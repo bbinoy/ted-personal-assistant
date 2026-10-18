@@ -47,6 +47,8 @@ export interface SendOptions {
   quote?: Quote;
   /** Absolute paths of files signal-cli can read. An audio file is shown as a voice message. */
   attachments?: string[];
+  /** Mark the audio attachments as voice notes: shown inline in the chat, with no file name above the player (signal-cli's `--voice-note`). */
+  voiceNote?: boolean;
   /** Send to this group instead of the default conversation (own-account mode). A target made by {@link toPerson} sends to that one person instead. */
   groupId?: string;
 }
@@ -328,6 +330,7 @@ export class SignalClient {
       ...addressOf(opts.groupId, () => this.to()),
       ...(text ? { message: text } : {}),
       ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
+      ...(opts.voiceNote ? { voiceNote: true } : {}),
       ...(textStyle.length ? { textStyle } : {}),
       ...(quote ? { quoteTimestamp: quote.timestamp, quoteAuthor: quote.author, quoteMessage: quote.text } : {}),
     });

@@ -106,6 +106,15 @@ test("client: send in peer mode, with style, quote and attachments", async () =>
   await done();
 });
 
+test("client: a voice message is marked as a voice note, a picture is not", async () => {
+  const { d, c, done } = await connected(PEER);
+  await c.send("", { attachments: ["/tmp/voice.m4a"], voiceNote: true });
+  await c.send("", { attachments: ["/tmp/a.png"] });
+  assert.deepEqual(d.requests[0]!.params, { recipient: [PEER.number], attachments: ["/tmp/voice.m4a"], voiceNote: true });
+  assert.deepEqual(d.requests[1]!.params, { recipient: [PEER.number], attachments: ["/tmp/a.png"] });
+  await done();
+});
+
 test("client: send to a group, attachment only", async () => {
   const { d, c, done } = await connected(PEER);
   await c.send("", { groupId: "grp==", attachments: ["/tmp/a.png"] });

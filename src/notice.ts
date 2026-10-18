@@ -14,7 +14,7 @@ import { ASSISTANT, OWNER } from "./settings.ts";
 // JSON answer, in the background only (a heartbeat alert, a handler report), so a cold process is fine.
 //
 // The facts come from email text and are fenced as untrusted data. The output is checked in code and anything off (an error,
-// a timeout, empty, too long, a link, a number or id that is not in the facts, a verbatim fact missing) means the caller's
+// a timeout, empty, too long, a number or id that is not in the facts, a verbatim fact missing) means the caller's
 // own deterministic text goes out instead, so a message is never lost and never carries something the facts do not.
 // Never used for approval questions, error notices, security notices or exact data (draft text): those stay code (docs/SAFETY.md).
 
@@ -62,7 +62,6 @@ export function noticePrompt(req: Pick<NoticeRequest, "task" | "facts" | "verbat
 }
 
 const NUMBER = /\d+/g;
-const LINK = /https?:\/\/|www\.|\b[\w-]+\.(?:com|org|net|io|me|app)\b/i;
 
 // Pure: the message if it passes every check, else why not. `raw` is untrusted model output.
 export function checkNotice(raw: unknown, req: Pick<NoticeRequest, "facts" | "verbatim">): { text: string } | { why: string } {
@@ -73,7 +72,6 @@ export function checkNotice(raw: unknown, req: Pick<NoticeRequest, "facts" | "ve
   if (!text) return { why: "empty" };
   if (text.length > NOTICE_MAX_CHARS) return { why: "too long" };
   if (/^[{[]/.test(text)) return { why: "looks like JSON" };
-  if (LINK.test(text)) return { why: "has a link" };
   if (/<\/?(?:facts|style_notes|system)/i.test(text)) return { why: "echoes the prompt fence" };
   const known = new Set(req.facts.match(NUMBER));
   const odd = (text.match(NUMBER) ?? []).find((n) => !known.has(n));

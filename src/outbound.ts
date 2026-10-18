@@ -63,7 +63,7 @@ export function createOutbound(signal: Pick<SignalClient, "send">, record?: (kin
 
   // A voice message (an audio file), to the owner's chat or a group. What was said is logged as text, so the log stays searchable.
   async function sendVoice(file: string, spoken: string, groupId?: string): Promise<number> {
-    const ts = await signal.send("", { attachments: [file], ...(groupId ? { groupId } : {}) });
+    const ts = await signal.send("", { attachments: [file], voiceNote: true, ...(groupId ? { groupId } : {}) });
     if (!groupId) remember(`t:${ts}`);
     record?.("chat", ts, `🔊 ${spoken}`, groupId);
     return ts;

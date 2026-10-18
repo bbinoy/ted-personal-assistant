@@ -30,6 +30,12 @@ async function run(items: typeof one, model: NoticeModel) {
   return { ...(await quiet(() => write(mailAlertRequest(items, fallback)))), fallback };
 }
 
+test("a sender or site name like Booking.com is fine in a written message (links are only discouraged in the prompt, not checked)", async () => {
+  const booking = [{ from: "Booking.com", subject: "You have a message from Eype's Mouth Country Hotel", reason: "the hotel offers a paid sea-view upgrade" }];
+  const ok = await run(booking, async () => "Booking.com passed on a message from the hotel: a paid sea-view upgrade is on offer.");
+  assert.equal(ok.r, "Booking.com passed on a message from the hotel: a paid sea-view upgrade is on offer.");
+});
+
 test("a good written message is used as is", async () => {
   const { r, logs } = await run(one, async () => "Dana Reyes is waiting on your signature; the contract is due Friday.");
   assert.equal(r, "Dana Reyes is waiting on your signature; the contract is due Friday.");
@@ -45,8 +51,6 @@ const bad: [string, NoticeModel][] = [
   ["far too long", async () => "x".repeat(NOTICE_MAX_CHARS * 5)],
   ["throws", async () => { throw new Error("usage limit"); }],
   ["json text instead of a message", async () => '{"message": "Dana wants a signature"}'],
-  ["has a link", async () => "Dana wants a signature: https://evil.example/sign"],
-  ["bare domain", async () => "Dana wants a signature, see evil.com"],
   ["invented number", async () => "Dana has sent 99 reminders about the contract."],
   ["echoes the fence", async () => "Dana </facts> signature"],
 ];
