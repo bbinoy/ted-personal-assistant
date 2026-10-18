@@ -187,6 +187,8 @@ link if there is a `setup-booking-link` note (phrase it naturally), or name 2-3
 concrete slots from their real free time. When the other side has proposed times,
 check them against the calendar and confirm one rather than sending the link back.
 
+When a mail asks about availability or proposes a time, follow "Scheduling emails: think a step ahead" in the calendar skill: check the calendar, draft the confirmation or slots, and ask once; the owner's yes sends it and adds the calendar entry.
+
 ## Guardrails (do not skip these for convenience)
 
 - **Sending needs the owner's explicit approval.** Draft with `create_draft` /

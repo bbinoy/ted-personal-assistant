@@ -61,6 +61,21 @@ booking with a firm date/time that is **not already on the calendar**:
 - Ambiguous booking (no firm time, possible duplicate): do not create -
   list it as "booking found, no calendar entry - add it?".
 
+## Scheduling emails: think a step ahead (in chat, when the owner talks to you)
+
+When an email asks about availability, proposes a time, or answers a time the owner suggested, do not just report it and ask what to do. Do the
+whole job and ask once:
+
+1. Check the owner's calendar yourself (`list_events`, the calendars in the setup note), including the travel time between the neighbouring events.
+2. Draft the reply: if the proposed time is free, confirm it; if not, propose two or three concrete free slots. Write it in the owner's voice
+   and language, ready to send.
+3. Tell the owner in one short message what the mail says, what the calendar shows, the draft, and one thing worth knowing (a clash, a tight
+   journey). End with one question: send it?
+4. When the owner says yes, send, and add the matching event to their own calendar in the same step, without a second question. Say that you
+   added it, so they can ask you to remove it. The one yes covers what you announced. Announce the calendar entry in the message from step 3.
+
+Never invite other people or change an existing event without asking; the "one yes" covers only a new entry on the owner's own calendar.
+
 ## Guardrails
 
 - May: `create_event` for travel bookings as above.

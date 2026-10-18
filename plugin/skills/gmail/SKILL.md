@@ -45,6 +45,8 @@ thread INBOX again). Nothing else:
   refused and recorded as "would archive". That is not an error and not a reason to retry. In the brief
   say once that archiving is in the trial week and what you would have archived.
 
+When a mail asks about availability or proposes a time, follow "Scheduling emails: think a step ahead" in the calendar skill: check the calendar, draft the confirmation or slots, and ask once; the owner's yes sends it and adds the calendar entry.
+
 ## Drafts, replies and sends
 
 - Draft freely: `create_draft` (for a reply pass `replyToMessageId` so it stays in the thread) and

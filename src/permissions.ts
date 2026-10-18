@@ -7,6 +7,7 @@ import { isGmailTool, isInboxArchive } from "./gmailrules.ts";
 import { classify, isReadTool } from "./policy.ts";
 import type { DraftView } from "./proposals.ts";
 import { actionOf, entryFor, mailView, type MailView, type ViewKind } from "./toolmanifest.ts";
+import { LIMITS } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
@@ -41,6 +42,10 @@ export function idsOf(input: Record<string, unknown>): Record<string, unknown> |
 // the warm chat process is built before the message arrives; chat turns run one at a time.
 let chatOwnerMessages: string[] = [];
 export const setChatOwnerMessage = (text: string) => void (chatOwnerMessages = [...chatOwnerMessages, text].slice(-3));
+// What the assistant last told the owner in chat (a draft it showed, a plan it announced): context for the judge, so that a plain "yes, send"
+// is read against what it answers. Never consent by itself (autojudge.ts says so to the judge).
+let chatAssistantMessage = "";
+export const setChatAssistantMessage = (text: string) => void (chatAssistantMessage = text.slice(0, LIMITS.quote));
 const MAIL_OUT = new Set(["send", "reply", "forward"]); // actions that put mail in front of other people, judged against the owner's words
 // An action the owner approved is done: the same call again (same tool, same arguments) within half an hour is refused
 // without a question, because repeating it would send, create or change it twice (a model once retried a send after a
@@ -162,7 +167,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     const [ownerMessage, ...earlier] = [...chatOwnerMessages].reverse();
     // A chat send is judged against the owner's words; with none on record there is nothing to judge it against.
     if (settings.autoApprove !== "off" && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, source, view)) && (view === undefined || (source === "chat" && ownerMessage !== undefined))) {
-      judged = await judge({ source, description, ownerMessage: source === "chat" ? ownerMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext });
+      judged = await judge({ source, description, ownerMessage: source === "chat" ? ownerMessage : undefined, assistantSaid: source === "chat" && chatAssistantMessage ? chatAssistantMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext });
       audit(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts });
       if (mayAutoApprove(settings.autoApprove, source, judged)) {
         audit(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
