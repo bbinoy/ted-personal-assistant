@@ -1,11 +1,15 @@
 ---
 name: draw
-description: Use when a picture says it better than words - a diagram, flowchart, bar or line chart, itinerary, schematic map, floor plan, icon or rough sketch - or when the person asks you to draw, sketch or chart something. You write an SVG, the draw tool renders it, you check the preview, then send it with the send tool.
+description: Use whenever a picture would explain it better or faster than words, whether or not the person asked for one - a diagram, flowchart, bar or line chart, comparison, timeline, itinerary, schematic map, floor plan, icon or rough sketch - and when they ask you to draw, sketch or chart something. You write an SVG, the draw tool renders it, you check the preview, then send it with the send tool.
 ---
 
 # Draw
 
 You write an SVG; code renders it to a PNG and shows it to you. It is a sketch, not a photo: say so plainly if the person expects more, and never promise a photo, a realistic or painterly picture, or a logo of a real brand.
+
+## When to draw (your judgement, not only when asked)
+
+Choose the format that serves the answer best, and reach for a picture when it would help, without waiting to be asked: numbers over time or across options (a chart beats a list), a process or decision (a flowchart), how things connect (a diagram), a plan over days (a timeline or itinerary), a layout or a route (a schematic), a forecast with a window (a small bar chart of wind by day). A short text answer is still right for a simple fact, a yes or no, or anything a sentence says well; do not draw for decoration, and do not draw when the person is in a hurry and a line will do. When you do draw, keep the words short: send the picture with a one-line caption and say only what the picture cannot. If you are unsure whether they want it, send the answer in words and offer the picture in one short line ("want that as a chart?"), once.
 
 ## How
 
