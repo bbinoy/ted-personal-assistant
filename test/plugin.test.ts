@@ -94,3 +94,11 @@ test("connectors: judged by the server status in the start-up message, so a slow
   assert.deepEqual(disconnected(detect([], [server("claude.ai Notion", "needs-auth"), server("claude.ai Google Calendar", "failed")])), ["notion", "calendar"]);
   assert.deepEqual(disconnected(detect([], [server("mailbird", "connected"), server("claude.ai Gmail", "connected")])), ["notion", "calendar"]); // never added
 });
+
+test("plugin: follow-through is a private skill the calendar and task skills and the mail handler point to", async () => {
+  const { handlerPrompt } = await import("../src/handler.ts");
+  const { PRIVATE_SKILLS } = await import("../src/skills.ts");
+  assert.ok(PRIVATE_SKILLS.includes("follow-through"));
+  for (const s of ["calendar", "notion-tasks"]) assert.match(readFileSync(join(skillsDir, s, "SKILL.md"), "utf8"), /ted-personal-assistant:follow-through/, s);
+  assert.match(handlerPrompt([]), /ted-personal-assistant:follow-through/);
+});

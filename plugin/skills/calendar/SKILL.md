@@ -62,6 +62,11 @@ booking with a firm date/time that is **not already on the calendar**:
   the offsets), and never send two local times without offsets: the two ends of a
   flight are in different time zones, and an event with mixed times is held back for
   the owner's approval. Use the booking's own times, else the owner's time zone.
+  The offset differs by DATE as well as place (daylight saving): the UK clocks change
+  on the last Sunday of October, so on 31 Oct 2026 London is `+00:00` while Zurich is
+  `+01:00`, whereas on 21 Oct both are on summer time (London `+01:00`, Zurich
+  `+02:00`). Work out each offset for the actual date and place.
+- Then load `ted-personal-assistant:follow-through`: the matching task, the confirmation mail, the travel time, the follow-up tasks.
 - Note each created event in the brief under "Changed by the assistant".
 - Ambiguous booking (no firm time, possible duplicate): do not create -
   list it as "booking found, no calendar entry - add it?".
