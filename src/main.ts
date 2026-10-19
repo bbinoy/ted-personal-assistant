@@ -1,9 +1,9 @@
 import "./log.ts"; // first: timestamps, redaction and owner-only files for everything below
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation.ts";
-import { ask, dropTenantWarm, runProfile, prepareChat } from "./agent.ts";
+import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
 import { compactChatIfNeeded, compactDue } from "./chatsession.ts";
 import { gmailReaders } from "./gmail.ts";
-import { approveIn, setApprovers, setDraftReader, setGmailReaders } from "./permissions.ts";
+import { approveIn, setApprovers, setChatOwnerMessage, setDraftReader, setGmailReaders } from "./permissions.ts";
 import * as approvals from "./approvals.ts";
 import { createApprovers } from "./approvers.ts";
 import { config, mask } from "./config.ts";
@@ -73,16 +73,15 @@ const out = createOutbound(signal, (kind, ts, text, groupId) => record(groupId, 
 // she types meanwhile is a chat message), a group in the group (any member may answer), a tenant in her own chat. approvals.ts scopes every
 // question to its conversation, so an answer from another one (the admin's included) never applies.
 setApprovers(createApprovers(out));
-const approve = approveIn(OWNER_KEY);
 const approveBackground = approveIn(OWNER_KEY, { background: true });
 // `say` is a plain message to the owner. `notify` is what the assistant sends on its own (mail
 // alerts, handled mail, setup problems) and is also remembered, so the chat knows what a reply
 // like "yes, do that" refers to (messages.ts). Memory announcements and chat answers use `say`.
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
-const warmChat = () => prepareChat(approve, say);
+const warmChat = () => prepare(owner(), { notify: say });
 const notify = async (text: string) => {
   await say(text);
-  prepareChat(approve, say, { refresh: true }); // the chat prompt carries recent pings, so the warm process is stale now (a renewal, not activity)
+  prepare(owner(), { notify: say }, { refresh: true }); // the chat prompt carries recent pings, so the warm process is stale now (a renewal, not activity)
 };
 
 // Every voice message is transcribed (in a group it may be meant for the assistant), but only a few at a time: a flood waits in line
@@ -130,8 +129,11 @@ const pipeline: Pipeline = createPipeline({
   out,
   record,
   account: config.signalAccount,
-  runOwner: (prompt, ownerMessage, pictures, hooks, documents) => ask(prompt, approve, say, ownerMessage, pictures, hooks, documents),
-  runTenant: (conv, prompt, pictures, hooks, documents) => tenantRunner.run(conv, prompt, pictures, hooks, documents),
+  // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
+  run: (conv, prompt, ownerMessage, pictures, hooks, documents) =>
+    conv.tenantId
+      ? tenantRunner.run(conv, prompt, pictures, hooks, documents)
+      : (setChatOwnerMessage(ownerMessage), runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)),
   picture: (m) => preparePicture(attachmentPath(m.image!, settings.signalAttachmentsDir)), // a plain file name inside signal-cli's folder
   document: async (m) => prepareFile(attachmentPath(m.file!, settings.signalAttachmentsDir), m.file!.name, audioTools), // the same: only the id, joined to signal-cli's folder; an audio file is transcribed (queued with voice messages)
   longText: (m) => readLongText(m.longText!, settings.signalAttachmentsDir), // the same: only the id, joined to signal-cli's folder
@@ -226,7 +228,7 @@ warmChat();
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
-setInterval(() => prepareChat(approve, say, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
+setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
 
 const handler = proposer ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: proposer.show }) : undefined;
 handler?.resume();

@@ -463,7 +463,7 @@ export function createPipeline(deps: PipelineDeps) {
           }
           const prompt = ownerPrompt(ms);
           await runTurn(conv, {
-            run: (hooks) => (conv.kind === "tenant" ? deps.runTenant!(conv, prompt, ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document))) : deps.runOwner(prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)))),
+            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document))),
             target: { author: last.from, timestamp: last.timestamp },
             threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
             hadQuote: ms.some((x) => x.quote),
@@ -488,7 +488,7 @@ export function createPipeline(deps: PipelineDeps) {
       const on = findMessage(r.targetTimestamp, conv.logFile);
       record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
       const prompt = reactionPrompt(r.emoji, on);
-      await runTurn(conv, { run: () => (conv.kind === "tenant" ? deps.runTenant!(conv, prompt) : deps.runOwner(prompt, prompt)), target: { author: r.targetAuthor ?? deps.account, timestamp: r.targetTimestamp }, reaction: true, announce: false });
+      await runTurn(conv, { run: () => deps.run(conv, prompt, prompt), target: { author: r.targetAuthor ?? deps.account, timestamp: r.targetTimestamp }, reaction: true, announce: false });
     });
   }
 

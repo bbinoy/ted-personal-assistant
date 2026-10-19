@@ -1,0 +1,373 @@
+{
+  "owner": {
+    "run": {
+      "source": "chat",
+      "sessionFile": "state/session.json",
+      "systemPrompt": "sha:8707375508a4fe40",
+      "memory": {
+        "dir": "<data>/memory/notes",
+        "notify": "[fn]"
+      },
+      "maxTurns": 40,
+      "maxBudgetUsd": 2
+    },
+    "model": "sonnet",
+    "system": {
+      "type": "preset",
+      "preset": "claude_code",
+      "append": "sha:8707375508a4fe40",
+      "snapshot": false
+    },
+    "settings": {
+      "autoMemoryEnabled": true,
+      "autoMemoryDirectory": "<data>/memory/notes"
+    },
+    "mcpServers": [
+      "send",
+      "weather",
+      "draw",
+      "voice",
+      "memory",
+      "browse"
+    ],
+    "tools": [
+      "Skill",
+      "Read",
+      "Write",
+      "Edit",
+      "WebSearch",
+      "WebFetch"
+    ],
+    "settingSources": [
+      "user"
+    ],
+    "plugins": [
+      {
+        "type": "local",
+        "path": "<repo>/plugin",
+        "skipMcpDiscovery": true
+      }
+    ],
+    "skills": [
+      "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mailbird",
+      "ted-personal-assistant:mailbird-troubleshooting",
+      "ted-personal-assistant:calendar",
+      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:meeting-prep",
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:setup",
+      "ted-personal-assistant:radar",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
+    ],
+    "disallowedTools": [
+      "mcp__claude_ai_Interactive_Brokers_IBKR",
+      "mcp__claude_ai_Gmail",
+      "mcp__claude_ai_Google_Drive",
+      "mcp__claude_ai_Google_Docs",
+      "mcp__claude_ai_Claude_Docs",
+      "mcp__claude_ai_Notion__notion-ai-search",
+      "mcp__claude_ai_Notion__notion-check-mcp-next-steps",
+      "mcp__claude_ai_Notion__notion-convert-page-to-skill",
+      "mcp__claude_ai_Notion__notion-create-attachment",
+      "mcp__claude_ai_Notion__notion-create-comment",
+      "mcp__claude_ai_Notion__notion-create-database",
+      "mcp__claude_ai_Notion__notion-create-file-upload",
+      "mcp__claude_ai_Notion__notion-create-folder",
+      "mcp__claude_ai_Notion__notion-create-view",
+      "mcp__claude_ai_Notion__notion-download-attachment",
+      "mcp__claude_ai_Notion__notion-download-skill",
+      "mcp__claude_ai_Notion__notion-duplicate-page",
+      "mcp__claude_ai_Notion__notion-get-async-task",
+      "mcp__claude_ai_Notion__notion-get-comments",
+      "mcp__claude_ai_Notion__notion-get-session-status",
+      "mcp__claude_ai_Notion__notion-get-teams",
+      "mcp__claude_ai_Notion__notion-get-tool-access",
+      "mcp__claude_ai_Notion__notion-get-users",
+      "mcp__claude_ai_Notion__notion-list-favorite-pages",
+      "mcp__claude_ai_Notion__notion-list-private-pages",
+      "mcp__claude_ai_Notion__notion-list-recent-pages",
+      "mcp__claude_ai_Notion__notion-list-session-events",
+      "mcp__claude_ai_Notion__notion-list-shared-pages",
+      "mcp__claude_ai_Notion__notion-move-pages",
+      "mcp__claude_ai_Notion__notion-query-data-sources",
+      "mcp__claude_ai_Notion__notion-query-meeting-notes",
+      "mcp__claude_ai_Notion__notion-query-multiple-data-sources",
+      "mcp__claude_ai_Notion__notion-query-sessions",
+      "mcp__claude_ai_Notion__notion-read-session-event",
+      "mcp__claude_ai_Notion__notion-search-agents",
+      "mcp__claude_ai_Notion__notion-search-sessions",
+      "mcp__claude_ai_Notion__notion-send-message-to-session",
+      "mcp__claude_ai_Notion__notion-show-advanced-analysis-next-steps",
+      "mcp__claude_ai_Notion__notion-spawn-session",
+      "mcp__claude_ai_Notion__notion-stop-session",
+      "mcp__claude_ai_Notion__notion-update-data-source",
+      "mcp__claude_ai_Notion__notion-update-folder",
+      "mcp__claude_ai_Notion__notion-update-view",
+      "mcp__claude_ai_Notion__notion-upload-skill",
+      "mcp__claude_ai_Notion__notion-wait-session",
+      "mcp__mailbird__copy_conversation",
+      "mcp__mailbird__delete_conversation_permanently",
+      "mcp__mailbird__discard_draft",
+      "mcp__mailbird__get_help",
+      "mcp__mailbird__get_ui_state",
+      "mcp__mailbird__mark_all_as_read",
+      "mcp__mailbird__move_conversation",
+      "mcp__mailbird__move_conversation_to_inbox",
+      "mcp__mailbird__set_conversation_important",
+      "mcp__mailbird__set_conversation_read",
+      "mcp__mailbird__set_conversation_spam",
+      "mcp__mailbird__set_conversation_starred",
+      "mcp__mailbird__set_sender_blocked",
+      "mcp__mailbird__show_notification",
+      "mcp__mailbird__snooze_conversation",
+      "mcp__mailbird__trash_conversation",
+      "mcp__mailbird__unsubscribe_from_newsletter",
+      "mcp__claude_ai_Gmail__apply_sensitive_message_label",
+      "mcp__claude_ai_Gmail__apply_sensitive_thread_label",
+      "mcp__claude_ai_Gmail__create_label",
+      "mcp__claude_ai_Gmail__delete_draft",
+      "mcp__claude_ai_Gmail__delete_label",
+      "mcp__claude_ai_Gmail__label_message",
+      "mcp__claude_ai_Gmail__mark_message_spam",
+      "mcp__claude_ai_Gmail__mark_thread_spam",
+      "mcp__claude_ai_Gmail__trash_message",
+      "mcp__claude_ai_Gmail__trash_thread",
+      "mcp__claude_ai_Gmail__unlabel_message",
+      "mcp__claude_ai_Gmail__unmark_message_spam",
+      "mcp__claude_ai_Gmail__unmark_thread_spam",
+      "mcp__claude_ai_Gmail__untrash_message",
+      "mcp__claude_ai_Gmail__untrash_thread",
+      "mcp__claude_ai_Gmail__update_label",
+      "mcp__claude_ai_Gmail__update_message_labels"
+    ],
+    "permissionMode": "default",
+    "maxTurns": 40,
+    "maxBudgetUsd": 2,
+    "envChanged": {},
+    "envRemoved": [],
+    "hooks": [
+      "PostToolUse"
+    ],
+    "canUseTool": "function"
+  },
+  "group": {
+    "run": {
+      "source": "group",
+      "sessionFile": "<data>/memory/groups/ff36ac23eadd/session.json",
+      "systemPrompt": "sha:48c3d0613a0ad2fc",
+      "memory": {
+        "dir": "<data>/memory/groups/ff36ac23eadd/notes",
+        "groupId": "g-run-options"
+      },
+      "skills": [
+        "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mailbird",
+        "ted-personal-assistant:mailbird-troubleshooting",
+        "ted-personal-assistant:calendar",
+        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:meeting-prep",
+        "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:setup",
+        "ted-personal-assistant:radar",
+        "ted-personal-assistant:surf-conditions",
+        "ted-personal-assistant:draw"
+      ],
+      "maxTurns": 8,
+      "maxBudgetUsd": 0.5
+    },
+    "model": "sonnet",
+    "system": {
+      "type": "preset",
+      "preset": "claude_code",
+      "append": "sha:48c3d0613a0ad2fc",
+      "snapshot": false
+    },
+    "settings": {
+      "autoMemoryEnabled": true,
+      "autoMemoryDirectory": "<data>/memory/groups/ff36ac23eadd/notes"
+    },
+    "mcpServers": [
+      "send",
+      "weather",
+      "draw",
+      "voice",
+      "memory",
+      "browse"
+    ],
+    "strictMcpConfig": true,
+    "tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "WebSearch"
+    ],
+    "settingSources": [],
+    "permissionMode": "default",
+    "maxTurns": 8,
+    "maxBudgetUsd": 0.5,
+    "envChanged": {},
+    "envRemoved": [],
+    "hooks": [
+      "PostToolUse"
+    ],
+    "canUseTool": "function"
+  },
+  "tenantAskingConsent": {
+    "run": {
+      "source": "group",
+      "sessionFile": "<data>/tenants/<ann>/session.json",
+      "systemPrompt": "sha:6a4d263fca1d1850",
+      "memory": {
+        "dir": "<data>/tenants/<ann>/notes"
+      },
+      "skills": [
+        "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mailbird",
+        "ted-personal-assistant:mailbird-troubleshooting",
+        "ted-personal-assistant:calendar",
+        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:meeting-prep",
+        "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:setup",
+        "ted-personal-assistant:radar",
+        "ted-personal-assistant:surf-conditions",
+        "ted-personal-assistant:draw"
+      ],
+      "maxTurns": 12,
+      "maxBudgetUsd": 0.5,
+      "tenant": {
+        "id": "<ann>",
+        "key": "tenant:<ann>",
+        "apiKey": "<instance-key>",
+        "keyTag": "f8707298",
+        "costFile": "<data>/tenants/<ann>/cost.json",
+        "logFile": "<data>/tenants/<ann>/messages.jsonl",
+        "consentFile": "<data>/tenants/<ann>/consent.json",
+        "consented": false,
+        "tools": [
+          "mcp__tenant__record_consent"
+        ],
+        "overBudget": "[fn]"
+      }
+    },
+    "model": "sonnet",
+    "system": {
+      "type": "preset",
+      "preset": "claude_code",
+      "append": "sha:6a4d263fca1d1850",
+      "snapshot": false
+    },
+    "settings": {
+      "autoMemoryEnabled": true,
+      "autoMemoryDirectory": "<data>/tenants/<ann>/notes"
+    },
+    "mcpServers": [
+      "tenant"
+    ],
+    "strictMcpConfig": true,
+    "tools": [],
+    "settingSources": [],
+    "permissionMode": "default",
+    "maxTurns": 12,
+    "maxBudgetUsd": 0.5,
+    "envChanged": {
+      "ANTHROPIC_API_KEY": "<instance-key>"
+    },
+    "envRemoved": [
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+    "hooks": [
+      "PostToolUse"
+    ],
+    "canUseTool": "function"
+  },
+  "tenant": {
+    "run": {
+      "source": "group",
+      "sessionFile": "<data>/tenants/<bea>/session.json",
+      "systemPrompt": "sha:ff154791ffecc553",
+      "memory": {
+        "dir": "<data>/tenants/<bea>/notes"
+      },
+      "skills": [
+        "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mailbird",
+        "ted-personal-assistant:mailbird-troubleshooting",
+        "ted-personal-assistant:calendar",
+        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:meeting-prep",
+        "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:setup",
+        "ted-personal-assistant:radar",
+        "ted-personal-assistant:surf-conditions",
+        "ted-personal-assistant:draw"
+      ],
+      "maxTurns": 12,
+      "maxBudgetUsd": 0.5,
+      "tenant": {
+        "id": "<bea>",
+        "key": "tenant:<bea>",
+        "apiKey": "<instance-key>",
+        "keyTag": "f8707298",
+        "costFile": "<data>/tenants/<bea>/cost.json",
+        "logFile": "<data>/tenants/<bea>/messages.jsonl",
+        "consentFile": "<data>/tenants/<bea>/consent.json",
+        "consented": true,
+        "tools": [
+          "Edit",
+          "Read",
+          "WebSearch",
+          "Write",
+          "mcp__browse__browse",
+          "mcp__memory__forget_note",
+          "mcp__memory__search_logs",
+          "mcp__send__send",
+          "mcp__voice__voice"
+        ],
+        "overBudget": "[fn]"
+      }
+    },
+    "model": "sonnet",
+    "system": {
+      "type": "preset",
+      "preset": "claude_code",
+      "append": "sha:ff154791ffecc553",
+      "snapshot": false
+    },
+    "settings": {
+      "autoMemoryEnabled": true,
+      "autoMemoryDirectory": "<data>/tenants/<bea>/notes"
+    },
+    "mcpServers": [
+      "send",
+      "weather",
+      "draw",
+      "voice",
+      "memory",
+      "browse"
+    ],
+    "strictMcpConfig": true,
+    "tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "WebSearch"
+    ],
+    "settingSources": [],
+    "permissionMode": "default",
+    "maxTurns": 12,
+    "maxBudgetUsd": 0.5,
+    "envChanged": {
+      "ANTHROPIC_API_KEY": "<instance-key>"
+    },
+    "envRemoved": [
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+    "hooks": [
+      "PostToolUse"
+    ],
+    "canUseTool": "function"
+  }
+}

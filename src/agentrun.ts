@@ -28,7 +28,7 @@ import { readJson, writeJson } from "./state.ts";
 import { recordToolsSeen, toolsSeen } from "./toolsseen.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
-// browse sub-run. The entry points that choose the options are agent.ts; the warm processes are agentwarm.ts.
+// browse sub-run. The options of a conversation come from one builder (runoptions.ts), the entry points are agent.ts, the warm processes agentwarm.ts.
 
 export interface AgentReply {
   text: string;

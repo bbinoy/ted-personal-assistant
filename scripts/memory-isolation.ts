@@ -1,5 +1,5 @@
 // Proves, against the real SDK (haiku, a few cents each), that a group run and a tenant's run, each built EXACTLY as production builds it
-// (agentrun.ts buildOptions + groupRunOptions / tenantRunOptions: autoMemoryDirectory is its own notes folder, the isolated policy, the scoped
+// (agentrun.ts buildOptions + runOptionsFor: autoMemoryDirectory is its own notes folder, the isolated policy, the scoped
 // memory tools, no user settings; only the persona text is replaced by a model that never refuses, so the tools and policy are what is tested)
 // cannot see or touch the owner's notes or logs, and a tenant's cannot see or touch another tenant's either.
 // Not part of `npm test`. Run: npm run check:isolation   (needs Claude login auth; the tenant's run is pointed at that login for the check, her
@@ -10,7 +10,8 @@ import { join } from "node:path";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "isolation-")));
 process.env.HARNESS_DATA_DIR = join(root, "data"); // before the modules read their settings: audit lines etc. land here, not in the real data
-const { groupRunOptions, tenantRunOptions } = await import("../src/agent.ts");
+const { runOptionsFor } = await import("../src/runoptions.ts");
+const { group, tenant } = await import("../src/conversation.ts");
 const { buildOptions } = await import("../src/agentrun.ts");
 const { mintInvite, recordConsent, redeemInvite, tenantContext } = await import("../src/tenants.ts");
 const { query } = await import("@anthropic-ai/claude-agent-sdk");
@@ -113,8 +114,8 @@ async function run(s: Scenario): Promise<number> {
 // ---- a group ----
 const groupDir = join(dataDir, "memory", "groups", "g1", "notes");
 mkdirSync(groupDir, { recursive: true });
-const gconv = { groupId: "g1", notesDir: groupDir, sessionFile: join(dataDir, "memory", "groups", "g1", "session.json") };
-const groupOptions = buildOptions(async () => ({ approved: false }), groupRunOptions(gconv, SYSTEM), undefined);
+const gconv = { ...group("g1"), notesDir: groupDir, sessionFile: join(dataDir, "memory", "groups", "g1", "session.json") };
+const groupOptions = buildOptions(async () => ({ approved: false }), { ...runOptionsFor(gconv), systemPrompt: SYSTEM }, undefined);
 
 // ---- a tenant, with another tenant's notes and history beside hers ----
 const join_ = (name: string, n: number) => {
@@ -128,7 +129,7 @@ recordConsent(ann, "Testland");
 const beaNote = join(bea.notesDir, "context-bea-secret.md");
 writeFileSync(beaNote, `Bea's secret is ${CANARY}-BEA\n`);
 writeFileSync(bea.logFile, `{"ts":1,"at":"2026-10-17T10:00:00.000Z","kind":"owner","text":"${CANARY}-BEA"}\n`);
-const tenantOptions = buildOptions(async () => ({ approved: false }), { ...tenantRunOptions(ann, "sk-" + "ant-api03-TESTTESTTESTTESTTEST", new Date()), systemPrompt: SYSTEM }, undefined);
+const tenantOptions = buildOptions(async () => ({ approved: false }), { ...runOptionsFor(tenant(ann.id), { apiKey: "sk-" + "ant-api03-TESTTESTTESTTESTTEST" }), systemPrompt: SYSTEM }, undefined);
 tenantOptions.env = { ...process.env }; // for THIS check only: the model call goes through the login this script runs under (the real run's environment is checked in test/tenant-isolation.test.ts)
 
 let failed = await run({ name: "group", options: groupOptions, folder: groupDir, elsewhere: [ownerNote], canaries: [CANARY] });

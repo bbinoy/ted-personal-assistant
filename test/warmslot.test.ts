@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { tick } from "./util.ts";
 import { firstWarm, SpareSlot } from "../src/warmslot.ts";
 import { askGateWith, prepareGate } from "../src/gate.ts";
-import { prepareGroupChat, runGroupTurn } from "../src/agent.ts";
+import { prepare, runConversation } from "../src/agent.ts";
 import { group, owner } from "../src/conversation.ts";
 import { createGroupBrain } from "../src/group.ts";
 import { loadSettings, settings } from "../src/settings.ts";
@@ -105,7 +105,7 @@ test("group warm: built from that group's own options only, exactly like a norma
   try {
     const rig = startRig();
     const conv = group(gid());
-    prepareGroupChat(conv, () => "- be warm", { start: rig.start });
+    prepare(conv, { style: "- be warm" }, { start: rig.start, keep: true });
     assert.equal(rig.started.length, 1);
     const o = rig.started[0];
     assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
@@ -125,20 +125,20 @@ test("group warm: one process for the latest group; another group replaces it; e
     const rig = startRig();
     const a = group(gid());
     const b = group(gid());
-    prepareGroupChat(a, () => "", { start: rig.start });
-    prepareGroupChat(a, () => "", { start: rig.start }); // already warm for a: nothing new started
+    prepare(a, { style: "" }, { start: rig.start, keep: true });
+    prepare(a, { style: "" }, { start: rig.start, keep: true }); // already warm for a: nothing new started
     assert.equal(rig.started.length, 1);
-    prepareGroupChat(b, () => "", { start: rig.start }); // b spoke last
+    prepare(b, { style: "" }, { start: rig.start, keep: true }); // b spoke last
     await tick();
     assert.equal(rig.started.length, 2);
     assert.deepEqual(rig.closed, ["warm1"]); // a's was dropped: at most one group process
     // a runs cold (its warm process is gone) and never on b's process
     const log: string[] = [];
-    await runGroupTurn(a, "", build, undefined, { query: coldQuery(log) });
+    await runConversation(a, { style: "" }, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(log, ["cold"]);
     assert.deepEqual(rig.used, []);
     // b uses its own
-    await runGroupTurn(b, "", build, undefined, { query: coldQuery(log) });
+    await runConversation(b, { style: "" }, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(rig.used, ["warm2"]);
     assert.deepEqual(log, ["cold"]);
   } finally {
@@ -152,10 +152,10 @@ test("group warm: a process built before the session moved on is not used", asyn
   try {
     const rig = startRig();
     const conv = group(gid());
-    prepareGroupChat(conv, () => "", { start: rig.start });
+    prepare(conv, { style: "" }, { start: rig.start, keep: true });
     writeJson(conv.sessionFile, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
     const log: string[] = [];
-    await runGroupTurn(conv, "", build, undefined, { query: coldQuery(log) });
+    await runConversation(conv, { style: "" }, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(log, ["cold"]);
     assert.deepEqual(rig.used, []);
     await tick();
@@ -176,8 +176,8 @@ test("warm: WARM=off starts nothing; WARM and WARM_IDLE_MINUTES are validated", 
   (settings as { warm: boolean }).warm = false;
   try {
     const rig = startRig();
-    prepareGroupChat(group(gid()), () => "", { start: rig.start });
-    prepareGroupChat(group(gid()), () => "", { start: rig.start, force: true });
+    prepare(group(gid()), { style: "" }, { start: rig.start, keep: true });
+    prepare(group(gid()), { style: "" }, { start: rig.start });
     assert.equal(rig.started.length, 0);
   } finally {
     (settings as { warm: boolean }).warm = was;

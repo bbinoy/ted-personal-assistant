@@ -23,7 +23,7 @@ import { LIMITS } from "./sanitize.ts";
 // is in, whose next look has come (or where something was said or a note changed since the last look), the gate is
 // asked whether to do something unprompted. If it says act, the conversation's NORMAL runner does it, with the
 // gate's instructions, and the answer goes out through the shared pipeline (it may be [[silent]]):
-//   a group    the group run (src/agent.ts runGroupTurn): its own notes and web search, nothing of the owner's
+//   a group    the group run (src/agent.ts runConversation): its own notes and web search, nothing of the owner's
 //   the owner  a background run with the radar's rights (policy source "background"): reads, anything else asks on
 //              the phone; web search allowed, page fetches ask
 // For the owner the gate also chooses the presets "brief" and "radar" (tasks.ts: WHEN is the gate's, HOW is code) when

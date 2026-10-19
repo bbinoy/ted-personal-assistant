@@ -12,7 +12,7 @@ import { RateLimitError } from "../src/errors.ts";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { groupRunOptions } from "../src/agent.ts";
+import { runOptionsFor } from "../src/runoptions.ts";
 import { buildOptions } from "../src/agentrun.ts";
 import { compactOptions } from "../src/chatsession.ts";
 import { owner } from "../src/conversation.ts";
@@ -43,7 +43,7 @@ test("groups: web search, the memory tools (scoped by their server) and the file
 
 test("groups: a group run is built with its own memory folder, its own session and nothing of the owner's", () => {
   const conv = group("g-build");
-  const o = buildOptions(async () => ({ approved: false }), groupRunOptions(conv, "sys"), undefined);
+  const o = buildOptions(async () => ({ approved: false }), runOptionsFor(conv), undefined);
   assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
   assert.notEqual(conv.notesDir, owner().notesDir);
   assert.ok(conv.sessionFile.startsWith(join(GROUPS_DIR, groupKey("g-build"))));
@@ -56,7 +56,7 @@ test("groups: a group run is built with its own memory folder, its own session a
 
 test("groups: compaction of a group session is isolated exactly like the group run; the owner's is unchanged", () => {
   const conv = group("g-compact");
-  const run = buildOptions(async () => ({ approved: false }), groupRunOptions(conv, "sys"), undefined);
+  const run = buildOptions(async () => ({ approved: false }), runOptionsFor(conv), undefined);
   const c = compactOptions("sess-1", "group", conv.notesDir);
   assert.deepEqual([c.settingSources, c.strictMcpConfig, c.settings, c.plugins, c.skills, c.resume, c.tools], [run.settingSources, run.strictMcpConfig, run.settings, run.plugins, run.skills, "sess-1", []]);
   assert.deepEqual(c.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
@@ -121,7 +121,7 @@ const rig = (over: object = {}) => {
     out: createOutbound(signal as any, (k, t, text, g) => record(g, k, t, text)),
     record,
     account: "+10000000001",
-    runOwner: async () => assert.fail("not the owner's chat"),
+    run: async () => assert.fail("not the owner's chat"),
     picture: (over as any).picture ?? (async () => ({ mediaType: "image/jpeg" as const, data: "QUJD" })),
     document: (over as any).document ?? (async () => assert.fail("no document")),
     longText: (over as any).longText,

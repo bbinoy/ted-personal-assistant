@@ -48,7 +48,7 @@ function rig(over: { separate?: boolean; run?: (prompt: string, own?: string) =>
     out,
     record,
     account: ACCOUNT,
-    runOwner: async (prompt, own, pics, _hooks, docs) => (r.prompts.push(prompt), over.pictures?.push(pics ?? []), over.documents?.push(docs ?? []), { text: await (over.run ?? (async () => "ok"))(prompt, own), costUsd: 0.01 }),
+    run: async (_conv, prompt, own, pics, _hooks, docs) => (r.prompts.push(prompt), over.pictures?.push(pics ?? []), over.documents?.push(docs ?? []), { text: await (over.run ?? (async () => "ok"))(prompt, own), costUsd: 0.01 }),
     picture: over.picture ?? (async () => PIC),
     document: over.document ?? (async () => assert.fail("no document")),
     longText: over.longText,

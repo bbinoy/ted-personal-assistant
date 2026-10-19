@@ -20,7 +20,10 @@ const { NOTES_DIR } = await import("../src/notes.ts");
 const { MANIFEST } = await import("../src/toolmanifest.ts");
 const { searchLogs } = await import("../src/logsearch.ts");
 const { searchHistoryFile, groupDir, groupNotesDir, GROUPS_DIR } = await import("../src/groupstore.ts");
-const { askTenant, tenantRunOptions } = await import("../src/agent.ts");
+const { runConversation } = await import("../src/agent.ts");
+const askTenant = (ctx: { id: string }, apiKey: string, prompt: string, _pictures: unknown[], hooks: { firstOutput: () => void } | undefined, _documents: unknown[], io: { query?: never }) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt }), hooks?.firstOutput, io);
+const { runOptionsFor } = await import("../src/runoptions.ts");
+const tenantRunOptions = (ctx: { id: string }, apiKey: string, now?: Date) => runOptionsFor(tenant(ctx.id), { apiKey, now });
 const { browseRunOptions, buildOptions } = await import("../src/agentrun.ts");
 const { BrowseGuard } = await import("../src/browseguard.ts");
 const { browse, startRefusal } = await import("../src/browse.ts");
@@ -302,8 +305,7 @@ function rig() {
     out,
     record,
     account: "+10000000001",
-    runOwner: async (prompt) => (ran.owner.push(prompt), { text: "owner ok" }),
-    runTenant: async (conv, prompt) => (ran.tenant.push(`${conv.key}: ${prompt}`), { text: "tenant ok" }),
+    run: async (conv, prompt) => (conv.kind === "tenant" ? (ran.tenant.push(`${conv.key}: ${prompt}`), { text: "tenant ok" }) : (ran.owner.push(prompt), { text: "owner ok" })),
     picture: async () => assert.fail("no picture"),
     document: async () => assert.fail("no document"),
     transcript: async () => "voice",

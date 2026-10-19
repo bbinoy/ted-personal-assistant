@@ -1,4 +1,5 @@
-import { askTenant, prepareTenantChat } from "./agent.ts";
+import { prepare as prepareWarm, runConversation } from "./agent.ts";
+import { tenant } from "./conversationmodel.ts";
 import { tenantOverBudget } from "./budget.ts";
 import { cooldownUntil } from "./cooldown.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
@@ -9,7 +10,7 @@ import { settings } from "./settings.ts";
 import { mayNotice, markDisclosed, setPaused, tenantById, tenantContext, wasDisclosed, type TenantContext } from "./tenants.ts";
 import { DISCLOSURE, notSetUpReply } from "./tenantroute.ts";
 
-// A tenant's turn, around the run itself (agent.ts askTenant): the gates that need no model, in code, in this order:
+// A tenant's turn, around the run itself (agent.ts runConversation): the gates that need no model, in code, in this order:
 //   suspended or deleted since the message arrived -> nothing
 //   she is in a cooldown (a limit, no credit, refused) -> a fixed notice until it ends; nobody else is affected (cooldown.ts, per tenant)
 //   her day's budget is spent -> a fixed notice until tomorrow
@@ -24,16 +25,17 @@ export interface TenantRunnerDeps {
   apiKey?: () => string | undefined; // the instance key tenants run on (default: settings.tenantApiKey)
   alertAdmin?: (text: string) => void; // a notice for the admin (the owner's chat); at most one per notice interval
 
-  ask?: typeof askTenant;
-  prepare?: typeof prepareTenantChat;
+  ask?: (ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => Promise<{ text: string; costUsd?: number }>;
+  prepare?: (ctx: TenantContext, apiKey: string) => void;
   now?: () => number;
 }
 
 export function createTenantRunner(deps: TenantRunnerDeps) {
   const now = deps.now ?? Date.now;
   const instanceKey = deps.apiKey ?? (() => settings.tenantApiKey);
-  const ask = deps.ask ?? askTenant;
-  const prepare = deps.prepare ?? prepareTenantChat;
+  // Her turn is a conversation turn like any other (agent.ts): her record decides the options, the instance key is the one thing she brings.
+  const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt, pictures, documents }), hooks?.firstOutput));
+  const prepare = deps.prepare ?? ((ctx: TenantContext, apiKey: string) => prepareWarm(tenant(ctx.id), { apiKey }));
 
   // The first thing she is ever told starts with the disclosure, whoever wrote it.
   function disclose(ctx: TenantContext, text: string): string {

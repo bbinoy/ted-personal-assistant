@@ -151,8 +151,7 @@ export interface PipelineDeps {
   };
   record: (target: string | undefined, kind: Kind, ts: number, text: string, extra?: Extra) => void; // into that conversation's log (target: a group id, "to:<id>" for a tenant, none for the owner)
   account: string; // our own Signal number: the author of messages of ours that a reaction points at
-  runOwner: (prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => Promise<{ text: string; costUsd?: number }>;
-  runTenant?: (conv: Conversation, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => Promise<{ text: string; costUsd?: number }>; // a tenant's turn (tenantrun.ts): gates, her key, the run, the disclosure
+  run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)
   picture: (m: IncomingMessage) => Promise<Picture>; // throws a sentence the sender can be told
   longText?: (m: IncomingMessage) => { text: string; cut: boolean } | undefined; // the full text of a long message (signal-cli's saved attachment, id only); undefined when it cannot be read
   document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported

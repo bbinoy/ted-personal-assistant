@@ -2,7 +2,7 @@ import { clockLine } from "./brief.ts";
 import { budgetSpent } from "./budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "./fence.ts";
-import { prepareGroupChat, runGroupTurn } from "./agent.ts";
+import { prepare, runConversation } from "./agent.ts";
 import { AuthError, RateLimitError } from "./errors.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
@@ -26,7 +26,7 @@ import { OWNER, settings } from "./settings.ts";
 //
 // A group has its own notes and its own history (groupstore.ts) and works like the owner's chat: the SDK's
 // auto-memory in the group's notes folder (the file tools reach nothing else, policy.ts), the memory tools
-// scoped to the group (memory-tools.ts), and a resumed session of its own (agent.ts runGroupTurn). Anyone in
+// scoped to the group (memory-tools.ts), and a resumed session of its own (agent.ts runConversation). Anyone in
 // the group can ask it to remember or forget things; a nightly dream (groupdream.ts) tidies the group's notes
 // from the group's own words, touching nothing else.
 
@@ -122,7 +122,7 @@ export type Runner = (build: PromptBuilder, ctx: { conv: Conversation; now: Date
 
 // Chat replies and wake-ups both run here; the cost is logged as for an owner run.
 export const realRunner: Runner = async (build, { conv, now, firstOutput }) => {
-  const r = await runGroupTurn(conv, styleLines(now), build, firstOutput);
+  const r = await runConversation(conv, { style: styleLines(now) }, build, firstOutput);
   if (r.costUsd !== undefined) console.log(`group run: ${r.text.length} chars, $${r.costUsd.toFixed(4)}`);
   return r.text.trim();
 };
@@ -134,7 +134,7 @@ interface Brain {
   context?: typeof groupContext; // what the run is shown (default: the group's log)
   run?: Runner;
   gate?: Gate;
-  // Keeps a warm model process ready for this group (agent.ts prepareGroupChat). Default: the real one, unless a test supplies its
+  // Keeps a warm model process ready for this group (agent.ts prepare). Default: the real one, unless a test supplies its
   // own runner (a warm process only pairs with the real one).
   warm?: (conv: Conversation, afterTurn: boolean) => void;
 }
@@ -152,7 +152,7 @@ export function createGroupBrain(brain: Brain) {
   type Asked = { line: string; quote: Quote; incoming?: Quote; voice: boolean; picture?: Picture; document?: Document; at: number; edit?: { before?: string } };
   const state = new Map<string, { addressed?: Asked; lastSpoke?: number; running?: boolean; runStart?: number; runEnd?: number; gone?: Set<number> }>(); // gone: timestamps of messages their author deleted
   const warm = brain.warm ?? (brain.run ? undefined : (conv: Conversation, afterTurn: boolean) => {
-    prepareGroupChat(conv, () => styleLines(new Date()), { force: afterTurn });
+    prepare(conv, { style: styleLines(new Date()) }, { keep: !afterTurn });
     prepareGate(); // the gate's spare belongs to no group, so it is not tied to this one
   });
 

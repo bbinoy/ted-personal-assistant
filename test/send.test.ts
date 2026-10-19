@@ -144,7 +144,7 @@ function rig(o: { speech?: boolean; foreign?: string; synthFails?: boolean } = {
     out: createOutbound(signal as any, record),
     record,
     account: "+1",
-    runOwner: async () => ({ text: "" }),
+    run: async () => ({ text: "" }),
     picture: async () => assert.fail("no picture"),
     document: async () => assert.fail("no document"),
     transcript: async () => "",

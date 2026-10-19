@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sleep } from "./util.ts";
 import { pausing, RunTimeout, withCeiling } from "../src/ceiling.ts";
-import { prepareGroupChat, runGroupTurn } from "../src/agent.ts";
+import { prepare, runConversation } from "../src/agent.ts";
 import { runAgent } from "../src/agentrun.ts";
 import { group } from "../src/conversation.ts";
 import { loadSettings, settings } from "../src/settings.ts";
@@ -70,11 +70,11 @@ test("run wrapper: a hung group turn times out, aborts the query, is audited, an
   try {
     const conv = group(gid());
     const seen: { aborted?: () => boolean } = {};
-    await assert.rejects(runGroupTurn(conv, "", build, undefined, { query: hung(seen) }), /run timed out after/);
+    await assert.rejects(runConversation(conv, { style: "" }, build, undefined, { query: hung(seen) }), /run timed out after/);
     assert.equal(seen.aborted!(), true);
     assert.ok(readAudit((e) => e.tool === "run" && e.decision === "timeout" && e.source === "group").length >= 1);
     mutable.runMaxMinutesChat = 40;
-    assert.equal((await runGroupTurn(conv, "", build, undefined, { query: (() => ok()) as any })).text, "hi");
+    assert.equal((await runConversation(conv, { style: "" }, build, undefined, { query: (() => ok()) as any })).text, "hi");
   } finally {
     mutable.runMaxMinutesChat = was;
   }
@@ -89,18 +89,18 @@ test("run wrapper: a warm process that hangs is closed on timeout, and the conve
     const closedQuery: string[] = [];
     const closed: string[] = [];
     const start = (() => Promise.resolve({ query: () => ({ close: () => void closedQuery.push("q"), async *[Symbol.asyncIterator]() { await never(); } }), close: () => void closed.push("w") })) as any;
-    prepareGroupChat(conv, () => "", { start });
+    prepare(conv, { style: "" }, { start, keep: true });
     await sleep(5);
-    const turn = runGroupTurn(conv, "", build, undefined, { query: (() => ok()) as any });
+    const turn = runConversation(conv, { style: "" }, build, undefined, { query: (() => ok()) as any });
     await sleep(5);
     // a spare built while the turn runs (the session is the same, so it would fit) is dropped with the aborted run
-    prepareGroupChat(conv, () => "", { start: (() => Promise.resolve({ query: () => ok(), close: () => void closed.push("spare") })) as any, force: true });
+    prepare(conv, { style: "" }, { start: (() => Promise.resolve({ query: () => ok(), close: () => void closed.push("spare") })) as any });
     await assert.rejects(turn, /timed out/);
     await sleep(5);
     assert.deepEqual(closedQuery, ["q"]); // the query of the warm process was stopped
     assert.deepEqual(closed, ["spare"]);
     mutable.runMaxMinutesChat = 40;
-    assert.equal((await runGroupTurn(conv, "", build, undefined, { query: (() => ok()) as any })).text, "hi"); // cold: nothing stale to reuse
+    assert.equal((await runConversation(conv, { style: "" }, build, undefined, { query: (() => ok()) as any })).text, "hi"); // cold: nothing stale to reuse
   } finally {
     Object.assign(mutable, was);
   }

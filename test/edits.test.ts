@@ -52,7 +52,7 @@ function rig(over: { run?: (prompt: string) => Promise<string>; gate?: () => Pro
     out: createOutbound(signal as any, (k, t, text, g) => record(g, k, t, text)),
     record,
     account: "+10000000001",
-    runOwner: async (prompt) => (prompts.push(prompt), { text: await (over.run ?? (async () => "ok"))(prompt) }),
+    run: async (_conv, prompt) => (prompts.push(prompt), { text: await (over.run ?? (async () => "ok"))(prompt) }),
     picture: async () => assert.fail("no picture"),
     document: async () => assert.fail("no document"),
     transcript: async () => assert.fail("no voice"),

@@ -34,7 +34,7 @@ test("timing: one line per answered turn, owner and group, with every stage and 
       out: createOutbound(signal as any, record),
       record,
       account: "+1",
-      runOwner: async (_p, _o, _pics, hooks) => (clock += 700, hooks?.firstOutput(), clock += 300, { text: "ok" }),
+      run: async (_c, _p, _o, _pics, hooks) => (clock += 700, hooks?.firstOutput(), clock += 300, { text: "ok" }),
       picture: async () => assert.fail("no picture"),
       document: async () => assert.fail("no document"),
       transcript: async () => "",
