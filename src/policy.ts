@@ -40,7 +40,7 @@ export function denial(tool: string, input: Record<string, unknown>): Denial | u
 // Hard blocks, checked first so nothing below can override them.
 const DENY: RegExp[] = [
   /^mcp__claude_ai_Interactive_Brokers/, // a chat message must never be able to touch trading
-  /__(trash|delete|untrash|mark_.*spam|unmark_.*spam|set_sender_blocked|unsubscribe)/i,
+  /__(trash|delete|untrash|mark_.*spam|unmark_.*spam|set_sender_blocked)/i,
 ];
 
 // No tool may reach local files. Mailbird's create_draft accepts file:// attachments, so an

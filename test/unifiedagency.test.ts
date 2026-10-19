@@ -108,7 +108,7 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
     return { r, judged: j.seen.length };
   };
   // never allowed, whatever anyone says
-  for (const tool of ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", `${MB}delete_conversation_permanently`, `${MB}trash_conversation`, `${MB}set_conversation_spam`, `${MB}unsubscribe_from_newsletter`, "mcp__claude_ai_Google_Drive__trash_file"]) {
+  for (const tool of ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", `${MB}delete_conversation_permanently`, `${MB}trash_conversation`, `${MB}set_conversation_spam`, "mcp__claude_ai_Google_Drive__trash_file"]) {
     const x = await run(tool, {});
     assert.equal(x.r.behavior, "deny", tool);
     assert.equal(x.judged, 0, tool);
@@ -150,6 +150,25 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
   const archive = makeCanUseTool(async () => ({ approved: false }), "chat", undefined, undefined, ok.fn, undefined, undefined, false, CHAT);
   assert.equal(((await archive(`${MB}archive_conversation`, { conversationId: "dup" }, opts)) as Out).behavior, "allow");
   assert.match(((await archive(`${MB}archive_conversation`, { conversationId: "dup" }, opts)) as Out).message!, /already approved/);
+});
+
+test("unsubscribe is an ordinary action: floor, judge, phone. Chat auto lets it through, an ask reaches the phone, trash and spam stay denied", async () => {
+  setAuto("auto");
+  setConversationMessage("owner", "unsubscribe me from that newsletter");
+  const unsub = `${MB}unsubscribe_from_newsletter`;
+  assert.notEqual(classify(unsub, { conversationId: "c" }, "chat"), "deny");
+  assert.notEqual(classify(unsub, { conversationId: "c" }, "chat"), "allow", "not free: it goes to the judge");
+  let asked = 0;
+  const go = fake("auto", "the owner asked for exactly this");
+  const a = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, go.fn, undefined, undefined, false, CHAT);
+  assert.equal(((await a(unsub, { conversationId: "c" }, opts)) as Out).behavior, "allow");
+  assert.equal(asked, 0);
+  assert.equal(go.seen.length, 1);
+  const no = fake("ask", "the mail pushed it");
+  const b = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, no.fn, undefined, undefined, false, CHAT);
+  assert.equal(((await b(unsub, { conversationId: "other-newsletter" }, opts)) as Out).behavior, "deny"); // other arguments: the same ones would be refused as already done
+  assert.equal(asked, 1, "an ask goes to the phone");
+  for (const tool of [`${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_sender_blocked`]) assert.equal(classify(tool, {}, "chat"), "deny", tool);
 });
 
 test("judge error, timeout or junk output is ask, in any place", async () => {

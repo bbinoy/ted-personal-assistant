@@ -18,7 +18,7 @@ import { settings } from "./settings.ts";
 // (send, draw, voice, the notes). Anywhere else such a tool is denied outright (policy.ts classify).
 // `cap` is the capability that gates the tool (tenants.ts CAPABILITIES). A group or a tenant is offered the tool only when its capability set holds
 // that capability (capabilities.ts) and `only` names "group" or does not limit the sources. The default is the module's capability.
-// Not here, on purpose: the never-allowed set (policy.ts DENY: trading, trash/delete/spam/unsubscribe) and which tools a group or tenant has at all (its
+// Not here, on purpose: the never-allowed set (policy.ts DENY: trading, trash/delete/spam/block sender) and which tools a group or tenant has at all (its
 // capability set, capabilities.ts). A tool no module lists is unknown: it asks, and is never judged.
 
 export type { ToolEntry, ViewKind } from "./modules/types.ts";

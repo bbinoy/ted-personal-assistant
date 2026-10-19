@@ -12,6 +12,7 @@
 {"tool":"mcp__mailbird__get_help","provider":"mailbird","action":"read","cap":"mail","only":null,"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__mailbird__get_ui_state","provider":"mailbird","action":"read","cap":"mail","only":null,"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__mailbird__archive_conversation","provider":"mailbird","action":"archive","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__mailbird__unsubscribe_from_newsletter","provider":"mailbird","action":"unsubscribe","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__mailbird__move_conversation_to_inbox","provider":"mailbird","action":"restore","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__mailbird__select_conversation","provider":"mailbird","action":"select","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__mailbird__create_draft","provider":"mailbird","action":"draft","cap":"mail","only":null,"view":"mbDraft","free":false,"untrusted":false},

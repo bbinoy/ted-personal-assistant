@@ -50,6 +50,7 @@ export const mailbirdModule: ToolModule = {
     ...mb("archive", "archive_conversation"),
     ...mb("restore", "move_conversation_to_inbox"),
     ...mb("select", "select_conversation"),
+    ...mb("unsubscribe", "unsubscribe_from_newsletter"), // not free: floor, judge, phone like any action; the judge asks when the mail itself pushes it (a phishing pattern)
     ...mb("draft", "create_draft update_draft", { view: "mbDraft" }),
     ...mb("reply-draft", "reply_to_conversation reply_all_to_conversation", { view: "mbReply" }),
     ...mb("send-self", "send_self_briefing"), // can only ever reach the owner
