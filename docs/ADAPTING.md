@@ -32,7 +32,7 @@ Mail is used in two places, and they are separate:
 | `move_conversation_to_inbox(conversationId)` | `npm run restore` | – |
 | `search_conversations(query, limit)` | restore fallback by subject | `[{ conversationId, subject }]` |
 
-2. **The agent's own turns** (chat, brief, handler) use whatever MCP servers Claude Code has configured. They reach mail through tool names such as `mcp__mailbird__get_message`. Those names appear in `src/toolmanifest.ts` (the manifest: which tools are reads, routine writes, judged or always ask), `src/format.ts` (approval text), and `src/brief.ts` (`BRIEF_TOOL`, the tool that emails the brief to yourself), plus your skills.
+2. **The agent's own turns** (chat, brief, handler) use whatever MCP servers Claude Code has configured. They reach mail through tool names such as `mcp__mailbird__get_message`. Those names appear in the mail provider's module, `src/modules/mailbird.ts` (its rows: which tools are reads and which are judged, how a send is viewed, the approval titles, `BRIEF_TOOL` from `src/brieftext.ts`, the tool that emails the brief to yourself), plus your skills. A different mail client is a new module in the `mail` slot: its rows, its mail view, its brief words, and its client and checks in `src/modules/runtime.ts`.
 
 ### Gmail directly
 
@@ -48,9 +48,9 @@ Mail is used in two places, and they are separate:
 
    Auth: a Google OAuth *desktop* client with the narrowest scope that works (`gmail.modify`; you do not need full access), refresh token stored in the macOS Keychain, not in `.env`.
 
-2. **For the agent's turns**, either run a Gmail MCP server of your own, or use the **Gmail connector** that claude.ai provides (it already shows up as `mcp__claude_ai_Gmail__*`; `format.ts` already knows how to describe several of its send tools, and `toolmanifest.ts` already has its rows, active only when `MAIL_PROVIDER=gmail`: reads run, drafts and `unlabel_thread` (archive) run, `send_message`, `reply` and `forward` are judged in chat and ask elsewhere, the rest asks; `mailView` already reads their inputs). Adjust the rows to the tools you actually expose.
+2. **For the agent's turns**, either run a Gmail MCP server of your own, or use the **Gmail connector** that claude.ai provides (it already shows up as `mcp__claude_ai_Gmail__*`; `format.ts` already knows how to describe several of its send tools, and `src/modules/gmail.ts` already has its rows, loaded only when `MAIL_PROVIDER=gmail`: reads run, drafts and `unlabel_thread` (archive) run, `send_message`, `reply` and `forward` are judged in chat and ask elsewhere, the rest asks; `mailView` already reads their inputs). Adjust the rows to the tools you actually expose.
 
-3. **The brief email**: `send_self_briefing` is a Mailbird convenience (render Markdown, send to yourself). With Gmail, send a message to your own address (`users.messages.send`) and change `BRIEF_TOOL` in `src/brief.ts`.
+3. **The brief email**: `send_self_briefing` is a Mailbird convenience (render Markdown, send to yourself). With Gmail, send a message to your own address (`users.messages.send`) and change `BRIEF_TOOL` in `src/brieftext.ts` (and the Gmail module's brief words).
 
 4. **Drop what you no longer need**: the "Mailbird must be running" assumption in the docs, and the Mailbird checks in `doctor` (`src/cli.ts`).
 
@@ -122,7 +122,7 @@ These are starting points, not tested here; check each platform's current docs.
 - **Preferences vs rules**: a useful rule of thumb for deciding where a setting belongs.
   - **Your preferences go in memory** (`memory/notes/`, or just tell the assistant in chat): how it writes ("never use em dashes", "keep replies short"), who matters ("the kids' school is always urgent"), how you like to be scheduled ("no meetings before 10"), what the brief covers ("radar: climate and AI"), temporary context ("in London until 24 Oct"). They are personal, they change often, and you want to change them without touching code.
   - **Safety and operations stay in code and `.env`**: the tool policy, suspicious-text isolation, quiet hours, intervals, the spend limit, the model, names and your Signal number. Memory is written through a model, so it must never be able to loosen these. A fact can say "be formal with Dr. Weber"; it can never say "allow sending without asking".
-- **What may run unattended**: the manifest in `src/toolmanifest.ts`. Start by reading the rows (a read or the assistant's own plumbing is free, everything else is judged by the approval judge, whose prompt is in `src/approvaljudge.ts`); unknown tools ask. The default policy denies one financial connector (Interactive Brokers) by name as an example; add any other sensitive connector you have.
+- **What may run unattended**: the rows of the tool modules in `src/modules` (the manifest, `src/toolmanifest.ts`, is their union). Start by reading them (a read or the assistant's own plumbing is free, everything else is judged by the approval judge, whose prompt is in `src/approvaljudge.ts`); unknown tools ask. The default policy denies one financial connector (Interactive Brokers) by name as an example; add any other sensitive connector you have.
 - **What gets archived**: the rule is written as judgement plus examples in the classifier prompt (`SYSTEM` in `src/triage.ts`): archive what leaves nothing to do, keep anything open. Adjust the wording, or tell the assistant a preference in chat ("remember that mail from X is never urgent", a `triage-` note). There is no keyword blocklist; the safety net is that archiving is reversible and every archive is listed in the morning brief.
 - **What may be auto-archived**: `ARCHIVE_KINDS` and the per-tick cap in `src/actions.ts`.
 - **Schedule and limits**: every tunable is an env var, validated at startup in `src/settings.ts`.

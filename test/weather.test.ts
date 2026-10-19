@@ -4,7 +4,8 @@ import { getForecast, getMarineForecast, getSpotInfo, searchPlaces, type Weather
 import { nearestSpot } from "../src/kitespots.ts";
 import { exposure, featuresFrom, rings, type Ring } from "../src/shore.ts";
 import { access } from "./util.ts";
-import { OFFERED_SKILLS } from "../src/profiles.ts";
+import { offeredSkills } from "../src/profiles.ts";
+import { settings } from "../src/settings.ts";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const io = (body: unknown, status = 200): WeatherIo => ({ fetch: async () => json(body, status), now: () => new Date("2026-10-19T08:30:00Z") }); // 10:30 local (UTC+2)
@@ -96,5 +97,5 @@ test("manifest: the weather tools are free reads in the owner's chat and in grou
     assert.equal(access(`mcp__weather__${t}`, "group"), "free");
     assert.equal(access(`mcp__weather__${t}`, "handler"), undefined);
   }
-  assert.ok(OFFERED_SKILLS.includes("ted-personal-assistant:surf-conditions"));
+  assert.ok(offeredSkills(settings.mail).includes("ted-personal-assistant:surf-conditions"));
 });

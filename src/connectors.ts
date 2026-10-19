@@ -1,3 +1,4 @@
+import { registered } from "./modules/index.ts";
 import { readJson, writeJson } from "./state.ts";
 
 // Which connectors the last run could actually see. Notion and Google Calendar come through the
@@ -27,21 +28,22 @@ interface ServerStatus {
   status: string;
 }
 
-const SERVERS: Record<"notion" | "calendar" | "mail" | "gmail", RegExp> = { notion: /\bnotion\b/i, calendar: /google calendar/i, mail: /^mailbird$/i, gmail: /^gmail$/i };
-
 // Pure. A connector is DOWN only when the run's start-up message says so: its server is not
 // listed at all (never added to the account), or failed, needs sign-in, or is disabled. Merely
 // "pending" is not down: slow servers (Mailbird through npx, a cold connector) are still
 // connecting and their tools appear a moment later. Without server info (an older SDK), fall
 // back to whether any of its tools were given.
+// Which connectors there are, under which name they are recorded, which server name they show up as and which tool prefix they have: each tool module's
+// `connection` (src/modules). Notion and Calendar are recorded as "notion" and "calendar", Mailbird as "mail", the Gmail connector as "gmail".
 export function detect(tools: readonly string[], servers?: readonly ServerStatus[], at = new Date()): Connectors {
   const hasTool = (prefix: string) => tools.some((t) => t.startsWith(prefix));
-  const up = (key: keyof typeof SERVERS, toolPrefix: string): boolean => {
+  const up = (match: RegExp, toolPrefix: string): boolean => {
     if (!servers) return hasTool(toolPrefix);
-    const s = servers.find((x) => SERVERS[key].test(x.name.replace(/^claude\.ai\s+/i, "")));
+    const s = servers.find((x) => match.test(x.name.replace(/^claude\.ai\s+/i, "")));
     return !!s && !["failed", "needs-auth", "disabled"].includes(s.status);
   };
-  return { at: at.toISOString(), notion: up("notion", "mcp__claude_ai_Notion__"), calendar: up("calendar", "mcp__claude_ai_Google_Calendar__"), mail: up("mail", "mcp__mailbird__"), gmail: up("gmail", "mcp__claude_ai_Gmail__") };
+  const seen = registered().flatMap((m) => (m.connection.kind === "connector" && m.connection.key ? [[m.connection.key, up(m.connection.server, m.connection.prefix)] as const] : []));
+  return { at: at.toISOString(), ...Object.fromEntries(seen) } as unknown as Connectors;
 }
 
 export const recordConnectors = (tools: readonly string[], servers?: readonly ServerStatus[]) => writeJson(FILE, detect(tools, servers));

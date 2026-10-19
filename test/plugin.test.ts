@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { missingSetup, SETUP_ITEMS, type Note } from "../src/notes.ts";
+import { missingSetup, setupItems, type Note } from "../src/notes.ts";
 import { briefSystem, chatSystem, handlerSystem } from "../src/persona.ts";
 import { settings } from "../src/settings.ts";
 
@@ -33,7 +33,7 @@ test("plugin: skills hold no personal details, only references to the owner's no
 
 test("plugin: every skill that needs setup names the note it reads, and setup saves under those names", () => {
   const setup = readFileSync(join(skillsDir, "setup", "SKILL.md"), "utf8");
-  for (const item of SETUP_ITEMS) assert.ok(setup.includes(item.file), `setup skill saves ${item.file}`);
+  for (const item of setupItems()) assert.ok(setup.includes(item.file), `setup skill saves ${item.file}`);
   for (const [skill, note] of [["calendar", "setup-calendars"], ["notion-tasks", "setup-tasks"], ["meeting-prep", "setup-meetings"], ["mailbird", "voice-writing"]] as const) {
     assert.ok(readFileSync(join(skillsDir, skill, "SKILL.md"), "utf8").includes(note), `${skill} reads ${note}`);
   }
@@ -42,9 +42,9 @@ test("plugin: every skill that needs setup names the note it reads, and setup sa
 
 test("setup: missing items are listed, in prompts as an offer in chat and a skip-and-say elsewhere", () => {
   const note = (file: string): Note => ({ file, category: file.startsWith("voice") ? "voice" : "setup", text: "x" });
-  assert.equal(missingSetup([]).length, SETUP_ITEMS.length);
-  assert.deepEqual(missingSetup(SETUP_ITEMS.map((i) => note(i.file))), []);
-  assert.equal(missingSetup([note("setup-calendars.md")]).length, SETUP_ITEMS.length - 1);
+  assert.equal(missingSetup([]).length, setupItems().length);
+  assert.deepEqual(missingSetup(setupItems().map((i) => note(i.file))), []);
+  assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
   assert.match(chatSystem(undefined, new Date("2026-10-12T09:00:00"), missing), /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
   assert.match(briefSystem("", missing), /You cannot ask anyone[\s\S]*message "set up"/);
@@ -97,8 +97,8 @@ test("connectors: judged by the server status in the start-up message, so a slow
 
 test("plugin: follow-through is a private skill the calendar and task skills and the mail handler point to", async () => {
   const { handlerPrompt } = await import("../src/handler.ts");
-  const { PRIVATE_SKILLS } = await import("../src/skills.ts");
-  assert.ok(PRIVATE_SKILLS.includes("follow-through"));
+  const { privateSkills } = await import("../src/skills.ts");
+  assert.ok(privateSkills().includes("follow-through"));
   for (const s of ["calendar", "notion-tasks"]) assert.match(readFileSync(join(skillsDir, s, "SKILL.md"), "utf8"), /ted-personal-assistant:follow-through/, s);
   assert.match(handlerPrompt([]), /ted-personal-assistant:follow-through/);
 });

@@ -7,8 +7,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BRIEF_INSTRUCTIONS, briefInstructions, runBriefAttempt } from "../src/brief.ts";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
+import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
-import { LAST_BRIEF, missingSetup, SETUP_ITEMS } from "../src/notes.ts";
+import { LAST_BRIEF, missingSetup, setupItems } from "../src/notes.ts";
 import { backgroundSystem, briefSystem, chatSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy.ts";
 import { offeredSkills } from "../src/profiles.ts";
@@ -166,8 +167,8 @@ test("doctor without mail: 'mail: off' is OK, Mailbird is never contacted, no ma
   assert.equal(heartbeatDetail({}, Infinity, false, false, () => "x"), "no tick recorded yet");
   // With mail, a reachable client is OK and an unreachable one still FAILS.
   lines.length = 0;
-  await mailCheck(line, true, async () => 2);
-  await mailCheck(line, true, async () => { throw new Error("no ~/.claude.json"); });
+  await mailbirdCheck(line, async () => 2);
+  await mailbirdCheck(line, async () => { throw new Error("no ~/.claude.json"); });
   assert.deepEqual(lines.map((l) => l[0]), [true, false]);
 });
 
@@ -221,9 +222,9 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
 test("setup items without mail: the writing-voice item (email drafts) is not asked for, the rest are", () => {
   const all = missingSetup([], [], true);
   const none = missingSetup([], [], false);
-  assert.equal(all.length, SETUP_ITEMS.length);
+  assert.equal(all.length, setupItems().length);
   assert.deepEqual(none, all.filter((l) => !/email drafts/.test(l)));
-  assert.equal(none.length, SETUP_ITEMS.length - 1);
+  assert.equal(none.length, setupItems().length - 1);
   assert.ok(none.every((l) => !/mail|writ/i.test(l)));
   // Connector gaps still drop their own items.
   assert.equal(missingSetup([], ["notion"], false).length, 1);

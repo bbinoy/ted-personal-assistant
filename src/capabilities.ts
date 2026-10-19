@@ -2,10 +2,11 @@ import { intakeToolsFor } from "./intakelinks.ts";
 import { settings } from "./settings.ts";
 import { skillsFor } from "./skills.ts";
 import { type Capability, type TenantContext } from "./tenants.ts";
-import { MANIFEST } from "./toolmanifest.ts";
+import { manifest } from "./toolmanifest.ts";
 
 // ONE mechanism for the tools and skills of every isolated conversation (a group, a tenant): a set of capabilities in, its tools and its skills out.
-// The tools come from the manifest (toolmanifest.ts: each row names its capability and the sources it is for), the skills from skills.ts, and policy.ts
+// The tools come from the manifest (toolmanifest.ts: the rows of the loaded tool modules, each naming its capability and the sources it is for), the skills
+// from skills.ts (the shared skills of the same modules), and policy.ts
 // classify, the run's built-in tools, its MCP servers and its skills allowlist all read the same two results. The owner is not derived: the owner's
 // conversation has everything (the connectors, the whole plugin), and its rules are the manifest flags.
 
@@ -39,7 +40,7 @@ export const tenantCapabilities = (ctx: Pick<TenantContext, "config" | "capabili
 // The tools of a run with these capabilities: every manifest row whose capability is in the set and that is not limited away from groups. Built-in tools
 // (no "mcp__" prefix) are in the same set; the unknown tool is simply not in it. Skill is there only when there is a skill to load.
 export function toolsFor(caps: ReadonlySet<Capability>): ReadonlySet<string> {
-  const tools = new Set(MANIFEST.filter((e) => caps.has(e.cap) && (!e.only || e.only.includes("group"))).map((e) => e.tool));
+  const tools = new Set(manifest().filter((e) => caps.has(e.cap) && (!e.only || e.only.includes("group"))).map((e) => e.tool));
   if (!skillsFor(caps).length) tools.delete("Skill");
   for (const t of tools) if (NEVER_FOR_ISOLATED.some((re) => re.test(t))) tools.delete(t);
   return tools;

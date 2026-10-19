@@ -1,34 +1,29 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "./audit.ts";
 import { recordCost } from "./budget.ts";
-import { createSendServer, OWNER_KEY } from "./send.ts";
-import { createVoiceServer } from "./voicetool.ts";
-import { INTAKE_LINK_TOOL } from "./intakelinks.ts";
-import { createIntakeServer } from "./intaketools.ts";
-import { createTenantAdminServer, createTenantServer, tenantEnv, type TenantRun } from "./tenanttools.ts";
-import { browseSystem, createBrowseServer } from "./browse.ts";
+import { OWNER_KEY } from "./send.ts";
+import { createTenantServer, tenantEnv, type TenantRun } from "./tenanttools.ts";
+import { browseSystem } from "./browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "./browseguard.ts";
-import { browseStatus, browserServer } from "./browseserver.ts";
 import { hiddenBrowserTools } from "./browserules.ts";
 import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { chatResume, forgetUnresumable } from "./chatsession.ts";
 import { recordConnectors } from "./connectors.ts";
 import { noteSuccess, observeRateLimit } from "./cooldown.ts";
 import { failure } from "./errors.ts";
-import { createMemoryServer } from "./memory-tools.ts";
-import { createWeatherServer } from "./weathertools.ts";
-import { createDrawServer } from "./drawtool.ts";
-import { announceMemoryChanges, noteWritten, recordMemoryChange } from "./memorynotice.ts";
+import { announceMemoryChanges, noteWritten } from "./memorynotice.ts";
+import { serversFor } from "./modules/runtime.ts";
+import type { RunContext } from "./modules/types.ts";
 import { approveIn, makeCanUseTool, type Approve, type JudgeSetup } from "./permissions.ts";
 import { groupCapabilities, groupTools } from "./capabilities.ts";
 import { hiddenTools } from "./policy.ts";
-import { OFFERED_SKILLS, PROFILES } from "./profiles.ts";
+import { PROFILES } from "./profiles.ts";
 import { changesCalendar, nudgeRadar } from "./radar-nudge.ts";
 import { type ChatSession } from "./session.ts";
 import { settings } from "./settings.ts";
 import { cleanToolOutput } from "./toolclean.ts";
 import { readJson, writeJson } from "./state.ts";
-import { skillsFor } from "./skills.ts";
+import { ownerSkills, skillsFor } from "./skills.ts";
 import { recordToolsSeen, toolsSeen } from "./toolsseen.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
@@ -48,7 +43,7 @@ export interface RunOptions {
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
-  skills?: readonly string[]; // the skills offered (default: all bundled ones, OFFERED_SKILLS); a group's or tenant's are the shared ones its capabilities allow (skills.ts)
+  skills?: readonly string[]; // the skills offered (default: the owner's, skills.ts ownerSkills);a group's or tenant's are the shared ones its capabilities allow (skills.ts)
   tools?: ReadonlySet<string>; // an isolated conversation (a group, a tenant): the tools that exist for the run, from its capabilities (capabilities.ts); decides its built-ins, its MCP servers and policy.ts classify
   maxTurns: number;
   maxBudgetUsd: number; // hard per-run spend cap. Per RUN, not per session: the SDK does not count the cost a resumed session already had (checked), so owner and groups alike need no adjustment here. The previous total is subtracted only when reporting cost (consume)
@@ -153,27 +148,17 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // Whose message the approval judge reads as the provenance of this run's calls: this conversation's own (the browse worker: the one that started it).
   const speaker = opts.speaker ?? (tellKey ? { key: tellKey, member: opts.source === "group" } : undefined);
   const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && opts.memory?.groupId ? approveIn(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
-  const browseTool =
-    settings.browse && (opts.source === "chat" || opts.source === "background" || opts.source === "group") && offers("mcp__browse__browse")
-      ? createBrowseServer({ mode, groupId: opts.memory?.groupId, key: tellKey, spent: tenant?.overBudget, run: browseRunner(askedIn, tenant, speaker) })
-      : undefined;
-  const sendServer = tellKey && offers("mcp__send__send") ? createSendServer(tellKey) : undefined;
-  // voice (voicetool.ts): the cloned voice of this conversation, Qwen only; the owner's chat and groups, never an unattended run.
-  const voiceServer = tellKey && settings.tts.provider === "qwen" && offers("mcp__voice__voice") ? createVoiceServer(tellKey) : undefined;
-  // weather (weathertools.ts): read-only forecasts and spot facts from public data, for the owner's chat and for groups, never an unattended run.
-  const weatherServer = (opts.source === "chat" || opts.source === "group") && settings.weather && offers("mcp__weather__get_forecast") ? createWeatherServer() : undefined;
-  // draw (drawtool.ts): an SVG the model writes, sanitised and rendered to a PNG it can send with `send`; the same conversations as `send`, never an unattended run.
-  const drawServer = tellKey && settings.draw && offers("mcp__draw__draw") ? createDrawServer(tellKey) : undefined;
-  // intake (intaketools.ts): a tenant's single-use link to the page where she types a secret herself; only when her tool set has it.
-  const intakeServer = tenant && tools?.has(INTAKE_LINK_TOOL) ? createIntakeServer(tenant) : undefined;
-  const status = browsing ? browseStatus() : undefined;
-  if (status && !status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
-  const mcpServers: Options["mcpServers"] = browsing && opts.guard && status?.ok
-    ? { browser: browserServer(status, opts.guard.outDir, undefined, { mode: opts.guard.vision, cdpPort: opts.guard.cdpPort }) }
+  // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
+  // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
+  // the browser: the browse run only) and builds it. A tenant's own server process (the Google and Notion modules to come) would be answered here the same way.
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId: opts.memory?.groupId, tenant, memory: opts.memory, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, speaker) };
+  const servers = serversFor(ctx);
+  const mcpServers: Options["mcpServers"] = browsing && opts.guard
+    ? servers
     : tenant && !tenant.consented
       ? { tenant: createTenantServer(tenant) }
-      : opts.memory || browseTool || sendServer
-        ? { ...(sendServer ? { send: sendServer } : {}), ...(weatherServer ? { weather: weatherServer } : {}), ...(drawServer ? { draw: drawServer } : {}), ...(voiceServer ? { voice: voiceServer } : {}), ...(opts.memory ? { memory: createMemoryServer({ notesDir: opts.memory.dir, groupId: opts.memory.groupId, tenantLog: tenant?.logFile, record: opts.memory.notify ? recordMemoryChange : () => {} }) } : {}), ...(browseTool ? { browse: browseTool } : {}), ...(intakeServer ? { intake: intakeServer } : {}), ...(opts.source === "chat" && settings.tenants ? { tenants: createTenantAdminServer() } : {}) } // the owner's tenant administration exists only with TENANTS=on
+      : opts.memory || servers.browse || servers.send
+        ? servers
         : undefined;
   // A tenant's run is on the instance key or it does not run: the owner's login is never a fallback (tenanttools.ts tenantEnv).
   const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
@@ -211,7 +196,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // The bundled skills, loaded from the repo; only these are offered to the model (the owner's
     // other skills would cost context on every call and are none of its business).
     plugins: isolated && !skills.length ? undefined : plugin,
-    skills: isolated ? (skills.length ? [...skills] : undefined) : (opts.skills ? [...opts.skills] : OFFERED_SKILLS),
+    skills: isolated ? (skills.length ? [...skills] : undefined) : (opts.skills ? [...opts.skills] : ownerSkills()),
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, opts.judgeContext, undefined, opts.guard, tools, !!tenant, { speaker, untrusted: opts.untrusted }),

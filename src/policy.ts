@@ -2,11 +2,12 @@ import type { Source } from "./audit.ts";
 import { realpathSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { isInside, realish } from "./contain.ts";
-import { gmailVerdict, GMAIL_PREFIX } from "./gmailrules.ts";
 import { isNotePath } from "./notes.ts";
 import { settings } from "./settings.ts";
 import { groupTools } from "./capabilities.ts";
-import { availableFor, entryFor, isFree, isReadTool } from "./toolmanifest.ts";
+import { registered } from "./modules/index.ts";
+import type { Denial, HideConfig } from "./modules/types.ts";
+import { availableFor, entryFor, isFree, isReadTool, moduleOf } from "./toolmanifest.ts";
 
 // Permissions as code. Every tool call any agent run wants to make passes classify():
 //   allow - run it
@@ -17,6 +18,24 @@ import { availableFor, entryFor, isFree, isReadTool } from "./toolmanifest.ts";
 // Unknown tools default to "ask", never to "allow".
 
 export type Verdict = "allow" | "ask" | "deny";
+
+// A tool module's own hard rule for a tool of its, or undefined to let the manifest decide.
+function floorVerdict(tool: string, input: Record<string, unknown>, source: Source): Verdict | undefined {
+  for (const m of registered()) {
+    const v = m.floor?.verdict?.(tool, input, source);
+    if (v) return v;
+  }
+  return undefined;
+}
+
+// What a denied call is recorded and answered with, if a tool module has something more to say than "blocked by policy" (permissions.ts).
+export function denial(tool: string, input: Record<string, unknown>): Denial | undefined {
+  for (const m of registered()) {
+    const d = m.floor?.onDeny?.(tool, input);
+    if (d) return d;
+  }
+  return undefined;
+}
 
 // Hard blocks, checked first so nothing below can override them.
 const DENY: RegExp[] = [
@@ -63,28 +82,18 @@ export function isReadableData(path: unknown, dirs: readonly string[] = [setting
 // --- what the model never sees ---
 // Every tool schema the model can see is re-sent on every model call, so hiding tools nobody
 // uses is the biggest saving there is: Notion alone was ~58k tokens of a ~118k floor, one of
-// its tools 21k. Hidden: the connectors in HIDDEN_CONNECTORS, Notion beyond NOTION_TOOLS, Mailbird beyond MAILBIRD_TOOLS, and
+// its tools 21k. Hidden: the connectors in HIDDEN_CONNECTORS, Notion beyond NOTION_TOOLS, Mailbird beyond MAILBIRD_TOOLS (each module's `hide`), and
 // anything policy denies for everyone anyway (it could never run). Both lists are settings
 // (.env): a skill that needs a hidden tool fails, so keep them in step with your skills.
-const NOTION = "mcp__claude_ai_Notion__";
-const MAILBIRD = "mcp__mailbird__";
 
 // Names come from the tools a run has seen (agent.ts records them), so a tool a connector
 // adds later is hidden from the run after the one that first saw it.
-export function hiddenTools(
-  seen: readonly string[],
-  cfg: { hiddenConnectors: readonly string[]; notionTools: readonly string[]; mailbirdTools: readonly string[]; gmailTools?: readonly string[] } = settings,
-): string[] {
-  const notion = new Set(cfg.notionTools);
-  const mail = new Set(cfg.mailbirdTools);
-  const gmail = cfg.gmailTools ? new Set(cfg.gmailTools) : undefined; // undefined: the whole connector is hidden by prefix, or not in use
-  const extra = seen.filter(
-    (t) =>
-      (t.startsWith(NOTION) && !notion.has(t.slice(NOTION.length))) ||
-      (t.startsWith(MAILBIRD) && !mail.has(t.slice(MAILBIRD.length))) ||
-      (gmail && t.startsWith(GMAIL_PREFIX) && !gmail.has(t.slice(GMAIL_PREFIX.length))) ||
-      DENY.some((re) => re.test(t)),
-  );
+export function hiddenTools(seen: readonly string[], cfg: HideConfig & { hiddenConnectors: readonly string[] } = settings): string[] {
+  const keeps = registered().flatMap((m) => {
+    const keep = m.hide?.keep(cfg); // undefined: the whole connector is hidden by prefix, or not in use
+    return m.hide && keep ? [{ prefix: m.hide.prefix, keep: new Set(keep) }] : [];
+  });
+  const extra = seen.filter((t) => keeps.some((k) => t.startsWith(k.prefix) && !k.keep.has(t.slice(k.prefix.length))) || DENY.some((re) => re.test(t)));
   return [...cfg.hiddenConnectors, ...new Set(extra)];
 }
 
@@ -106,10 +115,10 @@ export function classify(tool: string, input: Record<string, unknown>, source: S
   }
   if (DENY.some((re) => re.test(tool))) return "deny";
   if (LOCAL_FILE.test(JSON.stringify(input))) return "deny";
-  // Gmail's rules a flag cannot say: sensitive labels, attachment content, archive log-only, the brief to oneself (gmailrules.ts).
-  const gm = settings.mailProvider === "gmail";
-  const g = gmailVerdict(tool, input, source, { archiveLive: gm && settings.gmailArchiveLive, self: gm ? settings.mailSelfAddress : undefined, briefEmail: gm && settings.briefEmail });
-  if (g) return g;
+  // The tool modules' hard rules for their own tools, which a row cannot say (Gmail's sensitive labels, attachment content, archive log-only, the brief to
+  // oneself: gmailrules.ts). Every registered module's, loaded or not: they only restrict, so a connector's tools stay as refused as they were.
+  const floor = floorVerdict(tool, input, source);
+  if (floor) return floor;
   // The note file tools are chat only (manifest) and only on a path inside the notes (or, for Read, the data folders): the path is code.
   if (NOTE_FILE_TOOLS.has(tool) && !(isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path)))) return "deny";
   if (!availableFor(tool, source)) return "deny";
@@ -129,7 +138,8 @@ export interface Change {
 }
 
 export function isModifiable(tool: string): boolean {
-  return entryFor(tool)?.action === "calendar-write";
+  const action = entryFor(tool)?.action;
+  return !!action && !!moduleOf(tool)?.floor?.editable?.includes(action); // the calendar module's event writes
 }
 
 // Returns the patched input, or undefined if the patch is not acceptable

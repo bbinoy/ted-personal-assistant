@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { judgeAction, judgePrompt, mayFix, notifyNote, parseVerdict, agreement, type Verdict } from "../src/autojudge.ts";
 import { readAudit } from "../src/audit.ts";
 import { SYSTEM } from "../src/approvaljudge.ts";
-import { makeCanUseTool, setChatOwnerMessage, setDraftReader, type CallGuard } from "../src/permissions.ts";
+import { setDraftReader } from "../src/modules/mailbird.ts";
+import { makeCanUseTool, setChatOwnerMessage, type CallGuard } from "../src/permissions.ts";
 import { settings } from "../src/settings.ts";
 import { CHAT } from "./util.ts";
 

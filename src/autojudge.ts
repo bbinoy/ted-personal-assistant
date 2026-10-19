@@ -1,7 +1,8 @@
 import { runJudge, withTimeout } from "./approvaljudge.ts";
 import { fence } from "./fence.ts";
 import { OWNER } from "./settings.ts";
-import { actionOf, entryFor, type MailView } from "./toolmanifest.ts";
+import type { MailView } from "./mailview.ts";
+import { actionOf, entryFor, moduleOf } from "./toolmanifest.ts";
 import type { Source } from "./audit.ts";
 import { LIMITS } from "./sanitize.ts";
 
@@ -25,54 +26,21 @@ export interface Verdict {
   reason: string;
 }
 
-// The floor, set in code. Whether an action may be judged AT ALL: a veto per action (isJudgeable). Calendar events for the owner alone: no attendees, no
-// guests, nobody invited. An EXISTING event may have guests who would be emailed by an update even when this call names nobody; the judge is told so
-// in the Notifies line and is bold only for the owner's own event.
-const PEOPLE_FIELD = /^(attendees?|guests?|invitees?|recipients?)$/i;
+// The floor, set in code. Whether an action may be judged AT ALL: a veto per action (isJudgeable). The vetoes are data the tool modules bring (src/modules:
+// calendar events for the owner alone, a mail nobody can be named for, the plain-address check for a page, sharing, stopping a tenant); this file reads them.
 
-// Opening a web page. Either way the judge never sees mail or page text, only the owner's words, a member's words or the job's instructions. The floor is
-// about what the ADDRESS can carry out: a fetched URL is also a way to send data away in its query string. So: https, no credentials, a named public
-// host (no IP address, localhost or local name), a short address and a short query, no fragment. Whether the page is related to the request is the
-// judge's call; whether the address is safe to even consider is code's.
-const LOCAL_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|test|invalid|example|localdomain|intranet|private)$/i;
-// Public names that resolve to a private or loopback address anyway (127.0.0.1.nip.io, 192-168-1-5.sslip.io, localtest.me), so a
-// "named public host" can still point inside this machine's network.
-export const REBINDING_HOST = /(^|\.)(nip\.io|sslip\.io|xip\.io|localtest\.me|lvh\.me|vcap\.me|lacolhost\.com|traefik\.me)$|(^|[.-])\d{1,3}([.-])\d{1,3}\2\d{1,3}\2\d{1,3}($|[.-])/i;
-export function isPlainWebAddress(raw: unknown): boolean {
-  if (typeof raw !== "string" || raw.length > 300) return false;
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    return false;
-  }
-  const host = u.hostname;
-  return (
-    u.protocol === "https:" && !u.username && !u.password && !u.port && !u.hash &&
-    u.search.length <= 120 && host.includes(".") && !LOCAL_HOST.test(host) && !REBINDING_HOST.test(host) && !/^[\d.]+$/.test(host) && !host.includes(":") && !host.startsWith("[")
-  );
-}
+// Opening a web page: only a plain public https address may be judged (webaddress.ts). Re-exported, the tests and the browse rules read it from here.
+export { isPlainWebAddress, REBINDING_HOST } from "./webaddress.ts";
 
-// Actions that are never judged, whatever the verdict would be: handing a file to other people, and stopping or deleting a tenant.
-const NEVER_JUDGED = new Set(["share", "tenants-stop"]);
-
-// Pure: is there anything the floor forbids judging? `view` is the call as mailView() reads it (permissions.ts reads the draft back for a send).
+// Pure: is there anything the floor forbids judging? The tool's module says which of its actions are never judged (handing a file to other people, stopping or
+// deleting a tenant) and which need a check on the call itself. `view` is the call as mailView() reads it (permissions.ts reads the draft back for a send).
 // A tool the manifest does not know is never judged. Payment and login fields never get here (browseguard.ts asks them without the judge).
 export function isJudgeable(tool: string, input: Record<string, unknown>, view?: MailView): boolean {
   const action = entryFor(tool)?.action;
-  if (!action || NEVER_JUDGED.has(action)) return false;
-  switch (action) {
-    case "web-fetch":
-      return isPlainWebAddress(input.url);
-    case "calendar-write":
-      return Object.entries(input).every(([k, v]) => !PEOPLE_FIELD.test(k) || v === undefined || v === null || (Array.isArray(v) && v.length === 0) || v === "");
-    case "send":
-    case "reply":
-    case "forward":
-      return !!view && view.to.length > 0; // a mail nobody can be named for (a forward draft with no recipient yet) is not judged
-    default:
-      return true;
-  }
+  const floor = moduleOf(tool)?.floor;
+  if (!action || floor?.judgeNever?.includes(action)) return false;
+  const veto = floor?.judgeVeto?.[action];
+  return veto ? veto(input, view) : true;
 }
 
 // Pure: does this mode let a verdict skip the phone?
@@ -92,22 +60,18 @@ export interface CarriedApproval {
 }
 
 // Where `fix` is never allowed: the question there is whether the action may happen at all, not whether its arguments are right. A mail
-// send, reply or forward, anything that deletes, shares or pays, and a guard-built step (a browse commit step, a payment) are downgraded to ask.
-const NEVER_FIX = new Set(["send", "reply", "forward", "share", "calendar-respond"]);
+// send, reply or forward, anything that deletes, shares or pays, and a guard-built step (a browse commit step, a payment) are downgraded to ask. The actions
+// are the modules' (noFix: a mail send, a share, answering an invite).
 // By name as well as by manifest action, so it holds for the mail provider that is not active and for a tool the manifest does not know.
 const NEVER_BY_NAME = /(^|[_-])(delete|trash|remove|unsubscribe|spam|send|reply|forward|share|respond|pay)([_-]|$)/i;
 export function mayFix(tool: string, o: { guardStep?: boolean; payment?: boolean } = {}): boolean {
-  return !o.guardStep && !o.payment && !NEVER_FIX.has(actionOf(tool)) && !NEVER_BY_NAME.test(tool.split("__").pop() ?? tool);
+  return !o.guardStep && !o.payment && !moduleOf(tool)?.floor?.noFix?.includes(actionOf(tool)) && !NEVER_BY_NAME.test(tool.split("__").pop() ?? tool);
 }
 
-// Pure: for a calendar write, one line for the judge (not the owner) saying whether this call names guests or asks for notifications. It only
-// reads the call's own arguments; whether an existing event has guests is not known here, which is why the judge is told so.
-const NOTIFY_FIELD = /^(notificationLevel|sendUpdates|sendNotifications|notifyAttendees)$/i;
+// Pure: one line for the judge (not the owner) that a module may add about its own call: for a calendar write, whether the call names guests or asks for
+// notifications. It only reads the call's own arguments; whether an existing event has guests is not known here, which is why the judge is told so.
 export function notifyNote(tool: string, input: Record<string, unknown>): string {
-  if (actionOf(tool) !== "calendar-write") return "";
-  const people = Object.entries(input).filter(([k, v]) => PEOPLE_FIELD.test(k) && v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && v.length === 0)).length;
-  const notify = Object.entries(input).filter(([k]) => NOTIFY_FIELD.test(k)).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`);
-  return `\nNotifies: ${people ? "this call names guests" : "this call names no guests"}${notify.length ? `; ${notify.join(", ")}` : "; this call asks for no notifications"} (guests already on an existing event are not shown here)`;
+  return moduleOf(tool)?.floor?.judgeNote?.[actionOf(tool)]?.(input) ?? "";
 }
 
 // PROVENANCE: whose words or which standing task led to the call. Written by code (provenanceFor), never by the model and never from mail or a page.

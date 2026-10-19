@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 import { SOURCES } from "../src/audit.ts";
 import { classify } from "../src/policy.ts";
 import { settings } from "../src/settings.ts";
-import { actionOf, availableFor, entryFor, isFree, MAIL_PROVIDERS, MANIFEST, mailView, readsUntrusted } from "../src/toolmanifest.ts";
+import { mailProviders } from "../src/modules/index.ts";
+import { actionOf, allRows, availableFor, entryFor, isFree, mailView, readsUntrusted } from "../src/toolmanifest.ts";
 import { access } from "./util.ts";
 
+const MANIFEST = allRows();
+const MAIL_PROVIDERS = mailProviders();
 const MB = "mcp__mailbird__";
 const GM = "mcp__claude_ai_Gmail__";
 const CAL = "mcp__claude_ai_Google_Calendar__";

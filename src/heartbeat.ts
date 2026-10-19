@@ -4,8 +4,10 @@ import { mailAlertRequest, type NoticeWriter } from "./notice.ts";
 import { LIMITS, oneLine } from "./sanitize.ts";
 import { audit } from "./audit.ts";
 import type { HandleItem } from "./handler.ts";
-import { GmailMail } from "./gmail.ts";
-import { Mailbird } from "./mailbird.ts";
+import type { GmailMail } from "./gmail.ts";
+import type { Mailbird } from "./mailbird.ts";
+import { mailSlot } from "./modules/index.ts";
+import { mailRuntime } from "./modules/runtime.ts";
 import { noteRateLimit, skipForCooldown } from "./cooldown.ts";
 import { isPaused } from "./pause.ts";
 import { settings } from "./settings.ts";
@@ -56,11 +58,15 @@ interface HeartbeatHooks {
 // What the mail check needs of the mail client (Mailbird, the Gmail relay, or a fake in tests).
 export type MailSource = (Pick<Mailbird, "inboxes" | "call" | "close"> | Pick<GmailMail, "inboxes" | "call" | "close">) & { getMessages?: GmailMail["getMessages"] };
 
-// The provider's mail source (the heartbeat, `npm run triage-check` and `npm run restore` all start from here).
-export const newMailSource = (): MailSource & { connect?: () => Promise<void> } => (settings.mailProvider === "gmail" ? new GmailMail() : new Mailbird());
+// The mail provider's source (the heartbeat and `npm run triage-check` start from here): the loaded mail module's (src/modules).
+export function newMailSource(): MailSource & { connect?: () => Promise<void> } {
+  const mail = mailRuntime();
+  if (!mail) throw new Error("there is no mail provider (MAIL_PROVIDER=none)");
+  return mail.source();
+}
 
 // Gmail's first week: the heartbeat classifies and logs "would-archive" but archives nothing (GMAIL_ARCHIVE_LIVE=true ends it).
-const archiveLogOnly = () => settings.mailProvider === "gmail" && !settings.gmailArchiveLive;
+const archiveLogOnly = () => mailSlot()?.archiveLogOnly() ?? false;
 
 // Starts every tick-driven job (wake-ups, dream, brief, radar): each in its own try/catch, none awaited, so a job that throws
 // (even synchronously) or hangs never keeps another from starting.
@@ -213,8 +219,8 @@ async function processNewMail(mb: MailSource, fresh: NewMail[], hooks: Heartbeat
       }
     }
 
-    if (plan.handle.length > 0 && settings.mailProvider === "gmail") {
-      // The background handler drafts replies with Mailbird's tools and shows them as Mailbird drafts: not built for Gmail. The mail stays in the inbox and the brief lists it.
+    if (plan.handle.length > 0 && mailSlot()?.handler === false) {
+      // A provider without the background handler (Gmail: it drafts replies with Mailbird's tools and shows them as Mailbird drafts). The mail stays in the inbox and the brief lists it.
       for (const i of plan.handle) decision[i] = "kept-no-handler";
     } else if (plan.handle.length > 0) {
       try {

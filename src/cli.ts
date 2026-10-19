@@ -1,7 +1,7 @@
-import { isTriage, readAudit, type AuditEntry } from "./audit.ts";
-import { GmailMail } from "./gmail.ts";
+import { isTriage, readAudit } from "./audit.ts";
 import { newMailSource, triageCheck } from "./heartbeat.ts";
-import { Mailbird } from "./mailbird.ts";
+import { mailSlot } from "./modules/index.ts";
+import { mailRuntime } from "./modules/runtime.ts";
 import { localTime } from "./pause.ts";
 import { doctor } from "./doctor.ts";
 import { settings } from "./settings.ts";
@@ -14,8 +14,6 @@ import { APPROVAL_DECISIONS, approvalLines } from "./approvalreport.ts";
 //   npm run doctor                is everything the agent depends on in place?
 //   npm run triage-check [n]      how the heartbeat would classify the newest n emails (acts on nothing)
 
-
-const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 // What the approval judge (src/autojudge.ts) did: the actions it let through without asking the owner (newest last), and how its "ask" verdicts
 // compared with the owner's own answers.
@@ -49,7 +47,8 @@ async function report(hours: number) {
     judgeSummary(hours);
     return approvalSummary(hours);
   }
-  if (settings.mailProvider === "gmail" && !settings.gmailArchiveLive) console.log("Gmail archiving is in LOG-ONLY mode (GMAIL_ARCHIVE_LIVE=false): \"would-archive\" below was classified but NOT archived.");
+  const note = mailSlot()?.reportNote();
+  if (note) console.log(note);
   const order = ["archived", "would-archive", "alerted", "kept-no-handler", "covered-by-brief", "queued-for-handler", "archive-deferred", "archive-failed", "alert-failed", "handler-queue-failed", "kept"];
   const decisions = [...order, ...new Set(rows.map((e) => e.decision).filter((d) => !order.includes(d)))];
   for (const decision of decisions) {
@@ -64,40 +63,9 @@ async function report(hours: number) {
   approvalSummary(hours);
 }
 
-// Gmail: an archive is only the INBOX label removed, so undoing it is adding INBOX back to the thread (the audit id is the thread id).
-async function restoreGmail(id: string) {
-  await new GmailMail().call("move_conversation_to_inbox", { conversationId: id });
-  console.log(`Put back in the inbox (thread ${id}).`);
-  process.exit(0);
-}
-
+// How an archived mail is put back is the mail provider's (its module, src/modules): it prints what happened and returns the exit code.
 async function restore(id: string) {
-  if (settings.mailProvider === "gmail") return restoreGmail(id);
-  const mb = new Mailbird();
-  await mb.connect();
-  const entry: AuditEntry | undefined = readAudit((e) => isTriage(e) && e.meta?.id === id).pop();
-  const candidates = [id, ...(String(entry?.meta?.result ?? "").match(UUID) ?? []).filter((u: string) => u !== id)];
-  for (const c of candidates) {
-    try {
-      await mb.call("move_conversation_to_inbox", { conversationId: c });
-      console.log(`Restored to the inbox (conversation ${c}).`);
-      return process.exit(0);
-    } catch {
-      /* try the next candidate */
-    }
-  }
-  // Last resort: find it in the archive by subject.
-  if (entry?.meta?.subject) {
-    const hits = await mb.call<{ conversationId: string; subject: string }[]>("search_conversations", { query: `subject:"${entry.meta.subject.replace(/"/g, "")}"`, limit: 5 });
-    const hit = Array.isArray(hits) ? hits.find((h) => h.subject === entry.meta!.subject) : undefined;
-    if (hit) {
-      await mb.call("move_conversation_to_inbox", { conversationId: hit.conversationId });
-      console.log(`Restored via subject search (conversation ${hit.conversationId}).`);
-      return process.exit(0);
-    }
-  }
-  console.error("Could not restore it automatically. Find it in Mailbird's archive by subject.");
-  process.exit(1);
+  process.exit(await mailRuntime()!.restore(id)); // (mail off is refused below)
 }
 
 const [cmd, arg] = process.argv.slice(2);
