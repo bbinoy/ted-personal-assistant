@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { audit } from "./audit.ts";
 import { isInside } from "./contain.ts";
+import { intakeToolsFor } from "./intakelinks.ts";
 import { OneTimeCodes } from "./onetime.ts";
 import { FILE as OWNER_LOG, type Summarize } from "./messages.ts";
 import { NOTES_DIR } from "./notes.ts";
@@ -41,7 +42,7 @@ export type Role = "admin" | "member";
 export const ROLES: readonly Role[] = ["admin", "member"];
 
 // What a person may use; everything else about her is data. The owner has all of them, a friend starts with FRIEND_DEFAULTS.
-export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes"] as const;
+export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 export const FRIEND_DEFAULTS: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream"];
 export const isCapability = (x: unknown): x is Capability => (CAPABILITIES as readonly unknown[]).includes(x);
@@ -221,12 +222,13 @@ export const NEVER_FOR_TENANTS: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__
 export const connectorTools = (_ctx: Pick<TenantContext, "config">): readonly string[] => [];
 
 // The tools her run has: her notes (file tools inside notes/ only), web search, the memory tools, send, voice and browse (the browse
-// worker has no profile and no card in this mode, browseguard.ts), and the consent tool. What each may do is still policy.ts.
+// worker has no profile and no card in this mode, browseguard.ts), the consent tool and, when the intake page is set up and she may use it, its link tools. What each may do is still policy.ts.
 export function toolsFor(ctx: Pick<TenantContext, "config" | "capabilities">): ReadonlySet<string> {
   const t = new Set<string>(["Read", "Write", "Edit", "WebSearch", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send", TENANT_CONSENT_TOOL]);
   if (settings.browse && ctx.config.browse !== false && ctx.capabilities.includes("browse")) t.add("mcp__browse__browse");
   if (ctx.config.voice !== false && ctx.capabilities.includes("voice")) t.add("mcp__voice__voice");
   for (const c of connectorTools(ctx)) t.add(c);
+  for (const c of intakeToolsFor(ctx.capabilities)) t.add(c); // setup links to the intake page (intakelinks.ts): off unless INTAKE_BASE_URL and the capabilities are there
   for (const tool of t) if (NEVER_FOR_TENANTS.some((re) => re.test(tool))) t.delete(tool);
   return t;
 }

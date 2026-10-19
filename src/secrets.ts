@@ -17,6 +17,11 @@ export type ItemKind = "profile" | "card";
 export const ITEM_KINDS: readonly ItemKind[] = ["profile", "card"];
 export const CARD_TENANTS: ReadonlySet<string> = new Set([OWNER]);
 
+// The same rule for what the intake page writes (intakestore.ts): a card record of anyone but the owner has no security code in it, under any name.
+const CVC_FIELD = /^(cvc|cvv|cvn|csc|cid|cvc2|cvv2|security[_ -]?code)$/i;
+export const cvcProblem = (tenant: string, data: Data): string | undefined =>
+  !CARD_TENANTS.has(tenant) && Object.keys(data).some((k) => CVC_FIELD.test(k)) ? "a card's security code is never stored for this tenant" : undefined;
+
 export class SecretsError extends Error {}
 
 export class TenantSecrets {
@@ -59,6 +64,7 @@ export class TenantSecrets {
 // Service names of this Mac's Keychain items, from OPENBAO_KEYCHAIN_PREFIX.
 export const keychainNames = (prefix: string = settings.openbao.keychainPrefix) => ({
   token: `${prefix}-token`, // the app's own token (policy: tenants/owner/ only)
+  intake: `${prefix}-intake`, // the intake page's token (policy: create and update of profile and card items, nothing else: no read, no list, no delete)
   operator: `${prefix}-operator`, // the setup tool's token (policy: root generation, rekey, snapshot; no secrets)
   share: (n: number) => `${prefix}-unseal-${n}`,
 });
@@ -71,8 +77,9 @@ export function caPemOf(path: string): string | undefined {
   }
 }
 
-// The app's OpenBao client: the tenant token comes from the Keychain (kept in memory once read, never written anywhere else).
-export function appBao(o: { keychain?: Keychain; cfg?: typeof settings.openbao } = {}): OpenBao {
+// The app's OpenBao client: the token comes from the Keychain (kept in memory once read, never written anywhere else). `as: "intake"` is the intake
+// page's own write-only token; everything else uses the app's.
+export function appBao(o: { keychain?: Keychain; cfg?: typeof settings.openbao; as?: "app" | "intake" } = {}): OpenBao {
   const cfg = o.cfg ?? settings.openbao;
   const keychain = o.keychain ?? macKeychain;
   let token: { v: string; at: number } | undefined; // kept in memory for a few minutes, so a token replaced by a new setup is picked up without a restart
@@ -86,7 +93,8 @@ export function appBao(o: { keychain?: Keychain; cfg?: typeof settings.openbao }
     cacheMs: cfg.cacheMs,
     token: async () => {
       if (!token || Date.now() - token.at > 300_000) {
-        const v = await keychain.get(keychainNames(cfg.keychainPrefix).token);
+        const names = keychainNames(cfg.keychainPrefix);
+        const v = await keychain.get(o.as === "intake" ? names.intake : names.token);
         if (!v) throw new BaoError("no token");
         token = { v, at: Date.now() };
       }

@@ -343,7 +343,7 @@ test("registry: the owner is seeded from the number as an admin with every capab
   const rec = T.ensureOwner({ number: OWNER_NUMBER });
   assert.deepEqual([rec.id, rec.role, rec.status, rec.credential, rec.number, rec.acis], ["owner", "admin", "active", "login", OWNER_NUMBER, []]);
   assert.deepEqual([...rec.capabilities].sort(), [...T.CAPABILITIES].sort());
-  assert.equal(rec.capabilities.length, 12);
+  assert.equal(rec.capabilities.length, 13);
   const paths = T.pathsOf(rec);
   assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: "state/cost.json" }, "no file moved");
   assert.equal(T.ensureOwner({ number: "+15555550105", aci: ACI_A }).number, OWNER_NUMBER, "seeding twice changes nothing");

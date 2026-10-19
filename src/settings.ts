@@ -171,6 +171,15 @@ export function loadSettings(env: Env) {
       timeoutMs: num(env, "OPENBAO_TIMEOUT_SECONDS", 5, 1, 60) * 1000,
       cacheMs: num(env, "OPENBAO_CACHE_SECONDS", 30, 0, 300) * 1000, // how long profile reads may be served from memory (the card is never cached)
     },
+    // The intake page (src/intakeserver.ts, docs/SETUP.md "The intake page"): a separate process on loopback where a tenant types a saved detail or a card
+    // instead of telling it to the chat. Off until INTAKE_BASE_URL (the public https address a tunnel gives it) is set; without it no setup link is offered.
+    intake: {
+      baseUrl: env.INTAKE_BASE_URL?.trim().replace(/\/+$/, "") || undefined,
+      port: num(env, "INTAKE_PORT", 8787, 1024, 65_535), // the page listens on 127.0.0.1 and nowhere else
+      allowHttpLoopback: oneOf(env, "INTAKE_ALLOW_HTTP_LOOPBACK", "off", ["on", "off"] as const) === "on", // tests only: lets INTAKE_BASE_URL be an http://127.0.0.1 address
+      linkMinutes: num(env, "INTAKE_LINK_MINUTES", 15, 1, 60), // how long a setup link works (once)
+      dir: join(dataDir, "state/intake"), // the open links (hashed) and what was stored (lengths only)
+    },
     // Screenshot vision for the browse worker (src/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
     // click: also clicks by coordinates, which the guard resolves to the element under the point itself (a debugging port on loopback, browsecdp.ts).
     browseVision: oneOf(env, "BROWSE_VISION", "off", ["off", "read", "click"] as const),

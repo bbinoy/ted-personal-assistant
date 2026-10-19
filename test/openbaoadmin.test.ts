@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configHcl, installBinary, layoutOf, OPERATOR_POLICY, PIN, policyHcl, ensureDirs } from "../src/openbaoadmin.ts";
+import { configHcl, installBinary, intakePolicyHcl, layoutOf, OPERATOR_POLICY, PIN, policyHcl, ensureDirs } from "../src/openbaoadmin.ts";
 import { keeperPlist, serverPlist, serviceNames } from "../src/openbaoservice.ts";
 
 // The pure parts of the setup tool: the pinned download, the config, the policies and the launchd files. (The real server is in openbao-e2e.test.ts.)
@@ -46,6 +46,13 @@ test("policies: the owner's token reaches tenants/owner/ and nothing else; the o
   const op = [...OPERATOR_POLICY.matchAll(/path "([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(op, ["sys/generate-root-token/*", "sys/storage/raft/snapshot"]);
   assert.ok(!op.some((x) => x!.startsWith("ted/")));
+});
+
+test("the intake page's policy is write-only: create and update of profile and card items of any tenant, nothing else", () => {
+  const p = intakePolicyHcl("ted");
+  const blocks = [...p.matchAll(/path "([^"]+)" \{\s*capabilities = \[([^\]]*)\]/g)].map((m) => [m[1], m[2]!.replace(/[" ]/g, "")]);
+  assert.deepEqual(blocks, [["ted/data/tenants/+/profile/*", "create,update"], ["ted/data/tenants/+/card/*", "create,update"]]);
+  assert.ok(!/read|list|delete|sudo|metadata|sys\//.test(p.replace(/^#.*$/m, "")));
 });
 
 test("launchd files: filled in and escaped; the server job has a 077 umask and no secret in either", () => {
