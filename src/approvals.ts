@@ -1,10 +1,10 @@
 import { discardJudge, prepareJudge } from "./approvaljudge.ts";
 import { applyChanges, isModifiable, type Change } from "./policy.ts";
 import { settings } from "./settings.ts";
-import { audit } from "./audit.ts";
+import { audit, type Source } from "./audit.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
-import { recentChat } from "./recentchat.ts";
+import { recentIn } from "./recentchat.ts";
 import { isTypedYes, TYPED_YES_NEEDED } from "./paymentrules.ts";
 
 // Human-in-the-loop approvals over Signal. Several questions may be open at once; each is
@@ -55,8 +55,8 @@ interface Open {
   done: boolean;
   shown: string; // the question text as sent (what the judge is shown)
   askedAt: number;
-  source: "chat" | "background" | "group";
-  scope: string; // the conversation it was asked in (Conversation.key): an answer from another conversation never applies
+  source: Source;
+  scope: string; // the conversation it was asked in (Conversation.key): an answer from another conversation never applies, whoever gives it (the admin included)
   typedYes: boolean; // a card payment: only a typed yes approves it (isTypedYes); never a reaction, an emoji, a voice message or the judge's own reading
 }
 const open = new Map<number, Open>();
@@ -75,8 +75,7 @@ const REACT_NO = new Set(["👎", "❌"]);
 
 // A reaction counts only if it is on an open "Approve?" message itself; it answers that one. A card payment is the exception: a 👍 never
 // approves it ("needs_text": the question stays open and the owner is told to type yes); a 👎 declines it like any other.
-export const OWNER_SCOPE = "owner";
-export function answerReaction(emoji: string, targetTimestamp: number, scope: string = OWNER_SCOPE, by?: string): "approved" | "declined" | "ignored" | "needs_text" {
+export function answerReaction(emoji: string, targetTimestamp: number, scope: string, by?: string): "approved" | "declined" | "ignored" | "needs_text" {
   const current = open.get(targetTimestamp);
   if (!current || current.done || current.scope !== scope) return "ignored";
   const e = emoji.replace(/[︎️]/g, ""); // drop variation selectors
@@ -102,13 +101,12 @@ export interface AnswerDeps {
 // `scope`: the conversation the message arrived in; only approvals asked there can be answered. `by`: who wrote it (audit).
 // `voice`: the text is an automatic transcript of a voice message.
 export interface Ctx {
-  scope?: string;
+  scope: string;
   by?: string;
   voice?: boolean;
 }
-export async function answer(text: string, onJudging: () => void, quote?: { timestamp: number }, deps: AnswerDeps = {}, ctx: Ctx = {}): Promise<Answer> {
-  const scope = ctx.scope ?? OWNER_SCOPE;
-  const mine = [...open.values()].filter((o) => o.scope === scope && !o.done);
+export async function answer(text: string, onJudging: () => void, quote: { timestamp: number } | undefined, deps: AnswerDeps = {}, ctx: Ctx): Promise<Answer> {
+  const mine = [...open.values()].filter((o) => o.scope === ctx.scope && !o.done);
   if (mine.length === 0) return { outcome: "none" };
   return read(text, onJudging, quote, deps, ctx, mine);
 }
@@ -126,7 +124,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const live = [...mine].sort((a, b) => a.ts - b.ts);
   const t = normalise(text);
   const found = quote && quote.timestamp !== 0 ? open.get(quote.timestamp) : undefined;
-  const quoted = found?.scope === (ctx.scope ?? OWNER_SCOPE) ? found : undefined;
+  const quoted = found?.scope === ctx.scope ? found : undefined;
   const direct = quoted && !quoted.done ? quoted : live.length === 1 && !quote ? live[0] : undefined;
   // A card payment: the fast path approves only a typed yes (not 👍, ok, sure, and not a transcript of a voice message); any other yes is asked for again.
   const typedOk = (o: Open) => !o.typedYes || (isTypedYes(text) && !ctx.voice);
@@ -149,7 +147,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const quotedId = quoted && [...ids].find(([, o]) => o === quoted)?.[0];
   onJudging();
   const started = Date.now();
-  const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? (ctx.scope === undefined || ctx.scope === OWNER_SCOPE ? recentChat : () => []))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(quote.timestamp), voice: ctx.voice } : undefined);
+  const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? ((reply) => recentIn(ctx.scope, reply)))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(quote.timestamp), voice: ctx.voice } : undefined);
   const stillOpen = () => live.filter((o) => !o.done);
   const record = (what: string, o?: Open) => audit(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started });
   // "Yes to both": each part is applied to its own approval; only the parts that are not a plain yes / no stay open, and the
@@ -220,14 +218,15 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   return { outcome: "clarify", reply: j.reply ?? CLARIFY(current.label) };
 }
 
-// Ask the owner. Resolves "not approved" on no, timeout, or an aborted turn. Several may be open at once.
+// Ask in `opts.scope`, the conversation that triggered the action, and nowhere else. Resolves "not approved" on no, timeout, or an aborted turn.
+// Several may be open at once.
 // A chat approval waits APPROVAL_TIMEOUT_MINUTES, a background one BACKGROUND_APPROVAL_TIMEOUT_MINUTES.
 export function request(
   send: (text: string) => Promise<number>, // returns the sent message's timestamp
   description: string,
   call: { tool: string; input: Record<string, unknown> },
-  signal?: AbortSignal,
-  opts: { background?: boolean; question?: string; scope?: string; typedYes?: boolean } = {},
+  signal: AbortSignal | undefined,
+  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
@@ -250,7 +249,7 @@ export function request(
       if (why) console.log(`approval ${why}: ${label}`);
       resolve(d);
     };
-    const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.scope && opts.scope !== OWNER_SCOPE ? "group" : background ? "background" : "chat", scope: opts.scope ?? OWNER_SCOPE, typedYes: !!opts.typedYes };
+    const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, typedYes: !!opts.typedYes };
     const onAbort = () => finish({ approved: false });
     const timer = setTimeout(
       () => finish({ approved: false }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`),

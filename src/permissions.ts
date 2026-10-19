@@ -20,14 +20,19 @@ export type Approve = (
   o?: { typedYes?: boolean },
 ) => Promise<Decision>;
 
-// A group run never asks the owner for anything.
+// A conversation nobody can be asked in (not set up, a person who is gone).
 export const DENY_ALL: Approve = async () => ({ approved: false });
 
-// A group asks in its own group, and any member may answer there (approvals.ts scopes it). Set by main.ts; until then (and in tests)
-// a group asks nobody. Which tools a group run has at all is policy.ts, unchanged: today none of them asks.
-let groupApprover: (groupId: string) => Approve = () => DENY_ALL;
-export const setGroupApprover = (fn: typeof groupApprover) => void (groupApprover = fn);
-export const approveInGroup = (groupId: string): Approve => groupApprover(groupId);
+// One approver per conversation, keyed by Conversation.key (the owner's chat, a group id, "tenant:<id>"): a question goes to the
+// chat that triggered the action and only an answer there applies (approvals.ts scopes it); in a group any member may answer.
+// `background`: an unattended run of that conversation's own (a wake-up, the brief, the mail handler). Set by main.ts (approvers.ts);
+// until then (and in tests) nobody is asked. Which tools a run has at all is policy.ts.
+export interface ApproverOptions {
+  background?: boolean;
+}
+let approvers: (key: string, o?: ApproverOptions) => Approve = () => DENY_ALL;
+export const setApprovers = (fn: typeof approvers) => void (approvers = fn);
+export const approveIn = (key: string, o?: ApproverOptions): Approve => approvers(key, o);
 
 // Pulls id-like fields (id, conversationId, messageId...) out of tool input for the audit log.
 export function idsOf(input: Record<string, unknown>): Record<string, unknown> | undefined {

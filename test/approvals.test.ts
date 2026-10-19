@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick as settle } from "./util.ts";
-import { answer, answerReaction, formatWait, request } from "../src/approvals.ts";
+import { formatWait } from "../src/approvals.ts";
+import { answer, answerReaction, request } from "./approvalrig.ts";
 
 // Background approvals (wake-ups, presets, the handler) must not swallow the owner's chat messages.
 const call = { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "x" } };

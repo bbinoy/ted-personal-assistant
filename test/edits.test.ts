@@ -5,7 +5,7 @@ import { rmSync } from "node:fs";
 import { createPipeline, group, owner, type Incoming } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
 import { createGroupBrain } from "../src/group.ts";
-import * as approvals from "../src/approvals.ts";
+import * as approvals from "./approvalrig.ts";
 import { FILE, findMessage, foldEdits, ledgerEntries, recordMessage, revisionsOf, withoutDeleted, type Extra, type Kind, type Sent } from "../src/messages.ts";
 import { editNote, isAuthor, normalised, sameText } from "../src/edit.ts";
 import { conversationLines, groupConversation } from "../src/dream.ts";

@@ -568,6 +568,7 @@ test("the real asking path: the audited ask holds the placeholder and the code-w
   const g = new BrowseGuard({ mode: "owner", task: "buy the ticket", outDir: join(tmpdir(), "nope"), resolver: publicDns, card: access });
   let typedYes: boolean | undefined;
   const approve = makeApprove(async () => 1, {
+    scope: "owner", source: "chat", mayPay: true,
     request: (async (_send: unknown, _d: unknown, _call: unknown, _abort: unknown, o: { typedYes?: boolean; question?: string }) => ((typedYes = o.typedYes), { approved: true })) as never,
     compose: async (q) => ({ text: `Pay shop.test? ${q.details.includes("Card payment approval") ? "ok" : ""}`, ms: 1, by: "model" as const }),
   });

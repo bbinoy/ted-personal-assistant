@@ -1,7 +1,7 @@
 import { audit, type Source } from "./audit.ts";
 import * as approvals from "./approvals.ts";
 import { callKey, type Approve } from "./permissions.ts";
-import { recentChat } from "./recentchat.ts";
+import { recentIn } from "./recentchat.ts";
 import { composeQuestion } from "./approvalmodel.ts";
 import { LIMITS } from "./sanitize.ts";
 
@@ -19,21 +19,21 @@ export const argsForAudit = (input: Record<string, unknown>): unknown => {
 // Plain equality of two argument sets (key order does not matter).
 export const sameArgs = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => callKey("", a) === callKey("", b);
 
-// `scope`: the conversation the question is asked in (a group id, or the owner's chat): only an answer there applies.
+// `scope`: the conversation the question is asked in (its Conversation.key): only an answer there applies. `source`: the audit label of
+// the asker. `mayPay`: the chat of the person whose card it is; a group and an unattended run never pay.
 // `request` and `compose` are the real ones unless a test supplies its own.
-export function makeApprove(send: (text: string) => Promise<number>, o: { background?: boolean; scope?: string; request?: typeof approvals.request; compose?: typeof composeQuestion } = {}): Approve {
-  const { background = false, scope = approvals.OWNER_SCOPE, request = approvals.request, compose = composeQuestion } = o;
-  const source: Source = scope !== approvals.OWNER_SCOPE ? "group" : background ? "background" : "chat";
+export function makeApprove(send: (text: string) => Promise<number>, o: { scope: string; source: Source; background?: boolean; mayPay?: boolean; request?: typeof approvals.request; compose?: typeof composeQuestion }): Approve {
+  const { scope, source, background = false, mayPay = false, request = approvals.request, compose = composeQuestion } = o;
   return async (description, call, abort, o) => {
-    // A card payment is asked in the owner's chat only, never in a group and never by an unattended run.
-    if (o?.typedYes && (background || scope !== approvals.OWNER_SCOPE)) return { approved: false, failure: "a card payment can only be approved in the owner's own chat" };
+    // A card payment is asked in the chat of the person whose card it is only, never in a group and never by an unattended run.
+    if (o?.typedYes && (background || !mayPay)) return { approved: false, failure: "a card payment can only be approved in the owner's own chat" };
     // One model call writes it, code validates it. No question means no ask and no card: the agent gets the failure as the tool result.
-    const c = await compose({ tool: call.tool, args: call.input, details: description, recent: scope === approvals.OWNER_SCOPE ? recentChat() : [], background, source });
+    const c = await compose({ tool: call.tool, args: call.input, details: description, recent: recentIn(scope), background, source });
     if (c.text === undefined) return { approved: false, failure: `no question could be written that states the exact arguments (${c.failure})` };
     const question = c.text;
     const asked = structuredClone(call.input);
     audit(call.tool, "approval-asked", source, { args: argsForAudit(asked), question, details: description, writeMs: c.ms, by: c.by });
-    const d = await request(send, description, call, abort, { background, question, scope, typedYes: o?.typedYes });
+    const d = await request(send, description, call, abort, { background, question, scope, source, typedYes: o?.typedYes });
     // Post-hoc, never blocking: is what will run what the question was written for?
     audit(call.tool, "approval-outcome", source, { approved: d.approved, modified: !!d.updatedInput, argsEqual: sameArgs(asked, d.updatedInput ?? call.input), ...(d.feedback ? { feedback: d.feedback.slice(0, LIMITS.line) } : {}), ...(d.updatedInput ? { executed: argsForAudit(d.updatedInput) } : {}) });
     return d;
