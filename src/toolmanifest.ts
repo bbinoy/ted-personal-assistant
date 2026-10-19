@@ -95,6 +95,8 @@ export const MANIFEST: readonly ToolEntry[] = [
   // send (send.ts): a message, voice note, picture (a browse screenshot of this run) or reaction in the conversation the run is for, while it continues.
   // Chat and groups only, never an unattended run or a wake-up (a group's rights are in classify).
   ...rows("mcp__send__", "send", "send", "no", "send", { only: ["chat", "group"] }),
+  // draw (drawtool.ts): an SVG sanitised and rendered by code to a PNG kept for the turn; nothing leaves until `send` delivers it. Chat and groups.
+  ...rows("mcp__draw__", "draw", "draw", "no", "draw", { only: ["chat", "group"] }),
   // weather (weathertools.ts): public forecast and map data, read-only. The owner's chat and groups.
   ...rows("mcp__weather__", "weather", "read", "no", "search_places get_forecast get_marine_forecast get_spot_info get_distance", { only: ["chat", "group"] }),
   // voice (voicetool.ts): the conversation's own cloned voice, Qwen only. A low-risk local change (undo is switching): no approval. Chat and groups, never an unattended run.

@@ -245,6 +245,7 @@ export function loadSettings(env: Env) {
     // her own folder, her own Anthropic API key (OpenBao) and her own limits. The bot never writes first to anybody.
     tenants: oneOf(env, "TENANTS", "off", ["on", "off"] as const) === "on",
     weather: oneOf(env, "WEATHER", "on", ["on", "off"] as const) === "on", // forecast and spot tools with the surf-conditions skill (weathertools.ts)
+    draw: oneOf(env, "DRAW", "on", ["on", "off"] as const) === "on", // the draw tool and skill: an SVG the model writes, rendered to a PNG (drawtool.ts)
     tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on her own key (tenant.json may lower or raise it)
     inviteTtlHours: num(env, "INVITE_TTL_HOURS", 72, 1, 24 * 90), // how long a minted invite code works
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often

@@ -9,7 +9,8 @@
     "ted-personal-assistant:research-booking",
     "ted-personal-assistant:setup",
     "ted-personal-assistant:radar",
-    "ted-personal-assistant:surf-conditions"
+    "ted-personal-assistant:surf-conditions",
+    "ted-personal-assistant:draw"
   ],
   "profileSkills": {
     "brief": [
@@ -22,7 +23,8 @@
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:setup",
       "ted-personal-assistant:radar",
-      "ted-personal-assistant:surf-conditions"
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
     ],
     "radar": [
       "ted-personal-assistant:daily-brief",
@@ -34,7 +36,8 @@
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:setup",
       "ted-personal-assistant:radar",
-      "ted-personal-assistant:surf-conditions"
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
     ],
     "background": [
       "ted-personal-assistant:daily-brief",
@@ -46,7 +49,8 @@
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:setup",
       "ted-personal-assistant:radar",
-      "ted-personal-assistant:surf-conditions"
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
     ],
     "group": [
       "ted-personal-assistant:daily-brief",
@@ -58,7 +62,8 @@
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:setup",
       "ted-personal-assistant:radar",
-      "ted-personal-assistant:surf-conditions"
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
     ],
     "browse": []
   },

@@ -8,5 +8,6 @@ test("audit: public lookups log their inputs, nothing else does", () => {
   assert.equal(publicArgs("mcp__mailbird__get_message", { messageId: 1, body: "secret" }), undefined);
   assert.equal(publicArgs("mcp__browser__browser_type", { text: "4111" }), undefined);
   assert.equal(publicArgs("WebSearch", {}), undefined);
+  assert.equal(publicArgs("mcp__draw__draw", { svg: "<svg/>", caption: "x" }), undefined); // a drawing's markup is never logged
   assert.equal(String((publicArgs("WebSearch", { query: "x".repeat(900) })!.args as Record<string, unknown>).query).length, 300);
 });
