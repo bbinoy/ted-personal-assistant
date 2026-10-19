@@ -110,7 +110,7 @@ export const styleSummary = (now: Date): string =>
 // voice notes are not for a gate to read; a group has no such categories.
 function notesText(conv: Conversation, now: Date): string {
   const notes = readNotes(now, conv.notesDir).filter((n) => n.category !== "setup" && n.category !== "voice");
-  return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)).slice(0, settings.memoryRunChars) || "";
+  return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
 
 const stamp = (iso: string) => {

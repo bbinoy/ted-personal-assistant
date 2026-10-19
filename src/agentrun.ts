@@ -15,6 +15,7 @@ import { recordConnectors } from "./connectors.ts";
 import { noteSuccess, observeRateLimit } from "./cooldown.ts";
 import { failure } from "./errors.ts";
 import { createMemoryServer } from "./memory-tools.ts";
+import { createWeatherServer } from "./weathertools.ts";
 import { announceMemoryChanges, noteWritten, recordMemoryChange } from "./memorynotice.ts";
 import { approveInGroup, makeCanUseTool, type Approve } from "./permissions.ts";
 import { hiddenTools } from "./policy.ts";
@@ -142,6 +143,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const sendServer = tellKey && (!tenant || tenant.consented) ? createSendServer(tellKey) : undefined;
   // voice (voicetool.ts): the cloned voice of this conversation, Qwen only; the owner's chat and groups, never an unattended run.
   const voiceServer = tellKey && settings.tts.provider === "qwen" && (!tenant || tenant.consented) ? createVoiceServer(tellKey) : undefined;
+  // weather (weathertools.ts): read-only forecasts and spot facts for the owner's chat, never a group or an unattended run.
+  const weatherServer = opts.source === "chat" && settings.weather ? createWeatherServer() : undefined;
   const status = browsing ? browseStatus() : undefined;
   if (status && !status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard && status?.ok
@@ -149,7 +152,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     : tenant && !tenant.consented
       ? { tenant: createTenantServer(tenant) }
       : opts.memory || browseTool || sendServer
-        ? { ...(sendServer ? { send: sendServer } : {}), ...(voiceServer ? { voice: voiceServer } : {}), ...(opts.memory ? { memory: createMemoryServer({ notesDir: opts.memory.dir, groupId: opts.memory.groupId, tenantLog: tenant?.logFile, record: opts.memory.notify ? recordMemoryChange : () => {} }) } : {}), ...(browseTool ? { browse: browseTool } : {}), ...(opts.source === "chat" && settings.tenants ? { tenants: createTenantAdminServer({ keys: tenantKeys }) } : {}) } // the owner's tenant administration exists only with TENANTS=on
+        ? { ...(sendServer ? { send: sendServer } : {}), ...(weatherServer ? { weather: weatherServer } : {}), ...(voiceServer ? { voice: voiceServer } : {}), ...(opts.memory ? { memory: createMemoryServer({ notesDir: opts.memory.dir, groupId: opts.memory.groupId, tenantLog: tenant?.logFile, record: opts.memory.notify ? recordMemoryChange : () => {} }) } : {}), ...(browseTool ? { browse: browseTool } : {}), ...(opts.source === "chat" && settings.tenants ? { tenants: createTenantAdminServer({ keys: tenantKeys }) } : {}) } // the owner's tenant administration exists only with TENANTS=on
         : undefined;
   // A tenant's run is on her own key or it does not run: the instance's login is never a fallback (tenanttools.ts tenantEnv).
   const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };

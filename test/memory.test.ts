@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { categoryOf, forgetNote, isIndex, isNotePath, memoryFor, MAX_TOTAL_CHARS, NOTES_DIR, notesBlock, parseNote, readNotes } from "../src/notes.ts";
+import { categoryOf, forgetNote, isIndex, isNotePath, MAX_NOTE_CHARS, memoryFor, NOTES_DIR, notesBlock, parseNote, readNotes } from "../src/notes.ts";
 import { fence } from "../src/fence.ts";
+import { settings } from "../src/settings.ts";
 import { briefSystem, chatSystem, handlerSystem } from "../src/persona.ts";
 import { triageSystem } from "../src/triage.ts";
 
@@ -47,10 +48,10 @@ test("notes: a run sees only its categories, fenced as data, with caps", () => {
   assert.doesNotMatch(memoryFor(["triage", "people"]), /em dashes/);
   assert.equal(memoryFor(["context"]), "");
   assert.match(memoryFor(["style"]), /<owner_memory>[\s\S]*em dashes[\s\S]*<\/owner_memory>/);
-  const big = Array.from({ length: 50 }, (_, i) => ({ file: `style-${i}.md`, category: "style" as const, text: "x".repeat(900) }));
+  const big = Array.from({ length: settings.memoryMaxNotes + 20 }, (_, i) => ({ file: `style-${i}.md`, category: "style" as const, text: "x".repeat(2000) }));
   const block = notesBlock(big, ["style"]);
-  assert.ok(block.length < MAX_TOTAL_CHARS + 600, `block is ${block.length}`);
-  assert.ok(block.match(/\[style\]/g)!.length <= Math.ceil(MAX_TOTAL_CHARS / 900) + 1, "capped by size");
+  assert.equal(block.match(/\[style\]/g)!.length, settings.memoryMaxNotes, "capped by count");
+  assert.ok(!block.includes("x".repeat(MAX_NOTE_CHARS + 1)), "each note cut at the per-note limit");
 });
 
 test("notes: a closing tag in any case cannot escape the fence", () => {

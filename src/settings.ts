@@ -231,8 +231,7 @@ export function loadSettings(env: Env) {
 
     // What background runs may read of the owner's notes (chat reads them as files, on demand), and the
     // nightly "dream" that keeps them up to date (dream.ts).
-    memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 120, 10, 1000),
-    memoryRunChars: num(env, "MEMORY_RUN_CHARS", 24_000, 2000, 200_000),
+    memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 150, 10, 1000), // the one memory limit: how many notes a run reads (each is cut at MAX_NOTE_CHARS)
     dream: oneOf(env, "DREAM", "on", ["on", "off"] as const) === "on",
 
     // Wake-ups (src/gate.ts, src/wake.ts): on every heartbeat tick a small model looks at each conversation whose
@@ -245,6 +244,7 @@ export function loadSettings(env: Env) {
     // On: an unknown sender gets a fixed invitation reply (no model call), the owner can mint invite codes, and each friend is a tenant with
     // her own folder, her own Anthropic API key (OpenBao) and her own limits. The bot never writes first to anybody.
     tenants: oneOf(env, "TENANTS", "off", ["on", "off"] as const) === "on",
+    weather: oneOf(env, "WEATHER", "on", ["on", "off"] as const) === "on", // forecast and spot tools with the surf-conditions skill (weathertools.ts)
     tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on her own key (tenant.json may lower or raise it)
     inviteTtlHours: num(env, "INVITE_TTL_HOURS", 72, 1, 24 * 90), // how long a minted invite code works
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often
