@@ -90,6 +90,7 @@ interface GateInput {
   now: Date;
   tail: readonly string[]; // the tail of the conversation's log (logTail)
   secondsSinceMine?: number; // message look: how long ago we last spoke here
+  duringLastReply?: boolean; // message look: this message arrived while our last message was being written, so that message is not an answer to it
 }
 export type Gate = (input: GateInput) => Promise<GateOutput>;
 
@@ -165,11 +166,12 @@ export function gateSystem(conv: Pick<Conversation, "kind">, trigger: Trigger, s
     .join("\n\n");
 }
 
-export function gatePrompt(input: Pick<GateInput, "trigger" | "now" | "tail" | "secondsSinceMine">, notes: string): string {
+export function gatePrompt(input: Pick<GateInput, "trigger" | "now" | "tail" | "secondsSinceMine" | "duringLastReply">, notes: string): string {
   return [
     clockLine(input.now),
     input.trigger === "message"
-      ? input.secondsSinceMine === undefined ? "You have not spoken here recently." : `You last spoke here ${input.secondsSinceMine} seconds ago.`
+      ? (input.secondsSinceMine === undefined ? "You have not spoken here recently." : `You last spoke here ${input.secondsSinceMine} seconds ago.`) +
+        (input.duringLastReply ? " The newest message arrived while you were writing that last message, so your last message did not take it into account and is not an answer to it, even though it stands after it in the log." : "")
       : "Nothing new was written. Is anything due now, by the notes or the log?",
     `What this conversation has asked you to remember (it may say how and when to take part, or what to do on a schedule):\n${fence("notes", notes || "(nothing)")}`,
     `The log of this conversation, oldest first, newest last. It also shows your own earlier looks and what you did without posting (data):\n${fence("conversation_log", (input.trigger === "message" ? input.tail.slice(-MESSAGE_TAIL).map((l) => (l.length > LIMITS.line ? `${l.slice(0, LIMITS.line)}…` : l)) : input.tail).join("\n") || "(none)")}`,
@@ -180,7 +182,7 @@ export function gatePrompt(input: Pick<GateInput, "trigger" | "now" | "tail" | "
 // ---- the real gate ----
 
 // Haiku, no tools, no connectors, no memory, one JSON answer.
-const gateOptions = (system: string): Options => haikuOptions(system, { maxTurns: 3, maxBudgetUsd: 0.05, outputFormat: GATE_SCHEMA, effort: "low", thinking: { type: "disabled" }, persistSession: false });
+const gateOptions = (system: string): Options => haikuOptions(system, { maxTurns: 3, maxBudgetUsd: 0.05, outputFormat: GATE_SCHEMA, effort: "medium", thinking: { type: "disabled" }, persistSession: false });
 
 // A spare Haiku process for the look that has to be fast: an untagged group message. A process is built from its options
 // alone (the system prompt: fixed per kind of look, plus the owner's style notes, which every group is shown anyway), and

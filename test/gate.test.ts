@@ -38,6 +38,13 @@ test("gate: the delay is capped by the setting in code, and the prompt says typi
   assert.match(gatePrompt({ trigger: "clock", now: T0, tail: long }, ""), /line 0\b/); // the clock look keeps the whole tail
 });
 
+test("gate prompt: a message that arrived while the last reply was being written is said not to be answered by it", () => {
+  const tail = ["[10-14 09:00] Eve (a member): what do you think, Ted?", "[10-14 09:00] Assistant: Good point, Ben."];
+  assert.match(gatePrompt({ trigger: "message", now: T0, tail, secondsSinceMine: 3, duringLastReply: true }, ""), /arrived while you were writing that last message.*not an answer to it/);
+  assert.doesNotMatch(gatePrompt({ trigger: "message", now: T0, tail, secondsSinceMine: 3 }, ""), /while you were writing/);
+  assert.doesNotMatch(gatePrompt({ trigger: "clock", now: T0, tail, duringLastReply: true }, ""), /while you were writing/);
+});
+
 test("gate prompt: a message look sees the latest exchange with long lines cut, a clock look the whole log; the clock and the notes stay", () => {
   const long = Array.from({ length: 30 }, (_, i) => `[10-14 09:${String(i).padStart(2, "0")}] Eve (a member): msg${i} ${"xy".repeat(i === 29 ? 500 : 5)}`);
   const p = gatePrompt({ trigger: "message", now: T0, tail: long, secondsSinceMine: 90 }, "- [context] play on Thursdays");

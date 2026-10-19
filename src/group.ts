@@ -150,7 +150,7 @@ const stickyMs = () => settings.groupStickyMinutes * 60_000;
 export function createGroupBrain(brain: Brain) {
   const { pipeline } = brain;
   type Asked = { line: string; quote: Quote; incoming?: Quote; voice: boolean; picture?: Picture; document?: Document; at: number; edit?: { before?: string } };
-  const state = new Map<string, { addressed?: Asked; lastSpoke?: number; running?: boolean; gone?: Set<number> }>(); // gone: timestamps of messages their author deleted
+  const state = new Map<string, { addressed?: Asked; lastSpoke?: number; running?: boolean; runStart?: number; runEnd?: number; gone?: Set<number> }>(); // gone: timestamps of messages their author deleted
   const warm = brain.warm ?? (brain.run ? undefined : (conv: Conversation, afterTurn: boolean) => {
     prepareGroupChat(conv, () => styleLines(new Date()), { force: afterTurn });
     prepareGate(); // the gate's spare belongs to no group, so it is not tied to this one
@@ -204,7 +204,7 @@ export function createGroupBrain(brain: Brain) {
     const judge = () => {
       const looked = new Date();
       const gate = brain.gate ?? askGate;
-      return (async () => gate({ conv, trigger: "message", now, tail: brain.recent(m.groupId), secondsSinceMine: st.lastSpoke ? Math.round((Date.now() - st.lastSpoke) / 1000) : undefined }))().then(
+      return (async () => gate({ conv, trigger: "message", now, tail: brain.recent(m.groupId), secondsSinceMine: st.lastSpoke ? Math.round((Date.now() - st.lastSpoke) / 1000) : undefined, duringLastReply: st.runStart !== undefined && m.timestamp > st.runStart && (st.running || m.timestamp <= (st.runEnd ?? 0)) }))().then(
         (v) => ({ ok: true as const, v, looked, ms: Date.now() - looked.getTime() }),
         (e: unknown) => ({ ok: false as const, e }),
       );
@@ -261,6 +261,7 @@ export function createGroupBrain(brain: Brain) {
         };
         // Like a private chat, it may answer with an emoji reaction (on the message it is answering), with or without words.
         st.running = true;
+        st.runStart = Date.now();
         const res = await pipeline
           .runTurn(conv, {
             run: async (hooks) => ({ text: await (brain.run ?? realRunner)(build, { conv, now, firstOutput: hooks.firstOutput }) }),
@@ -270,7 +271,10 @@ export function createGroupBrain(brain: Brain) {
             threadUnder: live?.quote,
             announce: !!asked,
           })
-          .finally(() => (st.running = false));
+          .finally(() => {
+            st.running = false;
+            st.runEnd = Date.now();
+          });
         warm?.(conv, true); // the session moved on: the next turn of this group (or the one that spoke last) starts warm
         if (!res.error) st.addressed = undefined;
         if (res.noticed) st.addressed = undefined;
