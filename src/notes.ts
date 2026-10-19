@@ -19,7 +19,7 @@ import { settings } from "./settings.ts";
 export const NOTES_DIR = join(settings.memoryDir, "notes");
 export const LAST_BRIEF = "memory/last-brief.md"; // summary memory: the latest daily brief
 
-const CATEGORIES = ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"] as const;
+export const CATEGORIES = ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export const MAX_NOTE_CHARS = 1200;
