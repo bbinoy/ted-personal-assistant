@@ -267,16 +267,17 @@ test("a background approval is judged too, and marked as such", async () => {
 const q = { tool: MAIL, args: { to: ["alice@example.com"], cc: ["bob@example.com"], bcc: ["carol@example.com"], subject: "Offsite agenda", body: "See below. Mail me at ceo@example.org" }, details: `✉️ Send email\nTo: alice@example.com\nCc: bob@example.com\nBcc: carol@example.com\n\n${"A long body that needs a summary. ".repeat(30)}`, recent: [], background: false, source: "chat" as const };
 const GOOD = "Send “Offsite agenda” to alice@example.com, with bob@example.com on Cc and carol@example.com on Bcc?";
 
-test("factsOf / validateQuestion: every address, title and role word must be there; no invented address", () => {
+test("factsOf / validateQuestion: every address, title and role word must be there; extra addresses and links are allowed", () => {
   const f = factsOf(q.args, q.details);
   for (const m of ["alice@example.com", "bob@example.com", "carol@example.com", "Offsite agenda"]) assert.ok(f.must.includes(m), m);
   assert.ok(!f.must.includes("ceo@example.org")); // an address in free text is allowed, not required
   assert.equal(validateQuestion(GOOD, f), undefined);
   assert.match(validateQuestion(GOOD.replace(" and carol@example.com on Bcc", ""), f)!, /carol/);
   assert.match(validateQuestion(GOOD.replace("on Bcc", "on Cc"), f)!, /Bcc/); // bcc described as cc
-  assert.match(validateQuestion(GOOD.replace("alice@", "alyce@"), f)!, /missing|unknown/);
-  assert.match(validateQuestion(`${GOOD} Also dave@example.com.`, f)!, /unknown address/);
-  assert.match(validateQuestion(`${GOOD} See https://evil.example/x`, f)!, /unknown address/);
+  assert.match(validateQuestion(GOOD.replace("alice@", "alyce@"), f)!, /missing/);
+  assert.equal(validateQuestion(`${GOOD} Also dave@example.com.`, f), undefined); // an extra address is fine: the real ones are all there
+  assert.equal(validateQuestion(`${GOOD} See https://example.org/x`, f), undefined);
+  assert.match(validateQuestion("Send “Offsite agenda” to dave@example.com?", f)!, /missing/); // but an invented recipient in place of the real ones is still refused
   assert.equal(validateQuestion(`${GOOD} (the body mentions ceo@example.org)`, f), undefined); // an address from the body is allowed, not required
   // times, dates, ids, zone, amounts, urls
   const cal2 = factsOf({ eventId: "evt_8f2a", calendarId: "primary", summary: "Dentist", startTime: "2026-10-20T16:00:00", endTime: "2026-10-20T17:00:00", timeZone: "Europe/Berlin" }, "");
@@ -309,7 +310,7 @@ test("conversational: ONE call; a question that carries every fact is used and n
 });
 
 test("conversational fails closed and silent: a failed validation, junk or an error is no question (no retry, no code-text card)", async () => {
-  for (const steps of [[text("Send it to Alice, ok?")], [text(`${GOOD} Also dave@example.com.`)], [new Error("boom")], [undefined], [{ text: "short" }]]) {
+  for (const steps of [[text("Send it to Alice, ok?")], [text("Send “Offsite agenda” to dave@example.com?")], [new Error("boom")], [undefined], [{ text: "short" }]]) {
     const s = scripted([...steps]);
     const c = await composeQuestion(q, {}, 1000, s.run);
     assert.equal(c.text, undefined, JSON.stringify(steps));
