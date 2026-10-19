@@ -111,7 +111,7 @@ export const missingSetup = (notes: readonly Note[], down: readonly string[] = [
   setupItems().filter((i) => (mail || !i.mailOnly) && !notes.some((n) => n.file === i.file) && !(i.needs && down.includes(i.needs))).map((i) => i.label);
 
 // What a run sees: the notes of the given categories, rendered.
-export const memoryFor = (categories: readonly Category[], now = new Date()) => notesBlock(readNotes(now), categories);
+export const memoryFor = (categories: readonly Category[], now = new Date(), dir: string = NOTES_DIR) => notesBlock(readNotes(now, dir), categories); // `dir`: another conversation's notes (a friend's mail check reads hers)
 
 // Deletes one note and its line in the index. Only a plain file name inside the notes folder.
 export function forgetNote(file: string, dir: string = NOTES_DIR): { ok: true; removed: Note | undefined } | { ok: false; error: string } {

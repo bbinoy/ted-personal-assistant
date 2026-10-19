@@ -165,6 +165,12 @@ export class GoogleSession {
     return client;
   }
 
+  // Her address, once her server is up (starts it if it is not).
+  async account(): Promise<string> {
+    await this.ready();
+    return this.email!;
+  }
+
   async tools(): Promise<Tool[]> {
     const client = await this.ready();
     try {

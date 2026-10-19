@@ -8,6 +8,7 @@ import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
 import { chatSystem, groupSystem, tenantSystem } from "./persona.ts";
 import { groupTools, tenantCapabilities, toolsFor } from "./capabilities.ts";
 import { GOOGLE_PROBES } from "./modules/google.ts";
+import { mailDigest } from "./tenantmail.ts";
 import { PROFILES } from "./profiles.ts";
 import { readText } from "./state.ts";
 import { skillsFor } from "./skills.ts";
@@ -64,7 +65,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const consented = !!readConsent(ctx);
   const caps = tenantCapabilities(ctx);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_PROBES[0]), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
+    systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_PROBES[0]), digest: consented && toolsFor(caps).has(GOOGLE_PROBES[0]) ? mailDigest(ctx, i.now ?? new Date()) : undefined, language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },
     skills: consented ? skillsFor(caps) : [],
     tools: consented ? toolsFor(caps) : new Set([TENANT_CONSENT_TOOL]),

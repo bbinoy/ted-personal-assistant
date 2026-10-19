@@ -220,6 +220,11 @@ export function handlerSystem(memory: string, missing: readonly string[] = [], d
   );
 }
 
+// A friend's background handling of routine email (mailloops.ts): the same job as the owner's handler, with her name, her notes and her Google tools.
+export function tenantHandlerSystem(name: string, memory: string): string {
+  return join(say("tenantHandler", { her: oneLineName(name) }), memory);
+}
+
 // An unprompted run in the owner's chat (a wake-up, wake.ts): least privilege like the radar, web search but no page fetches without asking, nothing written without asking.
 export function backgroundSystem(memory: string, missing: readonly string[] = [], down: readonly Connector[] = [], mail: boolean = settings.mail): string {
   return join(
@@ -234,7 +239,7 @@ export function backgroundSystem(memory: string, missing: readonly string[] = []
 // A friend who was invited to use the assistant on this instance (a tenant, tenants.ts): a private one-to-one chat with a run that has NONE of the
 // owner's data and none of any other conversation's, only her own notes and the web. Her API key pays for it, which the prompt says plainly.
 // `persona` and `language` are her own words from tenant.json (data, never rules). Until she has confirmed her age and region the run has one tool, record_consent.
-export function tenantSystem(parts: { name: string; consented: boolean; timed?: boolean; google?: boolean; language?: string; persona?: string; now?: Date }): string {
+export function tenantSystem(parts: { name: string; consented: boolean; timed?: boolean; google?: boolean; digest?: string; language?: string; persona?: string; now?: Date }): string {
   const her = oneLineName(parts.name);
   return join(
     say("tenant", {
@@ -242,6 +247,7 @@ export function tenantSystem(parts: { name: string; consented: boolean; timed?: 
       consented: parts.consented,
       timed: !!parts.timed,
       google: !!parts.google,
+      digest: parts.digest ? fence("mail_digest", parts.digest) : "",
       her,
       personality: PERSONALITY,
       selfTimed: SELF_TIMED,

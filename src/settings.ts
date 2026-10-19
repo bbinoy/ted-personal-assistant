@@ -213,6 +213,7 @@ export function loadSettings(env: Env) {
       scopes: words(env, "GOOGLE_OAUTH_SCOPES", ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"]),
       idleMinutes: num(env, "GOOGLE_MCP_IDLE_MINUTES", 10, 1, 240), // a friend's server process is closed after this long unused (it is started again on demand)
       callSeconds: num(env, "GOOGLE_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
+      archiveLive: oneOf(env, "GOOGLE_ARCHIVE_LIVE", "false", ["true", "false"] as const) === "true", // friends' mail: false = the check classifies and logs "would-archive" and archives nothing, until you trust it
       mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model
     },
     // Screenshot vision for the browse worker (src/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.

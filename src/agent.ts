@@ -10,7 +10,9 @@ import type { Document } from "./document.ts";
 import { tenantKey } from "./send.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./permissions.ts";
-import { backgroundSystem, briefSystem, handlerSystem, radarSystem } from "./persona.ts";
+import { backgroundSystem, briefSystem, handlerSystem, radarSystem, tenantHandlerSystem } from "./persona.ts";
+import { GOOGLE_PREFIX } from "./modules/google.ts";
+import { tenantById, tenantContext } from "./tenants.ts";
 import { PROFILES, type OwnerProfile } from "./profiles.ts";
 import { settings } from "./settings.ts";
 
@@ -58,6 +60,31 @@ export function prepare(conv: Conversation, inputs: RunInputs, opts: { refresh?:
 
 // A tenant who was suspended or removed: her process is closed.
 export const dropTenantWarm = (id: string): void => pool.drop(tenantKey(id));
+
+// A friend's background mail handler run (mailloops.ts): a fresh run of hers on the instance key, with her Google tools and nothing else, her notes as data, and her
+// chat's approver, so that anything it would send or invite asks HER there. The standing task is the approval judge's provenance, as for the owner's handler.
+export function tenantHandlerOptions(conv: Conversation, access: { apiKey: string }, onToolSuccess: RunOptions["onToolSuccess"], task: string): RunOptions {
+  const base = runOptionsFor(conv, { apiKey: access.apiKey });
+  const rec = tenantById(conv.tenantId!);
+  const ctx = tenantContext(rec!);
+  return {
+    ...base,
+    sessionFile: undefined, // a fresh session every run
+    memory: undefined,
+    seenAt: undefined,
+    skills: [],
+    tools: new Set([...(base.tools ?? [])].filter((t) => t.startsWith(GOOGLE_PREFIX))),
+    systemPrompt: tenantHandlerSystem(ctx.name, memoryFor(["people", "scheduling", "context", "style"], new Date(), ctx.notesDir)),
+    maxTurns: Math.max(ctx.maxTurns, 25),
+    onToolSuccess,
+    judgeContext: task,
+    untrusted: true, // it reads raw mail
+    speaker: { key: `mail-handler:${conv.tenantId}`, member: true }, // (no chat message of hers is this run's provenance: the standing task is)
+  };
+}
+
+export const runTenantHandlerTurn = (conv: Conversation, access: { apiKey: string }, prompt: string, approve: Approve, onToolSuccess: RunOptions["onToolSuccess"], task: string): Promise<AgentReply> =>
+  runAgent(prompt, approve, tenantHandlerOptions(conv, access, onToolSuccess, task));
 
 // ---- the other owner runs ----
 
