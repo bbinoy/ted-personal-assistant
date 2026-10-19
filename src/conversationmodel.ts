@@ -112,8 +112,8 @@ export const tenant = (id: string): Conversation => {
 // ---- what a conversation may do: its record (tenants.ts), not its kind ----
 
 // Needs the instance's own Claude login, with its connectors and its card: effective only for a person whose credential is that login (the owner's),
-// whatever else a record lists. A tenant's own connectors are an extension point (tenants.ts connectorTools).
-const ON_LOGIN: readonly Capability[] = ["mail", "calendar", "notion", "profile", "card"];
+// whatever else a record lists. A tenant's own connectors are an extension point (a tool of the manifest with a capability of its own).
+const ON_LOGIN: readonly Capability[] = ["mail", "calendar", "notion", "google", "profile", "card", "admin"];
 // A group has no record: it is looked in on, tidied and woken like any conversation, and has nothing of the owner's (capabilities.ts GROUP_CAPABILITIES).
 
 type Who = Pick<Conversation, "kind" | "tenantId">;
