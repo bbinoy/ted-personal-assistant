@@ -166,6 +166,7 @@ export async function browse(ctx: BrowseContext, rawTask: string, o: { resolver?
     return resultMessage(failed);
   } finally {
     guard.finishPayment(); // the card is dropped whatever happened (the notes above are for the owner)
+    guard.endRun(); // so is an approved plan carried for the later steps
     busy = false;
     rmSync(outDir, { recursive: true, force: true });
     if (shotsDir) rmSync(shotsDir, { recursive: true, force: true });

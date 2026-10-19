@@ -38,6 +38,6 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     const d = await request(send, description, call, abort, { background, question, scope, source, typedYes: o?.typedYes });
     // Post-hoc, never blocking: is what will run what the question was written for?
     audit(call.tool, "approval-outcome", source, rows({ approved: d.approved, modified: !!d.updatedInput, argsEqual: sameArgs(asked, d.updatedInput ?? call.input), ...(d.feedback ? { feedback: d.feedback.slice(0, LIMITS.line) } : {}), ...(d.updatedInput ? { executed: argsForAudit(d.updatedInput) } : {}) }));
-    return d;
+    return { ...d, question };
   };
 }
