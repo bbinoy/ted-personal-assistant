@@ -14,7 +14,7 @@ import { tenantById } from "./tenants.ts";
 const reply = (text: string, isError = false) => ({ content: [{ type: "text" as const, text }], ...(isError ? { isError: true } : {}) });
 
 export function createIntakeServer(t: { id: string }, links: LinkStore = new LinkStore()) {
-  const purposeArg = { purpose: z.string().max(20).describe("What she wants to set up: profile (a saved detail like an address) or card") };
+  const purposeArg = { purpose: z.string().max(20).describe("What she wants to set up: profile (a saved detail like an address), card, or google (connect her own Gmail and Calendar by signing in on Google's page)") };
   // Her record is read at each call: a purpose she lost the capability for, or a suspension, takes effect at once.
   const mayUse = (purpose: string): string | undefined => {
     const rec = tenantById(t.id);
@@ -29,7 +29,7 @@ export function createIntakeServer(t: { id: string }, links: LinkStore = new Lin
     tools: [
       tool(
         INTAKE_LINK_TOOL.split("__")[2]!,
-        `Make a private, single-use setup link where she can type a secret or a saved detail (an address, a passport number, a card) herself, in her browser. Put the link in your reply and tell her it works once for ${settings.intake.linkMinutes} minutes. Never ask her to type the value in this chat, and do not read it from anywhere: you will never see it. Afterwards setup_status tells you whether it was saved.`,
+        `Make a private, single-use setup link where she can type a secret or a saved detail (an address, a passport number, a card) herself, or connect her Google account by signing in on Google's own page, in her browser. Put the link in your reply and tell her it works once for ${settings.intake.linkMinutes} minutes. Never ask her to type the value in this chat, and do not read it from anywhere: you will never see it. Afterwards setup_status tells you whether it was saved.`,
         purposeArg,
         async ({ purpose }) => {
           const no = mayUse(purpose);
@@ -53,6 +53,7 @@ export function createIntakeServer(t: { id: string }, links: LinkStore = new Lin
           const done = readDone(t.id, purpose);
           const open = links.isOpen({ tenant: t.id, purpose });
           if (!done) return reply(open ? "Not yet: her link is still open." : "Nothing saved yet, and no link is open.");
+          if (purpose === "google") return reply(`Google is connected (since ${done.at}).${open ? " A newer link is open." : ""} Nothing else about it is visible to you.`);
           return reply(`Stored at ${done.at}: ${done.stored.map((s) => `${s.name} (${s.chars} characters)`).join(", ")}.${open ? " A newer link is open." : ""}`);
         },
         { alwaysLoad: true },

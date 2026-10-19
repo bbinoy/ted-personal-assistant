@@ -15,10 +15,11 @@ import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./brows
 import { killSwitch } from "./card.ts";
 import { macKeychain, type Keychain } from "./keychain.ts";
 import { baseUrlProblem } from "./intakelinks.ts";
+import { readDone } from "./intakelinks.ts";
 import { INTAKE_ROLE } from "./openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./openbao.ts";
 import { appBao, keychainNames, looksLikeApiKey, OWNER } from "./secrets.ts";
-import { invites, listTenants, pausedUntil, readConsent, tenantContext } from "./tenants.ts";
+import { invites, listTenants, OWNER_ID, pausedUntil, people, readConsent, tenantContext } from "./tenants.ts";
 import { Ledger } from "./payments.ts";
 import { messengerDoctor } from "./messenger.ts";
 import { settings } from "./settings.ts";
@@ -91,17 +92,17 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
     const bao = (o.bao ?? (() => appBao({ keychain, as: "intake", ...(o.prefix ? { cfg: { ...settings.openbao, keychainPrefix: o.prefix } } : {}) })))();
     const t = await bao.lookupSelf();
     const w = (kind: string) => `data/tenants/x/${kind}/y`;
-    const caps = await bao.capabilities([w("profile"), w("card"), w("other"), "metadata/tenants/x/profile", "metadata/tenants/x/card"]);
+    const caps = await bao.capabilities([w("profile"), w("card"), w("google"), w("other"), "metadata/tenants/x/profile", "metadata/tenants/x/card", "metadata/tenants/x/google"]);
     const has = (p: string, c: string) => (caps[p] ?? []).includes(c) || (caps[p] ?? []).includes("root");
     const problems: string[] = [];
     if (t.policies.includes("root") || t.policies.some((p) => p !== "default" && p !== INTAKE_ROLE)) problems.push(`the token has policies besides ${INTAKE_ROLE}`);
-    for (const kind of ["profile", "card"]) {
+    for (const kind of ["profile", "card", "google"]) {
       if (!has(w(kind), "create") || !has(w(kind), "update")) problems.push(`the token cannot write ${kind} items`);
       if (["read", "delete", "list"].some((c) => has(w(kind), c)) || ["read", "list", "delete", "update"].some((c) => has(`metadata/tenants/x/${kind}`, c))) problems.push(`the token can do more than write ${kind} items`);
     }
-    if ((caps[w("other")] ?? []).some((c) => c !== "deny")) problems.push("the token reaches beyond profile and card items");
+    if ((caps[w("other")] ?? []).some((c) => c !== "deny")) problems.push("the token reaches beyond profile, card and google items");
     if (problems.length) line(false, "intake write-only token", `${problems.join("; ")}: npm run openbao -- setup repairs it`);
-    else line(true, "intake write-only token", `policy ${INTAKE_ROLE}: create and update of profile and card items, no read, list or delete`);
+    else line(true, "intake write-only token", `policy ${INTAKE_ROLE}: create and update of profile, card and google items, no read, list or delete`);
   } catch (e) {
     line("warn", "intake write-only token", e instanceof BaoError ? e.message.slice(0, LIMITS.reason) : "the check failed");
   }
@@ -109,6 +110,27 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
     const probe = o.probe ?? (async (port: number) => (await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000) })).ok);
     const up = await probe(cfg.port).catch(() => false);
     line(up ? true : "warn", "intake page process", up ? `answering on 127.0.0.1:${cfg.port}` : `not answering on 127.0.0.1:${cfg.port}: start it with npm run intake (docs/SETUP.md "The intake page")`);
+  }
+}
+
+// Google for friends (modules/google.ts): only when some friend has the `google` capability. Is the OAuth client set up (never its value), is the page that signs
+// her in there (INTAKE_BASE_URL), is the pinned server's command on this Mac's PATH, and per friend: connected (since when) or not yet, and the mail and calendar
+// capabilities that make the connection useful. The status is the intake page's own record (names and lengths); no token is read for this.
+export function googleCheck(line: Line, o: { cfg?: typeof settings.google; baseUrl?: string | undefined; onPath?: (command: string) => boolean; friends?: ReturnType<typeof people>; done?: typeof readDone } = {}): void {
+  const cfg = o.cfg ?? settings.google;
+  const friends = (o.friends ?? people()).filter((r) => r.id !== OWNER_ID && r.capabilities.includes("google"));
+  if (!friends.length) return;
+  const what = "google for friends";
+  const missing = [!cfg.clientId && "GOOGLE_OAUTH_CLIENT_ID", !cfg.clientSecret && "GOOGLE_OAUTH_CLIENT_SECRET", !(o.baseUrl ?? settings.intake.baseUrl) && "INTAKE_BASE_URL"].filter(Boolean);
+  if (missing.length) return line(false, what, `${friends.length} friend(s) have the google capability but ${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not set (docs/SETUP.md "Google for friends")`);
+  const onPath = o.onPath ?? ((c: string) => c.includes("/") ? existsSync(c) : (process.env.PATH ?? "").split(":").some((d) => d && existsSync(`${d}/${c}`)));
+  if (!onPath(cfg.command)) line("warn", `${what}: server command`, `${cfg.command} was not found on the PATH (brew install uv); friends' Google tools fail until it is`);
+  else line(true, `${what}: server command`, `${cfg.command} ${cfg.args[0] ?? ""} (pinned by GOOGLE_MCP_ARGS)`);
+  const done = o.done ?? readDone;
+  for (const r of friends) {
+    const d = done(r.id, "google");
+    const tools = ["mail", "calendar"].filter((c) => r.capabilities.includes(c as never));
+    line(d ? true : "warn", `${what}: ${r.id}`, `${d ? `connected since ${d.at.slice(0, 10)}` : "has not connected yet (she asks the assistant for a Google link)"}; tools: ${tools.join(", ") || "none (grant mail and calendar)"}`);
   }
 }
 
@@ -223,6 +245,7 @@ export async function doctor() {
   await openbaoCheck(line);
   await intakeCheck(line);
   tenantCheck(line);
+  googleCheck(line);
 
   line(true, "proactive radar", settings.proactive ? `chosen by your chat's gate, about every ${settings.radarMinutes} min (its "[radar] ran" lines are in the log)` : "off (PROACTIVE=off)");
 

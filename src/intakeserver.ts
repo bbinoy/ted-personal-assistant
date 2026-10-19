@@ -4,6 +4,8 @@ import { audit } from "./audit.ts";
 import { LINK_CODE, LinkStore, PURPOSE_CAPABILITY, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
 import type { Put } from "./intakepurposes.ts";
+import { CALLBACK_PATH, GoogleOAuth, OAuthProblem } from "./googleoauth.ts";
+import { GOOGLE_ITEM } from "./secrets.ts";
 import { people } from "./tenants.ts";
 
 // The intake page: a separate process (scripts/intake.ts), on 127.0.0.1 only, that is the one place a tenant types a secret. A tunnel the owner sets up
@@ -12,6 +14,7 @@ import { people } from "./tenants.ts";
 //
 //   GET  /i/<code>   the form of the link's purpose
 //   POST /i/<code>   store what was typed, then burn the link
+//   GET  /oauth/google/callback   where Google sends her browser back after the sign-in of a "Connect Google" link (googleoauth.ts)
 //   GET  /healthz    "ok", no data
 //   anything else    404, the same answer every time; no directory, no listing
 //
@@ -54,6 +57,7 @@ class Window {
 export interface IntakeDeps {
   links: LinkStore;
   writer: { for(tenant: string): Put };
+  google?: GoogleOAuth; // "Connect Google" (the flows in progress); absent: that purpose is not offered
   now?: () => number;
   limits?: Partial<Limits>;
 }
@@ -63,7 +67,7 @@ const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;",
 const STYLE = `body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#f6f6f4;color:#1c1c1c}main{max-width:30rem;margin:0 auto;padding:1.5rem 1rem 3rem}
 h1{font-size:1.35rem;margin:0 0 .5rem}p{margin:.5rem 0}label{display:block;font-weight:600;margin-top:1rem}.help{font-weight:400;color:#555;font-size:.9rem;margin:.1rem 0 .3rem}
 input,select{box-sizing:border-box;width:100%;font:inherit;padding:.55rem;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
-button{margin-top:1.5rem;font:inherit;font-weight:600;padding:.65rem 1.2rem;border:0;border-radius:6px;background:#1c4fd8;color:#fff}.error{background:#fde8e8;border:1px solid #c33;border-radius:6px;padding:.6rem}.note{color:#555;font-size:.85rem;margin-top:2rem}
+a.button{display:inline-block;margin-top:1.5rem;font:inherit;font-weight:600;padding:.65rem 1.2rem;border-radius:6px;background:#1c4fd8;color:#fff;text-decoration:none}button{margin-top:1.5rem;font:inherit;font-weight:600;padding:.65rem 1.2rem;border:0;border-radius:6px;background:#1c4fd8;color:#fff}.error{background:#fde8e8;border:1px solid #c33;border-radius:6px;padding:.6rem}.note{color:#555;font-size:.85rem;margin-top:2rem}
 @media (prefers-color-scheme:dark){body{background:#161616;color:#eee}input,select{background:#222;border-color:#777}.help,.note{color:#aaa}.error{background:#3a1c1c}}`;
 
 const cspFor = (nonce: string): string => `default-src 'none'; style-src 'nonce-${nonce}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
@@ -134,7 +138,7 @@ export class IntakeServer {
     const now = this.now();
     const ip = this.clientIp(req);
     const path = (req.url ?? "").split("?")[0]!;
-    const route = path === "/healthz" ? "healthz" : /^\/i\/[^/]+$/.test(path) ? "form" : "other";
+    const route = path === "/healthz" ? "healthz" : /^\/i\/[^/]+$/.test(path) ? "form" : path === CALLBACK_PATH ? "callback" : "other";
     res.on("finish", () => console.log(`intake: ${req.method} ${route} ${res.statusCode}`)); // never the path: it holds the code
 
     if (this.all.count("*", now) >= this.limits.globalPerMinute || this.perIp.count(ip, now) >= this.limits.perIpPerMinute || this.bad.count(ip, now) >= this.limits.badCodesPerIp) {
@@ -145,6 +149,7 @@ export class IntakeServer {
 
     if (route === "other") return sendText(res, 404, NOT_FOUND);
     if (route === "healthz") return req.method === "GET" ? sendText(res, 200, "ok\n") : sendText(res, 405, "Method not allowed\n", { Allow: "GET" });
+    if (route === "callback") return req.method === "GET" ? this.callback(req, res, ip, now) : sendText(res, 405, "Method not allowed\n", { Allow: "GET" });
     if (req.method !== "GET" && req.method !== "POST") return sendText(res, 405, "Method not allowed\n", { Allow: "GET, POST" });
 
     const code = path.slice(3);
@@ -154,6 +159,7 @@ export class IntakeServer {
       this.bad.add(ip, now);
       return sendText(res, 404, NOT_FOUND);
     }
+    if (purpose.oauth) return req.method === "GET" ? this.signIn(res, code, purpose, payload.tenant) : sendText(res, 405, "Method not allowed\n", { Allow: "GET" }); // a sign-in has no form to post
     if (req.method === "GET") return this.form(res, code, purpose, payload.tenant);
     return this.submit(req, res, code, ip, purpose, payload);
   }
@@ -163,6 +169,57 @@ export class IntakeServer {
     const rec = people().find((r) => r.id === tenant);
     const cap = Object.hasOwn(PURPOSE_CAPABILITY, purposeId) ? PURPOSE_CAPABILITY[purposeId] : undefined;
     return rec && rec.status === "active" && cap && rec.capabilities.includes(cap) ? purposeOf(purposeId) : undefined;
+  }
+
+  // A sign-in purpose: the page is a link to the other service's consent screen, made now with a state bound to this link.
+  private signIn(res: ServerResponse, code: string, purpose: Purpose, tenant: string): void {
+    const g = this.deps.google;
+    if (!g?.ready()) return sendPage(res, 503, "Not available", `<h1>Not available yet</h1><p>This assistant is not set up for ${esc(purpose.title.replace("Connect ", ""))} yet. Ask the person who runs it.</p>`);
+    let url: string;
+    try {
+      url = g.begin(code, tenant);
+    } catch (e) {
+      return sendPage(res, 503, "Try again later", `<h1>Try again later</h1><p>${esc(e instanceof OAuthProblem ? e.message : "Something went wrong.")}</p>`);
+    }
+    sendPage(res, 200, purpose.title, `<h1>${esc(purpose.title)}</h1><p>${esc(purpose.intro)}</p><p><a class="button" href="${esc(url)}" rel="noreferrer">${esc(purpose.title)}</a></p><p class="note">This page is private to you and the link works once.</p>`);
+  }
+
+  // Google sends her browser here with ?code=...&state=... (or ?error=... when she said no). The state is used up by this call and must belong to a link that is
+  // still open for this person and purpose; only then is the code exchanged and the result stored. Whatever is wrong gets the same answer as any unknown address.
+  private async callback(req: IncomingMessage, res: ServerResponse, ip: string, now: number): Promise<void> {
+    const g = this.deps.google;
+    const q = new URL(req.url ?? "", "http://localhost").searchParams;
+    const flow = g?.ready() ? g.take(q.get("state") ?? "") : undefined;
+    const peek = flow && this.deps.links.peek(flow.code, now);
+    const purpose = peek && peek.tenant === flow.tenant && peek.purpose === "google" ? this.allowed(peek.tenant, peek.purpose) : undefined;
+    if (!g || !flow || !peek || !purpose) {
+      this.bad.add(ip, now);
+      return sendText(res, 404, NOT_FOUND);
+    }
+    if (q.has("error") || !q.get("code")) {
+      // She said no (or Google did): the link stays open; she can start again from it.
+      return sendPage(res, 400, "Not connected", `<h1>Not connected</h1><p>Google was not connected. Nothing was saved. Open your link again to try once more.</p>`);
+    }
+    const claim = this.deps.links.claim(flow.code, now);
+    if (!claim) {
+      this.bad.add(ip, now);
+      return sendText(res, 404, NOT_FOUND);
+    }
+    try {
+      const grant = await g.exchange(q.get("code")!, flow.verifier);
+      await this.deps.writer.for(flow.tenant)("google", GOOGLE_ITEM, { refresh_token: grant.refreshToken, email: grant.email, scope: grant.scope, at: new Date(this.now()).toISOString() });
+      claim.burn();
+      const stored = [{ name: "google connection", chars: grant.email.length }];
+      recordDone(flow.tenant, "google", stored);
+      audit("intake_store", "stored", "background", { tenant: flow.tenant, purpose: "google", items: stored });
+      sendPage(res, 200, "Connected", `<h1>Google is connected</h1><p>You can close this page and go back to the chat.</p>`);
+    } catch (e) {
+      claim.release(); // the same link works again until it expires
+      if (e instanceof OAuthProblem) return sendPage(res, 400, "Not connected", `<h1>Not connected</h1><p>${esc(e.message)}</p>`);
+      console.error(`intake: connecting Google failed (${(e as Error).name})`);
+      audit("intake_store", "failed", "background", { tenant: flow.tenant, purpose: "google" });
+      sendPage(res, 503, "Not saved", `<h1>Not saved</h1><p>The secret store could not be reached. Nothing was saved. Open the same link again in a moment.</p>`);
+    }
   }
 
   private form(res: ServerResponse, code: string, purpose: Purpose, tenant: string, problem?: string, status = 200): void {

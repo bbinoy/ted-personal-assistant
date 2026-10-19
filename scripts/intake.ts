@@ -5,6 +5,7 @@ import { config } from "../src/config.ts";
 import { macKeychain } from "../src/keychain.ts";
 import { LinkStore, PURPOSE_CAPABILITY } from "../src/intakelinks.ts";
 import { purposeOf } from "../src/intakepurposes.ts";
+import { GoogleOAuth } from "../src/googleoauth.ts";
 import { IntakeServer } from "../src/intakeserver.ts";
 import { IntakeWriter } from "../src/intakestore.ts";
 import { appBao, keychainNames, OWNER } from "../src/secrets.ts";
@@ -17,7 +18,7 @@ const cfg = settings.intake;
 
 if (cmd === "link") {
   const cap = purpose && Object.hasOwn(PURPOSE_CAPABILITY, purpose) ? PURPOSE_CAPABILITY[purpose] : undefined;
-  if (who !== OWNER || !purpose || !purposeOf(purpose) || !cap) {
+  if (who !== OWNER || !purpose || !purposeOf(purpose) || !cap || purpose === "google") { // (the owner's Google is the Claude connector; "Connect Google" is for friends)
     say(`usage: npm run intake -- link owner <purpose>   (purposes: ${Object.keys(PURPOSE_CAPABILITY).join(", ")})`);
     process.exit(1);
   }
@@ -37,7 +38,7 @@ if (cmd === "link") {
     say("There is no intake token in this Mac's Keychain: run npm run openbao -- setup (it makes the page's write-only token).");
     process.exit(1);
   }
-  const page = new IntakeServer({ links: new LinkStore(), writer: new IntakeWriter(appBao({ as: "intake" })) });
+  const page = new IntakeServer({ links: new LinkStore(), writer: new IntakeWriter(appBao({ as: "intake" })), google: new GoogleOAuth() });
   page.server.listen(cfg.port, "127.0.0.1", () => say(`intake: listening on 127.0.0.1:${cfg.port}; links ${cfg.baseUrl ? `point to ${cfg.baseUrl}` : "are not offered to friends (INTAKE_BASE_URL is not set)"}`));
   for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => page.server.close(() => process.exit(0)));
 } else {

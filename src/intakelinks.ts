@@ -24,8 +24,10 @@ interface Stored {
 
 // The purposes of a link and the capability a person needs for each. EXTENSION POINT: `google`, `notion` and `cvc` are added here and in
 // intakepurposes.ts when they are built; nothing else needs to know a purpose by name.
-export const PURPOSE_CAPABILITY: Readonly<Record<string, Capability>> = { profile: "profile", card: "card" };
-export const purposesFor = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSE_CAPABILITY).filter(([, c]) => capabilities.includes(c)).map(([p]) => p);
+export const PURPOSE_CAPABILITY: Readonly<Record<string, Capability>> = { profile: "profile", card: "card", google: "google" };
+// `google` is offered only while the instance's OAuth client is set up (settings.google): without it there is nothing to sign in with.
+const purposeAvailable = (purpose: string): boolean => purpose !== "google" || (!!settings.google.clientId && !!settings.google.clientSecret);
+export const purposesFor = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSE_CAPABILITY).filter(([p, c]) => capabilities.includes(c) && purposeAvailable(p)).map(([p]) => p);
 
 export const INTAKE_LINK_TOOL = "mcp__intake__get_setup_link";
 export const INTAKE_STATUS_TOOL = "mcp__intake__setup_status";
