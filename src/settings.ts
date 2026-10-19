@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { presetFor } from "./preset.ts";
 import { isSafeUrl, type TtsProviderConfig } from "@ted-personal-assistant/signal/tts";
 
 // Every tunable in one place, read from the environment (see .env.example) and validated
@@ -100,6 +101,8 @@ export const parseLanguages = (raw: string | undefined): string[] => {
 };
 
 export function loadSettings(env: Env) {
+  // The rhythm (when the heartbeat ticks, the brief, the radar, the dream) has its defaults in the assistant preset (preset.ts); each env variable below still overrides its own.
+  const rhythm = presetFor(env).rhythm;
   const kokoro = {
     dir: env.TTS_DIR || `${env.HOME ?? ""}/.cache/ted-personal-assistant/kokoro`,
     voice: env.TTS_VOICE || "am_onyx",
@@ -132,16 +135,16 @@ export function loadSettings(env: Env) {
     briefEmail: oneOf(env, "BRIEF_EMAIL", "off", ["on", "off"] as const) === "on",
     mail: mailProvider !== "none", // is there any mail to look at? Every mail-only path asks this, never the provider's name
 
-    heartbeatMinutes: num(env, "HEARTBEAT_MINUTES", 15, 1, 240),
+    heartbeatMinutes: num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240),
     heartbeatLive: oneOf(env, "HEARTBEAT_ACTIONS", "live", ["live", "log"] as const) === "live",
     maxArchivesPerTick: num(env, "HEARTBEAT_MAX_ARCHIVES", 25, 0, 500),
-    quietStartHour: num(env, "QUIET_START_HOUR", 22, 0, 23),
-    quietEndHour: num(env, "QUIET_END_HOUR", 7, 0, 23),
+    quietStartHour: num(env, "QUIET_START_HOUR", rhythm.heartbeat.quietFromHour, 0, 23),
+    quietEndHour: num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23),
 
     // The radar: while the owner is awake, a model looks at calendar and mail every few hours and
     // writes to them only when something deserves it (src/radar.ts).
-    proactive: oneOf(env, "PROACTIVE", "on", ["on", "off"] as const) === "on",
-    radarMinutes: num(env, "RADAR_MINUTES", 180, 30, 720),
+    proactive: oneOf(env, "PROACTIVE", rhythm.radar.enabled ? "on" : "off", ["on", "off"] as const) === "on",
+    radarMinutes: num(env, "RADAR_MINUTES", rhythm.radar.everyMinutes, 30, 720),
     maxProactivePerDay: num(env, "MAX_PROACTIVE_PER_DAY", 8, 0, 50),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
@@ -199,11 +202,11 @@ export function loadSettings(env: Env) {
     // or your standing tasks, inside the floor that code sets; off asks you about everything that is not a plain read.
     autoApprove: autoApprove(env),
 
-    briefStartHour: num(env, "BRIEF_START_HOUR", 7, 0, 23), // only what the gate's default rules say ("from this hour")
-    briefMaxAttempts: num(env, "BRIEF_MAX_ATTEMPTS", 3, 1, 10),
+    briefStartHour: num(env, "BRIEF_START_HOUR", rhythm.brief.startHour, 0, 23), // only what the gate's default rules say ("from this hour")
+    briefMaxAttempts: num(env, "BRIEF_MAX_ATTEMPTS", rhythm.brief.maxAttempts, 1, 10),
     // The owner's gate (src/gate.ts, wake.ts) decides WHEN the brief and the radar run, by its default rules and the notes; code
     // keeps the HOW and a deterministic backstop for the brief.
-    briefBackstopHour: num(env, "BRIEF_BACKSTOP_HOUR", 9, 0, 24), // no brief logged today by this hour (local): run it anyway. 24: never
+    briefBackstopHour: num(env, "BRIEF_BACKSTOP_HOUR", rhythm.brief.backstopHour, 0, 24), // no brief logged today by this hour (local): run it anyway. 24: never
 
     // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every
     // model call, so hide what your skills never use. A skill that needs a hidden tool will
@@ -248,7 +251,7 @@ export function loadSettings(env: Env) {
     // What background runs may read of the owner's notes (chat reads them as files, on demand), and the
     // nightly "dream" that keeps them up to date (dream.ts).
     memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 150, 10, 1000), // the one memory limit: how many notes a run reads (each is cut at MAX_NOTE_CHARS)
-    dream: oneOf(env, "DREAM", "on", ["on", "off"] as const) === "on",
+    dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
 
     // Wake-ups (src/gate.ts, src/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").

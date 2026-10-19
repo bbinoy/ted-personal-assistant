@@ -1,0 +1,31 @@
+{
+  "name": "ted",
+  "description": "Ted, a personal assistant: mail, calendar, tasks and meetings for one person, in a warm, Ted Lasso kind of voice.",
+  "rhythm": {
+    "heartbeat": { "everyMinutes": 15, "quietFromHour": 22, "quietToHour": 7 },
+    "brief": { "skill": "daily-brief", "startHour": 7, "backstopHour": 9, "maxAttempts": 3 },
+    "radar": { "skill": "radar", "enabled": true, "everyMinutes": 180 },
+    "dream": { "enabled": true }
+  },
+  "notes": {
+    "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"],
+    "dream": ["triage", "people", "scheduling", "context", "brief", "style"],
+    "group": ["people", "context", "scheduling", "style"]
+  },
+  "profiles": {
+    "brief": { "maxTurns": 120, "maxBudgetUsd": 5, "notes": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"] },
+    "radar": { "maxTurns": 30, "maxBudgetUsd": 1, "notes": ["people", "scheduling", "context", "style", "brief", "setup", "voice"] },
+    "background": { "maxTurns": 20, "maxBudgetUsd": 1, "notes": ["people", "scheduling", "context", "style", "brief", "setup", "voice"] },
+    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5, "notes": [] }
+  },
+  "skills": {
+    "core": [
+      { "name": "daily-brief", "required": true },
+      { "name": "meeting-prep", "required": true },
+      { "name": "follow-through" },
+      { "name": "setup", "required": true },
+      { "name": "radar" }
+    ],
+    "order": ["daily-brief", "mailbird", "mailbird-troubleshooting", "gmail", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "setup", "radar", "surf-conditions", "draw"]
+  }
+}

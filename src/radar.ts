@@ -1,5 +1,6 @@
 import { clockLine } from "./brief.ts";
 import { fence } from "./fence.ts";
+import { wakeSkill } from "./preset.ts";
 
 // The proactive radar's prompt (the gate starts it, wake.ts; tasks.ts runs it). One Sonnet run looks at the
 // calendar and at what the heartbeat did, and says what (if anything) deserves an interruption:
@@ -10,7 +11,7 @@ import { fence } from "./fence.ts";
 
 // The radar preset's instructions (tasks.ts).
 export const radarInstructions = (windowMinutes: number): string =>
-  `Load the 'ted-personal-assistant:radar' skill with the Skill tool and follow it. Look at the calendar from now until ${windowMinutes} minutes from now for what is about to start, and at the next 24 hours for clashes.`;
+  `Load the '${wakeSkill("radar")}' skill with the Skill tool and follow it. Look at the calendar from now until ${windowMinutes} minutes from now for what is about to start, and at the next 24 hours for clashes.`;
 
 export function radarPrompt(now: Date, since: string, windowMinutes: number, digest: string, pings: readonly string[], sentKeys: readonly string[], instructions: string = radarInstructions(windowMinutes)): string {
   return [

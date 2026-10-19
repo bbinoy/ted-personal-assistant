@@ -5,6 +5,7 @@ import type { Scope } from "./dreamplan.ts";
 import { compactIfNeeded, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "./messages.ts";
 import { matchLines } from "./logsearch.ts";
 import { MAX_NOTE_CHARS, type Note } from "./notes.ts";
+import { preset } from "./preset.ts";
 import { settings } from "./settings.ts";
 import { readText } from "./state.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
@@ -21,7 +22,7 @@ import { LIMITS } from "./sanitize.ts";
 // The owner's chat can read all of it (read-only); nothing flows the other way.
 
 export const GROUPS_DIR = join(settings.memoryDir, "groups");
-const GROUP_CATEGORIES = ["people", "context", "scheduling", "style"] as const;
+const GROUP_CATEGORIES = preset().notes.group;
 
 export const groupKey = (groupId: string): string => createHash("sha256").update(groupId).digest("hex").slice(0, 12);
 export const groupLogFile = (groupId: string): string => `logs/group-${groupKey(groupId)}.jsonl`;

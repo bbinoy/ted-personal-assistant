@@ -1,4 +1,4 @@
-import { DONE_MARKER } from "../brieftext.ts";
+import { BRIEF_SKILL, DONE_MARKER } from "../brieftext.ts";
 import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "../gmailrules.ts";
 import { addrs, nativeView } from "../mailview.ts";
 import type { DraftView } from "../proposals.ts";
@@ -29,7 +29,7 @@ const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you draft is a G
 
 // The brief preset's instructions (tasks.ts): the mail pass uses the gmail skill and the Gmail connector. The brief is the final answer (Signal, the default) or, with
 // BRIEF_EMAIL=on, also emailed to the owner's own address with send_message (the one send the brief run is allowed, gmailrules.ts).
-const BRIEF_COMMON = "Load the 'ted-personal-assistant:daily-brief' skill with the Skill tool and follow it, with these changes because the mail is Gmail: wherever it says to run 'ted-personal-assistant:mailbird', load 'ted-personal-assistant:gmail' instead and use the Gmail tools it names; the mailbird tools do not exist here.";
+const BRIEF_COMMON = `Load the '${BRIEF_SKILL}' skill with the Skill tool and follow it, with these changes because the mail is Gmail: wherever it says to run 'ted-personal-assistant:mailbird', load 'ted-personal-assistant:gmail' instead and use the Gmail tools it names; the mailbird tools do not exist here.`;
 const briefSignal = () => `${BRIEF_COMMON} Do not deliver by email (step 6): your final answer is the brief itself, in the skill's format (Markdown, the sections in its order), with nothing before it, and then one last line with the exact text ${DONE_MARKER}. If the mail tools are unreachable, say so in the brief, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
 const briefEmail = (self: string): string =>
   `${BRIEF_COMMON} Deliver the brief (step 6) with the Gmail send_message tool, exactly once, to ${JSON.stringify([self])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody). After send_message succeeds, print the exact line ${DONE_MARKER}. If the mail tools are unreachable, send the brief anyway saying so, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
