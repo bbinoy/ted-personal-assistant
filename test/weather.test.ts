@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { getForecast, getMarineForecast, getSpotInfo, searchPlaces, type WeatherIo } from "../src/weather.ts";
 import { nearestSpot } from "../src/kitespots.ts";
 import { exposure, featuresFrom, rings, type Ring } from "../src/shore.ts";
-import { flagFor } from "../src/toolmanifest.ts";
+import { access } from "./util.ts";
 import { OFFERED_SKILLS } from "../src/profiles.ts";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -92,9 +92,9 @@ test("spots: the seed list finds a listed launch point and says so; an unlisted 
 
 test("manifest: the weather tools are free reads in the owner's chat and in groups, nowhere else", () => {
   for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) {
-    assert.equal(flagFor(`mcp__weather__${t}`, "chat"), "no");
-    assert.equal(flagFor(`mcp__weather__${t}`, "group"), "no");
-    assert.equal(flagFor(`mcp__weather__${t}`, "handler"), undefined);
+    assert.equal(access(`mcp__weather__${t}`, "chat"), "free");
+    assert.equal(access(`mcp__weather__${t}`, "group"), "free");
+    assert.equal(access(`mcp__weather__${t}`, "handler"), undefined);
   }
   assert.ok(OFFERED_SKILLS.includes("ted-personal-assistant:surf-conditions"));
 });

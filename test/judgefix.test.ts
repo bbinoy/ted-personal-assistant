@@ -5,6 +5,7 @@ import { readAudit } from "../src/audit.ts";
 import { SYSTEM } from "../src/approvaljudge.ts";
 import { makeCanUseTool, setChatOwnerMessage, setDraftReader, type CallGuard } from "../src/permissions.ts";
 import { settings } from "../src/settings.ts";
+import { CHAT } from "./util.ts";
 
 const CAL = "mcp__claude_ai_Google_Calendar__";
 const opts = { signal: new AbortController().signal } as never;
@@ -35,11 +36,11 @@ test("the prompt names the third verdict, its examples and the places it never a
 });
 
 test("the flight case: fix denies with the hint, asks nobody, runs nothing; the corrected call is judged auto and runs", async () => {
-  mode("broad");
+  mode("auto");
   setChatOwnerMessage("add my return flight to my calendar");
   const j = scripted(fix(), { decision: "auto", reason: "matches" });
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j.fn);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j.fn, undefined, undefined, false, CHAT);
   const first = (await canUse(`${CAL}create_event`, flight(), opts)) as Out;
   assert.equal(first.behavior, "deny");
   assert.equal(first.updatedInput, undefined);
@@ -56,11 +57,11 @@ test("the flight case: fix denies with the hint, asks nobody, runs nothing; the 
 });
 
 test("at most 2 fixes per tool per run, then ask; the same arguments again ask at once", async () => {
-  mode("broad");
+  mode("auto");
   setChatOwnerMessage("add my flight");
   const j = scripted(fix(), fix(), fix("a third"));
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j.fn);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j.fn, undefined, undefined, false, CHAT);
   const a = flight(), b = flight({ summary: "b" }), c = flight({ summary: "c" });
   assert.equal(((await canUse(`${CAL}create_event`, a, opts)) as Out).message?.startsWith("Not run"), true);
   assert.equal(((await canUse(`${CAL}create_event`, b, opts)) as Out).message?.startsWith("Not run"), true);
@@ -69,7 +70,7 @@ test("at most 2 fixes per tool per run, then ask; the same arguments again ask a
   assert.equal(asked, 1);
   // a fresh run starts at zero; byte-identical arguments are never fixed twice
   const j2 = scripted(fix(), fix());
-  const run2 = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j2.fn);
+  const run2 = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j2.fn, undefined, undefined, false, CHAT);
   assert.equal(((await run2(`${CAL}create_event`, flight({ summary: "d" }), opts)) as Out).message?.startsWith("Not run"), true);
   assert.match(((await run2(`${CAL}create_event`, flight({ summary: "d" }), opts)) as Out).message!, /declined/);
   assert.equal(asked, 2);
@@ -78,12 +79,12 @@ test("at most 2 fixes per tool per run, then ask; the same arguments again ask a
 });
 
 test("a fix for a send, a delete or a guard step is downgraded to ask", async () => {
-  mode("broad");
+  mode("auto");
   setChatOwnerMessage("send it");
   setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], subject: "s", body: "b" }) as never);
   let asked = 0;
   const ask = async () => (asked++, { approved: false });
-  const send = makeCanUseTool(ask, "chat", undefined, undefined, scripted(fix()).fn);
+  const send = makeCanUseTool(ask, "chat", undefined, undefined, scripted(fix()).fn, undefined, undefined, false, CHAT);
   assert.match(((await send("mcp__mailbird__send_message_now", { messageId: 9100, confirm: true }, opts)) as Out).message!, /declined/);
   assert.equal(asked, 1);
   const guard: CallGuard = { decide: async () => ({ kind: "ask", judge: true, description: "Browser: confirm this step" }) };
@@ -93,20 +94,20 @@ test("a fix for a send, a delete or a guard step is downgraded to ask", async ()
   assert.equal(rows("mcp__mailbird__send_message_now", "judge-fix").length, 0);
 });
 
-test("shadow mode: a fix is logged as said, the owner is still asked", async () => {
-  mode("shadow");
+test("AUTO_APPROVE=off: the judge is not called at all, so there is nothing to fix; the owner is asked", async () => {
+  mode("off");
   setChatOwnerMessage("add my flight");
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, undefined, scripted(fix()).fn);
-  assert.equal(((await canUse(`${CAL}create_event`, flight({ summary: "shadow" }), opts)) as Out).behavior, "allow");
+  const j = scripted(fix());
+  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, undefined, j.fn, undefined, undefined, false, CHAT);
+  assert.equal(((await canUse(`${CAL}create_event`, flight({ summary: "off" }), opts)) as Out).behavior, "allow");
   assert.equal(asked, 1);
-  const vs = rows(`${CAL}create_event`, "judge-vs-owner").at(-1)!;
-  assert.deepEqual(vs.meta, { judge: "fix", ownerApproved: true });
-  mode("broad");
+  assert.equal(j.seen.length, 0);
+  mode("auto");
 });
 
 test("follow-through: the judge is told the notification facts and the guidance for a location fill-in", async () => {
-  assert.match(SYSTEM, /A follow-through is also auto/);
+  assert.match(SYSTEM, /Follow-through is auto/);
   assert.match(SYSTEM, /Balboa course/);
   assert.match(SYSTEM, /booking number added to the description/);
   assert.match(SYSTEM, /Still ask for changing times, dates, attendees or guests/);
@@ -114,14 +115,14 @@ test("follow-through: the judge is told the notification facts and the guidance 
   assert.match(notifyNote(`${CAL}update_event`, update), /names no guests; this call asks for no notifications/);
   assert.match(notifyNote(`${CAL}update_event`, { ...update, attendees: ["a@example.com"], sendUpdates: "all" }), /names guests; sendUpdates=all/);
   assert.equal(notifyNote("mcp__mailbird__send_message_now", {}), "");
-  mode("broad");
+  mode("auto");
   setChatOwnerMessage("where is the Balboa course?");
   const j = scripted({ decision: "auto", reason: "fills in the place he asked about" });
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j.fn);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, undefined, j.fn, undefined, undefined, false, CHAT);
   assert.equal(((await canUse(`${CAL}update_event`, update, opts)) as Out).behavior, "allow");
   assert.equal(asked, 0);
   assert.match(j.seen[0]!, /Notifies: this call names no guests/);
-  assert.match(judgePrompt({ source: "chat", description: j.seen[0]!, ownerMessage: "where is the Balboa course?" }), /Förrlibuckstrasse/);
-  assert.equal((await judgeAction({ source: "chat", description: "x" }, async () => ({ decision: "fix", reason: "times" }))).decision, "fix");
+  assert.match(judgePrompt({ description: j.seen[0]!, provenance: { kind: "owner", message: "where is the Balboa course?" } }), /Förrlibuckstrasse/);
+  assert.equal((await judgeAction({ description: "x", provenance: { kind: "owner", message: "add my flight" } }, async () => ({ decision: "fix", reason: "times" }))).decision, "fix");
 });

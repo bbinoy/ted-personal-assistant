@@ -3,7 +3,7 @@ import { createPipeline, group, owner, tenant, type Conversation, type Pipeline 
 import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
 import { compactChatIfNeeded, compactDue } from "./chatsession.ts";
 import { gmailReaders } from "./gmail.ts";
-import { approveIn, setApprovers, setChatOwnerMessage, setDraftReader, setGmailReaders } from "./permissions.ts";
+import { approveIn, setApprovers, setChatOwnerMessage, setConversationMessage, setDraftReader, setGmailReaders } from "./permissions.ts";
 import * as approvals from "./approvals.ts";
 import { createApprovers } from "./approvers.ts";
 import { config, mask } from "./config.ts";
@@ -140,7 +140,7 @@ const pipeline: Pipeline = createPipeline({
   // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
   run: (conv, prompt, ownerMessage, pictures, hooks, documents) =>
     conv.tenantId
-      ? tenantRunner.run(conv, prompt, pictures, hooks, documents)
+      ? (setConversationMessage(conv.key, ownerMessage), tenantRunner.run(conv, prompt, pictures, hooks, documents).finally(() => setConversationMessage(conv.key, undefined)))
       : (setChatOwnerMessage(ownerMessage), runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)),
   picture: (m) => preparePicture(attachmentPath(m.image!, settings.signalAttachmentsDir)), // a plain file name inside signal-cli's folder
   document: async (m) => prepareFile(attachmentPath(m.file!, settings.signalAttachmentsDir), m.file!.name, audioTools), // the same: only the id, joined to signal-cli's folder; an audio file is transcribed (queued with voice messages)

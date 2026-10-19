@@ -62,12 +62,14 @@ export const dropTenantWarm = (id: string): void => pool.drop(tenantKey(id));
 // ---- the other owner runs ----
 
 // Background handling of heartbeat-flagged mail: fresh session, least privilege (see policy.ts).
-export function runHandlerTurn(prompt: string, approve: Approve, onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void): Promise<AgentReply> {
+export function runHandlerTurn(prompt: string, approve: Approve, onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void, task?: string): Promise<AgentReply> {
   return runAgent(prompt, approve, {
     source: "handler",
     systemPrompt: handlerSystem(memoryFor(["people", "scheduling", "context", "style", "setup", "voice"]), missingSetup(readNotes(), down()), down()),
     maxTurns: 40,
     maxBudgetUsd: 2.0,
     onToolSuccess,
+    judgeContext: task, // the standing task: the approval judge's provenance (fixed text, no mail)
+    untrusted: true, // it reads raw mail
   });
 }

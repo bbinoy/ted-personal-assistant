@@ -17,15 +17,22 @@ import { APPROVAL_DECISIONS, approvalLines } from "./approvalreport.ts";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
-// How the approval judge (src/autojudge.ts) did against the owner's own answers.
+// What the approval judge (src/autojudge.ts) did: the actions it let through without asking the owner (newest last), and how its "ask" verdicts
+// compared with the owner's own answers.
 function judgeSummary(hours: number) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();
+  const skipped = readAudit((e) => e.decision === "auto-approved" && e.ts > since);
   const rows = readAudit((e) => e.decision === "judge-vs-owner" && e.ts > since).map((e) => ({ judge: e.meta?.judge as "auto" | "ask", ownerApproved: Boolean(e.meta?.ownerApproved) }));
-  if (rows.length === 0) return;
-  const a = agreement(rows);
-  console.log(`\nApproval judge (mode ${settings.autoApprove}), ${a.total} question(s) in the last ${hours}h:`);
-  console.log(`  would have skipped the question: ${a.judgedAuto}, of which you approved ${a.autoOwnerApproved} and DECLINED ${a.autoOwnerDeclined}`);
-  console.log(`  asked, and you approved anyway: ${a.judgedAskOwnerApproved}`);
+  if (rows.length === 0 && skipped.length === 0) return;
+  console.log(`\nApproval judge (AUTO_APPROVE=${settings.autoApprove}), last ${hours}h:`);
+  if (skipped.length) {
+    console.log(`  ${skipped.length} action(s) went ahead without asking you:`);
+    for (const e of skipped.slice(-15)) console.log(`    ${localTime(e.ts)}  ${e.source}  ${e.tool.split("__").pop()}  ${String(e.meta?.reason ?? "").slice(0, 100)}`);
+  }
+  if (rows.length) {
+    const a = agreement(rows);
+    console.log(`  ${a.total} question(s) were put to you; you approved ${a.judgedAskOwnerApproved} of the ones it flagged (asked needlessly), and ${a.autoOwnerDeclined} it would have let through you declined`);
+  }
 }
 
 function approvalSummary(hours: number) {

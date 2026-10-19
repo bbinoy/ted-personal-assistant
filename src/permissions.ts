@@ -1,12 +1,13 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, type CarriedApproval, type Verdict } from "./autojudge.ts";
+import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type Verdict } from "./autojudge.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
 import { isGmailTool, isInboxArchive } from "./gmailrules.ts";
 import { classify, isReadTool } from "./policy.ts";
 import type { DraftView } from "./proposals.ts";
-import { actionOf, entryFor, mailView, type MailView, type ViewKind } from "./toolmanifest.ts";
+import { actionOf, entryFor, mailView, readsUntrusted, type MailView, type ViewKind } from "./toolmanifest.ts";
+import { OWNER_KEY } from "./send.ts";
 import { LIMITS } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
 
@@ -51,11 +52,13 @@ export function publicArgs(tool: string, input: Record<string, unknown>): Record
   return Object.keys(args).length ? { args } : undefined;
 }
 
-// What the owner just said in chat, and the two messages before it, for the approval judge (a send is judged against what was said
-// about it, which may have been a message ago: "reply to Armon that Tuesday works" ... "send it"). A module-level value because
-// the warm chat process is built before the message arrives; chat turns run one at a time.
-let chatOwnerMessages: string[] = [];
-export const setChatOwnerMessage = (text: string) => void (chatOwnerMessages = [...chatOwnerMessages, text].slice(-3));
+// What the person behind a conversation just said, and the two messages before it, for the approval judge's provenance (a send is judged against what
+// was said about it, which may have been a message ago: "reply to Armon that Tuesday works" ... "send it"). Keyed by conversation (the owner's chat,
+// a group id, a tenant's key). Module-level because the warm chat process is built before the message arrives; a conversation's turns run one at a time.
+// A group's or a tenant's message is cleared when its turn ends, so a later wake-up of it never reads an old one as its provenance.
+const recentMessages = new Map<string, string[]>();
+export const setConversationMessage = (key: string, text: string | undefined) => void (text === undefined ? recentMessages.delete(key) : recentMessages.set(key, [...(recentMessages.get(key) ?? []), text].slice(-3)));
+export const setChatOwnerMessage = (text: string) => setConversationMessage(OWNER_KEY, text);
 // What the assistant last told the owner in chat (a draft it showed, a plan it announced): context for the judge, so that a plain "yes, send"
 // is read against what it answers. Never consent by itself (autojudge.ts says so to the judge).
 let chatAssistantMessage = "";
@@ -127,7 +130,16 @@ export interface CallGuard {
   decide: (tool: string, input: Record<string, unknown>) => Promise<GuardDecision>;
 }
 
-export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judgeContext?: string, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false): CanUseTool {
+// What the approval judge is told about the run, set by code from how the run was started (never by the model): `speaker`: the conversation whose
+// message started it (the owner's chat; `member`: a group or a tenant); `untrusted`: the run reads raw mail or web pages from its first call (the mail
+// handler, the browse worker). Either way the flag also turns on once the run has read mail or a page.
+export interface JudgeSetup {
+  speaker?: { key: string; member?: boolean };
+  untrusted?: boolean;
+}
+
+export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judgeContext?: string, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
+  let untrusted = !!setup.untrusted;
   const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
@@ -146,6 +158,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return typeof r === "string" ? { deny: r } : { input: r };
     };
     if (verdict === "allow") {
+      if (readsUntrusted(tool)) untrusted = true;
       // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
       log(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
@@ -162,8 +175,6 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       log(tool, "deny-policy", source, isGmailTool(tool) ? idsOf(input) : undefined);
       return { behavior: "deny", message: `${tool} is blocked by policy (or its input is) and cannot be used.` };
     }
-    // A small model's second opinion, only for what code puts on the floor (autojudge.ts). In shadow
-    // mode it only logs; the owner is asked either way.
     const key = callKey(tool, input);
     const onceOnly = g ? !!g.once && !g.payment : once(tool);
     const doneAt = onceOnly ? done.get(key) : undefined;
@@ -185,14 +196,16 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       description = describeCall(tool, input, view);
     }
     let judged: Verdict | undefined;
-    const [ownerMessage, ...earlier] = [...chatOwnerMessages].reverse();
-    // A chat send is judged against the owner's words; with none on record there is nothing to judge it against.
-    if (settings.autoApprove !== "off" && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, source, view)) && (view === undefined || (source === "chat" && ownerMessage !== undefined))) {
-      judged = await judge({ source, description: description + notifyNote(tool, input), ownerMessage: source === "chat" ? ownerMessage : undefined, assistantSaid: source === "chat" && chatAssistantMessage ? chatAssistantMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext, approved: g?.carried });
+    // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
+    // here. With nothing on record there is nothing to judge the action against and the owner is asked.
+    const speaker = setup.speaker;
+    const provenance = provenanceFor({ source, speaker: speaker && (speaker.member ? "member" : "owner"), messages: speaker && [...(recentMessages.get(speaker.key) ?? [])].reverse(), assistantSaid: speaker?.key === OWNER_KEY && !speaker.member ? chatAssistantMessage : undefined, task: judgeContext });
+    if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
+      judged = await judge({ description: description + notifyNote(tool, input), provenance, untrustedInput: untrusted, approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
-      // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. Shadow mode: the owner is asked as today.
+      // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
       const fx = fixes.get(tool) ?? { n: 0, keys: new Set<string>() };
-      if (judged.decision === "fix" && settings.autoApprove !== "shadow") {
+      if (judged.decision === "fix") {
         const why = !mayFix(tool, { guardStep: g?.kind === "ask", payment: g?.payment }) ? "not-fixable" : fx.n >= MAX_FIXES ? "fix-cap" : fx.keys.has(key) ? "same-arguments" : undefined;
         if (!why) {
           fixes.set(tool, { n: fx.n + 1, keys: fx.keys.add(key) });
@@ -202,10 +215,11 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         judged = { decision: "ask", reason: judged.reason };
         log(tool, "judge-ask", source, { reason: judged.reason, mode: settings.autoApprove, fix: why, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
       } else log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
-      if (mayAutoApprove(settings.autoApprove, source, judged)) {
+      if (mayAutoApprove(settings.autoApprove, judged)) {
         log(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(key);
+        if (readsUntrusted(tool)) untrusted = true;
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
     }
@@ -228,6 +242,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       source,
     );
     if (d.approved && onceOnly) remember(key);
+    if (d.approved && readsUntrusted(tool)) untrusted = true;
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && g?.payment && g.resolve) {
       const f = await final(); // the card is opened only now, after the owner's typed yes

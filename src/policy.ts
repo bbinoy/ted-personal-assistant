@@ -6,13 +6,14 @@ import { gmailVerdict, GMAIL_PREFIX } from "./gmailrules.ts";
 import { isNotePath } from "./notes.ts";
 import { settings } from "./settings.ts";
 import { groupTools } from "./capabilities.ts";
-import { entryFor, flagFor, isReadTool } from "./toolmanifest.ts";
+import { availableFor, entryFor, isFree, isReadTool } from "./toolmanifest.ts";
 
 // Permissions as code. Every tool call any agent run wants to make passes classify():
 //   allow - run it
 //   ask   - the owner approves or declines on their phone
 //   deny  - never, whatever anyone says
-// A tool's manifest flag gives the verdict: no -> allow; auto and yes -> ask (auto: the judge may skip the question, permissions.ts).
+// The same for every tool in every place: a tool that does not exist for this source is denied; a free tool (a read, the assistant's own plumbing:
+// toolmanifest.ts isFree) is allowed; anything else is "ask", and permissions.ts lets the approval judge skip the question where code allows it.
 // Unknown tools default to "ask", never to "allow".
 
 export type Verdict = "allow" | "ask" | "deny";
@@ -88,8 +89,7 @@ export function hiddenTools(
 }
 
 // The web. Pages and search results are untrusted content, like mail, and a fetched URL can carry data out in its query
-// string. The manifest says who may search (chat, background, groups) and who may open a page (and that the judge decides);
-// the address veto is autojudge.ts. A group or a tenant never opens a page.
+// string. A search is free; opening a page is judged, and the address veto is autojudge.ts. A group or a tenant never opens a page.
 
 // groupNotesDir: for a group run, THE one folder its file tools may touch (its own notes). Without it a group
 // gets no file access at all.
@@ -112,8 +112,8 @@ export function classify(tool: string, input: Record<string, unknown>, source: S
   if (g) return g;
   // The note file tools are chat only (manifest) and only on a path inside the notes (or, for Read, the data folders): the path is code.
   if (NOTE_FILE_TOOLS.has(tool) && !(isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path)))) return "deny";
-  const flag = flagFor(tool, source);
-  return flag === undefined ? "deny" : flag === "no" ? "allow" : "ask";
+  if (!availableFor(tool, source)) return "deny";
+  return isFree(tool) ? "allow" : "ask";
 }
 
 // --- "yes, but make it 16:00": consent with a small edit, applied without re-asking ---

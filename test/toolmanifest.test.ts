@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SOURCES, type Source } from "../src/audit.ts";
+import { SOURCES } from "../src/audit.ts";
 import { classify } from "../src/policy.ts";
 import { settings } from "../src/settings.ts";
-import { actionOf, entryFor, flagFor, MAIL_PROVIDERS, MANIFEST, mailView, type Flag } from "../src/toolmanifest.ts";
+import { actionOf, availableFor, entryFor, isFree, MAIL_PROVIDERS, MANIFEST, mailView, readsUntrusted } from "../src/toolmanifest.ts";
+import { access } from "./util.ts";
 
 const MB = "mcp__mailbird__";
 const GM = "mcp__claude_ai_Gmail__";
@@ -14,68 +15,80 @@ test("manifest: a tool name appears in one entry only, and every entry names a p
   const names = MANIFEST.map((e) => e.tool);
   assert.deepEqual(names.filter((n, i) => names.indexOf(n) !== i), []);
   for (const e of MANIFEST) {
-    assert.ok(e.provider && e.action && e.flag, e.tool);
+    assert.ok(e.provider && e.action && e.cap, e.tool);
+    assert.ok(!("flag" in e), `${e.tool}: a row says what a tool is, not who may use it`);
     assert.ok(e.view === undefined || MAIL_PROVIDERS.includes(e.provider), `${e.tool}: only mail tools have a mail view`);
   }
 });
 
-// The flag a source gets, spelled out by hand here so that a change to the manifest's rules shows up as a failing line.
-const want = (spec: Flag | Partial<Record<string, Flag>>, source: Source): Flag => (typeof spec === "string" ? spec : (spec[source] ?? (source === "chat" ? undefined : spec.unattended) ?? "yes"));
-
-test("manifest: every entry classifies as its flag says, for every source (the active mail provider only)", () => {
+test("manifest: every entry classifies the same way for every source: not there (deny), free (allow) or judged (ask); the active mail provider only", () => {
   for (const e of MANIFEST) {
     if (MAIL_PROVIDERS.includes(e.provider) && e.provider !== settings.mailProvider) continue;
     for (const source of SOURCES) {
       if (source === "group") continue; // a group has its own rules (below)
-      const flag = e.only && !e.only.includes(source) ? undefined : want(e.flag, source);
-      assert.equal(flagFor(e.tool, source), flag, `${e.tool} (${source})`);
+      const there = !e.only || e.only.includes(source);
+      assert.equal(availableFor(e.tool, source), there, `${e.tool} (${source})`);
       assert.equal(actionOf(e.tool), e.action, e.tool);
       // Read/Write/Edit also need a path inside the notes: with none the file rule denies first
       if (e.provider === "builtin" && e.action === "note-file") continue;
-      assert.equal(classify(e.tool, {}, source), flag === undefined ? "deny" : flag === "no" ? "allow" : "ask", `${e.tool} (${source})`);
+      assert.equal(classify(e.tool, {}, source), !there ? "deny" : isFree(e.tool) ? "allow" : "ask", `${e.tool} (${source})`);
     }
   }
 });
 
-test("manifest: the defaults the owner decided, tool by tool: [chat, handler, brief]", () => {
-  const table: Record<string, [Flag, Flag, Flag]> = {
-    [`${MB}get_message`]: ["no", "no", "no"],
-    [`${MB}create_draft`]: ["no", "yes", "no"],
-    [`${MB}update_draft`]: ["no", "yes", "no"],
-    [`${MB}reply_to_conversation`]: ["no", "no", "no"], // an in-thread reply is a DRAFT in Mailbird
-    [`${MB}reply_all_to_conversation`]: ["no", "no", "no"],
-    [`${MB}archive_conversation`]: ["no", "yes", "no"],
-    [`${MB}select_conversation`]: ["no", "yes", "no"],
-    [`${MB}send_self_briefing`]: ["no", "yes", "no"],
-    [`${MB}send_message_now`]: ["auto", "yes", "yes"],
-    [`${MB}forward_conversation`]: ["no", "yes", "no"],
-    [`${CAL}list_events`]: ["no", "no", "no"],
-    [`${CAL}create_event`]: ["auto", "auto", "auto"],
-    [`${CAL}update_event`]: ["auto", "yes", "yes"],
-    [`${CAL}respond_to_event`]: ["yes", "yes", "yes"],
-    "mcp__claude_ai_Google_Drive__share_file": ["yes", "yes", "yes"],
-    [`${N}notion-create-pages`]: ["no", "yes", "no"],
-    [`${N}notion-update-page`]: ["no", "yes", "no"],
-    [`${N}notion-create-comment`]: ["yes", "yes", "yes"],
-    WebSearch: ["no", "no" as Flag, "no"], // handler/brief: see `only` below
-    Skill: ["no", "no", "no"],
+test("manifest: which tools run free and which are judged, tool by tool; the same in every place they exist", () => {
+  const table: Record<string, "free" | "judged"> = {
+    [`${MB}get_message`]: "free",
+    [`${MB}create_draft`]: "judged",
+    [`${MB}update_draft`]: "judged",
+    [`${MB}reply_to_conversation`]: "judged", // an in-thread reply is a DRAFT in Mailbird
+    [`${MB}archive_conversation`]: "judged",
+    [`${MB}select_conversation`]: "judged",
+    [`${MB}send_self_briefing`]: "judged",
+    [`${MB}send_message_now`]: "judged",
+    [`${MB}forward_conversation`]: "judged",
+    [`${CAL}list_events`]: "free",
+    [`${CAL}create_event`]: "judged",
+    [`${CAL}update_event`]: "judged",
+    [`${CAL}respond_to_event`]: "judged",
+    "mcp__claude_ai_Google_Drive__share_file": "judged",
+    [`${N}notion-fetch`]: "free",
+    [`${N}notion-create-pages`]: "judged",
+    [`${N}notion-update-page`]: "judged",
+    [`${N}notion-create-comment`]: "judged",
+    WebSearch: "free",
+    WebFetch: "judged",
+    Skill: "free",
+    "mcp__browse__browse": "judged",
+    "mcp__send__send": "free",
+    "mcp__memory__forget_note": "free",
   };
-  for (const [tool, [chat, handler, brief]] of Object.entries(table)) {
-    assert.equal(flagFor(tool, "chat"), chat, `${tool} chat`);
-    if (tool === "WebSearch") continue;
-    assert.equal(flagFor(tool, "handler"), handler, `${tool} handler`);
-    assert.equal(flagFor(tool, "brief"), brief, `${tool} brief`);
+  for (const [tool, kind] of Object.entries(table)) {
+    for (const source of SOURCES) if (availableFor(tool, source)) assert.equal(access(tool, source), kind, `${tool} (${source})`);
+    assert.ok(SOURCES.some((s) => availableFor(tool, s)), tool);
   }
-  // web: search in chat and background only; a page is judged for the owner's own runs and never for the mail handler
-  assert.deepEqual((["chat", "background", "brief", "handler"] as const).map((s) => flagFor("WebSearch", s)), ["no", "no", undefined, undefined]);
-  assert.deepEqual((["chat", "background", "brief", "radar", "handler", "heartbeat"] as const).map((s) => flagFor("WebFetch", s)), ["auto", "auto", "auto", "auto", undefined, undefined]);
+  // no per-source table: the web tools and the browse entry exist in every run, the ones that need a conversation or a notes folder only there
+  for (const source of SOURCES) for (const t of ["WebSearch", "WebFetch", "mcp__browse__browse", `${MB}archive_conversation`, `${CAL}update_event`]) assert.ok(availableFor(t, source), `${t} (${source})`);
+  assert.deepEqual(SOURCES.filter((s) => availableFor("mcp__send__send", s)), ["chat", "group"]);
+  assert.deepEqual(SOURCES.filter((s) => availableFor("mcp__draw__draw", s)), ["chat", "group"]);
 });
 
-test("manifest: unknown tools default to yes (ask), unless the name is a read verb", () => {
-  for (const source of SOURCES) if (source !== "group") assert.equal(flagFor("mcp__new_server__do_something", source), "yes", source);
-  assert.equal(flagFor("Bash", "chat"), "yes");
+test("manifest: only the browse run has the browser's tools; reading mail or a page marks a run as having read untrusted text", () => {
+  for (const source of SOURCES) assert.equal(availableFor("mcp__browser__browser_navigate", source), source === "browse", source);
+  assert.ok(readsUntrusted(`${MB}get_message`));
+  assert.ok(readsUntrusted("WebFetch"));
+  assert.ok(readsUntrusted("mcp__browser__browser_snapshot"));
+  assert.ok(readsUntrusted(`${MB}get_new_thing`)); // a read verb of the mail connector counts
+  assert.ok(!readsUntrusted(`${CAL}list_events`));
+  assert.ok(!readsUntrusted(`${MB}archive_conversation`));
+  assert.ok(!readsUntrusted("mcp__send__send"));
+});
+
+test("manifest: unknown tools are not free (they ask) and are not judged, unless the name is a read verb", () => {
+  for (const source of SOURCES) if (source !== "group") assert.equal(access("mcp__new_server__do_something", source), "judged", source);
+  assert.equal(access("Bash", "chat"), "judged");
   assert.equal(classify("mcp__new_server__do_something", {}, "chat"), "ask");
-  assert.equal(flagFor("mcp__new_server__get_thing", "chat"), "no");
+  assert.equal(access("mcp__new_server__get_thing", "chat"), "free");
   assert.equal(actionOf("mcp__x__send_search"), "unknown");
 });
 
@@ -93,20 +106,21 @@ test("manifest: a provider's entries take effect only while it is the active mai
     assert.equal(entryFor(e.tool, "mailbird")?.provider, "mailbird", e.tool);
   }
   // a Gmail send in mailbird mode is just an unknown tool: asks, and no mail view
-  assert.equal(flagFor(`${GM}send_message`, "chat", "mailbird"), "yes");
+  assert.equal(entryFor(`${GM}send_message`, "mailbird"), undefined);
   assert.equal(mailView(`${GM}send_message`, { to: ["a@example.com"] }, undefined, "mailbird"), undefined);
   assert.equal(mailView(`${MB}create_draft`, { to: [{ email: "a@example.com" }] }, undefined, "gmail"), undefined);
-  // ...and with gmail active the same rule holds as for Mailbird: sends are judged in chat, asked everywhere else
-  assert.equal(flagFor(`${GM}send_message`, "chat", "gmail"), "auto");
-  assert.equal(flagFor(`${GM}send_message`, "handler", "gmail"), "yes");
-  assert.equal(flagFor(`${GM}reply`, "radar", "gmail"), "yes");
-  assert.equal(flagFor(`${GM}forward`, "brief", "gmail"), "yes");
-  assert.equal(flagFor(`${GM}create_draft`, "chat", "gmail"), "no");
-  assert.equal(flagFor(`${GM}search_threads`, "handler", "gmail"), "no");
+  // ...and with gmail active the same rule holds as for Mailbird: sends are judged, drafts judged too, reads free, in every place
+  for (const source of ["chat", "handler", "radar", "brief"] as const) {
+    assert.equal(access(`${GM}send_message`, source, "gmail"), "judged", source);
+    assert.equal(access(`${GM}reply`, source, "gmail"), "judged", source);
+    assert.equal(access(`${GM}forward`, source, "gmail"), "judged", source);
+    assert.equal(access(`${GM}create_draft`, source, "gmail"), "judged", source);
+    assert.equal(access(`${GM}search_threads`, source, "gmail"), "free", source);
+  }
 });
 
 test("manifest: same action, same behaviour across mail providers", () => {
-  const by = (provider: string, action: string) => MANIFEST.filter((e) => e.provider === provider && e.action === action).map((e) => JSON.stringify(e.flag));
+  const by = (provider: string, action: string) => MANIFEST.filter((e) => e.provider === provider && e.action === action).map((e) => isFree(e.tool, provider as "mailbird" | "gmail"));
   for (const action of ["send", "forward", "draft", "read", "archive"]) {
     const a = new Set([...by("mailbird", action), ...by("gmail", action)]);
     assert.equal(a.size, 1, action);

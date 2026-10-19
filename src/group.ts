@@ -3,6 +3,7 @@ import { budgetSpent } from "./budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "./fence.ts";
 import { prepare, runConversation } from "./agent.ts";
+import { setConversationMessage } from "./permissions.ts";
 import { AuthError, RateLimitError } from "./errors.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
@@ -262,6 +263,7 @@ export function createGroupBrain(brain: Brain) {
         // Like a private chat, it may answer with an emoji reaction (on the message it is answering), with or without words.
         st.running = true;
         st.runStart = Date.now();
+        setConversationMessage(conv.key, live ? last.text : undefined); // the approval judge's provenance for this turn's browse steps: the member's message that addressed us (permissions.ts)
         const res = await pipeline
           .runTurn(conv, {
             run: async (hooks) => ({ text: await (brain.run ?? realRunner)(build, { conv, now, firstOutput: hooks.firstOutput }) }),
@@ -272,6 +274,7 @@ export function createGroupBrain(brain: Brain) {
             announce: !!asked,
           })
           .finally(() => {
+            setConversationMessage(conv.key, undefined);
             st.running = false;
             st.runEnd = Date.now();
           });

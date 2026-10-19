@@ -11,7 +11,7 @@ import { createOutbound } from "../src/outbound.ts";
 import { classify } from "../src/policy.ts";
 import { adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/shots.ts";
 import { OWNER_KEY, sendNow, withSend, type Content } from "../src/send.ts";
-import { flagFor } from "../src/toolmanifest.ts";
+import { access } from "./util.ts";
 
 // send: the model's one way to say something mid-turn (text, voice note, picture, reaction). Text before a tool call is never sent.
 
@@ -34,11 +34,11 @@ test("send_picture: the guard keeps only real jpeg bytes, under names code choos
 
 
 test("send: manifest and policy: chat and group only, never background or unattended", () => {
-  assert.equal(flagFor(TOOL, "chat"), "no");
+  assert.equal(access(TOOL, "chat"), "free");
   assert.equal(classify(TOOL, { text: "On it." }, "chat"), "allow");
   assert.equal(classify(TOOL, { text: "On it." }, "group"), "allow");
   for (const source of ["brief", "radar", "handler", "heartbeat", "dream", "browse", "background"] as const) {
-    assert.equal(flagFor(TOOL, source), undefined, source);
+    assert.equal(access(TOOL, source), undefined, source);
     assert.equal(classify(TOOL, { text: "x" }, source), "deny", source);
   }
 });

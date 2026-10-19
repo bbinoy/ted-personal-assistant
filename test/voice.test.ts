@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildOptions } from "../src/agentrun.ts";
 import { classify } from "../src/policy.ts";
-import { flagFor } from "../src/toolmanifest.ts";
+import { access } from "./util.ts";
 import { holdQuote, holdVoiceNote, resetVoiceNotes } from "../src/voicenote.ts";
 import { withSend } from "../src/send.ts";
 import { voiceNow, type VoiceDeps } from "../src/voicetool.ts";
@@ -236,11 +236,11 @@ test("tool: group rules: a group library is capped, anyone can switch back, only
 
 test("tool: manifest and policy: chat and group without approval, never an unattended run", () => {
   const TOOL = "mcp__voice__voice";
-  assert.equal(flagFor(TOOL, "chat"), "no");
+  assert.equal(access(TOOL, "chat"), "free");
   assert.equal(classify(TOOL, { action: "list" }, "chat"), "allow");
   assert.equal(classify(TOOL, { action: "list" }, "group"), "allow");
   for (const source of ["brief", "radar", "handler", "heartbeat", "dream", "browse", "background"] as const) {
-    assert.equal(flagFor(TOOL, source), undefined, source);
+    assert.equal(access(TOOL, source), undefined, source);
     assert.equal(classify(TOOL, { action: "list" }, source), "deny", source);
   }
   // the default provider is Qwen: chat and group are offered the tool, an unattended run is not
