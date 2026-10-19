@@ -78,3 +78,16 @@ test("MESSENGER=signal (the default) is found by name, and the doctor reports th
   const lines = await messengerDoctor(undefined);
   assert.deepEqual([lines[0]!.what, lines[0]!.detail, lines[1]!.what], ["messenger", "signal", "Signal channel"]);
 });
+
+test("the skeleton platforms load by name and say they are not built yet, and the doctor says so too", async () => {
+  const { loadMessenger } = await import("@ted-personal-assistant/messenger");
+  for (const name of ["telegram", "whatsapp", "slack"]) {
+    await assert.rejects(
+      loadMessenger(name, { owner: { address: OWNER }, account: OWNER, options: {}, logger: console }),
+      new Error(`${name} messenger is not built yet: see packages/${name}/SETUP.md`),
+    );
+    const lines = await (await (await import("@ted-personal-assistant/messenger")).loadMessengerModule(name)).doctor({ options: {} });
+    assert.deepEqual(lines.map((l) => [l.ok, l.what]), [[false, name]]);
+    assert.match(lines[0]!.detail ?? "", /not built yet/);
+  }
+});
