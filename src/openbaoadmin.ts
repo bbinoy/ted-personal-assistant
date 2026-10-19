@@ -17,6 +17,8 @@ import { keychainNames } from "./secrets.ts";
 //   backup or a stolen disk, not a logged-in attacker.
 // - The root token exists only in memory during setup (init or a root regenerated from the shares) and is revoked at the end.
 // - The app's token has one policy, limited to tenants/<id>/*, and lives in the Keychain.
+// - The intake page (intakeserver.ts) has a token of its own with a WRITE-ONLY policy: it can create and update profile and card items of any
+//   tenant and can neither read, list nor delete anything, so the web-facing process holds nothing that can leak a stored value.
 
 // ---- the pinned release ----
 
@@ -177,6 +179,17 @@ path "sys/storage/raft/snapshot" {
 `;
 export const OPERATOR_ROLE = "ted-operator";
 
+// The intake page's token: create and update on profile and card items (`+` is any one tenant id). No read, no list, no delete, no metadata, no other kind.
+export const INTAKE_ROLE = "ted-intake";
+export const intakePolicyHcl = (mount: string): string => `# The intake page's token: write-only.
+path "${mount}/data/tenants/+/profile/*" {
+  capabilities = ["create", "update"]
+}
+path "${mount}/data/tenants/+/card/*" {
+  capabilities = ["create", "update"]
+}
+`;
+
 // ---- the admin ----
 
 export interface AdminOptions {
@@ -325,8 +338,10 @@ export class Admin {
     await api.raw("POST", `auth/token/roles/${role}`, { allowed_policies: [role], orphan: true, period: "768h", renewable: true });
     await api.raw("PUT", `sys/policies/acl/${OPERATOR_ROLE}`, { policy: OPERATOR_POLICY });
     await api.raw("POST", `auth/token/roles/${OPERATOR_ROLE}`, { allowed_policies: [OPERATOR_ROLE], orphan: true, period: "768h", renewable: true });
+    await api.raw("PUT", `sys/policies/acl/${INTAKE_ROLE}`, { policy: intakePolicyHcl(mount) });
+    await api.raw("POST", `auth/token/roles/${INTAKE_ROLE}`, { allowed_policies: [INTAKE_ROLE], orphan: true, period: "768h", renewable: true });
     const names = keychainNames(this.o.prefix);
-    for (const [service, r, label] of [[names.token, role, `ted-${tenant}`], [names.operator, OPERATOR_ROLE, "ted-operator"]] as const) {
+    for (const [service, r, label] of [[names.token, role, `ted-${tenant}`], [names.operator, OPERATOR_ROLE, "ted-operator"], [names.intake, INTAKE_ROLE, "ted-intake"]] as const) {
       const old = await this.o.keychain.get(service).catch(() => undefined);
       const created = await api.raw("POST", `auth/token/create/${r}`, { display_name: label });
       const token = created?.auth?.client_token;
@@ -334,7 +349,7 @@ export class Admin {
       await this.o.keychain.set(service, token);
       if (old && old !== token) await api.raw("POST", "auth/token/revoke", { token: old }).catch(() => undefined);
     }
-    out(`The app's token (policy ${role}: only tenants/${tenant}/) and the setup tool's token (policy ${OPERATOR_ROLE}) are in the Keychain.`);
+    out(`The app's token (policy ${role}: only tenants/${tenant}/), the setup tool's token (policy ${OPERATOR_ROLE}) and the intake page's write-only token (policy ${INTAKE_ROLE}) are in the Keychain.`);
   }
 
   private async revoke(root: string): Promise<void> {
@@ -384,11 +399,11 @@ export class Admin {
     return file;
   }
 
-  // The keeper's second job: both tokens are periodic and must be renewed before they lapse.
+  // The keeper's second job: the tokens are periodic and must be renewed before they lapse.
   async renewTokens(): Promise<"renewed" | "not due" | "no token"> {
     const names = keychainNames(this.o.prefix);
     let did: "renewed" | "not due" | "no token" = "not due";
-    for (const service of [names.token, names.operator]) {
+    for (const service of [names.token, names.operator, names.intake]) {
       const token = await this.o.keychain.get(service);
       if (!token) {
         did = "no token";
