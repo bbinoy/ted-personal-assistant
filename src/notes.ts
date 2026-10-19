@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join, resolve } from "node:path";
 import { isInside } from "./contain.ts";
 import { fence } from "./fence.ts";
+import { loaded } from "./modules/index.ts";
+import type { SetupNeed } from "./modules/types.ts";
 import { localDay } from "./pause.ts";
 import { settings } from "./settings.ts";
 
@@ -97,18 +99,14 @@ export function notesBlock(notes: readonly Note[], categories: readonly Category
 
 // The setup the bundled skills need before they can do their job, as the file name each one
 // is saved under (plugin/skills/setup tells the chat agent to use exactly these).
-export const SETUP_ITEMS = [
-  { file: "setup-calendars.md", label: "calendars (which to check, time zone)", needs: "calendar" },
-  { file: "setup-tasks.md", label: "task list (your Notion page)", needs: "notion" },
-  { file: "setup-meetings.md", label: "meeting notes (where prep pages go)", needs: "notion" },
-  { file: "voice-writing.md", label: "how you write (for email drafts)", needs: undefined, mailOnly: true },
-] as const;
+// They are the loaded tool modules' (src/modules: calendar, Notion, the mail provider's), in module order.
+export const setupItems = (): SetupNeed[] => loaded().flatMap((m) => m.setup ?? []);
 
 // Pure: the labels of setup items with no note yet (an expired or empty note counts as missing).
 // An item whose connector is down is left out: the missing connection is the problem to report,
 // not the missing note. Without mail (MAIL_PROVIDER=none) an item that only exists for mail is never asked for.
 export const missingSetup = (notes: readonly Note[], down: readonly string[] = [], mail: boolean = settings.mail): string[] =>
-  SETUP_ITEMS.filter((i) => (mail || !("mailOnly" in i)) && !notes.some((n) => n.file === i.file) && !(i.needs && down.includes(i.needs))).map((i) => i.label);
+  setupItems().filter((i) => (mail || !i.mailOnly) && !notes.some((n) => n.file === i.file) && !(i.needs && down.includes(i.needs))).map((i) => i.label);
 
 // What a run sees: the notes of the given categories, rendered.
 export const memoryFor = (categories: readonly Category[], now = new Date()) => notesBlock(readNotes(now), categories);

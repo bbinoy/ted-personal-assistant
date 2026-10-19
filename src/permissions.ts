@@ -3,10 +3,10 @@ import { audit, wordless, type Source } from "./audit.ts";
 import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type Verdict } from "./autojudge.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
-import { isGmailTool, isInboxArchive } from "./gmailrules.ts";
-import { classify, isReadTool } from "./policy.ts";
-import type { DraftView } from "./proposals.ts";
-import { actionOf, entryFor, mailView, readsUntrusted, type MailView, type ViewKind } from "./toolmanifest.ts";
+import type { MailView } from "./mailview.ts";
+import { mailSlot } from "./modules/index.ts";
+import { classify, denial, isReadTool } from "./policy.ts";
+import { actionOf, entryFor, mailView, readsUntrusted } from "./toolmanifest.ts";
 import { OWNER_KEY } from "./send.ts";
 import { LIMITS } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
@@ -88,26 +88,6 @@ const remember = (key: string) => {
 // Only for actions that change something: opening a page again is harmless, and refusing it would just get in the way.
 export const doneCount = () => done.size; // tests
 const once = (tool: string) => tool !== "WebFetch" && !isReadTool(tool);
-let draftReader: ((messageId: number) => Promise<DraftView | undefined>) | undefined;
-// Set by main.ts: reads a draft back from Mailbird, for the approval of a send.
-export const setDraftReader = (fn: typeof draftReader) => void (draftReader = fn);
-// Gmail (MAIL_PROVIDER=gmail), set by main.ts: a draft read back by its id (the approval of send_message with a draftId), and the original
-// message of a reply (its sender and recipients, so a reply that names none is shown with the people who really receive it).
-export interface GmailReaders {
-  draft: (draftId: string) => Promise<DraftView | undefined>;
-  original: (messageId: string) => Promise<DraftView | undefined>;
-}
-let gmailReaders: GmailReaders | undefined;
-export const setGmailReaders = (r: GmailReaders | undefined) => void (gmailReaders = r);
-
-// What the mail client holds for a send of a draft, or the original of a Gmail reply (undefined: nothing to read, or it could not be read).
-async function readBack(kind: ViewKind | undefined, input: Record<string, unknown>): Promise<DraftView | undefined> {
-  const id = Number(input.messageId);
-  if (kind === "mbSend" && draftReader && Number.isFinite(id)) return draftReader(id).catch(() => undefined);
-  if (kind === "gmSend" && typeof input.draftId === "string" && gmailReaders) return gmailReaders.draft(input.draftId).catch(() => undefined);
-  if (kind === "gmReply" && typeof input.messageId === "string" && gmailReaders) return gmailReaders.original(input.messageId).catch(() => undefined);
-  return undefined;
-}
 
 // A run that needs rules a flag cannot say per call (the browse run: which element a click is, which address is fine) passes a guard.
 // It sees every call first: deny it, allow it, turn it into a question with code-built text (`ask`), or leave it to the manifest
@@ -167,13 +147,15 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "allow", updatedInput: f.input };
     }
     if (verdict === "deny") {
-      if (isInboxArchive(tool, input) && settings.mailProvider === "gmail") {
-        // Gmail archive in log-only mode (GMAIL_ARCHIVE_LIVE=false): recorded like the heartbeat's, so the report and brief show it.
-        log("gmail_archive", "would-archive", source, { id: input.threadId });
-        return { behavior: "deny", message: "Archiving is in log-only mode (GMAIL_ARCHIVE_LIVE=false): it was recorded as would-archive and the thread stays in the inbox. Carry on without archiving." };
+      // A tool module may have more to say about its own denied tool (Gmail archive in log-only mode: recorded like the heartbeat's, so the report and
+      // the brief show it, and the model is told to carry on).
+      const d = denial(tool, input);
+      if (d?.record) {
+        log(d.record.tool, d.record.decision, source, d.record.meta);
+        return { behavior: "deny", message: d.message ?? `${tool} is blocked by policy (or its input is) and cannot be used.` };
       }
-      log(tool, "deny-policy", source, isGmailTool(tool) ? idsOf(input) : undefined);
-      return { behavior: "deny", message: `${tool} is blocked by policy (or its input is) and cannot be used.` };
+      log(tool, "deny-policy", source, d?.withIds ? idsOf(input) : undefined);
+      return { behavior: "deny", message: d?.message ?? `${tool} is blocked by policy (or its input is) and cannot be used.` };
     }
     const key = callKey(tool, input);
     const onceOnly = g ? !!g.once && !g.payment : once(tool);
@@ -187,7 +169,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (MAIL_OUT.has(actionOf(tool))) {
       // Show what the mail client holds right now, not what the model says it is sending (a send of a draft), and the same view for
       // every provider. If that cannot be read, the owner would be approving blind, so the send does not happen.
-      const draft = await readBack(entryFor(tool)?.view, input);
+      const draft = await mailSlot()?.readBack(entryFor(tool)?.view, input);
       view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
       if (!view || (view.action !== "forward" && view.to.length === 0)) {
         log(tool, "deny-unreadable-draft", source);

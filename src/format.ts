@@ -2,23 +2,11 @@
 // arguments. Deliberately not model-written: an approval prompt that a model
 // paraphrases can misrepresent the call it is meant to guard.
 
-import { mailView, type MailView } from "./toolmanifest.ts";
+import type { MailView } from "./mailview.ts";
+import { mailView, titleOf } from "./toolmanifest.ts";
 
-// Titles for tools shown generically. (Mail tools are shown from mailView() below, whatever the provider; these titles
-// are only for a call mailView cannot read.)
-const TOOLS: Record<string, { icon: string; title: string; labels?: Record<string, string> }> = {
-  mcp__claude_ai_Google_Calendar__create_event: { icon: "📅", title: "Create calendar event" },
-  mcp__claude_ai_Google_Calendar__update_event: { icon: "📅", title: "Change calendar event" },
-  mcp__claude_ai_Google_Calendar__respond_to_event: { icon: "📅", title: "Respond to invite" },
-  mcp__mailbird__send_message_now: { icon: "✉️", title: "Send email now" },
-  mcp__mailbird__forward_conversation: { icon: "✉️", title: "Forward email" },
-  mcp__claude_ai_Gmail__send_message: { icon: "✉️", title: "Send email" },
-  mcp__claude_ai_Gmail__forward: { icon: "✉️", title: "Forward email" },
-  mcp__claude_ai_Gmail__reply: { icon: "✉️", title: "Reply to email" },
-  mcp__claude_ai_Google_Drive__share_file: { icon: "🔗", title: "Share a Drive file" },
-  mcp__browse__browse: { icon: "🌐", title: "Start a browser task", labels: { task: "Task" } },
-  WebFetch: { icon: "🌐", title: "Open a web page", labels: { url: "Address", prompt: "To find out" } },
-};
+// The titles of tools shown generically are the tool modules' (`titles`, src/modules). (Mail tools are shown from mailView() below, whatever the provider; the
+// titles are only for a call mailView cannot read.)
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -146,7 +134,7 @@ export const mailText = (v: MailView): string => `${MAIL_TITLES[v.action]}\n${ma
 export function describeCall(tool: string, input: Record<string, unknown>, draft?: Omit<MailView, "action">): string {
   const view = mailView(tool, input, draft);
   if (view) return mailText(view);
-  const meta = TOOLS[tool];
+  const meta = titleOf(tool);
   const lines: string[] = [meta ? `${meta.icon} ${meta.title}` : `❓ ${humanise(tool)}`];
 
   const title = input.summary ?? input.title;

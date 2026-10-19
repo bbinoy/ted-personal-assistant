@@ -1,7 +1,8 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { recordCost } from "./budget.ts";
 import { GMAIL_PREFIX, gmailVerdict } from "./gmailrules.ts";
-import { callKey, type GmailReaders } from "./permissions.ts";
+import type { GmailReaders } from "./modules/gmail.ts";
+import { callKey } from "./permissions.ts";
 import { hiddenTools } from "./policy.ts";
 import type { DraftView } from "./proposals.ts";
 import { settings } from "./settings.ts";
@@ -296,7 +297,7 @@ export class GmailMail {
   async close(): Promise<void> {}
 }
 
-// The approval's read-backs (permissions.ts setGmailReaders).
+// The approval's read-backs (modules/gmail.ts setGmailReaders).
 export function gmailReaders(relay: Relay = sdkRelay): GmailReaders {
   const one = (tool: string, input: Record<string, unknown>) => relay([{ tool: GMAIL_PREFIX + tool, input }]).then((r) => r[0]);
   return {

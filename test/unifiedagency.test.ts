@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Verdict } from "../src/autojudge.ts";
-import { makeCanUseTool, setConversationMessage, setDraftReader, type CallGuard, type JudgeSetup } from "../src/permissions.ts";
+import { setDraftReader } from "../src/modules/mailbird.ts";
+import { makeCanUseTool, setConversationMessage, type CallGuard, type JudgeSetup } from "../src/permissions.ts";
 import { classify } from "../src/policy.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import * as manifest from "../src/toolmanifest.ts";
@@ -28,7 +29,7 @@ const HANDLER: JudgeSetup = { untrusted: true };
 
 test("no code path reads a chat or unattended flag: the manifest has no flags and the path has no per-source branches", () => {
   for (const gone of ["flagFor", "ROUTINE", "SEND", "FlagSpec", "Flag"]) assert.equal(gone in manifest, false, gone);
-  for (const e of manifest.MANIFEST) assert.equal("flag" in e, false, e.tool);
+  for (const e of manifest.allRows()) assert.equal("flag" in e, false, e.tool);
   for (const file of ["src/permissions.ts", "src/autojudge.ts", "src/policy.ts", "src/toolmanifest.ts"]) {
     const code = readFileSync(file, "utf8").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
     assert.doesNotMatch(code, /source\s*[!=]==?\s*"(chat|handler|brief|radar|background|unattended)"/, file);

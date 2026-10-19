@@ -1,8 +1,9 @@
 import { AuthError } from "./errors.ts";
 import { audit } from "./audit.ts";
-import { isSelfSend } from "./gmailrules.ts";
+import { BRIEF_INSTRUCTIONS, BRIEF_INSTRUCTIONS_NO_MAIL, DONE_MARKER } from "./brieftext.ts";
 import { buildDigest, readTriageSince } from "./digest.ts";
 import { fence } from "./fence.ts";
+import { mailSlot } from "./modules/index.ts";
 import { LAST_BRIEF } from "./notes.ts";
 import { localDay } from "./pause.ts";
 import { settings } from "./settings.ts";
@@ -13,8 +14,6 @@ import { LIMITS } from "./sanitize.ts";
 // last brief (memory/last-brief.md) and what the heartbeat did since (the audit log).
 
 const STATE = "state/brief.json";
-const BRIEF_TOOL = "mcp__mailbird__send_self_briefing"; // the agent emails the brief with this
-const DONE_MARKER = "ROUTINE_COMPLETE";
 
 export interface BriefState {
   doneDay?: string; // local date (YYYY-MM-DD) the brief last completed
@@ -37,29 +36,15 @@ export function clockLine(now: Date): string {
   return `CURRENT TIME: it is now ${DAYS[now.getDay()]} ${localDay(now)} ${hhmm} (${tz}). Yesterday was ${at(-1)}. Tomorrow is ${at(1)}. The day after is ${at(2)}. Use these exact weekday+date pairs everywhere; never infer or compute a weekday yourself, and cross-check against the datetimes returned by calendar tools.`;
 }
 
-// The brief preset's instructions (tasks.ts): the skill, and how a run ends.
-export const BRIEF_INSTRUCTIONS = `Load the 'ted-personal-assistant:daily-brief' skill with the Skill tool and follow it exactly. After ${BRIEF_TOOL.split("__").pop()} succeeds, print the exact line ${DONE_MARKER}. If the mail tools are unreachable, send the brief anyway saying so, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
-
-// Without mail (MAIL_PROVIDER=none) there is no tool to email the brief with: the run's final answer IS the brief, and the
-// marker on its last line says it is whole. The skill still describes the mail steps, so this overrides them.
-export const BRIEF_INSTRUCTIONS_NO_MAIL = `Load the 'ted-personal-assistant:daily-brief' skill with the Skill tool and follow it, with these changes because there is no email in this setup: skip the email pass (step 1) and the newsletter radar, never load a mail skill or call a mail tool, and do not deliver by email (step 6). Your final answer is the brief itself, in the skill's format (Markdown, the sections in its order), with nothing before it, and then one last line with the exact text ${DONE_MARKER}. If you cannot do the calendar, task and meeting parts at all, say so in the brief and do NOT print ${DONE_MARKER}.`;
-
-// The instructions of the brief preset (tasks.ts) for the configured mail provider.
-// Gmail (MAIL_PROVIDER=gmail): the mail pass uses the gmail skill and the Gmail connector. The brief is the final answer (Signal, the default) or, with
-// BRIEF_EMAIL=on, also emailed to the owner's own address with send_message (policy.ts allows exactly that one send for the brief run, gmailrules.ts).
-const GMAIL_COMMON = "Load the 'ted-personal-assistant:daily-brief' skill with the Skill tool and follow it, with these changes because the mail is Gmail: wherever it says to run 'ted-personal-assistant:mailbird', load 'ted-personal-assistant:gmail' instead and use the Gmail tools it names; the mailbird tools do not exist here.";
-export const BRIEF_INSTRUCTIONS_GMAIL_SIGNAL = `${GMAIL_COMMON} Do not deliver by email (step 6): your final answer is the brief itself, in the skill's format (Markdown, the sections in its order), with nothing before it, and then one last line with the exact text ${DONE_MARKER}. If the mail tools are unreachable, say so in the brief, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
-export const briefInstructionsGmailEmail = (self: string): string =>
-  `${GMAIL_COMMON} Deliver the brief (step 6) with the Gmail send_message tool, exactly once, to ${JSON.stringify([self])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody). After send_message succeeds, print the exact line ${DONE_MARKER}. If the mail tools are unreachable, send the brief anyway saying so, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
+// The brief preset's instructions (tasks.ts): the skill, and how a run ends (brieftext.ts; the mail provider's own are its module's).
+export { BRIEF_INSTRUCTIONS, BRIEF_INSTRUCTIONS_NO_MAIL, DONE_MARKER };
 
 // How today's brief reaches the owner. email: the run sends it with a mail tool and the sent body is kept; signal: the run's final text is the brief.
-export const briefDelivery = (): "email" | "signal" => (!settings.mail ? "signal" : settings.mailProvider === "gmail" ? (settings.briefEmail && settings.mailSelfAddress ? "email" : "signal") : "email");
+// Which of the two a mail provider does is its module's (src/modules, slot `mail`: Mailbird emails it; Gmail emails it only with BRIEF_EMAIL=on).
+export const briefDelivery = (): "email" | "signal" => (!settings.mail ? "signal" : mailSlot()!.brief.delivery());
 
-export const briefInstructions = (mail: boolean = settings.mail, provider: string = settings.mailProvider): string => {
-  if (!mail) return BRIEF_INSTRUCTIONS_NO_MAIL;
-  if (provider !== "gmail") return BRIEF_INSTRUCTIONS;
-  return settings.briefEmail && settings.mailSelfAddress ? briefInstructionsGmailEmail(settings.mailSelfAddress) : BRIEF_INSTRUCTIONS_GMAIL_SIGNAL;
-};
+// The instructions of the brief preset (tasks.ts) for the configured mail provider: its module's, or the no-mail ones.
+export const briefInstructions = (mail: boolean = settings.mail, provider: string = settings.mailProvider): string => (mail ? mailSlot(provider)!.brief.instructions() : BRIEF_INSTRUCTIONS_NO_MAIL);
 
 // The run's prompt. Previous brief and digest go in as clearly fenced DATA.
 export function briefPrompt(now: Date, previous: string | undefined, previousAt: string | undefined, digest: string, instructions: string = BRIEF_INSTRUCTIONS): string {
@@ -103,8 +88,8 @@ export async function runBriefAttempt(deps: BriefAttemptDeps, prompt: string, at
   const started = Date.now();
   try {
     const { text, costUsd } = await deps.run(prompt, (tool, input) => {
-      if (tool === BRIEF_TOOL) captured = (input as { markdownBody?: string }).markdownBody;
-      else if (isSelfSend(tool, input as Record<string, unknown>, settings.mailProvider === "gmail" ? settings.mailSelfAddress : undefined)) captured = (input as { body?: string }).body; // Gmail: the brief sent to the owner's own address
+      const sent = mailSlot()?.brief.captured(tool, input as Record<string, unknown>); // the mail provider's send of the brief (Mailbird's send_self_briefing; Gmail: a send to the owner's own address)
+      if (sent) captured = sent.text;
     });
     if (deps.delivery === "signal" && text.includes(DONE_MARKER)) captured = text.replaceAll(DONE_MARKER, "").trim() || undefined;
     const complete = text.includes(DONE_MARKER) && !!captured;

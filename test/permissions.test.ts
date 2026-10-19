@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Verdict } from "../src/autojudge.ts";
-import { callKey, doneCount, makeCanUseTool, setChatOwnerMessage, setDraftReader } from "../src/permissions.ts";
+import { setDraftReader } from "../src/modules/mailbird.ts";
+import { callKey, doneCount, makeCanUseTool, setChatOwnerMessage } from "../src/permissions.ts";
 import { CHAT } from "./util.ts";
 
 const SEND = "mcp__mailbird__send_message_now";

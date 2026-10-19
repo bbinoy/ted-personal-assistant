@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isFree, MANIFEST, readsUntrusted } from "../src/toolmanifest.ts";
+import { allRows, isFree, readsUntrusted } from "../src/toolmanifest.ts";
 
 // The full set of manifest rows, pinned: every tool the model might get, with its provider, action, capability, sources and mail view, and the two
 // things the rows decide for it (runs free of the judge; reading it makes the run's arguments untrusted). Recorded from the code before the tool
@@ -23,7 +23,7 @@ const stored: Row[] = JSON.parse(readFileSync(new URL("./fixtures/manifest-rows.
 const byTool = (a: { tool: string }, b: { tool: string }) => (a.tool < b.tool ? -1 : a.tool > b.tool ? 1 : 0);
 
 test("manifest rows: the full row set is the recorded one (tool, provider, action, cap, only, view, free, untrusted)", () => {
-  const now: Row[] = MANIFEST.map((e) => ({ tool: e.tool, provider: e.provider, action: e.action, cap: e.cap, only: e.only ? [...e.only] : null, view: e.view ?? null, free: isFree(e.tool, e.provider as never), untrusted: readsUntrusted(e.tool, e.provider as never) }));
+  const now: Row[] = allRows().map((e) => ({ tool: e.tool, provider: e.provider, action: e.action, cap: e.cap, only: e.only ? [...e.only] : null, view: e.view ?? null, free: isFree(e.tool, e.provider as never), untrusted: readsUntrusted(e.tool, e.provider as never) }));
   assert.equal(now.length, stored.length, "the number of rows");
   assert.deepEqual([...now].sort(byTool), [...stored].sort(byTool));
 });

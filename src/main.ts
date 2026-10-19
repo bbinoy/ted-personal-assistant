@@ -2,8 +2,7 @@ import "./log.ts"; // first: timestamps, redaction and owner-only files for ever
 import { createPipeline, group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
 import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
 import { compactChatIfNeeded, compactDue } from "./chatsession.ts";
-import { gmailReaders } from "./gmail.ts";
-import { approveIn, setApprovers, setChatOwnerMessage, setConversationMessage, setDraftReader, setGmailReaders } from "./permissions.ts";
+import { approveIn, setApprovers, setChatOwnerMessage, setConversationMessage } from "./permissions.ts";
 import * as approvals from "./approvals.ts";
 import { createApprovers } from "./approvers.ts";
 import { config, mask } from "./config.ts";
@@ -21,8 +20,7 @@ import { writeNotice } from "./notice.ts";
 import { ensureNotesDir } from "./notes.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./messages.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
-import { Mailbird } from "./mailbird.ts";
-import { createProposer } from "./propose.ts";
+import { mailRuntime } from "./modules/runtime.ts";
 import { preparePicture } from "./image.ts";
 import { prepareFile, type AudioTools } from "./document.ts";
 import { createOutbound } from "./outbound.ts";
@@ -187,13 +185,10 @@ messenger.onDeletion((d) => {
   else if (settings.tenants && d.other && activeTenant(d.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(d.fromUuid)!.id), { type: "deletion", d }).catch((e) => console.error("tenant deletion error:", e.message));
 });
 
-// The owner's Mailbird connection for reply drafts: the handler's drafts are shown on Signal
-// (propose.ts), and the approval of any send shows the draft read back from here (agent.ts).
+// The mail provider's own start-up (its module, src/modules): Mailbird's connection for reply drafts (the handler's drafts are shown on Signal, propose.ts,
+// and the approval of any send shows the draft read back from it), or the Gmail connector's read-backs for the same approval.
 // MAIL_PROVIDER=none: no mail client is made at all, so there is no proposer and no mail handler either.
-const proposer = settings.mailProvider === "mailbird" ? createProposer({ mail: new Mailbird(), send: (t) => out.replyPlain(t, "draft") }) : undefined;
-if (proposer) setDraftReader(proposer.read);
-// Gmail: the approval of a send reads the draft (or the message being replied to) back through the connector (gmail.ts).
-if (settings.mailProvider === "gmail") setGmailReaders(gmailReaders());
+const mail = settings.mail ? mailRuntime()?.start({ reply: (t) => out.replyPlain(t, "draft") }) : undefined;
 
 // A 👍 / 👎 on the pending approval message answers it (the pipeline checks); any other reaction of the
 // owner is feedback. (Our own status icons come back as reactions; the messenger does not deliver those.)
@@ -221,7 +216,7 @@ if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies &
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
 
-const handler = proposer ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: proposer.show }) : undefined;
+const handler = mail?.propose ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: mail.propose }) : undefined;
 handler?.resume();
 
 const dreamer = createDreamer();

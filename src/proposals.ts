@@ -1,5 +1,5 @@
 import { authoredPart, cutBody, mailHeader, mailText } from "./format.ts";
-import { addrs, type MailView } from "./toolmanifest.ts";
+import { addrs, type MailView } from "./mailview.ts";
 
 export { authoredPart };
 

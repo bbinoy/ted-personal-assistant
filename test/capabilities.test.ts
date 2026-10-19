@@ -10,9 +10,11 @@ const { settings } = await import("../src/settings.ts");
 const { CAPABILITIES } = await import("../src/tenants.ts");
 type Capability = (typeof CAPABILITIES)[number];
 const { groupCapabilities, groupTools, NEVER_FOR_ISOLATED, runCapabilities, tenantTools, toolsFor } = await import("../src/capabilities.ts");
-const { PRIVATE_SKILLS, SHARED_SKILLS, skillsFor } = await import("../src/skills.ts");
+const { privateSkills, sharedSkills, skillsFor } = await import("../src/skills.ts");
+const PRIVATE_SKILLS = privateSkills();
+const SHARED_SKILLS = sharedSkills();
 const { classify } = await import("../src/policy.ts");
-const { MANIFEST } = await import("../src/toolmanifest.ts");
+const MANIFEST = (await import("../src/toolmanifest.ts")).allRows();
 const { buildOptions } = await import("../src/agentrun.ts");
 const { offeredSkills } = await import("../src/profiles.ts");
 
