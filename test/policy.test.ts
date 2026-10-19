@@ -27,30 +27,29 @@ test("reads are allowed, including Notion's prefixed names (regression: brief hu
   ]) assert.equal(chat(t), "allow", t);
 });
 
-test("routine writes run unattended for chat and the brief", () => {
+test("routine writes are not free: in every place they go to the judge (classify says ask), reads are free", () => {
   for (const t of [`${M}archive_conversation`, `${M}create_draft`, `${M}reply_to_conversation`, `${M}send_self_briefing`, `${N}notion-create-pages`, `${N}notion-update-page`]) {
-    assert.equal(classify(t, {}, "chat"), "allow", t);
-    assert.equal(classify(t, {}, "brief"), "allow", t);
+    for (const source of ["chat", "brief", "radar", "handler", "background"] as const) assert.equal(classify(t, {}, source), "ask", `${t} (${source})`);
   }
+  for (const source of ["chat", "brief", "radar", "handler", "background"] as const) assert.equal(classify(`${M}get_message`, {}, source), "allow", source);
 });
 
-test("the mail handler (reads untrusted mail, nobody watching) may only leave reply drafts", () => {
-  assert.equal(classify(`${M}reply_to_conversation`, {}, "handler"), "allow");
+test("the mail handler is on the same path as everyone: reads free, every write judged, nothing waved through by who it is", () => {
   assert.equal(classify(`${M}get_message`, {}, "handler"), "allow");
-  for (const t of [`${M}create_draft`, `${M}update_draft`, `${M}archive_conversation`, `${N}notion-update-page`, `${M}send_self_briefing`])
-    assert.equal(classify(t, {}, "handler"), "ask", t);
+  for (const t of [`${M}reply_to_conversation`, `${M}create_draft`, `${M}update_draft`, `${M}archive_conversation`, `${N}notion-update-page`, `${M}send_self_briefing`, `${M}send_message_now`])
+    assert.equal(classify(t, {}, "handler"), classify(t, {}, "chat"), t);
 });
 
 test("nothing may reference local files (create_draft takes file:// attachments)", () => {
   assert.equal(chat(`${M}create_draft`, { to: "x@example.com", attachments: ["file:///home/someone/.ssh/id_ed25519"] }), "deny");
   assert.equal(chat(`${M}create_draft`, { to: "x@example.com", attachments: ["FILE://~/.env"] }), "deny");
-  assert.equal(chat(`${M}create_draft`, { to: "x@example.com", attachments: ["mailbird://mcp/messages/1/attachments/2"] }), "allow");
+  assert.equal(chat(`${M}create_draft`, { to: "x@example.com", attachments: ["mailbird://mcp/messages/1/attachments/2"] }), "ask"); // judged like any draft
 });
 
-test("outward-facing actions ask", () => {
+test("outward-facing actions are not free: classify asks (the judge may skip the question where the floor allows it)", () => {
   for (const t of [`${M}send_message_now`, `${C}create_event`, `${C}update_event`, `${C}respond_to_event`, "mcp__claude_ai_Google_Drive__share_file", "mcp__claude_ai_Gmail__send_message", `${N}notion-create-comment`])
     assert.equal(chat(t), "ask", t);
-  assert.equal(chat(`${M}forward_conversation`), "allow"); // it only saves a draft; the send is send_message_now
+  assert.equal(chat(`${M}forward_conversation`), "ask"); // it only saves a draft (the judge passes it); the send is send_message_now
 });
 
 test("destructive actions and trading are denied, for everyone", () => {
@@ -119,17 +118,20 @@ test("hidden tools: Mailbird tools the skills never use are hidden, the ones the
   assert.ok(!hidden.includes(`${M}get_message`) && !hidden.includes(`${M}archive_conversation`));
 });
 
-test("web: search is allowed in chat and in the owner's background run, opening a page asks there (and in the brief and radar), the mail handler gets neither", () => {
+test("web: search is free and opening a page is judged in every place (which runs are offered the tools is agentrun.ts)", () => {
   assert.equal(classify("WebSearch", { query: "zurich opening hours" }, "chat"), "allow");
   assert.equal(classify("WebFetch", { url: "https://example.com/x", prompt: "hours" }, "chat"), "ask");
   assert.equal(classify("WebFetch", { url: "file:///etc/passwd", prompt: "x" }, "chat"), "deny"); // the file:// rule still wins
   assert.equal(classify("WebSearch", { query: "weather in zurich" }, "background"), "allow");
   assert.equal(classify("WebFetch", { url: "https://example.com/x", prompt: "hours" }, "background"), "ask");
   assert.equal(classify("WebFetch", { url: "file:///etc/passwd", prompt: "x" }, "background"), "deny");
-  for (const source of ["brief", "handler", "heartbeat"] as const) assert.equal(classify("WebSearch", { query: "x" }, source), "deny", `WebSearch (${source})`);
-  for (const source of ["handler", "heartbeat"] as const) assert.equal(classify("WebFetch", { url: "https://example.com" }, source), "deny", `WebFetch (${source})`);
-  // changed on purpose with the manifest: the brief and the radar (the owner's own jobs) may open a page, the judge decides; never the mail handler
-  for (const source of ["brief", "radar"] as const) assert.equal(classify("WebFetch", { url: "https://example.com" }, source), "ask", `WebFetch (${source})`);
+  for (const source of ["brief", "radar", "handler", "heartbeat"] as const) {
+    assert.equal(classify("WebSearch", { query: "x" }, source), "allow", `WebSearch (${source})`);
+    assert.equal(classify("WebFetch", { url: "https://example.com" }, source), "ask", `WebFetch (${source})`);
+    assert.equal(classify("WebFetch", { url: "file:///etc/passwd" }, source), "deny", `WebFetch file:// (${source})`);
+  }
+  // a group never opens a page: its tool set does not hold the tool
+  assert.equal(classify("WebFetch", { url: "https://example.com" }, "group"), "deny");
 });
 
 test("data folders: chat may read them (never write), and links cannot lead out", async () => {

@@ -43,7 +43,7 @@ Step by step: [docs/SETUP.md](docs/SETUP.md).
 
 ## Safety
 
-- **A judge that can skip questions, inside a floor.** A small model may skip a few low-risk questions (such as a new calendar event with nobody else on it). The floor is code: sends, forwards, shares and anything involving other people always ask. Skips are logged, and `AUTO_APPROVE=off` turns the judge off.
+- **A judge that can skip questions, inside a floor.** One small model decides, for every tool in every place, which questions to spare you: what follows from your request or your standing tasks and is easy to undo goes ahead, anything a mail asks for, new recipients, sharing and the like ask. The floor is code and no verdict overrides it: payments, logins, the never-allowed set, group and tenant boundaries and web addresses that could carry data out. Skips are logged and listed by `npm run report`, and `AUTO_APPROVE=off` turns the judge off.
 - **Approvals with the exact arguments.** Sending, forwarding, sharing and anything that involves other people ask first.
 - **A browser with guard rails.** Browsing runs in a separate, throwaway browser with no logins and none of your data. A small judge decides whether a step is read-only (searching, filtering) or books, buys or sends something, and anything like that asks you first. Payment and login fields always ask you, and the address checks that keep the browser away from your own machine and network are code, not a model decision.
 - **Permission policy in code.** Every tool call is allow, ask or deny in `src/policy.ts`, tested against real tool names. Deletes are denied. Memory can shape tone and priorities but never grant permissions.

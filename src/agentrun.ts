@@ -19,7 +19,7 @@ import { createMemoryServer } from "./memory-tools.ts";
 import { createWeatherServer } from "./weathertools.ts";
 import { createDrawServer } from "./drawtool.ts";
 import { announceMemoryChanges, noteWritten, recordMemoryChange } from "./memorynotice.ts";
-import { approveIn, makeCanUseTool, type Approve } from "./permissions.ts";
+import { approveIn, makeCanUseTool, type Approve, type JudgeSetup } from "./permissions.ts";
 import { groupCapabilities, groupTools } from "./capabilities.ts";
 import { hiddenTools } from "./policy.ts";
 import { OFFERED_SKILLS, PROFILES } from "./profiles.ts";
@@ -59,6 +59,8 @@ export interface RunOptions {
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
   maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else the chat or background one
   judgeContext?: string; // an unattended job: the instructions it was given, shown to the approval judge (autojudge.ts)
+  speaker?: JudgeSetup["speaker"]; // the conversation whose message started the run, when it is not this run's own conversation (the browse sub-run of a chat, a group or a tenant)
+  untrusted?: boolean; // the run reads raw mail or web pages from its first call (the mail handler, the browse worker): told to the approval judge
   // A tenant's run (tenants.ts): an isolated "group" run on HER OWN Anthropic API key, with her own cost ledger and cooldown. Never absent for a run
   // made for a tenant, and never given the instance's login: without a key the run does not start.
   tenant?: TenantRun;
@@ -70,7 +72,7 @@ const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: num
 
 // The browse sub-run (browse.ts calls this through the entry tool): a fresh run with the browser, under the guard. A group's run is the same
 // as the owner's; only `approve` differs (the group's own approver).
-export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun): RunOptions {
+export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, speaker?: RunOptions["speaker"]): RunOptions {
   return {
     source: PROFILES.browse.source,
     systemPrompt: browseSystem(undefined, guard.vision, guard.profileKeys(), guard.cardInfo()),
@@ -79,13 +81,15 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun): RunOpt
     maxMinutes: settings.browseMaxMinutes,
     outputFormat: PROFILES.browse.outputSchema,
     judgeContext: guard.task,
+    speaker,
+    untrusted: true, // it reads hostile pages
     guard,
     tenant, // the browse worker of a tenant's run is hers too: her key, her ledger (it would otherwise be billed to the instance's login)
   };
 }
 
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
-export const browseRunner = (approve: Approve, tenant?: TenantRun) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant));
+export const browseRunner = (approve: Approve, tenant?: TenantRun, speaker?: RunOptions["speaker"]) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, speaker));
 
 // The built-in tools of a run (everything else is an MCP tool): the browse run only searches; a group or a tenant has the built-ins of its tool set (its
 // own notes, search, skills; before a tenant's age and region are confirmed none); the owner's chat adds skills and opening pages; a background run
@@ -146,10 +150,12 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
   const tellKey = opts.source === "chat" ? OWNER_KEY : opts.source === "group" ? (tenant?.key ?? opts.memory?.groupId) : undefined;
   const mode: BrowseMode = opts.source === "group" ? "group" : "owner";
+  // Whose message the approval judge reads as the provenance of this run's calls: this conversation's own (the browse worker: the one that started it).
+  const speaker = opts.speaker ?? (tellKey ? { key: tellKey, member: opts.source === "group" } : undefined);
   const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && opts.memory?.groupId ? approveIn(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
   const browseTool =
     settings.browse && (opts.source === "chat" || opts.source === "background" || opts.source === "group") && offers("mcp__browse__browse")
-      ? createBrowseServer({ mode, groupId: opts.memory?.groupId, key: tellKey, spent: tenant?.overBudget, run: browseRunner(askedIn, tenant) })
+      ? createBrowseServer({ mode, groupId: opts.memory?.groupId, key: tellKey, spent: tenant?.overBudget, run: browseRunner(askedIn, tenant, speaker) })
       : undefined;
   const sendServer = tellKey && offers("mcp__send__send") ? createSendServer(tellKey) : undefined;
   // voice (voicetool.ts): the cloned voice of this conversation, Qwen only; the owner's chat and groups, never an unattended run.
@@ -208,7 +214,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     skills: isolated ? (skills.length ? [...skills] : undefined) : (opts.skills ? [...opts.skills] : OFFERED_SKILLS),
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, opts.judgeContext, undefined, opts.guard, tools, !!tenant),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, opts.judgeContext, undefined, opts.guard, tools, !!tenant, { speaker, untrusted: opts.untrusted }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

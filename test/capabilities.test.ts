@@ -150,7 +150,7 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
   const row = (who: typeof owner) => probes.map(([t, i]) => who(t, i));
   const A = "allow";
   const D = "deny";
-  assert.deepEqual(row(owner), [A, "ask", A, D, A, A, A, A, A, A, "ask", A, D, A, "ask", A, A, A, D, A, D, "ask", "ask", "ask"], "owner");
+  assert.deepEqual(row(owner), [A, "ask", A, D, A, A, A, A, A, A, "ask", "ask", D, A, "ask", A, A, A, D, A, D, "ask", "ask", "ask"], "owner");
   const g = [A, D, A, A, A, A, A, A, A, A, D, A, D, D, D, D, D, D, D, D, D, D, D, D];
   assert.deepEqual(row(group), g, "group");
   assert.deepEqual(row(friend), g, "friend (the default record)");

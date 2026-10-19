@@ -389,10 +389,10 @@ test("nothing leaks: no audit row, log field or tool result of a run with fills 
 });
 
 test("the browse tool manifest is unchanged: a saved detail is a browser_type call, so groups have no new tool", async () => {
-  const { flagFor } = await import("../src/toolmanifest.ts");
-  assert.equal(flagFor(`${B}type`, "browse"), "auto");
-  assert.equal(flagFor(`${B}type`, "chat"), undefined);
-  assert.equal(flagFor(`${B}type`, "group"), undefined);
+  const { access } = await import("./util.ts");
+  assert.equal(access(`${B}type`, "browse"), "judged");
+  assert.equal(access(`${B}type`, "chat"), undefined);
+  assert.equal(access(`${B}type`, "group"), undefined);
   assert.ok(!(await import("../src/browserules.ts")).ALLOWED_BROWSER_TOOLS.some((t) => /profile/.test(t)));
   void parseSnapshot;
 });

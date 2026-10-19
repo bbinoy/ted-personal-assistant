@@ -10,7 +10,7 @@ import { offeredSkills } from "../src/profiles.ts";
 import { OWNER_KEY, sendNow, withSend, type Content } from "../src/send.ts";
 import { settings } from "../src/settings.ts";
 import { adoptDrawing, adoptShots, loadShot, MAX_DRAWINGS, MAX_PICTURE_BYTES } from "../src/shots.ts";
-import { flagFor } from "../src/toolmanifest.ts";
+import { access } from "./util.ts";
 
 // draw: the model's SVG becomes a PNG kept for the turn (img1...), looked at, then sent with `send` like a screenshot.
 
@@ -100,9 +100,9 @@ test("shots: drawings and screenshots count separately, both kinds can be PNG or
 });
 
 test("draw: manifest and policy: free in chat and group, nowhere else", () => {
-  assert.equal(flagFor("mcp__draw__draw", "chat"), "no");
-  assert.equal(flagFor("mcp__draw__draw", "group"), "no");
-  for (const source of ["handler", "brief", "radar", "browse", "background", "heartbeat", "dream"] as const) assert.equal(flagFor("mcp__draw__draw", source), undefined, source);
+  assert.equal(access("mcp__draw__draw", "chat"), "free");
+  assert.equal(access("mcp__draw__draw", "group"), "free");
+  for (const source of ["handler", "brief", "radar", "browse", "background", "heartbeat", "dream"] as const) assert.equal(access("mcp__draw__draw", source), undefined, source);
   assert.equal(classify("mcp__draw__draw", { svg: SVG }, "chat"), "allow");
   assert.equal(classify("mcp__draw__draw", { svg: SVG }, "group"), "allow");
   for (const source of ["brief", "radar", "handler", "browse"] as const) assert.equal(classify("mcp__draw__draw", { svg: SVG }, source), "deny", source);

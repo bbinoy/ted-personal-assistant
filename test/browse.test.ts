@@ -12,7 +12,7 @@ import { addressProblem, classifyClick, isAllowedBrowserTool, isRef, looksLikeCa
 import { makeCanUseTool } from "../src/permissions.ts";
 import { classify } from "../src/policy.ts";
 import { settings } from "../src/settings.ts";
-import { flagFor } from "../src/toolmanifest.ts";
+import { access } from "./util.ts";
 
 const B = "mcp__browser__browser_";
 const opts = { signal: new AbortController().signal } as never;
@@ -138,7 +138,7 @@ test("every commit step goes to the judge; an auto skips the owner, an ask or a 
     const canUse = asCall(makeCanUseTool(async (x) => (asked.push(x), { approved: false }), "browse", undefined, "order a pizza for Ann", judge, onPage(guard())));
     return { behavior: (await canUse(`${B}click`, { target: click }, opts)).behavior, asked };
   };
-  const broad = settings.autoApprove === "broad";
+  const broad = settings.autoApprove === "auto";
   const auto = verdict("auto");
   const a = await run(auto.fn);
   assert.equal(a.behavior, broad ? "allow" : "deny");
@@ -170,23 +170,20 @@ test("payment and credential fields, and card numbers (Luhn)", () => {
 
 // ---- the manifest ----
 
-test("manifest rows: browser tools exist only for the browse run; reads run, pages and typing are judged, dialogs ask", () => {
-  for (const t of ["snapshot", "find", "wait_for", "tabs", "hover", "navigate_back", "click", "press_key"]) assert.equal(flagFor(B + t, "browse"), "no", t);
-  for (const t of ["navigate", "type", "fill_form", "select_option"]) assert.equal(flagFor(B + t, "browse"), "auto", t);
-  assert.equal(flagFor(B + "handle_dialog", "browse"), "yes");
-  for (const source of SOURCES) if (source !== "browse") assert.equal(flagFor(B + "navigate", source), undefined, source);
-  assert.equal(flagFor("WebSearch", "browse"), "no");
-  // the entry tool: free in chat, a wake-up asks, nowhere else (a group's right is in classify)
-  assert.equal(flagFor("mcp__browse__browse", "chat"), "no");
-  assert.equal(flagFor("mcp__browse__browse", "background"), "yes");
-  for (const source of ["brief", "radar", "handler", "heartbeat", "dream", "browse"] as const) assert.equal(flagFor("mcp__browse__browse", source), undefined, source);
+test("manifest rows: browser tools exist only for the browse run; reads run free, pages, typing and dialogs go through the judge", () => {
+  for (const t of ["snapshot", "find", "wait_for", "tabs", "hover", "navigate_back", "click", "press_key"]) assert.equal(access(B + t, "browse"), "free", t);
+  for (const t of ["navigate", "type", "fill_form", "select_option", "handle_dialog"]) assert.equal(access(B + t, "browse"), "judged", t);
+  for (const source of SOURCES) if (source !== "browse") assert.equal(access(B + "navigate", source), undefined, source);
+  assert.equal(access("WebSearch", "browse"), "free");
+  // the entry tool exists everywhere (the same judged path; it starts a sandboxed run), the browser's own tools only in that run
+  for (const source of SOURCES) assert.equal(access("mcp__browse__browse", source), "judged", source);
   // the browse run holds no owner tool at all
   for (const t of ["mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-create-pages", "mcp__claude_ai_Google_Calendar__create_event", "mcp__memory__forget_note", "Read", "Write", "WebFetch"]) assert.notEqual(classify(t, {}, "browse"), "allow", t);
   assert.equal(classify("mcp__memory__forget_note", {}, "browse"), "deny");
   // other sources get no browser tools
   for (const source of ["chat", "background", "group", "brief"] as const) assert.equal(classify(B + "navigate", { url: "https://example.com" }, source), "deny", source);
   assert.equal(classify("mcp__browse__browse", { task: "x" }, "group"), settings.browse ? "allow" : "deny");
-  assert.equal(classify("mcp__browse__browse", { task: "x" }, "chat"), "allow");
+  assert.equal(classify("mcp__browse__browse", { task: "x" }, "chat"), "ask"); // judged like every other tool: the sub-run it starts is sandboxed and guarded step by step
 });
 
 test("only the listed browser tools exist; evaluate, run_code, uploads and the rest are hidden and denied", async () => {
@@ -340,8 +337,8 @@ test("canUseTool with the guard: reads and judged typing run, a commit the judge
   let judge: (i?: unknown) => Promise<Verdict> = judgeAuto;
   const canUse = asCall(makeCanUseTool(async (d, call) => (asked.push(d), seen.push(call.input), { approved: false }), "browse", undefined, "order a pizza for Ann", (i) => judge(i), g));
   assert.equal((await canUse(`${B}snapshot`, {}, opts)).behavior, "allow");
-  assert.equal((await canUse(`${B}navigate`, { url: "https://example.com/" }, opts)).behavior, settings.autoApprove === "broad" ? "allow" : "deny");
-  assert.equal((await canUse(`${B}type`, { target: "e5", text: "Ann" }, opts)).behavior, settings.autoApprove === "broad" ? "allow" : "deny");
+  assert.equal((await canUse(`${B}navigate`, { url: "https://example.com/" }, opts)).behavior, settings.autoApprove === "auto" ? "allow" : "deny");
+  assert.equal((await canUse(`${B}type`, { target: "e5", text: "Ann" }, opts)).behavior, settings.autoApprove === "auto" ? "allow" : "deny");
   assert.equal(asked.length, 0, "judged calls need no question");
   // a payment field asks the owner even though the judge says auto, and the value reaches neither the question nor the approval's call
   assert.equal((await canUse(`${B}type`, { target: "e51", text: "4111111111111111" }, opts)).behavior, "deny", "the owner declined");
@@ -572,7 +569,7 @@ test("a search form: Enter after typing and the form button go to the judge, whi
   const seen: string[] = [];
   const asked: string[] = [];
   const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, "find the next train Zurich to Bern", async (i) => (seen.push(i.description), { decision: "auto", reason: "only searches timetables" }), g));
-  const broad = settings.autoApprove === "broad";
+  const broad = settings.autoApprove === "auto";
   assert.equal((await canUse(`${B}press_key`, { key: "Enter" }, opts)).behavior, broad ? "allow" : "deny");
   assert.equal((await canUse(`${B}click`, { target: "e5" }, opts)).behavior, broad ? "allow" : "deny");
   assert.equal((await canUse(`${B}type`, { target: "e3", text: "Bern", submit: true }, opts)).behavior, broad ? "allow" : "deny");

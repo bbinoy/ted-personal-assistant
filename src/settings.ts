@@ -26,6 +26,15 @@ function oneOf<T extends string>(env: Env, name: string, fallback: T, allowed: r
   return raw as T;
 }
 
+// AUTO_APPROVE: `auto` (the approval judge decides which actions skip the owner's phone; the default) or `off` (everything that is not a plain read asks).
+// Any other value stops the agent at start-up and says what to write.
+export function autoApprove(env: Env): "off" | "auto" {
+  const raw = env.AUTO_APPROVE?.trim();
+  if (raw === undefined || raw === "" || raw === "auto") return "auto";
+  if (raw === "off") return "off";
+  throw new Error(`AUTO_APPROVE must be "auto" or "off" (got "${raw}"). Write AUTO_APPROVE=auto (or remove the line) for the approval judge, or AUTO_APPROVE=off to be asked about everything.`);
+}
+
 function list(env: Env, name: string, fallback: readonly string[], valid: RegExp, hint: string): string[] {
   const raw = env[name];
   if (raw === undefined || raw.trim() === "") return [...fallback];
@@ -186,11 +195,9 @@ export function loadSettings(env: Env) {
     browseLocale: env.BROWSE_LOCALE?.trim() || "en-GB", // the browser's language (Accept-Language, navigator.language): an ordinary one, not the headless default en-US
     browseBrowserPath: env.BROWSE_BROWSER_PATH?.trim() || undefined, // advanced: a Chromium or Chrome executable instead of the one npm run setup:browse installs
 
-    // A small model's second opinion on approvals (src/autojudge.ts). It may skip the question for
-    // whatever the manifest marks `auto` (toolmanifest.ts): calendar events that only touch you, plain web pages, and in chat a
-    // send you asked for (broad: any source the flag allows, chat: only in chat); shadow: it judges
-    // and logs, you still decide; off: never.
-    autoApprove: oneOf(env, "AUTO_APPROVE", "broad", ["off", "shadow", "chat", "broad"] as const),
+    // The one switch for the approval judge (src/autojudge.ts): auto (default) lets it skip the question for what follows from your request
+    // or your standing tasks, inside the floor that code sets; off asks you about everything that is not a plain read.
+    autoApprove: autoApprove(env),
 
     briefStartHour: num(env, "BRIEF_START_HOUR", 7, 0, 23), // only what the gate's default rules say ("from this hour")
     briefMaxAttempts: num(env, "BRIEF_MAX_ATTEMPTS", 3, 1, 10),

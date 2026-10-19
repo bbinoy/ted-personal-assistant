@@ -90,16 +90,14 @@ test("policy: trash, spam, deletion and attachment content are denied however th
   });
 });
 
-test("policy: archiving is exactly 'remove INBOX from a thread'; log-only denies it, live lets chat and the brief do it", async () => {
+test("policy: archiving is exactly 'remove INBOX from a thread'; log-only denies it, live sends it to the judge in every place", async () => {
   const call = { threadId: "t1", labelIds: ["INBOX"] };
   assert.ok(isInboxArchive(`${GM}unlabel_thread`, call));
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["INBOX", "UNREAD"] }));
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { labelIds: ["INBOX"] }));
   await withGmail({ gmailArchiveLive: false }, () => assert.equal(classify(`${GM}unlabel_thread`, call, "chat"), "deny"));
   await withGmail({ gmailArchiveLive: true }, () => {
-    assert.equal(classify(`${GM}unlabel_thread`, call, "chat"), "allow");
-    assert.equal(classify(`${GM}unlabel_thread`, call, "brief"), "allow");
-    assert.equal(classify(`${GM}unlabel_thread`, call, "handler"), "ask");
+    for (const source of ["chat", "brief", "handler"] as const) assert.equal(classify(`${GM}unlabel_thread`, call, source), "ask", source); // judged, the same everywhere
     assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["UNREAD"] }, "chat"), "ask");
   });
 });
@@ -196,11 +194,11 @@ test("an unattended Gmail send always asks; chat sends are judged; forward and n
   });
 });
 
-test("drafts are made freely by chat and the brief (the draft step), never sent", async () => {
+test("drafts go to the judge in every place (the draft step), reads are free, nothing is sent by it", async () => {
   await withGmail({}, () => {
-    for (const source of ["chat", "brief"] as const) {
-      assert.equal(classify(`${GM}create_draft`, { to: ["a@example.com"], body: "x" }, source), "allow");
-      assert.equal(classify(`${GM}update_draft`, { draftId: "d", body: "x" }, source), "allow");
+    for (const source of ["chat", "brief", "handler"] as const) {
+      assert.equal(classify(`${GM}create_draft`, { to: ["a@example.com"], body: "x" }, source), "ask");
+      assert.equal(classify(`${GM}update_draft`, { draftId: "d", body: "x" }, source), "ask");
     }
     for (const t of ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels"]) assert.equal(classify(GM + t, {}, "radar"), "allow", t);
   });

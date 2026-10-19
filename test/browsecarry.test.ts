@@ -97,7 +97,7 @@ test("carry-forward: saved details typed in the run, and a site the worker once 
 });
 
 test("the judge prompt holds the approved text, fenced, only when code offers it", () => {
-  const base = { source: "browse" as const, description: "🛒 Browser: confirm this step\nSite: lu.ma\nButton: “Register” (button)", task: "register Ben" };
+  const base = { description: "🛒 Browser: confirm this step\nSite: lu.ma\nButton: “Register” (button)", provenance: { kind: "standing" as const, source: "browse" as const, task: "register Ben" } };
   const without = judgePrompt(base);
   assert.ok(!without.includes("approved_plan") && !without.includes("already approved"));
   const at = 1_000_000;
@@ -122,7 +122,7 @@ const judge = async (i: Parameters<typeof judgePrompt>[0]): Promise<Verdict> => 
 test("Luma sequence: the first Register click is asked, the form fill is automatic, the form's Register is covered: one question in total, audited", async (t) => {
   const mutable = settings as { autoApprove: string };
   const mode = mutable.autoApprove;
-  mutable.autoApprove = "broad";
+  mutable.autoApprove = "auto";
   t.after(() => void (mutable.autoApprove = mode));
   const approvals = await import("../src/approvals.ts");
   const { makeApprove } = await import("../src/approvalask.ts");
