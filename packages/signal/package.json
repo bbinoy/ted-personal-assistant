@@ -20,6 +20,11 @@
       "types": "./dist/speech.d.ts",
       "default": "./dist/speech.js"
     },
+    "./messenger": {
+      "workspace-source": "./src/messenger.ts",
+      "types": "./dist/messenger.d.ts",
+      "default": "./dist/messenger.js"
+    },
     "./testing": {
       "workspace-source": "./src/testing.ts",
       "types": "./dist/testing.d.ts",
@@ -66,7 +71,10 @@
     "typecheck": "tsc -p tsconfig.json",
     "prepack": "npm run build",
     "verify-pack": "node build/verify-pack.mjs",
-    "test": "node --test test/*.test.ts"
+    "test": "node --conditions=workspace-source --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@ted-personal-assistant/messenger": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

@@ -1,6 +1,6 @@
 import { fence } from "./fence.ts";
 import { settings } from "./settings.ts";
-import type { Quote } from "@ted-personal-assistant/signal";
+import type { Quote } from "@ted-personal-assistant/messenger";
 import { LIMITS } from "./sanitize.ts";
 
 // Replies in Signal point at an earlier message. Two directions:

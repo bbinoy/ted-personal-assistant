@@ -1,6 +1,7 @@
 import { lstatSync } from "node:fs";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
-import { attachmentPath, MAX_AUDIO_BYTES } from "@ted-personal-assistant/signal";
+import { MAX_AUDIO_BYTES } from "@ted-personal-assistant/messenger";
+import { messenger } from "./messenger.ts";
 import { MAX_AUDIO_FILE_BYTES } from "@ted-personal-assistant/signal/voice";
 import {
   buildReference, ClipRefused, DEFAULT_VOICE, deleteVoice, activeVoice, getMeta, listVoices, maxVoices, qwenReady, realClipTools, sanitizeVoiceName, saveVoice, scopeRoot, setActiveVoice,
@@ -18,7 +19,7 @@ import { listGroups } from "./groupstore.ts";
 // the owner's chat in state/voice, each group in its own folder, so a voice made in a group is only ever used in that group.
 // A voice is built from a voice note that was RECEIVED IN THIS CONVERSATION (voicenote.ts): the model names it by its id from the
 // conversation's own list (default: the message it is answering, or the voice note that message replies to). Code checks that the id is one of
-// this conversation's recent notes, that the file is still there, and joins the id to signal-cli's folder; a path is never taken from anyone.
+// this conversation's recent notes, that the file is still there, and has the messenger resolve the id to its file; a path is never taken from anyone.
 // The clip and its words are private data: logged by name, length and size only, used only by the local speech server for replies in this
 // conversation. Changing the voice is a low-risk local change, so no approval; undo is switching.
 
@@ -28,7 +29,7 @@ export interface VoiceDeps {
   voiceRoot: string;
   problem(): string | undefined; // why cloning is not available here, if it is not
   clip: ClipTools;
-  audioFile(id: string): string;
+  audioFile(id: string): Promise<string>; // the local file of a voice note or audio file the messenger received
   groups(): { id: string; name: string }[]; // known groups, for the owner's reset
   now(): number;
 }
@@ -126,7 +127,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
   let file: string;
   const isFile = note.kind === "file";
   try {
-    file = d.audioFile(note.id);
+    file = await d.audioFile(note.id);
     const st = lstatSync(file);
     if (!st.isFile() || st.size > (isFile ? MAX_AUDIO_FILE_BYTES : MAX_AUDIO_BYTES)) throw new Error("not usable");
   } catch {
@@ -170,7 +171,7 @@ export const realVoiceDeps = (): VoiceDeps => ({
     return q.ok ? undefined : `The Qwen voice is not set up (missing: ${q.missing.join(", ")}).`;
   },
   clip: realClipTools(settings.whisperModel),
-  audioFile: (id) => attachmentPath({ id }, settings.signalAttachmentsDir),
+  audioFile: (id) => messenger().attachmentFile({ id }),
   groups: () => listGroups().map((g) => ({ id: g.id, name: g.name })),
   now: Date.now,
 });

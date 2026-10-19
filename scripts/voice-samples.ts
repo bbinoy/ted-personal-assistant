@@ -6,7 +6,7 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { SignalClient } from "@ted-personal-assistant/signal";
+import { loadMessengerInUse } from "../src/messenger.ts";
 import { synthesize } from "@ted-personal-assistant/signal/tts";
 import { config } from "../src/config.ts";
 import { PERSONALITY } from "../src/persona.ts";
@@ -56,11 +56,12 @@ if (send) {
     console.error("SIGNAL_ACCOUNT is not set (Note to Self): not sending. The files are in", outDir);
     process.exit(0);
   }
-  const signal = new SignalClient({ host: settings.signalHost, port: settings.signalPort, account: config.signalAccount, peer: { number: config.ownerNumber, aci: config.ownerAci }, logger: console });
-  await signal.connect();
+  const messenger = await loadMessengerInUse({ owner: { address: config.ownerNumber, id: config.ownerAci }, account: config.signalAccount });
+  await messenger.start();
   for (const f of files) {
-    await signal.send(f.name, { attachments: [f.file] }); // no groupId: the owner's private chat
+    await messenger.send(undefined, { text: f.name, attachments: [{ file: f.file, kind: "file" }] }); // no target: the owner's private chat
     console.log("sent", f.name);
   }
+  messenger.stop();
   process.exit(0);
 }

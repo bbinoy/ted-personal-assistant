@@ -12,6 +12,7 @@ import { classify } from "../src/policy.ts";
 import { adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/shots.ts";
 import { OWNER_KEY, sendNow, withSend, type Content } from "../src/send.ts";
 import { access } from "./util.ts";
+import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
 
 // send: the model's one way to say something mid-turn (text, voice note, picture, reaction). Text before a tool call is never sent.
 
@@ -131,19 +132,21 @@ function rig(o: { speech?: boolean; foreign?: string; synthFails?: boolean } = {
   const typing: boolean[] = [];
   const spoken: string[] = [];
   const dir = mkdtempSync(join(tmpdir(), "voice-"));
-  const signal = {
-    separateAccount: false,
-    react: async (emoji: string, target: unknown, groupId?: string) => void reacted.push({ emoji, target, groupId }),
-    typing: async (stop = false) => void typing.push(stop),
+  const messenger = {
+    name: "fake",
+    summary: "fake",
+    self: "+1",
+    capabilities: { ...FULL_CAPABILITIES, typing: false, readReceipts: false, groups: false, people: false, voice: false }, // Note to Self
+    react: async (groupId: string | undefined, target: unknown, emoji: string) => void reacted.push({ emoji, target, groupId }),
+    typing: async (_groupId: string | undefined, on: boolean) => void typing.push(!on),
     markRead: async () => {},
-    send: async (t: string, x: { attachments?: string[]; groupId?: string; quote?: unknown } = {}) => (sent.push({ text: t, attachments: x.attachments, groupId: x.groupId, quote: x.quote }), sent.length),
+    send: async (groupId: string | undefined, m: { text: string; attachments?: { file: string }[]; quote?: unknown }) => (sent.push({ text: m.text, attachments: m.attachments?.map((a) => a.file), groupId, quote: m.quote }), sent.length),
   };
   const record = () => {};
   const pipeline = createPipeline({
-    signal: signal as any,
-    out: createOutbound(signal as any, record),
+    messenger,
+    out: createOutbound(messenger, record),
     record,
-    account: "+1",
     run: async () => ({ text: "" }),
     picture: async () => assert.fail("no picture"),
     document: async () => assert.fail("no document"),

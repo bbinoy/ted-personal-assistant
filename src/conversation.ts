@@ -18,7 +18,7 @@ import { settings } from "./settings.ts";
 import { UNSURE } from "./lang.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { startTiming, type Timing } from "./timing.ts";
-import { MAX_LONG_TEXT_BYTES, type IncomingDeletion, type IncomingMessage, type IncomingReaction, type Quote } from "@ted-personal-assistant/signal";
+import { MAX_LONG_TEXT_BYTES, type IncomingDeletion, type IncomingMessage, type IncomingReaction, type Quote } from "@ted-personal-assistant/messenger";
 import { MAX_SPOKEN_CHARS } from "@ted-personal-assistant/signal/tts";
 
 // The conversation model lives in conversationmodel.ts; these are re-exported for the modules and tests that import them from here.
@@ -29,8 +29,8 @@ export { cleanIncoming, group, owner, tenant, type Batch, type Conversation, typ
 // cannot be mixed up by building one by hand. What is the same is the code: read receipt, voice message in,
 // record, run, [[voice]] / [[react]] / [[silent]], quote threading, typing, error notice, one turn at a time.
 // A burst of messages is one turn in both (burst below): a short settling pause, then everything that arrived is answered together.
-//   owner   its own Signal chat; the full toolset (policy source "chat"); approvals exist; always answered
-//   group   one Signal group; no private data (policy source "group"); the participation gate decides (group.ts)
+//   owner   its own chat with the assistant; the full toolset (policy source "chat"); approvals exist; always answered
+//   group   one group chat; no private data (policy source "group"); the participation gate decides (group.ts)
 //   tenant  a friend's private chat (tenants.ts): the owner's turn path, the group's isolation, her own folder and API key
 
 
@@ -38,7 +38,8 @@ const SILENT = /^\s*\[\[silent\]\]\s*$/i;
 
 
 export function createPipeline(deps: PipelineDeps) {
-  const { signal, out } = deps;
+  const { messenger, out } = deps;
+  const caps = messenger.capabilities;
   const now = deps.now ?? Date.now;
 
   // One turn at a time per conversation: two at once would share one session. Approval answers skip this
@@ -112,10 +113,15 @@ export function createPipeline(deps: PipelineDeps) {
     if (approvalAnswers.size > 200) approvalAnswers.delete(approvalAnswers.keys().next().value!);
   };
 
-  // Working / done / failed icons on the owner's message. Only in Note to Self, where Signal shows no
-  // "typing…"; in an own-account chat the typing indicator says it, and groups are never decorated.
+  // An emoji on a message, where the messenger has reactions.
+  const reactTo = (conv: Conversation, emoji: string, target: { author: string; timestamp: number }) => {
+    if (caps.reactions) void messenger.react(conv.target, target, emoji);
+  };
+
+  // Working / done / failed icons on the owner's message. Only where the messenger shows no "typing…" (Signal's Note to Self); where
+  // it does, the typing indicator says it, and groups are never decorated.
   const status = (conv: Conversation, emoji: string, target?: { author: string; timestamp: number }) => {
-    if (target && !signal.separateAccount) void signal.react(emoji, target, conv.target);
+    if (target && !caps.typing) reactTo(conv, emoji, target);
   };
 
   const canSpeak = () => deps.speech.ready();
@@ -146,13 +152,14 @@ export function createPipeline(deps: PipelineDeps) {
       let told: string;
       if (c.kind === "reaction") {
         if (!t.target) return "Nothing to react to.";
-        if (t.target.author === deps.account) return "That is your own message; do not react to it."; // the one rule: no emoji on its own messages
-        void signal.react(c.emoji, t.target, conv.target);
+        if (t.target.author === messenger.self) return "That is your own message; do not react to it."; // the one rule: no emoji on its own messages
+        if (!caps.reactions) return "Reactions are not available here.";
+        reactTo(conv, c.emoji, t.target);
         state.reacted = true;
         told = "Reacted.";
       } else if (c.kind === "picture") {
         const caption = c.caption.trim();
-        await out.sendPicture(c.file, SILENT.test(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), groupId: conv.target });
+        await out.sendPicture(c.file, SILENT.test(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target });
         state.spoke = true;
         console.log(`${conv.kind} picture sent (${c.id}, ${c.size} bytes)`);
         told = `Sent ${c.id} as a picture.`;
@@ -171,13 +178,13 @@ export function createPipeline(deps: PipelineDeps) {
         } else if (!words) {
           return "Nothing to send.";
         } else {
-          await out.reply(speechFailed ? `${words}\n\n${VOICE_FAILED_NOTE}` : words, { kind: t.kind ?? "chat", quote: quote(), groupId: conv.target }); // the model may have announced a voice message
+          await out.reply(speechFailed ? `${words}\n\n${VOICE_FAILED_NOTE}` : words, { kind: t.kind ?? "chat", quote: quote(), target: conv.target }); // the model may have announced a voice message
           state.spoke = true;
           told = "Sent.";
         }
         console.log(`${conv.kind} ${spoken ? "voice note" : "text"} sent (${words.length} chars)`);
       }
-      if (more && typers.has(conv.key)) void signal.typing(false, conv.target);
+      if (more && typers.has(conv.key)) void messenger.typing(conv.target, true);
       return `${told} Carry on.`;
     }
     return { state, send };
@@ -196,15 +203,15 @@ export function createPipeline(deps: PipelineDeps) {
   // "typing…" for a conversation, from the moment it is decided to answer (not when the model starts) until the reply is out.
   // Holds are counted: the early one (the caller, while the gate's delay or an earlier turn is still running) and the turn's
   // own overlap without a stop and a restart in between; the last release stops it. Whoever holds must release (finally).
-  // The one place that refreshes it (Signal clears it after a few seconds) and stops it, for the owner and every group.
+  // The one place that refreshes it (platforms clear it after a few seconds) and stops it, for the owner and every group.
   const typers = new Map<string, { holds: number; timer?: ReturnType<typeof setInterval> }>();
   function holdTyping(conv: Conversation, timing?: Timing): () => void {
     let t = typers.get(conv.key);
     if (!t) {
-      // In an own-account chat Signal shows "typing…" (not in Note to Self, where the client ignores it).
-      t = { holds: 0, timer: signal.separateAccount ? setInterval(() => void signal.typing(false, conv.target), 8000) : undefined };
+      // Only where the messenger shows "typing…" (Signal does not in Note to Self).
+      t = { holds: 0, timer: caps.typing ? setInterval(() => void messenger.typing(conv.target, true), 8000) : undefined };
       typers.set(conv.key, t);
-      void signal.typing(false, conv.target);
+      void messenger.typing(conv.target, true);
     }
     timing?.mark("typing");
     const mine = t;
@@ -216,7 +223,7 @@ export function createPipeline(deps: PipelineDeps) {
       if (--mine.holds > 0) return;
       clearInterval(mine.timer);
       typers.delete(conv.key);
-      void signal.typing(true, conv.target);
+      void messenger.typing(conv.target, false);
     };
   }
 
@@ -226,7 +233,7 @@ export function createPipeline(deps: PipelineDeps) {
   async function warn(conv: Conversation, e: unknown, quote?: Quote): Promise<boolean> {
     if (now() - (lastNotice.get(conv.key) ?? 0) < conv.noticeEveryMs) return false;
     lastNotice.set(conv.key, now());
-    return out.reply(conv.notice(e), { quote: conv.groupId ? quote : undefined, kind: conv.target ? "chat" : undefined, groupId: conv.target }).then(() => true, () => false);
+    return out.reply(conv.notice(e), { quote: conv.groupId ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
   }
 
   // One run for one conversation: typing, the model, the reply, or a notice if it failed. Call it inside
@@ -281,9 +288,9 @@ export function createPipeline(deps: PipelineDeps) {
   async function tell(conv: Conversation, m: IncomingMessage, why: string, before?: () => void): Promise<void> {
     if (conv.attention === "always") {
       before?.();
-      if (conv.target) await out.reply(why, { plain: true, groupId: conv.target });
+      if (conv.target) await out.reply(why, { plain: true, target: conv.target });
       else await out.replyPlain(why);
-    } else if (m.addressedToMe) await out.reply(why, { kind: "chat", groupId: conv.groupId });
+    } else if (m.addressedToMe) await out.reply(why, { kind: "chat", target: conv.groupId });
   }
 
   // Voice message -> text, or false when it could not be understood (the sender was told, if they should be).
@@ -333,13 +340,13 @@ export function createPipeline(deps: PipelineDeps) {
   const LONG_CUT_NOTE = "[Note: this message was long and arrived cut off; the full text could not be read. Say so if the missing end matters, and ask to have it sent again]";
   const LONG_CUT_AT = `[Note: this message was very long; only the first ${MAX_LONG_TEXT_BYTES / 1024} KB are shown]`;
 
-  // A long message: Signal sends the first ~2000 characters as the body and all of it as an attachment. The attachment's text takes the
-  // body's place (when it starts with the body; otherwise it follows it); it is cleaned like any text right after. Unreadable: the cut body
-  // stays, with a note for the model. Never a file, so no "unsupported" sentence. Only the size is logged.
-  function withLongText(m: IncomingMessage): IncomingMessage {
+  // A long message: some platforms (Signal) send the first ~2000 characters as the body and all of it as an attachment. The attachment's text
+  // takes the body's place (when it starts with the body; otherwise it follows it); it is cleaned like any text right after. Unreadable: the
+  // cut body stays, with a note for the model. Never a file, so no "unsupported" sentence. Only the size is logged.
+  async function withLongText(m: IncomingMessage): Promise<IncomingMessage> {
     if (!m.longText) return m;
     const { longText: ref, ...rest } = m;
-    const got = deps.longText?.(m);
+    const got = await deps.longText?.(m);
     if (!got) {
       console.log(`long message: attachment (${ref.size} bytes) could not be read, using the cut text (${m.text.length} chars)`);
       return { ...rest, text: `${m.text}\n${LONG_CUT_NOTE}`.trim() };
@@ -354,13 +361,15 @@ export function createPipeline(deps: PipelineDeps) {
   // Everything a message goes through before its conversation decides what to do with it. The same steps for the owner and
   // every group; the Conversation's flags (vouch, attention, optionalPictures) say where they differ.
   async function intake(conv: Conversation, incoming: IncomingMessage): Promise<void> {
-    const original = cleanIncoming(withLongText(incoming)); // the door: hidden characters never get past here
+    const original = cleanIncoming(await withLongText(incoming)); // the door: hidden characters never get past here
     const arrived = now();
     if (conv.vouch && !(await deps.vouch(conv.groupId!))) return; // a group we cannot vouch for gets nothing, not even a transcription
     if (original.edited) return edit(conv, original, arrived);
     const author = original.from || original.fromUuid;
-    if (conv.attention === "always") void signal.markRead(original.timestamp, conv.kind === "tenant" ? author : undefined); // the owner sees it was read, as soon as we have it (a tenant: the receipt goes to her)
-    else if (original.addressedToMe && author) void signal.markRead(original.timestamp, author); // only those who spoke to us see "seen"
+    if (caps.readReceipts) {
+      if (conv.attention === "always") void messenger.markRead(conv.target, { timestamp: original.timestamp, author: conv.kind === "tenant" ? author : undefined }); // the owner sees it was read, as soon as we have it (a tenant: the receipt goes to her)
+      else if (original.addressedToMe && author) void messenger.markRead(conv.target, { timestamp: original.timestamp, author }); // only those who spoke to us see "seen"
+    }
     if (settings.tts.provider === "qwen") {
       rememberSender(conv.key, author, original.fromName && oneLine("sender name", original.fromName, 40));
       if (original.quotedAudio) holdQuote(conv.key, original.timestamp, original.quotedAudio);
@@ -413,7 +422,7 @@ export function createPipeline(deps: PipelineDeps) {
     const author = m.from || m.fromUuid;
     const via = { targetTimestamp: targetTs, stamps, prior, pending: !!waiting, picture: (waiting as { picture?: Picture } | undefined)?.picture, document: (waiting as { document?: Document } | undefined)?.document };
     if (conv.kind === "group") {
-      if (author && m.addressedToMe) void signal.markRead(m.timestamp, author);
+      if (author && m.addressedToMe && caps.readReceipts) void messenger.markRead(conv.target, { timestamp: m.timestamp, author });
       return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: m.text, picture: via.picture, document: via.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, edit: via });
     }
     if (prior !== undefined && sameText(prior, m.text)) return void console.log("edit changes nothing, ignored");
@@ -433,8 +442,8 @@ export function createPipeline(deps: PipelineDeps) {
     if (outcome === "none") return false;
     answeredApproval(m.timestamp);
     console.log(`approval ${outcome}${changes ? ` (${changes.map((c) => c.field).join(", ")})` : ""}`);
-    const say = (text: string) => out.reply(text, { plain: true, groupId: conv.target });
-    void signal.react({ approved: "👍", modified: "👍", declined: "👎", feedback: "💬", clarify: "💬" }[outcome], target, conv.target);
+    const say = (text: string) => out.reply(text, { plain: true, target: conv.target });
+    reactTo(conv, { approved: "👍", modified: "👍", declined: "👎", feedback: "💬", clarify: "💬" }[outcome], target);
     if (reply) await say(reply); // clarify: the approval stays open and this message was an answer, not a request; approved / declined with a reply: the parts of a multi-answer that are still open
     // An edited call runs without a second look, so say exactly what changed.
     if (outcome === "modified" && changes) await say(`Applied your change: ${changes.map((c) => `${c.field} → ${c.value}`).join(", ")}`);
@@ -488,7 +497,7 @@ export function createPipeline(deps: PipelineDeps) {
       const on = findMessage(r.targetTimestamp, conv.logFile);
       record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
       const prompt = reactionPrompt(r.emoji, on);
-      await runTurn(conv, { run: () => deps.run(conv, prompt, prompt), target: { author: r.targetAuthor ?? deps.account, timestamp: r.targetTimestamp }, reaction: true, announce: false });
+      await runTurn(conv, { run: () => deps.run(conv, prompt, prompt), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
     });
   }
 
@@ -527,10 +536,8 @@ export function createPipeline(deps: PipelineDeps) {
     return ev.type === "message" ? intake(conv, ev.m) : groupReaction(conv, ev.r);
   }
 
-  // A quick reaction of our own, no run needed (the gate chose it).
-  const react = (conv: Conversation, emoji: string, target: { author: string; timestamp: number }) => void signal.react(emoji, target, conv.target);
-
-  return { handleIncoming, enqueue, burst, burstQueued, wait, holdTyping, runTurn, record, canSpeak, react, warn, dropPending };
+  // `react`: a quick reaction of our own, no run needed (the gate chose it).
+  return { handleIncoming, enqueue, burst, burstQueued, wait, holdTyping, runTurn, record, canSpeak, react: reactTo, warn, dropPending };
 }
 
 export type Pipeline = ReturnType<typeof createPipeline>;

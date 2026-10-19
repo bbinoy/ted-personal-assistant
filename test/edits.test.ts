@@ -13,6 +13,7 @@ import { groupContext, groupLogFile } from "../src/groupstore.ts";
 import { logTail, tailLine } from "../src/gate.ts";
 import { dataPath } from "../src/state.ts";
 import type { IncomingDeletion, IncomingMessage } from "@ted-personal-assistant/signal";
+import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
 
 // Edited and deleted messages, through the real pipeline, the real group brain and the real logs (the model, the gate and Signal are fakes).
 
@@ -39,19 +40,21 @@ function rig(over: { run?: (prompt: string) => Promise<string>; gate?: () => Pro
   const gates: number[] = [];
   const answers: string[] = [];
   const pause = hold();
-  const signal = {
-    separateAccount: true,
+  const messenger = {
+    name: "fake",
+    summary: "fake",
+    self: "+10000000001",
+    capabilities: FULL_CAPABILITIES,
     react: async () => {},
     typing: async () => {},
     markRead: async () => {},
-    send: async (text: string) => (sent.push(text), 1000 + sent.length),
+    send: async (_target: unknown, m: { text: string }) => (sent.push(m.text), 1000 + sent.length),
   };
   const record = (groupId: string | undefined, kind: Kind, ts: number, text: string, extra?: Extra) => recordMessage(kind, ts, text, new Date(), groupId ? groupLogFile(groupId) : FILE, extra);
   const pipeline = createPipeline({
-    signal,
-    out: createOutbound(signal as any, (k, t, text, g) => record(g, k, t, text)),
+    messenger,
+    out: createOutbound(messenger, (k, t, text, g) => record(g, k, t, text)),
     record,
-    account: "+10000000001",
     run: async (_conv, prompt) => (prompts.push(prompt), { text: await (over.run ?? (async () => "ok"))(prompt) }),
     picture: async () => assert.fail("no picture"),
     document: async () => assert.fail("no document"),

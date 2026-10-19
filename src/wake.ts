@@ -42,7 +42,7 @@ import { LIMITS } from "./sanitize.ts";
 // per day), and a failed run is logged and silent. A gate that fails or says something odd means do nothing.
 
 interface WakeDeps {
-  separateAccount: boolean; // the assistant has its own Signal account (signal.separateAccount). Groups are woken only then: on Note to Self every message would go out as the owner
+  groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
   pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "canSpeak">;
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
   runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; judgeContext?: string }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // the owner's runs by profile (agent.ts runProfile)
@@ -266,7 +266,7 @@ export function createWakeups(deps: WakeDeps) {
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
     const convs: Conversation[] = spent() ? [] : [owner()]; // the instance's daily budget is the owner's and the groups'; a tenant's is her own (her access)
-    if (settings.wakeups && deps.separateAccount) {
+    if (settings.wakeups && deps.groupChats) {
       if (convs.length) {
         const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
         const vouched = await Promise.all(ids.map((id) => deps.vouch(id).catch(() => false))); // in parallel; a lookup is cached for minutes

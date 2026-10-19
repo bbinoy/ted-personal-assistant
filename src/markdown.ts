@@ -1,16 +1,14 @@
-// Markdown subset -> Signal text + style ranges.
-//
-// Signal has no markdown mode: formatting is sent as separate ranges
-// ("start:length:STYLE", offsets in UTF-16 code units, which are exactly
-// JavaScript string indices). So we strip the markers and record where the
-// styled text ended up.
+import type { TextStyle } from "@ted-personal-assistant/messenger";
 
-type StyleName = "BOLD" | "ITALIC" | "STRIKETHROUGH" | "MONOSPACE";
-export interface Style {
-  start: number;
-  length: number;
-  style: StyleName;
-}
+// Markdown subset -> text + style ranges (the messenger's TextStyle).
+//
+// Chat platforms like Signal have no markdown mode: formatting is sent as separate ranges
+// (offsets in UTF-16 code units, which are exactly JavaScript string indices). So we strip
+// the markers and record where the styled text ended up; the messenger turns the ranges into
+// its platform's format.
+
+type StyleName = TextStyle["style"];
+export type Style = TextStyle;
 interface Rendered {
   text: string;
   styles: Style[];
@@ -121,10 +119,6 @@ function tidy(r: Rendered): Rendered {
     if (end > start) styles.push({ ...s, start, length: end - start });
   }
   return { text: trimmed, styles };
-}
-
-export function toSignalStyles(styles: Style[]): string[] {
-  return styles.map((s) => `${s.start}:${s.length}:${s.style}`);
 }
 
 // Split a markdown brief into one piece per section (a section starts at a heading line). Length is not limited here: Signal shows a long message as a preview with "read more".

@@ -1,126 +1,22 @@
 import { closeSync, fstatSync, lstatSync, openSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { MAX_AUDIO_BYTES, MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_LONG_TEXT_BYTES, type AudioRef, type FileRef, type ImageRef, type IncomingDeletion, type IncomingMessage, type IncomingReaction, type LongTextRef, type Quote } from "@ted-personal-assistant/messenger";
+
+// The types of what comes in (IncomingMessage, Quote, ...) and the size limits are the Messenger interface's (packages/messenger): the same
+// objects reach the app as signal-cli reports them here. Re-exported so this package's own API is unchanged.
+export { MAX_AUDIO_BYTES, MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_LONG_TEXT_BYTES };
+export type { AudioRef, FileRef, ImageRef, IncomingDeletion, IncomingMessage, IncomingReaction, LongTextRef, Quote };
 
 // The pure half of the Signal client: the small types of our own and the functions that turn what signal-cli reports into them
 // (testable without any network). client.ts is the connection.
 //   interpretEnvelope  a "receive" notification -> a message (also an edited one), a reaction or a remote delete
 // Two modes, picked by the constructor options of the client (see README): Note to Self, or the bot's own account.
 
-/** The message a reply points at (Signal's "reply" / quote). */
-export interface Quote {
-  /** The quoted text. */
-  text: string;
-  /** Who wrote the quoted message (number or account id). */
-  author: string;
-  /** Timestamp of the quoted message. */
-  timestamp: number;
-}
-
-/**
- * What the client keeps from a signal-cli "receive" notification. Text, quotes and names are untrusted input from
- * whoever wrote them; who may talk to your bot is for you to decide.
- */
-export interface IncomingMessage {
-  /** Sender's number (the peer's number in own-account mode when the sender is the peer). */
-  from: string;
-  /** The text, with @mentions written out as `@name`. Empty for an attachment-only message. */
-  text: string;
-  /** Signal's timestamp, which doubles as the message id. */
-  timestamp: number;
-  /** A private one-to-one conversation with the bot (Note to Self, or its own chat); never a group. */
-  direct: boolean;
-  /** The sender's account id, when Signal gives it (also for the peer's own messages and Note to Self). */
-  fromUuid?: string;
-  /** The sender's own profile name, when Signal gives it (groups, and one-to-one messages from someone other than the peer). */
-  fromName?: string;
-  /** Own-account mode only: a private one-to-one message from someone OTHER than the peer (not a group). `from` is their number (empty if Signal hides it) and `fromUuid` their account id. Who may talk to your bot is still for you to decide. */
-  other?: boolean;
-  /** Set when the message was written in a group (own-account mode only). */
-  group?: { id: string };
-  /** Group messages: it @mentions the bot or replies to one of its messages. */
-  addressedToMe?: boolean;
-  /** Set when the message is a reply to an earlier one. */
-  quote?: Quote;
-  /** The message replies to a voice note: that voice note's timestamp (look it up among the voice notes received in this conversation). */
-  quotedAudio?: number;
-  /** A voice message or audio file (the first one); resolve its file with {@link attachmentPath}. */
-  audio?: AudioRef;
-  /** A picture (the first one; `text` is its caption, possibly empty); resolve its file with {@link attachmentPath}. */
-  image?: ImageRef;
-  /** Any other file (the first one that is neither a picture nor audio): a PDF, a text file, a zip... Its type is for the caller to decide from the bytes; resolve its file with {@link attachmentPath}. */
-  file?: FileRef;
-  /**
-   * The full text of a LONG message: Signal apps send text over about 2000 characters as a cut body plus an attachment of type
-   * `text/x-signal-plain` that holds all of it. Never a {@link file}; read it with {@link readLongText} and use it in place of `text`.
-   */
-  longText?: LongTextRef;
-  /**
-   * Set when this is an EDIT: `text` is the new text, `timestamp` the edit's own timestamp, and `targetTimestamp` the
-   * timestamp of the message it replaces (the original's, or an earlier edit's: Signal clients differ). An edit is
-   * untrusted like any message and Signal only lets the original author send one, but nothing here checks that: compare
-   * the sender with the original's author before you apply it. Audio and pictures are not carried over (edits are text only here).
-   */
-  edited?: { targetTimestamp: number };
-}
-
-/** Somebody deleted a message for everyone ("remote delete"). */
-export interface IncomingDeletion {
-  /** Who deleted it. Signal only honours the author, but nothing here checks: compare with the original's author. */
-  from: string;
-  /** Timestamp of the message that was deleted (the original's, or the latest edit's). */
-  targetTimestamp: number;
-  /** As {@link IncomingMessage.direct}. */
-  direct: boolean;
-  /** Set when it happened in a group. */
-  group?: { id: string };
-  fromUuid?: string;
-  fromName?: string;
-  /** As {@link IncomingMessage.other}. */
-  other?: boolean;
-}
-
-/** A voice note or audio file signal-cli has downloaded: its id names the file in its attachments folder. */
-export interface AudioRef {
-  id: string;
-  size: number;
-}
-
-/** Audio attachments larger than this (bytes) are not surfaced. */
-export const MAX_AUDIO_BYTES = 25_000_000;
-
-/** A picture signal-cli has downloaded, named like an audio file. */
-export interface ImageRef {
-  id: string;
-  size: number;
-}
-
-/** Pictures larger than this (bytes) are not surfaced. */
-export const MAX_IMAGE_BYTES = 20_000_000;
-
-/** Other files larger than this (bytes) are not read; the sender is told. Pairs with LIMITS.textFile in src/sanitize.ts (the part of a text file shown to the model). */
-export const MAX_FILE_BYTES = 20_000_000;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"];
-
-/** Any other file signal-cli has downloaded. `name` is the file name the sender gave: untrusted text, shorter than 200 characters, never a path. */
-export interface FileRef {
-  id: string;
-  size: number;
-  name?: string;
-  /** The sender's client said it is audio (an MP3, M4A...). Only a hint, for deciding whether to open it at all: the bytes decide. */
-  audio?: true;
-}
-
-/** The attachment that holds the whole text of a long message (the sender's file name is ignored). */
-export interface LongTextRef {
-  id: string;
-  size: number;
-}
 
 /** Signal's content type for the full text of a long message. */
 export const LONG_TEXT_TYPE = "text/x-signal-plain";
-/** The most of a long message that is read (bytes); the rest is cut. Pairs with LIMITS.message in src/sanitize.ts (70,000 characters: this plus the note), which must stay above it. */
-export const MAX_LONG_TEXT_BYTES = 64 * 1024;
 const isLongTextType = (a: any) => String(a?.contentType ?? "").split(";")[0]!.trim().toLowerCase() === LONG_TEXT_TYPE;
 
 const MAX_FILE_NAME = 200; // a file name is a label; pairs with LIMITS.preview in src/sanitize.ts
@@ -252,29 +148,6 @@ export function quotedAudio(raw: any): number | undefined {
   const has = Array.isArray(raw?.attachments) && raw.attachments.some((a: any) => String(a?.contentType ?? "").startsWith("audio/"));
   return has && Number.isFinite(id) && id > 0 ? id : undefined;
 }
-
-/** An emoji reaction somebody added to (or removed from) a message. */
-export interface IncomingReaction {
-  /** Who reacted. */
-  from: string;
-  emoji: string;
-  /** Timestamp of the message that was reacted to. */
-  targetTimestamp: number;
-  /** True when the reaction was taken away again. */
-  isRemove: boolean;
-  /** As {@link IncomingMessage.direct}. */
-  direct: boolean;
-  /** Who wrote the message that was reacted to. */
-  targetAuthor?: string;
-  /** Set when the reaction was made in a group. */
-  group?: { id: string };
-  fromUuid?: string;
-  fromName?: string;
-  /** As {@link IncomingMessage.other}. */
-  other?: boolean;
-}
-
-
 
 /** Pure: a message's text with each mention (Signal puts a placeholder character there) written as `@name`. */
 export function withMentions(text: string, mentions: unknown, fallback = "someone"): string {

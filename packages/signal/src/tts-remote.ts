@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { SAFE_INPUT, toolEnv } from "./internal/exec.ts";
+import { voiceEncoding, type VoiceFormat } from "./voiceformat.ts";
 
 // Shared parts of the optional remote speech providers (tts-elevenlabs.ts, tts-http.ts): a bounded HTTPS
-// request, a check that what came back is audio, and the same ffmpeg step to AAC as the local voice.
+// request, a check that what came back is audio, and the same ffmpeg step to the voice format as the local voice (AAC by default).
 // The text sent is only the words to be spoken; keys and tokens come from the caller's config and are never logged.
 
 const run = promisify(execFile);
@@ -76,9 +77,10 @@ export interface RemoteRequest {
   secrets: string[]; // blanked out of any error message
   timeoutMs: number;
   fetchImpl?: Fetch;
+  format?: VoiceFormat; // the voice message format to encode to (default m4a)
 }
 
-// POSTs the request, checks the answer is audio, and returns it as an AAC voice message in a fresh temp folder
+// POSTs the request, checks the answer is audio, and returns it as a voice message (AAC in an .m4a unless `format` says otherwise) in a fresh temp folder
 // (the caller deletes that folder, like for the local voice). Any timeout, HTTP error or non-audio answer throws.
 export async function synthesizeRemote(req: RemoteRequest, name: string): Promise<string> {
   const failed = (e: unknown) => {
@@ -110,11 +112,12 @@ export async function synthesizeRemote(req: RemoteRequest, name: string): Promis
   if (!kind) throw new Error(`${name} answer is not wav, mp3 or ogg audio (content type ${res.headers.get("content-type") ?? "none"})`);
   const dir = await mkdtemp(join(tmpdir(), "speech-"));
   const raw = join(dir, `remote.${kind}`);
-  const out = join(dir, "voice.m4a");
+  const enc = voiceEncoding(req.format);
+  const out = join(dir, enc.file);
   await writeFile(raw, bytes, { mode: 0o600 });
   const env = toolEnv();
   try {
-    await run("ffmpeg", ["-v", "error", "-y", ...SAFE_INPUT, "-f", kind, "-i", raw, "-c:a", "aac", "-b:a", "64k", out], { timeout: 60_000, env });
+    await run("ffmpeg", ["-v", "error", "-y", ...SAFE_INPUT, "-f", kind, "-i", raw, ...enc.args, out], { timeout: 60_000, env });
   } catch (e) {
     throw new Error(`ffmpeg failed: ${((e as { stderr?: string }).stderr ?? (e as Error).message).trim().split("\n").slice(-3).join(" | ").slice(0, 200)}`);
   }

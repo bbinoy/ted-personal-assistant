@@ -35,7 +35,7 @@ let tmp: string;
 let attachments: string;
 let deps: VoiceDeps;
 const mk = (clip: ClipTools = fakeClip(speech(12)), o: Partial<VoiceDeps> = {}): VoiceDeps => ({
-  voiceRoot: join(tmp, "voice"), problem: () => undefined, clip, audioFile: (id) => join(attachments, id), groups: () => [{ id: "grp-1", name: "Family" }], now: () => NOW, ...o,
+  voiceRoot: join(tmp, "voice"), problem: () => undefined, clip, audioFile: async (id) => join(attachments, id), groups: () => [{ id: "grp-1", name: "Family" }], now: () => NOW, ...o,
 });
 const note = (key: string, ts: number, by = "+1", o: { id?: string; file?: boolean; byName?: string } = {}) => {
   const id = o.id ?? `att${ts}`;
@@ -196,7 +196,7 @@ test("tool: a source from another conversation, an unknown or too old id, or a m
 
 test("tool: a source id is only joined to the attachments folder (the id is the only thing trusted)", async () => {
   let asked = "";
-  const d = mk(undefined, { audioFile: (id) => ((asked = id), join(attachments, id)) });
+  const d = mk(undefined, { audioFile: async (id) => ((asked = id), join(attachments, id)) });
   note("owner", NOW - 1000, "owner", { id: "abc123" });
   await voiceNow("owner", { action: "use" }, d);
   assert.equal(asked, "abc123");

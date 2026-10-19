@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderMarkdown, splitSections, toSignalStyles } from "../src/markdown.ts";
+import { renderMarkdown, splitSections } from "../src/markdown.ts";
+import { toSignalStyles } from "@ted-personal-assistant/signal/messenger";
 
 // Helper: the text each style range covers, to assert offsets land on the right characters.
 const covered = (md: string) => {

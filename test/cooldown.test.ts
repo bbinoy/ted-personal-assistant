@@ -87,7 +87,7 @@ function rig(gate: (n: number) => unknown) {
   const ran: string[] = [];
   const w = createWakeups({
     pipeline: pipeline as any,
-    separateAccount: false,
+    groupChats: false,
     vouch: async () => true,
     runProfile: async (_p, prompt) => (ran.push(prompt), { text: "done" }),
     gate: async () => {

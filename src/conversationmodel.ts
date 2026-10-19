@@ -13,7 +13,7 @@ import { tenantKey } from "./send.ts";
 import { OWNER, settings } from "./settings.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";
-import type { IncomingDeletion, IncomingMessage, IncomingReaction, Quote } from "@ted-personal-assistant/signal";
+import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-personal-assistant/messenger";
 
 // The one pipeline every conversation goes through: the owner's private chat and each group. What differs
 
@@ -22,9 +22,9 @@ import type { IncomingDeletion, IncomingMessage, IncomingReaction, Quote } from 
 export interface Conversation {
   readonly kind: "owner" | "group" | "tenant";
   readonly key: string; // queue key
-  readonly groupId?: string; // the Signal group; unset: the owner's chat or a tenant's
+  readonly groupId?: string; // the group; unset: the owner's chat or a tenant's
   readonly tenantId?: string; // a tenant's chat (tenants.ts): her id
-  readonly target?: string; // where this conversation's messages go: the group id, "to:<account id>" for a tenant (packages/signal toPerson); unset: the owner's chat
+  readonly target?: Target; // where this conversation's messages go (the messenger's opaque target): the group id, directTarget(account id) for a tenant; unset: the owner's chat
   readonly direct: boolean; // a private one-to-one chat (the owner's or a tenant's): one person, always answered, her messages are her own
   readonly source: "chat" | "group"; // policy source (src/policy.ts); a tenant's is "group" (isolated: none of the owner's data), with her own folder
   readonly logFile: string; // this conversation's message log
@@ -169,23 +169,17 @@ export interface TurnResult {
 }
 
 export interface PipelineDeps {
-  signal: {
-    separateAccount: boolean;
-    react(emoji: string, target: { author: string; timestamp: number }, groupId?: string): Promise<void>;
-    typing(stop?: boolean, groupId?: string): Promise<void>;
-    markRead(timestamp: number, from?: string): Promise<void>;
-  };
+  messenger: Pick<Messenger, "capabilities" | "self" | "react" | "typing" | "markRead">; // `self`: the author of messages of ours that a reaction points at
   out: {
-    reply(text: string, opts?: { plain?: boolean; quote?: Quote; kind?: Kind; groupId?: string }): Promise<number>;
+    reply(text: string, opts?: { plain?: boolean; quote?: Quote; kind?: Kind; target?: Target }): Promise<number>;
     replyPlain(text: string, kind?: Kind): Promise<number>;
-    sendVoice(file: string, spoken: string, groupId?: string): Promise<number>;
-    sendPicture(file: string, caption: string, opts?: { quote?: Quote; kind?: Kind; groupId?: string }): Promise<number>;
+    sendVoice(file: string, spoken: string, target?: Target): Promise<number>;
+    sendPicture(file: string, caption: string, opts?: { quote?: Quote; kind?: Kind; target?: Target }): Promise<number>;
   };
-  record: (target: string | undefined, kind: Kind, ts: number, text: string, extra?: Extra) => void; // into that conversation's log (target: a group id, "to:<id>" for a tenant, none for the owner)
-  account: string; // our own Signal number: the author of messages of ours that a reaction points at
+  record: (target: Target, kind: Kind, ts: number, text: string, extra?: Extra) => void; // into that conversation's log (target: a group id, a person's direct target for a tenant, none for the owner)
   run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)
   picture: (m: IncomingMessage) => Promise<Picture>; // throws a sentence the sender can be told
-  longText?: (m: IncomingMessage) => { text: string; cut: boolean } | undefined; // the full text of a long message (signal-cli's saved attachment, id only); undefined when it cannot be read
+  longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; // the full text of a long message (the messenger's attachment, by id only); undefined when it cannot be read
   document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
   speech: { ready: () => boolean; synth: (words: string, conversation: string) => Promise<string>; foreign: (words: string) => Promise<string | undefined> }; // spoken replies: local TTS, a file
@@ -209,7 +203,7 @@ export interface Batch<T> {
   run: (job: (items: T[]) => Promise<void>) => Promise<void>;
 }
 
-// A message as it comes in from Signal, cleaned: text (also a picture's caption), the sender's name and the quoted text.
+// A message as it comes in from the messenger, cleaned: text (also a picture's caption), the sender's name and the quoted text.
 export const cleanIncoming = (m: IncomingMessage): IncomingMessage => ({
   ...m,
   text: clean("message", m.text, { max: LIMITS.message }),

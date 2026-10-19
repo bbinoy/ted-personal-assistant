@@ -30,14 +30,14 @@ import { Ledger } from "./payments.ts";
 import { OWNER_KEY } from "./send.ts";
 import { settings } from "./settings.ts";
 import { unsupportedForVoice } from "./lang.ts";
-import { openLog } from "./state.ts";
-import { attachmentPath, ensureSignalDaemon, personOf, readLongText, SignalClient, type IncomingMessage } from "@ted-personal-assistant/signal";
+import { directOf, type IncomingMessage } from "@ted-personal-assistant/messenger";
+import { loadMessengerInUse } from "./messenger.ts";
 import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-personal-assistant/signal/tts";
 import { Limiter } from "./limiter.ts";
 import { activeTenant, admitStranger } from "./tenantroute.ts";
 import { createTenantRunner } from "./tenantrun.ts";
 import { tenantHooks } from "./tenanttools.ts";
-import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByAci, tenantById, tenantContext } from "./tenants.ts";
+import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByTarget, tenantById, tenantContext } from "./tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
 
 ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
@@ -45,19 +45,13 @@ if (new Ledger().recover()) console.log("card: a payment that was clicked and ne
 
 // The owner's record in the registry (tenants.ts): made on the first start from SIGNAL_OWNER_NUMBER, its account id learned from her first message.
 const ownerRecord = ensureOwner({ number: config.ownerNumber, aci: config.ownerAci });
-const signal = new SignalClient({
-  host: settings.signalHost,
-  port: settings.signalPort,
-  account: config.signalAccount,
-  peer: config.signalAccount !== config.ownerNumber ? { number: config.ownerNumber, aci: config.ownerAci ?? ownerRecord.acis[0] } : undefined,
-  logger: console, // the app's console is the timestamped, redacting one from log.ts
-});
+// The chat platform (MESSENGER, default signal): everything below talks to this interface (packages/messenger) and knows no platform call.
+const messenger = await loadMessengerInUse({ owner: { address: config.ownerNumber, id: config.ownerAci ?? ownerRecord.acis[0] }, account: config.signalAccount });
 // What was said goes into that conversation's own log: the owner's chat, or the group's (made on first use).
 function record(target: string | undefined, kind: Kind, ts: number, text: string, extra?: Extra) {
   // A tenant's own history (tenants.ts), in her folder, bounded by size and never summarised by a model (that call would run on the instance's login).
-  const person = personOf(target);
-  if (person) {
-    const rec = tenantByAci(person); // a stranger's fixed reply, or a tenant deleted meanwhile, is logged nowhere
+  if (directOf(target)) {
+    const rec = tenantByTarget(target); // a stranger's fixed reply, or a tenant deleted meanwhile, is logged nowhere
     if (!rec) return;
     const { logFile } = tenantContext(rec);
     recordMessage(kind, ts, text, new Date(), logFile, extra);
@@ -68,7 +62,7 @@ function record(target: string | undefined, kind: Kind, ts: number, text: string
   recordMessage(kind, ts, text, new Date(), undefined, extra);
   void compactIfNeeded(summarizeWithHaiku).catch((e) => console.error("messages: compaction failed:", e.message));
 }
-const out = createOutbound(signal, (kind, ts, text, groupId) => record(groupId, kind, ts, text));
+const out = createOutbound(messenger, (kind, ts, text, target) => record(target, kind, ts, text));
 // Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her unattended
 // runs (wake-ups, the brief, the radar, the mail handler: only an explicit yes / no or a reply to the question answers those, whatever else
 // she types meanwhile is a chat message), a group in the group (any member may answer), a tenant in her own chat. approvals.ts scopes every
@@ -94,7 +88,7 @@ const transcribing = new Limiter(() => settings.transcribeConcurrency);
 async function transcript(m: IncomingMessage): Promise<string> {
   let heard = "";
   try {
-    heard = await transcribing.run(() => transcribe(attachmentPath(m.audio!, settings.signalAttachmentsDir), settings.whisperModel));
+    heard = await transcribing.run(async () => transcribe(await messenger.attachmentFile(m.audio!), settings.whisperModel));
   } catch (e) {
     const gaps = voiceReady(settings.whisperModel);
     console.error("voice: transcription failed:", (e as Error).message);
@@ -115,14 +109,14 @@ const audioTools: AudioTools = {
 // into that group's own history; the brain decides when the assistant speaks. No access to anything private.
 const isOwnerAccount = (who: { number?: string; uuid?: string }) => resolveSender({ number: who.number, aci: who.uuid })?.role === "admin";
 const fromOwner = (w: { from: string; fromUuid?: string }) => isOwnerAccount({ number: w.from || undefined, uuid: w.fromUuid });
-const vouch = (groupId: string) => ownerInGroup(groupId, () => signal.groups(), isOwnerAccount); // is the owner in this group?
+const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(), isOwnerAccount); // is the owner in this group?
 
 // Both kinds of conversation run through one pipeline (src/conversation.ts). Spoken replies need the
 // assistant's own chat (in Note to Self our own voice message would echo back as if the owner had sent
 // it) and the local speech setup.
 // Several people on one instance (TENANTS=on, src/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
-// Needs the assistant's own Signal account: in Note to Self there is nobody else to talk to.
-if (settings.tenants && !signal.separateAccount) throw new Error("TENANTS=on needs the assistant's own Signal account (SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
+// Needs a messenger other people can write to: with Signal that is the assistant's own account (in Note to Self there is nobody else to talk to).
+if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 const tenantRunner = createTenantRunner({ alertAdmin: (text) => void out.replyPlain(text, "notice") });
 // Compaction of a conversation's session (the urgent one after a reply, the quiet one from the tick): a tenant's runs on the instance key and is billed to her.
 async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<void> {
@@ -133,22 +127,21 @@ async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<vo
 }
 tenantHooks.drop = dropTenantWarm;
 const pipeline: Pipeline = createPipeline({
-  signal,
+  messenger,
   out,
   record,
-  account: config.signalAccount,
   // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
   run: (conv, prompt, ownerMessage, pictures, hooks, documents) =>
     conv.tenantId
       ? (setConversationMessage(conv.key, ownerMessage), tenantRunner.run(conv, prompt, pictures, hooks, documents).finally(() => setConversationMessage(conv.key, undefined)))
       : (setChatOwnerMessage(ownerMessage), runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)),
-  picture: (m) => preparePicture(attachmentPath(m.image!, settings.signalAttachmentsDir)), // a plain file name inside signal-cli's folder
-  document: async (m) => prepareFile(attachmentPath(m.file!, settings.signalAttachmentsDir), m.file!.name, audioTools), // the same: only the id, joined to signal-cli's folder; an audio file is transcribed (queued with voice messages)
-  longText: (m) => readLongText(m.longText!, settings.signalAttachmentsDir), // the same: only the id, joined to signal-cli's folder
+  picture: async (m) => preparePicture(await messenger.attachmentFile(m.image!)), // the messenger resolves the id to its own file (Signal: a plain file name inside signal-cli's folder)
+  document: async (m) => prepareFile(await messenger.attachmentFile(m.file!), m.file!.name, audioTools), // the same; an audio file is transcribed (queued with voice messages)
+  longText: (m) => messenger.readLongText(m.longText!), // the same
   transcript,
   speech: {
-    ready: () => settings.voiceReplies && signal.separateAccount && providerReady(settings.tts).ok,
-    synth: (words, conversation) => synthesizeWith(words, settings.tts, console, conversation), // the conversation picks its cloned voice (voicetool.ts)
+    ready: () => settings.voiceReplies && messenger.capabilities.voice && providerReady(settings.tts).ok,
+    synth: (words, conversation) => synthesizeWith(words, settings.tts, console, conversation, messenger.capabilities.voiceFormat), // the conversation picks its cloned voice (voicetool.ts); the messenger picks the audio format
     foreign: (words) => unsupportedForVoice(words, settings.ttsLanguages),
   },
   approvals,
@@ -170,13 +163,13 @@ const route = (w: { group?: { id: string } }, ev: Parameters<Pipeline["handleInc
 // reply with no model call (an invitation, a welcome); the assistant answers only what was written to it. Off: ignored, exactly as before.
 function fromStranger(m: IncomingMessage): void {
   const decided = admitStranger({ fromUuid: m.fromUuid, name: m.fromName, text: m.text }, {
-    reply: (to, text) => out.reply(text, { plain: true, kind: "other", groupId: to }),
+    reply: (to, text) => out.reply(text, { plain: true, kind: "other", target: to }),
     deliver: (t) => void pipeline.handleIncoming(tenant(t.id), { type: "message", m }).catch((e) => console.error("tenant message error:", e.message)),
     welcomed: (t) => markDisclosed(tenantContext(t)),
   });
   if (decided.kind === "ignore") console.log(`ignored a message from someone else (${decided.why})`);
 }
-signal.onMessage((m) => {
+messenger.onMessage((m) => {
   if (!m.group) {
     if (!acceptOwner(m, resolveSender)) {
       if (settings.tenants && m.other) return fromStranger(m);
@@ -189,7 +182,7 @@ signal.onMessage((m) => {
 });
 
 // A message deleted for everyone: the same door as a message.
-signal.onDelete((d) => {
+messenger.onDeletion((d) => {
   if (d.group || acceptOwner(d, resolveSender)) route(d, { type: "deletion", d });
   else if (settings.tenants && d.other && activeTenant(d.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(d.fromUuid)!.id), { type: "deletion", d }).catch((e) => console.error("tenant deletion error:", e.message));
 });
@@ -203,28 +196,23 @@ if (proposer) setDraftReader(proposer.read);
 if (settings.mailProvider === "gmail") setGmailReaders(gmailReaders());
 
 // A 👍 / 👎 on the pending approval message answers it (the pipeline checks); any other reaction of the
-// owner is feedback. Our own status icons come back as reactions and are dropped.
-signal.onReaction((r) => {
-  if (r.isRemove || signal.isOwnReaction(r)) return;
+// owner is feedback. (Our own status icons come back as reactions; the messenger does not deliver those.)
+messenger.onReaction((r) => {
+  if (r.isRemove) return;
   if (r.group || acceptOwner(r, resolveSender)) route(r, { type: "reaction", r });
   else if (settings.tenants && r.other && activeTenant(r.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(r.fromUuid)!.id), { type: "reaction", r }).catch((e) => console.error("tenant reaction error:", e.message));
 });
 
-// Policy of this app, not of the signal package: if Signal goes away we exit, and launchd restarts the whole agent
-// cleanly instead of leaving a process with no Signal connection. A signal we are asked to stop on takes the daemon down too.
-const daemon = await ensureSignalDaemon({ account: config.signalAccount, host: settings.signalHost, port: settings.signalPort, logFd: openLog("logs/signal-daemon.log"), logger: console });
-void daemon.exited.then(({ code, signal: sig }) => {
-  console.error(`signal-cli exited (code=${code} signal=${sig}); exiting so launchd restarts us`);
+// Policy of this app, not of the messenger: if the platform goes away we exit, and launchd restarts the whole agent
+// cleanly instead of leaving a process with no connection. A signal we are asked to stop on takes the platform's helper (Signal's daemon) down too.
+messenger.onClose(({ reason }) => {
+  console.error(`${reason}; exiting so launchd restarts us`);
   process.exit(1);
 });
-process.once("exit", () => daemon.stop());
-for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, () => (daemon.stop(), stopQwen(), process.exit(0)));
-signal.onClose(({ error }) => {
-  console.error(`signal socket closed${error ? ` (${error.message})` : ""}; exiting so launchd restarts us`);
-  process.exit(1);
-});
-await signal.connect();
-console.log(`connected to signal-cli (${signal.separateAccount ? "own account" : "Note to Self"}); accepting only ${mask(config.ownerNumber)}; auth: ${config.credential}`);
+process.once("exit", () => messenger.stop());
+for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, () => (messenger.stop(), stopQwen(), process.exit(0)));
+await messenger.start();
+console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(config.ownerNumber)}; auth: ${config.credential}`);
 
 warmChat();
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
@@ -249,7 +237,7 @@ const dream = () => {
 // gate also decides when the brief and the radar run, with a deterministic backstop for the brief.
 const wakeups = createWakeups({
   pipeline,
-  separateAccount: signal.separateAccount,
+  groupChats: messenger.capabilities.groups,
   vouch,
   runProfile: (profile, prompt, extra) => runProfile(profile, prompt, approveBackground, extra),
   presets: { sendBrief: out.sendBriefSummary, notify: say, beforeBrief: dream },

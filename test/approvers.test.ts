@@ -17,7 +17,7 @@ const ANNA = "tenant:anna";
 function rig(tenants: Record<string, string> = { anna: "to:anna-aci" }) {
   const sent: { to?: string; text: string; ts: number }[] = [];
   let ts = 5000;
-  const out = { reply: async (text: string, o: { plain: true; kind: "approval"; groupId?: string }) => (sent.push({ to: o.groupId, text, ts: ++ts }), ts) };
+  const out = { reply: async (text: string, o: { plain: true; kind: "approval"; target?: string }) => (sent.push({ to: o.target, text, ts: ++ts }), ts) };
   const made: { scope: string; source: string; background: boolean; mayPay: boolean }[] = [];
   const approverFor = createApprovers(out, {
     target: (id) => tenants[id],

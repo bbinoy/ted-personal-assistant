@@ -14,7 +14,7 @@ import { documentNote, takeDocuments, type Document } from "./document.ts";
 import { group, type Batch, type Conversation, type Pipeline } from "./conversation.ts";
 import { quoteNote } from "./quote.ts";
 import { voiceOption } from "./voicereply.ts";
-import type { Quote } from "@ted-personal-assistant/signal";
+import type { Quote } from "@ted-personal-assistant/messenger";
 import { clean, defuseSpeakers, LIMITS, oneLine } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
 
@@ -67,7 +67,7 @@ export function groupWakePrompt(now: Date, lines: readonly string[], instruction
   ].filter(Boolean).join("\n\n");
 }
 
-// Is the owner in this group? Looked up from signal-cli's member list, remembered for a few minutes.
+// Is the owner in this group? Looked up from the messenger's member list, remembered for a few minutes.
 // Anything that goes wrong means no: a group we cannot vouch for gets no answers and no logging.
 const MAX_CACHED_GROUPS = 200;
 const memberCache = new Map<string, { at: number; ok: boolean; name: string }>();

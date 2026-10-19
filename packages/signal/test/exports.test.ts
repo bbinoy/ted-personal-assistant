@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import * as core from "../src/index.ts";
 import * as voice from "../src/voice.ts";
 import * as tts from "../src/speech.ts";
+import * as messenger from "../src/messenger.ts";
 import * as testing from "../src/testing.ts";
 
 // The public surface, written down: an accidental addition or removal shows up here and is a deliberate change
@@ -43,6 +44,10 @@ test("exports: ./tts", () => {
     "ClipRefused", "DEFAULT_VOICE", "MAX_SECONDS", "MAX_SPOKEN_CHARS", "MAX_VOICES", "MIN_SECONDS", "OWNER_SCOPE", "VOICE_NAME", "activeVoice", "activeVoiceRel", "buildReference", "deleteVoice", "getMeta", "isSafeUrl", "listVoices", "looksLikeSpeech",
     "maxVoices", "providerReady", "qwenReady", "realClipTools", "removeScope", "sanitizeVoiceName", "saveVoice", "scopeRoot", "setActiveVoice", "stopQwen", "synthesize", "synthesizeQwen", "synthesizeWith", "ttsReady", "voiceFiles", "warmQwen",
   ]);
+});
+
+test("exports: ./messenger", () => {
+  assert.deepEqual(names(messenger), ["createMessenger", "doctor", "toSignalStyles"]);
 });
 
 test("exports: ./testing", () => {

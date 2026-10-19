@@ -10,10 +10,13 @@ import { AuthError, RateLimitError } from "../src/errors.ts";
 import { SLOW_REPLY_MS } from "../src/quote.ts";
 import type { Picture } from "../src/image.ts";
 import type { Document } from "../src/document.ts";
-import { readLongText, type IncomingMessage, type IncomingReaction } from "@ted-personal-assistant/signal";
+import { readLongText } from "@ted-personal-assistant/signal";
+import { toSignalStyles } from "@ted-personal-assistant/signal/messenger";
+import type { IncomingMessage, IncomingReaction, OutgoingMessage, Target } from "@ted-personal-assistant/messenger";
+import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
 import { MAX_SPOKEN_CHARS } from "@ted-personal-assistant/signal/tts";
 
-// The shared conversation pipeline against a fake Signal client. The first block pins the owner's private chat
+// The shared conversation pipeline against a fake messenger. The first block pins the owner's private chat
 // exactly as it behaved when it lived in main.ts; the second shows groups get the same machinery.
 
 const PIC: Picture = { mediaType: "image/jpeg", data: "QUJD" };
@@ -30,24 +33,27 @@ interface Rig {
   spoken: string[];
 }
 
-function rig(over: { separate?: boolean; run?: (prompt: string, own?: string) => Promise<string>; ready?: boolean; approval?: any; reactionApproval?: any; transcript?: (m: IncomingMessage) => Promise<string>; picture?: (m: IncomingMessage) => Promise<Picture>; pictures?: Picture[][]; document?: (m: IncomingMessage) => Promise<Document>; longText?: (m: IncomingMessage) => { text: string; cut: boolean } | undefined; documents?: Document[][]; now?: () => number; vouch?: boolean; wait?: (ms: number) => Promise<void>; synth?: (words: string) => Promise<string>; foreign?: (words: string) => Promise<string | undefined>; admitGroup?: any; settleMs?: number; settleMaxMs?: number } = {}) {
+function rig(over: { separate?: boolean; run?: (prompt: string, own?: string) => Promise<string>; ready?: boolean; approval?: any; reactionApproval?: any; transcript?: (m: IncomingMessage) => Promise<string>; picture?: (m: IncomingMessage) => Promise<Picture>; pictures?: Picture[][]; document?: (m: IncomingMessage) => Promise<Document>; longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; documents?: Document[][]; now?: () => number; vouch?: boolean; wait?: (ms: number) => Promise<void>; synth?: (words: string) => Promise<string>; foreign?: (words: string) => Promise<string | undefined>; admitGroup?: any; settleMs?: number; settleMaxMs?: number } = {}) {
   const r: Rig = { sent: [], reacts: [], typing: [], reads: [], records: [], prompts: [], spoken: [] };
   let ts = 5000;
-  const signal = {
-    separateAccount: over.separate ?? true,
-    react: async (emoji: string, target: any, groupId?: string) => void r.reacts.push({ emoji, target, groupId }),
-    typing: async (stop = false, groupId?: string) => void r.typing.push({ stop, groupId }),
-    markRead: async (t: number, from?: string) => void r.reads.push({ ts: t, from }),
-    send: async (text: string, opts: { style?: string[]; quote?: unknown; groupId?: string; attachments?: string[] } = {}) => (r.sent.push({ text, styles: opts.style ?? [], quote: opts.quote, groupId: opts.groupId, attachments: opts.attachments }), ++ts),
+  const separate = over.separate ?? true;
+  const messenger = {
+    name: "fake",
+    summary: "fake",
+    self: ACCOUNT,
+    capabilities: { ...FULL_CAPABILITIES, typing: separate, readReceipts: separate, groups: separate, people: separate, voice: separate },
+    react: async (groupId: Target, target: any, emoji: string) => void r.reacts.push({ emoji, target, groupId }),
+    typing: async (groupId: Target, on: boolean) => void r.typing.push({ stop: !on, groupId }),
+    markRead: async (_t: Target, m: { timestamp: number; author?: string }) => void r.reads.push({ ts: m.timestamp, from: m.author }),
+    send: async (groupId: Target, m: OutgoingMessage) => (r.sent.push({ text: m.text, styles: toSignalStyles(m.styles ?? []), quote: m.quote, groupId, attachments: m.attachments?.map((x) => x.file) }), ++ts),
   };
   const record = (groupId: string | undefined, kind: string, _ts: number, text: string) => void r.records.push({ groupId, kind, text });
-  const out = createOutbound(signal as any, (kind, t, text, groupId) => record(groupId, kind, t, text));
+  const out = createOutbound(messenger, (kind, t, text, groupId) => record(groupId, kind, t, text));
   const dir = mkdtempSync(join(tmpdir(), "tts-"));
   const pipeline = createPipeline({
-    signal: signal as any,
+    messenger,
     out,
     record,
-    account: ACCOUNT,
     run: async (_conv, prompt, own, pics, _hooks, docs) => (r.prompts.push(prompt), over.pictures?.push(pics ?? []), over.documents?.push(docs ?? []), { text: await (over.run ?? (async () => "ok"))(prompt, own), costUsd: 0.01 }),
     picture: over.picture ?? (async () => PIC),
     document: over.document ?? (async () => assert.fail("no document")),
@@ -800,7 +806,7 @@ const LONG = Array.from({ length: 400 }, (_, i) => `Sentence ${i} of a very long
 const longRig = (files: Record<string, Buffer | string>, over: Parameters<typeof rig>[0] = {}) => {
   const dir = mkdtempSync(join(tmpdir(), "longtext-"));
   for (const [id, data] of Object.entries(files)) writeFileSync(join(dir, id), data);
-  return rig({ ...over, longText: (m) => readLongText(m.longText!, dir) });
+  return rig({ ...over, longText: async (m) => readLongText(m.longText!, dir) });
 };
 
 test("long message: the owner's model gets the whole text from the attachment, never an unsupported-file sentence", async () => {
@@ -826,7 +832,7 @@ test("long message: a fake text attachment (binary, NUL, a symlink, a folder, mi
   mkdirSync(join(dir, "sub"));
   symlinkSync(join(dir, "real"), join(dir, "link"));
   for (const id of ["bin", "nul", "link", "missing", "sub"]) {
-    const { pipeline, r } = rig({ longText: (m) => readLongText(m.longText!, dir) });
+    const { pipeline, r } = rig({ longText: async (m) => readLongText(m.longText!, dir) });
     await pipeline.handleIncoming(owner(), msg({ text: "the cut start of it", longText: { id, size: 30 } }));
     assert.match(r.prompts[0]!, /^the cut start of it\n\[Note: this message was long and arrived cut off/, id);
     assert.ok(!r.prompts[0]!.includes("secret outside"));

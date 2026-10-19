@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { MAX_IMAGE_BYTES } from "@ted-personal-assistant/signal";
+import { MAX_IMAGE_BYTES } from "@ted-personal-assistant/messenger";
 import type { Document } from "./document.ts";
 import { LIMITS } from "./sanitize.ts";
 
@@ -42,7 +42,7 @@ async function sips(args: string[]): Promise<string> {
 // A picture file -> what the model is shown. Throws a sentence the sender can be told. macOS's own `sips` does the
 // resizing and the HEIC conversion (no dependency); without it only a small picture in a supported format works.
 export async function preparePicture(file: string, maxPixels: number = MAX_PIXELS): Promise<Picture> {
-  // The size Signal reported was checked on arrival; check the file itself, which is what is read. A symlink is not what signal-cli writes.
+  // The size the messenger reported was checked on arrival; check the file itself, which is what is read. A symlink is not what signal-cli writes.
   const st = lstatSync(file);
   if (!st.isFile() || st.size > MAX_IMAGE_BYTES) throw new Error("I can't open that picture (too large, or not a plain file).");
   const bytes = readFileSync(file);

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { onPath, toolEnv } from "./internal/exec.ts";
 import { synthesizeRemote, type Fetch } from "./tts-remote.ts";
+import type { VoiceFormat } from "./voiceformat.ts";
 import { activeVoiceRel, OWNER_SCOPE } from "./voices.ts";
 
 // Local cloned voice: Qwen3-TTS (Apple Silicon, mlx-audio) in its own Python environment (`npm run setup:tts-qwen`).
@@ -115,7 +116,7 @@ class QwenServer {
     this.#touch();
   }
 
-  async say(text: string, scope: string = OWNER_SCOPE): Promise<string> {
+  async say(text: string, scope: string = OWNER_SCOPE, format?: VoiceFormat): Promise<string> {
     const started = Date.now();
     this.#busy++;
     clearTimeout(this.#idle);
@@ -124,7 +125,7 @@ class QwenServer {
       const voice = this.c.voiceRoot ? activeVoiceRel(this.c.voiceRoot, scope) : undefined; // read per reply: a switch needs no restart
       const left = Math.max(1000, this.c.timeoutMs - (Date.now() - started));
       return await synthesizeRemote(
-        { url: `http://127.0.0.1:${port}/say`, headers: { "x-qwen-key": key }, body: voice ? { text, voice } : { text }, secrets: [key], timeoutMs: left, fetchImpl: this.c.fetchImpl },
+        { url: `http://127.0.0.1:${port}/say`, headers: { "x-qwen-key": key }, body: voice ? { text, voice } : { text }, secrets: [key], timeoutMs: left, fetchImpl: this.c.fetchImpl, format },
         "Qwen voice server",
       );
     } catch (e) {
@@ -146,8 +147,8 @@ const serverFor = (c: QwenConfig): QwenServer => {
   return s;
 };
 
-/** Speaks `text` in the cloned voice (the active one of the conversation `scope`: "owner" or a group id) and returns the path of an .m4a in a fresh temp folder (the caller deletes it). Starts the server if needed. */
-export const synthesizeQwen = (text: string, c: QwenConfig, scope: string = OWNER_SCOPE): Promise<string> => serverFor(c).say(text, scope);
+/** Speaks `text` in the cloned voice (the active one of the conversation `scope`: "owner" or a group id) and returns the path of a voice message (an .m4a unless `format` says otherwise) in a fresh temp folder (the caller deletes it). Starts the server if needed. */
+export const synthesizeQwen = (text: string, c: QwenConfig, scope: string = OWNER_SCOPE, format?: VoiceFormat): Promise<string> => serverFor(c).say(text, scope, format);
 
 /** Starts the server ahead of the first reply (at start-up). Never throws: a failure is returned for the log, and the first reply tries again. */
 export async function warmQwen(c: QwenConfig): Promise<string | undefined> {

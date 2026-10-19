@@ -1,16 +1,17 @@
 // `npm run signal:hello`: the assistant's own Signal account sends you a first message, so the chat
 // exists on your phone (an account without a phone number cannot be found by number). Run it
 // while the agent is running with SIGNAL_ACCOUNT set; it uses the agent's own signal-cli daemon.
-import { SignalClient } from "@ted-personal-assistant/signal";
 import { config } from "../src/config.ts";
+import { loadMessengerInUse } from "../src/messenger.ts";
 import { settings } from "../src/settings.ts";
 
 if (config.signalAccount === config.ownerNumber) {
   console.error("SIGNAL_ACCOUNT is not set: the assistant talks in Note to Self, so there is nothing to start. See docs/SIGNAL-ACCOUNT.md.");
   process.exit(1);
 }
-const signal = new SignalClient({ host: settings.signalHost, port: settings.signalPort, account: config.signalAccount, peer: { number: config.ownerNumber, aci: config.ownerAci }, logger: console });
-await signal.connect();
-await signal.send(`Hi, it's ${settings.assistant}. This is my own chat now, so you can talk to me here. Say hi back and I'll answer. 👋`);
+const messenger = await loadMessengerInUse({ owner: { address: config.ownerNumber, id: config.ownerAci }, account: config.signalAccount });
+await messenger.start();
+await messenger.send(undefined, { text: `Hi, it's ${settings.assistant}. This is my own chat now, so you can talk to me here. Say hi back and I'll answer. 👋` });
+messenger.stop();
 console.log("sent: look for a message request from the assistant on your phone, accept it and say hi");
 process.exit(0);

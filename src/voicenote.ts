@@ -13,7 +13,7 @@ export const MAX_AGE_MS = 7 * 24 * 3_600_000;
 
 export interface VoiceNote {
   ts: number; // the voice message's timestamp: its id in the conversation
-  id: string; // attachment id (a plain file name; joined to signal-cli's folder by the caller)
+  id: string; // attachment id (a plain file name; resolved to its file by the messenger)
   size: number;
   by: string; // sender's Signal id
   byName?: string;
