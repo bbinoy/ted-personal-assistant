@@ -386,13 +386,13 @@ test("canUseTool: an approved commit runs once; the same click is not repeated",
 test("a group browse run: a commit click the judge sends on asks in that group, a member's yes lets it continue, another chat's answer does not", async () => {
   const approvals = await import("../src/approvals.ts");
   const { makeApprove } = await import("../src/approvalask.ts");
-  const { setGroupApprover, approveInGroup, DENY_ALL } = await import("../src/permissions.ts");
+  const { setApprovers, approveIn, DENY_ALL } = await import("../src/permissions.ts");
   const posted: { groupId: string; text: string }[] = [];
   let ts = 1000;
-  setGroupApprover((groupId) => makeApprove(async (t) => (posted.push({ groupId, text: t }), ++ts), { compose: async (q) => ({ text: q.details, ms: 0 }), scope: groupId }));
+  setApprovers((groupId) => makeApprove(async (t) => (posted.push({ groupId, text: t }), ++ts), { compose: async (q) => ({ text: q.details, ms: 0 }), scope: groupId, source: "group" }));
   try {
     const g = onPage(guard("group"));
-    const canUse = asCall(makeCanUseTool(approveInGroup("g-browse"), "browse", undefined, undefined, judgeAsk, g));
+    const canUse = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, undefined, judgeAsk, g));
     const pending = canUse(`${B}click`, { target: "e44", element: "harmless" }, opts);
     for (let i = 0; i < 50 && posted.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     assert.equal(posted.length, 1, "one question");
@@ -400,14 +400,14 @@ test("a group browse run: a commit click the judge sends on asks in that group, 
     assert.match(posted[0]!.text, /Submit order/);
     assert.match(posted[0]!.text, /Customer name: Ann Example/);
     // an answer in another chat (the owner's 1:1 or another group) does nothing
-    assert.equal((await approvals.answer("yes", () => {}, undefined, {}, { scope: approvals.OWNER_SCOPE })).outcome, "none");
+    assert.equal((await approvals.answer("yes", () => {}, undefined, {}, { scope: "owner" })).outcome, "none");
     assert.equal((await approvals.answer("yes", () => {}, undefined, {}, { scope: "g-other", by: "stranger" })).outcome, "none");
     // a (non-owner) member of that group answers
     assert.equal((await approvals.answer("yes", () => {}, undefined, {}, { scope: "g-browse", by: "member" })).outcome, "approved");
     assert.equal((await pending).behavior, "allow");
     // and a payment field in a group asks the group, without the value, whatever the judge would say
     posted.length = 0;
-    const pay = asCall(makeCanUseTool(approveInGroup("g-browse"), "browse", undefined, undefined, judgeAuto, g))(`${B}type`, { target: "e51", text: "4242424242424242" }, opts);
+    const pay = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, undefined, judgeAuto, g))(`${B}type`, { target: "e51", text: "4242424242424242" }, opts);
     for (let i = 0; i < 50 && posted.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     assert.equal(posted.length, 1);
     assert.equal(posted[0]!.groupId, "g-browse");
@@ -415,7 +415,7 @@ test("a group browse run: a commit click the judge sends on asks in that group, 
     await approvals.answer("no", () => {}, undefined, {}, { scope: "g-browse", by: "member" });
     assert.equal((await pay).behavior, "deny");
   } finally {
-    setGroupApprover(() => DENY_ALL);
+    setApprovers(() => DENY_ALL);
   }
 });
 

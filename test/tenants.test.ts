@@ -204,6 +204,14 @@ function runner(over: { key?: string | undefined; ask?: (key: string) => Promise
   return { r, asked, alerts };
 }
 
+test("disclosure: plainly an AI, her notes private from other users AND from the admin through it, and the host's own access said honestly; short", () => {
+  assert.match(R.DISCLOSURE, /\bAI\b/);
+  assert.match(R.DISCLOSURE, /private from other users and from the admin/);
+  assert.match(R.DISCLOSURE, /runs this computer could still technically read the files/);
+  assert.ok(R.DISCLOSURE.length < 320, "short");
+  assert.ok(R.welcomeReply("Carl").startsWith(R.DISCLOSURE));
+});
+
 test("turn: no instance key means a plain 'not set up for friends' with the AI line, a notice for the admin, no model call and never the owner's login", async () => {
   const rec = join_("Eve");
   const { r, asked, alerts } = runner({ key: undefined });

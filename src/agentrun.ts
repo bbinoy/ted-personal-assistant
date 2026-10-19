@@ -17,7 +17,7 @@ import { createMemoryServer } from "./memory-tools.ts";
 import { createWeatherServer } from "./weathertools.ts";
 import { createDrawServer } from "./drawtool.ts";
 import { announceMemoryChanges, noteWritten, recordMemoryChange } from "./memorynotice.ts";
-import { approveInGroup, makeCanUseTool, type Approve } from "./permissions.ts";
+import { approveIn, makeCanUseTool, type Approve } from "./permissions.ts";
 import { hiddenTools } from "./policy.ts";
 import { OFFERED_SKILLS, PROFILES } from "./profiles.ts";
 import { changesCalendar, nudgeRadar } from "./radar-nudge.ts";
@@ -135,7 +135,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
   const tellKey = opts.source === "chat" ? OWNER_KEY : opts.source === "group" ? (tenant?.key ?? opts.memory?.groupId) : undefined;
   const mode: BrowseMode = opts.source === "group" ? "group" : "owner";
-  const askedIn = tenant ? approveInGroup(tenant.key) : mode === "group" && opts.memory?.groupId ? approveInGroup(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
+  const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && opts.memory?.groupId ? approveIn(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
   const browseTool =
     settings.browse && (opts.source === "chat" || opts.source === "background" || opts.source === "group") && (!tenant || tenant.consented)
       ? createBrowseServer({ mode, groupId: opts.memory?.groupId, key: tellKey, spent: tenant?.overBudget, run: browseRunner(askedIn, tenant) })

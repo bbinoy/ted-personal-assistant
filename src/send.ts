@@ -21,7 +21,9 @@ export type Content =
 // Delivers one piece of content of the running turn; returns what the model is told.
 export type SendSink = (c: Content) => Promise<string>;
 
-export const OWNER_KEY = "owner"; // the owner's chat; a group's key is its group id
+export const OWNER_KEY = "owner"; // the owner's chat; a group's key is its group id, a tenant's is tenantKey(id)
+export const tenantKey = (id: string): string => `tenant:${id}`;
+export const isTenantKey = (key: string): boolean => key.startsWith("tenant:");
 
 const sinks = new Map<string, SendSink>();
 

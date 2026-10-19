@@ -130,7 +130,7 @@ test("tenant tools: nothing of the owner's, no payment, no saved profile; only w
   const allowed = [...tools].sort();
   assert.ok(["Read", "Write", "Edit", "WebSearch", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send", T.TENANT_CONSENT_TOOL].every((t) => tools.has(t)));
   for (const t of tools) assert.ok(!T.NEVER_FOR_TENANTS.some((re) => re.test(t)), t);
-  const seen = ["Bash", "Skill", "WebFetch", "mcp__browser__browser_click", "mcp__claude_ai_Interactive_Brokers__create_order_instruction", "mcp__memory__undo_dream", "mcp__tenants__create_invite", "mcp__tenants__remove_tenant", "mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-search", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__create_event", "mcp__card__pay", "mcp__profile__fill", "mcp__something__unknown"];
+  const seen = ["Bash", "Glob", "Grep", "NotebookEdit", "Skill", "WebFetch", "mcp__browser__browser_click", "mcp__claude_ai_Interactive_Brokers__create_order_instruction", "mcp__memory__undo_dream", "mcp__tenants__create_invite", "mcp__tenants__remove_tenant", "mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-search", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__create_event", "mcp__card__pay", "mcp__profile__fill", "mcp__something__unknown"];
   for (const t of [...MANIFEST.map((e) => e.tool), ...seen]) {
     if (tools.has(t)) continue;
     assert.equal(asTenant(t, { file_path: join(ann.notesDir, "x.md") }), "deny", t);

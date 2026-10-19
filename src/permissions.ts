@@ -1,5 +1,5 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
-import { audit, type Source } from "./audit.ts";
+import { audit, wordless, type Source } from "./audit.ts";
 import { isJudgeable, judgeAction, mayAutoApprove, type Verdict } from "./autojudge.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
@@ -20,14 +20,19 @@ export type Approve = (
   o?: { typedYes?: boolean },
 ) => Promise<Decision>;
 
-// A group run never asks the owner for anything.
+// A conversation nobody can be asked in (not set up, a person who is gone).
 export const DENY_ALL: Approve = async () => ({ approved: false });
 
-// A group asks in its own group, and any member may answer there (approvals.ts scopes it). Set by main.ts; until then (and in tests)
-// a group asks nobody. Which tools a group run has at all is policy.ts, unchanged: today none of them asks.
-let groupApprover: (groupId: string) => Approve = () => DENY_ALL;
-export const setGroupApprover = (fn: typeof groupApprover) => void (groupApprover = fn);
-export const approveInGroup = (groupId: string): Approve => groupApprover(groupId);
+// One approver per conversation, keyed by Conversation.key (the owner's chat, a group id, "tenant:<id>"): a question goes to the
+// chat that triggered the action and only an answer there applies (approvals.ts scopes it); in a group any member may answer.
+// `background`: an unattended run of that conversation's own (a wake-up, the brief, the mail handler). Set by main.ts (approvers.ts);
+// until then (and in tests) nobody is asked. Which tools a run has at all is policy.ts.
+export interface ApproverOptions {
+  background?: boolean;
+}
+let approvers: (key: string, o?: ApproverOptions) => Approve = () => DENY_ALL;
+export const setApprovers = (fn: typeof approvers) => void (approvers = fn);
+export const approveIn = (key: string, o?: ApproverOptions): Approve => approvers(key, o);
 
 // Pulls id-like fields (id, conversationId, messageId...) out of tool input for the audit log.
 export function idsOf(input: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -119,10 +124,11 @@ export interface CallGuard {
 }
 
 export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judgeContext?: string, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tenantTools?: ReadonlySet<string>): CanUseTool {
+  const log: typeof audit = tenantTools ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   return async (tool, input, { signal }) => {
     const g = guard ? await guard.decide(tool, input) : undefined;
     if (g?.kind === "deny") {
-      audit(tool, "deny-guard", source);
+      log(tool, "deny-guard", source);
       return { behavior: "deny", message: g.reason ?? `${tool} is blocked and cannot be used.` };
     }
     const base = classify(tool, input, source, memoryDir, tenantTools);
@@ -136,7 +142,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (verdict === "allow") {
       // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
-      audit(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
+      log(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
       return { behavior: "allow", updatedInput: f.input };
@@ -144,10 +150,10 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (verdict === "deny") {
       if (isInboxArchive(tool, input) && settings.mailProvider === "gmail") {
         // Gmail archive in log-only mode (GMAIL_ARCHIVE_LIVE=false): recorded like the heartbeat's, so the report and brief show it.
-        audit("gmail_archive", "would-archive", source, { id: input.threadId });
+        log("gmail_archive", "would-archive", source, { id: input.threadId });
         return { behavior: "deny", message: "Archiving is in log-only mode (GMAIL_ARCHIVE_LIVE=false): it was recorded as would-archive and the thread stays in the inbox. Carry on without archiving." };
       }
-      audit(tool, "deny-policy", source, isGmailTool(tool) ? idsOf(input) : undefined);
+      log(tool, "deny-policy", source, isGmailTool(tool) ? idsOf(input) : undefined);
       return { behavior: "deny", message: `${tool} is blocked by policy (or its input is) and cannot be used.` };
     }
     // A small model's second opinion, only for what code puts on the floor (autojudge.ts). In shadow
@@ -156,7 +162,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     const onceOnly = g ? !!g.once && !g.payment : once(tool);
     const doneAt = onceOnly ? done.get(key) : undefined;
     if (doneAt !== undefined && Date.now() - doneAt < DONE_WINDOW_MS) {
-      audit(tool, "deny-already-done", source);
+      log(tool, "deny-already-done", source);
       return { behavior: "deny", message: "That exact call was already approved and done a moment ago. Do not repeat it; check its result once if you need to be sure it went through." };
     }
     let description = g?.description ?? describeCall(tool, input);
@@ -167,7 +173,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       const draft = await readBack(entryFor(tool)?.view, input);
       view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
       if (!view || (view.action !== "forward" && view.to.length === 0)) {
-        audit(tool, "deny-unreadable-draft", source);
+        log(tool, "deny-unreadable-draft", source);
         return { behavior: "deny", message: "That mail could not be read back, so it cannot be shown for approval and was not sent." };
       }
       description = describeCall(tool, input, view);
@@ -177,27 +183,27 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     // A chat send is judged against the owner's words; with none on record there is nothing to judge it against.
     if (settings.autoApprove !== "off" && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, source, view)) && (view === undefined || (source === "chat" && ownerMessage !== undefined))) {
       judged = await judge({ source, description, ownerMessage: source === "chat" ? ownerMessage : undefined, assistantSaid: source === "chat" && chatAssistantMessage ? chatAssistantMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext });
-      audit(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts });
+      log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts });
       if (mayAutoApprove(settings.autoApprove, source, judged)) {
-        audit(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
+        log(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
         if (onceOnly) remember(key);
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
     }
     if ((failures.get(key) ?? 0) >= MAX_FAILED_ASKS) {
-      audit(tool, "deny-reask-cap", source);
+      log(tool, "deny-reask-cap", source);
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
-    audit(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
+    log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
     const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, g?.payment ? { typedYes: true } : undefined);
     if (d.failure) {
       failures.set(key, (failures.get(key) ?? 0) + 1);
-      audit(tool, "ask-failed", source, { reason: d.failure });
+      log(tool, "ask-failed", source, { reason: d.failure });
       return { behavior: "deny", message: `The approval could not be confirmed: ${d.failure}. Nothing was executed.${d.feedback ? ` ${OWNER} had replied: ${JSON.stringify(d.feedback)}.` : ""} Decide yourself: ask ${OWNER} again in your own words (at most ${MAX_FAILED_ASKS - (failures.get(key) ?? 0)} more time(s) for this call), rephrase the request, or drop the action.` };
     }
     failures.delete(key);
-    if (judged) audit(tool, "judge-vs-owner", source, { judge: judged.decision, ownerApproved: d.approved });
-    audit(
+    if (judged) log(tool, "judge-vs-owner", source, { judge: judged.decision, ownerApproved: d.approved });
+    log(
       tool,
       d.approved ? (d.updatedInput ? "ask-approved-modified" : "ask-approved") : d.feedback ? "ask-feedback" : "ask-declined",
       source,

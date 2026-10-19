@@ -3,9 +3,9 @@ import { createPipeline, group, owner, tenant, type Pipeline } from "./conversat
 import { ask, dropTenantWarm, runProfile, prepareChat } from "./agent.ts";
 import { compactChatIfNeeded, compactDue } from "./chatsession.ts";
 import { gmailReaders } from "./gmail.ts";
-import { setDraftReader, setGmailReaders, setGroupApprover, type Approve } from "./permissions.ts";
+import { approveIn, setApprovers, setDraftReader, setGmailReaders } from "./permissions.ts";
 import * as approvals from "./approvals.ts";
-import { makeApprove } from "./approvalask.ts";
+import { createApprovers } from "./approvers.ts";
 import { config, mask } from "./config.ts";
 import { acceptOwner } from "./guards.ts";
 import { createDreamer } from "./dream.ts";
@@ -26,6 +26,7 @@ import { preparePicture } from "./image.ts";
 import { prepareFile, type AudioTools } from "./document.ts";
 import { createOutbound } from "./outbound.ts";
 import { Ledger } from "./payments.ts";
+import { OWNER_KEY } from "./send.ts";
 import { settings } from "./settings.ts";
 import { unsupportedForVoice } from "./lang.ts";
 import { openLog } from "./state.ts";
@@ -35,7 +36,7 @@ import { Limiter } from "./limiter.ts";
 import { activeTenant, admitStranger } from "./tenantroute.ts";
 import { createTenantRunner } from "./tenantrun.ts";
 import { tenantHooks } from "./tenanttools.ts";
-import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByAci, tenantById, tenantContext, targetOf } from "./tenants.ts";
+import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByAci, tenantById, tenantContext } from "./tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
 
 ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
@@ -67,13 +68,13 @@ function record(target: string | undefined, kind: Kind, ts: number, text: string
   void compactIfNeeded(summarizeWithHaiku).catch((e) => console.error("messages: compaction failed:", e.message));
 }
 const out = createOutbound(signal, (kind, ts, text, groupId) => record(groupId, kind, ts, text));
-const approve: Approve = makeApprove((t) => out.replyPlain(t, "approval"));
-// Unattended runs (wake-ups, the brief, the radar, the mail handler) ask the same way, but only an explicit yes / no or a reply
-// to the question answers it: whatever else the owner types meanwhile is a chat message (approvals.ts).
-// A group asks in the group itself; any member may answer there (approvals.ts scopes every question to its conversation).
-// (A tenant's questions, from her browse run, are asked in her own chat: her scope key is "tenant:<id>".)
-setGroupApprover((scope) => makeApprove((t) => out.reply(t, { plain: true, kind: "approval", groupId: scope.startsWith("tenant:") ? targetOf(scope.slice(7)) : scope }), { scope }));
-const approveBackground: Approve = makeApprove((t) => out.replyPlain(t, "approval"), { background: true });
+// Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her unattended
+// runs (wake-ups, the brief, the radar, the mail handler: only an explicit yes / no or a reply to the question answers those, whatever else
+// she types meanwhile is a chat message), a group in the group (any member may answer), a tenant in her own chat. approvals.ts scopes every
+// question to its conversation, so an answer from another one (the admin's included) never applies.
+setApprovers(createApprovers(out));
+const approve = approveIn(OWNER_KEY);
+const approveBackground = approveIn(OWNER_KEY, { background: true });
 // `say` is a plain message to the owner. `notify` is what the assistant sends on its own (mail
 // alerts, handled mail, setup problems) and is also remembered, so the chat knows what a reply
 // like "yes, do that" refers to (messages.ts). Memory announcements and chat answers use `say`.

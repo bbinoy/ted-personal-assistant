@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick as settle } from "./util.ts";
-import { answer, answerReaction, request } from "../src/approvals.ts";
+import { answer, answerReaction, request } from "./approvalrig.ts";
 import { makeApprove } from "../src/approvalask.ts";
 import type { AnswerJudgement } from "../src/approvalprompt.ts";
 import type { Verdict } from "../src/autojudge.ts";
@@ -94,7 +94,7 @@ test("a payment is asked only in the owner's chat: a group's and a background ru
   let sent = 0;
   const send = async () => (sent++, 1);
   const never2 = (async () => assert.fail("no question must be written")) as never;
-  for (const o of [{ scope: "group-1" }, { background: true }]) {
+  for (const o of [{ scope: "group-1", source: "group" as const }, { scope: "owner", source: "background" as const, background: true, mayPay: true }]) {
     const approve = makeApprove(send, { ...o, compose: never2, request: never2 });
     const d = await approve("💳 Card payment approval", call, new AbortController().signal, { typedYes: true });
     assert.equal(d.approved, false);
