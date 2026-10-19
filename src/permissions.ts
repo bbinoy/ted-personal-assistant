@@ -1,6 +1,6 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, type Verdict } from "./autojudge.ts";
+import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, type Verdict } from "./autojudge.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
 import { isGmailTool, isInboxArchive } from "./gmailrules.ts";
@@ -70,6 +70,8 @@ const done = new Map<string, number>();
 // agent, but only this many times in total, so the loop cannot spin.
 const MAX_FAILED_ASKS = 2;
 const failures = new Map<string, number>();
+// The judge's `fix` verdicts (a call held back for wrong arguments) per tool and run: at most this many, then the owner is asked (autojudge.ts).
+const MAX_FIXES = 2;
 // Keys sorted at every depth. (A JSON.stringify key-list replacer also filters NESTED keys, so two events that differ only
 // in start.dateTime had the same key and the second was refused as "already done".)
 const stable = (v: unknown): unknown => (Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, stable(x)])) : v);
@@ -125,6 +127,8 @@ export interface CallGuard {
 
 export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judgeContext?: string, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false): CanUseTool {
   const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
+  // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
+  const fixes = new Map<string, { n: number; keys: Set<string> }>();
   return async (tool, input, { signal }) => {
     const g = guard ? await guard.decide(tool, input) : undefined;
     if (g?.kind === "deny") {
@@ -182,8 +186,20 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     const [ownerMessage, ...earlier] = [...chatOwnerMessages].reverse();
     // A chat send is judged against the owner's words; with none on record there is nothing to judge it against.
     if (settings.autoApprove !== "off" && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, source, view)) && (view === undefined || (source === "chat" && ownerMessage !== undefined))) {
-      judged = await judge({ source, description, ownerMessage: source === "chat" ? ownerMessage : undefined, assistantSaid: source === "chat" && chatAssistantMessage ? chatAssistantMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext });
-      log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts });
+      judged = await judge({ source, description: description + notifyNote(tool, input), ownerMessage: source === "chat" ? ownerMessage : undefined, assistantSaid: source === "chat" && chatAssistantMessage ? chatAssistantMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext });
+      // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
+      // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. Shadow mode: the owner is asked as today.
+      const fx = fixes.get(tool) ?? { n: 0, keys: new Set<string>() };
+      if (judged.decision === "fix" && settings.autoApprove !== "shadow") {
+        const why = !mayFix(tool, { guardStep: g?.kind === "ask", payment: g?.payment }) ? "not-fixable" : fx.n >= MAX_FIXES ? "fix-cap" : fx.keys.has(key) ? "same-arguments" : undefined;
+        if (!why) {
+          fixes.set(tool, { n: fx.n + 1, keys: fx.keys.add(key) });
+          log(tool, "judge-fix", source, { reason: judged.reason, mode: settings.autoApprove, count: fx.n + 1, ...g?.facts });
+          return { behavior: "deny", message: `Not run, nobody was asked: ${JSON.stringify(judged.reason)}. Correct the arguments and call the tool again, once. If you cannot tell the right value, ask ${OWNER} in chat instead of guessing.` };
+        }
+        judged = { decision: "ask", reason: judged.reason };
+        log(tool, "judge-ask", source, { reason: judged.reason, mode: settings.autoApprove, fix: why, ...g?.facts });
+      } else log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts });
       if (mayAutoApprove(settings.autoApprove, source, judged)) {
         log(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
         if (onceOnly) remember(key);
