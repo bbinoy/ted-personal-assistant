@@ -1,38 +1,51 @@
-// npm run tenants -- list | invite [note] | set-key <id> | forget-key <id>: the owner's terminal side of tenants (docs/SETUP.md "More than one person").
-// Local terminal only. `set-key` is the local-only implementation of the intake (src/intake.ts): the key is typed at a hidden prompt and goes straight
-// to OpenBao; it is never printed, never logged, and never goes through chat.
-import { localIntake } from "../src/intake.ts";
-import { readHiddenFromTerminal } from "../src/profilecli.ts";
-import { tenantKeys } from "../src/secrets.ts";
+// npm run tenants -- list | invite [note] | grant <id> <capability> | revoke <id> <capability> | set-admin <id>: the administrator's terminal side of tenants
+// (docs/SETUP.md "More than one person"). Local terminal only. This is the ONLY place the admin role and the capabilities change: no tool, no chat path,
+// no model can reach them (test/tenants.test.ts walks every tool).
+import { config } from "../src/config.ts";
 import { settings } from "../src/settings.ts";
 import { describeTenants } from "../src/tenanttools.ts";
-import { mintInvite, tenantById } from "../src/tenants.ts";
+import { CAPABILITIES, ensureOwner, grant, isCapability, mintInvite, revoke, setAdmin } from "../src/tenants.ts";
 
 const [cmd, arg, ...rest] = process.argv.slice(2);
 const say = (l: string) => console.log(l);
+const usage = `usage: npm run tenants -- list | invite [note] | grant <id> <capability> | revoke <id> <capability> | set-admin <id>\ncapabilities: ${CAPABILITIES.join(", ")}`;
 
-if (!settings.tenants) {
+// The admin role is the way back in after a lock-out, so it works with TENANTS off too; everything about friends needs TENANTS=on.
+if (cmd !== "set-admin" && !settings.tenants) {
   say("TENANTS is off. Set TENANTS=on in .env (and give the assistant its own Signal account) first; see docs/SETUP.md.");
   process.exit(1);
 }
+ensureOwner({ number: config.ownerNumber, aci: config.ownerAci });
 
 if (cmd === "list") {
-  const lines = await describeTenants(tenantKeys);
-  say(lines.length ? lines.join("\n") : "No tenants yet. Mint an invite: npm run tenants -- invite \"for Anna\" (or ask the assistant in your chat).");
+  const lines = describeTenants();
+  say(lines.join("\n"));
+  if (lines.length === 1) say("No tenants yet. Mint an invite: npm run tenants -- invite \"for Anna\" (or ask the assistant in your chat).");
 } else if (cmd === "invite") {
   const made = mintInvite([arg, ...rest].filter(Boolean).join(" ") || undefined);
   say(made ? `Invite code: ${made.code}\nSingle use, valid until ${new Date(made.expiresAt).toLocaleString()}. She sends it to the assistant in a private Signal message.` : "Too many invite codes are open already.");
-} else if (cmd === "set-key" && arg) {
-  const r = await localIntake(arg, tenantKeys(), readHiddenFromTerminal).catch((e: Error) => ({ ok: false as const, reason: e.message }));
-  say(r.ok ? `Stored ${arg}'s Anthropic API key in OpenBao (tenants/${arg}/anthropic_api_key).` : `Not stored: ${r.reason}.`);
-  process.exit(r.ok ? 0 : 1);
-} else if (cmd === "forget-key" && arg) {
-  if (!tenantById(arg)) {
+} else if ((cmd === "grant" || cmd === "revoke") && arg && rest[0]) {
+  if (!isCapability(rest[0])) {
+    say(`Not a capability: ${rest[0]}. ${CAPABILITIES.join(", ")}`);
+    process.exit(1);
+  }
+  const rec = (cmd === "grant" ? grant : revoke)(arg, rest[0]);
+  if (!rec) {
     say("No such tenant.");
     process.exit(1);
   }
-  say((await tenantKeys().forget(arg)) ? `Removed ${arg}'s API key from OpenBao.` : "There was no key to remove.");
+  say(`${rec.id}: ${rec.capabilities.join(", ") || "no capabilities"}`);
+} else if (cmd === "set-admin" && arg) {
+  // Until every person has her own file root, the admin chat is the instance's own files: they stay the owner's. Moving the role to a friend would
+  // hand them to her, so for now it can only be set (back) on the owner's record.
+  if (arg !== "owner") {
+    say("Not yet: the admin chat is the owner's own files, so the role can only be (re)set on 'owner' until every person has her own file root.");
+    process.exit(1);
+  }
+  const rec = setAdmin(arg);
+  say(rec ? `${rec.id} is the admin.` : "No such record.");
+  process.exit(rec ? 0 : 1);
 } else {
-  say("usage: npm run tenants -- list | invite [note] | set-key <id> | forget-key <id>");
+  say(usage);
   process.exit(1);
 }

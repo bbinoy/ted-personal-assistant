@@ -4,7 +4,6 @@ import { recordCost } from "./budget.ts";
 import { createSendServer, OWNER_KEY } from "./send.ts";
 import { createVoiceServer } from "./voicetool.ts";
 import { createTenantAdminServer, createTenantServer, tenantEnv, type TenantRun } from "./tenanttools.ts";
-import { tenantKeys } from "./secrets.ts";
 import { browseSystem, createBrowseServer } from "./browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "./browseguard.ts";
 import { browseStatus, browserServer } from "./browseserver.ts";
@@ -155,9 +154,9 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     : tenant && !tenant.consented
       ? { tenant: createTenantServer(tenant) }
       : opts.memory || browseTool || sendServer
-        ? { ...(sendServer ? { send: sendServer } : {}), ...(weatherServer ? { weather: weatherServer } : {}), ...(drawServer ? { draw: drawServer } : {}), ...(voiceServer ? { voice: voiceServer } : {}), ...(opts.memory ? { memory: createMemoryServer({ notesDir: opts.memory.dir, groupId: opts.memory.groupId, tenantLog: tenant?.logFile, record: opts.memory.notify ? recordMemoryChange : () => {} }) } : {}), ...(browseTool ? { browse: browseTool } : {}), ...(opts.source === "chat" && settings.tenants ? { tenants: createTenantAdminServer({ keys: tenantKeys }) } : {}) } // the owner's tenant administration exists only with TENANTS=on
+        ? { ...(sendServer ? { send: sendServer } : {}), ...(weatherServer ? { weather: weatherServer } : {}), ...(drawServer ? { draw: drawServer } : {}), ...(voiceServer ? { voice: voiceServer } : {}), ...(opts.memory ? { memory: createMemoryServer({ notesDir: opts.memory.dir, groupId: opts.memory.groupId, tenantLog: tenant?.logFile, record: opts.memory.notify ? recordMemoryChange : () => {} }) } : {}), ...(browseTool ? { browse: browseTool } : {}), ...(opts.source === "chat" && settings.tenants ? { tenants: createTenantAdminServer() } : {}) } // the owner's tenant administration exists only with TENANTS=on
         : undefined;
-  // A tenant's run is on her own key or it does not run: the instance's login is never a fallback (tenanttools.ts tenantEnv).
+  // A tenant's run is on the instance key or it does not run: the owner's login is never a fallback (tenanttools.ts tenantEnv).
   const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
   const env = opts.tenant ? tenantEnv(baseEnv, opts.tenant.apiKey) : baseEnv;
   return {

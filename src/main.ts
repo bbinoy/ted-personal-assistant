@@ -35,18 +35,19 @@ import { Limiter } from "./limiter.ts";
 import { activeTenant, admitStranger } from "./tenantroute.ts";
 import { createTenantRunner } from "./tenantrun.ts";
 import { tenantHooks } from "./tenanttools.ts";
-import { markDisclosed, plainSummary, tenantByAci, tenantById, tenantContext, targetOf } from "./tenants.ts";
-import { tenantKeys } from "./secrets.ts";
+import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByAci, tenantById, tenantContext, targetOf } from "./tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
 
 ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
 if (new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
 
+// The owner's record in the registry (tenants.ts): made on the first start from SIGNAL_OWNER_NUMBER, its account id learned from her first message.
+const ownerRecord = ensureOwner({ number: config.ownerNumber, aci: config.ownerAci });
 const signal = new SignalClient({
   host: settings.signalHost,
   port: settings.signalPort,
   account: config.signalAccount,
-  peer: config.signalAccount !== config.ownerNumber ? { number: config.ownerNumber, aci: config.ownerAci } : undefined,
+  peer: config.signalAccount !== config.ownerNumber ? { number: config.ownerNumber, aci: config.ownerAci ?? ownerRecord.acis[0] } : undefined,
   logger: console, // the app's console is the timestamped, redacting one from log.ts
 });
 // What was said goes into that conversation's own log: the owner's chat, or the group's (made on first use).
@@ -111,9 +112,8 @@ const audioTools: AudioTools = {
 
 // Group chats (src/group.ts): in any group the owner is a member of. Everything said or reacted there goes
 // into that group's own history; the brain decides when the assistant speaks. No access to anything private.
-const isOwnerId = (number?: string, uuid?: string) => number === config.ownerNumber || (!!config.ownerAci && uuid === config.ownerAci);
-const isOwnerAccount = (who: { number?: string; uuid?: string }) => isOwnerId(who.number, who.uuid);
-const fromOwner = (w: { from: string; fromUuid?: string }) => isOwnerId(w.from, w.fromUuid);
+const isOwnerAccount = (who: { number?: string; uuid?: string }) => resolveSender({ number: who.number, aci: who.uuid })?.role === "admin";
+const fromOwner = (w: { from: string; fromUuid?: string }) => isOwnerAccount({ number: w.from || undefined, uuid: w.fromUuid });
 const vouch = (groupId: string) => ownerInGroup(groupId, () => signal.groups(), isOwnerAccount); // is the owner in this group?
 
 // Both kinds of conversation run through one pipeline (src/conversation.ts). Spoken replies need the
@@ -122,7 +122,7 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => signal.groups(), 
 // Several people on one instance (TENANTS=on, src/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
 // Needs the assistant's own Signal account: in Note to Self there is nobody else to talk to.
 if (settings.tenants && !signal.separateAccount) throw new Error("TENANTS=on needs the assistant's own Signal account (SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
-const tenantRunner = createTenantRunner({ keys: tenantKeys });
+const tenantRunner = createTenantRunner({ alertAdmin: (text) => void out.replyPlain(text, "notice") });
 tenantHooks.drop = dropTenantWarm;
 const pipeline: Pipeline = createPipeline({
   signal,
@@ -146,8 +146,8 @@ const pipeline: Pipeline = createPipeline({
   admitGroup: (_conv, m) => groupBrain(m),
   compact: async (conv, mode) => {
     if (conv.kind !== "tenant") return compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode);
-    const rec = tenantById(conv.tenantId!); // hers runs on her own key
-    const apiKey = rec && (await tenantKeys().get(rec.id).catch(() => undefined));
+    const rec = tenantById(conv.tenantId!); // hers runs on the instance key
+    const apiKey = settings.tenantApiKey;
     if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { apiKey, costFile: tenantContext(rec).costFile });
   }, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it
   // The owner's chat is kept warm after each turn; the group that spoke last has its own warm process (group.ts).
@@ -172,10 +172,11 @@ function fromStranger(m: IncomingMessage): void {
 }
 signal.onMessage((m) => {
   if (!m.group) {
-    if (!acceptOwner(m, config.ownerNumber)) {
+    if (!acceptOwner(m, resolveSender)) {
       if (settings.tenants && m.other) return fromStranger(m);
       return void console.log(`ignored a message from ${mask(m.from)}`);
     }
+    learnOwnerAci({ number: m.from, aci: m.fromUuid }); // the first message from her number carries her account id: the pair is recorded once
     if (!m.edited && out.isOwnEcho(m)) return; // one of our own replies coming back (an edit is the owner's, never an echo)
   }
   route(m, { type: "message", m });
@@ -183,7 +184,7 @@ signal.onMessage((m) => {
 
 // A message deleted for everyone: the same door as a message.
 signal.onDelete((d) => {
-  if (d.group || acceptOwner(d, config.ownerNumber)) route(d, { type: "deletion", d });
+  if (d.group || acceptOwner(d, resolveSender)) route(d, { type: "deletion", d });
   else if (settings.tenants && d.other && activeTenant(d.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(d.fromUuid)!.id), { type: "deletion", d }).catch((e) => console.error("tenant deletion error:", e.message));
 });
 
@@ -199,7 +200,7 @@ if (settings.mailProvider === "gmail") setGmailReaders(gmailReaders());
 // owner is feedback. Our own status icons come back as reactions and are dropped.
 signal.onReaction((r) => {
   if (r.isRemove || signal.isOwnReaction(r)) return;
-  if (r.group || acceptOwner(r, config.ownerNumber)) route(r, { type: "reaction", r });
+  if (r.group || acceptOwner(r, resolveSender)) route(r, { type: "reaction", r });
   else if (settings.tenants && r.other && activeTenant(r.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(r.fromUuid)!.id), { type: "reaction", r }).catch((e) => console.error("tenant reaction error:", e.message));
 });
 

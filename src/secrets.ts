@@ -101,45 +101,8 @@ export function ownerSecrets(): TenantSecrets {
   return (shared ??= new TenantSecrets(appBao(), OWNER));
 }
 
-// ---- tenants' Anthropic API keys ----
+// ---- the instance key ----
 
-// A tenant's own API key lives at tenants/<id>/anthropic_api_key (data: { value }). Only code reads it, at run time, to hand it to that tenant's
-// runs through the environment (agentrun.ts); the model never sees it and the registry holds a reference only. The key is entered by the
-// person herself through a one-time link or at the owner's terminal (intake.ts), NEVER in chat.
-// The app's token is limited to tenants/owner/ by default; `npm run openbao -- setup` with TENANTS=on widens it to read these keys (openbaoadmin.ts policyHcl).
-export const KEY_ITEM = "anthropic_api_key";
+// Tenants have no keys of their own: they run on TENANT_ANTHROPIC_API_KEY (settings.tenantApiKey). This is only the shape check the doctor uses.
 const KEY_SHAPE = /^sk-ant-[A-Za-z0-9_-]{16,300}$/;
 export const looksLikeApiKey = (v: unknown): v is string => typeof v === "string" && KEY_SHAPE.test(v);
-
-export interface KeyStore {
-  get(tenant: string): Promise<string | undefined>;
-  put(tenant: string, key: string): Promise<void>;
-  forget(tenant: string): Promise<boolean>;
-}
-
-export class TenantKeys implements KeyStore {
-  readonly bao: OpenBao;
-  constructor(bao: OpenBao) {
-    this.bao = bao;
-  }
-  private path(tenant: string): string {
-    if (!TENANT_ID.test(tenant) || tenant === OWNER) throw new SecretsError("not a tenant id"); // the owner uses the instance's own login, never a stored key
-    return `tenants/${tenant}/${KEY_ITEM}`;
-  }
-  async get(tenant: string): Promise<string | undefined> {
-    const v = (await this.bao.read(this.path(tenant)))?.value;
-    return looksLikeApiKey(v) ? v : undefined; // a missing or malformed item is "no key", and nothing else is guessed
-  }
-  async put(tenant: string, key: string): Promise<void> {
-    if (!looksLikeApiKey(key)) throw new SecretsError("that does not look like an Anthropic API key");
-    return this.bao.write(this.path(tenant), { value: key });
-  }
-  async forget(tenant: string): Promise<boolean> {
-    return this.bao.delete(this.path(tenant));
-  }
-}
-
-let sharedKeys: TenantKeys | undefined;
-export function tenantKeys(): TenantKeys {
-  return (sharedKeys ??= new TenantKeys(appBao()));
-}

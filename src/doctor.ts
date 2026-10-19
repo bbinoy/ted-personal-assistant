@@ -14,7 +14,7 @@ import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./brows
 import { killSwitch } from "./card.ts";
 import { macKeychain, type Keychain } from "./keychain.ts";
 import { BaoError, type OpenBao } from "./openbao.ts";
-import { appBao, keychainNames, OWNER, tenantKeys, type KeyStore } from "./secrets.ts";
+import { appBao, keychainNames, looksLikeApiKey, OWNER } from "./secrets.ts";
 import { invites, listTenants, pausedUntil, readConsent, tenantContext } from "./tenants.ts";
 import { Ledger } from "./payments.ts";
 import { settings } from "./settings.ts";
@@ -83,30 +83,25 @@ export async function openbaoCheck(line: Line, o: { bao?: () => OpenBao; keychai
   }
 }
 
-// The tenants (TENANTS=on): who is there, what state each is in, whether her API key is in OpenBao, what she spent today against her own limit, and
-// whether her key is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
-export async function tenantCheck(line: Line, o: { on?: boolean; keys?: () => KeyStore; now?: number } = {}): Promise<void> {
+// The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today against her own limit,
+// and whether she is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
+export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number } = {}): void {
   const on = o.on ?? settings.tenants;
   if (!on) return line(true, "tenants: off", "TENANTS=off: one person, as always");
   const now = o.now ?? Date.now();
+  const key = "key" in o ? o.key : settings.tenantApiKey;
+  line(key ? (looksLikeApiKey(key) ? true : "warn") : "warn", "tenant API key", key ? (looksLikeApiKey(key) ? "TENANT_ANTHROPIC_API_KEY is set; it must be a separate Console workspace key with a spend limit, never your own" : "TENANT_ANTHROPIC_API_KEY is set but does not look like an Anthropic API key") : "TENANT_ANTHROPIC_API_KEY is not set: friends are told the assistant is not set up for them (set a separate Console workspace key with a spend limit)");
   const all = listTenants();
   const count = (s: string) => all.filter((t) => t.status === s).length;
   line(true, "tenants", `${all.length} (${count("active")} active, ${count("invited")} invited, ${count("suspended")} suspended); ${invites().count(now)} invite code(s) open`);
   for (const rec of all) {
     const ctx = tenantContext(rec);
-    let key: boolean | undefined;
-    try {
-      key = o.keys ? !!(await o.keys().get(rec.id)) : undefined;
-    } catch {
-      key = undefined;
-    }
     const spent = spentToday(ctx.costFile);
     const paused = pausedUntil(ctx, now);
     const problems = [
-      key === false ? "no API key yet (setup incomplete: npm run tenants -- set-key)" : key === undefined ? "API key not checked (OpenBao not reachable)" : "",
       !readConsent(ctx) ? "age/region not confirmed yet" : "",
       spent >= ctx.dailyBudgetUsd ? "today's budget is spent" : "",
-      paused ? `her key is paused until ${localTime(new Date(paused).toISOString())}` : "",
+      paused ? `paused until ${localTime(new Date(paused).toISOString())}` : "",
     ].filter(Boolean);
     line(rec.status === "suspended" || problems.length === 0 ? true : "warn", `tenant ${rec.id}`, `${rec.status}; today $${spent.toFixed(2)} of $${ctx.dailyBudgetUsd}${problems.length ? `; ${problems.join("; ")}` : ""}`);
   }
@@ -215,7 +210,7 @@ export async function doctor() {
 
   browseCheck(line, settings.browse, browseStatus());
   await openbaoCheck(line);
-  await tenantCheck(line, { keys: tenantKeys });
+  tenantCheck(line);
 
   line(true, "proactive radar", settings.proactive ? `chosen by your chat's gate, about every ${settings.radarMinutes} min (its "[radar] ran" lines are in the log)` : "off (PROACTIVE=off)");
 

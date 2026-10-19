@@ -1,7 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import { readJson, writeJson } from "./state.ts";
 
-// One-time codes: an invitation to a friend, or the ticket of a one-time link (intake.ts). A code is shown once, to whoever minted it;
+// One-time codes: an invitation to a friend, or, later, the ticket of a one-time link. A code is shown once, to whoever minted it;
 // only its hash is kept, with an expiry and a small payload. Redeeming one removes it in the same synchronous step that finds it
 // (state.ts: a read-modify-write cannot interleave), so a code works exactly once, even if two messages carry it at the same moment.
 

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { audit } from "./audit.ts";
 import { isInside } from "./contain.ts";
 import { OneTimeCodes } from "./onetime.ts";
 import { FILE as OWNER_LOG, type Summarize } from "./messages.ts";
@@ -18,12 +19,14 @@ import { toPerson } from "@ted-personal-assistant/signal";
 //   tenants/<id>/backup/        snapshots of her notes
 //   tenants/<id>/messages.jsonl everything said in her chat, size-bounded (no summary model: that would run on the owner's login)
 //   tenants/<id>/session.json   her resumed SDK session
-//   tenants/<id>/cost.json      what she spent today on her own key
+//   tenants/<id>/cost.json      what she spent today on the instance key
 //   tenants/<id>/consent.json   the one-time age/region confirmation
 //   tenants/<id>/meta.json      small bookkeeping (disclosure shown, notice times)
 // The folder is outside logs/, state/ and memory/, which are what the owner's chat may read (policy.ts): the owner does not read a friend's
 // notes or history through the assistant. The host's admin can, of course: the files are on the owner's Mac (docs/SAFETY.md).
-// The registry state/tenants.json holds ids, sender account ids (ACI), status and a REFERENCE to the API key in OpenBao, never a key.
+// The registry state/tenants.json holds ONE record per person, the owner included (role admin, every capability, the files above unchanged: pathsOf):
+// id, name, sender account ids (ACI), role, status, capabilities and the credential source, never a key. Tenants run on the instance key
+// (settings.tenantApiKey, from TENANT_ANTHROPIC_API_KEY), the owner on the login.
 // Everything is files, read and written synchronously (state.ts); SQLite is for later.
 
 export const OWNER_ID = "owner";
@@ -33,26 +36,41 @@ export const INVITES = "state/invites.json";
 export type TenantStatus = "invited" | "active" | "suspended";
 export const STATUSES: readonly TenantStatus[] = ["invited", "active", "suspended"];
 
+// admin: the instance's powers (invites, suspending, the doctor); member: everybody else. It changes only through the local CLI (setAdmin, scripts/tenants.ts).
+export type Role = "admin" | "member";
+export const ROLES: readonly Role[] = ["admin", "member"];
+
+// What a person may use; everything else about her is data. The owner has all of them, a friend starts with FRIEND_DEFAULTS.
+export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes"] as const;
+export type Capability = (typeof CAPABILITIES)[number];
+export const FRIEND_DEFAULTS: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream"];
+export const isCapability = (x: unknown): x is Capability => (CAPABILITIES as readonly unknown[]).includes(x);
+
+// Whose model credential her runs use: the instance's Claude login (the owner), or the instance key TENANT_ANTHROPIC_API_KEY (tenants).
+export type Credential = "login" | "instance-key";
+export const CREDENTIALS: readonly Credential[] = ["login", "instance-key"];
+
 export interface TenantRecord {
   id: string;
   name: string; // what she is called (from her Signal profile, or what the owner said); one line
   acis: string[]; // her Signal account id(s): the identity (a number can change hands; the ACI does not)
+  number?: string; // the owner's phone number: the seed of her record until her account id is learned (a friend's number is not known)
+  role: Role;
   status: TenantStatus;
+  capabilities: Capability[];
+  credential: Credential;
   created: string; // ISO time
-  keyRef: string; // where her Anthropic API key is in OpenBao (a path, never the key)
 }
 
 // Her Signal account id, a UUID.
 export const ACI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export const keyRefOf = (id: string): string => `tenants/${id}/anthropic_api_key`;
 
 // ---- typed overrides (tenant.json) ----
 
 export interface TenantConfig {
   language?: string; // the language she writes in, as a hint ("German")
   persona?: string; // how she would like the assistant to talk, in her words (data for the prompt, never rules)
-  dailyBudgetUsd?: number; // her own daily ceiling on her own key
+  dailyBudgetUsd?: number; // her own daily ceiling on the instance key
   maxTurns?: number; // per run
   maxBudgetUsdPerRun?: number; // per run
   browse?: boolean; // false switches the browse tool off for her (it can never be switched on beyond BROWSE)
@@ -125,7 +143,9 @@ export interface TenantContext {
   configFile: string;
   consentFile: string;
   metaFile: string;
-  keyRef: string;
+  role: Role;
+  capabilities: readonly Capability[];
+  credential: Credential;
   config: TenantConfig;
   dailyBudgetUsd: number;
   maxTurns: number;
@@ -139,8 +159,22 @@ const dirOf = (id: string): string => {
   return join(settings.tenantsDir, id);
 };
 
+// Where a person's files are: the owner's are the places the instance has always used (nothing is moved); a friend's are in her folder.
+export interface Paths {
+  root: string;
+  notesDir: string;
+  logFile: string;
+  sessionFile: string;
+  costFile: string;
+}
+export const pathsOf = (rec: Pick<TenantRecord, "id">): Paths =>
+  rec.id === OWNER_ID
+    ? { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: "state/cost.json" }
+    : { root: dirOf(rec.id), notesDir: join(dirOf(rec.id), "notes"), logFile: join(dirOf(rec.id), "messages.jsonl"), sessionFile: join(dirOf(rec.id), "session.json"), costFile: join(dirOf(rec.id), "cost.json") };
+
 export function tenantContext(rec: TenantRecord): TenantContext {
   const dir = dirOf(rec.id);
+  const paths = pathsOf(rec);
   const configFile = join(dir, "tenant.json");
   let raw: unknown;
   try {
@@ -156,15 +190,17 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     status: rec.status,
     target: toPerson(rec.acis[0] ?? ""),
     dir,
-    notesDir: join(dir, "notes"),
+    notesDir: paths.notesDir,
     backupDir: join(dir, "backup"),
-    sessionFile: join(dir, "session.json"),
-    logFile: join(dir, "messages.jsonl"),
-    costFile: join(dir, "cost.json"),
+    sessionFile: paths.sessionFile,
+    logFile: paths.logFile,
+    costFile: paths.costFile,
     configFile,
     consentFile: join(dir, "consent.json"),
     metaFile: join(dir, "meta.json"),
-    keyRef: rec.keyRef,
+    role: rec.role,
+    capabilities: [...rec.capabilities],
+    credential: rec.credential,
     config,
     dailyBudgetUsd: config.dailyBudgetUsd ?? settings.tenantDailyBudgetUsd,
     maxTurns: config.maxTurns ?? 12,
@@ -172,11 +208,6 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     language: config.language,
     persona: config.persona,
   };
-}
-
-// The owner as a tenant: the same fields, pointing at the places the instance has always used. Nothing is moved.
-export function ownerContext(): Pick<TenantContext, "id" | "name" | "notesDir" | "sessionFile" | "logFile" | "costFile" | "dailyBudgetUsd"> {
-  return { id: OWNER_ID, name: settings.owner, notesDir: NOTES_DIR, sessionFile: OWNER_SESSION_FILE, logFile: OWNER_LOG, costFile: "state/cost.json", dailyBudgetUsd: settings.dailyBudgetUsd };
 }
 
 // ---- tools a tenant's run may have ----
@@ -191,10 +222,10 @@ export const connectorTools = (_ctx: Pick<TenantContext, "config">): readonly st
 
 // The tools her run has: her notes (file tools inside notes/ only), web search, the memory tools, send, voice and browse (the browse
 // worker has no profile and no card in this mode, browseguard.ts), and the consent tool. What each may do is still policy.ts.
-export function toolsFor(ctx: Pick<TenantContext, "config">): ReadonlySet<string> {
+export function toolsFor(ctx: Pick<TenantContext, "config" | "capabilities">): ReadonlySet<string> {
   const t = new Set<string>(["Read", "Write", "Edit", "WebSearch", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send", TENANT_CONSENT_TOOL]);
-  if (settings.browse && ctx.config.browse !== false) t.add("mcp__browse__browse");
-  if (ctx.config.voice !== false) t.add("mcp__voice__voice");
+  if (settings.browse && ctx.config.browse !== false && ctx.capabilities.includes("browse")) t.add("mcp__browse__browse");
+  if (ctx.config.voice !== false && ctx.capabilities.includes("voice")) t.add("mcp__voice__voice");
   for (const c of connectorTools(ctx)) t.add(c);
   for (const tool of t) if (NEVER_FOR_TENANTS.some((re) => re.test(tool))) t.delete(tool);
   return t;
@@ -203,27 +234,98 @@ export function toolsFor(ctx: Pick<TenantContext, "config">): ReadonlySet<string
 // ---- the registry ----
 
 interface Registry {
-  tenants: TenantRecord[];
+  tenants: unknown[];
 }
 
-const validRecord = (x: unknown): x is TenantRecord => {
-  const r = x as TenantRecord;
-  return !!r && typeof r.id === "string" && TENANT_ID.test(r.id) && r.id !== OWNER_ID && typeof r.name === "string" && Array.isArray(r.acis) && r.acis.every((a) => typeof a === "string" && ACI.test(a)) && STATUSES.includes(r.status) && typeof r.created === "string";
+const isRecord = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+
+// One stored record, checked and completed: a field a registry written before roles existed lacks gets the safe value (a member with the friend
+// defaults), so an old file keeps working and nobody becomes an admin by omission. Undefined: not a usable record.
+function normalise(x: unknown): TenantRecord | undefined {
+  if (!isRecord(x)) return undefined;
+  const { id, name, acis, status, created } = x;
+  if (typeof id !== "string" || !TENANT_ID.test(id) || typeof name !== "string" || typeof created !== "string") return undefined;
+  if (!Array.isArray(acis) || !acis.every((a) => typeof a === "string" && ACI.test(a)) || !STATUSES.includes(status as TenantStatus)) return undefined;
+  const isOwner = id === OWNER_ID;
+  const role = x.role === undefined ? (isOwner ? "admin" : "member") : x.role;
+  const credential = x.credential === undefined ? (isOwner ? "login" : "instance-key") : x.credential;
+  if (!ROLES.includes(role as Role) || !CREDENTIALS.includes(credential as Credential)) return undefined;
+  if (x.capabilities !== undefined && !(Array.isArray(x.capabilities) && x.capabilities.every(isCapability))) return undefined;
+  const capabilities = x.capabilities === undefined ? (isOwner ? [...CAPABILITIES] : [...FRIEND_DEFAULTS]) : [...new Set(x.capabilities as Capability[])];
+  if (x.number !== undefined && typeof x.number !== "string") return undefined;
+  return { id, name, acis: [...(acis as string[])], ...(typeof x.number === "string" && x.number ? { number: x.number } : {}), role: role as Role, status: status as TenantStatus, capabilities, credential: credential as Credential, created };
+}
+
+// Everybody: the owner (once seeded) and every tenant.
+export const people = (): TenantRecord[] => (readJson<Partial<Registry>>(REGISTRY, {}).tenants ?? []).map(normalise).filter((r): r is TenantRecord => !!r);
+// The tenants: everybody but the owner. What the invitations, routing, suspension and removal work on; none of it can reach the owner's record.
+export const listTenants = (): TenantRecord[] => people().filter((r) => r.id !== OWNER_ID);
+const save = (all: TenantRecord[]) => writeJson(REGISTRY, { tenants: all });
+const update = (id: string, change: (r: TenantRecord) => TenantRecord): TenantRecord | undefined => {
+  const all = people();
+  const at = all.findIndex((t) => t.id === id);
+  if (at < 0) return undefined;
+  all[at] = change(all[at]!);
+  save(all);
+  return all[at];
 };
 
-export function listTenants(): TenantRecord[] {
-  return (readJson<Partial<Registry>>(REGISTRY, {}).tenants ?? []).filter(validRecord).map((r) => ({ ...r, keyRef: keyRefOf(r.id) })); // keyRef is derived: a hand-edited registry cannot point a tenant at another's key
-}
-const save = (tenants: TenantRecord[]) => writeJson(REGISTRY, { tenants });
-
 export const tenantById = (id: string): TenantRecord | undefined => listTenants().find((t) => t.id === id);
-export const tenantByAci = (aci: string | undefined): TenantRecord | undefined => (aci && ACI.test(aci) ? listTenants().find((t) => t.acis.some((a) => a.toLowerCase() === aci.toLowerCase())) : undefined);
+const hasAci = (r: TenantRecord, aci: string) => r.acis.some((a) => a.toLowerCase() === aci.toLowerCase());
+export const tenantByAci = (aci: string | undefined): TenantRecord | undefined => (aci && ACI.test(aci) ? listTenants().find((t) => hasAci(t, aci)) : undefined);
 // The conversation target of a tenant (to send to her), for the outbound path.
 export const targetOf = (id: string): string | undefined => {
   const t = tenantById(id);
   return t?.acis[0] ? toPerson(t.acis[0]) : undefined;
 };
 export const tenantByTarget = (target: string | undefined): TenantRecord | undefined => (target?.startsWith("to:") ? tenantByAci(target.slice(3)) : undefined);
+
+// ---- who is who: identity is the account id; the owner's number is the seed and the fallback ----
+
+// The owner's record, made on first start from SIGNAL_OWNER_NUMBER (and SIGNAL_OWNER_ACI when set): admin, every capability, the existing files.
+// Idempotent; an existing record is kept as it is (what was learned or changed stays).
+export function ensureOwner(seed: { number: string; aci?: string }, now = new Date()): TenantRecord {
+  const have = people().find((r) => r.id === OWNER_ID);
+  if (have) return have;
+  const acis = seed.aci && ACI.test(seed.aci) ? [seed.aci] : [];
+  const rec: TenantRecord = { id: OWNER_ID, name: settings.owner, acis, ...(seed.number ? { number: seed.number } : {}), role: "admin", status: "active", capabilities: [...CAPABILITIES], credential: "login", created: now.toISOString() };
+  save([rec, ...people()]);
+  return rec;
+}
+
+// The record a sender is: by account id when she has one that is known, else by number (the owner's, until her account id is learned).
+export function resolveSender(who: { number?: string; aci?: string }): TenantRecord | undefined {
+  const all = people();
+  if (who.aci && ACI.test(who.aci)) {
+    const byAci = all.find((r) => hasAci(r, who.aci!));
+    if (byAci) return byAci;
+  }
+  return who.number ? all.find((r) => !!r.number && r.number === who.number) : undefined;
+}
+
+// The owner's first message carries her account id: the pair (number, account id) is written to the record once, and logged. Never through chat or
+// the model; later messages are matched by the account id. Nothing is learned when the record has an id already or the id belongs to someone else.
+export function learnOwnerAci(who: { number: string; aci?: string }): boolean {
+  if (!who.aci || !ACI.test(who.aci)) return false;
+  const rec = people().find((r) => r.id === OWNER_ID);
+  if (!rec || rec.acis.length || !rec.number || rec.number !== who.number || people().some((r) => hasAci(r, who.aci!))) return false;
+  update(OWNER_ID, (r) => ({ ...r, acis: [who.aci!] }));
+  audit("owner_aci", "learned", "chat");
+  console.log(`tenants: the owner's Signal account id (${who.aci.slice(0, 8)}...) was learned from the first message from her number and recorded once (state/tenants.json)`);
+  return true;
+}
+
+// ---- roles and capabilities: changed only by the local CLI (scripts/tenants.ts); no tool, no chat path, no model ----
+
+// The admin role moves to this record: the previous admin(s) become members, so there is exactly one. Undefined: no such record.
+export function setAdmin(id: string): TenantRecord | undefined {
+  if (!people().some((r) => r.id === id)) return undefined;
+  const all = people().map((r) => ({ ...r, role: (r.id === id ? "admin" : "member") as Role }));
+  save(all);
+  return all.find((r) => r.id === id);
+}
+export const grant = (id: string, capability: Capability): TenantRecord | undefined => update(id, (r) => ({ ...r, capabilities: [...new Set([...r.capabilities, capability])] }));
+export const revoke = (id: string, capability: Capability): TenantRecord | undefined => update(id, (r) => ({ ...r, capabilities: r.capabilities.filter((c) => c !== capability) }));
 
 // A new id from her name: lower case, a short random tail so two Annas never collide.
 export function newTenantId(name: string, taken: ReadonlySet<string> = new Set(listTenants().map((t) => t.id))): string {
@@ -262,43 +364,28 @@ export function redeemInvite(code: string, who: { aci: string; name?: string }, 
   if (tenantByAci(who.aci)) return undefined; // she already is one
   const invite = invites().redeem(code, now);
   if (!invite) return undefined;
-  const all = listTenants();
+  const all = people();
   const name = oneLine("tenant name", (who.name || invite.note || "a friend").replace(/[<>"]/g, " "), LIMITS.name) || "a friend";
   const id = newTenantId(name, new Set(all.map((t) => t.id)));
-  const rec: TenantRecord = { id, name, acis: [who.aci], status: "invited", created: new Date(now).toISOString(), keyRef: keyRefOf(id) };
+  const rec: TenantRecord = { id, name, acis: [who.aci], role: "member", status: "invited", capabilities: [...FRIEND_DEFAULTS], credential: "instance-key", created: new Date(now).toISOString() };
   save([...all, rec]);
   provision(rec);
   console.log(`tenants: ${id} joined with an invitation`);
   return rec;
 }
 
-export function setStatus(id: string, status: TenantStatus): TenantRecord | undefined {
-  const all = listTenants();
-  const at = all.findIndex((t) => t.id === id);
-  if (at < 0) return undefined;
-  all[at] = { ...all[at]!, status };
-  save(all);
-  return all[at];
-}
+export const setStatus = (id: string, status: TenantStatus): TenantRecord | undefined => (id === OWNER_ID ? undefined : update(id, (r) => ({ ...r, status })));
 
-// Remove a tenant and her data: the registry entry, her folder (notes, history, session, cost, consent), her API key in OpenBao (`forgetKey`).
+// Remove a tenant and her data: the registry entry and her folder (notes, history, session, cost, consent). True: she was a tenant.
 // What the host already holds elsewhere (the SDK's own transcript of her sessions under ~/.claude, backups of the Mac) is not reached: docs/SAFETY.md.
-export async function deleteTenant(id: string, o: { forgetKey?: (id: string) => Promise<void>; drop?: (id: string) => void } = {}): Promise<{ removed: boolean; keyRemoved: boolean }> {
-  const rec = tenantById(id);
-  if (!rec) return { removed: false, keyRemoved: false };
-  save(listTenants().filter((t) => t.id !== id)); // first: from this moment she is nobody
+export function deleteTenant(id: string, o: { drop?: (id: string) => void } = {}): boolean {
+  if (!tenantById(id)) return false;
+  save(people().filter((t) => t.id !== id)); // first: from this moment she is nobody
   o.drop?.(id);
   const dir = dirOf(id);
   if (isInside(dir, settings.tenantsDir)) rmSync(dir, { recursive: true, force: true });
-  let keyRemoved = false;
-  try {
-    await o.forgetKey?.(id);
-    keyRemoved = !!o.forgetKey;
-  } catch (e) {
-    console.error(`tenants: ${id}'s key could not be removed from OpenBao: ${(e as Error).message}`);
-  }
   console.log(`tenants: ${id} deleted`);
-  return { removed: true, keyRemoved };
+  return true;
 }
 
 // ---- consent, disclosure, notice times: small files in her folder ----
@@ -324,7 +411,7 @@ export function recordConsent(ctx: Pick<TenantContext, "consentFile" | "id">, re
 interface Meta {
   disclosedAt?: string;
   noticeAt?: Record<string, string>;
-  pausedUntil?: number; // her key's cooldown (cooldown.ts keeps it in memory; this is for `npm run doctor`, a separate process)
+  pausedUntil?: number; // her cooldown (cooldown.ts keeps it in memory; this is for `npm run doctor`, a separate process)
 }
 const meta = (ctx: Pick<TenantContext, "metaFile">): Meta => readJson<Meta>(ctx.metaFile, {});
 export const wasDisclosed = (ctx: Pick<TenantContext, "metaFile">): boolean => !!meta(ctx).disclosedAt;
@@ -337,7 +424,7 @@ export function setPaused(ctx: Pick<TenantContext, "metaFile">, until: number | 
   const { pausedUntil: _old, ...rest } = meta(ctx);
   if (until !== undefined || _old !== undefined) writeJson(ctx.metaFile, until !== undefined ? { ...rest, pausedUntil: until } : rest);
 }
-// A fixed notice (setup incomplete, budget, cooldown) at most every TENANT_NOTICE_MINUTES: true when it may be sent now (and is marked).
+// A fixed notice (not set up, budget, cooldown) at most every TENANT_NOTICE_MINUTES: true when it may be sent now (and is marked).
 export function mayNotice(ctx: Pick<TenantContext, "metaFile">, kind: string, now = Date.now()): boolean {
   const m = meta(ctx);
   const last = Date.parse(m.noticeAt?.[kind] ?? "");
