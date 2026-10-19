@@ -8,6 +8,7 @@ import { NOTES_DIR } from "./notes.ts";
 import { type Picture } from "./image.ts";
 import { type Document } from "./document.ts";
 import { OWNER_SESSION_FILE } from "./session.ts";
+import { tenantKey } from "./send.ts";
 import { settings } from "./settings.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";
@@ -88,7 +89,7 @@ export const tenant = (id: string): Conversation => {
   const ctx = tenantContext(rec);
   return Object.freeze({
     kind: "tenant",
-    key: `tenant:${id}`,
+    key: tenantKey(id),
     tenantId: id,
     target: ctx.target,
     direct: true,

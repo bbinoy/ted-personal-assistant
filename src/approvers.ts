@@ -1,6 +1,6 @@
 import { makeApprove } from "./approvalask.ts";
 import { DENY_ALL, type Approve, type ApproverOptions } from "./permissions.ts";
-import { OWNER_KEY } from "./send.ts";
+import { isTenantKey, OWNER_KEY } from "./send.ts";
 import { targetOf } from "./tenants.ts";
 
 // The one place that decides where a question is asked: IN THE CONVERSATION THAT TRIGGERED THE ACTION, never anywhere else.
@@ -17,7 +17,7 @@ export function createApprovers(out: { reply(text: string, opts: { plain: true; 
     const background = !!o.background;
     const send = (groupId?: string) => (text: string) => out.reply(text, { plain: true, kind: "approval", ...(groupId ? { groupId } : {}) });
     if (key === OWNER_KEY) return make(send(), { scope: key, source: background ? "background" : "chat", background, mayPay: true });
-    if (key.startsWith("tenant:")) {
+    if (isTenantKey(key)) {
       const to = target(key.slice("tenant:".length));
       return to ? make(send(to), { scope: key, source: "group", background }) : DENY_ALL;
     }

@@ -1,7 +1,8 @@
 import { discardJudge, prepareJudge } from "./approvaljudge.ts";
 import { applyChanges, isModifiable, type Change } from "./policy.ts";
 import { settings } from "./settings.ts";
-import { audit, type Source } from "./audit.ts";
+import { audit, wordless, type Source } from "./audit.ts";
+import { isTenantKey } from "./send.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
 import { recentIn } from "./recentchat.ts";
@@ -70,6 +71,9 @@ export function formatWait(minutes: number): string {
   return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
+// A tenant's rows in the audit log (the admin's) carry no words (audit.ts wordless), and her questions stay out of the console log too.
+const rows = (scope: string, meta: Record<string, unknown>) => (isTenantKey(scope) ? wordless(meta) : meta);
+
 const REACT_YES = new Set(["👍", "✅"]);
 const REACT_NO = new Set(["👎", "❌"]);
 
@@ -80,11 +84,11 @@ export function answerReaction(emoji: string, targetTimestamp: number, scope: st
   if (!current || current.done || current.scope !== scope) return "ignored";
   const e = emoji.replace(/[︎️]/g, ""); // drop variation selectors
   if (current.typedYes && REACT_YES.has(e)) {
-    audit(current.call.tool, "answer-reaction-refused", current.source, { by, scope, question: current.shown });
+    audit(current.call.tool, "answer-reaction-refused", current.source, rows(scope, { by, scope, question: current.shown }));
     return "needs_text";
   }
   if (REACT_YES.has(e) || REACT_NO.has(e)) {
-    audit(current.call.tool, "answer-reaction", current.source, { by, scope, approved: REACT_YES.has(e), question: current.shown });
+    audit(current.call.tool, "answer-reaction", current.source, rows(scope, { by, scope, approved: REACT_YES.has(e), question: current.shown }));
     current.resolve({ approved: REACT_YES.has(e) });
     return REACT_YES.has(e) ? "approved" : "declined";
   }
@@ -129,9 +133,9 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   // A card payment: the fast path approves only a typed yes (not 👍, ok, sure, and not a transcript of a voice message); any other yes is asked for again.
   const typedOk = (o: Open) => !o.typedYes || (isTypedYes(text) && !ctx.voice);
   if (direct && (YES.has(t) || NO.has(t) || (direct.typedYes && isTypedYes(text)))) {
-    if (!NO.has(t) && !typedOk(direct)) return audit(direct.call.tool, "answer-refused", direct.source, { by: ctx.by, scope: direct.scope, reply: text, question: direct.shown }), { outcome: "clarify", reply: TYPED_YES_NEEDED };
+    if (!NO.has(t) && !typedOk(direct)) return audit(direct.call.tool, "answer-refused", direct.source, rows(ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, question: direct.shown })), { outcome: "clarify", reply: TYPED_YES_NEEDED };
     const approved = !NO.has(t);
-    audit(direct.call.tool, "answer-fast", direct.source, { by: ctx.by, scope: direct.scope, reply: text, approved, question: direct.shown });
+    audit(direct.call.tool, "answer-fast", direct.source, rows(ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, approved, question: direct.shown }));
     direct.resolve({ approved });
     return { outcome: approved ? "approved" : "declined" };
   }
@@ -149,7 +153,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const started = Date.now();
   const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? ((reply) => recentIn(ctx.scope, reply)))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(quote.timestamp), voice: ctx.voice } : undefined);
   const stillOpen = () => live.filter((o) => !o.done);
-  const record = (what: string, o?: Open) => audit(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started });
+  const record = (what: string, o?: Open) => audit(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", rows(ctx.scope, { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started }));
   // "Yes to both": each part is applied to its own approval; only the parts that are not a plain yes / no stay open, and the
   // reply asks about those alone. An unknown or ended approval is skipped, never guessed.
   const multi = (parts: readonly { target: string; outcome: "approve" | "decline" | "other" }[], reply?: string): Answer => {
@@ -233,6 +237,7 @@ export function request(
   const minutes = background ? settings.backgroundApprovalTimeoutMinutes : settings.approvalTimeoutMinutes;
   return new Promise<Decision>((resolve) => {
     const label = description.split("\n")[0] ?? "";
+    const named = isTenantKey(opts.scope) ? `(${opts.scope})` : label;
     const shown = opts.question ?? description; // a model-written question; the label stays the code's first line
     const finish = (d: Decision, why?: string) => {
       if (entry.done) return;
@@ -246,7 +251,7 @@ export function request(
       if (entry.ts && open.get(entry.ts) === entry) open.delete(entry.ts);
       // The warm judge is shared and single-use: drop it only when no other chat approval is left to use it.
       if (--openChat === 0) discardJudge();
-      if (why) console.log(`approval ${why}: ${label}`);
+      if (why) console.log(`approval ${why}: ${named}`);
       resolve(d);
     };
     const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, typedYes: !!opts.typedYes };
@@ -256,7 +261,7 @@ export function request(
       minutes * 60_000,
     );
     signal?.addEventListener("abort", onAbort);
-    console.log(`approval requested${background ? " (background)" : ""}: ${label}`);
+    console.log(`approval requested${background ? " (background)" : ""}: ${named}`);
     openChat++;
     prepareJudge(); // warm the judge while the owner reads the question
     // The message is the model's question, as written: no header, no footer. A 👍 / 👎 or a reply on it answers it (open is keyed by its timestamp).

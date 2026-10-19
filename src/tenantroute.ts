@@ -11,7 +11,9 @@ import { toPerson } from "@ted-personal-assistant/signal";
 // The assistant never writes first to a stranger: every reply here answers a message she sent. Whatever is not a decision (a message with no account
 // id, a flood) is dropped, as it always was.
 
-export const DISCLOSURE = "You're talking to an AI, and its answers may be wrong.";
+// Said once, in the first thing she is ever told (tenantrun.ts): that it is an AI, that her notes are private from other users and from the admin
+// through the assistant, and the honest limit of that: whoever runs the computer could technically read the files on it (docs/SAFETY.md, host admin trust).
+export const DISCLOSURE = "You're talking to an AI, and its answers may be wrong. What you tell me and what I note down stays private from other users and from the admin: I won't show it to them. Whoever runs this computer could still technically read the files on it.";
 export const invitationReply = (): string => `Hi, I'm ${ASSISTANT}, an AI assistant that works for ${OWNER}. I only chat with people ${OWNER} has invited. If you have an invitation code, send it to me here; otherwise I can't help, sorry.`;
 export const badCodeReply = (): string => `That code isn't valid (it may have been used already, or it has expired). Please ask ${OWNER} for a new one.`;
 export const welcomeReply = (name: string): string => `${DISCLOSURE}\n\nWelcome${name ? `, ${name}` : ""}! Your invitation worked. Before we can talk I need a quick confirmation of your age and region. Never type a password or any other secret into this chat.`;
