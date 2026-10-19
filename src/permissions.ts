@@ -1,6 +1,6 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, type Verdict } from "./autojudge.ts";
+import { isJudgeable, judgeAction, mayAutoApprove, type CarriedApproval, type Verdict } from "./autojudge.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
 import { isGmailTool, isInboxArchive } from "./gmailrules.ts";
@@ -117,6 +117,8 @@ export interface GuardDecision {
   facts?: Record<string, unknown>; // ask: what the judge's audit row records about the step (host, role, name)
   input?: Record<string, unknown>; // the call as it must run, when the guard narrowed it (the browse screenshot); the allowed call runs with this input
   payment?: boolean; // ask: a card payment. Never judged, never auto-approved; only the owner's typed yes approves it (approvals.ts), and it is not remembered as done (the guard keeps its own once-only)
+  carried?: CarriedApproval; // ask + judge: the owner's earlier approved question of this run, offered by code (same run, conversation and host, not expired, no payment); the judge reads it as fenced data
+  approved?: (question: string) => void; // ask: told the owner's question after they approve it (the guard keeps it for the rest of the run)
   resolve?: () => Promise<Record<string, unknown> | string>; // the call as it must run, built only now that it is allowed (the card is opened here, after the owner said yes); a string: the call is refused with that reason
 }
 export interface CallGuard {
@@ -182,10 +184,11 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     const [ownerMessage, ...earlier] = [...chatOwnerMessages].reverse();
     // A chat send is judged against the owner's words; with none on record there is nothing to judge it against.
     if (settings.autoApprove !== "off" && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, source, view)) && (view === undefined || (source === "chat" && ownerMessage !== undefined))) {
-      judged = await judge({ source, description, ownerMessage: source === "chat" ? ownerMessage : undefined, assistantSaid: source === "chat" && chatAssistantMessage ? chatAssistantMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext });
-      log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts });
+      judged = await judge({ source, description, ownerMessage: source === "chat" ? ownerMessage : undefined, assistantSaid: source === "chat" && chatAssistantMessage ? chatAssistantMessage : undefined, earlier: source === "chat" ? earlier.reverse() : undefined, task: source === "chat" ? undefined : judgeContext, approved: g?.carried });
+      log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
       if (mayAutoApprove(settings.autoApprove, source, judged)) {
         log(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
+        if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(key);
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
@@ -209,6 +212,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       source,
     );
     if (d.approved && onceOnly) remember(key);
+    if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && g?.payment && g.resolve) {
       const f = await final(); // the card is opened only now, after the owner's typed yes
       return "deny" in f ? { behavior: "deny", message: f.deny } : { behavior: "allow", updatedInput: f.input };

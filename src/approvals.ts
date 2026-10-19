@@ -37,6 +37,7 @@ export interface Decision {
   approved: boolean;
   feedback?: string;
   updatedInput?: Record<string, unknown>; // set when approved with an accepted edit
+  question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
 

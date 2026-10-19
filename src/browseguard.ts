@@ -11,6 +11,7 @@ import { approvalId, CARD_PLACEHOLDER, cartHash, cartLines, expirySplit, findPay
 import { localDay } from "./pause.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput, validPoint } from "./browsevision.ts";
 import { audit } from "./audit.ts";
+import type { CarriedApproval } from "./autojudge.ts";
 import { clip } from "./format.ts";
 import { cleanText, LIMITS } from "./sanitize.ts";
 import { isJpeg, MAX_PICTURE_BYTES } from "./shots.ts";
@@ -32,6 +33,8 @@ export interface Decision {
   facts?: Record<string, unknown>; // ask: host, role and name of the element, added to the judge's audit row
   input?: Record<string, unknown>; // the call as it must run, when code narrowed it (a screenshot: jpeg, viewport only)
   payment?: boolean; // ask: a card payment, approved only by the owner's typed yes (permissions.ts, approvals.ts)
+  carried?: CarriedApproval; // ask + judge: the plan the owner approved earlier in this run, when the rules below allow offering it (see offer)
+  approved?: (question: string) => void; // ask: the owner approved this question (as shown to them): kept for the later steps of this run
   resolve?: () => Promise<Record<string, unknown> | string>; // the call as it must run, built after it is allowed (a card typed by code); a string: refused with that reason
 }
 
@@ -65,6 +68,9 @@ const MAX_DENIED = 6;
 const AUTOFILL_SENSITIVE = /\b(cc-[a-z-]+|current-password|new-password|one-time-code)\b/i; // autocomplete tokens of card and login fields
 const nolabel = (s: string) => s.replace(/\s*:\s*$/, ""); // "Customer name:" as the page labels it
 const HIDDEN = "(hidden: payment or login detail)";
+// An approved plan carries forward to later steps of the same run for this long, on the same site only, never to a payment.
+export const CARRY_MS = 10 * 60_000;
+const PAYISH = /\b(pay(ment|ing)?|buy|purchase|check\s*out|checkout|place\s+(the\s+)?order|donate|kaufen|bezahlen|zahlungspflichtig|kostenpflichtig|acheter|payer|comprar|pagar)\b/i;
 const short = (tool: string) => tool.slice(BROWSER_PREFIX.length);
 
 export class BrowseGuard {
@@ -86,6 +92,9 @@ export class BrowseGuard {
   readonly shotsDir?: string;
   kept: { id: string; file: string; size: number }[] = []; // the screenshots kept for the chat, in order
   private pointClicks = 0;
+  private approvedPlan?: CarriedApproval; // the owner's last approved browser question of this run (memory only; cleared when the site changes or the run ends)
+  private approvedCount = 0;
+  private readonly runId = Math.random().toString(36).slice(2, 8);
   private pending?: string; // the commit call that was asked about: counted when that very call succeeds
   private readonly profile?: Profile;
   private readonly secrets = new Set<string>(); // values typed from the profile: cut from everything the model reads, for the rest of the run
@@ -284,7 +293,29 @@ export class BrowseGuard {
     if (this.filled.length) (judge = false), (why = `${why}; details from your saved profile were typed in this run, so you always confirm`);
     this.log(tool, judge ? "judge" : "ask-owner", input, { commit: true, why, role: node?.role, name: node?.name?.slice(0, LIMITS.control), ...(this.filled.length ? { profileKeys: this.filled.map((f) => f.key) } : {}) });
     this.pending = tool + JSON.stringify(input);
-    return { kind: "ask", description: this.commitText(control, why, extraValues, node?.formName), once: true, judge, facts: { host: hostOf(this.url), role: node?.role, name: node?.name?.slice(0, LIMITS.control), step: short(tool) } };
+    const host = hostOf(this.url);
+    const label = node?.name?.slice(0, LIMITS.control) ?? control.slice(0, LIMITS.control);
+    return {
+      kind: "ask", description: this.commitText(control, why, extraValues, node?.formName), once: true, judge,
+      facts: { host, role: node?.role, name: node?.name?.slice(0, LIMITS.control), step: short(tool) },
+      ...(judge ? { carried: this.offer(label) } : {}),
+      approved: (question) => void (this.approvedPlan = { id: `${this.runId}-${++this.approvedCount}`, at: Date.now(), host, step: short(tool), label, question }),
+    };
+  }
+
+  // Whether the plan the owner approved earlier may be shown to the judge for this step: code decides, the judge only reads it. The same
+  // run (this guard) and conversation (its approver), the same site, not expired, and never anything that could be a payment: a card in
+  // progress, a pay-like control, or a page that states a total or price. Anything else is judged as before.
+  private offer(label: string, now = Date.now()): CarriedApproval | undefined {
+    const a = this.approvedPlan;
+    if (!a || !a.host || now - a.at >= CARRY_MS || a.host !== hostOf(this.url)) return undefined;
+    if (this.pay.active || this.pay.approval || PAYISH.test(label) || findTotal(this.view)) return undefined;
+    return a;
+  }
+
+  // The end of the run: an approval carried in memory goes with it.
+  endRun() {
+    this.approvedPlan = undefined;
   }
 
   // Payment and login fields: the owner is ALWAYS asked (no judge, no cap, no skipping). The question names the page, the field and the kind of
@@ -780,6 +811,7 @@ export class BrowseGuard {
     if (seen && seen !== this.url) {
       this.typed.clear();
       this.url = seen;
+      if (this.approvedPlan && this.approvedPlan.host !== hostOf(seen)) this.approvedPlan = undefined; // another site: nothing carries over
       const domain = registeredDomain(hostOf(seen));
       if (domain && this.chain[this.chain.length - 1]?.domain !== domain) this.chain.push({ domain, by: this.navNext ? "navigate" : "follow" });
       // A typed card belongs to the page it was approved on: another page, and the approval is void.
