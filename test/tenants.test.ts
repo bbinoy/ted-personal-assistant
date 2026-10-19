@@ -226,6 +226,24 @@ test("turn: no instance key means a plain 'not set up for friends' with the AI l
   assert.deepEqual(asked, []);
 });
 
+test("turn: a refused instance key tells the owner's chat once, not once per tenant, and again only after the notice interval", async () => {
+  const [a, b] = [join_("Gus"), join_("Ivy")];
+  let t = 10_000_000;
+  const { r, alerts } = runner({ key: KEY_A, now: () => t, ask: async () => Promise.reject(new TenantKeyError("refused")) });
+  await assert.rejects(r.run(tenant(a.id), "hi"), TenantKeyError); // her own run still fails as it did (her notice is the error path's)
+  await assert.rejects(r.run(tenant(b.id), "hi"), TenantKeyError); // another tenant, the same key
+  assert.equal(alerts.length, 1);
+  assert.match(alerts[0]!, /friends' API key was refused \(expired\? limit\?\) - replace TENANT_ANTHROPIC_API_KEY in \.env/);
+  assert.ok(!alerts[0]!.includes(KEY_A), "never the key");
+  t += on.tenantNoticeMinutes * 60_000 + 1;
+  resetCooldown();
+  await assert.rejects(r.run(tenant(a.id), "again"), TenantKeyError);
+  assert.equal(alerts.length, 2, "rate limited like the other notices, not silenced for good");
+  const quiet = runner({ key: KEY_A, ask: async () => Promise.reject(new Error("a plain failure")) });
+  await assert.rejects(quiet.r.run(tenant(a.id), "hi"), /plain failure/);
+  assert.deepEqual(quiet.alerts, [], "only a refused key is the owner's business");
+});
+
 test("turn: the run gets the instance key, and the first reply carries the AI line exactly once", async () => {
   const rec = join_("Finn");
   const { r, asked } = runner({ key: KEY_A });
