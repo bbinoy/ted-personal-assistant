@@ -117,3 +117,9 @@ test("draw: the server exists for chat and group runs only, and the skill is off
   for (const source of ["brief", "radar", "handler", "background"] as const) assert.ok(!servers({ ...base, source }).includes("draw"), source);
   assert.equal(offeredSkills(true).includes("ted-personal-assistant:draw"), settings.draw);
 });
+
+test("policy: the weather tools are allowed in a group run, other weather names are not", async () => {
+  const { classify } = await import("../src/policy.ts");
+  for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) assert.equal(classify(`mcp__weather__${t}`, {}, "group"), "allow");
+  assert.equal(classify("mcp__weather__set_alert", {}, "group"), "deny");
+});

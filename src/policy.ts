@@ -100,6 +100,7 @@ const WEB_SEARCH = "WebSearch";
 // gets no file access at all.
 // tenantTools: a tenant's run (tenants.ts) is a "group" run in every respect of isolation, with her own notes folder in `groupNotesDir`; only the
 // tools in this set exist for her (toolsFor), whatever else the group rules below would allow. Undefined for a real group.
+const WEATHER_TOOL = /^mcp__weather__(search_places|get_forecast|get_marine_forecast|get_spot_info|get_distance)$/; // public forecast and map data, read-only (weathertools.ts)
 export function classify(tool: string, input: Record<string, unknown>, source: Source, groupNotesDir?: string, tenantTools?: ReadonlySet<string>): Verdict {
   // A group chat holds other people: no private data, no pages. Web search, the file tools inside that one
   // group's own notes folder, and the memory tools (scoped to that group by the server, memory-tools.ts).
@@ -108,7 +109,7 @@ export function classify(tool: string, input: Record<string, unknown>, source: S
     if (NOTE_FILE_TOOLS.has(tool)) return groupNotesDir && isInside(input.file_path, groupNotesDir) ? "allow" : "deny";
     // The browse tool starts a separate run with no owner data (browse.ts); in a group the run asks in that group like the owner's chat does.
     if (tool === "mcp__browse__browse") return settings.browse ? "allow" : "deny";
-    if (tool === "mcp__send__send" || tool === "mcp__voice__voice" || tool === "mcp__draw__draw") return "allow"; // draw: sanitised and rendered by code, kept for the turn (drawtool.ts)
+    if (tool === "mcp__send__send" || tool === "mcp__voice__voice" || tool === "mcp__draw__draw" || WEATHER_TOOL.test(tool)) return "allow"; // draw: sanitised and rendered by code, kept for the turn (drawtool.ts)
     if (tenantTools && tool === TENANT_CONSENT_TOOL) return "allow"; // a tenant's one-time age and region confirmation (tenanttools.ts)
     return tool === WEB_SEARCH || tool === FORGET_NOTE || tool === SEARCH_LOGS || tool === UNDO_DREAM ? "allow" : "deny";
   }
