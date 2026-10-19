@@ -12,7 +12,7 @@ export const SHARED_SKILLS: Readonly<Record<string, readonly Capability[]>> = {
 };
 
 // Never offered to a group or a tenant, whatever capability she holds: they read or write the owner's mail, calendar, Notion, brief and setup.
-export const PRIVATE_SKILLS: readonly string[] = ["daily-brief", "mailbird", "mailbird-troubleshooting", "gmail", "calendar", "notion-tasks", "meeting-prep", "setup", "radar"];
+export const PRIVATE_SKILLS: readonly string[] = ["daily-brief", "mailbird", "mailbird-troubleshooting", "gmail", "calendar", "notion-tasks", "meeting-prep", "setup", "radar", "follow-through"];
 
 export const skillsFor = (caps: ReadonlySet<Capability>): string[] =>
   Object.entries(SHARED_SKILLS).filter(([, needs]) => needs.every((c) => caps.has(c))).map(([name]) => `${PLUGIN}:${name}`);

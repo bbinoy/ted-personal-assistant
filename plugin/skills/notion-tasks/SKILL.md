@@ -65,6 +65,8 @@ Only when the link is unambiguous:
 When the link is fuzzy, do **not** edit - list it in the brief as a
 question ("looks like 'Foo' may be done - confirm?").
 
+After you add, change or tick off a task, load `ted-personal-assistant:follow-through`: it asks what else the change implies (a done task may free a follow-up, a new one may belong with a calendar entry or a mail to archive).
+
 ## Guardrails
 
 - May: add rows, edit a row's Task / Due / Priority / Area, move rows
