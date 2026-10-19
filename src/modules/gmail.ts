@@ -1,0 +1,116 @@
+import { DONE_MARKER } from "../brieftext.ts";
+import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "../gmailrules.ts";
+import { addrs, nativeView } from "../mailview.ts";
+import type { DraftView } from "../proposals.ts";
+import { settings } from "../settings.ts";
+import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
+
+// The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot
+// say (sensitive labels, attachment content, archiving in log-only mode, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
+// There is no background handler: drafts are made in chat or the brief and sent only on the owner's word. The mail client (src/gmail.ts), `npm run restore`
+// and the doctor check are runtime.ts.
+
+// The approval's read-backs: a draft by its id (the approval of send_message with a draftId), and the original message of a reply (its sender and recipients,
+// so a reply that names none is shown with the people who really receive it). Set by runtime.ts when the app starts.
+export interface GmailReaders {
+  draft: (draftId: string) => Promise<DraftView | undefined>;
+  original: (messageId: string) => Promise<DraftView | undefined>;
+}
+let readers: GmailReaders | undefined;
+export const setGmailReaders = (r: GmailReaders | undefined) => void (readers = r);
+
+const active = () => settings.mailProvider === "gmail";
+
+const gm = rowsOf(GMAIL_PREFIX, "gmail", "mail");
+
+const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you draft is a Gmail draft (create_draft with replyToMessageId, or update_draft); say it is ready and wait. When ${owner} says to send it, call send_message with that draftId, or reply / forward with the exact text; ${owner} is then asked to approve (or it is checked) with the real recipients shown. Archiving is removing the INBOX label (unlabel_thread with labelIds ["INBOX"]); it may be switched to log-only, in which case a refused archive is not an error. Never use trash, spam or label tools for TRASH or SPAM, and never open attachment content.
+
+`;
+
+// The brief preset's instructions (tasks.ts): the mail pass uses the gmail skill and the Gmail connector. The brief is the final answer (Signal, the default) or, with
+// BRIEF_EMAIL=on, also emailed to the owner's own address with send_message (the one send the brief run is allowed, gmailrules.ts).
+const BRIEF_COMMON = "Load the 'ted-personal-assistant:daily-brief' skill with the Skill tool and follow it, with these changes because the mail is Gmail: wherever it says to run 'ted-personal-assistant:mailbird', load 'ted-personal-assistant:gmail' instead and use the Gmail tools it names; the mailbird tools do not exist here.";
+const briefSignal = () => `${BRIEF_COMMON} Do not deliver by email (step 6): your final answer is the brief itself, in the skill's format (Markdown, the sections in its order), with nothing before it, and then one last line with the exact text ${DONE_MARKER}. If the mail tools are unreachable, say so in the brief, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
+const briefEmail = (self: string): string =>
+  `${BRIEF_COMMON} Deliver the brief (step 6) with the Gmail send_message tool, exactly once, to ${JSON.stringify([self])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody). After send_message succeeds, print the exact line ${DONE_MARKER}. If the mail tools are unreachable, send the brief anyway saying so, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
+
+const mail: MailSlot = {
+  handler: false, // the background handler drafts replies with Mailbird's tools and shows them as Mailbird drafts: not built for Gmail. The mail stays in the inbox and the brief lists it
+  archiveLogOnly: () => !settings.gmailArchiveLive, // Gmail's first week: the heartbeat classifies and logs "would-archive" but archives nothing (GMAIL_ARCHIVE_LIVE=true ends it)
+  reportNote: () => (settings.gmailArchiveLive ? undefined : "Gmail archiving is in LOG-ONLY mode (GMAIL_ARCHIVE_LIVE=false): \"would-archive\" below was classified but NOT archived."),
+  brief: {
+    delivery: () => (settings.briefEmail && settings.mailSelfAddress ? "email" : "signal"),
+    instructions: () => (settings.briefEmail && settings.mailSelfAddress ? briefEmail(settings.mailSelfAddress) : briefSignal()),
+    captured: (tool, input) => (isSelfSend(tool, input, settings.mailSelfAddress) ? { text: (input as { body?: string }).body } : undefined), // the brief sent to the owner's own address
+  },
+  chat: { skill: "ted-personal-assistant:gmail", note: GMAIL_DRAFTS },
+  readBack: async (kind, input) => {
+    if (kind === "gmSend" && typeof input.draftId === "string" && readers) return readers.draft(input.draftId).catch(() => undefined);
+    if (kind === "gmReply" && typeof input.messageId === "string" && readers) return readers.original(input.messageId).catch(() => undefined);
+    return undefined;
+  },
+  views: {
+    // A send of a Gmail draft is shown from the draft as read back (get_draft). A new send, reply or forward is read from its own
+    // arguments; a reply that names no recipients goes to the people of the original message, read back (`draft` = the original's
+    // sender and recipients), so the approval and the judge floor see who really receives it.
+    gmSend: (i, draft) => (i.draftId ? draft && { action: "send", ...draft } : nativeView("send", i)),
+    gmReply: (i, orig) => {
+      const v = nativeView("reply", i);
+      if (!orig) return i.replyAll ? undefined : v; // a reply-all cannot be shown without the original; explicit recipients, or none: permissions.ts reads the original back first and refuses a reply nobody can be named for
+      const to = addrs(i.to).length ? v.to : i.replyAll ? orig.to : orig.to.slice(0, 1); // orig.to: the sender first, then (reply-all) the other recipients
+      const cc = i.cc !== undefined ? v.cc : i.replyAll ? orig.cc : [];
+      return { ...v, to: [...new Set(to)], cc: [...new Set(cc)], subject: v.subject || orig.subject };
+    },
+    gmForward: (i) => nativeView("forward", i),
+    gmDraft: (i) => nativeView("draft", i),
+  },
+};
+
+const named = (_input: Record<string, unknown>, view?: { to: string[] }) => !!view && view.to.length > 0; // a mail nobody can be named for (a forward draft with no recipient yet) is not judged
+
+export const gmailModule: ToolModule = {
+  name: "gmail",
+  slot: "mail",
+  connection: { kind: "connector", key: "gmail", server: /^gmail$/i, prefix: GMAIL_PREFIX },
+  rows: [
+    ...gm("read", "search_threads get_thread get_message get_draft list_drafts list_labels"),
+    ...gm("draft", "create_draft update_draft", { view: "gmDraft" }),
+    ...gm("send", "send_message", { view: "gmSend" }),
+    ...gm("reply", "reply", { view: "gmReply" }),
+    ...gm("forward", "forward", { view: "gmForward" }),
+    ...gm("archive", "unlabel_thread"), // removing INBOX is an archive; undoing it adds a label, which is a different action
+    ...gm("label", "label_thread label_message unlabel_message update_message_labels create_label update_label apply_sensitive_message_label apply_sensitive_thread_label"),
+  ],
+  free: ["read"],
+  titles: {
+    [`${GMAIL_PREFIX}send_message`]: { icon: "✉️", title: "Send email" },
+    [`${GMAIL_PREFIX}forward`]: { icon: "✉️", title: "Forward email" },
+    [`${GMAIL_PREFIX}reply`]: { icon: "✉️", title: "Reply to email" },
+  },
+  untrusted: ["read"],
+  untrustedPrefix: GMAIL_PREFIX,
+  floor: {
+    // Gmail's rules a row cannot say: sensitive labels, attachment content, archive log-only, the brief to oneself (gmailrules.ts). They hold whichever provider is
+    // active: they only restrict, so the connector's tools stay as refused as before if it is ever seen under another provider.
+    verdict: (tool, input, source) => {
+      const on = active();
+      return gmailVerdict(tool, input, source, { archiveLive: on && settings.gmailArchiveLive, self: on ? settings.mailSelfAddress : undefined, briefEmail: on && settings.briefEmail });
+    },
+    // Archive in log-only mode (GMAIL_ARCHIVE_LIVE=false) is recorded like the heartbeat's, so the report and the brief show it.
+    onDeny: (tool, input) => {
+      if (isInboxArchive(tool, input) && active()) {
+        return { record: { tool: "gmail_archive", decision: "would-archive", meta: { id: input.threadId } }, message: "Archiving is in log-only mode (GMAIL_ARCHIVE_LIVE=false): it was recorded as would-archive and the thread stays in the inbox. Carry on without archiving." };
+      }
+      return isGmailTool(tool) ? { withIds: true } : undefined;
+    },
+    judgeVeto: { send: named, reply: named, forward: named },
+    noFix: ["send", "reply", "forward"],
+  },
+  skills: [{ name: "gmail", required: true }],
+  setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
+  hide: { prefix: GMAIL_PREFIX, keep: (cfg) => cfg.gmailTools }, // undefined: the whole connector is hidden by prefix, or not in use
+  known: "apply_sensitive_message_label apply_sensitive_thread_label create_draft create_label delete_draft delete_label forward get_draft get_message get_thread label_message label_thread list_drafts list_labels mark_message_spam mark_thread_spam reply search_threads send_message trash_message trash_thread unlabel_message unlabel_thread unmark_message_spam unmark_thread_spam untrash_message untrash_thread update_draft update_label update_message_labels"
+    .split(" ")
+    .map((t) => `${GMAIL_PREFIX}${t}`),
+  mail,
+};
