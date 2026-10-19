@@ -13,6 +13,7 @@ export interface FakeBao {
   mount: string;
   token: string; // a token limited to tenants/owner/
   tokenFor(tenant: string): string;
+  intakeToken: string; // the intake page's write-only token: create and update of profile and card items of any tenant, nothing else
   store: Map<string, Record<string, unknown>>; // "tenants/owner/profile/email" -> data
   requests: { method: string; path: string; body: string; token: string | undefined }[];
   mode: { sealed: boolean; down: boolean; delayMs: number; garbage: boolean; policies: string[]; ttl: number };
@@ -41,6 +42,7 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
     mount,
     token: tokenFor("owner"),
     tokenFor,
+    intakeToken: "fake-token-intake",
     store,
     requests: [],
     mode: { sealed: false, down: false, delayMs: 0, garbage: false, policies: ["default", "ted-owner"], ttl: 30 * 86_400 },
@@ -63,6 +65,20 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
     const p = url.pathname.replace(/^\/v1\//, "");
     if (p === "sys/health") return send(200, { initialized: true, sealed: f.mode.sealed, version: "2.7.1-fake" });
     if (f.mode.sealed) return send(503, { errors: ["Vault is sealed"] });
+    if (token === f.intakeToken) {
+      const writable = (full: string) => new RegExp(`^${mount}/data/tenants/[^/]+/(profile|card)/[^/]+$`).test(full);
+      if (p === "auth/token/lookup-self") return send(200, { data: { policies: ["default", "ted-intake"], ttl: f.mode.ttl, renewable: true } });
+      if (p === "sys/capabilities-self") {
+        const out: Record<string, string[]> = {};
+        for (const full of JSON.parse(raw).paths as string[]) out[full] = writable(full) ? ["create", "update"] : ["deny"];
+        return send(200, { ...out, data: out });
+      }
+      const w = new RegExp(`^${mount}/(data|metadata)/(.+)$`).exec(p);
+      const ok = w?.[1] === "data" && (req.method === "POST" || req.method === "PUT") && /^tenants\/[^/]+\/(profile|card)\/[^/]+$/.test(w[2]!);
+      if (!ok) return send(403, { errors: ["permission denied"] });
+      store.set(w![2]!, JSON.parse(raw).data);
+      return send(200, { data: { version: 1 } });
+    }
     const tenant = token ? tokens.get(token) : undefined;
     if (!tenant) return send(403, { errors: ["permission denied"] });
     if (p === "auth/token/lookup-self") return send(200, { data: { policies: f.mode.policies, ttl: f.mode.ttl, renewable: true } });

@@ -22,6 +22,7 @@
     "profile": "node --conditions=workspace-source --env-file-if-exists=.env scripts/profile.ts",
     "card": "node --conditions=workspace-source --env-file-if-exists=.env scripts/card.ts",
     "openbao": "node --conditions=workspace-source --env-file-if-exists=.env scripts/openbao.ts",
+    "intake": "node --conditions=workspace-source --env-file-if-exists=.env scripts/intake.ts",
     "tenants": "node --conditions=workspace-source --env-file-if-exists=.env scripts/tenants.ts",
     "browse:smoke": "node --conditions=workspace-source --env-file-if-exists=.env scripts/browse-smoke.ts"
   },

@@ -5,6 +5,7 @@ import { isInside, realish } from "./contain.ts";
 import { gmailVerdict, GMAIL_PREFIX } from "./gmailrules.ts";
 import { isNotePath } from "./notes.ts";
 import { settings } from "./settings.ts";
+import { INTAKE_LINK_TOOL, INTAKE_STATUS_TOOL } from "./intakelinks.ts";
 import { TENANT_CONSENT_TOOL } from "./tenants.ts";
 import { entryFor, flagFor, isReadTool } from "./toolmanifest.ts";
 
@@ -111,6 +112,7 @@ export function classify(tool: string, input: Record<string, unknown>, source: S
     if (tool === "mcp__browse__browse") return settings.browse ? "allow" : "deny";
     if (tool === "mcp__send__send" || tool === "mcp__voice__voice" || tool === "mcp__draw__draw" || WEATHER_TOOL.test(tool)) return "allow"; // draw: sanitised and rendered by code, kept for the turn (drawtool.ts)
     if (tenantTools && tool === TENANT_CONSENT_TOOL) return "allow"; // a tenant's one-time age and region confirmation (tenanttools.ts)
+    if (tenantTools && (tool === INTAKE_LINK_TOOL || tool === INTAKE_STATUS_TOOL)) return "allow"; // a link to the intake page, and what it stored as names and lengths (intaketools.ts); it holds no value
     return tool === WEB_SEARCH || tool === FORGET_NOTE || tool === SEARCH_LOGS || tool === UNDO_DREAM ? "allow" : "deny";
   }
   if (DENY.some((re) => re.test(tool))) return "deny";

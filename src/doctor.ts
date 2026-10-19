@@ -13,6 +13,8 @@ import { isPaused, localTime } from "./pause.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./browseserver.ts";
 import { killSwitch } from "./card.ts";
 import { macKeychain, type Keychain } from "./keychain.ts";
+import { baseUrlProblem } from "./intakelinks.ts";
+import { INTAKE_ROLE } from "./openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./openbao.ts";
 import { appBao, keychainNames, looksLikeApiKey, OWNER } from "./secrets.ts";
 import { invites, listTenants, pausedUntil, readConsent, tenantContext } from "./tenants.ts";
@@ -80,6 +82,43 @@ export async function openbaoCheck(line: Line, o: { bao?: () => OpenBao; keychai
     line(days < 3 ? "warn" : true, what, `v${h.version ?? "?"} unsealed, token limited to tenants/${OWNER}/ (policy ${cfg.role}), expires in ${days >= 1 ? `${Math.floor(days)} day(s)` : "under a day"}${days < 3 ? "; renew: npm run openbao -- renew" : ""}`);
   } catch (e) {
     down(e instanceof BaoError ? e.message.slice(0, LIMITS.reason) : "the check failed");
+  }
+}
+
+// The intake page (intakeserver.ts): is it configured (INTAKE_BASE_URL, https), is its token write-only (create and update on profile and card items, no
+// read, list or delete, nothing else), and is the process answering on its loopback port. Off is a valid setup: no setup links are offered.
+export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake; bao?: () => OpenBao; keychain?: Keychain; probe?: (port: number) => Promise<boolean>; prefix?: string } = {}): Promise<void> {
+  const cfg = o.cfg ?? settings.intake;
+  const what = "intake page";
+  const keychain = o.keychain ?? macKeychain;
+  const problem = baseUrlProblem(cfg);
+  const hasToken = await keychain.get(keychainNames(o.prefix ?? settings.openbao.keychainPrefix).intake).then((t) => !!t, () => false);
+  if (!cfg.baseUrl) line(true, `${what}: off`, "INTAKE_BASE_URL is not set: friends are told setup links are not available yet (the owner can still use npm run intake -- link owner profile)");
+  else if (problem) return line(false, what, problem);
+  else line(true, what, `links point to ${new URL(cfg.baseUrl).origin}`);
+  if (!hasToken) return cfg.baseUrl ? line("warn", "intake write-only token", "this Mac's Keychain has none: npm run openbao -- setup") : undefined;
+  try {
+    const bao = (o.bao ?? (() => appBao({ keychain, as: "intake", ...(o.prefix ? { cfg: { ...settings.openbao, keychainPrefix: o.prefix } } : {}) })))();
+    const t = await bao.lookupSelf();
+    const w = (kind: string) => `data/tenants/x/${kind}/y`;
+    const caps = await bao.capabilities([w("profile"), w("card"), w("other"), "metadata/tenants/x/profile", "metadata/tenants/x/card"]);
+    const has = (p: string, c: string) => (caps[p] ?? []).includes(c) || (caps[p] ?? []).includes("root");
+    const problems: string[] = [];
+    if (t.policies.includes("root") || t.policies.some((p) => p !== "default" && p !== INTAKE_ROLE)) problems.push(`the token has policies besides ${INTAKE_ROLE}`);
+    for (const kind of ["profile", "card"]) {
+      if (!has(w(kind), "create") || !has(w(kind), "update")) problems.push(`the token cannot write ${kind} items`);
+      if (["read", "delete", "list"].some((c) => has(w(kind), c)) || ["read", "list", "delete", "update"].some((c) => has(`metadata/tenants/x/${kind}`, c))) problems.push(`the token can do more than write ${kind} items`);
+    }
+    if ((caps[w("other")] ?? []).some((c) => c !== "deny")) problems.push("the token reaches beyond profile and card items");
+    if (problems.length) line(false, "intake write-only token", `${problems.join("; ")}: npm run openbao -- setup repairs it`);
+    else line(true, "intake write-only token", `policy ${INTAKE_ROLE}: create and update of profile and card items, no read, list or delete`);
+  } catch (e) {
+    line("warn", "intake write-only token", e instanceof BaoError ? e.message.slice(0, LIMITS.reason) : "the check failed");
+  }
+  if (cfg.baseUrl) {
+    const probe = o.probe ?? (async (port: number) => (await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000) })).ok);
+    const up = await probe(cfg.port).catch(() => false);
+    line(up ? true : "warn", "intake page process", up ? `answering on 127.0.0.1:${cfg.port}` : `not answering on 127.0.0.1:${cfg.port}: start it with npm run intake (docs/SETUP.md "The intake page")`);
   }
 }
 
@@ -210,6 +249,7 @@ export async function doctor() {
 
   browseCheck(line, settings.browse, browseStatus());
   await openbaoCheck(line);
+  await intakeCheck(line);
   tenantCheck(line);
 
   line(true, "proactive radar", settings.proactive ? `chosen by your chat's gate, about every ${settings.radarMinutes} min (its "[radar] ran" lines are in the log)` : "off (PROACTIVE=off)");

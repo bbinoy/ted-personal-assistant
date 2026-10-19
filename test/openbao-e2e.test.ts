@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CardStore } from "../src/card.ts";
-import { openbaoCheck } from "../src/doctor.ts";
+import { intakeCheck, openbaoCheck } from "../src/doctor.ts";
 import type { Keychain } from "../src/keychain.ts";
 import { BaoError } from "../src/openbao.ts";
 import { Admin, configHcl, ensureCert, ensureDirs, installBinary, layoutOf, writeConfig } from "../src/openbaoadmin.ts";
@@ -111,6 +111,19 @@ test("real OpenBao (throwaway): setup, store and read fake items, narrow token, 
     assert.deepEqual(t.policies.sort(), ["default", "ted-owner"]);
     assert.ok(t.ttlSeconds > 700 * 3600, "a periodic token of 768 hours");
 
+    // the intake page's own token: it writes profile and card items of any tenant and does nothing else (no read, list or delete, no other kind, no other path)
+    assert.ok(keychain.items.get(names.intake) && keychain.items.get(names.intake) !== token, "the intake page has a token of its own");
+    const intake = appBao({ keychain, cfg, as: "intake" });
+    await intake.write("tenants/ann/profile/address.home", { value: FAKE_EMAIL, kind: "address", domains: [] });
+    await intake.write("tenants/ann/profile/address.home", { value: FAKE_EMAIL, kind: "address", domains: [] }); // an update
+    await intake.write("tenants/ann/card/primary", { pan: FAKE_PAN, expMonth: 12, expYear: 2099 });
+    for (const f of [() => intake.read("tenants/ann/profile/address.home"), () => intake.list("tenants/ann/profile"), () => intake.delete("tenants/ann/profile/address.home"), () => intake.write("tenants/ann/other/x", { a: 1 }), () => intake.write("tenants/ann/profile", { a: 1 }), () => intake.raw("GET", "sys/mounts")]) await assert.rejects(f(), (e: Error) => e instanceof BaoError && e.status === 403);
+    assert.deepEqual((await intake.lookupSelf()).policies.sort(), ["default", "ted-intake"]);
+    await assert.rejects(bao.read("tenants/ann/profile/address.home"), (e: Error) => e instanceof BaoError && e.status === 403); // the owner's token does not reach what the page wrote for her
+    const seenIntake: { ok: boolean | "warn"; detail: string }[] = [];
+    await intakeCheck((ok, _w, detail = "") => seenIntake.push({ ok, detail }), { keychain, prefix, cfg: { baseUrl: "https://intake.example.test", port: 1, allowHttpLoopback: false, linkMinutes: 15, dir: "" }, bao: () => appBao({ keychain, cfg, as: "intake" }), probe: async () => true });
+    assert.deepEqual(seenIntake.map((x) => x.ok), [true, true, true], seenIntake.map((x) => x.detail).join(" | "));
+
     // the doctor sees it healthy
     const seen: { ok: boolean | "warn"; detail: string }[] = [];
     await openbaoCheck((ok, _w, detail = "") => seen.push({ ok, detail }), { keychain, cfg });
@@ -145,6 +158,10 @@ test("real OpenBao (throwaway): setup, store and read fake items, narrow token, 
     const lines2: string[] = [];
     await admin.setup({ out: (l) => lines2.push(l), showShares: async () => assert.fail("shares are shown once only") });
     const token2 = keychain.items.get(names.token)!;
+    const oldIntake = intake;
+    assert.notEqual(keychain.items.get(names.intake), undefined);
+    await assert.rejects(oldIntake.write("tenants/ann/profile/after", { a: 1 }), (e: Error) => e instanceof BaoError && e.status === 403, "the intake page's old token was revoked by the repair");
+    await appBao({ keychain, cfg, as: "intake" }).write("tenants/ann/profile/after", { a: 1 });
     assert.notEqual(token2, token);
     await assert.rejects(appBao({ keychain: { ...keychain, get: async () => token, set: keychain.set, remove: keychain.remove }, cfg }).read("tenants/owner/profile/email"), (e: Error) => e instanceof BaoError && e.status === 403, "the old token was revoked");
     assert.equal((await new ProfileStore(new TenantSecrets(appBao({ keychain, cfg }), "owner")).read()).email?.value, FAKE_EMAIL);
