@@ -4,9 +4,10 @@ import { silentLogger, type Logger } from "./logger.ts";
 import { synthesizeHttp, type HttpTtsConfig } from "./tts-http.ts";
 import { OWNER_SCOPE } from "./voices.ts";
 import { qwenReady, synthesizeQwen, type QwenConfig } from "./tts-qwen.ts";
+import type { VoiceFormat } from "./voiceformat.ts";
 
 // Which engine speaks: Kokoro on this machine (the default, nothing leaves it), or a remote one by choice.
-// Every provider returns the path of an .m4a in a fresh temp folder, or throws; the caller then sends text.
+// Every provider returns the path of a voice message (an .m4a, or the `format` asked for) in a fresh temp folder, or throws; the caller then sends text.
 
 /** What happens when a remote engine fails: "none" (the call throws) or "kokoro" (the same words, spoken locally). */
 export type TtsFallback = "none" | "kokoro";
@@ -32,21 +33,21 @@ export function providerReady(cfg: TtsProviderConfig): { ok: boolean; missing: s
 }
 
 /**
- * Speaks `text` with the configured engine (qwen: local cloned voice, nothing leaves the Mac) and returns the path of an .m4a in a fresh temp folder, which the caller
+ * Speaks `text` with the configured engine (qwen: local cloned voice, nothing leaves the Mac) and returns the path of a voice message (an .m4a unless `format` says otherwise) in a fresh temp folder, which the caller
  * deletes after sending. `scope` is the conversation ("owner" or a group id): the cloned voice is the one active there. A remote engine sends the text to a third party. A failed remote request throws, unless
  * `fallback` is "kokoro" and Kokoro is set up; a silent switch never happens otherwise.
  */
-export async function synthesizeWith(text: string, cfg: TtsProviderConfig, log: Logger = silentLogger, scope: string = OWNER_SCOPE): Promise<string> {
+export async function synthesizeWith(text: string, cfg: TtsProviderConfig, log: Logger = silentLogger, scope: string = OWNER_SCOPE, format?: VoiceFormat): Promise<string> {
   const t0 = Date.now();
   const done = (provider: string, file: string) => (log.info(`voice: ${provider} synthesised ${text.length} chars in ${Date.now() - t0} ms`), file);
-  if (cfg.provider === "kokoro") return done("kokoro", await synthesize(text, cfg.kokoro));
+  if (cfg.provider === "kokoro") return done("kokoro", await synthesize(text, cfg.kokoro, format));
   try {
     if (cfg.provider === "qwen" && !qwenReady(cfg.qwen).ok) throw new Error(`Qwen voice not set up, missing: ${qwenReady(cfg.qwen).missing.join(", ")}`);
-    return done(cfg.provider, await (cfg.provider === "qwen" ? synthesizeQwen(text, cfg.qwen, scope) : cfg.provider === "elevenlabs" ? synthesizeElevenLabs(text, cfg.elevenlabs) : synthesizeHttp(text, cfg.http)));
+    return done(cfg.provider, await (cfg.provider === "qwen" ? synthesizeQwen(text, cfg.qwen, scope, format) : cfg.provider === "elevenlabs" ? synthesizeElevenLabs(text, cfg.elevenlabs, format) : synthesizeHttp(text, cfg.http, format)));
   } catch (e) {
     // Only when asked for (fallback: "kokoro"): the same words, spoken locally.
     if (cfg.fallback !== "kokoro" || !ttsReady(cfg.kokoro.dir).ok) throw e;
     log.warn(`${cfg.provider} speech failed, using Kokoro:`, (e as Error).message);
-    return done("kokoro (fallback)", await synthesize(text, cfg.kokoro));
+    return done("kokoro (fallback)", await synthesize(text, cfg.kokoro, format));
   }
 }

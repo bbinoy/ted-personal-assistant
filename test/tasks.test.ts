@@ -42,7 +42,7 @@ function rig(o: { gate?: (conv: Conversation) => unknown; brief?: "ok" | "incomp
   };
   const w = createWakeups({
     pipeline: pipeline as any,
-    separateAccount: true,
+    groupChats: true,
     vouch: async () => true,
     runProfile: async (profile, prompt, extra) => {
       r.profiles.push(profile);
@@ -215,7 +215,7 @@ test("presets are detached background jobs: the look returns at once, one run pe
   let finish!: () => void;
   const open = new Promise<void>((res) => (finish = res));
   const w = createWakeups({
-    separateAccount: true,
+    groupChats: true,
     pipeline: { canSpeak: () => false, enqueue: (_c: any, j: any) => j(), record: (c: Conversation, k: Kind, ts: number, text: string) => recordMessage(k, ts, text, T0, conv.logFile), runTurn: async () => ({ spoke: false }) } as any,
     vouch: async () => true,
     runProfile: async (profile) => { r.profiles.push(profile); await open; return { text: "", structured: { eventsSeen: 2, messages: [] } }; },

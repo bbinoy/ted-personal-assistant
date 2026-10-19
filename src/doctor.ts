@@ -4,7 +4,6 @@ import { voiceReady } from "@ted-personal-assistant/signal/voice";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { spentToday } from "./budget.ts";
 import { inQuietHours } from "./actions.ts";
@@ -19,6 +18,7 @@ import { BaoError, type OpenBao } from "./openbao.ts";
 import { appBao, keychainNames, looksLikeApiKey, OWNER } from "./secrets.ts";
 import { invites, listTenants, pausedUntil, readConsent, tenantContext } from "./tenants.ts";
 import { Ledger } from "./payments.ts";
+import { messengerDoctor } from "./messenger.ts";
 import { settings } from "./settings.ts";
 import { disconnected, NAMES, readConnectors } from "./connectors.ts";
 import { missingSetup, readNotes } from "./notes.ts";
@@ -186,17 +186,8 @@ export async function doctor() {
     line(!/^ANTHROPIC_API_KEY=./m.test(env) || process.env.HARNESS_AUTH === "api-key" ? true : "warn", "no API key shadowing the stored login", "API key lines override login mode only if HARNESS_AUTH=api-key");
   }
 
-  line(true, "Signal channel", process.env.SIGNAL_ACCOUNT ? "the assistant's own account (its own chat)" : "Note to Self (optional: docs/SIGNAL-ACCOUNT.md gives the assistant its own account and name)");
-  const sig = run("signal-cli", ["--version"]);
-  line(!!sig, "signal-cli installed", sig);
-  const accounts = await readFile(`${process.env.HOME}/.local/share/signal-cli/data/accounts.json`, "utf8").catch(() => "");
-  line(/"number"/.test(accounts), "a Signal account is linked to signal-cli");
-  const up = await new Promise<boolean>((res) => {
-    const s = net.connect(settings.signalPort, settings.signalHost);
-    s.once("connect", () => (s.destroy(), res(true)));
-    s.once("error", () => res(false));
-  });
-  line(up ? true : "warn", `Signal daemon reachable on ${settings.signalHost}:${settings.signalPort}`, up ? "" : "only running while the agent is");
+  // The chat platform (MESSENGER): its own checks come from its package (for Signal: the mode, signal-cli installed and linked, the daemon reachable).
+  for (const l of await messengerDoctor(process.env.SIGNAL_ACCOUNT?.trim() || undefined)) line(l.ok, l.what, l.detail);
 
   if (settings.mailProvider === "gmail") gmailChecks(line, { self: settings.mailSelfAddress, connector: readConnectors()?.gmail, archiveLive: settings.gmailArchiveLive, briefEmail: settings.briefEmail });
   else await mailCheck(line, settings.mail, async () => {

@@ -1,0 +1,26 @@
+{
+  "name": "@ted-personal-assistant/messenger",
+  "version": "0.1.0",
+  "description": "The Messenger interface of the Ted personal assistant: what the assistant needs from a chat platform (types, a neutral addressing convention, loadMessenger and a fake for tests). Platform packages implement it.",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "workspace-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "workspace-source": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "author": "Ben",
+  "engines": {
+    "node": ">=24"
+  }
+}

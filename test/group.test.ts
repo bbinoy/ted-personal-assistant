@@ -110,20 +110,22 @@ const rig = (over: object = {}) => {
   const reactTargets: { author: string; timestamp: number }[] = [];
   const recorded: string[] = [];
   const waits: number[] = [];
-  const signal = {
-    separateAccount: true,
-    react: async (e: string, t: { author: string; timestamp: number }) => void (reacted.push(e), reactTargets.push(t)),
-    typing: async (stop = false) => void (over as any).events?.push(stop ? "typing stop" : "typing start"),
+  const messenger = {
+    name: "fake",
+    summary: "fake",
+    self: "+10000000001",
+    capabilities: FULL_CAPABILITIES,
+    react: async (_g: unknown, t: { author: string; timestamp: number }, e: string) => void (reacted.push(e), reactTargets.push(t)),
+    typing: async (_g: unknown, on: boolean) => void (over as any).events?.push(on ? "typing start" : "typing stop"),
     markRead: async () => {},
-    send: async (text: string, o?: { quote?: unknown; attachments?: string[] }) => (sent.push({ text: o?.attachments ? `[voice]` : text, quoted: !!o?.quote }), 1),
+    send: async (_g: unknown, m: { text: string; quote?: unknown; attachments?: unknown[] }) => (sent.push({ text: m.attachments ? `[voice]` : m.text, quoted: !!m.quote }), 1),
   };
   const ledger: string[] = [];
   const record = (_g: string | undefined, k: string, _ts: number, text: string) => void (k === "wake" || k === "action" ? ledger.push(`${k} ${text}`) : recorded.push(text));
   const pipeline: Pipeline = createPipeline({
-    signal,
-    out: createOutbound(signal as any, (k, t, text, g) => record(g, k, t, text)),
+    messenger,
+    out: createOutbound(messenger, (k, t, text, g) => record(g, k, t, text)),
     record,
-    account: "+10000000001",
     run: async () => assert.fail("not the owner's chat"),
     picture: (over as any).picture ?? (async () => ({ mediaType: "image/jpeg" as const, data: "QUJD" })),
     document: (over as any).document ?? (async () => assert.fail("no document")),
@@ -452,6 +454,7 @@ test("group dream: nightly, only groups with enough new talk, silently", async (
 });
 
 import { chatSystem, groupSystem, SELF_TIMED } from "../src/persona.ts";
+import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
 test("prompts: Ted is told he can act later and on a schedule, in a private chat and in a group alike", () => {
   assert.ok(groupSystem({}).includes(SELF_TIMED));
   assert.ok(chatSystem(undefined, new Date(), [], [], []).includes(SELF_TIMED));

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { parseQuote } from "@ted-personal-assistant/signal";
 import { createOutbound } from "../src/outbound.ts";
 import { shouldThread, SLOW_REPLY_MS, withQuoteContext } from "../src/quote.ts";
+import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
 
 test("quote: signal-cli's quote object is parsed; an empty or attachment-only quote is nothing", () => {
   assert.deepEqual(parseQuote({ id: 1760000000000, author: "+15555550105", authorNumber: "+15555550105", text: " Meeting at 15:00 " }), {
@@ -30,8 +31,8 @@ test("quote: replies are threaded only for a reply-to-something or a slow answer
 
 test("a long reply is one message with the quote, and its cut body coming back is still recognised as our echo", async () => {
   const calls: { text: string; quote: unknown }[] = [];
-  const signal = { send: async (text: string, opts: { quote?: unknown } = {}) => (calls.push({ text, quote: opts.quote }), 5000 + calls.length) } as any;
-  const out = createOutbound(signal);
+  const messenger = { capabilities: FULL_CAPABILITIES, send: async (_target: unknown, m: { text: string; quote?: unknown }) => (calls.push({ text: m.text, quote: m.quote }), 5000 + calls.length) };
+  const out = createOutbound(messenger);
   const q = { text: "the question", author: "+1", timestamp: 42 };
   await out.reply(`${"para one. ".repeat(120)}\n\n${"para two. ".repeat(120)}`, { quote: q });
   assert.equal(calls.length, 1);

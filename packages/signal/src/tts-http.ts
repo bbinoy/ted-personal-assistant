@@ -1,4 +1,5 @@
 import { synthesizeRemote, type Fetch } from "./tts-remote.ts";
+import type { VoiceFormat } from "./voiceformat.ts";
 
 // Optional speech from a server of your own (a serverless GPU running F5-TTS or Chatterbox, say). The contract is
 // in docs/remote-tts.md of this package: POST JSON {text, voice?, reference_id?}, optional bearer token, audio bytes back.
@@ -14,7 +15,7 @@ export interface HttpTtsConfig {
   fetchImpl?: Fetch;
 }
 
-export const synthesizeHttp = (text: string, c: HttpTtsConfig): Promise<string> =>
+export const synthesizeHttp = (text: string, c: HttpTtsConfig, format?: VoiceFormat): Promise<string> =>
   synthesizeRemote(
     {
       url: c.url,
@@ -23,6 +24,7 @@ export const synthesizeHttp = (text: string, c: HttpTtsConfig): Promise<string> 
       secrets: c.token ? [c.token] : [],
       timeoutMs: c.timeoutMs,
       fetchImpl: c.fetchImpl,
+      format,
     },
     "Remote speech server",
   );

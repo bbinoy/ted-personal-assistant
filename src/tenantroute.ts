@@ -1,7 +1,7 @@
 import { CODE_PATTERN } from "./onetime.ts";
 import { ACI, redeemInvite, tenantByAci, type TenantRecord } from "./tenants.ts";
 import { ASSISTANT, OWNER, settings } from "./settings.ts";
-import { toPerson } from "@ted-personal-assistant/signal";
+import { directTarget } from "@ted-personal-assistant/messenger";
 
 // Who is this sender? The door for everybody who is not the owner (main.ts), with TENANTS=on. Pure of Signal: a sender and her text in, a decision out.
 //   a tenant (invited or active)  -> her conversation
@@ -89,7 +89,7 @@ export function routeSender(who: Sender, now = Date.now()): Route {
 }
 
 export interface StrangerIo {
-  reply(to: string, text: string): Promise<unknown>; // a fixed message to one person (a conversation target, packages/signal toPerson)
+  reply(to: string, text: string): Promise<unknown>; // a fixed message to one person (a conversation target: the messenger's directTarget)
   deliver(tenant: TenantRecord): void; // her message goes to her conversation
   welcomed?(tenant: TenantRecord): void; // she just joined; the welcome carries the AI disclosure
 }
@@ -101,7 +101,7 @@ export function admitStranger(m: Pick<Sender, "name" | "text"> & { fromUuid?: st
   if (decided.kind === "tenant") io.deliver(decided.tenant);
   else if (decided.kind === "reply") {
     if (decided.welcome) io.welcomed?.(decided.welcome);
-    void io.reply(toPerson(m.fromUuid!), decided.text).catch((e) => console.error("invitation reply failed:", (e as Error).message));
+    void io.reply(directTarget(m.fromUuid!), decided.text).catch((e) => console.error("invitation reply failed:", (e as Error).message));
   }
   return decided;
 }

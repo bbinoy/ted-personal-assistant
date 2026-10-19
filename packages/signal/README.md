@@ -7,7 +7,8 @@ A small, dependency-free TypeScript client for [signal-cli](https://github.com/A
 - **A library that behaves.** It never calls `process.exit`, installs signal handlers or logs by default: you get a close event and a daemon handle and decide what happens.
 - **Testable.** `/testing` ships `FakeSignalDaemon`, a fake of signal-cli's socket, so a bot's tests need no Signal account.
 - **Optional voice.** Voice messages in (local whisper.cpp) and out (local Kokoro, or your own or a hosted speech server), as separate entry points that the core never imports.
-- **Typed and small.** Zero runtime dependencies, compiled JavaScript with `.d.ts` files, Node 24+, MIT.
+- **A Messenger adapter.** The `/messenger` entry point implements the `Messenger` interface of `@ted-personal-assistant/messenger` (the assistant app loads it with `MESSENGER=signal`): the daemon, the client, targets, text styles, attachments and the doctor's checks behind one neutral interface.
+- **Typed and small.** No third-party dependencies (the only package it uses is the interface package it implements), compiled JavaScript with `.d.ts` files, Node 24+, MIT.
 
 It was written for, and is used every day by, a personal assistant ([Ted](https://github.com/bbinoy/ted-personal-assistant)) that lives in a Signal chat and in groups. Unofficial; not affiliated with Signal or signal-cli.
 

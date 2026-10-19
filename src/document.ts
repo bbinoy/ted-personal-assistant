@@ -1,5 +1,5 @@
 import { closeSync, fstatSync, lstatSync, openSync, readSync, readFileSync } from "node:fs";
-import { MAX_FILE_BYTES } from "@ted-personal-assistant/signal";
+import { MAX_FILE_BYTES } from "@ted-personal-assistant/messenger";
 import { AUDIO_FILE_MAX_SECONDS, audioMagic, MAX_AUDIO_FILE_BYTES, type AudioInfo } from "@ted-personal-assistant/signal/voice";
 import { looksLikeSpeech } from "@ted-personal-assistant/signal/tts";
 import { fence } from "./fence.ts";

@@ -6,10 +6,11 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { onPath, toolEnv } from "./internal/exec.ts";
+import { voiceEncoding, type VoiceFormat } from "./voiceformat.ts";
 
 // Text to speech, on this machine: Kokoro (an open-source neural voice model, run through onnx in its
-// own Python environment) makes the audio, ffmpeg turns it into an AAC file, which Signal shows as a
-// voice message. No network, no API key. `scripts/setup-tts.sh` in this package installs everything.
+// own Python environment) makes the audio, ffmpeg turns it into the voice message format of the messenger (AAC for Signal, which shows it as a
+// voice message). No network, no API key. `scripts/setup-tts.sh` in this package installs everything.
 // English only: voices starting with "b" speak en-gb, all others en-us (scripts/kokoro-say.py).
 
 const run = promisify(execFile);
@@ -50,19 +51,20 @@ async function step<T>(name: string, p: Promise<T>): Promise<T> {
 }
 
 /**
- * Speaks `text` locally and returns the path of an .m4a voice message in a fresh temp folder (mode 0700). The caller
+ * Speaks `text` locally and returns the path of a voice message (an .m4a, or the `format` asked for) in a fresh temp folder (mode 0700). The caller
  * sends it and then deletes that folder (`dirname` of the path).
  * @throws if the Python environment, the model or ffmpeg is missing or fails, or after 240 s
  */
-export async function synthesize(text: string, cfg: TtsConfig): Promise<string> {
+export async function synthesize(text: string, cfg: TtsConfig, format?: VoiceFormat): Promise<string> {
   const f = files(cfg.dir);
   const dir = await mkdtemp(join(tmpdir(), "speech-"));
   const wav = join(dir, "say.wav");
-  const out = join(dir, "voice.m4a");
+  const enc = voiceEncoding(format);
+  const out = join(dir, enc.file);
   const env = toolEnv();
   const py = run(f.python, [SCRIPT, f.model, f.voices, cfg.voice, String(cfg.speed), wav], { timeout: TIMEOUT_MS, env });
   py.child.stdin?.end(text);
   await step("speech model", py);
-  await step("ffmpeg", run("ffmpeg", ["-v", "error", "-y", "-i", wav, "-c:a", "aac", "-b:a", "64k", out], { timeout: TIMEOUT_MS, env }));
+  await step("ffmpeg", run("ffmpeg", ["-v", "error", "-y", "-i", wav, ...enc.args, out], { timeout: TIMEOUT_MS, env }));
   return out;
 }

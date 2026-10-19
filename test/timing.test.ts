@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startTiming } from "../src/timing.ts";
 import { createPipeline, group, owner } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
+import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
 
 test("timing: marks are ms since arrival, durations are as given, the first value wins, the line has no content", () => {
   let t = 1000;
@@ -27,13 +28,12 @@ test("timing: one line per answered turn, owner and group, with every stage and 
   console.log = (...a: unknown[]) => void logged.push(a.join(" "));
   try {
     let clock = 10_000;
-    const signal = { separateAccount: true, react: async () => {}, typing: async () => {}, markRead: async () => {}, send: async () => 1 };
+    const messenger = { name: "fake", summary: "fake", self: "+1", capabilities: FULL_CAPABILITIES, react: async () => {}, typing: async () => {}, markRead: async () => {}, send: async () => 1 };
     const record = () => {};
     const pipeline = createPipeline({
-      signal: signal as any,
-      out: createOutbound(signal as any, record),
+      messenger,
+      out: createOutbound(messenger, record),
       record,
-      account: "+1",
       run: async (_c, _p, _o, _pics, hooks) => (clock += 700, hooks?.firstOutput(), clock += 300, { text: "ok" }),
       picture: async () => assert.fail("no picture"),
       document: async () => assert.fail("no document"),

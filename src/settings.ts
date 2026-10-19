@@ -270,6 +270,9 @@ export function loadSettings(env: Env) {
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none
 
+    // Which chat platform the assistant talks on: the package @ted-personal-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.
+    messenger: env.MESSENGER?.trim() || "signal",
+    // Signal's own settings, handed to its package as options (src/messenger.ts).
     signalHost: "127.0.0.1", // never anything else: signal-cli's socket is unauthenticated
     signalPort: num(env, "SIGNAL_PORT", 7583, 1024, 65_535),
 

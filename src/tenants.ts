@@ -10,7 +10,7 @@ import { TENANT_ID } from "./secrets.ts";
 import { OWNER_SESSION_FILE } from "./session.ts";
 import { settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
-import { toPerson } from "@ted-personal-assistant/signal";
+import { directOf, directTarget, type Target } from "@ted-personal-assistant/messenger";
 
 // Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (the folders and files the
 // instance has always had, unchanged); a friend is a tenant with a folder of her own:
@@ -55,7 +55,7 @@ export const CREDENTIALS: readonly Credential[] = ["login", "instance-key"];
 export interface TenantRecord {
   id: string;
   name: string; // what she is called (from her Signal profile, or what the owner said); one line
-  acis: string[]; // her Signal account id(s): the identity (a number can change hands; the ACI does not)
+  acis: string[]; // her stable account id(s) on the messenger (Signal: the ACI): the identity (a number can change hands; the ACI does not)
   number?: string; // the owner's phone number: the seed of her record until her account id is learned (a friend's number is not known)
   role: Role;
   status: TenantStatus;
@@ -135,7 +135,7 @@ export interface TenantContext {
   name: string;
   senders: string[]; // her sender ids (ACI)
   status: TenantStatus;
-  target: string; // the conversation target to send to her (a Signal person, packages/signal toPerson)
+  target: string; // the conversation target to send to her (the messenger's directTarget of her account id)
   dir: string;
   notesDir: string;
   backupDir: string;
@@ -190,7 +190,7 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     name: rec.name,
     senders: [...rec.acis],
     status: rec.status,
-    target: toPerson(rec.acis[0] ?? ""),
+    target: directTarget(rec.acis[0] ?? ""),
     dir,
     notesDir: paths.notesDir,
     backupDir: join(dir, "backup"),
@@ -260,9 +260,9 @@ export const tenantByAci = (aci: string | undefined): TenantRecord | undefined =
 // The conversation target of a tenant (to send to her), for the outbound path.
 export const targetOf = (id: string): string | undefined => {
   const t = tenantById(id);
-  return t?.acis[0] ? toPerson(t.acis[0]) : undefined;
+  return t?.acis[0] ? directTarget(t.acis[0]) : undefined;
 };
-export const tenantByTarget = (target: string | undefined): TenantRecord | undefined => (target?.startsWith("to:") ? tenantByAci(target.slice(3)) : undefined);
+export const tenantByTarget = (target: Target): TenantRecord | undefined => tenantByAci(directOf(target));
 
 // ---- who is who: identity is the account id; the owner's number is the seed and the fallback ----
 

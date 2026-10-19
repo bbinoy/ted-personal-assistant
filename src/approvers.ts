@@ -1,3 +1,4 @@
+import type { Target } from "@ted-personal-assistant/messenger";
 import { makeApprove } from "./approvalask.ts";
 import { DENY_ALL, type Approve, type ApproverOptions } from "./permissions.ts";
 import { isTenantKey, OWNER_KEY } from "./send.ts";
@@ -10,12 +11,12 @@ import { targetOf } from "./tenants.ts";
 //   "tenant:<id>"      that tenant's own chat, never the admin's: the admin's messages are another conversation and answer nothing here
 // A person who is gone (removed) cannot be asked anywhere: the question is not sent, and never falls back to the owner's chat.
 // A card payment is asked in the owner's foreground chat only (the card is hers); a group and a tenant never pay.
-export function createApprovers(out: { reply(text: string, opts: { plain: true; kind: "approval"; groupId?: string }): Promise<number> }, deps: { make?: typeof makeApprove; target?: (tenantId: string) => string | undefined } = {}): (key: string, o?: ApproverOptions) => Approve {
+export function createApprovers(out: { reply(text: string, opts: { plain: true; kind: "approval"; target?: Target }): Promise<number> }, deps: { make?: typeof makeApprove; target?: (tenantId: string) => string | undefined } = {}): (key: string, o?: ApproverOptions) => Approve {
   const make = deps.make ?? makeApprove;
   const target = deps.target ?? targetOf;
   return (key, o = {}) => {
     const background = !!o.background;
-    const send = (groupId?: string) => (text: string) => out.reply(text, { plain: true, kind: "approval", ...(groupId ? { groupId } : {}) });
+    const send = (target?: Target) => (text: string) => out.reply(text, { plain: true, kind: "approval", ...(target ? { target } : {}) });
     if (key === OWNER_KEY) return make(send(), { scope: key, source: background ? "background" : "chat", background, mayPay: true });
     if (isTenantKey(key)) {
       const to = target(key.slice("tenant:".length));

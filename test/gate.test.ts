@@ -219,7 +219,7 @@ function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; pa
   };
   const wakeups = createWakeups({
     pipeline: pipeline as any,
-    separateAccount: over.separate ?? true,
+    groupChats: over.separate ?? true,
     vouch: async () => over.vouch ?? true,
     runProfile: async (profile, prompt) => (c.profiles.push(profile), c.ownerRuns.push(prompt), { text: over.ownerAnswer ?? "Morning! Fun fact: biscuits." }),
     runGroup: async (build, ctx) => (c.groupRuns.push(`${ctx.conv.source}:${build().prompt}`), over.groupAnswer ?? "Group fun fact!"),
@@ -289,7 +289,7 @@ test("wake: the owner's background run does not hold the chat queue; only its de
   let running = false;
   const w = createWakeups({
     pipeline: { canSpeak: () => false, enqueue: async (_c: any, j: any) => (queued.push("queued"), j()), record: () => {}, runTurn: async (_c: any, t: any) => { const r = await t.run(); queued.push(`delivered ${r.text}`); return { spoke: true }; } } as any,
-    separateAccount: true,
+    groupChats: true,
     vouch: async () => true,
     runProfile: async () => { running = true; await slow; return { text: "late" }; },
     gate: async () => parseGate({ act: true, instructions: "do it", nextCheckMinutes: 20 }),
@@ -313,7 +313,7 @@ test("wake: [[silent]] posts nothing but is an action; a failing run is logged, 
   assert.deepEqual(quiet.c.sent, []);
   assert.match(quiet.c.recorded[1]![1], /stayed silent/);
   const broken = rig();
-  const w = createWakeups({ pipeline: { ...({} as any), canSpeak: () => false, enqueue: (_c: any, j: any) => j(), record: (_c: any, k: string, _t: number, text: string) => broken.c.recorded.push([k, text]), runTurn: async (_c: any, t: any) => { try { await t.run(); return { spoke: false }; } catch (e) { return { spoke: false, error: e }; } } }, separateAccount: true, vouch: async () => true, runProfile: async () => { throw new Error("boom"); }, gate: async () => parseGate({ act: true, instructions: "do it", nextCheckMinutes: 20 }), groups: () => [], notesChangedAt: () => 0, now: () => T0 });
+  const w = createWakeups({ pipeline: { ...({} as any), canSpeak: () => false, enqueue: (_c: any, j: any) => j(), record: (_c: any, k: string, _t: number, text: string) => broken.c.recorded.push([k, text]), runTurn: async (_c: any, t: any) => { try { await t.run(); return { spoke: false }; } catch (e) { return { spoke: false, error: e }; } } }, groupChats: true, vouch: async () => true, runProfile: async () => { throw new Error("boom"); }, gate: async () => parseGate({ act: true, instructions: "do it", nextCheckMinutes: 20 }), groups: () => [], notesChangedAt: () => 0, now: () => T0 });
   assert.equal(await w.look(owner(), T0), "failed");
   assert.match(broken.c.recorded.find(([k]) => k === "action")![1], /failed/);
   assert.equal(broken.c.sent.length, 0);

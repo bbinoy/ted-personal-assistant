@@ -72,7 +72,7 @@ function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversati
   };
   const wakeups = createWakeups({
     pipeline: pipeline as never,
-    separateAccount: true,
+    groupChats: true,
     vouch: async () => true,
     runProfile: async (profile) => (seen.profiles.push(profile), { text: "owner ran" }),
     runGroup: async (build, ctx) => {
@@ -200,7 +200,7 @@ test("quiet-time compaction of a tenant needs heartbeat and her access; it is he
     const r = rig({ key });
     const w = createWakeups({
       pipeline: { canSpeak: () => false, enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never,
-      separateAccount: true,
+      groupChats: true,
       vouch: async () => true,
       runProfile: async () => ({ text: "" }),
       gate: async () => parseGate({ act: false }),

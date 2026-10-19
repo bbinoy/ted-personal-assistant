@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
 
 // A tenant is a "group" run with one person in it and a folder of her own. What this pins: her file tools reach her notes and nothing else (not
 // another tenant's, not the owner's, through "..", an absolute path or a symlink); the owner's chat does not read hers; her tool set has none of the
@@ -292,20 +293,22 @@ function rig() {
   const records: { target?: string; kind: string; text: string }[] = [];
   const ran = { tenant: [] as string[], owner: [] as string[], group: [] as string[] };
   let ts = 9000;
-  const signal = {
-    separateAccount: true,
+  const messenger = {
+    name: "fake",
+    summary: "fake",
+    self: "+10000000001",
+    capabilities: FULL_CAPABILITIES,
     react: async () => {},
-    typing: async (stop = false, groupId?: string) => void typing.push({ stop, groupId }),
-    markRead: async (t: number, from?: string) => void reads.push({ ts: t, from }),
-    send: async (text: string, opts: { groupId?: string } = {}) => (sent.push({ text, groupId: opts.groupId }), ++ts),
+    typing: async (groupId: string | undefined, on: boolean) => void typing.push({ stop: !on, groupId }),
+    markRead: async (_target: string | undefined, m: { timestamp: number; author?: string }) => void reads.push({ ts: m.timestamp, from: m.author }),
+    send: async (groupId: string | undefined, m: { text: string }) => (sent.push({ text: m.text, groupId }), ++ts),
   };
   const record = (target: string | undefined, kind: string, _t: number, text: string) => void records.push({ target, kind, text });
-  const out = createOutbound(signal as never, (kind, t, text, target) => record(target, kind, t, text));
+  const out = createOutbound(messenger, (kind, t, text, target) => record(target, kind, t, text));
   const pipeline = createPipeline({
-    signal: signal as never,
+    messenger,
     out,
     record,
-    account: "+10000000001",
     run: async (conv, prompt) => (conv.kind === "tenant" ? (ran.tenant.push(`${conv.key}: ${prompt}`), { text: "tenant ok" }) : (ran.owner.push(prompt), { text: "owner ok" })),
     picture: async () => assert.fail("no picture"),
     document: async () => assert.fail("no document"),

@@ -5,6 +5,8 @@
 ## 0.2.0 (unreleased)
 
 Added
+- `/messenger` entry point: the Signal client, daemon and attachments as an implementation of the `Messenger` interface (`createMessenger`, `doctor`, `toSignalStyles`). The incoming types (`IncomingMessage`, `Quote`, ...) and the attachment size limits now come from `@ted-personal-assistant/messenger` and are re-exported unchanged.
+- Speech engines take an optional voice format (`m4a` by default, or `ogg-opus`) for their ffmpeg step.
 - Long messages: an attachment of type `text/x-signal-plain` (how Signal apps send the full text of a message over about 2000 characters) is delivered as `IncomingMessage.longText` (`LongTextRef`, `parseLongText`), never as `file`. `readLongText(ref, dir?)` reads it safely (plain file, no symlink, strict UTF-8 without NUL, at most `MAX_LONG_TEXT_BYTES` = 64 KB); `LONG_TEXT_TYPE`.
 - `IncomingMessage.file` / `parseFile` / `FileRef` / `MAX_FILE_BYTES`: the first attachment that is neither a picture nor audio (a document or any other file), with its id, size and the sender's file name. A message with only such a file is now delivered.
 
