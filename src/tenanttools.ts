@@ -3,8 +3,8 @@ import { z } from "zod";
 import { audit } from "./audit.ts";
 import { spentToday } from "./budget.ts";
 import { cooldownUntil } from "./cooldown.ts";
-import { deleteTenant, listTenants, mintInvite, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
-import { TENANT_ID, type KeyStore } from "./secrets.ts";
+import { deleteTenant, mintInvite, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
+import { TENANT_ID } from "./secrets.ts";
 import { settings } from "./settings.ts";
 
 // Two small in-process MCP servers (like memory-tools.ts):
@@ -18,8 +18,8 @@ const reply = (text: string, isError = false) => ({ content: [{ type: "text" as 
 export interface TenantRun {
   id: string;
   key: string; // her conversation's key ("tenant:<id>"): where send, voice and the browse questions go
-  apiKey: string; // HER Anthropic API key, from OpenBao: only into the environment of this run (tenantEnv), nowhere else
-  keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after she changed it
+  apiKey: string; // the instance key (TENANT_ANTHROPIC_API_KEY): only into the environment of this run (tenantEnv), nowhere else, never logged or audited
+  keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after it changed
   costFile: string;
   logFile: string; // her history: what search_logs reads
   consentFile: string;
@@ -28,10 +28,10 @@ export interface TenantRun {
   overBudget: () => boolean; // her own ledger against her own ceiling (the browse run asks)
 }
 
-// The environment of a tenant's run: the process's, minus every way of authenticating as the instance, plus her key. If it is not hers, it is not used.
+// The environment of a tenant's run: the process's, minus every way of authenticating as the owner, plus the instance key (as ANTHROPIC_API_KEY, in this env only).
 const OWN_LOGIN = ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_API_KEY_HELPER"];
 export function tenantEnv(base: Record<string, string | undefined>, apiKey: string): Record<string, string | undefined> {
-  if (!apiKey) throw new Error("a tenant's run needs her own API key"); // never a quiet fall back to the instance's login
+  if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
   const env = { ...base };
   for (const k of OWN_LOGIN) delete env[k];
   env.ANTHROPIC_API_KEY = apiKey;
@@ -67,24 +67,22 @@ export function createTenantServer(t: Pick<TenantRun, "id" | "consentFile">) {
 export const tenantHooks: { drop?: (id: string) => void } = {};
 
 export interface AdminDeps {
-  keys?: () => KeyStore; // her API keys in OpenBao (built on first use; it throws when OpenBao is not reachable)
   drop?: (id: string) => void; // stop anything in flight for her (warm process, queue state)
 }
 
 const when = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 
-export async function describeTenants(keys?: () => KeyStore): Promise<string[]> {
+// One line per person: id, name, role, status, capabilities, consent and today's spend. Everybody, the owner first (it is also what `npm run tenants -- list` shows).
+export function describeTenants(): string[] {
   const lines: string[] = [];
-  for (const rec of listTenants()) {
-    const ctx = tenantContext(rec);
-    let key = "unknown";
-    try {
-      key = keys ? ((await keys().get(rec.id)) ? "set" : "missing") : "unknown";
-    } catch {
-      key = "unknown (OpenBao not reachable)";
+  for (const rec of people()) {
+    if (rec.id === OWNER_ID) {
+      lines.push(`${rec.id} (${rec.name}): ${rec.role}; capabilities ${rec.capabilities.join(", ") || "none"}`);
+      continue;
     }
+    const ctx = tenantContext(rec);
     const c = cooldownUntil(rec.id);
-    lines.push(`${rec.id} (${rec.name}): ${rec.status}; API key ${key}; consent ${readConsent(ctx) ? "given" : "not yet"}; today $${spentToday(ctx.costFile).toFixed(2)} of $${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)} (her key's limit)` : ""}`);
+    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}; consent ${readConsent(ctx) ? "given" : "not yet"}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
   }
   return lines;
 }
@@ -98,7 +96,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
     tools: [
       tool(
         "create_invite",
-        `Mint a single-use invite code for a friend of ${settings.owner}. It is valid for ${settings.inviteTtlHours} hours and works once. Tell ${settings.owner} the code in your reply, and that the friend sends it to ${settings.assistant} in a private Signal message (${settings.assistant} never writes first to anybody). The friend then needs her own Anthropic API key, which she gives through a private link or at the terminal, never in chat.`,
+        `Mint a single-use invite code for a friend of ${settings.owner}. It is valid for ${settings.inviteTtlHours} hours and works once. Tell ${settings.owner} the code in your reply, and that the friend sends it to ${settings.assistant} in a private Signal message (${settings.assistant} never writes first to anybody). `,
         { note: z.string().max(100).optional().describe("Who it is for, for the owner's own reference (like: for Anna)") },
         async ({ note }) => {
           const made = mintInvite(note);
@@ -106,8 +104,8 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
           return made ? reply(`Invite code: ${made.code} (single use, valid until ${new Date(made.expiresAt).toLocaleString()}).`) : reply("Too many invite codes are open already; wait for some to expire or be used.", true);
         },
       ),
-      tool("list_tenants", "List the tenants (friends who use this assistant): id, name, status, whether her API key and her consent are in place, what she spent today against her own limit, and any pause. Never shows a key or anything she said.", {}, async () => {
-        const lines = await describeTenants(deps.keys);
+      tool("list_tenants", "List the tenants (friends who use this assistant): id, name, role, status, capabilities, whether her consent is in place, what she spent today against her own limit, and any pause. Never shows a key or anything she said.", {}, async () => {
+        const lines = describeTenants();
         return reply(lines.length ? lines.join("\n") : "No tenants yet.");
       }),
       tool(
@@ -131,13 +129,13 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
       }),
       tool(
         "remove_tenant",
-        "Delete a tenant AND her data for good: her notes, her chat history, her session and her API key in OpenBao. Cannot be undone. (Asks the owner's approval first.)",
+        "Delete a tenant AND her data for good: her notes, her chat history, and her session. Cannot be undone. (Asks the owner's approval first.)",
         { ...idArg, confirm: z.literal(true).describe("Always true: the owner's approval is what actually decides") },
         async ({ id }) => {
           if (!found(id)) return reply("No such tenant.", true);
-          const r = await deleteTenant(id, { drop: deps.drop ?? tenantHooks.drop, forgetKey: deps.keys ? async (t) => void (await deps.keys!().forget(t)) : undefined });
-          audit("tenant_status", "deleted", "chat", { tenant: id, keyRemoved: r.keyRemoved });
-          return reply(`Deleted ${id} and her data.${r.keyRemoved ? " Her API key is gone from OpenBao." : " Her API key was NOT removed from OpenBao (not reachable or none): remove tenants/" + id + "/anthropic_api_key by hand if it exists."}`);
+          deleteTenant(id, { drop: deps.drop ?? tenantHooks.drop });
+          audit("tenant_status", "deleted", "chat", { tenant: id });
+          return reply(`Deleted ${id} and her data.`);
         },
       ),
     ],

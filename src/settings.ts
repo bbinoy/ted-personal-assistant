@@ -242,11 +242,14 @@ export function loadSettings(env: Env) {
 
     // Several people on one instance (src/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Off: nothing changes, an unknown sender is ignored as always.
     // On: an unknown sender gets a fixed invitation reply (no model call), the owner can mint invite codes, and each friend is a tenant with
-    // her own folder, her own Anthropic API key (OpenBao) and her own limits. The bot never writes first to anybody.
+    // her own folder, her own limits, and runs on the instance key below. The bot never writes first to anybody.
     tenants: oneOf(env, "TENANTS", "off", ["on", "off"] as const) === "on",
     weather: oneOf(env, "WEATHER", "on", ["on", "off"] as const) === "on", // forecast and spot tools with the surf-conditions skill (weathertools.ts)
     draw: oneOf(env, "DRAW", "on", ["on", "off"] as const) === "on", // the draw tool and skill: an SVG the model writes, rendered to a PNG (drawtool.ts)
-    tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on her own key (tenant.json may lower or raise it)
+    // The key tenants' runs use: a separate Anthropic Console workspace key with a spend limit, never the owner's login or key. It is handed to a tenant's
+    // run only, as ANTHROPIC_API_KEY in that run's environment (tenanttools.ts tenantEnv), and dropped from process.env below. Unset: tenants get a plain "not set up".
+    tenantApiKey: env.TENANT_ANTHROPIC_API_KEY?.trim() || undefined,
+    tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on the instance key (tenant.json may lower or raise it)
     inviteTtlHours: num(env, "INVITE_TTL_HOURS", 72, 1, 24 * 90), // how long a minted invite code works
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none
@@ -311,8 +314,8 @@ export function loadSettings(env: Env) {
 }
 
 export const settings = loadSettings(process.env);
-// The speech keys were read into `settings` above. Nothing the agent starts (Claude Code and its MCP servers, ffmpeg, signal-cli)
-// needs them, and they are inherited by every child process unless dropped here.
-for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN"]) delete process.env[name];
+// The speech keys and the tenants' instance key were read into `settings` above. Nothing the agent starts (Claude Code and its MCP servers, ffmpeg, signal-cli)
+// needs them, and they are inherited by every child process unless dropped here (the owner's runs never see the tenants' key).
+for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN", "TENANT_ANTHROPIC_API_KEY"]) delete process.env[name];
 export const OWNER = settings.owner;
 export const ASSISTANT = settings.assistant;

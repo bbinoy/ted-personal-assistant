@@ -35,7 +35,7 @@ export function compactOptions(sessionId: string | undefined, source: Source, no
   const isolated = source === "group";
   return {
     model: settings.model,
-    ...(tenant ? { env: tenantEnv({ ...process.env }, tenant.apiKey) } : {}), // a tenant's compaction is on her own key, like her turns'
+    ...(tenant ? { env: tenantEnv({ ...process.env }, tenant.apiKey) } : {}), // a tenant's compaction is on the instance key, like her turns'
 
     resume: sessionId,
     tools: [],

@@ -30,7 +30,7 @@ export interface IncomingMessage {
   timestamp: number;
   /** A private one-to-one conversation with the bot (Note to Self, or its own chat); never a group. */
   direct: boolean;
-  /** The sender's account id, when Signal gives it. */
+  /** The sender's account id, when Signal gives it (also for the peer's own messages and Note to Self). */
   fromUuid?: string;
   /** The sender's own profile name, when Signal gives it (groups, and one-to-one messages from someone other than the peer). */
   fromName?: string;
@@ -328,7 +328,7 @@ export function interpretEnvelope(env: any, ch: Channel): { message?: IncomingMe
   // A group (own-account mode only; in Note to Self every group message is someone else's and ignored).
   const group = ch.peer !== undefined && data?.groupInfo?.groupId ? { id: String(data.groupInfo.groupId) } : undefined;
   if (data?.groupInfo && !group) return {};
-  const who = other ? { other: true as const, fromUuid: env.sourceUuid || undefined, fromName: env.sourceName || undefined } : {}; // a private message from someone else: who she is
+  const who = other ? { other: true as const, fromUuid: env.sourceUuid || undefined, fromName: env.sourceName || undefined } : direct && env.sourceUuid ? { fromUuid: String(env.sourceUuid) } : {}; // a private message from someone else: who she is; from the peer or in Note to Self: her account id, when Signal gives it (the app learns the owner's from it)
 
   // An edit that does not say what it edits is dropped, not taken for a new message; its body is text only.
   const target = Number(edit?.targetSentTimestamp);

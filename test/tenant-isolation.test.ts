@@ -10,6 +10,8 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenant-isolation-"));
 process.env.ANTHROPIC_API_KEY = "sk-" + "ant-api03-OWNEROWNEROWNEROWNEROWNER"; // the instance's own, which a tenant's run must never carry
 process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token";
+const INSTANCE_KEY = "sk-" + "ant-api03-INSTANCEINSTANCEINSTANCE"; // TENANT_ANTHROPIC_API_KEY: the shared key tenants run on, in .env
+process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
@@ -134,9 +136,10 @@ test("tenant tools: nothing of the owner's, no payment, no saved profile; only w
     assert.equal(asTenant(t, { file_path: join(ann.notesDir, "x.md") }), "deny", t);
   }
   // her own settings can only take tools away
-  assert.ok(!T.toolsFor({ config: { browse: false } }).has("mcp__browse__browse"));
-  assert.ok(!T.toolsFor({ config: { voice: false } }).has("mcp__voice__voice"));
-  assert.deepEqual([...T.toolsFor({ config: { connectors: ["gmail"] } })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
+  assert.ok(!T.toolsFor({ config: { browse: false }, capabilities: ann.capabilities }).has("mcp__browse__browse"));
+  assert.ok(!T.toolsFor({ config: { voice: false }, capabilities: ann.capabilities }).has("mcp__voice__voice"));
+  assert.ok(!T.toolsFor({ config: {}, capabilities: ann.capabilities.filter((c) => c !== "browse" && c !== "voice") }).has("mcp__voice__voice"), "a revoked capability takes the tool away");
+  assert.deepEqual([...T.toolsFor({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
   // and the owner-only admin tools are the owner's chat's, not hidden away from it
   assert.ok(!hiddenTools(["mcp__tenants__create_invite", "mcp__tenants__remove_tenant"]).some((t) => t.startsWith("mcp__tenants")));
   assert.equal(classify("mcp__tenants__create_invite", {}, "chat"), "allow");
@@ -168,7 +171,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
   assert.equal(env.ANTHROPIC_BASE_URL, undefined);
   assert.equal(env.PATH, "/bin");
-  assert.throws(() => tenantEnv({}, ""), /her own API key/);
+  assert.throws(() => tenantEnv({}, ""), /instance API key/);
   T.recordConsent(ann, "Germany"); // (her age and region are confirmed: the full tool set)
   const noop = async () => ({ approved: false });
   const o = buildOptions(noop, tenantRunOptions(ann, KEY), undefined);
@@ -237,6 +240,29 @@ test("a tenant's run: her key in the environment, her cost on her ledger, her se
   assert.equal(spentToday(), before, "the instance's daily guard did not move");
   assert.equal(JSON.parse(readFileSync(ann.sessionFile, "utf8")).sessionId, "sess-ann");
   assert.equal(existsSync(join(settings.stateDir, "session.json")), false);
+});
+
+test("the instance key: read into settings, gone from the process environment, in a tenant run's env only, never in a log or an audit row", async () => {
+  assert.equal(settings.tenantApiKey, INSTANCE_KEY);
+  assert.equal(process.env.TENANT_ANTHROPIC_API_KEY, undefined, "no child process (Claude Code, MCP servers, the owner's runs) inherits it");
+  const noop = async () => ({ approved: false });
+  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionFile: "state/session.json", memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
+  const owners = buildOptions(noop, ownerOpts, undefined);
+  assert.ok(!JSON.stringify(owners.env).includes(INSTANCE_KEY), "the owner's run never carries it");
+  const logged: string[] = [];
+  const spies = (["log", "error", "warn"] as const).map((k) => [k, console[k]] as const);
+  for (const [k] of spies) console[k] = (...a: unknown[]) => void logged.push(a.map(String).join(" "));
+  const seen: { options?: Record<string, unknown> } = {};
+  try {
+    await askTenant(ann, settings.tenantApiKey!, "hello", [], undefined, [], { query: fakeQuery(ok, seen) });
+  } finally {
+    for (const [k, f] of spies) console[k] = f;
+  }
+  assert.equal((seen.options!.env as Record<string, string>).ANTHROPIC_API_KEY, INSTANCE_KEY, "the tenant's run has it as ANTHROPIC_API_KEY");
+  assert.equal((seen.options!.env as Record<string, string>).TENANT_ANTHROPIC_API_KEY, undefined);
+  const written = [logged.join("\n"), ...["logs/audit.jsonl", "logs/agent.log"].map((f) => (existsSync(join(settings.dataDir, f)) ? readFileSync(join(settings.dataDir, f), "utf8") : ""))];
+  for (const text of written) assert.ok(!text.includes(INSTANCE_KEY) && !text.includes("INSTANCEINSTANCE"), "not in a log or an audit row");
+  assert.ok(!JSON.stringify(tenantRunOptions(ann, INSTANCE_KEY, new Date()).systemPrompt).includes("INSTANCEINSTANCE"), "nor in the prompt");
 });
 
 test("a tenant's run that fails on her key pauses her alone", async () => {

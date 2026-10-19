@@ -15,7 +15,7 @@ const cfg = settings.openbao;
 const layout = layoutOf(cfg.dir);
 const names = serviceNames();
 const out = (l: string) => console.log(l);
-const admin = new Admin({ layout, addr: cfg.addr, mount: cfg.mount, role: cfg.role, tenant: "owner", prefix: cfg.keychainPrefix, keychain: macKeychain, tenantKeys: settings.tenants });
+const admin = new Admin({ layout, addr: cfg.addr, mount: cfg.mount, role: cfg.role, tenant: "owner", prefix: cfg.keychainPrefix, keychain: macKeychain });
 
 const USAGE = [
   "usage: npm run openbao -- <command>",

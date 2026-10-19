@@ -157,23 +157,14 @@ export function writeConfig(l: Layout, addr: string): void {
 
 // ---- the policy ----
 
-// `tenantKeys` (TENANTS=on): the app also reads, writes and drops the ONE item of each tenant's own Anthropic API key
-// (tenants/<id>/anthropic_api_key, secrets.ts TenantKeys) and nothing else of theirs. Off: exactly the owner's folder.
-export const policyHcl = (mount: string, tenant: string, tenantKeys = false): string => `# The app's token for tenant "${tenant}": its own folder and nothing else.
+export const policyHcl = (mount: string, tenant: string): string => `# The app's token for tenant "${tenant}": its own folder and nothing else.
 path "${mount}/data/tenants/${tenant}/*" {
   capabilities = ["create", "read", "update", "delete"]
 }
 path "${mount}/metadata/tenants/${tenant}/*" {
   capabilities = ["list", "read", "delete"]
 }
-${tenantKeys ? `# Each tenant's own API key: this one item per tenant.
-path "${mount}/data/tenants/+/anthropic_api_key" {
-  capabilities = ["create", "read", "update", "delete"]
-}
-path "${mount}/metadata/tenants/+/anthropic_api_key" {
-  capabilities = ["read", "delete"]
-}
-` : ""}`;
+`;
 
 // The setup tool's own token. It can only ask for a root token (which also needs the unseal shares) and take a snapshot; it reads no secret.
 // OpenBao 2.7 turns the unauthenticated root-generation endpoints off, so something must hold this much to repair or rotate later.
@@ -196,7 +187,6 @@ export interface AdminOptions {
   tenant: string;
   prefix: string; // Keychain item prefix
   keychain: Keychain;
-  tenantKeys?: boolean; // TENANTS=on: the app's policy also covers each tenant's own API key item (policyHcl)
 }
 
 export interface SetupIo {
@@ -331,7 +321,7 @@ export class Admin {
     const audits = await api.raw("GET", "sys/audit");
     const devices = Object.values((audits?.data ?? audits ?? {}) as Record<string, { type?: string }>).filter((d) => d && typeof d === "object" && d.type === "file");
     if (!devices.length) throw new Error(`no file audit device is enabled (the config should declare one; see ${this.o.layout.config})`);
-    await api.raw("PUT", `sys/policies/acl/${role}`, { policy: policyHcl(mount, tenant, !!this.o.tenantKeys) });
+    await api.raw("PUT", `sys/policies/acl/${role}`, { policy: policyHcl(mount, tenant) });
     await api.raw("POST", `auth/token/roles/${role}`, { allowed_policies: [role], orphan: true, period: "768h", renewable: true });
     await api.raw("PUT", `sys/policies/acl/${OPERATOR_ROLE}`, { policy: OPERATOR_POLICY });
     await api.raw("POST", `auth/token/roles/${OPERATOR_ROLE}`, { allowed_policies: [OPERATOR_ROLE], orphan: true, period: "768h", renewable: true });

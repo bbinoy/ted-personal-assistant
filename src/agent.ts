@@ -114,8 +114,8 @@ export function runHandlerTurn(prompt: string, approve: Approve, onToolSuccess?:
 
 // ---- a tenant's chat ----
 
-// A tenant's turn (tenants.ts): an isolated "group" run in a private chat, on HER OWN API key, with her notes, her session, her ledger. Until she has
-// confirmed her age and region the run has one tool, record_consent. The key comes from OpenBao (tenantrun.ts) and goes only into this run's environment.
+// A tenant's turn (tenants.ts): an isolated "group" run in a private chat, on the instance key, with her notes, her session, her ledger. Until she has
+// confirmed her age and region the run has one tool, record_consent. The key (settings.tenantApiKey, via tenantrun.ts) goes only into this run's environment.
 export function tenantRunOptions(ctx: TenantContext, apiKey: string, now = new Date()): RunOptions {
   const consented = !!readConsent(ctx);
   const key = `tenant:${ctx.id}`;

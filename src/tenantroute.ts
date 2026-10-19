@@ -14,8 +14,8 @@ import { toPerson } from "@ted-personal-assistant/signal";
 export const DISCLOSURE = "You're talking to an AI, and its answers may be wrong.";
 export const invitationReply = (): string => `Hi, I'm ${ASSISTANT}, an AI assistant that works for ${OWNER}. I only chat with people ${OWNER} has invited. If you have an invitation code, send it to me here; otherwise I can't help, sorry.`;
 export const badCodeReply = (): string => `That code isn't valid (it may have been used already, or it has expired). Please ask ${OWNER} for a new one.`;
-export const welcomeReply = (name: string): string => `${DISCLOSURE}\n\nWelcome${name ? `, ${name}` : ""}! Your invitation worked. Before we can talk I need two things: your own Anthropic API key (so the AI runs on your account and the cost is yours; ${OWNER} never sees it), and a quick confirmation of your age and region. ${OWNER} will give you a private way to add the key. Never type a key or any password into this chat.`;
-export const setupIncompleteReply = (): string => `Setup isn't finished yet: I still need your own Anthropic API key before I can reply. ${OWNER} can give you a private way to add it. Please never type the key into this chat.`;
+export const welcomeReply = (name: string): string => `${DISCLOSURE}\n\nWelcome${name ? `, ${name}` : ""}! Your invitation worked. Before we can talk I need a quick confirmation of your age and region. Never type a password or any other secret into this chat.`;
+export const notSetUpReply = (): string => `I'm not set up for friends yet, so I can't reply for now. I've let ${OWNER} know.`;
 
 export type Route =
   | { kind: "tenant"; tenant: TenantRecord }
