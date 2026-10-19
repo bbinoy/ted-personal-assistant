@@ -10,7 +10,7 @@ import { settings } from "./settings.ts";
 // Without mail the two mail skills are not offered (the others keep a few mail sentences; the system prompt says to skip them, persona.ts).
 const MAIL_SKILLS = ["mailbird", "mailbird-troubleshooting", "gmail"];
 export const offeredSkills = (mail: boolean, provider: string = settings.mailProvider): string[] =>
-  ["daily-brief", provider === "gmail" ? "gmail" : "mailbird", ...(provider === "gmail" ? [] : ["mailbird-troubleshooting"]), "calendar", "notion-tasks", "meeting-prep", "research-booking", "setup", "radar", ...(settings.weather ? ["surf-conditions"] : [])].filter((s) => mail || !MAIL_SKILLS.includes(s)).map((s) => `ted-personal-assistant:${s}`);
+  ["daily-brief", provider === "gmail" ? "gmail" : "mailbird", ...(provider === "gmail" ? [] : ["mailbird-troubleshooting"]), "calendar", "notion-tasks", "meeting-prep", "research-booking", "setup", "radar", ...(settings.weather ? ["surf-conditions"] : []), ...(settings.draw ? ["draw"] : [])].filter((s) => mail || !MAIL_SKILLS.includes(s)).map((s) => `ted-personal-assistant:${s}`);
 export const OFFERED_SKILLS = offeredSkills(settings.mail, settings.mailProvider);
 
 // ---- run profiles ----

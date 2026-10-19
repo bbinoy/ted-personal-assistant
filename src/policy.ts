@@ -108,7 +108,7 @@ export function classify(tool: string, input: Record<string, unknown>, source: S
     if (NOTE_FILE_TOOLS.has(tool)) return groupNotesDir && isInside(input.file_path, groupNotesDir) ? "allow" : "deny";
     // The browse tool starts a separate run with no owner data (browse.ts); in a group the run asks in that group like the owner's chat does.
     if (tool === "mcp__browse__browse") return settings.browse ? "allow" : "deny";
-    if (tool === "mcp__send__send" || tool === "mcp__voice__voice") return "allow";
+    if (tool === "mcp__send__send" || tool === "mcp__voice__voice" || tool === "mcp__draw__draw") return "allow"; // draw: sanitised and rendered by code, kept for the turn (drawtool.ts)
     if (tenantTools && tool === TENANT_CONSENT_TOOL) return "allow"; // a tenant's one-time age and region confirmation (tenanttools.ts)
     return tool === WEB_SEARCH || tool === FORGET_NOTE || tool === SEARCH_LOGS || tool === UNDO_DREAM ? "allow" : "deny";
   }
