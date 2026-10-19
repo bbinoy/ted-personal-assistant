@@ -37,6 +37,10 @@ npm run install:launchd               # installs a launchd job; the agent starts
 
 Send yourself a message on Signal. The first heartbeat tick only records a **baseline** of your current inbox (it does not triage old mail). The first daily brief runs on the next tick at or after 07:00.
 
+### Choosing a messenger
+
+Signal is the messenger that works, and the default (`MESSENGER=signal`, or leave it unset). Telegram, WhatsApp and Slack exist only as skeletons under `packages/telegram`, `packages/whatsapp` and `packages/slack`: each has a `SETUP.md` with the design, and choosing one today ends in a "not built yet" message. Only the chosen package is ever loaded; a platform other than Signal is installed with `npm install -w packages/<name>`. `npm run doctor` names the active messenger first, then the checks of that platform.
+
 ### Chat only (no mail)
 
 Mail is optional. For the Signal chat, memory, wake-ups, the calendar radar and a daily brief without an inbox, you need only **Claude Code** (logged in) and **signal-cli**: skip the Mailbird step above and put this in `.env`:
