@@ -27,17 +27,17 @@ export interface Task {
   retries?: number; // brief: extra attempts after an incomplete one, same day
 }
 
-// Pure. The gate's output as a task, or nothing. Fails closed: a preset is only for the owner's chat (and the radar only when it is enabled); a group that asks for one, or an unknown name, gets the plain task if
-// the gate wrote instructions, else nothing.
-export function buildTask(convKind: "owner" | "group", out: Pick<GateOutput, "task" | "instructions">, o: { radar?: boolean } = {}): Task | undefined {
+// Pure. The gate's output as a task, or nothing. Fails closed: a preset is only for a conversation that has them (conversationmodel.ts hasPresets: the
+// owner's chat; the radar only when it is enabled); any other that asks for one, or an unknown name, gets the plain task if the gate wrote instructions, else nothing.
+export function buildTask(presets: boolean, out: Pick<GateOutput, "task" | "instructions">, o: { radar?: boolean } = {}): Task | undefined {
   const radar = o.radar ?? settings.proactive;
-  if (convKind === "owner") {
+  if (presets) {
     if (out.task === "brief") return { name: "brief", instructions: briefInstructions(), profile: "brief", after: "brief", retries: settings.briefMaxAttempts - 1 };
     if (out.task === "radar" && radar) return { name: "radar", instructions: radarInstructions(WINDOW_MINUTES), profile: "radar", after: "radar" };
   }
   const instructions = out.instructions?.trim();
   if (!instructions) return undefined;
-  return { name: "task", instructions, profile: convKind === "owner" ? "background" : "group", after: "post" };
+  return { name: "task", instructions, profile: presets ? "background" : "group", after: "post" };
 }
 
 // ---- when the brief is owed, in code ----

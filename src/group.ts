@@ -118,11 +118,11 @@ export interface GroupMessage {
 
 // Makes the prompt once it is known whether the session resumes: `since` is the newest line it has been shown.
 export type PromptBuilder = (since?: string) => { prompt: string; seenAt?: string; pictures?: Picture[]; documents?: Document[] };
-export type Runner = (build: PromptBuilder, ctx: { conv: Conversation; now: Date; firstOutput?: () => void }) => Promise<string>;
+export type Runner = (build: PromptBuilder, ctx: { conv: Conversation; now: Date; firstOutput?: () => void; apiKey?: string }) => Promise<string>; // apiKey: a tenant's unattended run, on the instance key (tenantrun.ts access)
 
 // Chat replies and wake-ups both run here; the cost is logged as for an owner run.
-export const realRunner: Runner = async (build, { conv, now, firstOutput }) => {
-  const r = await runConversation(conv, { style: styleLines(now) }, build, firstOutput);
+export const realRunner: Runner = async (build, { conv, now, firstOutput, apiKey }) => {
+  const r = await runConversation(conv, { style: conv.groupId ? styleLines(now) : undefined, apiKey }, build, firstOutput); // the owner's style notes are a group's; a tenant has her own
   if (r.costUsd !== undefined) console.log(`group run: ${r.text.length} chars, $${r.costUsd.toFixed(4)}`);
   return r.text.trim();
 };

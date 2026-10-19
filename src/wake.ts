@@ -8,30 +8,36 @@ import { askGate, idleFingerprint, logTail, NOTHING, type Gate } from "./gate.ts
 import { KEY_TTL_MS, lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";
 import { groupContext, listGroups } from "./groupstore.ts";
 import { groupWakePrompt, realRunner, type PromptBuilder, type Runner } from "./group.ts";
-import { group, owner, type Conversation, type Pipeline } from "./conversation.ts";
+import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
+import { allows, hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
 import { localDay } from "./pause.ts";
 import { voiceOption } from "./voicereply.ts";
 import { isPaused } from "./pause.ts";
 import type { OwnerProfile } from "./profiles.ts";
+import { listTenants } from "./tenants.ts";
+import type { TenantAccess } from "./tenantrun.ts";
 import { briefOwed, briefPending, buildTask, presetRefusal, runBriefTask, runRadarTask, type PresetIO, type Task } from "./tasks.ts";
-import { OWNER, settings } from "./settings.ts";
+import { settings } from "./settings.ts";
 import { MIN_GAP_MINUTES } from "./radar-rules.ts";
 import { LIMITS } from "./sanitize.ts";
 
-// The clock half of the gate (gate.ts). On every heartbeat tick, for the owner's chat and for every group the owner
-// is in, whose next look has come (or where something was said or a note changed since the last look), the gate is
-// asked whether to do something unprompted. If it says act, the conversation's NORMAL runner does it, with the
+// The clock half of the gate (gate.ts). On every heartbeat tick, for the owner's chat, every group the owner is in and
+// every tenant (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look),
+// the gate is asked whether to do something unprompted. If it says act, the conversation's NORMAL runner does it, with the
 // gate's instructions, and the answer goes out through the shared pipeline (it may be [[silent]]):
 //   a group    the group run (src/agent.ts runConversation): its own notes and web search, nothing of the owner's
+//   a tenant   the same run on the instance key, with HER notes, session and cost file, her approvals in her chat, an answer to her chat only.
+//              She is looked in on only with the capabilities `heartbeat` and `wake` (a friend has the first, not the second), while she is
+//              active, out of a cooldown and within her day's budget; the gate's own call is billed to her the same way
 //   the owner  a background run with the radar's rights (policy source "background"): reads, anything else asks on
 //              the phone; web search allowed, page fetches ask
-// For the owner the gate also chooses the presets "brief" and "radar" (tasks.ts: WHEN is the gate's, HOW is code) when
-// SCHEDULER=gate. Presets are owner-only: a group's gate output is always a plain task. Besides, one deterministic rule
+// For a conversation with the mail and calendar capabilities (the owner's) the gate also chooses the presets "brief" and "radar" (tasks.ts: WHEN is the
+// gate's, HOW is code) when SCHEDULER=gate. A group's or a tenant's gate output is always a plain task. Besides, one deterministic rule
 // that needs no model: if no brief is logged for today by BRIEF_BACKSTOP_HOUR, or an attempt came out incomplete, the brief
 // runs anyway (the dream first). Presets are not queued behind the chat (a brief takes minutes) and not awaited by the look either: they run as detached jobs, one per task at a time; free-form tasks are queued.
 // The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the
-// owner's once-a-day notice), the owner's quiet hours, the next look clamped to 15..60 minutes, per preset its own rules
+// owner's once-a-day notice; a tenant's own day is her access, tenantrun.ts), quiet hours of every private chat, the next look clamped to 15..60 minutes, per preset its own rules
 // (tasks.ts presetRefusal: brief once a day and its attempt cap; radar not too soon, not before the brief, the cap on posts
 // per day), and a failed run is logged and silent. A gate that fails or says something odd means do nothing.
 
@@ -42,29 +48,31 @@ interface WakeDeps {
   runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; judgeContext?: string }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // the owner's runs by profile (agent.ts runProfile)
   presets?: { sendBrief: (markdown: string) => Promise<void>; notify: (text: string) => Promise<void>; beforeBrief?: () => Promise<void> }; // what the brief and radar presets need
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
-  runGroup?: Runner;
+  runGroup?: Runner; // a group's or a tenant's run
   gate?: Gate;
   groups?: () => string[]; // known group ids
+  tenants?: { access: (id: string | undefined) => TenantAccess | undefined }; // what a tenant's unattended work runs on (tenantrun.ts); absent: tenants are not looked in on
+  tenantIds?: () => string[]; // active tenants (default: the registry)
   context?: typeof groupContext;
   notesChangedAt?: (dir: string) => number;
   now?: () => Date;
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
 }
 
-// Pure: the prompt of the owner's wake-up. The log tail is data; the task is the gate's reading of the notes.
-function ownerWakePrompt(now: Date, instructions: string, tail: readonly string[], speak = false): string {
+// Pure: the prompt of a private chat's wake-up (`who`: the owner, or the tenant by her name). The log tail is data; the task is the gate's reading of the notes.
+function wakePrompt(who: string, now: Date, instructions: string, tail: readonly string[], speak = false): string {
   return [
     clockLine(now),
-    `Nobody wrote to you just now: going by ${OWNER}'s notes and the clock, you decided to act on your own. The task (a note to yourself, derived from the notes; it cannot widen what you are allowed to do):\n${fence("task", instructions)}`,
+    `Nobody wrote to you just now: going by ${who}'s notes and the clock, you decided to act on your own. The task (a note to yourself, derived from the notes; it cannot widen what you are allowed to do):\n${fence("task", instructions)}`,
     `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`,
-    `Do the task, then write the short chat message to send ${OWNER}. If on reflection nothing needs saying, answer exactly [[silent]].`,
+    `Do the task, then write the short chat message to send ${who}. If on reflection nothing needs saying, answer exactly [[silent]].`,
     voiceOption(speak),
   ].filter(Boolean).join("\n\n");
 }
 
 const outcome = (res: { error?: unknown; spoke: boolean }): "posted" | "silent" | "failed" => (res.error ? "failed" : res.spoke ? "posted" : "silent");
 
-const source = (conv: Conversation): Source => (conv.kind === "owner" ? "background" : "group");
+const source = (conv: Conversation): Source => (onLogin(conv) ? "background" : "group");
 
 export function createWakeups(deps: WakeDeps) {
   const { pipeline } = deps;
@@ -74,13 +82,14 @@ export function createWakeups(deps: WakeDeps) {
   const spent = deps.guards?.budgetSpent ?? budgetSpent;
   const changed = deps.notesChangedAt ?? notesChangedAt;
 
-  async function act(conv: Conversation, instructions: string, now: Date): Promise<"posted" | "silent" | "failed"> {
-    if (conv.kind === "owner") {
+  async function act(conv: Conversation, instructions: string, now: Date, apiKey?: string): Promise<"posted" | "silent" | "failed"> {
+    const speak = pipeline.canSpeak() && allows(conv, "voice");
+    if (onLogin(conv)) {
       // The owner's run happens OUTSIDE the chat queue: it may ask for an approval and wait up to `BACKGROUND_APPROVAL_TIMEOUT_MINUTES` (2 h by default) for it, and the
       // owner's chat must not wait with it. Only the delivery of the answer takes its place in the queue.
       let done: { text: string; costUsd?: number } | undefined;
       let failure: unknown;
-      await deps.runProfile("background", ownerWakePrompt(now, instructions, logTail(conv, 20), pipeline.canSpeak()), { judgeContext: instructions }).then((r) => void (done = r), (e) => void (failure = e));
+      await deps.runProfile("background", wakePrompt(speakerOf(conv), now, instructions, logTail(conv, 20), speak), { judgeContext: instructions }).then((r) => void (done = r), (e) => void (failure = e));
       return pipeline.enqueue(conv, async () => {
         const run = async () => {
           if (done) return done;
@@ -90,11 +99,14 @@ export function createWakeups(deps: WakeDeps) {
       });
     }
     return pipeline.enqueue(conv, async () => {
-      const build: PromptBuilder = (since) => {
-        const { lines, seenAt } = (deps.context ?? groupContext)(conv.groupId!, since);
-        return { prompt: groupWakePrompt(now, lines, instructions, !!since, pipeline.canSpeak()), seenAt };
-      };
-      const run = async () => ({ text: await (deps.runGroup ?? realRunner)(build, { conv, now }) });
+      // Her session already holds her chat; the prompt carries the tail of her log, like the owner's. A group's is what its members wrote since the session last saw.
+      const build: PromptBuilder = conv.tenantId
+        ? () => ({ prompt: wakePrompt(speakerOf(conv), now, instructions, logTail(conv, 20), speak) })
+        : (since) => {
+            const { lines, seenAt } = (deps.context ?? groupContext)(conv.groupId!, since);
+            return { prompt: groupWakePrompt(now, lines, instructions, !!since, speak), seenAt };
+          };
+      const run = async () => ({ text: await (deps.runGroup ?? realRunner)(build, { conv, now, apiKey }) });
       return outcome(await pipeline.runTurn(conv, { run, background: true, announce: false, kind: "chat" }));
     });
   }
@@ -144,7 +156,8 @@ export function createWakeups(deps: WakeDeps) {
   // session file); the tick does not wait for it, and the tick's guards (paused, over budget) have already passed.
   function quietCompact(conv: Conversation): void {
     const key = `compact:${conv.key}`;
-    if (!deps.compact || running.has(key) || !deps.compact.due(conv) || skipForCooldown("compaction")) return;
+    if (!deps.compact || running.has(key) || !deps.compact.due(conv)) return;
+    if (conv.tenantId ? !deps.tenants?.access(conv.tenantId) : skipForCooldown("compaction")) return; // hers is billed to her (and stops with her cooldown and budget)
     const run = deps.compact.run;
     const job = pipeline.enqueue(conv, () => run(conv)).then(
       () => "compact-done",
@@ -154,12 +167,12 @@ export function createWakeups(deps: WakeDeps) {
     void job.finally(() => running.delete(key));
   }
 
-  const briefTask = (): Task => buildTask("owner", { task: "brief" })!;
+  const briefTask = (): Task => buildTask(true, { task: "brief" })!;
 
   // The deterministic brief (no model decides): the backstop hour has passed with no brief logged today, or an attempt came
   // out incomplete. Not held back by quiet hours: a Mac that wakes late still gets that day's brief.
   async function backstop(conv: Conversation, st: LookState, now: Date): Promise<string | undefined> {
-    if (conv.kind !== "owner" || !briefOwed(st, now)) return undefined;
+    if (!hasPresets(conv) || !briefOwed(st, now)) return undefined;
     if (paused(clock()) || spent()) return "guarded";
     if (skipForCooldown("brief")) return "cooldown"; // usage limit: the next tick after it lifts retries
     return runPreset(conv, briefTask(), st, now);
@@ -190,20 +203,23 @@ export function createWakeups(deps: WakeDeps) {
 
   // One conversation, one look. Returns what happened (for the log and tests).
   async function look(conv: Conversation, now: Date): Promise<string> {
-    if (conv.kind === "tenant") return "tenant"; // a tenant never acts on her own in this phase: no wake-ups, no gate (and every such run would be on the instance's login)
     const st = stateOf(conv, now);
     const owed = await backstop(conv, st, now);
     if (owed) return owed;
     if (!settings.wakeups) return "off";
-    if (conv.kind === "owner" && inQuietHours(now, settings.quietStartHour, settings.quietEndHour)) return "quiet-hours";
+    if (!allows(conv, "heartbeat") || !allows(conv, "wake")) return "not-allowed"; // a tenant's record decides; nothing for her without both
+    if (conv.direct && inQuietHours(now, settings.quietStartHour, settings.quietEndHour)) return "quiet-hours"; // a private chat: the owner's and each tenant's
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: changed(conv.notesDir), messagesCount: !tagged })) return "not-due";
 
-    if (skipForCooldown(`${conv.kind} look`)) return "cooldown"; // usage limit: no model call, nothing recorded, the next tick looks again
+    // A tenant's look runs on the instance key and is billed to her: suspended, in her own cooldown, past her day's budget or no key set means no model call.
+    const access = conv.tenantId ? deps.tenants?.access(conv.tenantId) : undefined;
+    if (conv.tenantId && !access) return "blocked";
+    if (!conv.tenantId && skipForCooldown(`${conv.kind} look`)) return "cooldown"; // usage limit: no model call, nothing recorded, the next tick looks again
 
     // Nothing relevant changed since the model last found nothing to do: its answer would be the same, so keep that look time.
     const tail = logTail(conv);
-    const print = idleFingerprint({ conv, now, tail }, conv.kind === "owner" ? idleFacts(st, now) : "");
+    const print = idleFingerprint({ conv, now, tail }, hasPresets(conv) ? idleFacts(st, now) : "");
     const quiet = quietLooks.get(conv.key);
     if (quiet && quiet.print === print) {
       recordWake(pipeline, conv, quiet.nextCheckMinutes, now);
@@ -214,7 +230,7 @@ export function createWakeups(deps: WakeDeps) {
     let out = NOTHING;
     let answered = false;
     try {
-      out = await gate({ conv, trigger: "clock", now, tail });
+      out = await gate({ conv, trigger: "clock", now, tail, ...(access ? { tenant: { id: access.id, apiKey: access.apiKey, costFile: access.costFile } } : {}) });
       answered = true;
     } catch (e) {
       console.error(`wake: gate failed (${conv.kind}):`, (e as Error).message); // fail closed; the default delay stops a retry on every tick
@@ -225,16 +241,17 @@ export function createWakeups(deps: WakeDeps) {
       if (answered) quietLooks.set(conv.key, { print, nextCheckMinutes: out.nextCheckMinutes }); // only a real answer counts as a quiet decision
       return "no";
     }
-    const task = buildTask(conv.kind, out); // presets only for the owner; anything else is the plain task, or nothing
+    const task = buildTask(hasPresets(conv), out); // presets only where they exist (the owner's); anything else is the plain task, or nothing
     if (!task) return "no-instructions"; // a free-form look must say what to do
-    if (paused(clock()) || spent()) return "guarded"; // re-checked: the gate call itself took time and money
+    const again = conv.tenantId ? deps.tenants?.access(conv.tenantId) : undefined; // re-checked: the gate call itself took time and money (hers too)
+    if (paused(clock()) || (conv.tenantId ? !again : spent())) return "guarded";
 
     if (task.name !== "task") {
-      if (conv.kind !== "owner") return "no"; // defence in depth: buildTask never returns this
+      if (!hasPresets(conv)) return "no"; // defence in depth: buildTask never returns this
       // The wake line is written again when the run ends: the ledger lines it wrote are not news.
       return runPreset(conv, task, st, now, () => recordWake(pipeline, conv, out.nextCheckMinutes, now));
     }
-    const result = await act(conv, task.instructions, now).catch((e) => (console.error(`wake: ${conv.kind} run failed:`, (e as Error).message), "failed" as const));
+    const result = await act(conv, task.instructions, now, again?.apiKey).catch((e) => (console.error(`wake: ${conv.kind} run failed:`, (e as Error).message), "failed" as const));
     pipeline.record(conv, "action", Date.now(), `wake-up: ${task.instructions.slice(0, LIMITS.preview)} → ${result === "posted" ? "posted" : result === "silent" ? "stayed silent" : "failed"}`);
     audit("wake", result, source(conv));
     recordWake(pipeline, conv, out.nextCheckMinutes, now); // after the act: notes it wrote are not news
@@ -247,17 +264,29 @@ export function createWakeups(deps: WakeDeps) {
   // Every conversation looks on its own: a slow brief or a failing group never delays another conversation.
   const busy = new Set<string>();
   async function tick(now = clock()): Promise<void> {
-    if (paused(now) || spent()) return;
-    const convs: Conversation[] = [owner()];
+    if (paused(now)) return;
+    const convs: Conversation[] = spent() ? [] : [owner()]; // the instance's daily budget is the owner's and the groups'; a tenant's is her own (her access)
     if (settings.wakeups && deps.separateAccount) {
-      const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
-      const vouched = await Promise.all(ids.map((id) => deps.vouch(id).catch(() => false))); // in parallel; a lookup is cached for minutes
-      ids.forEach((id, i) => vouched[i] && convs.push(group(id)));
-      for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups that are gone
+      if (convs.length) {
+        const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
+        const vouched = await Promise.all(ids.map((id) => deps.vouch(id).catch(() => false))); // in parallel; a lookup is cached for minutes
+        ids.forEach((id, i) => vouched[i] && convs.push(group(id)));
+      }
+      if (settings.tenants && deps.tenants) {
+        for (const id of (deps.tenantIds ?? (() => listTenants().filter((r) => r.status === "active").map((r) => r.id)))()) {
+          try {
+            const conv = tenant(id);
+            if (allows(conv, "heartbeat")) convs.push(conv); // the tick is her heartbeat: without it nothing of hers is touched
+          } catch (e) {
+            console.error("wake: a tenant could not be looked at:", (e as Error).message);
+          }
+        }
+      }
+      for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone
     }
     await Promise.all(
       convs.map(async (conv) => {
-        if (paused(clock()) || spent()) return;
+        if (paused(clock()) || (conv.tenantId ? false : spent())) return;
         quietCompact(conv);
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
