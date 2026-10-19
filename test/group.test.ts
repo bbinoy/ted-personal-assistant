@@ -5,6 +5,8 @@ import { createPipeline, group, type Pipeline } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
 import { groupName, createGroupBrain, groupPrompt, groupWakePrompt, ownerInGroup, speaker } from "../src/group.ts";
 import { readLongText } from "@ted-personal-assistant/signal";
+import { groupCapabilities } from "../src/capabilities.ts";
+import { skillsFor } from "../src/skills.ts";
 import { classify } from "../src/policy.ts";
 import { parseGate } from "../src/gate.ts";
 import { settings } from "../src/settings.ts";
@@ -29,7 +31,7 @@ test("groups: web search, the memory tools (scoped by their server) and the file
   mkdirSync(NOTES_DIR, { recursive: true });
   assert.equal(classify("WebSearch", { query: "x" }, "group"), "allow");
   for (const t of ["mcp__memory__search_logs", "mcp__memory__forget_note", "mcp__memory__undo_dream"]) assert.equal(classify(t, {}, "group"), "allow", t);
-  for (const t of ["WebFetch", "Skill", "Bash", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, "group"), "deny", t);
+  for (const t of ["WebFetch", "Bash", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, "group"), "deny", t);
   for (const t of ["Read", "Write", "Edit"]) {
     assert.equal(classify(t, { file_path: join(dir, "people-eve.md") }, "group", dir), "allow", t);
     assert.equal(classify(t, { file_path: join(dir, "anything at all.txt") }, "group", dir), "allow", `${t}: no file name rules, containment is the only gate`);
@@ -47,8 +49,8 @@ test("groups: a group run is built with its own memory folder, its own session a
   assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
   assert.notEqual(conv.notesDir, owner().notesDir);
   assert.ok(conv.sessionFile.startsWith(join(GROUPS_DIR, groupKey("g-build"))));
-  assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, undefined, undefined, ["send", "weather", "draw", "voice", "memory", "browse"]]);
-  assert.deepEqual(o.tools, ["Read", "Write", "Edit", "WebSearch"]);
+  assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "voice", "memory", "browse"]]);
+  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
   const oo = buildOptions(async () => ({ approved: false }), { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: NOTES_DIR } }, undefined);
   assert.deepEqual(oo.settings, { autoMemoryEnabled: true, autoMemoryDirectory: NOTES_DIR }); // the owner's wiring is unchanged
   assert.deepEqual(oo.settingSources, ["user"]);
@@ -58,7 +60,8 @@ test("groups: compaction of a group session is isolated exactly like the group r
   const conv = group("g-compact");
   const run = buildOptions(async () => ({ approved: false }), runOptionsFor(conv), undefined);
   const c = compactOptions("sess-1", "group", conv.notesDir);
-  assert.deepEqual([c.settingSources, c.strictMcpConfig, c.settings, c.plugins, c.skills, c.resume, c.tools], [run.settingSources, run.strictMcpConfig, run.settings, run.plugins, run.skills, "sess-1", []]);
+  assert.deepEqual([c.settingSources, c.strictMcpConfig, c.settings, c.resume, c.tools], [run.settingSources, run.strictMcpConfig, run.settings, "sess-1", []]);
+  assert.deepEqual([c.plugins, c.skills], [undefined, undefined], "compaction has no tools, so it loads none of the skills the group run has");
   assert.deepEqual(c.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
   const o = compactOptions("sess-2", "chat");
   assert.deepEqual([o.settingSources, o.strictMcpConfig, o.settings, o.plugins], [[], undefined, undefined, undefined]);

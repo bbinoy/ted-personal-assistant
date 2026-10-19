@@ -24,7 +24,6 @@ export interface TenantRun {
   logFile: string; // her history: what search_logs reads
   consentFile: string;
   consented: boolean;
-  tools: ReadonlySet<string>; // the tools that exist for her run (tenants.ts toolsFor), policy.ts classify's tenantTools
   overBudget: () => boolean; // her own ledger against her own ceiling (the browse run asks)
 }
 

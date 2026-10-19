@@ -15,6 +15,7 @@ process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
+const { tenantTools, NEVER_FOR_ISOLATED } = await import("../src/capabilities.ts");
 const { classify, isReadableData, hiddenTools } = await import("../src/policy.ts");
 const { NOTES_DIR } = await import("../src/notes.ts");
 const { MANIFEST } = await import("../src/toolmanifest.ts");
@@ -49,7 +50,7 @@ const join_ = (name: string): import("../src/tenants.ts").TenantRecord => {
 
 const ann = T.tenantContext(join_("Ann"));
 const bea = T.tenantContext(join_("Bea"));
-const tools = T.toolsFor(ann);
+const tools = tenantTools(ann);
 
 // the owner's things, and Bea's
 mkdirSync(NOTES_DIR, { recursive: true });
@@ -129,20 +130,20 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   assert.match(searchLogs(settings.logsDir, { query: CANARY_OWNER }), new RegExp(CANARY_OWNER));
 });
 
-test("tenant tools: nothing of the owner's, no payment, no saved profile; only what toolsFor lists", () => {
+test("tenant tools: nothing of the owner's, no payment, no saved profile; only what her capabilities give", () => {
   const allowed = [...tools].sort();
-  assert.ok(["Read", "Write", "Edit", "WebSearch", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send", T.TENANT_CONSENT_TOOL].every((t) => tools.has(t)));
-  for (const t of tools) assert.ok(!T.NEVER_FOR_TENANTS.some((re) => re.test(t)), t);
-  const seen = ["Bash", "Glob", "Grep", "NotebookEdit", "Skill", "WebFetch", "mcp__browser__browser_click", "mcp__claude_ai_Interactive_Brokers__create_order_instruction", "mcp__memory__undo_dream", "mcp__tenants__create_invite", "mcp__tenants__remove_tenant", "mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-search", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__create_event", "mcp__card__pay", "mcp__profile__fill", "mcp__something__unknown"];
+  assert.ok(["Read", "Write", "Edit", "WebSearch", "Skill", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send", "mcp__weather__get_forecast", "mcp__draw__draw"].every((t) => tools.has(t)));
+  for (const t of tools) assert.ok(!NEVER_FOR_ISOLATED.some((re) => re.test(t)), t);
+  const seen = ["Bash", "Glob", "Grep", "NotebookEdit", "WebFetch", "mcp__browser__browser_click", "mcp__claude_ai_Interactive_Brokers__create_order_instruction", "mcp__tenants__create_invite", "mcp__tenants__remove_tenant", "mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-search", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__create_event", "mcp__card__pay", "mcp__profile__fill", "mcp__something__unknown"];
   for (const t of [...MANIFEST.map((e) => e.tool), ...seen]) {
     if (tools.has(t)) continue;
     assert.equal(asTenant(t, { file_path: join(ann.notesDir, "x.md") }), "deny", t);
   }
   // her own settings can only take tools away
-  assert.ok(!T.toolsFor({ config: { browse: false }, capabilities: ann.capabilities }).has("mcp__browse__browse"));
-  assert.ok(!T.toolsFor({ config: { voice: false }, capabilities: ann.capabilities }).has("mcp__voice__voice"));
-  assert.ok(!T.toolsFor({ config: {}, capabilities: ann.capabilities.filter((c) => c !== "browse" && c !== "voice") }).has("mcp__voice__voice"), "a revoked capability takes the tool away");
-  assert.deepEqual([...T.toolsFor({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
+  assert.ok(!tenantTools({ config: { browse: false }, capabilities: ann.capabilities }).has("mcp__browse__browse"));
+  assert.ok(!tenantTools({ config: { voice: false }, capabilities: ann.capabilities }).has("mcp__voice__voice"));
+  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed, "listing a connector adds nothing in this phase");
+  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
   // and the owner-only admin tools are the owner's chat's, not hidden away from it
   assert.ok(!hiddenTools(["mcp__tenants__create_invite", "mcp__tenants__remove_tenant"]).some((t) => t.startsWith("mcp__tenants")));
   assert.equal(classify("mcp__tenants__create_invite", {}, "chat"), "allow");
@@ -183,7 +184,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.equal(o.strictMcpConfig, true);
   assert.deepEqual(o.settingSources, []);
   assert.equal(o.permissionMode, "default");
-  assert.deepEqual(o.tools, ["Read", "Write", "Edit", "WebSearch"]);
+  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
   assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "send", "weather", "draw", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
   assert.equal((o.settings as { autoMemoryDirectory: string }).autoMemoryDirectory, ann.notesDir);
   // the owner's chat is as it was: the process environment, no key injected, and no tenant tools without TENANTS
@@ -213,7 +214,7 @@ test("consent first: until her age and region are confirmed her run has one tool
   T.recordConsent(ctx, "Germany");
   const done = tenantRunOptions(ctx, KEY);
   assert.equal(done.tenant!.consented, true);
-  assert.ok(!done.tenant!.tools.has(T.TENANT_CONSENT_TOOL));
+  assert.ok(!done.tools!.has(T.TENANT_CONSENT_TOOL));
   assert.notEqual(done.systemPrompt, after.systemPrompt);
   assert.ok(createTenantServer({ id: ctx.id, consentFile: ctx.consentFile }));
 });

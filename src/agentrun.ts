@@ -20,6 +20,7 @@ import { createWeatherServer } from "./weathertools.ts";
 import { createDrawServer } from "./drawtool.ts";
 import { announceMemoryChanges, noteWritten, recordMemoryChange } from "./memorynotice.ts";
 import { approveIn, makeCanUseTool, type Approve } from "./permissions.ts";
+import { groupCapabilities, groupTools } from "./capabilities.ts";
 import { hiddenTools } from "./policy.ts";
 import { OFFERED_SKILLS, PROFILES } from "./profiles.ts";
 import { changesCalendar, nudgeRadar } from "./radar-nudge.ts";
@@ -27,6 +28,7 @@ import { type ChatSession } from "./session.ts";
 import { settings } from "./settings.ts";
 import { cleanToolOutput } from "./toolclean.ts";
 import { readJson, writeJson } from "./state.ts";
+import { skillsFor } from "./skills.ts";
 import { recordToolsSeen, toolsSeen } from "./toolsseen.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
@@ -46,7 +48,8 @@ export interface RunOptions {
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
-  skills?: readonly string[]; // the skills offered (default: all bundled ones, OFFERED_SKILLS)
+  skills?: readonly string[]; // the skills offered (default: all bundled ones, OFFERED_SKILLS); a group's or tenant's are the shared ones its capabilities allow (skills.ts)
+  tools?: ReadonlySet<string>; // an isolated conversation (a group, a tenant): the tools that exist for the run, from its capabilities (capabilities.ts); decides its built-ins, its MCP servers and policy.ts classify
   maxTurns: number;
   maxBudgetUsd: number; // hard per-run spend cap. Per RUN, not per session: the SDK does not count the cost a resumed session already had (checked), so owner and groups alike need no adjustment here. The previous total is subtracted only when reporting cost (consume)
   outputFormat?: Options["outputFormat"]; // constrained JSON output
@@ -84,12 +87,13 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun): RunOpt
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
 export const browseRunner = (approve: Approve, tenant?: TenantRun) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant));
 
-// The built-in tools of a run (everything else is an MCP tool): the browse run only searches; a group edits its own notes and searches; the
-// owner's chat adds skills and opening pages; a background run has no notes; the rest only load skills.
-function builtinTools(opts: RunOptions, browsing: boolean, isolated: boolean): string[] {
+// The built-in tools of a run (everything else is an MCP tool): the browse run only searches; a group or a tenant has the built-ins of its tool set (its
+// own notes, search, skills; before a tenant's age and region are confirmed none); the owner's chat adds skills and opening pages; a background run
+// has no notes; the rest only load skills.
+const BUILTINS = ["Skill", "Read", "Write", "Edit", "WebSearch"]; // the built-in tools a group or tenant can have (never WebFetch), in the order the owner's list has them
+function builtinTools(opts: RunOptions, browsing: boolean, tools: ReadonlySet<string> | undefined): string[] {
   if (browsing) return ["WebSearch"];
-  if (opts.tenant && !opts.tenant.consented) return []; // before her age and region are confirmed her run has one tool, record_consent
-  if (isolated) return ["Read", "Write", "Edit", "WebSearch"];
+  if (tools) return BUILTINS.filter((t) => tools.has(t));
   if (opts.memory) return ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"];
   return opts.source === "background" ? ["Skill", "WebSearch", "WebFetch"] : ["Skill"];
 }
@@ -129,9 +133,14 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     ],
   };
 
-  // A group run: no connectors, no user settings, no skills; its memory server is the only MCP server.
+  // A group or tenant run: no connectors, no user settings; its tools are its capability set (capabilities.ts), its MCP servers are those of that set, and
+  // the skills are the shared ones its capabilities allow.
   const browsing = opts.source === "browse"; // the browse sub-run: the browser and web search, nothing of the owner's
   const isolated = opts.source === "group" || browsing;
+  const tools = isolated && !browsing ? (opts.tools ?? groupTools()) : undefined;
+  const offers = (tool: string) => !tools || tools.has(tool); // the owner's chat and the unattended runs: as before; an isolated one: what its set holds
+  const skills = tools?.has("Skill") ? (opts.skills ?? skillsFor(groupCapabilities())) : []; // (no Skill tool, no skill to load)
+  const plugin = [{ type: "local" as const, path: settings.pluginDir, skipMcpDiscovery: true }];
   // The entry tool (browse.ts) for the runs that may browse: the owner's chat, a wake-up and a group. It starts a separate browse run.
   // send (send.ts): the owner's chat and groups, never an unattended run (a wake-up included).
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
@@ -139,18 +148,18 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const mode: BrowseMode = opts.source === "group" ? "group" : "owner";
   const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && opts.memory?.groupId ? approveIn(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
   const browseTool =
-    settings.browse && (opts.source === "chat" || opts.source === "background" || opts.source === "group") && (!tenant || tenant.consented)
+    settings.browse && (opts.source === "chat" || opts.source === "background" || opts.source === "group") && offers("mcp__browse__browse")
       ? createBrowseServer({ mode, groupId: opts.memory?.groupId, key: tellKey, spent: tenant?.overBudget, run: browseRunner(askedIn, tenant) })
       : undefined;
-  const sendServer = tellKey && (!tenant || tenant.consented) ? createSendServer(tellKey) : undefined;
+  const sendServer = tellKey && offers("mcp__send__send") ? createSendServer(tellKey) : undefined;
   // voice (voicetool.ts): the cloned voice of this conversation, Qwen only; the owner's chat and groups, never an unattended run.
-  const voiceServer = tellKey && settings.tts.provider === "qwen" && (!tenant || tenant.consented) ? createVoiceServer(tellKey) : undefined;
+  const voiceServer = tellKey && settings.tts.provider === "qwen" && offers("mcp__voice__voice") ? createVoiceServer(tellKey) : undefined;
   // weather (weathertools.ts): read-only forecasts and spot facts from public data, for the owner's chat and for groups, never an unattended run.
-  const weatherServer = (opts.source === "chat" || opts.source === "group") && settings.weather ? createWeatherServer() : undefined;
+  const weatherServer = (opts.source === "chat" || opts.source === "group") && settings.weather && offers("mcp__weather__get_forecast") ? createWeatherServer() : undefined;
   // draw (drawtool.ts): an SVG the model writes, sanitised and rendered to a PNG it can send with `send`; the same conversations as `send`, never an unattended run.
-  const drawServer = tellKey && settings.draw && (!tenant || tenant.consented) ? createDrawServer(tellKey) : undefined;
-  // intake (intaketools.ts): a tenant's single-use link to the page where she types a secret herself; only when toolsFor listed it for her.
-  const intakeServer = tenant?.tools.has(INTAKE_LINK_TOOL) ? createIntakeServer(tenant) : undefined;
+  const drawServer = tellKey && settings.draw && offers("mcp__draw__draw") ? createDrawServer(tellKey) : undefined;
+  // intake (intaketools.ts): a tenant's single-use link to the page where she types a secret herself; only when her tool set has it.
+  const intakeServer = tenant && tools?.has(INTAKE_LINK_TOOL) ? createIntakeServer(tenant) : undefined;
   const status = browsing ? browseStatus() : undefined;
   if (status && !status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard && status?.ok
@@ -188,18 +197,18 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // Built-ins: Skill, and for chat Read / Write / Edit (confined to the notes folder by
     // policy.ts) and WebSearch / WebFetch (search freely, open a page only after approval). No Bash. Everything else the agent can do is an MCP tool (Mailbird,
     // Notion, Calendar...), gated by canUseTool.
-    tools: builtinTools(opts, browsing, isolated),
+    tools: builtinTools(opts, browsing, tools),
     // "user" loads user-scope MCP servers (Mailbird) and CLAUDE.md; the skills offered are
     // limited to the bundled ones below.
     // Not "project": there is no project here.
     settingSources: isolated ? [] : ["user"],
     // The bundled skills, loaded from the repo; only these are offered to the model (the owner's
     // other skills would cost context on every call and are none of its business).
-    plugins: isolated ? undefined : [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }],
-    skills: isolated ? undefined : (opts.skills ? [...opts.skills] : OFFERED_SKILLS),
+    plugins: isolated && !skills.length ? undefined : plugin,
+    skills: isolated ? (skills.length ? [...skills] : undefined) : (opts.skills ? [...opts.skills] : OFFERED_SKILLS),
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, opts.judgeContext, undefined, opts.guard, tenant?.tools),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, opts.judgeContext, undefined, opts.guard, tools, !!tenant),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

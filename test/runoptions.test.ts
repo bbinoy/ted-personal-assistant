@@ -56,7 +56,7 @@ function describeRun(run: Run): Record<string, any> {
   const system = o.systemPrompt as { type: string; preset?: string; append?: string; prompt?: string; snapshot?: boolean };
   const env = o.env as Record<string, string | undefined>;
   return scrub({
-    run: { ...run, systemPrompt: `sha:${sha(run.systemPrompt)}`, tenant: run.tenant && { ...run.tenant, tools: [...run.tenant.tools].sort() } },
+    run: { ...run, systemPrompt: `sha:${sha(run.systemPrompt)}`, tools: run.tools && [...run.tools].sort() },
     model: o.model,
     system: { ...system, append: system.append === undefined ? undefined : `sha:${sha(system.append)}`, prompt: system.prompt === undefined ? undefined : `sha:${sha(system.prompt)}` },
     settings: o.settings,
@@ -106,23 +106,25 @@ test("run options: the owner's chat, a group and a tenant are built exactly as t
 test("run options: what differs between the owner, a group and a tenant, and only that", () => {
   const c = cases();
   if (process.env.RUN_OPTIONS_PRINT) console.log(JSON.stringify({ ownerGroup: differing(c.owner, c.group), groupTenant: differing(c.group, c.tenant), tenantConsent: differing(c.tenantAskingConsent, c.tenant) }, null, 1));
-  // owner -> group: persona, limits, notes folder and session, the group's isolation (no user settings, no connectors, no plugin skills, strict MCP)
+  // owner -> group: persona, limits, notes folder and session, the group's isolation (no user settings, no connectors, its capabilities' tools and shared skills (not the owner's), strict MCP)
   assert.deepEqual(differing(c.owner, c.group), [
-    "disallowedTools", "maxBudgetUsd", "maxTurns", "plugins.path", "plugins.skipMcpDiscovery", "plugins.type", "run.maxBudgetUsd", "run.maxTurns", "run.memory",
-    "run.sessionFile", "run.skills", "run.source", "run.systemPrompt", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append", "tools",
+    "disallowedTools", "maxBudgetUsd", "maxTurns", "run.maxBudgetUsd", "run.maxTurns", "run.memory",
+    "run.sessionFile", "run.skills", "run.source", "run.systemPrompt", "run.tools", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append", "tools",
   ]);
   // group -> tenant: her limits, notes, session and persona, her ledger and key; the instance key reaches her environment and the owner's logins leave it
   assert.deepEqual(differing(c.group, c.tenant), [
     "envChanged.ANTHROPIC_API_KEY", "envRemoved", "maxTurns", "run.maxTurns", "run.memory", "run.sessionFile", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
   ]);
-  // before her consent: one MCP server and no built-in tool, her ledger and persona unchanged
-  assert.deepEqual(differing(c.tenantAskingConsent, c.tenant), ["mcpServers", "run.memory", "run.sessionFile", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append", "tools"]);
+  // before her consent: one MCP server, no built-in tool and no skill, her ledger and persona unchanged
+  assert.deepEqual(differing(c.tenantAskingConsent, c.tenant), ["mcpServers", "plugins.path", "plugins.skipMcpDiscovery", "plugins.type", "run.memory", "run.sessionFile", "run.skills", "run.systemPrompt", "run.tenant", "run.tools", "settings.autoMemoryDirectory", "skills", "system.append", "tools"]);
   // the invariants the table above must not hide
   assert.deepEqual([c.owner.envChanged, c.owner.envRemoved, c.group.envChanged, c.group.envRemoved], [{}, [], {}, []], "the owner's and a group's environment is the process's, untouched");
   assert.equal(c.tenant.envChanged.ANTHROPIC_API_KEY, "<instance-key>");
   assert.ok(c.tenant.envRemoved.includes("CLAUDE_CODE_OAUTH_TOKEN"));
   assert.deepEqual([c.owner.run.tenant, c.group.run.tenant], [undefined, undefined]);
-  assert.deepEqual(c.group.mcpServers, c.tenant.mcpServers, "a group and a tenant have the same servers (no skills, no connectors)");
-  assert.deepEqual([c.group.skills, c.tenant.skills, c.group.settingSources, c.tenant.settingSources], [undefined, undefined, [], []]);
+  assert.deepEqual(c.group.mcpServers, c.tenant.mcpServers, "a group and a tenant have the same servers (no connectors)");
+  const shared = ["research-booking", "surf-conditions", "draw"].map((s) => `ted-personal-assistant:${s}`); // (never a private skill: no brief, mail, calendar, notion, setup, radar)
+  assert.deepEqual([c.group.skills, c.tenant.skills, c.group.settingSources, c.tenant.settingSources], [shared, shared, [], []]);
+  assert.equal(c.tenantAskingConsent.skills, undefined);
   assert.deepEqual(c.tenantAskingConsent.mcpServers, ["tenant"]);
 });

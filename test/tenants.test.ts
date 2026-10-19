@@ -10,6 +10,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenants-test-"));
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
+const { tenantTools } = await import("../src/capabilities.ts");
 const R = await import("../src/tenantroute.ts");
 const { createTenantRunner } = await import("../src/tenantrun.ts");
 const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
@@ -55,7 +56,6 @@ test("config: a tenant.json is checked, never trusted; connectors are only an ex
   assert.equal(bad.problems.length, 6);
   assert.deepEqual(T.parseTenantConfig(undefined), { config: {}, problems: [] });
   assert.equal(T.parseTenantConfig([]).problems.length, 1);
-  assert.deepEqual([...T.connectorTools({ config: { connectors: ["gmail"] } })], []); // nothing is granted by listing it
 });
 
 test("invites: single use, expire, hashed at rest, forgiving about case and dashes", () => {
@@ -88,7 +88,7 @@ test("a redeemed invite provisions the tenant: owner-only folders, notes, a tena
   for (const d of [ctx.dir, ctx.notesDir, ctx.backupDir]) assert.equal(statSync(d).mode & 0o077, 0, d);
   assert.ok(existsSync(ctx.configFile));
   assert.equal(rec.role, "member");
-  assert.deepEqual(rec.capabilities, ["chat", "browse", "voice", "heartbeat", "dream"], "every other capability is off for a new tenant");
+  assert.deepEqual(rec.capabilities, ["chat", "browse", "voice", "heartbeat", "dream", "weather", "draw"], "the free ones are on and every other capability is off for a new tenant");
   assert.equal(rec.credential, "instance-key");
   assert.ok(!readFileSync(join(settings.dataDir, T.REGISTRY), "utf8").match(/sk-ant|"key"/));
   assert.equal(T.tenantByAci(rec.acis[0]!.toUpperCase())?.id, rec.id, "the account id is matched without regard to case");
@@ -226,6 +226,24 @@ test("turn: no instance key means a plain 'not set up for friends' with the AI l
   assert.deepEqual(asked, []);
 });
 
+test("turn: a refused instance key tells the owner's chat once, not once per tenant, and again only after the notice interval", async () => {
+  const [a, b] = [join_("Gus"), join_("Ivy")];
+  let t = 10_000_000;
+  const { r, alerts } = runner({ key: KEY_A, now: () => t, ask: async () => Promise.reject(new TenantKeyError("refused")) });
+  await assert.rejects(r.run(tenant(a.id), "hi"), TenantKeyError); // her own run still fails as it did (her notice is the error path's)
+  await assert.rejects(r.run(tenant(b.id), "hi"), TenantKeyError); // another tenant, the same key
+  assert.equal(alerts.length, 1);
+  assert.match(alerts[0]!, /friends' API key was refused \(expired\? limit\?\) - replace TENANT_ANTHROPIC_API_KEY in \.env/);
+  assert.ok(!alerts[0]!.includes(KEY_A), "never the key");
+  t += on.tenantNoticeMinutes * 60_000 + 1;
+  resetCooldown();
+  await assert.rejects(r.run(tenant(a.id), "again"), TenantKeyError);
+  assert.equal(alerts.length, 2, "rate limited like the other notices, not silenced for good");
+  const quiet = runner({ key: KEY_A, ask: async () => Promise.reject(new Error("a plain failure")) });
+  await assert.rejects(quiet.r.run(tenant(a.id), "hi"), /plain failure/);
+  assert.deepEqual(quiet.alerts, [], "only a refused key is the owner's business");
+});
+
 test("turn: the run gets the instance key, and the first reply carries the AI line exactly once", async () => {
   const rec = join_("Finn");
   const { r, asked } = runner({ key: KEY_A });
@@ -343,7 +361,7 @@ test("registry: the owner is seeded from the number as an admin with every capab
   const rec = T.ensureOwner({ number: OWNER_NUMBER });
   assert.deepEqual([rec.id, rec.role, rec.status, rec.credential, rec.number, rec.acis], ["owner", "admin", "active", "login", OWNER_NUMBER, []]);
   assert.deepEqual([...rec.capabilities].sort(), [...T.CAPABILITIES].sort());
-  assert.equal(rec.capabilities.length, 13);
+  assert.equal(rec.capabilities.length, T.CAPABILITIES.length);
   const paths = T.pathsOf(rec);
   assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: "state/cost.json" }, "no file moved");
   assert.equal(T.ensureOwner({ number: "+15555550105", aci: ACI_A }).number, OWNER_NUMBER, "seeding twice changes nothing");
@@ -435,13 +453,13 @@ test("grant and revoke: one capability at a time, on a real record, no duplicate
   assert.equal(T.grant("nobody", "mail"), undefined);
   assert.equal(T.isCapability("everything"), false);
   const ctx = () => T.tenantContext(T.tenantById(rec.id)!);
-  assert.ok(T.toolsFor(ctx()).has("mcp__voice__voice"));
+  assert.ok(tenantTools(ctx()).has("mcp__voice__voice"));
   T.revoke(rec.id, "voice");
-  assert.ok(!T.toolsFor(ctx()).has("mcp__voice__voice"), "without the capability the tool is not there");
+  assert.ok(!tenantTools(ctx()).has("mcp__voice__voice"), "without the capability the tool is not there");
   assert.deepEqual(ctx().capabilities, T.tenantById(rec.id)!.capabilities);
   const lines = describeTenants().filter((l) => l.startsWith(rec.id));
-  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream/);
-  assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities chat, browse, voice, heartbeat, dream, wake, mail, calendar, notion, profile, card, notes/);
+  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, weather, draw/);
+  assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities chat, browse, voice, heartbeat, dream, wake, mail, calendar, notion, profile, card, notes, intake, weather, draw, google, admin/);
 });
 
 test("the per-tenant key plumbing is gone: no set-key, forget-key, KeyStore, intake or setup-incomplete state", () => {

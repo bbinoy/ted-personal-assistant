@@ -1,5 +1,6 @@
 import type { Source } from "./audit.ts";
 import { settings } from "./settings.ts";
+import type { Capability } from "./tenants.ts";
 
 // THE tool manifest: every tool the model might get declares here whether it needs the owner's approval, so one rule
 // applies the same way across mail providers and other tools. policy.ts, autojudge.ts, permissions.ts and format.ts read
@@ -12,8 +13,10 @@ import { settings } from "./settings.ts";
 // A flag is one value, or per who is acting: `chat`, `unattended` (every other source) or one named source, which wins
 // over `unattended`. A source a flag does not name is `yes`. A tool that is not here is `yes` too, unless its name is a
 // read verb. `only` limits a tool to some sources; anywhere else it is denied outright (policy.ts classify).
-// Not here, on purpose: the never-allowed set (policy.ts DENY: trading, trash/delete/spam/unsubscribe) and a group's
-// rights (classify). They are not flag values.
+// `cap` is the capability that gates the tool (tenants.ts CAPABILITIES). A group or a tenant is offered the tool only when its capability set holds
+// that capability (capabilities.ts) and `only` names "group" or does not limit the sources. The default is the provider's capability.
+// Not here, on purpose: the never-allowed set (policy.ts DENY: trading, trash/delete/spam/unsubscribe) and which tools a group or tenant
+// has at all (its capability set, capabilities.ts). They are not flag values.
 
 export type Flag = "no" | "auto" | "yes";
 export type FlagSpec = Flag | Partial<Record<"chat" | "unattended" | Source, Flag>>;
@@ -24,6 +27,7 @@ export interface ToolEntry {
   provider: string; // mailbird, gmail, calendar, notion, drive, docs, builtin, memory
   action: string; // read, draft, reply-draft, send, reply, forward, archive, restore, label, select, send-self, calendar-write, ...
   flag: FlagSpec;
+  cap: Capability; // what gates it: the capability a conversation needs to be offered the tool
   only?: readonly Source[];
   view?: ViewKind; // a mail tool: how mailView() reads its input
 }
@@ -43,9 +47,12 @@ const ROUTINE: FlagSpec = { chat: "no", brief: "no" };
 // In chat the judge decides a send from the owner's words and the exact draft; every unattended run (the mail handler reads raw untrusted mail) asks.
 const SEND: FlagSpec = { chat: "auto", unattended: "yes" };
 
-type Opts = { only?: readonly Source[]; view?: ViewKind };
+// The capability of each provider's tools, unless a row says otherwise.
+const PROVIDER_CAP: Readonly<Record<string, Capability>> = { mailbird: "mail", gmail: "mail", calendar: "calendar", notion: "notion", drive: "google", docs: "google", builtin: "chat", memory: "chat", tenants: "admin", intake: "intake", send: "chat", draw: "draw", weather: "weather", voice: "voice", browse: "browse" };
+
+type Opts = { only?: readonly Source[]; view?: ViewKind; cap?: Capability };
 const rows = (prefix: string, provider: string, action: string, flag: FlagSpec, names: string, o: Opts = {}): ToolEntry[] =>
-  names.split(" ").map((n) => ({ tool: prefix + n, provider, action, flag, ...o }));
+  names.split(" ").map((n) => ({ tool: prefix + n, provider, action, flag, ...o, cap: o.cap ?? PROVIDER_CAP[provider]! }));
 
 export const MANIFEST: readonly ToolEntry[] = [
   // --- Mailbird ---
@@ -83,19 +90,21 @@ export const MANIFEST: readonly ToolEntry[] = [
   ...rows("mcp__claude_ai_Google_Docs__", "docs", "read", "no", "read_doc"),
   ...rows("mcp__claude_ai_Google_Docs__", "docs", "doc-write", "yes", "update_doc"),
   // --- the assistant's own: web, skills, notes ---
-  ...rows("", "builtin", "web-search", "no", "WebSearch", { only: ["chat", "background", "browse"] }), // a search query is a small channel out, accepted where the owner is behind the run
+  ...rows("", "builtin", "web-search", "no", "WebSearch", { only: ["chat", "background", "browse", "group"] }), // a search query is a small channel out, accepted where the owner is behind the run
   ...rows("", "builtin", "web-fetch", { chat: "auto", background: "auto", brief: "auto", radar: "auto" }, "WebFetch", { only: ["chat", "background", "brief", "radar"] }), // never the mail handler; the plain-address veto is code
-  ...rows("", "builtin", "skill", "no", "Skill"), // which skills load is limited by the SDK's skills allowlist (agent.ts)
-  // The file tools are chat only; WHICH path is code (policy.ts classify), a flag cannot say that.
-  ...rows("", "builtin", "note-file", "no", "Read Write Edit", { only: ["chat"] }),
-  ...rows("mcp__memory__", "memory", "memory", "no", "forget_note search_logs undo_dream", { only: ["chat"] }),
+  ...rows("", "builtin", "skill", "no", "Skill"), // which skills load is limited by the SDK's skills allowlist (agent.ts, skills.ts); a group or tenant has the tool only with a shared skill to load
+  // The file tools are for the owner's chat and, inside their own notes folder, for groups and tenants; WHICH path is code (policy.ts classify), a flag cannot say that.
+  ...rows("", "builtin", "note-file", "no", "Read Write Edit", { only: ["chat", "group"] }),
+  // The memory tools are scoped to the conversation by their server (memory-tools.ts); undoing a dream goes with the dream.
+  ...rows("mcp__memory__", "memory", "memory", "no", "forget_note search_logs", { only: ["chat", "group"] }),
+  ...rows("mcp__memory__", "memory", "memory", "no", "undo_dream", { only: ["chat", "group"], cap: "dream" }),
   // The owner's tenant administration (tenanttools.ts), only while TENANTS=on: minting an invite and looking are free; stopping a tenant or deleting her and her data asks on the phone.
   ...rows("mcp__tenants__", "tenants", "tenants-read", "no", "create_invite list_tenants resume_tenant", { only: ["chat"] }),
   ...rows("mcp__tenants__", "tenants", "tenants-stop", "yes", "suspend_tenant remove_tenant", { only: ["chat"] }),
   // intake (intaketools.ts): a tenant's single-use link to the page where she types a secret herself, and what it stored as names and lengths. Tenant runs only (they are "group" runs).
   ...rows("mcp__intake__", "intake", "intake", "no", "get_setup_link setup_status", { only: ["group"] }),
   // send (send.ts): a message, voice note, picture (a browse screenshot of this run) or reaction in the conversation the run is for, while it continues.
-  // Chat and groups only, never an unattended run or a wake-up (a group's rights are in classify).
+  // Chat and groups only, never an unattended run or a wake-up.
   ...rows("mcp__send__", "send", "send", "no", "send", { only: ["chat", "group"] }),
   // draw (drawtool.ts): an SVG sanitised and rendered by code to a PNG kept for the turn; nothing leaves until `send` delivers it. Chat and groups.
   ...rows("mcp__draw__", "draw", "draw", "no", "draw", { only: ["chat", "group"] }),
@@ -103,8 +112,8 @@ export const MANIFEST: readonly ToolEntry[] = [
   ...rows("mcp__weather__", "weather", "read", "no", "search_places get_forecast get_marine_forecast get_spot_info get_distance", { only: ["chat", "group"] }),
   // voice (voicetool.ts): the conversation's own cloned voice, Qwen only. A low-risk local change (undo is switching): no approval. Chat and groups, never an unattended run.
   ...rows("mcp__voice__", "voice", "voice", "no", "voice", { only: ["chat", "group"] }),
-  // --- the browse sub-task (browse.ts). The entry tool: the owner's chat starts a run freely, a wake-up asks first (a group's rights are in classify). ---
-  ...rows("mcp__browse__", "browse", "browse", { chat: "no", background: "yes" }, "browse", { only: ["chat", "background"] }),
+  // --- the browse sub-task (browse.ts). The entry tool: the owner's chat starts a run freely, a wake-up asks first (a group's run asks in that group). ---
+  ...rows("mcp__browse__", "browse", "browse", { chat: "no", background: "yes" }, "browse", { only: ["chat", "background", "group"] }),
   // The browser server's tools, in the browse run only (denied everywhere else). Which element a click or a field is, and which
   // addresses are fine, is code (browse.ts): reads and plain clicks run, a page address and typed text go to the approval judge, a
   // click that commits (book, buy, send...) is turned into an ask by code, payment and login fields are denied. Any other tool of the server is denied there.

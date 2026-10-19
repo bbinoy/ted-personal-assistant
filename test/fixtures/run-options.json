@@ -162,17 +162,28 @@
         "groupId": "g-run-options"
       },
       "skills": [
-        "ted-personal-assistant:daily-brief",
-        "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
-        "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
-        "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
-        "ted-personal-assistant:setup",
-        "ted-personal-assistant:radar",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
+      ],
+      "tools": [
+        "Edit",
+        "Read",
+        "Skill",
+        "WebSearch",
+        "Write",
+        "mcp__browse__browse",
+        "mcp__draw__draw",
+        "mcp__memory__forget_note",
+        "mcp__memory__search_logs",
+        "mcp__memory__undo_dream",
+        "mcp__send__send",
+        "mcp__voice__voice",
+        "mcp__weather__get_distance",
+        "mcp__weather__get_forecast",
+        "mcp__weather__get_marine_forecast",
+        "mcp__weather__get_spot_info",
+        "mcp__weather__search_places"
       ],
       "maxTurns": 8,
       "maxBudgetUsd": 0.5
@@ -198,12 +209,25 @@
     ],
     "strictMcpConfig": true,
     "tools": [
+      "Skill",
       "Read",
       "Write",
       "Edit",
       "WebSearch"
     ],
     "settingSources": [],
+    "plugins": [
+      {
+        "type": "local",
+        "path": "<repo>/plugin",
+        "skipMcpDiscovery": true
+      }
+    ],
+    "skills": [
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
+    ],
     "permissionMode": "default",
     "maxTurns": 8,
     "maxBudgetUsd": 0.5,
@@ -222,18 +246,9 @@
       "memory": {
         "dir": "<data>/tenants/<ann>/notes"
       },
-      "skills": [
-        "ted-personal-assistant:daily-brief",
-        "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
-        "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
-        "ted-personal-assistant:meeting-prep",
-        "ted-personal-assistant:research-booking",
-        "ted-personal-assistant:setup",
-        "ted-personal-assistant:radar",
-        "ted-personal-assistant:surf-conditions",
-        "ted-personal-assistant:draw"
+      "skills": [],
+      "tools": [
+        "mcp__tenant__record_consent"
       ],
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -246,9 +261,6 @@
         "logFile": "<data>/tenants/<ann>/messages.jsonl",
         "consentFile": "<data>/tenants/<ann>/consent.json",
         "consented": false,
-        "tools": [
-          "mcp__tenant__record_consent"
-        ],
         "overBudget": "[fn]"
       }
     },
@@ -292,17 +304,28 @@
         "dir": "<data>/tenants/<bea>/notes"
       },
       "skills": [
-        "ted-personal-assistant:daily-brief",
-        "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
-        "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
-        "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
-        "ted-personal-assistant:setup",
-        "ted-personal-assistant:radar",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
+      ],
+      "tools": [
+        "Edit",
+        "Read",
+        "Skill",
+        "WebSearch",
+        "Write",
+        "mcp__browse__browse",
+        "mcp__draw__draw",
+        "mcp__memory__forget_note",
+        "mcp__memory__search_logs",
+        "mcp__memory__undo_dream",
+        "mcp__send__send",
+        "mcp__voice__voice",
+        "mcp__weather__get_distance",
+        "mcp__weather__get_forecast",
+        "mcp__weather__get_marine_forecast",
+        "mcp__weather__get_spot_info",
+        "mcp__weather__search_places"
       ],
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -315,17 +338,6 @@
         "logFile": "<data>/tenants/<bea>/messages.jsonl",
         "consentFile": "<data>/tenants/<bea>/consent.json",
         "consented": true,
-        "tools": [
-          "Edit",
-          "Read",
-          "WebSearch",
-          "Write",
-          "mcp__browse__browse",
-          "mcp__memory__forget_note",
-          "mcp__memory__search_logs",
-          "mcp__send__send",
-          "mcp__voice__voice"
-        ],
         "overBudget": "[fn]"
       }
     },
@@ -350,12 +362,25 @@
     ],
     "strictMcpConfig": true,
     "tools": [
+      "Skill",
       "Read",
       "Write",
       "Edit",
       "WebSearch"
     ],
     "settingSources": [],
+    "plugins": [
+      {
+        "type": "local",
+        "path": "<repo>/plugin",
+        "skipMcpDiscovery": true
+      }
+    ],
+    "skills": [
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
+    ],
     "permissionMode": "default",
     "maxTurns": 12,
     "maxBudgetUsd": 0.5,

@@ -6,7 +6,7 @@ import { purposeOf } from "./intakepurposes.ts";
 import { settings } from "./settings.ts";
 import { tenantById } from "./tenants.ts";
 
-// A tenant's two tools for the intake page (intakeserver.ts), in her run only (agentrun.ts) and only when toolsFor lists them:
+// A tenant's two tools for the intake page (intakeserver.ts), in her run only (agentrun.ts) and only when her tool set has them (capabilities.ts):
 //   get_setup_link   mints a single-use link, valid a few minutes, for ONE purpose, bound to her; the assistant puts it in her chat
 //   setup_status     what the page stored, as names and lengths ("stored (N characters)"), never a value
 // The model never sees what she types: it goes from her browser to the page to OpenBao. Scope is closed over (her id), never a parameter.

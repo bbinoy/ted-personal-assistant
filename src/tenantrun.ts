@@ -15,6 +15,7 @@ import { DISCLOSURE, notSetUpReply } from "./tenantroute.ts";
 //   she is in a cooldown (a limit, no credit, refused) -> a fixed notice until it ends; nobody else is affected (cooldown.ts, per tenant)
 //   her day's budget is spent -> a fixed notice until tomorrow
 //   the instance key (TENANT_ANTHROPIC_API_KEY) is not set -> a plain "not set up for friends" to her and a notice to the admin; the owner's login is NEVER used instead
+//   the instance key is refused (expired, over its limit, out of credit) -> her run fails as before, and the owner's chat hears of it once, not once per tenant
 // and after the run: the AI disclosure in the first reply she ever gets (a fixed one, or the model's). A fixed notice is sent at most every
 // TENANT_NOTICE_MINUTES; in between the turn stays silent ([[silent]]).
 // `access` is the same gates for work nobody asked for (the idle look, a wake-up, the dream, quiet compaction): silent, and without the key no run at all.
@@ -47,6 +48,14 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
   const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt, pictures, documents }), hooks?.firstOutput));
   const prepare = deps.prepare ?? ((ctx: TenantContext, apiKey: string) => prepareWarm(tenant(ctx.id), { apiKey }));
 
+  // The key every tenant runs on was refused: the owner's chat is told once per notice interval, whichever tenant ran into it.
+  let refusedAt: number | undefined;
+  function keyRefused(): void {
+    if (refusedAt !== undefined && now() - refusedAt < settings.tenantNoticeMinutes * 60_000) return;
+    refusedAt = now();
+    deps.alertAdmin?.("The friends' API key was refused (expired? limit?) - replace TENANT_ANTHROPIC_API_KEY in .env and restart.");
+  }
+
   // The first thing she is ever told starts with the disclosure, whoever wrote it.
   function disclose(ctx: TenantContext, text: string): string {
     if (wasDisclosed(ctx)) return text;
@@ -72,7 +81,10 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     try {
       r = await ask(ctx, apiKey, prompt, pictures, hooks, documents);
     } catch (e) {
-      if (e instanceof TenantKeyError) setPaused(ctx, cooldownUntil(ctx.id, now())); // for doctor, which is another process
+      if (e instanceof TenantKeyError) {
+        setPaused(ctx, cooldownUntil(ctx.id, now())); // for doctor, which is another process
+        keyRefused();
+      }
       throw e;
     }
     setPaused(ctx, undefined);
