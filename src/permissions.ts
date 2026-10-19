@@ -37,6 +37,15 @@ export function idsOf(input: Record<string, unknown>): Record<string, unknown> |
   return Object.keys(ids).length ? { ids } : undefined;
 }
 
+// The inputs of the calls that only look things up in public data (the weather tools, a web search, a page fetch), for the audit log:
+// "which coordinates did it use?", "what did it search?". Anything else logs no content (mail, calendar, notes, the browser).
+const PUBLIC_LOOKUPS = /^(mcp__weather__|WebSearch$|WebFetch$)/;
+export function publicArgs(tool: string, input: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!PUBLIC_LOOKUPS.test(tool)) return undefined;
+  const args = Object.fromEntries(Object.entries(input).filter(([, v]) => ["string", "number", "boolean"].includes(typeof v)).map(([k, v]) => [k, typeof v === "string" ? v.slice(0, 300) : v]));
+  return Object.keys(args).length ? { args } : undefined;
+}
+
 // What the owner just said in chat, and the two messages before it, for the approval judge (a send is judged against what was said
 // about it, which may have been a message ago: "reply to Armon that Tuesday works" ... "send it"). A module-level value because
 // the warm chat process is built before the message arrives; chat turns run one at a time.
@@ -125,9 +134,9 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return typeof r === "string" ? { deny: r } : { input: r };
     };
     if (verdict === "allow") {
-      // Reads log tool + decision only. Writes also log the ids they touch (ids, never
+      // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
-      audit(tool, "allow", source, isReadTool(tool) ? undefined : idsOf(input));
+      audit(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
       return { behavior: "allow", updatedInput: f.input };
