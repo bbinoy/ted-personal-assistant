@@ -15,7 +15,7 @@ export const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voi
 
 // Capabilities an isolated run can never have, whatever a record lists: they need the instance's own login (its connectors, its card, its Google
 // account) or the admin's powers. A run on the instance key has no connectors (strictMcpConfig), so there is nothing to give.
-const LOGIN_ONLY: readonly Capability[] = ["mail", "calendar", "notion", "google", "profile", "card", "admin"];
+const LOGIN_ONLY: readonly Capability[] = ["notion", "profile", "card", "admin"];
 
 // Never a tool of a group or a tenant, whatever the table says: the owner's connectors and tools, the browser's own tools, opening a page, payment and the
 // saved profile. Listed so a test can check that nothing here is reachable, and so that a row added to the manifest cannot slip one in unnoticed.
@@ -27,6 +27,8 @@ export function runCapabilities(granted: readonly Capability[], own: { browse?: 
   const caps = new Set(granted);
   if (!intakeToolsFor(granted).length) caps.delete("intake"); // its tools need INTAKE_BASE_URL, a purpose and the capability for it (read before the login-only ones go)
   for (const c of LOGIN_ONLY) caps.delete(c);
+  // Mail and calendar of a person on the instance key are her own Google (modules/google.ts): only with the `google` capability and an OAuth client set up.
+  if (!caps.has("google") || !settings.google.clientId || !settings.google.clientSecret) for (const c of ["google", "mail", "calendar"] as const) caps.delete(c);
   if (!settings.browse || own.browse === false) caps.delete("browse");
   if (own.voice === false) caps.delete("voice");
   if (!settings.weather) caps.delete("weather");

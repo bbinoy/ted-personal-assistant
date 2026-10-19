@@ -66,7 +66,7 @@ const mail: MailSlot = {
   },
 };
 
-const named = (_input: Record<string, unknown>, view?: { to: string[] }) => !!view && view.to.length > 0; // a mail nobody can be named for (a forward draft with no recipient yet) is not judged
+export const named = (_input: Record<string, unknown>, view?: { to: string[] }) => !!view && view.to.length > 0; // a mail nobody can be named for (a forward draft with no recipient yet) is not judged
 
 export const gmailModule: ToolModule = {
   name: "gmail",

@@ -36,6 +36,13 @@ export function autoApprove(env: Env): "off" | "auto" {
   throw new Error(`AUTO_APPROVE must be "auto" or "off" (got "${raw}"). Write AUTO_APPROVE=auto (or remove the line) for the approval judge, or AUTO_APPROVE=off to be asked about everything.`);
 }
 
+// A setting that is a list of words separated by spaces (a command's arguments, OAuth scopes).
+function words(env: Env, name: string, fallback: readonly string[]): string[] {
+  const raw = env[name];
+  if (raw === undefined || raw.trim() === "") return [...fallback];
+  return raw.trim().split(/\s+/);
+}
+
 function list(env: Env, name: string, fallback: readonly string[], valid: RegExp, hint: string): string[] {
   const raw = env[name];
   if (raw === undefined || raw.trim() === "") return [...fallback];
@@ -192,6 +199,22 @@ export function loadSettings(env: Env) {
       linkMinutes: num(env, "INTAKE_LINK_MINUTES", 15, 1, 60), // how long a setup link works (once)
       dir: join(dataDir, "state/intake"), // the open links (hashed) and what was stored (lengths only)
     },
+    // Google for friends (src/googlemcp.ts, src/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend with the `google` capability connects her own Google
+    // account on the intake page (OAuth, offline) and her mail and calendar tools are served by a pinned third-party MCP server that THIS process starts for her, with
+    // her refresh token from her own OpenBao path. Off until the OAuth client is set. The client secret is a secret like TENANT_ANTHROPIC_API_KEY: in .env, dropped from
+    // process.env below, handed only to her server process. The server's command and arguments are plain settings (pinned by version or commit, never auto-updated).
+    google: {
+      clientId: env.GOOGLE_OAUTH_CLIENT_ID?.trim() || undefined,
+      clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() || undefined,
+      command: env.GOOGLE_MCP_COMMAND?.trim() || "uvx",
+      args: words(env, "GOOGLE_MCP_ARGS", ["workspace-mcp==2.1.0", "--single-user", "--tools", "gmail", "calendar"]),
+      authUrl: env.GOOGLE_OAUTH_AUTH_URL?.trim() || "https://accounts.google.com/o/oauth2/v2/auth",
+      tokenUrl: env.GOOGLE_OAUTH_TOKEN_URL?.trim() || "https://oauth2.googleapis.com/token", // tests point this at a fake
+      scopes: words(env, "GOOGLE_OAUTH_SCOPES", ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"]),
+      idleMinutes: num(env, "GOOGLE_MCP_IDLE_MINUTES", 10, 1, 240), // a friend's server process is closed after this long unused (it is started again on demand)
+      callSeconds: num(env, "GOOGLE_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
+      mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model
+    },
     // Screenshot vision for the browse worker (src/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
     // click: also clicks by coordinates, which the guard resolves to the element under the point itself (a debugging port on loopback, browsecdp.ts).
     browseVision: oneOf(env, "BROWSE_VISION", "off", ["off", "read", "click"] as const),
@@ -338,6 +361,6 @@ export function loadSettings(env: Env) {
 export const settings = loadSettings(process.env);
 // The speech keys and the tenants' instance key were read into `settings` above. Nothing the agent starts (Claude Code and its MCP servers, ffmpeg, signal-cli)
 // needs them, and they are inherited by every child process unless dropped here (the owner's runs never see the tenants' key).
-for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN", "TENANT_ANTHROPIC_API_KEY"]) delete process.env[name];
+for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN", "TENANT_ANTHROPIC_API_KEY", "GOOGLE_OAUTH_CLIENT_SECRET"]) delete process.env[name];
 export const OWNER = settings.owner;
 export const ASSISTANT = settings.assistant;

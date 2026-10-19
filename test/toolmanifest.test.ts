@@ -20,7 +20,7 @@ test("manifest: a tool name appears in one entry only, and every entry names a p
   for (const e of MANIFEST) {
     assert.ok(e.provider && e.action && e.cap, e.tool);
     assert.ok(!("flag" in e), `${e.tool}: a row says what a tool is, not who may use it`);
-    assert.ok(e.view === undefined || MAIL_PROVIDERS.includes(e.provider), `${e.tool}: only mail tools have a mail view`);
+    assert.ok(e.view === undefined || MAIL_PROVIDERS.includes(e.provider) || e.provider === "google", `${e.tool}: only mail tools have a mail view`);
   }
 });
 

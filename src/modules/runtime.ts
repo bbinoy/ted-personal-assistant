@@ -4,6 +4,7 @@ import { createBrowseServer } from "../browse.ts";
 import { browseStatus, browserServer } from "../browseserver.ts";
 import { readConnectors } from "../connectors.ts";
 import { createDrawServer } from "../drawtool.ts";
+import { googleProxy } from "../googlemcp.ts";
 import { GmailMail, gmailReaders } from "../gmail.ts";
 import { createIntakeServer } from "../intaketools.ts";
 import { Mailbird } from "../mailbird.ts";
@@ -18,6 +19,7 @@ import { createVoiceServer } from "../voicetool.ts";
 import { createWeatherServer } from "../weathertools.ts";
 import { connectionOf, loaded, mailModule } from "./index.ts";
 import { setGmailReaders } from "./gmail.ts";
+import { GOOGLE_PREFIX } from "./google.ts";
 import { setDraftReader } from "./mailbird.ts";
 import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types.ts";
 
@@ -42,6 +44,8 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
     return browserServer(status, ctx.guard!.outDir, undefined, { mode: ctx.guard!.vision, cdpPort: ctx.guard!.cdpPort });
   },
   intake: (ctx) => createIntakeServer(ctx.tenant!),
+  // A friend's Google tools: her own server process, started by this process with her token (googlemcp.ts), forwarded to the run through a proxy that has no command line and no environment.
+  google: (ctx) => googleProxy(ctx.tenant!.id, (name) => ctx.offers(GOOGLE_PREFIX + name)),
   tenants: () => createTenantAdminServer(),
 };
 

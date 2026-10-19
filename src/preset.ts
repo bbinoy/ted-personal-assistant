@@ -103,7 +103,7 @@ export const PROMPTS = {
   skills: ["mail", "mailSkill"],
   chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed"],
   group: ["weather", "browse", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
-  tenant: ["browse", "consented", "timed", "her", "personality", "selfTimed", "sources", "reactions", "send"],
+  tenant: ["browse", "consented", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send"],
   dreamOwner: [],
   dreamTenant: ["her"],
   dreamGroup: [],

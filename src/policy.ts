@@ -7,7 +7,7 @@ import { settings } from "./settings.ts";
 import { groupTools } from "./capabilities.ts";
 import { registered } from "./modules/index.ts";
 import type { Denial, HideConfig } from "./modules/types.ts";
-import { availableFor, entryFor, isFree, isReadTool, moduleOf } from "./toolmanifest.ts";
+import { availableFor, entryFor, isFree, isPersonal, isReadTool, moduleOf } from "./toolmanifest.ts";
 
 // Permissions as code. Every tool call any agent run wants to make passes classify():
 //   allow - run it
@@ -110,8 +110,13 @@ export function classify(tool: string, input: Record<string, unknown>, source: S
   // run with no owner data, browse.ts, that asks in that group) and the intake link of a tenant (it holds no value).
   if (source === "group") {
     if (!(tools ?? groupTools()).has(tool)) return "deny";
+    if (DENY.some((re) => re.test(tool))) return "deny";
     if (NOTE_FILE_TOOLS.has(tool)) return groupNotesDir && isInside(input.file_path, groupNotesDir) ? "allow" : "deny";
-    return "allow";
+    // The modules' hard rules restrict here too (a friend's Google tools: no attachments, no TRASH or SPAM, modules/google.ts); a floor can only take away.
+    if (floorVerdict(tool, input, source) === "deny") return "deny";
+    // Every tool the weather, draw, send, voice, memory and browse modules bring is free. A tool of a friend's own accounts (her Google: a send, a draft, a label, an
+    // event) is not: like the owner's it goes to the floor, the judge and, where they say so, to HER chat (permissions.ts).
+    return isPersonal(tool) && !isFree(tool) ? "ask" : "allow";
   }
   if (DENY.some((re) => re.test(tool))) return "deny";
   if (LOCAL_FILE.test(JSON.stringify(input))) return "deny";

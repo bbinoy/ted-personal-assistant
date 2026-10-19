@@ -12,7 +12,8 @@ const strings = (v: unknown): string[] => (Array.isArray(v) ? v : v === undefine
 
 // Every label value a call names, whatever the tool calls the field.
 export function labelValues(input: Record<string, unknown>): string[] {
-  return [...strings(input.labelIds), ...strings(input.addLabelIds), ...strings(input.removeLabelIds), ...strings(input.labelOption), ...strings(input.labelId), ...strings(input.label)];
+  // (the snake_case names are the friends' Google server's: modules/google.ts, which holds the same rule for its tools)
+  return [...strings(input.labelIds), ...strings(input.addLabelIds), ...strings(input.removeLabelIds), ...strings(input.labelOption), ...strings(input.labelId), ...strings(input.label), ...strings(input.label_ids), ...strings(input.add_label_ids), ...strings(input.remove_label_ids)];
 }
 
 // TRASH and SPAM are never a label value, however a tool is asked to set or clear them (adding trashes, removing untrashes).

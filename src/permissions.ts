@@ -6,7 +6,7 @@ import { describeCall } from "./format.ts";
 import type { MailView } from "./mailview.ts";
 import { mailSlot } from "./modules/index.ts";
 import { classify, denial, isReadTool } from "./policy.ts";
-import { actionOf, entryFor, mailView, readsUntrusted } from "./toolmanifest.ts";
+import { actionOf, entryFor, mailToolsOf, mailView, readsUntrusted } from "./toolmanifest.ts";
 import { OWNER_KEY } from "./send.ts";
 import { LIMITS } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
@@ -169,7 +169,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (MAIL_OUT.has(actionOf(tool))) {
       // Show what the mail client holds right now, not what the model says it is sending (a send of a draft), and the same view for
       // every provider. If that cannot be read, the owner would be approving blind, so the send does not happen.
-      const draft = await mailSlot()?.readBack(entryFor(tool)?.view, input);
+      const draft = await (mailToolsOf(tool) ?? mailSlot())?.readBack(entryFor(tool)?.view, input, setup.speaker?.key);
       view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
       if (!view || (view.action !== "forward" && view.to.length === 0)) {
         log(tool, "deny-unreadable-draft", source);

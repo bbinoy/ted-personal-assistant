@@ -1,7 +1,7 @@
 import type { Source } from "./audit.ts";
 import type { MailView } from "./mailview.ts";
 import { loaded, registered } from "./modules/index.ts";
-import type { CallTitle, ToolEntry, ToolModule, ViewKind } from "./modules/types.ts";
+import type { CallTitle, MailTools, ToolEntry, ToolModule, ViewKind } from "./modules/types.ts";
 import { settings } from "./settings.ts";
 
 // THE tool manifest: every tool the model might get declares here what it is, so one rule applies the same way across mail providers and other tools.
@@ -73,6 +73,9 @@ export function isFree(tool: string, mail: MailProvider = settings.mailProvider)
   return f ? covers(f.module.free, f.entry.action) : readVerb(tool);
 }
 
+// Tools of the person's own accounts (a friend's Google): a non-free call is judged and asked even in an isolated run (policy.ts classify).
+export const isPersonal = (tool: string, mail: MailProvider = settings.mailProvider): boolean => !!lookup(tool, mail)?.module.personal;
+
 // Reading these shows the run text a third party wrote: mail, a web page, a search result. After one, the run's arguments may be steered by it
 // (permissions.ts tells the judge). A mail provider's reads only count while that provider is loaded; an unlisted tool with a read verb under a mail
 // connector's prefix counts too, loaded or not (it can only make the judge more careful), and so does anything in the browse run.
@@ -87,5 +90,11 @@ export function readsUntrusted(tool: string, mail: MailProvider = settings.mailP
 export function mailView(tool: string, input: Record<string, unknown>, draft?: Omit<MailView, "action">, mail: MailProvider = settings.mailProvider): MailView | undefined {
   const f = lookup(tool, mail);
   const kind: ViewKind | undefined = f?.entry.view;
-  return kind ? f!.module.mail?.views[kind]?.(input, draft) : undefined;
+  return kind ? (f!.module.mail ?? f!.module.mailTools)?.views[kind]?.(input, draft) : undefined;
 }
+
+// How the module that lists a mail-sending tool reads its sends back (permissions.ts): the mail provider's own, or a friend's Google module's. Undefined: the tool has none.
+export const mailToolsOf = (tool: string, mail: MailProvider = settings.mailProvider): MailTools | undefined => {
+  const m = lookup(tool, mail)?.module;
+  return m && (m.mail ?? m.mailTools);
+};

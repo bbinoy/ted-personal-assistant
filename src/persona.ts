@@ -234,13 +234,14 @@ export function backgroundSystem(memory: string, missing: readonly string[] = []
 // A friend who was invited to use the assistant on this instance (a tenant, tenants.ts): a private one-to-one chat with a run that has NONE of the
 // owner's data and none of any other conversation's, only her own notes and the web. Her API key pays for it, which the prompt says plainly.
 // `persona` and `language` are her own words from tenant.json (data, never rules). Until she has confirmed her age and region the run has one tool, record_consent.
-export function tenantSystem(parts: { name: string; consented: boolean; timed?: boolean; language?: string; persona?: string; now?: Date }): string {
+export function tenantSystem(parts: { name: string; consented: boolean; timed?: boolean; google?: boolean; language?: string; persona?: string; now?: Date }): string {
   const her = oneLineName(parts.name);
   return join(
     say("tenant", {
       browse: settings.browse,
       consented: parts.consented,
       timed: !!parts.timed,
+      google: !!parts.google,
       her,
       personality: PERSONALITY,
       selfTimed: SELF_TIMED,

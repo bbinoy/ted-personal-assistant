@@ -86,7 +86,7 @@ const LABELS: Record<string, string> = {
   location: "Where", attendees: "With", description: "Notes", body: "Message",
 };
 // Fields shown specially or not worth showing.
-const SKIP = new Set(["startTime", "endTime", "start", "end", "timeZone", "timezone", "summary", "title"]);
+const SKIP = new Set(["startTime", "endTime", "start", "end", "start_time", "end_time", "timeZone", "timezone", "summary", "title"]);
 const SKIP_VALUES = new Set(["primary"]);
 
 // --- an outgoing mail, the same for every provider (toolmanifest.ts mailView) ---
@@ -140,7 +140,7 @@ export function describeCall(tool: string, input: Record<string, unknown>, draft
   const title = input.summary ?? input.title;
   if (typeof title === "string" && title) lines.push(`“${clip(title, 120)}”`);
 
-  const time = when(input.startTime ?? input.start, input.endTime ?? input.end, input.timeZone ?? input.timezone);
+  const time = when(input.startTime ?? input.start ?? input.start_time, input.endTime ?? input.end ?? input.end_time, input.timeZone ?? input.timezone);
   if (time) lines.push(`🕒 ${time}`);
 
   for (const [key, value] of Object.entries(input)) {

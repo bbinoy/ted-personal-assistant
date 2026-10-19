@@ -1,0 +1,82 @@
+import { sensitiveLabel } from "../gmailrules.ts";
+import { nativeView } from "../mailview.ts";
+import { namesNoGuests, notifyLine } from "./calendar.ts";
+import { named } from "./gmail.ts";
+import { rowsOf, type Connection, type FloorVerdict, type RunContext, type ToolModule } from "./types.ts";
+
+// Google for friends (capability `google`, with `mail` and `calendar` for the tools): a friend's own Gmail and Calendar, served by a third-party MCP server that
+// runs as one process per friend with her own token (src/googlemcp.ts). The owner never has these tools (her mail and calendar are the connectors above); a friend
+// never has the owner's. The tools are those of taylorwilsdon/google_workspace_mcp at the pinned version (docs/SETUP.md); the names, arguments and result shapes
+// are read from its code and UNVERIFIED LIVE: the first live run is the check (plans/google-mcp-spike.md).
+//
+// Everything about HOW a call is treated is the same as for the owner's mail and calendar and is not written here: the rows say what a tool is (read, draft, send,
+// label, calendar-write), the floor below only restricts (never grants), and the unified judge, the approvers and the audit are the central ones. A friend's calls are
+// asked in HER chat, judged against HER words, and her audit rows carry no words (permissions.ts).
+export const GOOGLE_PREFIX = "mcp__google__";
+
+const gm = rowsOf(GOOGLE_PREFIX, "google", "mail");
+const gc = rowsOf(GOOGLE_PREFIX, "google", "calendar");
+const only = { only: ["group"] } as const; // a friend's run is an isolated "group" run; the owner's policy source has no such tool
+
+// The tool a run must be offered for her server to be started at all: any of her Google tools would do, this one is in every set that has mail.
+export const GOOGLE_PROBES = [`${GOOGLE_PREFIX}search_gmail_messages`, `${GOOGLE_PREFIX}get_events`] as const;
+
+const given = (v: unknown): boolean => v !== undefined && v !== null && v !== "" && v !== false && !(Array.isArray(v) && v.length === 0);
+
+// The floor, in addition to the central one: what these tools can do that the manifest cannot say. A send or draft with attachments (the server reads local files
+// and URLs for them), a "Send As" alias, a message exported to a file or as raw MIME (attachments inside, files written), and TRASH or SPAM as a label are refused.
+function verdict(tool: string, input: Record<string, unknown>): FloorVerdict | undefined {
+  if (!tool.startsWith(GOOGLE_PREFIX)) return undefined;
+  const name = tool.slice(GOOGLE_PREFIX.length);
+  if (sensitiveLabel(input)) return "deny";
+  if ((name === "send_gmail_message" || name === "draft_gmail_message") && (given(input.attachments) || given(input.from_email))) return "deny";
+  if (/^get_gmail_(message|messages_content_batch|thread|threads_content_batch)/.test(name) && (input.full === true || /^raw$/i.test(String(input.body_format ?? "")))) return "deny";
+  return undefined;
+}
+
+const calendarAction = (input: Record<string, unknown>): string => String(input.action ?? "").toLowerCase();
+
+const connection = (when: (ctx: RunContext) => boolean): Connection => ({ kind: "external", name: "google", when });
+
+export const googleModule: ToolModule = {
+  name: "google",
+  // Nobody has her server by default; a friend's run does when her capability set has any of its tools (connectionFor). The owner's run never does.
+  connection: connection(() => false),
+  connectionFor: (ctx) => (ctx.tenant && !ctx.browsing ? connection((c) => !!c.tenant && GOOGLE_PROBES.some((t) => c.offers(t))) : undefined),
+  rows: [
+    ...gm("read", "search_gmail_messages get_gmail_message_content get_gmail_messages_content_batch get_gmail_thread_content get_gmail_threads_content_batch list_gmail_labels", only),
+    ...gm("draft", "draft_gmail_message", { ...only, view: "ggDraft" }),
+    ...gm("send", "send_gmail_message", { ...only, view: "ggSend" }), // a new mail, a reply (thread_id, in_reply_to) and a forward (forward_message_id) are one tool: all are sends
+    ...gm("label", "modify_gmail_message_labels", only), // removing INBOX is an archive; TRASH and SPAM are refused by the floor
+    ...gc("read", "list_calendars get_events query_freebusy", only),
+    ...gc("calendar-write", "manage_event", only), // create, update, delete and rsvp by its `action`; only create and update without guests are ever judged (below)
+  ],
+  personal: true,
+  free: ["read"],
+  untrusted: ["read"], // mail and event text are written by third parties
+  untrustedPrefix: GOOGLE_PREFIX,
+  titles: {
+    [`${GOOGLE_PREFIX}send_gmail_message`]: { icon: "✉️", title: "Send email" },
+    [`${GOOGLE_PREFIX}draft_gmail_message`]: { icon: "✉️", title: "Save email draft" },
+    [`${GOOGLE_PREFIX}modify_gmail_message_labels`]: { icon: "🏷️", title: "Change email labels", labels: { message_id: "Message", add_label_ids: "Add", remove_label_ids: "Remove" } },
+    [`${GOOGLE_PREFIX}manage_event`]: { icon: "📅", title: "Calendar event", labels: { action: "Action", event_id: "Event", calendar_id: "Calendar" } },
+  },
+  floor: {
+    verdict,
+    onDeny: (tool) => (tool.startsWith(GOOGLE_PREFIX) ? { withIds: true } : undefined),
+    // A mail nobody can be named for is not judged; a calendar event is judged only when it is created or changed and names no guest (anything that would email
+    // people, and every delete or answer to an invite, is the person's call).
+    judgeVeto: { send: named, "calendar-write": (input) => ["create", "update"].includes(calendarAction(input)) && namesNoGuests(input) },
+    noFix: ["send"],
+    judgeNote: { "calendar-write": notifyLine },
+    editable: ["calendar-write"],
+  },
+  mailTools: {
+    // Every send names its recipients in its own arguments (the model is told to; a reply that names none cannot be shown, so it is refused): there is nothing to read back.
+    readBack: async () => undefined,
+    views: {
+      ggSend: (i) => nativeView(given(i.forward_message_id) ? "forward" : given(i.thread_id) || given(i.in_reply_to) ? "reply" : "send", i),
+      ggDraft: (i) => nativeView("draft", i),
+    },
+  },
+};

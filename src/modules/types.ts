@@ -25,7 +25,7 @@ import type { MailInput, MailView } from "../mailview.ts";
 
 // ---- the manifest rows ----
 
-export type ViewKind = "mbSend" | "mbDraft" | "mbReply" | "mbForward" | "gmSend" | "gmReply" | "gmForward" | "gmDraft";
+export type ViewKind = "mbSend" | "mbDraft" | "mbReply" | "mbForward" | "gmSend" | "gmReply" | "gmForward" | "gmDraft" | "ggSend" | "ggDraft";
 
 // A row says WHAT a tool is. It carries no approval flag: whether a tool runs free of the judge is the module's `free`, and everything else is judged.
 export interface ToolEntry {
@@ -132,7 +132,16 @@ export interface SetupNeed {
 
 // What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
 // MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
-export interface MailSlot {
+// What a module with mail-SENDING tools tells the approval about them, whether or not it is a mail provider: how each row's `view` reads its call, and how the
+// mail client is asked what a send really holds (the read-back). A mail provider (MailSlot) has these; so does a friend's Google module, which is not a provider.
+export interface MailTools {
+  // The mail as the mail client holds it, for the approval of a send (permissions.ts): a send of a draft, or the original of a reply. `conversation`: the key of the
+  // conversation whose tools these are ("tenant:<id>"), for a module whose client is per conversation.
+  readBack: (kind: ViewKind | undefined, input: Record<string, unknown>, conversation?: string) => Promise<DraftView | undefined>;
+  views: Partial<Record<ViewKind, (i: MailInput, draft?: Omit<MailView, "action">) => MailView | undefined>>; // how each row's `view` reads its call
+}
+
+export interface MailSlot extends MailTools {
   handler: boolean; // a background mail handler exists (it drafts replies with this provider's tools); without one the heartbeat keeps what it would hand over
   archiveLogOnly: () => boolean; // the heartbeat classifies and logs "would-archive" but archives nothing
   reportNote: () => string | undefined; // one line for `npm run report`
@@ -142,9 +151,6 @@ export interface MailSlot {
     captured: (tool: string, input: Record<string, unknown>) => { text: string | undefined } | undefined; // the brief the run sent with this provider's mail tool: undefined when the call is not the brief's send
   };
   chat: { skill: string; note: (owner: string) => string }; // the chat prompt: the mail skill it names, and what it says about drafts and sending
-  // The mail as the mail client holds it, for the approval of a send (permissions.ts): a send of a draft, or the original of a reply.
-  readBack: (kind: ViewKind | undefined, input: Record<string, unknown>) => Promise<DraftView | undefined>;
-  views: Partial<Record<ViewKind, (i: MailInput, draft?: Omit<MailView, "action">) => MailView | undefined>>; // how each row's `view` reads its call
 }
 
 // The code behind a mail slot (runtime.ts): the client, putting a mail back, what to start while the app runs, the doctor check.
@@ -168,6 +174,7 @@ export interface ToolModule {
   free?: true | readonly string[]; // rows that run without the judge: all of the module's, or those with these actions (a read, the assistant's own plumbing)
   untrusted?: true | readonly string[]; // reading these shows the run text a third party wrote (mail, a web page): after one, the run's arguments may be steered
   untrustedPrefix?: string; // an unlisted tool with a read verb under this prefix counts as untrusted too
+  personal?: true; // tools of the person's own accounts (a friend's Google): in an isolated run, where the capability set is otherwise enough, each non-free call goes to the floor, the judge and her chat (policy.ts classify)
   floor?: ModuleFloor;
   titles?: Readonly<Record<string, CallTitle>>; // by tool name
   skills?: readonly ModuleSkill[];
@@ -175,6 +182,7 @@ export interface ToolModule {
   hide?: { prefix: string; keep: (cfg: HideConfig) => readonly string[] | undefined }; // what the model sees of a connector: tools beyond `keep` are hidden (policy.ts hiddenTools)
   known?: readonly string[]; // the connector's full tool names as of writing (toolsseen.ts seeds the hiding with them, so even the very first run is trimmed)
   mail?: MailSlot; // slot "mail" only
+  mailTools?: MailTools; // a module that is no mail provider but has tools that send mail (a friend's Google): how its sends are shown and read back
 }
 
 export interface HideConfig {

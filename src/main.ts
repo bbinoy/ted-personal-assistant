@@ -11,6 +11,7 @@ import { createDreamer } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
 import { createGroupDreamer } from "./groupdream.ts";
 import { createTenantDreamer } from "./tenantdream.ts";
+import { googleHub } from "./googlemcp.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
@@ -123,7 +124,7 @@ async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<vo
   const apiKey = settings.tenantApiKey;
   if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { apiKey, costFile: tenantContext(rec).costFile });
 }
-tenantHooks.drop = dropTenantWarm;
+tenantHooks.drop = (id) => (dropTenantWarm(id), googleHub.drop(id)); // a suspended or removed tenant: her warm process and her Google server process stop
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,
