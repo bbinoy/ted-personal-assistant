@@ -90,10 +90,10 @@ test("spots: the seed list finds a listed launch point and says so; an unlisted 
   assert.match(offline, /^not in the seed list, and no shore data: the map service did not answer/);
 });
 
-test("manifest: the weather tools are free reads in the owner's chat and nowhere else", () => {
+test("manifest: the weather tools are free reads in the owner's chat and in groups, nowhere else", () => {
   for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) {
     assert.equal(flagFor(`mcp__weather__${t}`, "chat"), "no");
-    assert.equal(flagFor(`mcp__weather__${t}`, "group"), undefined);
+    assert.equal(flagFor(`mcp__weather__${t}`, "group"), "no");
     assert.equal(flagFor(`mcp__weather__${t}`, "handler"), undefined);
   }
   assert.ok(OFFERED_SKILLS.includes("ted-personal-assistant:surf-conditions"));

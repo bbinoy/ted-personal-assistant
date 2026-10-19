@@ -143,8 +143,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const sendServer = tellKey && (!tenant || tenant.consented) ? createSendServer(tellKey) : undefined;
   // voice (voicetool.ts): the cloned voice of this conversation, Qwen only; the owner's chat and groups, never an unattended run.
   const voiceServer = tellKey && settings.tts.provider === "qwen" && (!tenant || tenant.consented) ? createVoiceServer(tellKey) : undefined;
-  // weather (weathertools.ts): read-only forecasts and spot facts for the owner's chat, never a group or an unattended run.
-  const weatherServer = opts.source === "chat" && settings.weather ? createWeatherServer() : undefined;
+  // weather (weathertools.ts): read-only forecasts and spot facts from public data, for the owner's chat and for groups, never an unattended run.
+  const weatherServer = (opts.source === "chat" || opts.source === "group") && settings.weather ? createWeatherServer() : undefined;
   const status = browsing ? browseStatus() : undefined;
   if (status && !status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard && status?.ok

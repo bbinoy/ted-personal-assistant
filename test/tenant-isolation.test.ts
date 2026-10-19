@@ -178,7 +178,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.deepEqual(o.settingSources, []);
   assert.equal(o.permissionMode, "default");
   assert.deepEqual(o.tools, ["Read", "Write", "Edit", "WebSearch"]);
-  assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "send", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
+  assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "send", "weather", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
   assert.equal((o.settings as { autoMemoryDirectory: string }).autoMemoryDirectory, ann.notesDir);
   // the owner's chat is as it was: the process environment, no key injected, and no tenant tools without TENANTS
   const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionFile: "state/session.json", memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
