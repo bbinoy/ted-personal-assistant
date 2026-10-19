@@ -1,8 +1,10 @@
-import { skipForCooldown } from "./cooldown.ts";
+import { observeRateLimit, skipForCooldown } from "./cooldown.ts";
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
+import { allows } from "./conversationmodel.ts";
+import { failure } from "./errors.ts";
 import { applyPlan } from "./dreamapply.ts";
 import { OWNER_SCOPE, planOps, type NoteFile, type Plan, type Scope } from "./dreamplan.ts";
 import { clockLine } from "./brief.ts";
@@ -14,6 +16,7 @@ import { isPaused, localDay } from "./pause.ts";
 import { dreamSystem } from "./persona.ts";
 import { OWNER, settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
+import { tenantEnv } from "./tenanttools.ts";
 import { LIMITS } from "./sanitize.ts";
 
 // The dream: once a day, before the daily brief, a model with NO tools reads what the owner said
@@ -35,16 +38,16 @@ const MAX_PROMPT_CONVERSATION_CHARS = 40_000;
 
 const hhmm = (iso: string) => `${iso.slice(5, 10)} ${new Date(iso).toTimeString().slice(0, 5)}`;
 
-// Pure: the conversation since the last dream as lines. Only the owner's own typed or spoken words
+// Pure: the conversation since the last dream as lines. Only the person's own typed or spoken words (the owner's, or a tenant's, `who`)
 // can ground a note (ownerText). Their reactions are shown as signals, but the message they were on may
 // quote mail, and the assistant's replies only make sense of "yes, do that": neither is evidence.
-// A message the owner deleted is not evidence at all, and an edited one counts once, as edited.
-export function conversationLines(messages: readonly Sent[]): { lines: string[]; ownerText: string } {
+// A message she deleted is not evidence at all, and an edited one counts once, as edited.
+export function conversationLines(messages: readonly Sent[], who: string = OWNER): { lines: string[]; ownerText: string } {
   const lines: string[] = [];
   const owner: string[] = [];
   for (const m of foldEdits(withoutDeleted(messages))) {
-    if (m.kind === "owner") { lines.push(`[${hhmm(m.at)}] ${OWNER}: ${m.text.replace(/\n+/g, " / ")}`); owner.push(m.text); }
-    else if (m.kind === "reaction") { lines.push(`[${hhmm(m.at)}] ${OWNER} reacted ${m.text.replace(/\n+/g, " / ")}`); } // shows what was reacted to, which may quote mail: never evidence
+    if (m.kind === "owner") { lines.push(`[${hhmm(m.at)}] ${who}: ${m.text.replace(/\n+/g, " / ")}`); owner.push(m.text); }
+    else if (m.kind === "reaction") { lines.push(`[${hhmm(m.at)}] ${who} reacted ${m.text.replace(/\n+/g, " / ")}`); } // shows what was reacted to, which may quote mail: never evidence
     else if (m.kind === "chat") lines.push(`[${hhmm(m.at)}] assistant (context only): ${m.text.slice(0, LIMITS.line).replace(/\n+/g, " / ")}`);
   }
   return { lines, ownerText: owner.join("\n") };
@@ -63,8 +66,9 @@ function buildPrompt(now: Date, kept: string, said: string, notes: readonly Note
   ].join("\n\n");
 }
 
-const dreamPrompt = (now: Date, notes: readonly NoteFile[], messages: readonly Sent[]): string =>
-  buildPrompt(now, `The notes you keep about ${OWNER} right now (one file per fact; MEMORY.md is the index and is updated for you):`, `What ${OWNER} said and did since the last dream, oldest first:`, notes, conversationLines(messages).lines);
+// The owner's, or (`who`) a tenant's: the same prompt about her.
+export const dreamPrompt = (now: Date, notes: readonly NoteFile[], messages: readonly Sent[], who: string = OWNER): string =>
+  buildPrompt(now, `The notes you keep about ${who} right now (one file per fact; MEMORY.md is the index and is updated for you):`, `What ${who} said and did since the last dream, oldest first:`, notes, conversationLines(messages, who).lines);
 
 // A group's log holds what members wrote ("Eve: ...", kind member) and the assistant's replies (kind chat).
 // Anyone's own words in the group can ground a note there: that is whose memory it is. The assistant's
@@ -126,15 +130,28 @@ const OPTIONS = (system: string): Options => ({
 
 export type Runner = (prompt: string, system?: string) => Promise<unknown>;
 
-export const realRunner: Runner = async (prompt, system = dreamSystem("owner")) => {
-  for await (const m of query({ prompt, options: OPTIONS(system) })) {
+// A tenant's dream is billed to her: the instance key, her cost file, her cooldown (tenantrun.ts access).
+export interface DreamTenant {
+  id: string;
+  apiKey: string;
+  costFile: string;
+}
+
+export const runnerFor = (tenant?: DreamTenant): Runner => async (prompt, system = dreamSystem("owner")) => {
+  const options = tenant ? { ...OPTIONS(system), env: tenantEnv({ ...process.env }, tenant.apiKey) } : OPTIONS(system);
+  let lastError: string | undefined;
+  for await (const m of query({ prompt, options })) {
+    if (tenant) observeRateLimit(m, tenant.id);
+    if (m.type === "assistant" && m.error) lastError = m.error;
     if (m.type !== "result") continue;
-    recordCost(m.total_cost_usd);
-    if (m.subtype !== "success" || m.is_error) throw new Error("the dream run failed");
+    recordCost(m.total_cost_usd, tenant?.costFile);
+    if (m.subtype !== "success" || m.is_error) throw tenant ? failure(lastError, m.subtype, tenant.id) : new Error("the dream run failed"); // hers: her cooldown only
     return m.structured_output;
   }
   throw new Error("no result");
 };
+
+export const realRunner = runnerFor();
 
 export const readNoteFiles = (dir: string = NOTES_DIR): NoteFile[] => {
   try {
@@ -175,7 +192,7 @@ export function createDreamer(deps: { run?: Runner } = {}) {
     const today = localDay(now);
     const state = readJson<DreamState>(STATE, {});
     if (state.day === today) return;
-    if (!settings.dream || isPaused(now) || budgetSpent()) return;
+    if (!settings.dream || !allows({ kind: "owner" }, "dream") || isPaused(now) || budgetSpent()) return;
     writeJson(STATE, { ...state, day: today }); // before the run: a crash must not mean a retry on every tick
     const messages = messagesSince(state.lastRunAt);
     const { ownerText } = conversationLines(messages);

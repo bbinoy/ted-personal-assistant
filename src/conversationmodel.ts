@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { errorNotice, groupErrorNotice, tenantErrorNotice } from "./errors.ts";
-import { tenantById, tenantContext } from "./tenants.ts";
+import { OWNER_ID, people, tenantById, tenantContext, type Capability } from "./tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
 import { FILE as OWNER_LOG, type Extra, type Kind } from "./messages.ts";
@@ -9,7 +9,7 @@ import { type Picture } from "./image.ts";
 import { type Document } from "./document.ts";
 import { OWNER_SESSION_FILE } from "./session.ts";
 import { tenantKey } from "./send.ts";
-import { settings } from "./settings.ts";
+import { OWNER, settings } from "./settings.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Quote } from "@ted-personal-assistant/signal";
@@ -107,6 +107,38 @@ export const tenant = (id: string): Conversation => {
     notice: tenantErrorNotice, // no terminals, no logs
   });
 };
+
+// ---- what a conversation may do: its record (tenants.ts), not its kind ----
+
+// Needs the instance's own Claude login, with its connectors and its card: effective only for a person whose credential is that login (the owner's),
+// whatever else a record lists. A tenant's own connectors are an extension point (tenants.ts connectorTools).
+const ON_LOGIN: readonly Capability[] = ["mail", "calendar", "notion", "profile", "card"];
+// A group has no record: it is looked in on, tidied and woken like any conversation, and has nothing of the owner's.
+const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "wake"];
+
+type Who = Pick<Conversation, "kind" | "tenantId">;
+const recordOf = (conv: Who) => (conv.kind === "owner" ? people().find((r) => r.id === OWNER_ID) : conv.tenantId ? tenantById(conv.tenantId) : undefined);
+
+// Do her runs use the instance's own Claude login (and so the owner's connectors) rather than the instance key? The owner before her record is seeded does.
+export function onLogin(conv: Who): boolean {
+  if (conv.kind === "group") return false;
+  const rec = recordOf(conv);
+  return conv.kind === "owner" ? !rec || rec.credential === "login" : rec?.credential === "login";
+}
+
+// May this conversation use a capability now? A tenant only while she is active (not invited, suspended or removed).
+export function allows(conv: Who, capability: Capability): boolean {
+  if (conv.kind === "group") return GROUP_CAPABILITIES.includes(capability);
+  const rec = recordOf(conv);
+  if (!rec) return conv.kind === "owner"; // the owner before her record is seeded: everything, as ever
+  return rec.status === "active" && rec.capabilities.includes(capability) && (!ON_LOGIN.includes(capability) || rec.credential === "login");
+}
+
+// Can it run the daily brief and the radar (tasks.ts)? They read mail and calendar through the owner's connectors.
+export const hasPresets = (conv: Who): boolean => allows(conv, "mail") && allows(conv, "calendar");
+
+// Who the person in a private chat is called in the prompts built for it: the owner as always, a tenant by her name.
+export const speakerOf = (conv: Pick<Conversation, "tenantId">): string => (conv.tenantId ? (tenantById(conv.tenantId)?.name ?? "a friend") : OWNER);
 
 // A message with its picture or document, once prepared (the bytes are held for this turn only; src/image.ts).
 export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; document?: Document; edit?: { before?: string } }; // voice: the text is a transcript of a voice message (set by hear); edit: an edit of a message that was answered already, with the version it replaces

@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { audit } from "./audit.ts";
-import { cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Held, type Incoming, type PipelineDeps, type Turn, type TurnResult } from "./conversationmodel.ts";
+import { allows, cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Held, type Incoming, type PipelineDeps, type Turn, type TurnResult } from "./conversationmodel.ts";
 import { findMessage, revisionsOf, type Extra, type Kind } from "./messages.ts";
 import { DELETED_LINE, editNote, isAuthor, sameText } from "./edit.ts";
 import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "./image.ts";
@@ -187,7 +187,7 @@ export function createPipeline(deps: PipelineDeps) {
   async function deliverFinal(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target" | "reaction">): Promise<void> {
     const chosen = splitVoice(replied);
     const { reaction, text } = splitReaction(chosen.text);
-    if (conv.kind === "owner") setChatAssistantMessage(text); // the judge reads the owner's next "yes" against it
+    if (conv.source === "chat") setChatAssistantMessage(text); // the owner's own chat (the others are isolated): the judge reads her next "yes" against it
     await d.send({ kind: "text", text, voice: !!chosen.voice }, false);
     if (reaction && t.target) await d.send({ kind: "reaction", emoji: reaction }, false);
     else if (!t.reaction && !d.state.reacted) status(conv, "✅", t.target); // a reaction the model already put on that message stays
@@ -241,7 +241,7 @@ export function createPipeline(deps: PipelineDeps) {
     const sink: SendSink | undefined = background ? undefined : (c) => d.send(c, true);
     try {
       const by = turn.target?.author;
-      const asking = { author: by, timestamp: turn.target?.timestamp, owner: conv.kind === "owner" || (!!by && deps.isOwner({ from: by, fromUuid: by })) };
+      const asking = { author: by, timestamp: turn.target?.timestamp, owner: conv.source === "chat" || (!!by && deps.isOwner({ from: by, fromUuid: by })) };
       const { text, costUsd } = await withSend(conv.key, sink, () => turn.run({ firstOutput: () => turn.timing?.mark("first") }), asking);
       turn.timing?.set("run", now() - started);
       console.log(`${conv.kind} replied (${text.length} chars${costUsd === undefined ? "" : `, $${costUsd.toFixed(4)}`})`);
@@ -445,7 +445,7 @@ export function createPipeline(deps: PipelineDeps) {
     record(conv, edited ? "edit" : "owner", m.timestamp, line, { by: m.from || m.fromUuid, ...(edited ? { of: edited.of } : {}) });
     // The card's kill switch: handled here, in code, before any model sees the message, and only for the owner's own chat. It can only switch card
     // use OFF; switching it on is the terminal's (card.ts).
-    if (conv.kind === "owner" && !edited && !m.picture && !m.document) {
+    if (allows(conv, "card") && !edited && !m.picture && !m.document) {
       const said = cardCommand(m.text);
       if (said !== undefined) return void (await out.reply(said, { plain: true }));
     }

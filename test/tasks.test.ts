@@ -90,23 +90,23 @@ test("profiles: named in code; brief, radar and background are owner runs with t
 });
 
 test("tasks: the gate names a task; presets are owner-only and fail closed", () => {
-  const brief = buildTask("owner", { task: "brief" })!;
+  const brief = buildTask(true, { task: "brief" })!;
   assert.deepEqual([brief.name, brief.profile, brief.after, brief.retries], ["brief", "brief", "brief", settings.briefMaxAttempts - 1]);
   assert.match(brief.instructions, /daily-brief/);
-  const radar = buildTask("owner", { task: "radar" }, { radar: true })!;
+  const radar = buildTask(true, { task: "radar" }, { radar: true })!;
   assert.deepEqual([radar.profile, radar.after], ["radar", "radar"]);
   assert.match(radar.instructions, /radar/);
-  assert.equal(buildTask("owner", { task: "task", instructions: " do it " })!.profile, "background");
+  assert.equal(buildTask(true, { task: "task", instructions: " do it " })!.profile, "background");
   // groups never get a preset: the plain group task if there are instructions, else nothing
   for (const name of ["brief", "radar"] as const) {
-    assert.deepEqual(buildTask("group", { task: name, instructions: "say hi" }, { radar: true }), { name: "task", instructions: "say hi", profile: "group", after: "post" });
-    assert.equal(buildTask("group", { task: name }, { radar: true }), undefined);
+    assert.deepEqual(buildTask(false, { task: name, instructions: "say hi" }, { radar: true }), { name: "task", instructions: "say hi", profile: "group", after: "post" });
+    assert.equal(buildTask(false, { task: name }, { radar: true }), undefined);
   }
   // an unknown name is the plain task
   assert.equal(parseGate({ act: true, task: "format-disk", instructions: "x" }).task, "task");
   assert.equal(parseGate({ act: true, task: "brief" }).task, "brief");
   // radar off: no radar preset
-  assert.equal(buildTask("owner", { task: "radar", instructions: "look" }, { radar: false })!.name, "task");
+  assert.equal(buildTask(true, { task: "radar", instructions: "look" }, { radar: false })!.name, "task");
 });
 
 test("gate prompt: the owner's gate offers the presets, a group's does not", () => {

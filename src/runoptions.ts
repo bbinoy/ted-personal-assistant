@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { RunOptions } from "./agentrun.ts";
 import { tenantOverBudget } from "./budget.ts";
 import { disconnected, readConnectors } from "./connectors.ts";
-import type { Conversation } from "./conversationmodel.ts";
+import { allows, type Conversation } from "./conversationmodel.ts";
 import { recentNotices } from "./messages.ts";
 import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
 import { chatSystem, groupSystem, tenantSystem } from "./persona.ts";
@@ -59,7 +59,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
   const consented = !!readConsent(ctx);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, consented, language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
+    systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },
     skills: PROFILES.group.skills,
     maxTurns: ctx.maxTurns,

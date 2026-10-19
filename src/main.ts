@@ -1,5 +1,5 @@
 import "./log.ts"; // first: timestamps, redaction and owner-only files for everything below
-import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation.ts";
+import { createPipeline, group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
 import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
 import { compactChatIfNeeded, compactDue } from "./chatsession.ts";
 import { gmailReaders } from "./gmail.ts";
@@ -11,6 +11,7 @@ import { acceptOwner } from "./guards.ts";
 import { createDreamer } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
 import { createGroupDreamer } from "./groupdream.ts";
+import { createTenantDreamer } from "./tenantdream.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
@@ -123,6 +124,13 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => signal.groups(), 
 // Needs the assistant's own Signal account: in Note to Self there is nobody else to talk to.
 if (settings.tenants && !signal.separateAccount) throw new Error("TENANTS=on needs the assistant's own Signal account (SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 const tenantRunner = createTenantRunner({ alertAdmin: (text) => void out.replyPlain(text, "notice") });
+// Compaction of a conversation's session (the urgent one after a reply, the quiet one from the tick): a tenant's runs on the instance key and is billed to her.
+async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<void> {
+  if (!conv.tenantId) return compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode);
+  const rec = tenantById(conv.tenantId);
+  const apiKey = settings.tenantApiKey;
+  if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { apiKey, costFile: tenantContext(rec).costFile });
+}
 tenantHooks.drop = dropTenantWarm;
 const pipeline: Pipeline = createPipeline({
   signal,
@@ -147,12 +155,7 @@ const pipeline: Pipeline = createPipeline({
   vouch,
   isOwner: fromOwner,
   admitGroup: (_conv, m) => groupBrain(m),
-  compact: async (conv, mode) => {
-    if (conv.kind !== "tenant") return compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode);
-    const rec = tenantById(conv.tenantId!); // hers runs on the instance key
-    const apiKey = settings.tenantApiKey;
-    if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { apiKey, costFile: tenantContext(rec).costFile });
-  }, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it
+  compact, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it
   // The owner's chat is kept warm after each turn; the group that spoke last has its own warm process (group.ts).
   afterTurn: (conv) => void (conv.kind === "owner" ? warmChat() : conv.kind === "tenant" && tenantRunner.warm(conv)),
 });
@@ -235,9 +238,13 @@ handler?.resume();
 
 const dreamer = createDreamer();
 const groupDreamer = createGroupDreamer();
+const tenantDreamer = createTenantDreamer({ access: (id) => tenantRunner.access(id) });
 // The dream tidies the notes the brief then reads; it runs at most once a day, only when you said something new, and a
-// failure just moves on.
-const dream = () => dreamer.run().then(() => groupDreamer.run()).catch(() => {});
+// failure just moves on. The tenants' dreams start with it but are not waited for: the brief never waits for them, and each is its own.
+const dream = () => {
+  void tenantDreamer.run().catch(() => {});
+  return dreamer.run().then(() => groupDreamer.run()).catch(() => {});
+};
 // The clock half of the gate: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's
 // gate also decides when the brief and the radar run, with a deterministic backstop for the brief.
 const wakeups = createWakeups({
@@ -246,7 +253,8 @@ const wakeups = createWakeups({
   vouch,
   runProfile: (profile, prompt, extra) => runProfile(profile, prompt, approveBackground, extra),
   presets: { sendBrief: out.sendBriefSummary, notify: say, beforeBrief: dream },
-  compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, "quiet") },
+  tenants: tenantRunner,
+  compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compact(conv, "quiet") },
 });
 
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the

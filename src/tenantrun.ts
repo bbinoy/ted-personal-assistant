@@ -17,9 +17,19 @@ import { DISCLOSURE, notSetUpReply } from "./tenantroute.ts";
 //   the instance key (TENANT_ANTHROPIC_API_KEY) is not set -> a plain "not set up for friends" to her and a notice to the admin; the owner's login is NEVER used instead
 // and after the run: the AI disclosure in the first reply she ever gets (a fixed one, or the model's). A fixed notice is sent at most every
 // TENANT_NOTICE_MINUTES; in between the turn stays silent ([[silent]]).
+// `access` is the same gates for work nobody asked for (the idle look, a wake-up, the dream, quiet compaction): silent, and without the key no run at all.
 
 const SILENT = "[[silent]]";
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
+
+// What her unattended work (the idle look, a wake-up, the dream, quiet compaction) runs on: the instance key, her cost file, her id.
+export interface TenantAccess {
+  id: string;
+  name: string;
+  apiKey: string;
+  costFile: string;
+  ctx: TenantContext;
+}
 
 export interface TenantRunnerDeps {
   apiKey?: () => string | undefined; // the instance key tenants run on (default: settings.tenantApiKey)
@@ -79,5 +89,24 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     if (apiKey) prepare(ctx, apiKey);
   }
 
-  return { run, warm };
+  // The same gates for work nobody asked for, and silent: suspended, in a cooldown or past her day's budget means nothing runs and she is told nothing;
+  // without the instance key nothing runs either and the admin hears of it once (not once per tenant). The owner's login is never a fallback.
+  let keyAlertAt = 0;
+  function access(id: string | undefined): TenantAccess | undefined {
+    const rec = id ? tenantById(id) : undefined;
+    if (!rec || rec.status !== "active") return undefined;
+    const ctx = tenantContext(rec);
+    if (cooldownUntil(ctx.id, now()) || tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd)) return undefined;
+    const apiKey = instanceKey();
+    if (!apiKey) {
+      if (now() - keyAlertAt >= settings.tenantNoticeMinutes * 60_000) {
+        keyAlertAt = now();
+        deps.alertAdmin?.("TENANT_ANTHROPIC_API_KEY is not set, so I can't look in on friends' chats or tidy their notes. Set it in .env (a separate Console workspace key with a spend limit) and restart.");
+      }
+      return undefined;
+    }
+    return { id: ctx.id, name: ctx.name, apiKey, costFile: ctx.costFile, ctx };
+  }
+
+  return { run, warm, access };
 }
