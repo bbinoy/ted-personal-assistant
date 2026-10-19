@@ -29,7 +29,7 @@ export function chatResume(file: string = OWNER_SESSION_FILE): Resume {
 }
 
 // The options of the /compact run. A group's session was built under the group's isolation (buildOptions: no user settings,
-// no connectors, no skills or plugins, auto-memory = its own notes folder), and its compaction must load nothing more than
+// no connectors, only the tools and shared skills of its capabilities, auto-memory = its own notes folder), and its compaction must load nothing more than
 // that: it is the same session, resumed. The owner's compaction is unchanged.
 export function compactOptions(sessionId: string | undefined, source: Source, notesDir?: string, tenant?: { apiKey: string }): Options {
   const isolated = source === "group";

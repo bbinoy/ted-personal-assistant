@@ -16,6 +16,7 @@ import { startFakeBao, type FakeBao } from "./fakebao.ts";
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
+const { tenantTools } = await import("../src/capabilities.ts");
 const L = await import("../src/intakelinks.ts");
 const { IntakeServer } = await import("../src/intakeserver.ts");
 const { createIntakeServer } = await import("../src/intaketools.ts");
@@ -372,7 +373,7 @@ test("the minted link: a tenant's tool, offered only with INTAKE_BASE_URL, the i
   const cfg = settings.intake as { baseUrl: string | undefined; allowHttpLoopback: boolean };
   const was = { ...cfg };
   const caps = (...c: import("../src/tenants.ts").Capability[]) => ({ config: {}, capabilities: c });
-  const has = (c: ReturnType<typeof caps>) => [...T.toolsFor(c)].filter((t) => t.startsWith("mcp__intake__"));
+  const has = (c: ReturnType<typeof caps>) => [...tenantTools(c)].filter((t) => t.startsWith("mcp__intake__"));
   try {
     cfg.baseUrl = undefined;
     assert.deepEqual(has(caps("chat", "intake", "profile", "card")), [], "no INTAKE_BASE_URL: no tool");
@@ -389,8 +390,8 @@ test("the minted link: a tenant's tool, offered only with INTAKE_BASE_URL, the i
     assert.deepEqual(has(caps("profile", "card")), [], "profile and card alone do not switch it on");
     assert.deepEqual(has(caps("intake", "chat")), [], "intake alone has no purpose");
     assert.deepEqual(has(caps("intake", "mail")), []);
-    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "group", "/n", T.toolsFor(caps("intake", "profile"))), "allow");
-    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "group", "/n", T.toolsFor(caps("chat"))), "deny");
+    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "group", "/n", tenantTools(caps("intake", "profile"))), "allow");
+    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "group", "/n", tenantTools(caps("chat"))), "deny");
     assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "chat"), "deny", "not a tool of the owner's chat");
     assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "background"), "deny");
 

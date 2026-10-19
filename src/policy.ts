@@ -5,8 +5,7 @@ import { isInside, realish } from "./contain.ts";
 import { gmailVerdict, GMAIL_PREFIX } from "./gmailrules.ts";
 import { isNotePath } from "./notes.ts";
 import { settings } from "./settings.ts";
-import { INTAKE_LINK_TOOL, INTAKE_STATUS_TOOL } from "./intakelinks.ts";
-import { TENANT_CONSENT_TOOL } from "./tenants.ts";
+import { groupTools } from "./capabilities.ts";
 import { entryFor, flagFor, isReadTool } from "./toolmanifest.ts";
 
 // Permissions as code. Every tool call any agent run wants to make passes classify():
@@ -60,10 +59,6 @@ export function isReadableData(path: unknown, dirs: readonly string[] = [setting
   }
 }
 
-const FORGET_NOTE = "mcp__memory__forget_note";
-const SEARCH_LOGS = "mcp__memory__search_logs";
-const UNDO_DREAM = "mcp__memory__undo_dream";
-
 // --- what the model never sees ---
 // Every tool schema the model can see is re-sent on every model call, so hiding tools nobody
 // uses is the biggest saving there is: Notion alone was ~58k tokens of a ~118k floor, one of
@@ -93,27 +88,21 @@ export function hiddenTools(
 }
 
 // The web. Pages and search results are untrusted content, like mail, and a fetched URL can carry data out in its query
-// string. The manifest says who may search (chat, background) and who may open a page (and that the judge decides);
-// the address veto is autojudge.ts. A group gets web search only (classify).
-const WEB_SEARCH = "WebSearch";
+// string. The manifest says who may search (chat, background, groups) and who may open a page (and that the judge decides);
+// the address veto is autojudge.ts. A group or a tenant never opens a page.
 
 // groupNotesDir: for a group run, THE one folder its file tools may touch (its own notes). Without it a group
 // gets no file access at all.
-// tenantTools: a tenant's run (tenants.ts) is a "group" run in every respect of isolation, with her own notes folder in `groupNotesDir`; only the
-// tools in this set exist for her (toolsFor), whatever else the group rules below would allow. Undefined for a real group.
-const WEATHER_TOOL = /^mcp__weather__(search_places|get_forecast|get_marine_forecast|get_spot_info|get_distance)$/; // public forecast and map data, read-only (weathertools.ts)
-export function classify(tool: string, input: Record<string, unknown>, source: Source, groupNotesDir?: string, tenantTools?: ReadonlySet<string>): Verdict {
-  // A group chat holds other people: no private data, no pages. Web search, the file tools inside that one
-  // group's own notes folder, and the memory tools (scoped to that group by the server, memory-tools.ts).
+// tools: the tools that exist for an isolated conversation (a group, a tenant), from its capability set (capabilities.ts); a group's own by default.
+// A tool outside it is denied, whatever it is called. Every tool in it is a free one, so the set decides and only the notes path is looked at here.
+export function classify(tool: string, input: Record<string, unknown>, source: Source, groupNotesDir?: string, tools?: ReadonlySet<string>): Verdict {
+  // A group chat holds other people: no private data, no pages. What it may use is its capability set: web search, the file tools inside that one
+  // group's own notes folder, the memory tools (scoped to that group by the server, memory-tools.ts), send, voice, draw, weather, browse (a separate
+  // run with no owner data, browse.ts, that asks in that group) and the intake link of a tenant (it holds no value).
   if (source === "group") {
-    if (tenantTools && !tenantTools.has(tool)) return "deny";
+    if (!(tools ?? groupTools()).has(tool)) return "deny";
     if (NOTE_FILE_TOOLS.has(tool)) return groupNotesDir && isInside(input.file_path, groupNotesDir) ? "allow" : "deny";
-    // The browse tool starts a separate run with no owner data (browse.ts); in a group the run asks in that group like the owner's chat does.
-    if (tool === "mcp__browse__browse") return settings.browse ? "allow" : "deny";
-    if (tool === "mcp__send__send" || tool === "mcp__voice__voice" || tool === "mcp__draw__draw" || WEATHER_TOOL.test(tool)) return "allow"; // draw: sanitised and rendered by code, kept for the turn (drawtool.ts)
-    if (tenantTools && tool === TENANT_CONSENT_TOOL) return "allow"; // a tenant's one-time age and region confirmation (tenanttools.ts)
-    if (tenantTools && (tool === INTAKE_LINK_TOOL || tool === INTAKE_STATUS_TOOL)) return "allow"; // a link to the intake page, and what it stored as names and lengths (intaketools.ts); it holds no value
-    return tool === WEB_SEARCH || tool === FORGET_NOTE || tool === SEARCH_LOGS || tool === UNDO_DREAM ? "allow" : "deny";
+    return "allow";
   }
   if (DENY.some((re) => re.test(tool))) return "deny";
   if (LOCAL_FILE.test(JSON.stringify(input))) return "deny";

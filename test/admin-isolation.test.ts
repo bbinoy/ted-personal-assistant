@@ -13,6 +13,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "admin-isolation-"));
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
+const { tenantTools } = await import("../src/capabilities.ts");
 const { classify, isReadableData } = await import("../src/policy.ts");
 const { NOTES_DIR } = await import("../src/notes.ts");
 const { MANIFEST } = await import("../src/toolmanifest.ts");
@@ -80,7 +81,7 @@ test("no run of the instance has Glob, Grep or Bash (they could list and read an
     buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source: "group", memory: { dir: ann.notesDir }, tenant: undefined }, undefined),
   ];
   for (const o of runs) assert.ok((o.tools as string[]).every((t) => ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"].includes(t)), String(o.tools));
-  for (const [tool, input] of probes) assert.equal(classify(tool, input, "group", ann.notesDir, T.toolsFor(ann)), "deny", tool);
+  for (const [tool, input] of probes) assert.equal(classify(tool, input, "group", ann.notesDir, tenantTools(ann)), "deny", tool);
   for (const [tool, input] of probes) assert.notEqual(classify(tool, input, "chat"), "allow", tool);
   assert.deepEqual([...new Set(MANIFEST.filter((e) => !e.tool.startsWith("mcp__")).map((e) => e.tool))].sort(), ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"]);
 });
@@ -102,7 +103,7 @@ const search = (dir = settings.logsDir) => searchLogs(dir, { query: CANARY });
 
 test("search_logs for the admin: a tenant's approvals, replies, searches and judge reasons leave no word in the audit log; the owner's own rows are unchanged", async () => {
   // a tenant's run: a web search (its query is logged for the owner's runs) and an approval answered in her chat
-  const tenantRun = makeCanUseTool(async () => ({ approved: true }), "group", ann.notesDir, undefined, undefined, undefined, T.toolsFor(ann));
+  const tenantRun = makeCanUseTool(async () => ({ approved: true }), "group", ann.notesDir, undefined, undefined, undefined, tenantTools(ann), true);
   await tenantRun("WebSearch", call.input, { signal: new AbortController().signal } as never);
   let ts = 100;
   const ask = (scope: string, source: "chat" | "group") => {

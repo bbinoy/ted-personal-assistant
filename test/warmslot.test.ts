@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { tick } from "./util.ts";
 import { firstWarm, SpareSlot } from "../src/warmslot.ts";
 import { askGateWith, prepareGate } from "../src/gate.ts";
+import { groupCapabilities } from "../src/capabilities.ts";
+import { skillsFor } from "../src/skills.ts";
 import { prepare, runConversation } from "../src/agent.ts";
 import { group, owner } from "../src/conversation.ts";
 import { createGroupBrain } from "../src/group.ts";
@@ -110,8 +112,8 @@ test("group warm: built from that group's own options only, exactly like a norma
     const o = rig.started[0];
     assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
     assert.notEqual(conv.notesDir, owner().notesDir);
-    assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, undefined, undefined, ["send", "weather", "draw", "voice", "memory", "browse"]]);
-    assert.deepEqual(o.tools, ["Read", "Write", "Edit", "WebSearch"]);
+    assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "voice", "memory", "browse"]]);
+    assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
     assert.match(JSON.stringify(o.systemPrompt), /be warm/);
   } finally {
     (settings as { warm: boolean }).warm = was;

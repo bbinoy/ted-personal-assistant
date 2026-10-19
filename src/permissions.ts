@@ -123,15 +123,15 @@ export interface CallGuard {
   decide: (tool: string, input: Record<string, unknown>) => Promise<GuardDecision>;
 }
 
-export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judgeContext?: string, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tenantTools?: ReadonlySet<string>): CanUseTool {
-  const log: typeof audit = tenantTools ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
+export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judgeContext?: string, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false): CanUseTool {
+  const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   return async (tool, input, { signal }) => {
     const g = guard ? await guard.decide(tool, input) : undefined;
     if (g?.kind === "deny") {
       log(tool, "deny-guard", source);
       return { behavior: "deny", message: g.reason ?? `${tool} is blocked and cannot be used.` };
     }
-    const base = classify(tool, input, source, memoryDir, tenantTools);
+    const base = classify(tool, input, source, memoryDir, tools);
     const verdict = g?.kind === "allow" && base !== "deny" ? "allow" : g?.kind === "ask" && base !== "deny" ? "ask" : base;
     // The call as it must run: what the guard narrowed, or built only now (a card typed by code after the yes), else the model's own.
     const final = async (): Promise<{ input: Record<string, unknown> } | { deny: string }> => {

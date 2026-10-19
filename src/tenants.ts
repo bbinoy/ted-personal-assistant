@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { audit } from "./audit.ts";
 import { isInside } from "./contain.ts";
-import { intakeToolsFor } from "./intakelinks.ts";
 import { OneTimeCodes } from "./onetime.ts";
 import { FILE as OWNER_LOG, type Summarize } from "./messages.ts";
 import { NOTES_DIR } from "./notes.ts";
@@ -41,10 +40,12 @@ export const STATUSES: readonly TenantStatus[] = ["invited", "active", "suspende
 export type Role = "admin" | "member";
 export const ROLES: readonly Role[] = ["admin", "member"];
 
-// What a person may use; everything else about her is data. The owner has all of them, a friend starts with FRIEND_DEFAULTS.
-export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake"] as const;
+// What a person may use; everything else about her is data. The owner has all of them, a friend starts with FRIEND_DEFAULTS. Each tool of the manifest
+// (toolmanifest.ts) and each shared skill (skills.ts) names the capability that gates it; capabilities.ts turns a set of them into tools and skills.
+// weather and draw are free (public data, a sanitised render), so they are on by default; every other capability a friend gets is granted.
+export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "google", "admin"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
-export const FRIEND_DEFAULTS: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream"];
+export const FRIEND_DEFAULTS: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "weather", "draw"];
 export const isCapability = (x: unknown): x is Capability => (CAPABILITIES as readonly unknown[]).includes(x);
 
 // Whose model credential her runs use: the instance's Claude login (the owner), or the instance key TENANT_ANTHROPIC_API_KEY (tenants).
@@ -77,7 +78,7 @@ export interface TenantConfig {
   browse?: boolean; // false switches the browse tool off for her (it can never be switched on beyond BROWSE)
   voice?: boolean; // false switches the voice tool off for her
   timezone?: string; // an IANA name, for her clock line
-  connectors?: string[]; // EXTENSION POINT, off: her own connectors (mail, calendar...) are phase 2; anything listed here is ignored and reported
+  connectors?: string[]; // EXTENSION POINT, off: her own connectors (mail, calendar...) are phase 2; anything listed here is ignored and reported (they will be tools of the manifest with a capability of theirs)
 }
 
 const KNOWN: readonly string[] = ["language", "persona", "dailyBudgetUsd", "maxTurns", "maxBudgetUsdPerRun", "browse", "voice", "timezone", "connectors"];
@@ -122,7 +123,7 @@ export function parseTenantConfig(raw: unknown): { config: TenantConfig; problem
   }
   if (r.connectors !== undefined) {
     if (!Array.isArray(r.connectors) || !r.connectors.every((x) => typeof x === "string")) problems.push("connectors must be a list of names");
-    else if (r.connectors.length) problems.push("connectors are not supported yet: ignored"); // the extension point (connectorTools below)
+    else if (r.connectors.length) problems.push("connectors are not supported yet: ignored");
   }
   return { config, problems };
 }
@@ -211,27 +212,8 @@ export function tenantContext(rec: TenantRecord): TenantContext {
   };
 }
 
-// ---- tools a tenant's run may have ----
-
+// The one tool of a tenant's run that is no feature: her one-time age and region confirmation (tenanttools.ts), the only tool before she has given it.
 export const TENANT_CONSENT_TOOL = "mcp__tenant__record_consent";
-// Never a tenant's in this phase, whatever her tenant.json says: the owner's connectors and tools, payment and the saved profile. Listed so
-// a test can check that nothing here is reachable, and so that adding a tool to the allowed set below cannot slip one in unnoticed.
-export const NEVER_FOR_TENANTS: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^Skill$/, /^WebFetch$/, /^Bash/, /card|payment|profile/i];
-
-// Her connectors: the EXTENSION POINT (phase 2). Off by default; nothing is returned today, whatever tenant.json lists.
-export const connectorTools = (_ctx: Pick<TenantContext, "config">): readonly string[] => [];
-
-// The tools her run has: her notes (file tools inside notes/ only), web search, the memory tools, send, voice and browse (the browse
-// worker has no profile and no card in this mode, browseguard.ts), the consent tool and, when the intake page is set up and she may use it, its link tools. What each may do is still policy.ts.
-export function toolsFor(ctx: Pick<TenantContext, "config" | "capabilities">): ReadonlySet<string> {
-  const t = new Set<string>(["Read", "Write", "Edit", "WebSearch", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send", TENANT_CONSENT_TOOL]);
-  if (settings.browse && ctx.config.browse !== false && ctx.capabilities.includes("browse")) t.add("mcp__browse__browse");
-  if (ctx.config.voice !== false && ctx.capabilities.includes("voice")) t.add("mcp__voice__voice");
-  for (const c of connectorTools(ctx)) t.add(c);
-  for (const c of intakeToolsFor(ctx.capabilities)) t.add(c); // setup links to the intake page (intakelinks.ts): off unless INTAKE_BASE_URL and the capabilities are there
-  for (const tool of t) if (NEVER_FOR_TENANTS.some((re) => re.test(tool))) t.delete(tool);
-  return t;
-}
 
 // ---- the registry ----
 

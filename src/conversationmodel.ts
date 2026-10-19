@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { errorNotice, groupErrorNotice, tenantErrorNotice } from "./errors.ts";
+import { GROUP_CAPABILITIES } from "./capabilities.ts";
 import { OWNER_ID, people, tenantById, tenantContext, type Capability } from "./tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
@@ -113,8 +114,7 @@ export const tenant = (id: string): Conversation => {
 // Needs the instance's own Claude login, with its connectors and its card: effective only for a person whose credential is that login (the owner's),
 // whatever else a record lists. A tenant's own connectors are an extension point (tenants.ts connectorTools).
 const ON_LOGIN: readonly Capability[] = ["mail", "calendar", "notion", "profile", "card"];
-// A group has no record: it is looked in on, tidied and woken like any conversation, and has nothing of the owner's.
-const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "wake"];
+// A group has no record: it is looked in on, tidied and woken like any conversation, and has nothing of the owner's (capabilities.ts GROUP_CAPABILITIES).
 
 type Who = Pick<Conversation, "kind" | "tenantId">;
 const recordOf = (conv: Who) => (conv.kind === "owner" ? people().find((r) => r.id === OWNER_ID) : conv.tenantId ? tenantById(conv.tenantId) : undefined);

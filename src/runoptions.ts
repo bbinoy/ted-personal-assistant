@@ -6,9 +6,11 @@ import { allows, type Conversation } from "./conversationmodel.ts";
 import { recentNotices } from "./messages.ts";
 import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
 import { chatSystem, groupSystem, tenantSystem } from "./persona.ts";
+import { groupTools, tenantCapabilities, toolsFor } from "./capabilities.ts";
 import { PROFILES } from "./profiles.ts";
 import { readText } from "./state.ts";
-import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, toolsFor, type TenantContext } from "./tenants.ts";
+import { skillsFor } from "./skills.ts";
+import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
 
 // The ONE builder of the options of a conversation's run: the owner's chat, a group and a tenant. What a run is made of comes from the
 // conversation's record (conversationmodel.ts: kind, source, notes folder, session file, the group's id) and, for a person with a registry record,
@@ -16,11 +18,11 @@ import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, toolsFor, 
 // a group's chat, the owner's notifier, the instance key a run on it carries, the clock.
 //
 //   owner   the preset prompt with the owner's persona and notes, the owner's connectors and tools (agentrun.ts buildOptions: no tenant, no group id)
-//   group   the group's persona, its own notes and session, the group profile's limits and skills; isolated: no connectors, no user settings, no skills
+//   group   the group's persona, its own notes and session, the group profile's limits; isolated: no connectors, no user settings; its tools and skills are those of the group's capability set
 //   tenant  a group run with one person in it: her persona, notes, session and limits, her ledger and consent, and the instance key in this run's environment only
 //
 // Security stays where it was and is not decided here: the isolation (strictMcpConfig, no settings sources, no plugins) follows from `source` in
-// buildOptions; the tool set of a tenant comes from her capabilities (tenants.ts toolsFor) and policy.ts classify; the instance key goes only into the
+// buildOptions; the tools and skills of a group or a tenant come from its capabilities (capabilities.ts, skills.ts) and policy.ts classify; the instance key goes only into the
 // run's environment (tenanttools.ts tenantEnv).
 
 export interface RunInputs {
@@ -30,7 +32,7 @@ export interface RunInputs {
   now?: Date;
 }
 
-type Shape = Pick<RunOptions, "systemPrompt" | "maxTurns" | "maxBudgetUsd" | "memory" | "skills" | "tenant">;
+type Shape = Pick<RunOptions, "systemPrompt" | "maxTurns" | "maxBudgetUsd" | "memory" | "skills" | "tools" | "tenant">;
 
 const down = () => disconnected(readConnectors());
 
@@ -45,12 +47,13 @@ const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: groupSystem({ style: i.style }),
   memory: { dir: conv.notesDir, groupId: conv.groupId },
   skills: PROFILES.group.skills,
+  tools: groupTools(),
   maxTurns: PROFILES.group.maxTurns,
   maxBudgetUsd: PROFILES.group.maxBudgetUsd,
 });
 
 // A tenant's turn (tenants.ts): an isolated "group" run in a private chat, on the instance key, with her notes, her session, her ledger. Until she has
-// confirmed her age and region the run has one tool, record_consent.
+// confirmed her age and region the run has one tool, record_consent, and no skill.
 const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
   if (!rec) throw new Error("not a tenant");
@@ -58,10 +61,12 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const apiKey = i.apiKey;
   if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
   const consented = !!readConsent(ctx);
+  const caps = tenantCapabilities(ctx);
   return {
     systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },
-    skills: PROFILES.group.skills,
+    skills: consented ? skillsFor(caps) : [],
+    tools: consented ? toolsFor(caps) : new Set([TENANT_CONSENT_TOOL]),
     maxTurns: ctx.maxTurns,
     maxBudgetUsd: ctx.maxBudgetUsdPerRun,
     tenant: {
@@ -73,7 +78,6 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
       logFile: ctx.logFile,
       consentFile: ctx.consentFile,
       consented,
-      tools: consented ? new Set([...toolsFor(ctx)].filter((t) => t !== TENANT_CONSENT_TOOL)) : new Set([TENANT_CONSENT_TOOL]),
       overBudget: () => tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd),
     },
   };
