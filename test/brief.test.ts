@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { briefPrompt, clockLine } from "../src/brief.ts";
 import { localDay } from "../src/pause.ts";
 import { buildDigest, readTriageSince, type TriageEntry } from "../src/digest.ts";
-import { chunk } from "../src/outbound.ts";
 import { audit } from "../src/audit.ts";
 import { sleep } from "./util.ts";
 const at = (iso: string) => new Date(iso); // local time, no zone suffix
@@ -54,14 +53,6 @@ test("digest: a row without a kind has no empty brackets", () => {
 test("digest: caps very long lists", () => {
   const many = Array.from({ length: 55 }, (_, i) => entry("archive", `S${i}`, "n", "notification"));
   assert.match(buildDigest(many, undefined), /\.\.\.and 15 more/);
-});
-
-test("chunk: splits on paragraphs and respects the limit", () => {
-  const text = ("para ".repeat(60) + "\n\n").repeat(5);
-  const parts = chunk(text, 500);
-  assert.ok(parts.length > 1);
-  assert.ok(parts.every((p) => p.length <= 500));
-  assert.equal(parts.join(" ").replace(/\s+/g, " ").trim(), text.replace(/\s+/g, " ").trim());
 });
 
 test("brief prompt: previous brief and digest are fenced data and cannot close their fence", () => {

@@ -213,7 +213,7 @@ The package publishes compiled `dist/`, but the app runs straight from TypeScrip
 src/main.ts          wiring: Signal in (to the conversation pipeline), heartbeat, brief, approvals
 packages/signal/     @ted-personal-assistant/signal: signal-cli JSON-RPC client, daemon start, and optional local speech in and out (entry points /voice and /tts); a workspace package, usable on its own, with its own README and tests
 src/markdown.ts      Markdown → Signal text styles (UTF-16 offsets)
-src/outbound.ts      sending, chunking, echo guard
+src/outbound.ts      sending (one message, however long), echo guard
 src/guards.ts        owner check: the sender resolves to the admin record (pure, tested)
 src/agent.ts         the entry points of Agent SDK runs: runConversation and prepare for the owner's chat, groups and tenants; the profiles (brief, radar, wake-up) and the handler
 src/runoptions.ts    the ONE builder of a conversation's run options (runOptionsFor), from its record: owner, group, tenant

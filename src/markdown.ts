@@ -127,23 +127,9 @@ export function toSignalStyles(styles: Style[]): string[] {
   return styles.map((s) => `${s.start}:${s.length}:${s.style}`);
 }
 
-// Split a markdown brief into one message-sized piece per section.
-// Sections start at a heading line; oversize sections are split on blank lines.
-export function splitSections(markdown: string, limit = 1800): string[] {
-  const parts = markdown.replace(/\r\n/g, "\n").split(/\n(?=#{1,3}\s)/);
-  const out: string[] = [];
-  for (const part of parts) {
-    let rest = part.trim();
-    while (rest.length > limit) {
-      let cut = rest.lastIndexOf("\n\n", limit);
-      if (cut < limit / 2) cut = rest.lastIndexOf("\n", limit);
-      if (cut < limit / 2) cut = limit;
-      out.push(rest.slice(0, cut).trim());
-      rest = rest.slice(cut).trim();
-    }
-    if (rest) out.push(rest);
-  }
-  return out;
+// Split a markdown brief into one piece per section (a section starts at a heading line). Length is not limited here: Signal shows a long message as a preview with "read more".
+export function splitSections(markdown: string): string[] {
+  return markdown.replace(/\r\n/g, "\n").split(/\n(?=#{1,3}\s)/).map((p) => p.trim()).filter(Boolean);
 }
 
 // The short version of a brief for Signal: the pep talk (if there is one) and the Focus section,
@@ -155,7 +141,7 @@ export const BRIEF_FOOTER_NO_MAIL = "The rest of the brief is saved. Say \"brief
 const SIGNAL_FALLBACK_CHARS = 700;
 
 export function signalSummary(markdown: string, footer = BRIEF_FOOTER): string {
-  const sections = splitSections(markdown, Number.MAX_SAFE_INTEGER);
+  const sections = splitSections(markdown);
   const head = (s: string) => s.split("\n", 1)[0] ?? "";
   const pep = sections.find((s) => /^#{1,3}\s.*(pep|💪)/i.test(head(s)));
   const focus = sections.find((s) => /^#{1,3}\s.*(focus|🎯)/i.test(head(s)));

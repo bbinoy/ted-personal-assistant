@@ -5,23 +5,8 @@ import { briefDelivery } from "./brief.ts";
 import { BRIEF_FOOTER, BRIEF_FOOTER_NO_MAIL, renderMarkdown, signalSummary, splitSections, toSignalStyles } from "./markdown.ts";
 import type { Quote, SignalClient } from "@ted-personal-assistant/signal";
 
-const CHUNK_LIMIT = 1800; // keep each Signal message comfortably short
+const LONG_BODY_MIN = 500; // an echo this long that starts a remembered reply is that reply's cut body
 const ECHO_WINDOW_MS = settings.echoWindowMinutes * 60_000;
-
-// Split long text on paragraph, then line, then hard boundaries.
-export function chunk(text: string, limit = CHUNK_LIMIT): string[] {
-  const out: string[] = [];
-  let rest = text.trim();
-  while (rest.length > limit) {
-    let cut = rest.lastIndexOf("\n\n", limit);
-    if (cut < limit / 2) cut = rest.lastIndexOf("\n", limit);
-    if (cut < limit / 2) cut = limit;
-    out.push(rest.slice(0, cut).trim());
-    rest = rest.slice(cut).trim();
-  }
-  if (rest) out.push(rest);
-  return out;
-}
 
 // `record` is told about every message sent (kind, Signal timestamp, text, group id if it went to a group): the message log.
 export function createOutbound(signal: Pick<SignalClient, "send">, record?: (kind: MessageKind, ts: number, text: string, groupId?: string) => void) {
@@ -38,7 +23,9 @@ export function createOutbound(signal: Pick<SignalClient, "send">, record?: (kin
 
   function isOwnEcho(m: { text: string; timestamp: number }): boolean {
     const now = Date.now();
-    return (recent.get(`t:${m.timestamp}`) ?? 0) > now || (recent.get(`x:${m.text}`) ?? 0) > now;
+    if ((recent.get(`t:${m.timestamp}`) ?? 0) > now || (recent.get(`x:${m.text}`) ?? 0) > now) return true;
+    // A long reply comes back as its cut body (the first part of what was sent; the rest is an attachment): the same text, cut.
+    return m.text.length >= LONG_BODY_MIN && [...recent].some(([k, expires]) => expires > now && k.startsWith("x:") && k.length > m.text.length + 2 && k.startsWith(`x:${m.text}`));
   }
 
   // Sends markdown as styled Signal text. `plain` skips markdown parsing: use it for anything
@@ -50,7 +37,9 @@ export function createOutbound(signal: Pick<SignalClient, "send">, record?: (kin
   async function reply(text: string, opts: { plain?: boolean; quote?: Quote; kind?: MessageKind; groupId?: string } = {}): Promise<number> {
     let last = 0;
     let quote = opts.quote;
-    for (const part of chunk(text)) {
+    // One message, however long: signal-cli sends text over the official clients' limit (about 2000 characters) as a cut body plus a text
+    // attachment, which the phone shows as a preview with "read more".
+    for (const part of text.trim() ? [text.trim()] : []) {
       const r = opts.plain ? { text: part, styles: [] } : renderMarkdown(part);
       if (!opts.groupId) remember(`x:${r.text}`);
       last = await signal.send(r.text, { style: toSignalStyles(r.styles), quote, ...(opts.groupId ? { groupId: opts.groupId } : {}) });
@@ -89,7 +78,7 @@ export function createOutbound(signal: Pick<SignalClient, "send">, record?: (kin
   }
 
   async function sendBrief(markdown: string) {
-    for (const section of splitSections(markdown, CHUNK_LIMIT)) {
+    for (const section of splitSections(markdown)) {
       await reply(section, { kind: "brief" });
       await new Promise((r) => setTimeout(r, 400)); // keep delivery order stable
     }

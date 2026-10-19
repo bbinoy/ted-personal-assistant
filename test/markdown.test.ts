@@ -54,10 +54,10 @@ test("horizontal rules dropped, blank runs squeezed", () => {
   assert.equal(renderMarkdown("a\n\n\n\n---\n\nb").text, "a\n\nb");
 });
 
-test("splitSections splits on headings and oversize text", () => {
+test("splitSections splits on headings only", () => {
   assert.deepEqual(splitSections("intro\n## A\nx\n## B\ny"), ["intro", "## A\nx", "## B\ny"]);
   const long = ("word ".repeat(100) + "\n\n").repeat(6);
-  assert.ok(splitSections(long, 1000).every((p) => p.length <= 1000));
+  assert.equal(splitSections(long).length, 1);
 });
 
 test("brief on Signal: pep talk and focus only, then a pointer to the email", async () => {
