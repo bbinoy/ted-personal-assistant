@@ -54,9 +54,14 @@ booking with a firm date/time that is **not already on the calendar**:
 
 - `create_event` on the calendar the setup note names for bookings: clear title ("Flight
   ZRH -> BCN LX123", "Hotel: <name>, <city>", "Train <A> -> <B>"),
-  correct start/end (booking's own timezone, else the owner's time zone),
-  location, and confirmation number + one-line summary in the
-  description.
+  correct start/end, location, and confirmation number + one-line summary in the
+  description. Times: write each of `startTime` and `endTime` as a full ISO time with
+  the UTC offset of the place it happens in (a flight ZRH 10:30 -> LHR 11:20 local on
+  21 Oct is `2026-10-21T10:30:00+02:00` to `2026-10-21T11:20:00+01:00`; a train
+  within one time zone uses that zone's offset). Do NOT set `timeZone` (it overrides
+  the offsets), and never send two local times without offsets: the two ends of a
+  flight are in different time zones, and an event with mixed times is held back for
+  the owner's approval. Use the booking's own times, else the owner's time zone.
 - Note each created event in the brief under "Changed by the assistant".
 - Ambiguous booking (no firm time, possible duplicate): do not create -
   list it as "booking found, no calendar entry - add it?".
