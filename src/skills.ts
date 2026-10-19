@@ -1,5 +1,6 @@
 import { loaded, registered } from "./modules/index.ts";
 import type { ModuleSkill, ToolModule } from "./modules/types.ts";
+import { PLUGIN, preset } from "./preset.ts";
 import { settings } from "./settings.ts";
 import type { Capability } from "./tenants.ts";
 
@@ -8,13 +9,14 @@ import type { Capability } from "./tenants.ts";
 // The owner loads the whole plugin (offeredSkills, profiles.ts); a group or a tenant loads only the shared skills whose capabilities its set holds (skillsFor),
 // through the same plugin, with the SDK's skills allowlist as the gate. A skill that is neither shared nor private is a mistake: the test names every folder
 // of plugin/skills.
-export const PLUGIN = "ted-personal-assistant";
+export { PLUGIN };
 
-// The assistant's own skills, not tied to one tool. All private: they read or write the owner's mail, calendar, Notion, brief and setup.
-const CORE_SKILLS: readonly ModuleSkill[] = [{ name: "daily-brief", required: true }, { name: "meeting-prep", required: true }, { name: "follow-through" }, { name: "setup", required: true }, { name: "radar" }];
+// The assistant's own skills, not tied to one tool, and the order of the owner's list are the assistant preset's (assistants/<name>/preset.json "skills").
+// All private: they read or write the owner's mail, calendar, Notion, brief and setup.
+const CORE_SKILLS: readonly ModuleSkill[] = preset().skills.core;
 
 // The order the owner's list has always had (the default-prompts snapshot pins it); a skill not named here goes last.
-const ORDER = ["daily-brief", "mailbird", "mailbird-troubleshooting", "gmail", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "setup", "radar", "surf-conditions", "draw"];
+const ORDER = preset().skills.order;
 const rank = (s: ModuleSkill) => (ORDER.includes(s.name) ? ORDER.indexOf(s.name) : ORDER.length);
 const inOrder = (skills: readonly ModuleSkill[]): ModuleSkill[] => skills.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map(({ s }) => s);
 

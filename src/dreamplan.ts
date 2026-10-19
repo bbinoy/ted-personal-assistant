@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_NOTE_CHARS, NOTES_DIR, parseNote, type Category } from "./notes.ts";
+import { preset } from "./preset.ts";
 import { settings } from "./settings.ts";
 import { LIMITS } from "./sanitize.ts";
 
@@ -15,7 +16,7 @@ const MIN_EVIDENCE = 12; // characters of the owner's own words a new fact must 
 
 // What the dream may write or delete. setup-* notes are the setup skill's (calendar ids, Notion
 // pages) and voice-* notes come from the owner's sent mail: neither is learned from chat.
-const DREAM_CATEGORIES: readonly Category[] = ["triage", "people", "scheduling", "context", "brief", "style"];
+const DREAM_CATEGORIES: readonly Category[] = preset().notes.dream;
 
 // Where a dream works and what it may touch. The owner's own notes are one scope; every group has its own
 // (groupstore.ts), so a group's dream can never read or write anything but that group's notes.

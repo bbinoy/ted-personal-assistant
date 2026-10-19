@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { isInside } from "./contain.ts";
 import { fence } from "./fence.ts";
 import { loaded } from "./modules/index.ts";
+import { preset } from "./preset.ts";
 import type { SetupNeed } from "./modules/types.ts";
 import { localDay } from "./pause.ts";
 import { settings } from "./settings.ts";
@@ -21,8 +22,9 @@ import { settings } from "./settings.ts";
 export const NOTES_DIR = join(settings.memoryDir, "notes");
 export const LAST_BRIEF = "memory/last-brief.md"; // summary memory: the latest daily brief
 
-export const CATEGORIES = ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"] as const;
-export type Category = (typeof CATEGORIES)[number];
+// The categories are the assistant preset's (assistants/<name>/preset.json "notes"): which kinds of note this assistant keeps.
+export const CATEGORIES: readonly string[] = preset().notes.categories;
+export type Category = string;
 
 export const MAX_NOTE_CHARS = 1200;
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;
