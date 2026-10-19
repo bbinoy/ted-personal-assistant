@@ -17,7 +17,9 @@ import { LIMITS } from "./sanitize.ts";
 // background runs).
 
 type Mode = "off" | "shadow" | "chat" | "broad";
-export type Decision = "auto" | "ask";
+// `fix`: the action is fine but its ARGUMENTS are wrong (a time that contradicts the description, a wrong day). It can only ever DENY the
+// call with a hint for the model (permissions.ts); nobody is asked and nothing is approved or changed, so it grants nothing.
+export type Decision = "auto" | "ask" | "fix";
 export interface Verdict {
   decision: Decision;
   reason: string;
@@ -93,6 +95,25 @@ export interface CarriedApproval {
   question: string;
 }
 
+// Where `fix` is never allowed: the question there is whether the action may happen at all, not whether its arguments are right. A mail
+// send, reply or forward, anything that deletes, shares or pays, and a guard-built step (a browse commit step, a payment) are downgraded to ask.
+const NEVER_FIX = new Set(["send", "reply", "forward", "share", "calendar-respond"]);
+// By name as well as by manifest action, so it holds for the mail provider that is not active and for a tool the manifest does not know.
+const NEVER_BY_NAME = /(^|[_-])(delete|trash|remove|unsubscribe|spam|send|reply|forward|share|respond|pay)([_-]|$)/i;
+export function mayFix(tool: string, o: { guardStep?: boolean; payment?: boolean } = {}): boolean {
+  return !o.guardStep && !o.payment && !NEVER_FIX.has(actionOf(tool)) && !NEVER_BY_NAME.test(tool.split("__").pop() ?? tool);
+}
+
+// Pure: for a calendar write, one line for the judge (not the owner) saying whether this call names guests or asks for notifications. It only
+// reads the call's own arguments; whether an existing event has guests is not known here, which is why the judge is told so.
+const NOTIFY_FIELD = /^(notificationLevel|sendUpdates|sendNotifications|notifyAttendees)$/i;
+export function notifyNote(tool: string, input: Record<string, unknown>): string {
+  if (actionOf(tool) !== "calendar-write") return "";
+  const people = Object.entries(input).filter(([k, v]) => PEOPLE_FIELD.test(k) && v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && v.length === 0)).length;
+  const notify = Object.entries(input).filter(([k]) => NOTIFY_FIELD.test(k)).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`);
+  return `\nNotifies: ${people ? "this call names guests" : "this call names no guests"}${notify.length ? `; ${notify.join(", ")}` : "; this call asks for no notifications"} (guests already on an existing event are not shown here)`;
+}
+
 interface JudgeInput {
   source: Source;
   description: string; // the action in plain words, built by code from the exact arguments
@@ -120,10 +141,12 @@ export function judgePrompt(i: JudgeInput): string {
   return `${asked}${i.approved ? approvedPlan(i.approved, i.now ?? Date.now()) : ""}\n\nThe action:\n${fence("action", i.description.slice(0, 2400))}`;
 }
 
-// Pure: whatever came back, as a verdict. Anything but an exact "auto" is "ask".
+// Pure: whatever came back, as a verdict. Anything but an exact "auto" or "fix" is "ask"; "fix" also needs a reason (the model is told it).
 export function parseVerdict(out: unknown): Verdict {
   const o = out as { decision?: unknown; reason?: unknown } | null | undefined;
-  return { decision: o?.decision === "auto" ? "auto" : "ask", reason: String(o?.reason ?? "no answer").replace(/\s+/g, " ").slice(0, LIMITS.reason) };
+  const reason = String(o?.reason ?? "no answer").replace(/\s+/g, " ").trim().slice(0, LIMITS.reason);
+  const fix = o?.decision === "fix" && typeof o.reason === "string" && o.reason.trim() !== "";
+  return { decision: o?.decision === "auto" ? "auto" : fix ? "fix" : "ask", reason };
 }
 
 type Runner = (prompt: string) => Promise<unknown>;
@@ -149,6 +172,6 @@ export function agreement(rows: readonly { judge: Decision; ownerApproved: boole
     judgedAuto: auto.length,
     autoOwnerApproved: auto.filter((r) => r.ownerApproved).length, // would have been right to skip the question
     autoOwnerDeclined: auto.filter((r) => !r.ownerApproved).length, // the dangerous kind: judge said go, owner said no
-    judgedAskOwnerApproved: rows.filter((r) => r.judge === "ask" && r.ownerApproved).length, // asked needlessly (cost of caution)
+    judgedAskOwnerApproved: rows.filter((r) => r.judge !== "auto" && r.ownerApproved).length, // ask, or a fix seen in shadow mode // asked needlessly (cost of caution)
   };
 }
