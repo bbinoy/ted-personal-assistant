@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { forTask, judgeTiming, runJudge, discardJudge, prepareJudge, SYSTEM, withTimeout } from "../src/approvaljudge.ts";
-import { judgeAnswer } from "../src/approvalmodel.ts";
-import { judgeAction } from "../src/autojudge.ts";
+import { forTask, judgeTiming, runJudge, discardJudge, prepareJudge, SYSTEM, withTimeout } from "../src/approvals/approvaljudge.ts";
+import { judgeAnswer } from "../src/approvals/approvalmodel.ts";
+import { judgeAction } from "../src/approvals/autojudge.ts";
 import { OWNER, settings } from "../src/settings.ts";
 
 const setWarm = (v: boolean) => ((settings as { warm: boolean }).warm = v);

@@ -11,7 +11,7 @@ import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
 import { LAST_BRIEF, missingSetup, setupItems } from "../src/notes.ts";
 import { backgroundSystem, briefSystem, chatContext, chatSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
-import { hiddenTools } from "../src/policy.ts";
+import { hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { dataPath, readJson } from "../src/state.ts";

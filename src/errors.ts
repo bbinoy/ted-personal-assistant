@@ -1,5 +1,5 @@
 import { noteRateLimit } from "./cooldown.ts";
-import { reportKeyProblem } from "./keynotice.ts";
+import { reportKeyProblem } from "./tenants/keynotice.ts";
 import { cooldownKeyOf, LOGIN, type Payer } from "./payer.ts";
 import { OWNER } from "./settings.ts";
 

@@ -1,26 +1,26 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "./audit.ts";
 import { OWNER_KEY } from "./ownerkey.ts";
-import { createTenantServer, type TenantRun } from "./tenanttools.ts";
+import { createTenantServer, type TenantRun } from "./tenants/tenanttools.ts";
 import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "./payer.ts";
-import { browseSystem } from "./browse.ts";
-import { resultText, withText, type BrowseGuard, type BrowseMode } from "./browseguard.ts";
-import { hiddenBrowserTools } from "./browserules.ts";
+import { browseSystem } from "./modules/browse/browse.ts";
+import { resultText, withText, type BrowseGuard, type BrowseMode } from "./modules/browse/browseguard.ts";
+import { hiddenBrowserTools } from "./modules/browse/browserules.ts";
 import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "./connectors.ts";
 import { failure } from "./errors.ts";
 import { announceMemoryChanges, noteWritten } from "./memorynotice.ts";
 import { builtinModule } from "./modules/builtin.ts";
-import { createsOf, isOwnerOnly } from "./toolmanifest.ts";
-import { idsInResult, noteCreated } from "./created.ts";
+import { createsOf, isOwnerOnly } from "./policy/toolmanifest.ts";
+import { idsInResult, noteCreated } from "./approvals/created.ts";
 import { serversFor } from "./modules/runtime.ts";
 import type { RunContext } from "./modules/types.ts";
-import { approveIn, makeCanUseTool, type Approve } from "./permissions.ts";
-import type { RunProvenance } from "./autojudge.ts";
-import { scopeOf } from "./turnscope.ts";
-import { groupCapabilities, groupTools } from "./capabilities.ts";
-import { hiddenTools } from "./policy.ts";
+import { approveIn, makeCanUseTool, type Approve } from "./approvals/permissions.ts";
+import type { RunProvenance } from "./approvals/autojudge.ts";
+import { scopeOf } from "./approvals/turnscope.ts";
+import { groupCapabilities, groupTools } from "./policy/capabilities.ts";
+import { hiddenTools } from "./policy/policy.ts";
 import { hiddenOutside } from "./profiletools.ts";
 import { PROFILES } from "./profiles.ts";
 import { changesCalendar, nudgeRadar } from "./radar-nudge.ts";
@@ -29,7 +29,7 @@ import { settings } from "./settings.ts";
 import { cleanToolOutput } from "./toolclean.ts";
 import { readJson, writeJson } from "./state.ts";
 import { ownerSkills, skillsFor } from "./skills.ts";
-import { recordToolsSeen, toolsSeen } from "./toolsseen.ts";
+import { recordToolsSeen, toolsSeen } from "./policy/toolsseen.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
 // browse sub-run. The options of a conversation come from one builder (runoptions.ts), the entry points are agent.ts, the warm processes agentwarm.ts.

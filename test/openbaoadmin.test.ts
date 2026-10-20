@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configHcl, installBinary, intakePolicyHcl, layoutOf, OPERATOR_POLICY, PIN, policyHcl, ensureDirs } from "../src/openbaoadmin.ts";
-import { ITEM_KINDS } from "../src/secrets.ts";
-import { keeperPlist, serverPlist, serviceNames } from "../src/openbaoservice.ts";
+import { configHcl, installBinary, intakePolicyHcl, layoutOf, OPERATOR_POLICY, PIN, policyHcl, ensureDirs } from "../src/secrets/openbaoadmin.ts";
+import { ITEM_KINDS } from "../src/secrets/secrets.ts";
+import { keeperPlist, serverPlist, serviceNames } from "../src/secrets/openbaoservice.ts";
 
 // The pure parts of the setup tool: the pinned download, the config, the policies and the launchd files. (The real server is in openbao-e2e.test.ts.)
 

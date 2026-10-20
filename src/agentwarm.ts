@@ -5,7 +5,7 @@ import { forgetUnresumable, type Resume } from "./chatsession.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { userInput } from "./image.ts";
 import { NOTES_DIR } from "./notes.ts";
-import { approveIn } from "./permissions.ts";
+import { approveIn } from "./approvals/permissions.ts";
 import { buildOptions, consume, underCeiling, type AgentReply, type RunOptions } from "./agentrun.ts";
 import { settings } from "./settings.ts";
 import { firstWarm, SpareSlot } from "./warmslot.ts";

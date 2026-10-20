@@ -1,4 +1,4 @@
-import * as approvals from "../src/approvals.ts";
+import * as approvals from "../src/approvals/approvals.ts";
 
 // The approvals API with the owner's chat filled in, for the tests that are about one conversation: a question belongs to the conversation
 // it was asked in (approvals.ts), so a call that names none is the owner's. Tests about scoping name theirs.

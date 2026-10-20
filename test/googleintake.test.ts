@@ -21,16 +21,16 @@ process.env.INTAKE_ALLOW_HTTP_LOOPBACK = "on";
 const { settings } = await import("../src/settings.ts");
 const { startFakeBao } = await import("./fakebao.ts");
 const { readAudit } = await import("../src/audit.ts");
-const { IntakeWriter } = await import("../src/intakestore.ts");
-const T = await import("../src/tenants.ts");
-const L = await import("../src/intakelinks.ts");
-const { IntakeServer } = await import("../src/intakeserver.ts");
-const { googleProvider } = await import("../src/googleoauth.ts");
-const { OAuthFlows, pkce, bindingCookie } = await import("../src/oauth.ts");
-const { createIntakeServer } = await import("../src/intaketools.ts");
+const { IntakeWriter } = await import("../src/intake/intakestore.ts");
+const T = await import("../src/tenants/tenants.ts");
+const L = await import("../src/intake/intakelinks.ts");
+const { IntakeServer } = await import("../src/intake/intakeserver.ts");
+const { googleProvider } = await import("../src/intake/googleoauth.ts");
+const { OAuthFlows, pkce, bindingCookie } = await import("../src/intake/oauth.ts");
+const { createIntakeServer } = await import("../src/intake/intaketools.ts");
 const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
 const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
-const { TenantSecrets } = await import("../src/secrets.ts");
+const { TenantSecrets } = await import("../src/secrets/secrets.ts");
 
 const REFRESH = "fake-refresh-token-0123456789-not-real";
 const ACCESS = "fake-access-token-9876543210-not-real";
@@ -72,7 +72,7 @@ after(() => {
 });
 
 let n = 0;
-function person(name: string, capabilities: import("../src/tenants.ts").Capability[]): import("../src/tenants.ts").TenantRecord {
+function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.setStatus(rec.id, "active");
   for (const c of capabilities) T.grant(rec.id, c);

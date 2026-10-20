@@ -6,11 +6,11 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildOptions } from "../src/agentrun.ts";
-import { classify } from "../src/policy.ts";
+import { classify } from "../src/policy/policy.ts";
 import { access } from "./util.ts";
-import { holdQuote, holdVoiceNote, resetVoiceNotes } from "../src/voicenote.ts";
-import { withSend } from "../src/send.ts";
-import { voiceNow, type VoiceDeps } from "../src/voicetool.ts";
+import { holdQuote, holdVoiceNote, resetVoiceNotes } from "../src/modules/voice/voicenote.ts";
+import { withSend } from "../src/modules/send/send.ts";
+import { voiceNow, type VoiceDeps } from "../src/modules/voice/voicetool.ts";
 import {
   activeVoice, activeVoiceRel, buildReference, deleteVoice, listVoices, MAX_VOICES, sanitizeVoiceName, saveVoice, scopeRoot, setActiveVoice, voiceFiles,
   type ClipTools,

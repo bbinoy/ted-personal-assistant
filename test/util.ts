@@ -1,9 +1,9 @@
 // Small helpers several test files used to define for themselves.
 
 import type { Source } from "../src/audit.ts";
-import { availableFor, isFree, type MailProvider } from "../src/toolmanifest.ts";
-import type { JudgeSetup } from "../src/permissions.ts";
-import { scopeOf } from "../src/turnscope.ts";
+import { availableFor, isFree, type MailProvider } from "../src/policy/toolmanifest.ts";
+import type { JudgeSetup } from "../src/approvals/permissions.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 
 // What the manifest says about a tool for a source (what the one path in permissions.ts starts from): undefined = the tool does not exist there
 // (denied outright), "free" = runs without the judge (a read, the assistant's own plumbing), "judged" = goes floor -> judge -> approval question.

@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Verdict } from "../src/autojudge.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/audit.ts";
 import { setDraftReader } from "../src/modules/mailbird.ts";
-import { makeCanUseTool, type CallGuard } from "../src/permissions.ts";
+import { makeCanUseTool, type CallGuard } from "../src/approvals/permissions.ts";
 import { settings } from "../src/settings.ts";
 
 // A check that fails for any reason denies the call.

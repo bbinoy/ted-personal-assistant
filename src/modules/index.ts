@@ -1,22 +1,22 @@
 import { settings } from "../settings.ts";
-import { browseModule, browserModule } from "./browse.ts";
+import { browseModule, browserModule } from "./browse/module.ts";
 import { builtinModule } from "./builtin.ts";
 import { calendarModule } from "./calendar.ts";
 import { claudeDocsModule, docsModule, driveModule } from "./drive.ts";
-import { drawModule } from "./draw.ts";
+import { drawModule } from "./draw/module.ts";
 import { gmailModule } from "./gmail.ts";
 import { ibkrModule } from "./ibkr.ts";
-import { googleModule } from "./google.ts";
-import { notionHostedModule } from "./notionhosted.ts";
+import { googleModule } from "./google/module.ts";
+import { notionHostedModule } from "./notion/module.ts";
 import { intakeModule } from "./intake.ts";
 import { mailbirdModule } from "./mailbird.ts";
 import { memoryModule } from "./memory.ts";
 import { notionModule } from "./notion.ts";
-import { sendModule } from "./send.ts";
+import { sendModule } from "./send/module.ts";
 import { tenantsModule } from "./tenants.ts";
 import type { MailSlot, ToolModule } from "./types.ts";
-import { voiceModule } from "./voice.ts";
-import { weatherModule } from "./weather.ts";
+import { voiceModule } from "./voice/module.ts";
+import { weatherModule } from "./weather/module.ts";
 
 // THE LIST OF TOOL MODULES. Adding a tool is a file in this folder and a line here; nothing else in the code names its tools. The order is the order the
 // run's MCP servers are listed in (send, weather, draw, voice, memory, browse, intake, tenants) and the order setup questions and known tools are listed in.

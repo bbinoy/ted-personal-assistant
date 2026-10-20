@@ -4,13 +4,13 @@ import { existsSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildOptions } from "../src/agentrun.ts";
-import { drawNow } from "../src/drawtool.ts";
-import { classify } from "../src/policy.ts";
+import { drawNow } from "../src/modules/draw/drawtool.ts";
+import { classify } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
-import { sendNow, withSend, type Content } from "../src/send.ts";
+import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { OWNER_KEY } from "../src/ownerkey.ts";
 import { settings } from "../src/settings.ts";
-import { adoptDrawing, adoptShots, loadShot, MAX_DRAWINGS, MAX_PICTURE_BYTES } from "../src/shots.ts";
+import { adoptDrawing, adoptShots, loadShot, MAX_DRAWINGS, MAX_PICTURE_BYTES } from "../src/modules/send/shots.ts";
 import { access } from "./util.ts";
 
 // draw: the model's SVG becomes a PNG kept for the turn (img1...), looked at, then sent with `send` like a screenshot.
@@ -120,7 +120,7 @@ test("draw: the server exists for chat and group runs only, and the skill is off
 });
 
 test("policy: the weather tools are allowed in a group run, other weather names are not", async () => {
-  const { classify } = await import("../src/policy.ts");
+  const { classify } = await import("../src/policy/policy.ts");
   for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) assert.equal(classify(`mcp__weather__${t}`, {}, "group"), "allow");
   assert.equal(classify("mcp__weather__set_alert", {}, "group"), "deny");
 });

@@ -1,4 +1,4 @@
-import { capabilitiesOf, toolsFor } from "./capabilities.ts";
+import { capabilitiesOf, toolsFor } from "./policy/capabilities.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { loaded, mailModule } from "./modules/index.ts";
 import type { MailTools, ToolModule } from "./modules/types.ts";

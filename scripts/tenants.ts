@@ -2,8 +2,8 @@
 // (docs/SETUP.md "More than one person"). Local terminal only. This is the ONLY place the admin role and the capabilities change: no tool, no chat path,
 // no model can reach them (test/tenants.test.ts walks every tool).
 import { settings, signalIdentity } from "../src/settings.ts";
-import { describeTenants } from "../src/tenanttools.ts";
-import { CAPABILITIES, ensureOwner, grant, isCapability, mintInvite, revoke, setAdmin } from "../src/tenants.ts";
+import { describeTenants } from "../src/tenants/tenanttools.ts";
+import { CAPABILITIES, ensureOwner, grant, isCapability, mintInvite, revoke, setAdmin } from "../src/tenants/tenants.ts";
 
 const [cmd, arg, ...rest] = process.argv.slice(2);
 const say = (l: string) => console.log(l);

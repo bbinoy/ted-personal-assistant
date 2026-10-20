@@ -3,17 +3,17 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isJudgeable, mayFix, notifyNote } from "../src/autojudge.ts";
-import { namesNoGuests, namesPeople } from "../src/guests.ts";
-import { describeCall } from "../src/format.ts";
-import { DELETE_CONFIRM, destinationIsTrashOrSpam, NEVER_ACTIONS, nameIsNever, namesLocalFile } from "../src/neverallowed.ts";
-import { sweepStaleRuns } from "../src/browse.ts";
+import { isJudgeable, mayFix, notifyNote } from "../src/approvals/autojudge.ts";
+import { namesNoGuests, namesPeople } from "../src/policy/guests.ts";
+import { describeCall } from "../src/approvals/format.ts";
+import { DELETE_CONFIRM, destinationIsTrashOrSpam, NEVER_ACTIONS, nameIsNever, namesLocalFile } from "../src/policy/neverallowed.ts";
+import { sweepStaleRuns } from "../src/modules/browse/browse.ts";
 import { registered } from "../src/modules/index.ts";
-import { applyChanges, classify, hiddenTools, isNeverAllowed } from "../src/policy.ts";
+import { applyChanges, classify, hiddenTools, isNeverAllowed } from "../src/policy/policy.ts";
 import { SOURCES } from "../src/audit.ts";
-import { allRows, confirmsDelete, entryFor, isFree, neverAllowedTool } from "../src/toolmanifest.ts";
-import { groupTools } from "../src/capabilities.ts";
-import { SYSTEM } from "../src/approvaljudge.ts";
+import { allRows, confirmsDelete, entryFor, isFree, neverAllowedTool } from "../src/policy/toolmanifest.ts";
+import { groupTools } from "../src/policy/capabilities.ts";
+import { SYSTEM } from "../src/approvals/approvaljudge.ts";
 
 // ONE never-allowed mechanism (neverallowed.ts, toolmanifest.ts neverAllowedTool, policy.ts classify) and the one fold of classify: tested over the rows, over
 // every tool name each connector is known to have, by name, by arguments, and for every source.
@@ -274,7 +274,7 @@ test("the judge prompt says what to do with an unsubscribe", () => {
 
 test("state/browse is not readable data, and stale browse run folders are swept at start-up", async () => {
   const { settings } = await import("../src/settings.ts");
-  const { isReadableData } = await import("../src/policy.ts");
+  const { isReadableData } = await import("../src/policy/policy.ts");
   const root = join(settings.stateDir, "browse");
   mkdirSync(join(root, "run-fresh"), { recursive: true });
   writeFileSync(join(root, "run-fresh", "page.md"), "a page view");

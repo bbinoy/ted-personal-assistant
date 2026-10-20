@@ -6,13 +6,13 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CardStore } from "../src/card.ts";
+import { CardStore } from "../src/modules/browse/card.ts";
 import { intakeCheck, openbaoCheck } from "../src/doctor.ts";
-import type { Keychain } from "../src/keychain.ts";
-import { BaoError } from "../src/openbao.ts";
-import { Admin, configHcl, ensureCert, ensureDirs, installBinary, layoutOf, writeConfig } from "../src/openbaoadmin.ts";
-import { ProfileStore } from "../src/profile.ts";
-import { appBao, keychainNames, TenantSecrets } from "../src/secrets.ts";
+import type { Keychain } from "../src/secrets/keychain.ts";
+import { BaoError } from "../src/secrets/openbao.ts";
+import { Admin, configHcl, ensureCert, ensureDirs, installBinary, layoutOf, writeConfig } from "../src/secrets/openbaoadmin.ts";
+import { ProfileStore } from "../src/modules/browse/profile.ts";
+import { appBao, keychainNames, TenantSecrets } from "../src/secrets/secrets.ts";
 import { settings } from "../src/settings.ts";
 
 // A real OpenBao, started by this test as a THROWAWAY server (its own temporary folder, its own port, its own random unseal keys, an in-memory

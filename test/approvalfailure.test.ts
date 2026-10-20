@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { standing } from "./util.ts";
-import type { Verdict } from "../src/autojudge.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { CHAT } from "./util.ts";
 
 const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test" });

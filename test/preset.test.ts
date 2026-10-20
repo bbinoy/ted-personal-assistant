@@ -147,7 +147,7 @@ test("a second preset's note categories reach every run: chat, group, friend, br
   const probe = join(scratch, "probe2.ts");
   const src = new URL("../src/", import.meta.url).pathname;
   writeFileSync(probe, `
-    const T = await import(${JSON.stringify(src + "tenants.ts")});
+    const T = await import(${JSON.stringify(src + "tenants/tenants.ts")});
     const { owner, group, tenant } = await import(${JSON.stringify(src + "conversation.ts")});
     const { runOptionsFor } = await import(${JSON.stringify(src + "runoptions.ts")});
     const { handlerOptions } = await import(${JSON.stringify(src + "agent.ts")});

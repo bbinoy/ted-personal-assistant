@@ -10,15 +10,15 @@ import { userInput, type Picture } from "./image.ts";
 import type { Document } from "./document.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
-import { approveIn, type Approve } from "./permissions.ts";
+import { approveIn, type Approve } from "./approvals/permissions.ts";
 import { backgroundSystem, briefSystem, handlerSystem, radarSystem } from "./persona.ts";
 import { handlerToolsOf } from "./mailhandler.ts";
 import type { Payer } from "./payer.ts";
 import { categoriesFor } from "./preset.ts";
-import { tenantById, tenantContext } from "./tenants.ts";
+import { tenantById, tenantContext } from "./tenants/tenants.ts";
 import { PROFILES, type OwnerProfile } from "./profiles.ts";
 import { settings } from "./settings.ts";
-import type { RunProvenance } from "./autojudge.ts";
+import type { RunProvenance } from "./approvals/autojudge.ts";
 
 const down = () => disconnected(readConnectors());
 

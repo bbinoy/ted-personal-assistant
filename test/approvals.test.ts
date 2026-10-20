@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick as settle } from "./util.ts";
-import { formatWait } from "../src/approvals.ts";
+import { formatWait } from "../src/approvals/approvals.ts";
 import { answer, answerReaction, request } from "./approvalrig.ts";
 
 // Background approvals (wake-ups, presets, the handler) must not swallow the owner's chat messages.

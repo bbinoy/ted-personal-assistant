@@ -3,7 +3,7 @@ import { budgetSpent } from "./budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "./fence.ts";
 import { prepare, runConversation } from "./agent.ts";
-import { scopeOf } from "./turnscope.ts";
+import { scopeOf } from "./approvals/turnscope.ts";
 import { AuthError, RateLimitError } from "./errors.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";

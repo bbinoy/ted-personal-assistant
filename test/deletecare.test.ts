@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createdNote, isJudgeable, mayFix, type Verdict } from "../src/autojudge.ts";
-import { SYSTEM } from "../src/approvaljudge.ts";
-import { createdFact, forgetCreated, idsInCall, idsInResult, noteCreated } from "../src/created.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
-import { classify } from "../src/policy.ts";
+import { createdNote, isJudgeable, mayFix, type Verdict } from "../src/approvals/autojudge.ts";
+import { SYSTEM } from "../src/approvals/approvaljudge.ts";
+import { createdFact, forgetCreated, idsInCall, idsInResult, noteCreated } from "../src/approvals/created.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
+import { classify } from "../src/policy/policy.ts";
 import { settings } from "../src/settings.ts";
-import { createsOf } from "../src/toolmanifest.ts";
+import { createsOf } from "../src/policy/toolmanifest.ts";
 
 // The five destructive actions (a draft, a calendar event, a Notion page and a Drive file to the bin) are allowed, judged with care: the judge is told by code whether the
 // assistant made this very thing in this conversation, and a delete is never fixed.

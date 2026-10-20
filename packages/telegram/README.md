@@ -62,10 +62,10 @@ Other limits: 50 MB upload through the Bot API, 20 MB download. Use `MAX_AUDIO_B
 
 The bot is public by username: anyone can message it. So the owner must be paired, not guessed.
 
-- Setup (or `npm run telegram -- pair`) prints a one-time code (`onetime.ts`: single use, expiring, stored hashed).
+- Setup (or `npm run telegram -- pair`) prints a one-time code (`src/secrets/onetime.ts`: single use, expiring, stored hashed).
 - Setup shows a deep link `https://t.me/<bot>?start=<code>` and a terminal QR code (only if small and dependency-free; else just the link). One tap, press Start, the code is sent for you, and Ted greets the owner in the same chat.
 - The first account that sends `/start <code>` becomes the owner, nobody else. The numeric user id is stored. No phone number is needed or asked for (a bot cannot look one up, and the first message always comes from the user).
-- Before pairing, and for every unknown sender afterwards, the reply is fixed text with no model call (same as `tenantroute.ts`).
+- Before pairing, and for every unknown sender afterwards, the reply is fixed text with no model call (same as `src/tenants/tenantroute.ts`).
 - Tenant invites reuse the same code mechanism.
 - Group use: the bot answers only in groups the owner added it to. Messages relayed by the agent can never grant ownership.
 

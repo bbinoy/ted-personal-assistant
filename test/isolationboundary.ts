@@ -59,7 +59,7 @@ export async function buildWorld(): Promise<World> {
   const { runOptionsFor } = await import("../src/runoptions.ts");
   const { group, tenant } = await import("../src/conversation.ts");
   const { buildOptions } = await import("../src/agentrun.ts");
-  const { mintInvite, recordConsent, redeemInvite, tenantContext } = await import("../src/tenants.ts");
+  const { mintInvite, recordConsent, redeemInvite, tenantContext } = await import("../src/tenants/tenants.ts");
 
   mkdirSync(settings.dataDir, { recursive: true });
   const dataDir = realpathSync(settings.dataDir);

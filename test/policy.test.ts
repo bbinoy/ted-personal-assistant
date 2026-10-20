@@ -2,11 +2,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { settings } from "../src/settings.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { idsOf } from "../src/permissions.ts";
+import { idsOf } from "../src/approvals/permissions.ts";
 import { NOTES_DIR } from "../src/notes.ts";
-import { applyChanges, classify, hiddenTools, isReadTool } from "../src/policy.ts";
+import { applyChanges, classify, hiddenTools, isReadTool } from "../src/policy/policy.ts";
 import { loadSettings } from "../src/settings.ts";
-import { neverAllowedTool } from "../src/toolmanifest.ts";
+import { neverAllowedTool } from "../src/policy/toolmanifest.ts";
 import { SOURCES } from "../src/audit.ts";
 
 test("policy: every source audit.ts names is classified", () => { // (the per-source rights table is gone: flags in the manifest say who may do what)
@@ -162,7 +162,7 @@ test("data folders: chat may read them (never write), and links cannot lead out"
   const { mkdtempSync, writeFileSync, symlinkSync, mkdirSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const { isReadableData } = await import("../src/policy.ts");
+  const { isReadableData } = await import("../src/policy/policy.ts");
   const root = mkdtempSync(join(tmpdir(), "logs-"));
   const logs = join(root, "logs");
   mkdirSync(logs);

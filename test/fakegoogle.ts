@@ -1,4 +1,4 @@
-// A tiny stdio MCP server standing in for the pinned Google server (taylorwilsdon/google_workspace_mcp, src/googlemcp.ts) in tests. It reads the account's
+// A tiny stdio MCP server standing in for the pinned Google server (taylorwilsdon/google_workspace_mcp, src/modules/google/googlemcp.ts) in tests. It reads the account's
 // credentials the way the real one does in single-user mode (<WORKSPACE_MCP_CREDENTIALS_DIR>/<USER_GOOGLE_EMAIL>.json), answers the Gmail and Calendar tools with the
 // same kind of plain text, and keeps each account's mailbox in a JSON file (FAKE_GOOGLE_STATE: {"<email>": {"messages": [...]}}) so a test can add mail and see an
 // archive. FAKE_GOOGLE_LOG: every call is appended there as one JSON line (tool, arguments, the email it ran as, whether the credentials file held a refresh token).

@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { standing } from "./util.ts";
 import { readFileSync } from "node:fs";
-import type { Verdict } from "../src/autojudge.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
 import { setDraftReader } from "../src/modules/mailbird.ts";
-import { makeCanUseTool, type CallGuard, type JudgeSetup } from "../src/permissions.ts";
-import { classify } from "../src/policy.ts";
+import { makeCanUseTool, type CallGuard, type JudgeSetup } from "../src/approvals/permissions.ts";
+import { classify } from "../src/policy/policy.ts";
 import { loadSettings, settings } from "../src/settings.ts";
-import * as manifest from "../src/toolmanifest.ts";
+import * as manifest from "../src/policy/toolmanifest.ts";
 import { CHAT } from "./util.ts";
 
 // One agent, one authority, one judge: every tool goes through the same floor -> judge -> approval question path in every place.
@@ -32,7 +32,7 @@ const HANDLER: JudgeSetup = { untrusted: true };
 test("no code path reads a chat or unattended flag: the manifest has no flags and the path has no per-source branches", () => {
   for (const gone of ["flagFor", "ROUTINE", "SEND", "FlagSpec", "Flag"]) assert.equal(gone in manifest, false, gone);
   for (const e of manifest.allRows()) assert.equal("flag" in e, false, e.tool);
-  for (const file of ["src/permissions.ts", "src/autojudge.ts", "src/policy.ts", "src/toolmanifest.ts"]) {
+  for (const file of ["src/approvals/permissions.ts", "src/approvals/autojudge.ts", "src/policy/policy.ts", "src/policy/toolmanifest.ts"]) {
     const code = readFileSync(file, "utf8").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
     assert.doesNotMatch(code, /source\s*[!=]==?\s*"(chat|handler|brief|radar|background|unattended)"/, file);
     assert.doesNotMatch(code, /\bunattended\b/, file);
@@ -188,7 +188,7 @@ test("judge error, timeout or junk output is ask, in any place", async () => {
   scopeOf("owner").say("archive it");
   let asked = 0;
   for (const j of [async () => { throw new Error("boom"); }, async () => ({ decision: "yes" }), async () => undefined, () => new Promise(() => {})]) {
-    const { judgeAction } = await import("../src/autojudge.ts");
+    const { judgeAction } = await import("../src/approvals/autojudge.ts");
     const quick: typeof judgeAction = (i, _run) => judgeAction(i, (j as never), 30);
     const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "handler", undefined, quick, undefined, undefined, false, { ...HANDLER, provenance: standing(HANDLER_TASK) });
     assert.notEqual(((await canUse(`${MB}archive_conversation`, { conversationId: `x${asked}` }, opts)) as Out).behavior, "allow");

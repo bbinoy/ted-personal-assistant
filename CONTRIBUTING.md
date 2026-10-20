@@ -32,3 +32,4 @@
 **Layout**
 
 - `test/boundaries.test.ts` checks the value imports of every file under `src/` against a folder table (each folder may import only the folders below it); a new folder needs a row there, and `test/docs-layout.test.ts` wants a line for every file in `docs/ARCHITECTURE.md`.
+- Adding a tool is a folder `src/modules/<name>/` with `module.ts` (the light declaration) and the code it wraps, one line in `src/modules/index.ts` and one binding in `src/modules/runtime.ts` (`docs/ADAPTING.md`). A tool with no code of its own stays a single file `src/modules/<name>.ts`.

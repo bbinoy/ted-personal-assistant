@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { standing } from "./util.ts";
-import { judgeAction, judgePrompt, mayFix, notifyNote, parseVerdict, agreement, type Verdict } from "../src/autojudge.ts";
+import { judgeAction, judgePrompt, mayFix, notifyNote, parseVerdict, agreement, type Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/audit.ts";
-import { SYSTEM } from "../src/approvaljudge.ts";
+import { SYSTEM } from "../src/approvals/approvaljudge.ts";
 import { setDraftReader } from "../src/modules/mailbird.ts";
-import { makeCanUseTool, type CallGuard } from "../src/permissions.ts";
+import { makeCanUseTool, type CallGuard } from "../src/approvals/permissions.ts";
 import { settings } from "../src/settings.ts";
 import { CHAT } from "./util.ts";
 

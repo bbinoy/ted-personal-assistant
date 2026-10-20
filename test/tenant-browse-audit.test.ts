@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAudit } from "../src/audit.ts";
-import type { Verdict } from "../src/autojudge.ts";
-import { browse } from "../src/browse.ts";
-import { BrowseGuard } from "../src/browseguard.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
+import { browse } from "../src/modules/browse/browse.ts";
+import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/settings.ts";
 
 // A tenant's browse run: the audit log is the admin's, so its rows carry no words.
