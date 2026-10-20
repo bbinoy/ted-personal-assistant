@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { settings } from "./settings.ts";
+import { settings } from "../../settings.ts";
 
 // The voice notes received in each conversation (the owner's chat, and each group on its own), so the voice tool can build a cloned voice from
 // one of them. Audio FILES that contain speech (an MP3 someone sent) are kept in the same list, marked kind "file". Only the attachment id is kept (signal-cli's file name; the file is found by joining it to the attachments folder, voice.ts

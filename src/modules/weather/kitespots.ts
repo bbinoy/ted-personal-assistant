@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ASSETS_DIR } from "./paths.ts";
+import { ASSETS_DIR } from "../../paths.ts";
 
 // A seed list of kite spots (assets/kitespots.json): launch point, the wind directions that are rideable there, water and notes.
 // It is only a starting point: the owner's own spot notes win, and a spot that is not in the list falls back to the shore from the map (shore.ts).

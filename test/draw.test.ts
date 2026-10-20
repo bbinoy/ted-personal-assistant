@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildOptions } from "../src/agentrun.ts";
-import { drawNow } from "../src/drawtool.ts";
+import { drawNow } from "../src/modules/draw/drawtool.ts";
 import { classify } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { sendNow, withSend, type Content } from "../src/send.ts";

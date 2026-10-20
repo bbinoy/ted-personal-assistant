@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getForecast, getMarineForecast, getSpotInfo, searchPlaces, type WeatherIo } from "../src/weather.ts";
-import { nearestSpot } from "../src/kitespots.ts";
-import { exposure, featuresFrom, rings, type Ring } from "../src/shore.ts";
+import { getForecast, getMarineForecast, getSpotInfo, searchPlaces, type WeatherIo } from "../src/modules/weather/weather.ts";
+import { nearestSpot } from "../src/modules/weather/kitespots.ts";
+import { exposure, featuresFrom, rings, type Ring } from "../src/modules/weather/shore.ts";
 import { access } from "./util.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { settings } from "../src/settings.ts";

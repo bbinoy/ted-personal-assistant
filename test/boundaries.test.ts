@@ -92,6 +92,13 @@ test("boundaries: every relative value import stays inside src/ and names a file
   assert.deepEqual(bad, [], "packages are imported by name (@ted-assistant/...), never by a relative path");
 });
 
+test("boundaries: every feature folder under src/modules/ holds its declaration as module.ts", () => {
+  const features = readdirSync(join(SRC, "modules"), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  assert.ok(features.length > 0, "the walk found the feature folders");
+  const without = features.filter((f) => !readdirSync(join(SRC, "modules", f)).includes("module.ts"));
+  assert.deepEqual(without, [], "module.ts is the light declaration; the server, guard, rules and store files sit next to it");
+});
+
 test("boundaries: the checker rejects a deliberately wrong import", () => {
   // a made-up graph in the target layout: core reaching up into approvals, a policy file importing a feature, a module importing the entry point
   const wrong: Graph = {

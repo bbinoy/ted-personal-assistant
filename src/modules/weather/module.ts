@@ -1,5 +1,5 @@
-import { settings } from "../settings.ts";
-import { rowsOf, type ToolModule } from "./types.ts";
+import { settings } from "../../settings.ts";
+import { rowsOf, type ToolModule } from "../types.ts";
 
 // weather (weathertools.ts): public forecast and map data, read-only. The owner's chat and groups, and a tenant whose capabilities hold `weather`.
 export const weatherModule: ToolModule = {

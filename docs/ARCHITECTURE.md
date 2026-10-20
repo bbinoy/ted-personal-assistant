@@ -386,7 +386,6 @@ src/doctor.ts        `npm run doctor`
 src/browsecdp.ts     what is under a point of the page, owned by code (the vision-click experiment, BROWSE_VISION=click)
 src/browsevision.ts  the pure rules of the vision experiment (BROWSE_VISION, off by default)
 src/document.ts      files people send that are not pictures, made ready for the model (the bytes decide what a file is)
-src/drawtool.ts      the draw tool: SVG written by the model, sanitised (svgclean.ts), rendered to a PNG (svgrender.ts), kept for the turn (shots.ts)
 src/googlemail.ts    a friend's mailbox for the mail check, through her own Google server
 src/googlemcp.ts     a friend's Google tools: the pinned third-party MCP server, one process per friend
 src/googleoauth.ts   Google as an OAuthProvider (offline access, the scopes the tools need)
@@ -396,7 +395,6 @@ src/intakepurposes.ts the purposes of a link (PURPOSES): capability, item kind, 
 src/intakeserver.ts  the intake page: a separate loopback process where a tenant types a secret herself
 src/intakestore.ts   the intake page's write-only way into OpenBao
 src/intaketools.ts   a tenant's two tools for the intake page (get_setup_link, setup_status)
-src/kitespots.ts     the seed list of kite spots (assets/kitespots.json)
 src/logsearch.ts     the `search_logs` tool's plain-text search over the logs folder
 src/mailloops.ts     the mail check, triage and handler for every friend who has mail through her own Google, on the heartbeat's tick
 src/messenger.ts     the app's one meeting point with its chat platform (MESSENGER): load it by name, its options, the instance in use
@@ -409,25 +407,17 @@ src/persona.ts       system prompts: the words are the preset's, this fills in w
 src/profiletools.ts  what an unattended job can see of the connectors
 src/radar-nudge.ts   the calendar changed by the assistant: the radar looks again soon
 src/send.ts          the send tool: a message, voice note, picture or reaction in the conversation NOW while the run continues
-src/shore.ts         which wind directions are onshore, side-on or offshore at a launch point (OpenStreetMap water outlines)
 src/shots.ts         pictures of a turn (browse screenshots, drawings) kept so the `send` tool can deliver one
 src/skills.ts        which bundled skills a conversation may load
-src/svgclean.ts      the sanitiser for a drawing the model wrote as SVG (parsed with parse5, rebuilt)
-src/svgrender.ts     SVG to PNG with resvg: no script, no network, no files
 src/tenantmail.ts    a friend's mail check state in her own folder (tenants/<id>/mail/)
 src/tenantroute.ts   who is this sender? The door for everybody who is not the owner
 src/tenantrun.ts     a tenant's turn around the run: the gates that need no model, in code
 src/tenants.ts       tenants: the registry of people, capabilities, invites, her folder and limits
 src/tenanttools.ts   the in-process MCP servers of a tenant's run (record_consent) and the owner's tenant administration
 src/turncontext.ts   what a conversation's session is told at the start of a turn
-src/voicenote.ts     the voice notes received in each conversation, for the voice tool
-src/voicetool.ts     the voice tool: the cloned voice of a conversation (Qwen only)
-src/weather.ts       the weather tools' bodies: data in, compact text out
-src/weathertools.ts  the read-only weather tools (forecast, marine, place search, distance, spot info)
 src/modules/browse.ts browse: the entry tool and the browser server
 src/modules/builtin.ts the assistant's own tools (web search, page fetch, skills, the notes' file tools)
 src/modules/calendar.ts Google Calendar through the owner's connector, with the guests floor
-src/modules/draw.ts  draw
 src/modules/drive.ts Google Drive, Docs and Claude Docs connectors (hidden by default)
 src/modules/gmail.ts the Gmail connector (MAIL_PROVIDER=gmail) and its mail slot
 src/modules/google.ts Google for friends (capability `google`): mail and calendar tools of a friend's own account
@@ -443,8 +433,6 @@ src/modules/tenants.ts the owner's tenant administration tools (TENANTS=on)
 src/modules/index.ts the list of tool modules and which are loaded; checkHideSettings
 src/modules/runtime.ts the code the modules wrap (servers, mail clients, doctor checks), bound to them by name
 src/modules/types.ts the shape of a tool module: rows, connection, floor data, skills, setup, the mail slot
-src/modules/voice.ts voice
-src/modules/weather.ts weather
 plugin/skills/       the skills the agent works with (daily-brief, mailbird, calendar, notion-tasks, follow-through, meeting-prep, setup...), loaded straight from here
 test/                unit tests (node:test)
 scripts/             launchd install, secrets scanner, voice-samples.ts (renders one text in several voice variants, sent to the owner's private chat only)
@@ -485,6 +473,39 @@ src/policy/guests.ts        does a call name people (guests, recipients, address
 src/policy/toolsseen.ts     tool names runs have seen (so unused ones are hidden)
 src/policy/webaddress.ts    the plain-address check for opening a page (used by the builtin module's floor and the browse rules)
 src/policy/mailview.ts      the one view of an outgoing mail, whatever the provider (the shape and shared helpers, and the draft id from a Mailbird result)
+```
+
+### src/modules/draw/
+
+The draw feature (the `draw` tool: SVG in, a picture out). `module.ts` is the declaration: light, it imports only core and policy leaves. The other files are the code it wraps; only `src/modules/runtime.ts` binds them by name. Dependency rule for every feature folder: it may use the policy, tenants, secrets and core folders (and the root files not moved yet), never the conversation, run or heartbeat code above it (`test/boundaries.test.ts`).
+
+```
+src/modules/draw/module.ts     draw
+src/modules/draw/drawtool.ts   the draw tool: SVG written by the model, sanitised (svgclean.ts), rendered to a PNG (svgrender.ts), kept for the turn (shots.ts)
+src/modules/draw/svgclean.ts   the sanitiser for a drawing the model wrote as SVG (parsed with parse5, rebuilt)
+src/modules/draw/svgrender.ts  SVG to PNG with resvg: no script, no network, no files
+```
+
+### src/modules/voice/
+
+The voice feature (speaking a reply as a voice note, and the voice tool). `module.ts` is the declaration; the speech engines themselves live in the `packages/speech` package. Same dependency rule as every feature folder.
+
+```
+src/modules/voice/module.ts     voice
+src/modules/voice/voicetool.ts  the voice tool: the cloned voice of a conversation (Qwen only)
+src/modules/voice/voicenote.ts  the voice notes received in each conversation, for the voice tool
+```
+
+### src/modules/weather/
+
+The weather feature (forecast, kite spots, the coast). `module.ts` is the declaration; the kite spot list is read from `assets/kitespots.json` through `src/paths.ts`. Same dependency rule as every feature folder.
+
+```
+src/modules/weather/module.ts        weather
+src/modules/weather/weather.ts       the weather tools' bodies: data in, compact text out
+src/modules/weather/weathertools.ts  the read-only weather tools (forecast, marine, place search, distance, spot info)
+src/modules/weather/kitespots.ts     the seed list of kite spots (assets/kitespots.json)
+src/modules/weather/shore.ts         which wind directions are onshore, side-on or offshore at a launch point (OpenStreetMap water outlines)
 ```
 
 ## Development

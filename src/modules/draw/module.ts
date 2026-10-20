@@ -1,5 +1,5 @@
-import { settings } from "../settings.ts";
-import { rowsOf, type ToolModule } from "./types.ts";
+import { settings } from "../../settings.ts";
+import { rowsOf, type ToolModule } from "../types.ts";
 
 // draw (drawtool.ts): an SVG sanitised and rendered by code to a PNG kept for the turn; nothing leaves until `send` delivers it. Needs a conversation.
 export const drawModule: ToolModule = {

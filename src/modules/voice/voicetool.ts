@@ -1,19 +1,19 @@
 import { lstatSync } from "node:fs";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { MAX_AUDIO_BYTES } from "@ted-assistant/messenger";
-import { messenger } from "./messenger.ts";
+import { messenger } from "../../messenger.ts";
 import { MAX_AUDIO_FILE_BYTES } from "@ted-assistant/speech/voice";
 import {
   buildReference, ClipRefused, DEFAULT_VOICE, deleteVoice, activeVoice, getMeta, listVoices, maxVoices, qwenReady, realClipTools, sanitizeVoiceName, saveVoice, scopeRoot, setActiveVoice,
   type ClipTools,
 } from "@ted-assistant/speech/tts";
 import { z } from "zod";
-import { audit } from "./audit.ts";
+import { audit } from "../../audit.ts";
 import { askingIn, quotedVoiceNote, voiceNote, voiceNotes, type VoiceNote } from "./voicenote.ts";
-import { oneLine } from "./sanitize.ts";
-import { settings } from "./settings.ts";
-import { OWNER_KEY, sourceOfKey } from "./ownerkey.ts";
-import { listGroups } from "./groupstore.ts";
+import { oneLine } from "../../sanitize.ts";
+import { settings } from "../../settings.ts";
+import { OWNER_KEY, sourceOfKey } from "../../ownerkey.ts";
+import { listGroups } from "../../groupstore.ts";
 
 // The voice tool: the cloned voice of a conversation (Qwen only). Each conversation has its own library and active voice (voices.ts):
 // the owner's chat in state/voice, each group in its own folder, so a voice made in a group is only ever used in that group.

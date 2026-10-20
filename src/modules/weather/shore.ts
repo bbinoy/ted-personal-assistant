@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { settings } from "./settings.ts";
+import { settings } from "../../settings.ts";
 
 // Which wind directions are onshore, side-on or offshore at a launch point, from OpenStreetMap water outlines: for each of 16 directions, how many
 // metres of open water the wind has crossed before it reaches the spot. Pure geometry; the model compares it with the forecast direction.

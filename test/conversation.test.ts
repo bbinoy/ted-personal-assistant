@@ -721,7 +721,7 @@ async function withQwen<T>(run: () => Promise<T>): Promise<T> {
 }
 
 test("audio file: in the owner's chat the model gets the fenced file transcript and the file becomes a voice source of this chat (id only)", async () => {
-  const { resetVoiceNotes, voiceNotes } = await import("../src/voicenote.ts");
+  const { resetVoiceNotes, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
   await withQwen(async () => {
     resetVoiceNotes();
     const { pipeline, r } = rig({ document: async () => MP3_DOC });
@@ -741,7 +741,7 @@ test("audio file: in the owner's chat the model gets the fenced file transcript 
 });
 
 test("audio file: a fake mp3 gets one sentence and no run, and is no source", async () => {
-  const { resetVoiceNotes, voiceNotes } = await import("../src/voicenote.ts");
+  const { resetVoiceNotes, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
   await withQwen(async () => {
     resetVoiceNotes();
     const { pipeline, r } = rig({ document: async () => { throw new Error("That file is called .mp3 but is not real audio, so I didn't open it."); } });
@@ -753,7 +753,7 @@ test("audio file: a fake mp3 gets one sentence and no run, and is no source", as
 });
 
 test("audio file: in a group it is opened even when nobody addressed us (like a voice message), becomes a source of THAT group, and reaches the admission", async () => {
-  const { resetVoiceNotes, voiceNotes } = await import("../src/voicenote.ts");
+  const { resetVoiceNotes, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
   const { settings } = await import("../src/settings.ts");
   const mutable = settings as { groupParticipation: string };
   const was = mutable.groupParticipation;

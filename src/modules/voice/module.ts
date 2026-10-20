@@ -1,5 +1,5 @@
-import { settings } from "../settings.ts";
-import { rowsOf, type ToolModule } from "./types.ts";
+import { settings } from "../../settings.ts";
+import { rowsOf, type ToolModule } from "../types.ts";
 
 // voice (voicetool.ts): the conversation's own cloned voice, Qwen only. Needs a conversation.
 export const voiceModule: ToolModule = {

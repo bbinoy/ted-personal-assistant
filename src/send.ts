@@ -3,7 +3,7 @@ import { z } from "zod";
 import { audit } from "./audit.ts";
 import { isOneEmoji } from "./reaction.ts";
 import { dropShots, loadShot } from "./shots.ts";
-import { setAsking, type Asking } from "./voicenote.ts";
+import { setAsking, type Asking } from "./modules/voice/voicenote.ts";
 import { sourceOfKey } from "./ownerkey.ts";
 
 // send: the model's way to put something in the conversation NOW while it keeps working: a message ("On it, researching now"), a voice note,

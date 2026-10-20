@@ -1,5 +1,5 @@
 import { Resvg, renderAsync, type ResvgRenderOptions } from "@resvg/resvg-js";
-import { MAX_PICTURE_BYTES } from "./shots.ts";
+import { MAX_PICTURE_BYTES } from "../../shots.ts";
 import { cleanSvg } from "./svgclean.ts";
 
 // SVG to PNG with resvg (Rust): it runs no script and fetches nothing. The input is always the sanitiser's rebuilt markup (svgclean.ts), which holds

@@ -8,7 +8,7 @@ import { DELETED_LINE, editNote, isAuthor, sameText } from "./edit.ts";
 import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "./image.ts";
 import { documentNote, takeDocuments, type Document } from "./document.ts";
 import { shouldThread, withQuoteContext } from "./quote.ts";
-import { holdQuote, holdVoiceNote, rememberSender } from "./voicenote.ts";
+import { holdQuote, holdVoiceNote, rememberSender } from "./modules/voice/voicenote.ts";
 import { cardCommand } from "./card.ts";
 import { TYPED_YES_NEEDED } from "./paymentrules.ts";
 import { withSend, type Content, type SendSink } from "./send.ts";
