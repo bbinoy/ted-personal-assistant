@@ -2,7 +2,7 @@ import { synthesizeRemote, type Fetch } from "./tts-remote.ts";
 import type { VoiceFormat } from "./voiceformat.ts";
 
 // Optional speech from a server of your own (a serverless GPU running F5-TTS or Chatterbox, say). The contract is
-// in docs/remote-tts.md of this package: POST JSON {text, voice?, reference_id?}, optional bearer token, audio bytes back.
+// in packages/speech/docs/remote-tts.md: POST JSON {text, voice?, reference_id?}, optional bearer token, audio bytes back.
 // The reference recording of a cloned voice stays on that server; here it is only named by `reference_id`.
 
 /** Settings of the generic HTTP engine. */

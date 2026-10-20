@@ -1,7 +1,7 @@
 {
   "name": "@ted-personal-assistant/signal",
   "version": "0.2.0",
-  "description": "A small, dependency-free client for signal-cli's JSON-RPC daemon: Note to Self or a separate assistant account, quotes, reactions, groups, read receipts, typing, voice notes in (local whisper.cpp) and out (local Kokoro).",
+  "description": "A small, dependency-free client for signal-cli's JSON-RPC daemon: Note to Self or a separate assistant account, quotes, reactions, groups, read receipts, typing, voice notes and files as attachments.",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -9,16 +9,6 @@
       "workspace-source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./voice": {
-      "workspace-source": "./src/voice.ts",
-      "types": "./dist/voice.d.ts",
-      "default": "./dist/voice.js"
-    },
-    "./tts": {
-      "workspace-source": "./src/speech.ts",
-      "types": "./dist/speech.d.ts",
-      "default": "./dist/speech.js"
     },
     "./messenger": {
       "workspace-source": "./src/messenger.ts",
@@ -53,14 +43,10 @@
     "signal",
     "signal-cli",
     "json-rpc",
-    "whisper",
-    "kokoro",
-    "tts",
     "signal-bot"
   ],
   "files": [
     "dist",
-    "scripts",
     "docs",
     "CHANGELOG.md",
     "README.md",
