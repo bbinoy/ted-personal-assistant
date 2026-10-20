@@ -49,3 +49,13 @@ export const nativeView = (action: MailAction, i: MailInput): MailView => ({
   hasAttachments: Array.isArray(i.attachments) && i.attachments.length > 0,
   ...attachmentsNamed(i.attachments),
 });
+
+// The seam that keeps modules/mailbird.ts off proposals.ts: this was the only proposals function the declaration needed, and it is a plain parser of a Mailbird
+// result, so it lives with the other mail-view readers. proposals.ts builds on format.ts, which reads the module list; a declaration that imported it
+// closed the loop format -> toolmanifest -> modules/index -> modules/mailbird -> proposals -> format.
+// Pure: the draft's messageId from a Mailbird tool result (JSON text, or an MCP content array).
+export function extractMessageId(response: unknown): number | undefined {
+  const text = typeof response === "string" ? response : JSON.stringify(response ?? "");
+  const m = /messageId\\?"?\s*[:=]\s*\\?"?(\d{1,12})/.exec(text); // also inside a JSON string, where the quotes are escaped
+  return m ? Number(m[1]) : undefined;
+}
