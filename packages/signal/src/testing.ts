@@ -96,13 +96,24 @@ export class FakeSignalDaemon {
    */
   whenConnections(test: (count: number) => boolean): Promise<void> {
     return new Promise((resolve) => {
+      let settling = false;
       const check = () => {
-        if (!test(this.sockets.size)) return false;
-        this.watchers.delete(check);
-        resolve();
-        return true;
+        if (settling || !test(this.sockets.size)) return;
+        settling = true;
+        // The adapter probes the port with a short connection before it makes its real one, and that probe alone can satisfy `n > 0`: a message pushed
+        // to it is lost. So the answer counts only if it still holds after the connection events already waiting have been handled (two event-loop turns,
+        // no timer); if it does not, the watcher stays and the next connect or disconnect asks again.
+        setImmediate(() =>
+          setImmediate(() => {
+            settling = false;
+            if (!test(this.sockets.size)) return;
+            this.watchers.delete(check);
+            resolve();
+          }),
+        );
       };
-      if (!check()) this.watchers.add(check);
+      this.watchers.add(check);
+      check();
     });
   }
 
