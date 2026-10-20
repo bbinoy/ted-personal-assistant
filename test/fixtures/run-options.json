@@ -3,7 +3,10 @@
     "run": {
       "source": "chat",
       "sessionFile": "state/session.json",
-      "systemPrompt": "sha:12c88e1515e09a31",
+      "systemPrompt": {
+        "key": "owner.run.systemPrompt",
+        "sha": "12c88e1515e09a31"
+      },
       "memory": {
         "dir": "<data>/memory/notes",
         "notify": "[fn]"
@@ -15,7 +18,10 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:12c88e1515e09a31",
+      "append": {
+        "key": "owner.system.append",
+        "sha": "12c88e1515e09a31"
+      },
       "snapshot": false
     },
     "settings": {
@@ -157,7 +163,10 @@
     "run": {
       "source": "group",
       "sessionFile": "<data>/memory/groups/ff36ac23eadd/session.json",
-      "systemPrompt": "sha:48c3d0613a0ad2fc",
+      "systemPrompt": {
+        "key": "group.run.systemPrompt",
+        "sha": "48c3d0613a0ad2fc"
+      },
       "memory": {
         "dir": "<data>/memory/groups/ff36ac23eadd/notes",
         "groupId": "g-run-options"
@@ -193,7 +202,10 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:48c3d0613a0ad2fc",
+      "append": {
+        "key": "group.system.append",
+        "sha": "48c3d0613a0ad2fc"
+      },
       "snapshot": false
     },
     "settings": {
@@ -243,7 +255,10 @@
     "run": {
       "source": "group",
       "sessionFile": "<data>/tenants/<ann>/session.json",
-      "systemPrompt": "sha:17cdffecb0cd312a",
+      "systemPrompt": {
+        "key": "tenantAskingConsent.run.systemPrompt",
+        "sha": "17cdffecb0cd312a"
+      },
       "memory": {
         "dir": "<data>/tenants/<ann>/notes"
       },
@@ -269,7 +284,10 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:17cdffecb0cd312a",
+      "append": {
+        "key": "tenantAskingConsent.system.append",
+        "sha": "17cdffecb0cd312a"
+      },
       "snapshot": false
     },
     "settings": {
@@ -300,7 +318,10 @@
     "run": {
       "source": "group",
       "sessionFile": "<data>/tenants/<bea>/session.json",
-      "systemPrompt": "sha:0d14b999971e449d",
+      "systemPrompt": {
+        "key": "tenant.run.systemPrompt",
+        "sha": "0d14b999971e449d"
+      },
       "memory": {
         "dir": "<data>/tenants/<bea>/notes"
       },
@@ -346,7 +367,10 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:0d14b999971e449d",
+      "append": {
+        "key": "tenant.system.append",
+        "sha": "0d14b999971e449d"
+      },
       "snapshot": false
     },
     "settings": {

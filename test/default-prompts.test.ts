@@ -9,7 +9,8 @@ import { ownerSkills } from "../src/skills.ts";
 import { settings } from "../src/settings.ts";
 
 // The default (MAIL_PROVIDER=mailbird) must not drift: every prompt and the offered skills are compared with a stored copy.
-// A deliberate change to a prompt means regenerating the fixture on purpose: SNAPSHOT_WRITE=1 npm test.
+// A deliberate change to a prompt means regenerating the fixture on purpose: SNAPSHOT_WRITE=1 npm test (the same switch as the run options' fixture). A missing fixture is a
+// failure, never written silently.
 
 const FIXTURE = new URL("./fixtures/default-prompts.json", import.meta.url);
 const NOW = new Date("2026-10-12T09:00:00");
@@ -48,7 +49,8 @@ export function snapshot(): Record<string, unknown> {
 
 test("default (mailbird): prompts and offered skills are byte-identical to the stored copy", () => {
   const now = snapshot();
-  if (process.env.SNAPSHOT_WRITE || !existsSync(FIXTURE)) return void writeFileSync(FIXTURE, `${JSON.stringify(now, null, 2)}\n`);
+  if (process.env.SNAPSHOT_WRITE) return void writeFileSync(FIXTURE, `${JSON.stringify(now, null, 2)}\n`);
+  assert.ok(existsSync(FIXTURE), "test/fixtures/default-prompts.json is missing: regenerate it on purpose with SNAPSHOT_WRITE=1 npm test"); 
   const stored = JSON.parse(readFileSync(FIXTURE, "utf8")) as Record<string, unknown>;
   for (const key of Object.keys(stored)) assert.deepEqual(now[key], stored[key], `${key} drifted from test/fixtures/default-prompts.json`);
   assert.deepEqual(Object.keys(now), Object.keys(stored));
