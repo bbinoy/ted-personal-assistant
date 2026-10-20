@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
-import { query, startup, type Options, type Query, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
+import { query, startup, type Options, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
 import { clockLine } from "./brief.ts";
-import { recordCost } from "./budget.ts";
-import { noteSuccess, observeRateLimit } from "./cooldown.ts";
-import { haikuOptions } from "./haiku.ts";
-import { AuthError, failure, RateLimitError, TenantKeyError } from "./errors.ts";
+import { haikuOptions, oneShot } from "./haiku.ts";
+import { LOGIN, type Payer } from "./payer.ts";
 import { fence } from "./fence.ts";
 import { groupNotesBlock } from "./groupstore.ts";
 import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES, parseWake } from "./ledger.ts";
@@ -18,7 +16,6 @@ import { MIN_GAP_MINUTES } from "./radar-rules.ts";
 import { OWNER, settings } from "./settings.ts";
 import { firstWarm, SpareSlot } from "./warmslot.ts";
 import { LIMITS } from "./sanitize.ts";
-import { tenantEnv } from "./tenanttools.ts";
 
 // The one gate. "Should I do something in this conversation now?" is asked in two situations and answered by the
 // same small model (Haiku, no tools) with the same input: the clock, the conversation's notes, the tail of its log
@@ -92,7 +89,7 @@ interface GateInput {
   tail: readonly string[]; // the tail of the conversation's log (logTail)
   secondsSinceMine?: number; // message look: how long ago we last spoke here
   duringLastReply?: boolean; // message look: this message arrived while our last message was being written, so that message is not an answer to it
-  tenant?: { id: string; apiKey: string; costFile: string }; // a tenant's look: on the instance key, her cost file and her cooldown (tenantrun.ts access)
+  payer?: Payer; // a friend's look: on the instance key, her cost file (payer.ts mayRun); default the login
 }
 export type Gate = (input: GateInput) => Promise<GateOutput>;
 
@@ -187,8 +184,9 @@ export function gatePrompt(input: Pick<GateInput, "trigger" | "now" | "tail" | "
 
 // ---- the real gate ----
 
-// Haiku, no tools, no connectors, no memory, one JSON answer.
-const gateOptions = (system: string, tenant?: GateInput["tenant"]): Options => haikuOptions(system, { ...(tenant ? { env: tenantEnv({ ...process.env }, tenant.apiKey) } : {}), maxTurns: 3, maxBudgetUsd: 0.05, outputFormat: GATE_SCHEMA, effort: "medium", thinking: { type: "disabled" }, persistSession: false });
+// Haiku, no tools, no connectors, no memory, one JSON answer (haiku.ts oneShot: the payer's environment, ledger and cooldown).
+const GATE_LIMITS = { maxTurns: 3, maxBudgetUsd: 0.05, effort: "medium", thinking: { type: "disabled" }, persistSession: false } as const;
+const gateOptions = (system: string): Options => haikuOptions(system, { ...GATE_LIMITS, outputFormat: GATE_SCHEMA });
 
 // A spare Haiku process for the look that has to be fast: an untagged group message. A process is built from its options
 // alone (the system prompt: fixed per kind of look, plus the owner's style notes, which every group is shown anyway), and
@@ -225,39 +223,38 @@ export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<Ga
   const t0 = Date.now();
   const at: Record<string, number> = {};
   const mark = (k: string) => void (k in at || (at[k] = Date.now() - t0));
-  const spare = usesSpare(input) ? await gateSpare.take(SPARE_ID, system)?.catch((e: Error) => console.error("gate: warm process unavailable, starting normally:", e.message)) : undefined;
-  if (usesSpare(input)) setImmediate(() => prepareGate(input.now, io.start)); // a spare serves one look: the next is already on its way
-  const started: Query[] = [];
-  const track = (q: Query): Query => (started.push(q), q);
-  const cold = () => track((io.query ?? query)({ prompt, options: gateOptions(system, input.tenant) }));
+  let warm = false;
   let api: number | undefined;
   let cost: number | undefined;
   let out = NOTHING;
-  let lastError: string | undefined; // the SDK reports a refused call (usage limit, expired login) as an assistant error code
   try {
-    // Not `for await ... break`: leaving that loop waits ~0.8 s for the process to wind down, on the critical path.
-    const it = (spare ? firstWarm(() => track(spare.query(prompt)), cold, (e) => console.error("gate: warm process failed, starting normally:", e.message)) : cold())[Symbol.asyncIterator]();
-    for (let n = await it.next(); !n.done; n = await it.next()) {
-      const m = n.value;
-      observeRateLimit(m, input.tenant?.id);
-      mark("init");
-      if (m.type === "assistant" && m.error) lastError = m.error;
-      if (m.type !== "result") continue;
-      mark("result");
-      api = m.duration_api_ms;
-      recordCost((cost = m.total_cost_usd), input.tenant?.costFile);
-      const p0 = Date.now();
-      // A usage limit or an expired login is NOT "nothing to do": say so (group.ts decides whether anyone needs to hear it).
-      const refused = failure(lastError, m.subtype, input.tenant?.id); // a tenant's refusal is hers: her cooldown only
-      if (refused instanceof RateLimitError || refused instanceof AuthError || refused instanceof TenantKeyError) throw refused;
-      out = m.subtype === "success" && !m.is_error ? parseGate(m.structured_output) : NOTHING;
-      if (m.subtype === "success" && !m.is_error) noteSuccess(input.tenant?.id);
-      at.parse = Date.now() - p0;
-      break;
-    }
+    // A usage limit, an expired login or a refused key is NOT "nothing to do": oneShot throws it (group.ts decides whether anyone needs to hear it).
+    const r = await oneShot({
+      system,
+      prompt,
+      payer: input.payer ?? LOGIN, // a friend's look is hers: the instance key, her cost file (wake.ts mayRun)
+      schema: GATE_SCHEMA,
+      options: GATE_LIMITS,
+      run: io.query,
+      onMessage: (m) => {
+        mark("init");
+        if (m.type === "result") (mark("result"), (api = m.duration_api_ms), (cost = m.total_cost_usd));
+      },
+      spare: usesSpare(input)
+        ? async (p, cold, track) => {
+            const w = await gateSpare.take(SPARE_ID, system)?.catch((e: Error) => console.error("gate: warm process unavailable, starting normally:", e.message));
+            setImmediate(() => prepareGate(input.now, io.start)); // a spare serves one look: the next is already on its way
+            if (!w) return cold();
+            warm = true;
+            return firstWarm(() => track(w.query(p)), cold, (e) => console.error("gate: warm process failed, starting normally:", e.message));
+          }
+        : undefined,
+    });
+    const p0 = Date.now();
+    out = r.ok ? parseGate(r.output) : NOTHING;
+    at.parse = Date.now() - p0;
   } finally {
-    for (const q of started) q.close(); // the answer is in, or it failed
-    console.log(`timing gate ${input.trigger} ${spare ? "warm" : "cold"} prompt=${prompt.length} system=${system.length} ${Object.entries(at).map(([k, v]) => `${k}=${v}`).join(" ")}${api === undefined ? "" : ` api=${api}`}${cost === undefined ? "" : ` cost=$${cost.toFixed(4)}`} total=${Date.now() - t0}`);
+    console.log(`timing gate ${input.trigger} ${warm ? "warm" : "cold"} prompt=${prompt.length} system=${system.length} ${Object.entries(at).map(([k, v]) => `${k}=${v}`).join(" ")}${api === undefined ? "" : ` api=${api}`}${cost === undefined ? "" : ` cost=$${cost.toFixed(4)}`} total=${Date.now() - t0}`);
   }
   return out;
 }

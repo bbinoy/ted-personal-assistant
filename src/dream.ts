@@ -1,14 +1,12 @@
-import { observeRateLimit, skipForCooldown } from "./cooldown.ts";
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
 import { allows } from "./capabilities.ts";
-import { failure } from "./errors.ts";
+import { oneShot } from "./haiku.ts";
+import { isRefusal, LOGIN, mayRun, type Payer } from "./payer.ts";
 import { applyPlan } from "./dreamapply.ts";
 import { OWNER_SCOPE, planOps, type NoteFile, type Plan, type Scope } from "./dreamplan.ts";
 import { clockLine } from "./brief.ts";
-import { budgetSpent, recordCost } from "./budget.ts";
 import { fence } from "./fence.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "./messages.ts";
 import { NOTES_DIR } from "./notes.ts";
@@ -16,7 +14,6 @@ import { isPaused, localDay } from "./pause.ts";
 import { dreamSystem } from "./persona.ts";
 import { OWNER, settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
-import { tenantEnv } from "./tenanttools.ts";
 import { LIMITS } from "./sanitize.ts";
 
 // The dream: once a day, before the daily brief, a model with NO tools reads what the owner said
@@ -115,43 +112,15 @@ const SCHEMA = {
   },
 };
 
-const OPTIONS = (system: string): Options => ({
-  model: settings.model,
-  systemPrompt: system,
-  tools: [], // nothing to call: it answers with JSON and code applies what it allows
-  settingSources: [],
-  strictMcpConfig: true,
-  mcpServers: {},
-  settings: { autoMemoryEnabled: false },
-  maxTurns: 3,
-  maxBudgetUsd: 0.6,
-  outputFormat: SCHEMA,
-});
-
 export type Runner = (prompt: string, system?: string) => Promise<unknown>;
 
-// A tenant's dream is billed to her: the instance key, her cost file, her cooldown (tenantrun.ts access).
-export interface DreamTenant {
-  id: string;
-  apiKey: string;
-  costFile: string;
-}
-
-export const runnerFor = (tenant?: DreamTenant): Runner => async (prompt, system = dreamSystem("owner")) => {
-  const options = tenant ? { ...OPTIONS(system), env: tenantEnv({ ...process.env }, tenant.apiKey) } : OPTIONS(system);
-  let lastError: string | undefined;
-  for await (const m of query({ prompt, options })) {
-    if (tenant) observeRateLimit(m, tenant.id);
-    if (m.type === "assistant" && m.error) lastError = m.error;
-    if (m.type !== "result") continue;
-    recordCost(m.total_cost_usd, tenant?.costFile);
-    if (m.subtype !== "success" || m.is_error) throw tenant ? failure(lastError, m.subtype, tenant.id) : new Error("the dream run failed"); // hers: her cooldown only
-    return m.structured_output;
-  }
-  throw new Error("no result");
+// The model that proposes the changes: no tools, one JSON answer, on whoever pays (payer.ts: the login for the owner's and a group's dream, the instance key and her
+// cost file for a friend's). A refusal of the API is thrown (errors.ts), any other failure too.
+export const runnerFor = (payer: Payer = LOGIN): Runner => async (prompt, system = dreamSystem("owner")) => {
+  const r = await oneShot({ system, prompt, payer, schema: SCHEMA, model: settings.model, options: { maxTurns: 3, maxBudgetUsd: 0.6 } });
+  if (!r.ok) throw r.error ?? new Error("the dream run failed");
+  return r.output;
 };
-
-export const realRunner = runnerFor();
 
 export const readNoteFiles = (dir: string = NOTES_DIR): NoteFile[] => {
   try {
@@ -186,13 +155,15 @@ interface DreamState {
 
 export function createDreamer(deps: { run?: Runner } = {}) {
   let inFlight: Promise<void> | undefined;
-  const runner = deps.run ?? realRunner;
 
   async function once(now: Date): Promise<void> {
     const today = localDay(now);
     const state = readJson<DreamState>(STATE, {});
     if (state.day === today) return;
-    if (!allows({ kind: "owner" }, "dream") || isPaused(now) || budgetSpent()) return;
+    if (!allows({ kind: "owner" }, "dream")) return;
+    const payer = mayRun({ kind: "owner" }, "dream", { paused: () => isPaused(now) }); // paused, a usage limit or the day's budget spent: no attempt, the day stays open
+    if (isRefusal(payer)) return;
+    const runner = deps.run ?? runnerFor(payer);
     writeJson(STATE, { ...state, day: today }); // before the run: a crash must not mean a retry on every tick
     const messages = messagesSince(state.lastRunAt);
     const { ownerText } = conversationLines(messages);
@@ -214,5 +185,5 @@ export function createDreamer(deps: { run?: Runner } = {}) {
   }
 
   // One run at a time; a second caller waits for the first.
-  return { run: (now = new Date()) => (skipForCooldown("dream") ? Promise.resolve() : (inFlight ??= once(now).finally(() => (inFlight = undefined)))) }; // usage limit: no attempt, the day stays open
+  return { run: (now = new Date()) => (inFlight ??= once(now).finally(() => (inFlight = undefined))) };
 }

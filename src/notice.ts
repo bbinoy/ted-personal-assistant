@@ -1,9 +1,8 @@
 import { skipForCooldown } from "./cooldown.ts";
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { withTimeout } from "./approvaljudge.ts";
-import { recordCost } from "./budget.ts";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { fence } from "./fence.ts";
-import { haikuOptions } from "./haiku.ts";
+import { oneShot } from "./haiku.ts";
+import { LOGIN } from "./payer.ts";
 import { styleLines } from "./gate.ts";
 import { PERSONALITY } from "./persona.ts";
 import { cleanText, LIMITS } from "./sanitize.ts";
@@ -82,37 +81,21 @@ export function checkNotice(raw: unknown, req: Pick<NoticeRequest, "facts" | "ve
 }
 
 // The real model call. Constrained output.
-const options = (system: string): Options =>
-  haikuOptions(system, {
-    maxTurns: 3, // structured output can take a retry turn
-    maxBudgetUsd: 0.05,
-    outputFormat: { type: "json_schema", schema: { type: "object", properties: { message: { type: "string" } }, required: ["message"], additionalProperties: false } },
-    effort: "low",
-    thinking: { type: "disabled" },
-    persistSession: false,
-  });
-
 export const askHaiku =
   (run: typeof query = query, timeoutMs: number = NOTICE_TIMEOUT_MS): NoticeModel =>
   async (system, prompt) => {
     if (skipForCooldown("notice")) throw new Error("usage limit cooldown"); // the writer sends the template text
-    const q = run({ prompt, options: options(system) });
-    try {
-      return await withTimeout(
-        (async () => {
-          for await (const m of q) {
-            if (m.type !== "result") continue;
-            recordCost(m.total_cost_usd);
-            const out = m.subtype === "success" && !m.is_error ? (m.structured_output as { message?: unknown } | undefined)?.message : undefined;
-            return typeof out === "string" ? out : undefined;
-          }
-          return undefined;
-        })(),
-        timeoutMs,
-      );
-    } finally {
-      q.close(); // also ends a call that timed out
-    }
+    const r = await oneShot({
+      system,
+      prompt,
+      payer: LOGIN,
+      schema: { type: "json_schema", schema: { type: "object", properties: { message: { type: "string" } }, required: ["message"], additionalProperties: false } },
+      options: { maxTurns: 3, maxBudgetUsd: 0.05, effort: "low", thinking: { type: "disabled" }, persistSession: false }, // structured output can take a retry turn
+      timeoutMs,
+      run,
+    });
+    const out = (r.output as { message?: unknown } | undefined)?.message;
+    return typeof out === "string" ? out : undefined;
   };
 
 // Writes the message, or returns the request's own fallback text. Never throws.

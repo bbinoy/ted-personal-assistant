@@ -24,7 +24,8 @@ const { recordMessage } = await import("../src/messages.ts");
 const { recordCost, spentToday } = await import("../src/budget.ts");
 const { noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
 const { NOTES_DIR } = await import("../src/notes.ts");
-const { TenantKeyError } = await import("../src/errors.ts");
+const { InstanceKeyError } = await import("../src/errors.ts");
+const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 on.briefBackstopHour = 24;
@@ -84,11 +85,11 @@ function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversati
       return (o.run ?? (() => "Good morning! A reminder from me."))(ctx.conv);
     },
     gate: async (input) => {
-      seen.gates.push({ conv: input.conv, tenant: input.tenant, tail: input.tail });
+      seen.gates.push({ conv: input.conv, tenant: input.payer, tail: input.tail });
       return parseGate(input.conv.tenantId ? (o.gate ?? (() => ({ act: true, instructions: "Remind her about her sister's birthday", nextCheckMinutes: 30 })))(input.conv) : { act: false, nextCheckMinutes: 30 });
     },
     groups: () => [],
-    tenants: runner,
+    key: () => ("key" in o ? o.key : KEY),
     tenantIds: () => o.ids ?? created,
     notesChangedAt: () => 0,
     now: () => now,
@@ -107,7 +108,7 @@ test("a tenant with heartbeat and wake gets the gate's look and a wake-up, on th
   await r.wakeups.tick(NOON);
   assert.deepEqual(tenantGates(r), [anna.id], "the look: only hers; Bo has no wake");
   const g = r.seen.gates.find((x) => x.conv.tenantId === anna.id)!;
-  assert.deepEqual(g.tenant, { id: anna.id, apiKey: KEY, costFile: T.tenantContext(anna).costFile });
+  assert.deepEqual(g.tenant, { kind: "instance", id: anna.id, apiKey: KEY, costFile: T.tenantContext(anna).costFile });
   assert.ok(g.tail.some((l) => /Anna: remind me about my sister's birthday/.test(l)), "her words, under her name");
   assert.ok(!g.tail.join("\n").includes("secret of Bo"));
   assert.equal(r.seen.runs.length, 1);
@@ -153,9 +154,9 @@ test("a tenant's suspension, cooldown, budget and a missing instance key each st
   await sus.wakeups.tick(NOON);
   assert.deepEqual(tenantGates(sus), []);
   T.setStatus(anna.id, "active");
-  noteRateLimit(Date.now(), anna.id);
+  noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN); // the KEY is cooling down: for every friend
   const cool = rig();
-  assert.equal(await cool.wakeups.look(tenant(anna.id), NOON), "blocked");
+  assert.equal(await cool.wakeups.look(tenant(anna.id), NOON), "cooldown");
   resetCooldown();
   recordCost(100, T.tenantContext(anna).costFile);
   const rich = rig();
@@ -201,7 +202,6 @@ test("quiet-time compaction of a tenant needs heartbeat and her access; it is he
   T.revoke(nobeat.id, "heartbeat");
   const ran: string[] = [];
   const mk = (key: string | undefined) => {
-    const r = rig({ key });
     const w = createWakeups({
       pipeline: { canSpeak: () => false, enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never,
       groupChats: true,
@@ -209,7 +209,7 @@ test("quiet-time compaction of a tenant needs heartbeat and her access; it is he
       runProfile: async () => ({ text: "" }),
       gate: async () => parseGate({ act: false }),
       groups: () => [],
-      tenants: r.runner,
+      key: () => key,
       tenantIds: () => [anna.id, nobeat.id],
       compact: { due: () => true, run: async (c) => void ran.push(c.tenantId ?? c.kind) },
       notesChangedAt: () => 0,
@@ -243,16 +243,16 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
     }) as never,
   });
   const before = spentToday();
-  const input = { conv: tenant(anna.id), trigger: "clock" as const, now: NOON, tail: [], tenant: { id: anna.id, apiKey: KEY, costFile: ctx.costFile } };
+  const input = { conv: tenant(anna.id), trigger: "clock" as const, now: NOON, tail: [], payer: { kind: "instance" as const, id: anna.id, apiKey: KEY, costFile: ctx.costFile } };
   await askGateWith(input, fake());
   assert.equal(options!.env!.ANTHROPIC_API_KEY, KEY);
   assert.equal(options!.env!.CLAUDE_CODE_OAUTH_TOKEN, undefined, "never the owner's login");
   assert.equal(spentToday(ctx.costFile), 0.25);
   assert.equal(spentToday(), before, "not the instance's own ledger");
-  await assert.rejects(askGateWith(input, fake("rate_limit")), TenantKeyError);
+  await assert.rejects(askGateWith(input, fake("rate_limit")), InstanceKeyError);
   const { coolingDown } = await import("../src/cooldown.ts");
-  assert.equal(coolingDown(Date.now(), anna.id), true);
-  assert.equal(coolingDown(Date.now(), ""), false, "the instance's cooldown is untouched");
+  assert.equal(coolingDown(Date.now(), INSTANCE_KEY_COOLDOWN), true, "the key's refusal is the key's: one cooldown for every friend");
+  assert.equal(coolingDown(Date.now(), ""), false, "the owner's login cooldown is untouched");
 });
 
 test("the gate's rules for a tenant's chat name her, have no brief or radar and nothing of the owner's", () => {
@@ -280,9 +280,9 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   const before = ownerNotesBefore();
   const prompts: { prompt: string; system?: string; key: string }[] = [];
   const d = createTenantDreamer({
-    access: (id) => createTenantRunner({ apiKey: () => KEY }).access(id),
+    key: () => KEY,
     ids: () => created,
-    run: (access) => async (prompt, system) => (prompts.push({ prompt, system, key: access.apiKey }), WRITE("my sister Eve is vegetarian")),
+    run: (payer) => async (prompt, system) => (prompts.push({ prompt, system, key: payer.apiKey }), WRITE("my sister Eve is vegetarian")),
   });
   await d.run(NOON);
   assert.equal(prompts.length, 2, "Mia and Ned; not Oz");
@@ -308,38 +308,39 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
 test("a tenant's dream: nothing new said, suspended, cooling down, over budget, no key, TENANTS off; and one failing never stops the next", async () => {
   const quiet = person("Pia", ["dream"]);
   const sus = person("Quin", ["dream"]);
-  const cool = person("Rae", ["dream"]);
   const poor = person("Sol", ["dream"]);
   const fine = person("Tia", ["dream"]);
   const boom = person("Uma", ["dream"]);
-  for (const p of [sus, cool, poor, fine, boom]) said(p, `${p.name} says something worth keeping about her plans`);
+  for (const p of [sus, poor, fine, boom]) said(p, `${p.name} says something worth keeping about her plans`);
   T.setStatus(sus.id, "suspended");
-  noteRateLimit(Date.now(), cool.id);
   recordCost(100, T.tenantContext(poor).costFile);
   const ran: string[] = [];
   const alerts: string[] = [];
   keyNotices.reset();
   keyNotices.sendTo((t) => void alerts.push(t));
   const mk = (key: string | undefined) => {
-    const runner = createTenantRunner({ apiKey: () => key });
     return createTenantDreamer({
-      access: (id) => runner.access(id),
-      run: (access) => async () => {
-        ran.push(access.id);
-        if (access.id === boom.id) throw new Error("model down");
+      key: () => key,
+      run: (payer) => async () => {
+        ran.push(payer.id);
+        if (payer.id === boom.id) throw new Error("model down");
         return { ops: [] };
       },
-      ids: () => [quiet.id, sus.id, cool.id, poor.id, boom.id, fine.id],
+      ids: () => [quiet.id, sus.id, poor.id, boom.id, fine.id],
     });
   };
   await mk(KEY).run(NOON);
   assert.deepEqual(ran.sort(), [boom.id, fine.id].sort(), "the failing one is tried, the one after it still runs");
   ran.length = 0;
-  on.tenants = false;
+  noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN); // the key is cooling down: it is the key's, so no friend's dream runs (the day stays open for each)
   await mk(KEY).run(new Date(NOON.getTime() + 86_400_000));
+  assert.deepEqual(ran, [], "the key is cooling down");
+  resetCooldown();
+  on.tenants = false;
+  await mk(KEY).run(new Date(NOON.getTime() + 2 * 86_400_000));
   assert.deepEqual(ran, [], "TENANTS=off");
   on.tenants = true;
-  await mk(undefined).run(new Date(NOON.getTime() + 2 * 86_400_000));
+  await mk(undefined).run(new Date(NOON.getTime() + 3 * 86_400_000));
   assert.deepEqual(ran, [], "no instance key: no run");
   assert.equal(alerts.length, 1, "and one notice for the admin");
 });

@@ -120,7 +120,7 @@ for (const [name, write, expected] of [
 }
 
 test("heartbeat: a usage limit leaves the mail unseen, so the next tick classifies it", async () => {
-  const { RateLimitError } = await import("../src/errors.ts");
+  const { failure } = await import("../src/errors.ts"); // (the cooldown is noted where the call fails)
   const { writeJson, readJson } = await import("../src/state.ts");
   const s = settings as unknown as Record<string, unknown>;
   const was = { quietStartHour: s.quietStartHour, quietEndHour: s.quietEndHour, heartbeatLive: s.heartbeatLive, mail: s.mail };
@@ -141,7 +141,7 @@ test("heartbeat: a usage limit leaves the mail unseen, so the next tick classifi
   try {
     const hb = startHeartbeat(
       { alert: async () => {}, handle: () => {}, briefDue: () => false, onTick: () => {} },
-      { mail, triage: async () => { calls++; throw new RateLimitError("rate_limit"); }, setTimeout: () => 0, setInterval: () => 0 },
+      { mail, triage: async () => { calls++; throw failure("rate_limit", "success"); }, setTimeout: () => 0, setInterval: () => 0 },
     );
     const { coolingDown, resetCooldown } = await import("../src/cooldown.ts");
     await hb.mailCheck();

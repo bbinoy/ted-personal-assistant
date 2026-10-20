@@ -1,10 +1,8 @@
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { recordCost } from "./budget.ts";
-import { haikuOptions } from "./haiku.ts";
-import { failure, RateLimitError } from "./errors.ts";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { oneShot } from "./haiku.ts";
+import { RateLimitError } from "./errors.ts";
 import { CATEGORIES, memoryFor } from "./notes.ts";
-import { observeRateLimit, noteSuccess } from "./cooldown.ts";
-import { tenantEnv } from "./tenanttools.ts";
+import { LOGIN, type Payer } from "./payer.ts";
 import { clean, defuseLines, defuseTags, LIMITS, oneLine } from "./sanitize.ts";
 import { OWNER } from "./settings.ts";
 
@@ -49,39 +47,33 @@ export const triageSystem = (memory: string, who: TriageWho = OWNER_WHO) => [sys
 export interface TriageCtx {
   who?: TriageWho;
   notesDir?: string;
-  tenant?: { id: string; apiKey: string; costFile: string };
+  payer?: Payer;
 }
 
-const options = (memory: string, ctx: TriageCtx = {}): Options =>
-  haikuOptions(triageSystem(memory, ctx.who), {
-    ...(ctx.tenant ? { env: tenantEnv({ ...process.env }, ctx.tenant.apiKey) } : {}),
-    maxTurns: 3,
-    maxBudgetUsd: 0.25, // a ceiling, not a target; the real cost is logged per batch
-    outputFormat: {
-      type: "json_schema",
-      schema: {
-        type: "object",
-        properties: {
-          items: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                index: { type: "integer" },
-                label: { type: "string", enum: ["act_now", "handle", "read_later", "archive"] },
-                kind: { type: "string", enum: ["newsletter", "notification", "cold_outreach", "personal_or_work"] },
-                reason: { type: "string" },
-              },
-              required: ["index", "label", "kind", "reason"],
-              additionalProperties: false,
-            },
+const SCHEMA = {
+  type: "json_schema" as const,
+  schema: {
+    type: "object" as const,
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            index: { type: "integer" },
+            label: { type: "string", enum: ["act_now", "handle", "read_later", "archive"] },
+            kind: { type: "string", enum: ["newsletter", "notification", "cold_outreach", "personal_or_work"] },
+            reason: { type: "string" },
           },
+          required: ["index", "label", "kind", "reason"],
+          additionalProperties: false,
         },
-        required: ["items"],
-        additionalProperties: false,
       },
     },
-  });
+    required: ["items"],
+    additionalProperties: false,
+  },
+};
 
 export interface MailInput {
   account: string;
@@ -127,33 +119,24 @@ export function formatMails(mails: MailInput[]): string {
 // A usage limit throws RateLimitError instead: that is not a verdict on the mail, so the caller retries it later.
 async function classifyGroup(mails: MailInput[], memory: string, run: typeof query, ctx: TriageCtx = {}): Promise<Triage[]> {
   const out: Triage[] = mails.map(() => fallback("classifier unavailable"));
-  let lastError: string | undefined; // the SDK reports a refused call as an assistant error code, even when the result says "success"
   try {
-    for await (const message of run({ prompt: formatMails(mails), options: options(memory, ctx) })) {
-      if (ctx.tenant) observeRateLimit(message, ctx.tenant.id); // (her own cooldown, cooldown.ts)
-      if (message.type === "assistant" && message.error) lastError = message.error;
-      if (message.type !== "result") continue;
-      const o = message.subtype === "success" && !message.is_error ? (message.structured_output as any) : undefined;
-      console.log(`triage: ${mails.length} email(s), ${message.subtype}, $${message.total_cost_usd.toFixed(4)}`);
-      recordCost(message.total_cost_usd, ctx.tenant?.costFile); // a friend's goes to her own ledger
-      const refused = failure(lastError, message.subtype, ctx.tenant?.id);
-      if (refused instanceof RateLimitError) throw refused;
-      if (!Array.isArray(o?.items)) {
-        console.error(`triage fallback: subtype=${message.subtype} structured=${o ? "invalid" : "missing"}`);
-        break;
-      }
-      const filled = new Set<number>();
-      for (const it of o.items) {
-        const i = Number(it?.index) - 1;
-        if (!Number.isInteger(i) || i < 0 || i >= mails.length || filled.has(i)) continue;
-        if (!LABELS.includes(it.label) || !KINDS.includes(it.kind)) continue;
-        filled.add(i);
-        out[i] = { label: it.label, kind: it.kind, reason: String(it.reason ?? "").slice(0, LIMITS.reason), protected: false };
-      }
-      if (ctx.tenant && message.subtype === "success" && !message.is_error && !lastError) noteSuccess(ctx.tenant.id);
-      if (filled.size !== mails.length) console.error(`triage: model returned ${filled.size}/${mails.length} valid items`);
-      break;
+    // oneShot: the payer's environment, ledger and cooldown; a usage limit (or a refused key) is thrown, any other failure is a plain "not ok".
+    const r = await oneShot({ system: triageSystem(memory, ctx.who), prompt: formatMails(mails), payer: ctx.payer ?? LOGIN, schema: SCHEMA, options: { maxTurns: 3, maxBudgetUsd: 0.25 }, run }); // (a ceiling, not a target; the real cost is logged per batch)
+    console.log(`triage: ${mails.length} email(s), ${r.subtype}, $${(r.costUsd ?? 0).toFixed(4)}`);
+    const o = r.ok ? (r.output as any) : undefined;
+    if (!Array.isArray(o?.items)) {
+      console.error(`triage fallback: subtype=${r.subtype} structured=${o ? "invalid" : "missing"}`);
+      return out;
     }
+    const filled = new Set<number>();
+    for (const it of o.items) {
+      const i = Number(it?.index) - 1;
+      if (!Number.isInteger(i) || i < 0 || i >= mails.length || filled.has(i)) continue;
+      if (!LABELS.includes(it.label) || !KINDS.includes(it.kind)) continue;
+      filled.add(i);
+      out[i] = { label: it.label, kind: it.kind, reason: String(it.reason ?? "").slice(0, LIMITS.reason), protected: false };
+    }
+    if (filled.size !== mails.length) console.error(`triage: model returned ${filled.size}/${mails.length} valid items`);
   } catch (e) {
     if (e instanceof RateLimitError) throw e;
     console.error("triage error:", (e as Error).message);

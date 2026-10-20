@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { errorNotice, groupErrorNotice, tenantErrorNotice } from "./errors.ts";
+import { noticeFor } from "./errors.ts";
 import { allows } from "./capabilities.ts";
 import { tenantById, tenantContext } from "./tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
@@ -55,7 +55,7 @@ const OWNER_CONVERSATION: Conversation = Object.freeze({
   optionalPictures: false,
   threadAlways: false,
   noticeEveryMs: 0,
-  notice: errorNotice, // tells the owner where to look
+  notice: noticeFor("owner"), // tells the owner where to look
 });
 
 export const owner = (): Conversation => OWNER_CONVERSATION;
@@ -79,7 +79,7 @@ export const group = (groupId: string): Conversation =>
     optionalPictures: true,
     threadAlways: true, // a group scrolls: say whom you answer
     noticeEveryMs: settings.groupNoticeMinutes * 60_000, // a failure is reported at most this often per group
-    notice: groupErrorNotice, // nobody there should be sent to a terminal
+    notice: noticeFor("group"), // nobody there should be sent to a terminal
   });
 
 // A tenant's private chat (tenants.ts): the group isolation machinery with one person in it. Her own folder (notes, history, session, ledger), her own
@@ -105,7 +105,7 @@ export const tenant = (id: string): Conversation => {
     optionalPictures: false,
     threadAlways: false,
     noticeEveryMs: Math.min(5, settings.tenantNoticeMinutes) * 60_000, // she is waiting: told promptly, but not once per message of a flood
-    notice: tenantErrorNotice, // no terminals, no logs
+    notice: noticeFor("friend"), // no terminals, no logs
   });
 };
 

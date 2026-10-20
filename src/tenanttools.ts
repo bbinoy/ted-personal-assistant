@@ -3,6 +3,7 @@ import { z } from "zod";
 import { audit } from "./audit.ts";
 import { spentToday } from "./budget.ts";
 import { cooldownUntil } from "./cooldown.ts";
+import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
 import { deleteTenant, mintInvite, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
 import { TENANT_ID } from "./secrets.ts";
@@ -19,7 +20,7 @@ const reply = (text: string, isError = false) => ({ content: [{ type: "text" as 
 export interface TenantRun {
   id: string;
   key: string; // her conversation's key ("tenant:<id>"): where send, voice and the browse questions go
-  apiKey: string; // the instance key (TENANT_ANTHROPIC_API_KEY): only into the environment of this run (tenantEnv), nowhere else, never logged or audited
+  apiKey: string; // the instance key (TENANT_ANTHROPIC_API_KEY): only into the environment of this run (payer.ts envFor), nowhere else, never logged or audited
   keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after it changed
   costFile: string;
   logFile: string; // her history: what search_logs reads
@@ -28,15 +29,7 @@ export interface TenantRun {
   overBudget: () => boolean; // her own ledger against her own ceiling (the browse run asks)
 }
 
-// The environment of a tenant's run: the process's, minus every way of authenticating as the owner, plus the instance key (as ANTHROPIC_API_KEY, in this env only).
-const OWN_LOGIN = ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_API_KEY_HELPER"];
-export function tenantEnv(base: Record<string, string | undefined>, apiKey: string): Record<string, string | undefined> {
-  if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
-  const env = { ...base };
-  for (const k of OWN_LOGIN) delete env[k];
-  env.ANTHROPIC_API_KEY = apiKey;
-  return env;
-}
+export { tenantEnv }; // (payer.ts: the environment of a call on the instance key)
 
 export function createTenantServer(t: Pick<TenantRun, "id" | "consentFile">) {
   return createSdkMcpServer({
@@ -82,7 +75,7 @@ export function describeTenants(): string[] {
       continue;
     }
     const ctx = tenantContext(rec);
-    const c = cooldownUntil(rec.id);
+    const c = cooldownUntil(INSTANCE_KEY_COOLDOWN); // (the key is cooling down: for every friend alike)
     const connections = connectionSummary(rec);
     lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}; consent ${readConsent(ctx) ? "given" : "not yet"}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
   }

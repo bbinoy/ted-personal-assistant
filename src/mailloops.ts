@@ -1,22 +1,20 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { runTenantHandlerTurn } from "./agent.ts";
 import { audit } from "./audit.ts";
-import { tenantOverBudget } from "./budget.ts";
 import { tenant as tenantConversation } from "./conversation.ts";
 import { allows } from "./capabilities.ts";
-import { noteRateLimit } from "./cooldown.ts";
 import { GoogleMail } from "./googlemail.ts";
 import { googleHub } from "./googlemcp.ts";
 import { createHandler, type HandlerContext } from "./handler.ts";
 import { createMailCheck, type MailContext, type MailSource } from "./heartbeat.ts";
 import { readDone } from "./intakelinks.ts";
 import { googleHandlerTask } from "./modules/google.ts";
+import { isRefusal, mayRun } from "./payer.ts";
 import { approveIn, type Approve } from "./permissions.ts";
 import { tenantKey } from "./send.ts";
 import { settings } from "./settings.ts";
 import { listTenants, tenantContext, tenantById } from "./tenants.ts";
 import { mailFiles, recordTriage } from "./tenantmail.ts";
-import type { TenantAccess } from "./tenantrun.ts";
 import { triageBatch } from "./triage.ts";
 
 // The mail check, the triage and the handler for every FRIEND who has mail through her own Google, run on the heartbeat's tick like the owner's. This file is only the
@@ -25,13 +23,13 @@ import { triageBatch } from "./triage.ts";
 //   who      an active friend with the capabilities heartbeat, mail and google (conversationmodel.ts allows), the instance's Google client set up, and a connected account
 //   state    her folder (tenants/<id>/mail/: seen mail, last tick, the handler's queue, what was decided), never state/
 //   mailbox  her own Google server, read with no model call (googlemail.ts); nothing new, nothing spent
-//   model    the small model on the instance key, billed to her cost file, stopped by her cooldown and her day's budget (tenantrun.ts access), with her notes
+//   model    the small model on the instance key, billed to her cost file, stopped by the key's cooldown and her day's budget (payer.ts mayRun), with her notes
 //   handler  drafts only: a send or an invitation asks HER in her chat (the approver is her conversation's), judged against the standing task
 //   notices  her chat and nobody else's; a friend's failure is logged and stops with her; it never reaches another friend or the owner
 // Push (Gmail Pub/Sub, calendar webhooks) is not built: polling is cheap here because the look is a search, not a model call.
 
 export interface TenantMailDeps {
-  access: (id: string) => TenantAccess | undefined; // tenantrun.ts: suspended, cooling down, over her budget or no instance key: nothing runs
+  key?: () => string | undefined; // where the instance key comes from (default settings.tenantApiKey; tests). Suspended, cooling down, over her budget or no key: nothing runs (payer.ts mayRun)
   notify: (id: string, text: string) => Promise<void>; // a plain message in HER chat
   approve?: (id: string) => Approve; // where the handler's questions go (default: her conversation, as a background run)
   ids?: () => string[]; // the people to look at (default: the registry's tenants)
@@ -49,13 +47,14 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
   const loops = new Map<string, Loop>();
 
   // May she have a mail check now? Her record (active, with the capabilities), the instance's Google client, and her connection (the intake page's record).
-  const eligible = (id: string): TenantAccess | undefined => {
-    if (!settings.tenants) return undefined;
-    const who = { kind: "tenant", tenantId: id } as const;
-    if (!allows(who, "heartbeat") || !allows(who, "mail")) return undefined; // (mail of a friend means her own Google with the instance's OAuth client set up: capabilities.ts)
-    if (!readDone(id, "google")) return undefined; // she has not connected: there is no mailbox to look at
-    return deps.access(id);
+  const who = (id: string) => ({ kind: "tenant", tenantId: id }) as const;
+  const eligible = (id: string): boolean => {
+    if (!settings.tenants) return false;
+    if (!allows(who(id), "heartbeat") || !allows(who(id), "mail")) return false; // (mail of a friend means her own Google with the instance's OAuth client set up: capabilities.ts)
+    return !!readDone(id, "google"); // she has not connected: there is no mailbox to look at
   };
+  // The Payer for one model call of hers (mail triage, the handler): a refusal means nothing runs now.
+  const payer = (id: string, what: string) => mayRun(who(id), what, { key: deps.key });
 
   function build(id: string): Loop {
     const rec = tenantById(id)!;
@@ -68,11 +67,11 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
       who: ctx.name,
       task: () => googleHandlerTask(ctx.name),
       run: deps.handlerRun?.(id) ?? ((prompt, ap, onToolSuccess, task) => {
-        const access = deps.access(id);
-        if (!access) throw new Error("not available now"); // (cooldown, budget or key changed since the batch was queued)
-        return runTenantHandlerTurn(tenantConversation(id), access, prompt, ap, onToolSuccess, task);
+        const p = payer(id, "mail handler");
+        if (isRefusal(p) || p.kind !== "instance") throw new Error("not available now"); // (cooldown, budget or key changed since the batch was queued)
+        return runTenantHandlerTurn(tenantConversation(id), p, prompt, ap, onToolSuccess, task);
       }),
-      over: () => tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd),
+      over: () => isRefusal(payer(id, "mail handler")), // the key in a cooldown, her day spent, no key: the queue waits
       tag: { tenant: id },
     };
     const handler = createHandler({ approve, notify: (text) => deps.notify(id, text), ctx: hctx });
@@ -81,15 +80,14 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
       triage:
         deps.triage?.(id) ??
         ((mails) => {
-          const a = deps.access(id);
-          if (!a) throw new Error("not available now");
-          return triageBatch(mails, query, { who: { name: a.name, pronoun: "them" }, notesDir: a.ctx.notesDir, tenant: { id, apiKey: a.apiKey, costFile: a.costFile } });
+          const p = payer(id, "mail triage");
+          if (isRefusal(p)) throw new Error("not available now");
+          return triageBatch(mails, query, { who: { name: ctx.name, pronoun: "them" }, notesDir: ctx.notesDir, payer: p });
         }),
       record: (decision, row) => recordTriage(ctx, decision, row),
       archiveLogOnly: () => !settings.google.archiveLive,
       handler: () => true,
-      skipForCooldown: () => !deps.access(id), // her cooldown, day's budget, suspension or a missing key: no model call (hers alone)
-      onRateLimit: () => noteRateLimit(Date.now(), id),
+      blocked: (what) => isRefusal(payer(id, what)), // the key's cooldown, her day's budget, suspension or a missing key: no model call
       tidyOwnBriefs: false,
     };
     const check = createMailCheck(source, mctx, { alert: (text) => deps.notify(id, text), handle: (items) => handler.enqueue(items), briefDue: () => false });

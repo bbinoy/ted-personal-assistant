@@ -1,10 +1,9 @@
-import { skipForCooldown } from "./cooldown.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
-import { budgetSpent } from "./budget.ts";
 import { allows } from "./capabilities.ts";
-import { dreamOver, describePlan, groupConversation, groupDreamPrompt, readNoteFiles, realRunner as dreamRunner, type Runner as DreamRunner } from "./dream.ts";
+import { dreamOver, describePlan, groupConversation, groupDreamPrompt, readNoteFiles, runnerFor, type Runner as DreamRunner } from "./dream.ts";
+import { isRefusal, mayRun } from "./payer.ts";
 import { groupHistorySince, groupScope, listGroups } from "./groupstore.ts";
 import { dreamSystem } from "./persona.ts";
 import { isPaused, localDay } from "./pause.ts";
@@ -26,7 +25,9 @@ export function createGroupDreamer(deps: { run?: DreamRunner } = {}) {
   let inFlight: Promise<void> | undefined;
 
   async function once(now: Date): Promise<void> {
-    if (!allows({ kind: "group" }, "dream") || isPaused(now) || budgetSpent()) return;
+    if (!allows({ kind: "group" }, "dream")) return;
+    const payer = mayRun({ kind: "group" }, "group dream", { paused: () => isPaused(now) }); // paused, a usage limit or the day's budget spent: no attempt, the day stays open
+    if (isRefusal(payer)) return;
     const today = localDay(now);
     let dreamt = 0;
     for (const g of listGroups()) {
@@ -42,7 +43,7 @@ export function createGroupDreamer(deps: { run?: DreamRunner } = {}) {
       dreamt++;
       try {
         const scope = groupScope(g.id);
-        const { plan, snapshot } = await dreamOver(scope, groupDreamPrompt(now, readNoteFiles(scope.notesDir), messages, g.name || "a group"), dreamSystem("group"), memberText, now, deps.run ?? dreamRunner);
+        const { plan, snapshot } = await dreamOver(scope, groupDreamPrompt(now, readNoteFiles(scope.notesDir), messages, g.name || "a group"), dreamSystem("group"), memberText, now, deps.run ?? runnerFor(payer));
         writeFileSync(stateFile, JSON.stringify({ day: today, lastRunAt: now.toISOString() }), { mode: 0o600 });
         for (const r of plan.rejected) console.log(`group dream: rejected ${r.file || "(no file)"}: ${r.why}`);
         audit("group_dream", snapshot ? "changed" : "no-change", "dream", { actions: plan.actions.length, rejected: plan.rejected.length });
@@ -54,6 +55,6 @@ export function createGroupDreamer(deps: { run?: DreamRunner } = {}) {
     }
   }
 
-  return { run: (now = new Date()) => (skipForCooldown("group dream") ? Promise.resolve() : (inFlight ??= once(now).finally(() => (inFlight = undefined)))) }; // usage limit: no attempt, the day stays open
+  return { run: (now = new Date()) => (inFlight ??= once(now).finally(() => (inFlight = undefined))) };
 }
 
