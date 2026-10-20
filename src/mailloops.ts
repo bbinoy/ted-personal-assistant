@@ -82,7 +82,7 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
         ((mails) => {
           const p = payer(id, "mail triage");
           if (isRefusal(p)) throw new Error("not available now");
-          return triageBatch(mails, query, { who: { name: ctx.name, pronoun: "them" }, notesDir: ctx.notesDir, payer: p });
+          return triageBatch(mails, query, { who: { name: ctx.name }, notesDir: ctx.notesDir, payer: p });
         }),
       record: (decision, row) => recordTriage(ctx, decision, row),
       archiveLogOnly: () => !settings.google.archiveLive,

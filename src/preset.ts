@@ -106,6 +106,8 @@ export const PROMPTS = {
   skills: ["mail", "mailSkill"],
   chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed", "categories"],
   voice: ["own", "group"],
+  triage: ["who"],
+  summary: [],
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
   tenant: ["browse", "weather", "draw", "consented", "timed", "google", "digest", "her", "personality", "selfTimed", "sources", "reactions", "send", "categories"],
   dream: ["subject", "own", "group", "categories"],
@@ -114,8 +116,7 @@ export const PROMPTS = {
   handler: ["who", "own"],
   background: ["mail", "personality"],
   gateGroup: ["participation", "unprompted"],
-  gateOwner: ["mail", "unprompted"],
-  gateDirect: ["name", "unprompted"],
+  gateDirect: ["name", "presets", "mail", "unprompted"],
   gateScheduler: ["mail", "radar", "briefHour", "backstop", "hours", "minGap", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;
 export type PromptKey = keyof typeof PROMPTS;

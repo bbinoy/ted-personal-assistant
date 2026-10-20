@@ -135,11 +135,15 @@ export const SELF_TIMED = say("selfTimed");
 const UNPROMPTED = say("unprompted");
 export const GATE_DEFAULTS = {
   group: say("gateGroup", { participation: PARTICIPATION, unprompted: UNPROMPTED }),
-  owner: say("gateOwner", { mail: settings.mail, unprompted: UNPROMPTED }),
+  owner: say("gateDirect", { name: OWNER, presets: true, mail: settings.mail, unprompted: UNPROMPTED }), // the owner's chat also runs the brief and the radar (the gate's note about them)
 } as const;
 
 // The same for a tenant's private chat (tenants.ts): no brief, no radar, only what her notes ask for.
-export const directGateDefaults = (name: string): string => say("gateDirect", { name, unprompted: UNPROMPTED });
+export const directGateDefaults = (name: string): string => say("gateDirect", { name, presets: false, mail: false, unprompted: UNPROMPTED });
+
+// The small models' system prompts are the preset's too: the mail triage (triage.ts) and the log summary (summarize.ts).
+export const triagePrompt = (who: string): string => say("triage", { who: oneLineName(who) });
+export const summarySystem = (): string => say("summary");
 
 // The owner's gate when it also decides WHEN the daily brief and the radar run (SCHEDULER=gate, tasks.ts). These are
 // the defaults; the owner's notes tweak them ("brief at 6:30", "no radar on weekends"). The HOW stays in code.

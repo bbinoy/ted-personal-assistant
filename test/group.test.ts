@@ -4,7 +4,8 @@ import { defer, tick } from "./util.ts";
 import { scopeOf } from "../src/turnscope.ts";
 import { createPipeline, group, type Pipeline } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
-import { groupName, createGroupBrain, groupPrompt, groupWakePrompt, ownerInGroup, speaker } from "../src/group.ts";
+import { groupName, createGroupBrain, groupPrompt, ownerInGroup, speaker } from "../src/group.ts";
+import { wakePrompt } from "../src/wakeprompt.ts";
 import { readLongText } from "@ted-personal-assistant/signal";
 import { groupCapabilities } from "../src/capabilities.ts";
 import { skillsFor } from "../src/skills.ts";
@@ -87,8 +88,8 @@ test("groups: messages nobody answered are prepended on the next turn of a resum
 });
 
 test("groups: the wake-up prompt offers the voice option when speech is available", () => {
-  assert.match(groupWakePrompt(new Date(), [], "post a fun fact", false, true), /Voice: you may answer by voice[\s\S]*\[\[voice\]\]/);
-  assert.doesNotMatch(groupWakePrompt(new Date(), [], "post a fun fact"), /Voice:/);
+  assert.match(wakePrompt({ who: "", where: "group", now: new Date(), instructions: "post a fun fact", lines: [], speak: true }), /Voice: you may answer by voice[\s\S]*\[\[voice\]\]/);
+  assert.doesNotMatch(wakePrompt({ who: "", where: "group", now: new Date(), instructions: "post a fun fact", lines: [] }), /Voice:/);
 });
 
 test("groups: a quoted message and a voice transcript reach the prompt as data; the voice option is separate", () => {
