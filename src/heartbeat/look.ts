@@ -1,7 +1,8 @@
 import { audit } from "../audit.ts";
-import { inQuietHours } from "../actions.ts";
+import { inQuietHours, systemZone, timeIn, dayAt } from "../timezone.ts";
 import { clockLine } from "../brief.ts";
 import type { Conversation, Pipeline } from "../conversation.ts";
+import { zoneOf } from "../conversationmodel.ts";
 import { fence } from "../fence.ts";
 import { logTail } from "../gate.ts";
 import { lookDue, recordWake, type LookState } from "../ledger.ts";
@@ -33,25 +34,26 @@ export interface HeartbeatDeps {
   rowsFile?: string; // tests
 }
 
-const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-// What the instruction says about the last look: when it was, or that there was none.
-export function lastLookText(looked: string | undefined, now: Date): string {
+// What the instruction says about the last look: when it was, or that there was none. Times are the conversation's own (`zone`, timezone.ts).
+export function lastLookText(looked: string | undefined, now: Date, zone: string = systemZone()): string {
   if (!looked) return "This is your first look.";
   const at = new Date(looked);
-  const sameDay = at.toDateString() === now.toDateString();
-  return `Your last look was at ${hhmm(at)}${sameDay ? "" : " (an earlier day)"}.`;
+  const sameDay = dayAt(at, 0, zone).date === dayAt(now, 0, zone).date;
+  return `Your last look was at ${timeIn(at, zone)}${sameDay ? "" : " (an earlier day)"}.`;
 }
 
 // How the daily brief reaches the owner, for the instruction: the mail provider's own words, or the chat alone when there is no mail.
 const briefHow = (): string => (settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format.");
 
 // The fixed text of one look, as the judge's standing provenance and the start of the prompt. Written by code from the preset; no mail, no chat in it.
-export function lookInstruction(now: Date, looked: string | undefined): string {
+export function lookInstruction(now: Date, looked: string | undefined, zone: string = systemZone()): string {
+  const today = dayAt(now, 0, zone);
   return heartbeatInstruction({
-    now: `${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getDay()]} ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${hhmm(now)}`,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    lastLook: lastLookText(looked, now),
+    now: `${WEEKDAYS[today.weekday]} ${today.date} ${timeIn(now, zone)}`,
+    timeZone: zone,
+    lastLook: lastLookText(looked, now, zone),
     quietFrom: `${String(settings.quietStartHour).padStart(2, "0")}:00`,
     quietTo: `${String(settings.quietEndHour).padStart(2, "0")}:00`,
     dayMinutes: String(settings.heartbeatDayMinutes),
@@ -62,8 +64,8 @@ export function lookInstruction(now: Date, looked: string | undefined): string {
   });
 }
 
-export const lookPrompt = (now: Date, instruction: string, tail: readonly string[]): string =>
-  [clockLine(now), instruction, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].join("\n\n");
+export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string): string =>
+  [clockLine(now, zone), instruction, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].join("\n\n");
 
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
@@ -78,14 +80,15 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
 
     // Written BEFORE acting: a crash in the run must not mean a retry on every tick.
     recordWake(pipeline, conv, settings.heartbeatDayMinutes, now, clampLook);
-    const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour);
+    const zone = zoneOf(conv); // its own clock: the owner's, the Mac's, unless a friend has her own
+    const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour, zone);
     let toolCalls = 0;
     let archived = 0;
     let delegations = 0;
-    const instruction = lookInstruction(now, st.wake?.looked);
+    const instruction = lookInstruction(now, st.wake?.looked, zone);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     try {
-      reply = await deps.runProfile("heartbeat", lookPrompt(now, instruction, logTail(conv, 40)), {
+      reply = await deps.runProfile("heartbeat", lookPrompt(now, instruction, logTail(conv, 40), zone), {
         provenance: { kind: "standing", task: instruction },
         onDelegate: () => void delegations++,
         onToolSuccess: (tool) => {

@@ -10,6 +10,7 @@ import { TENANT_ID } from "../secrets/secrets.ts";
 import { OWNER_SESSION_FILE } from "../session.ts";
 import { settings } from "../settings.ts";
 import { dataPath, readJson, writeJson } from "../state.ts";
+import { isZone } from "../timezone.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
 // Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (the folders and files the
@@ -72,6 +73,7 @@ export const ACI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export interface TenantConfig {
   language?: string; // the language she writes in, as a hint ("German")
   persona?: string; // how she would like the assistant to talk, in her words (data for the prompt, never rules)
+  timeZone?: string; // her time zone ("Europe/Lisbon"): the clock of her heartbeat run and the day her notes expire on; absent: the owner's, the Mac's (timezone.ts)
   dailyBudgetUsd?: number; // her own daily ceiling on the instance key
   maxTurns?: number; // per run
   maxBudgetUsdPerRun?: number; // per run
@@ -81,7 +83,7 @@ export interface TenantConfig {
   voice?: boolean; // false switches the voice tool off for her
 }
 
-const KNOWN: readonly string[] = ["language", "persona", "dailyBudgetUsd", "maxTurns", "maxBudgetUsdPerRun", "browse", "voice"];
+const KNOWN: readonly string[] = ["language", "persona", "timeZone", "dailyBudgetUsd", "maxTurns", "maxBudgetUsdPerRun", "browse", "voice"];
 
 // Pure. Whatever is in the file, the result is a valid config and `problems` says what was left out. Never throws.
 export function parseTenantConfig(raw: unknown): { config: TenantConfig; problems: string[] } {
@@ -99,6 +101,10 @@ export function parseTenantConfig(raw: unknown): { config: TenantConfig; problem
   };
   text("language", LIMITS.name, true);
   text("persona", LIMITS.brief, false);
+  if (r.timeZone !== undefined) {
+    if (!isZone(r.timeZone)) problems.push("timeZone must be a time zone like Europe/Lisbon");
+    else config.timeZone = (r.timeZone as string).trim();
+  }
   const num = (k: "dailyBudgetUsd" | "maxTurns" | "maxBudgetUsdPerRun", min: number, max: number) => {
     if (r[k] === undefined) return;
     if (typeof r[k] !== "number" || !Number.isFinite(r[k]) || (r[k] as number) < min || (r[k] as number) > max) return void problems.push(`${k} must be a number from ${min} to ${max}`);
@@ -379,6 +385,26 @@ export function deleteTenant(id: string, o: { drop?: (id: string) => void } = {}
   if (isInside(dir, settings.tenantsDir)) rmSync(dir, { recursive: true, force: true });
   console.log(`tenants: ${id} deleted`);
   return true;
+}
+
+// Her time zone, in tenant.json (the other typed overrides stay as they are); undefined removes it (the owner's zone again). Only the local CLI calls this
+// (scripts/tenants.ts timezone). Undefined: no such tenant.
+export function setTimeZone(id: string, zone: string | undefined): TenantRecord | undefined {
+  const rec = tenantById(id);
+  if (!rec || rec.id === OWNER_ID) return undefined;
+  if (zone !== undefined && !isZone(zone)) throw new Error("not a time zone (like Europe/Lisbon)");
+  const ctx = provision(rec);
+  let raw: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(ctx.configFile, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed as Record<string, unknown>;
+  } catch {
+    /* none yet, or damaged: start from the defaults */
+  }
+  if (zone === undefined) delete raw.timeZone;
+  else raw.timeZone = zone.trim();
+  writeFileSync(ctx.configFile, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  return rec;
 }
 
 // ---- consent, disclosure, notice times: small files in her folder ----

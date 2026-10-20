@@ -7,7 +7,7 @@ import { fence } from "./fence.ts";
 import { groupNotesBlock } from "./groupstore.ts";
 import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES, parseWake } from "./ledger.ts";
 import { ledgerEntries, withoutDeleted, type Sent } from "./messages.ts";
-import { speakerOf, type Conversation } from "./conversationmodel.ts";
+import { speakerOf, zoneOf, type Conversation } from "./conversationmodel.ts";
 import { readNotes } from "./notes.ts";
 import { dayPart, namedTimes, passedTimes, TIME_HINT } from "./notetimes.ts";
 import { localDay } from "./pause.ts";
@@ -103,7 +103,7 @@ export const styleSummary = (now: Date): string =>
 
 // All of the conversation's own notes as data, bounded like every other prompt that includes notes.
 export function notesText(conv: Conversation, now: Date): string {
-  const notes = readNotes(now, conv.notesDir);
+  const notes = readNotes(now, conv.notesDir, zoneOf(conv));
   return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
 

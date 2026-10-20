@@ -1,4 +1,4 @@
-import { inQuietHours } from "./actions.ts";
+import { inQuietHours } from "./timezone.ts";
 
 // The times of day a conversation's notes name ("post a fun fact at 9:40", "ab 18 Uhr", "5pm", "noon"). One extraction
 // serves two readers: the idle fingerprint (gate.ts: a quiet look is repeated only when a named time has passed or

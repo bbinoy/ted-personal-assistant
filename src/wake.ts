@@ -1,5 +1,5 @@
 import { audit, type Source } from "./audit.ts";
-import { inQuietHours } from "./actions.ts";
+import { inQuietHours } from "./timezone.ts";
 import { budgetSpent } from "./budget.ts";
 import { askGate, idleFingerprint, logTail, NOTHING, notesText, type Gate } from "./gate.ts";
 import { lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";

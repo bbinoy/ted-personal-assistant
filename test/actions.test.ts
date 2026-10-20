@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatAlert, inQuietHours, planActions } from "../src/actions.ts";
+import { formatAlert, planActions } from "../src/actions.ts";
 import { handlerPrompt } from "../src/handler.ts";
 import type { Triage } from "../src/triage.ts";
 
@@ -33,17 +33,6 @@ test("plan: per-tick archive cap defers the rest instead of archiving them", () 
 test("plan: act_now alerts, handle goes to the handler, read_later stays", () => {
   const p = planActions([t("act_now", "personal_or_work"), t("handle", "personal_or_work"), t("read_later", "personal_or_work")], { maxArchives: 25 });
   assert.deepEqual([p.alert, p.handle, p.keep], [[0], [1], [2]]);
-});
-
-test("quiet hours wrap midnight", () => {
-  const at = (h: number) => new Date(2026, 9, 12, h, 30);
-  assert.equal(inQuietHours(at(23), 22, 7), true);
-  assert.equal(inQuietHours(at(3), 22, 7), true);
-  assert.equal(inQuietHours(at(7), 22, 7), false);
-  assert.equal(inQuietHours(at(12), 22, 7), false);
-  assert.equal(inQuietHours(at(22), 22, 7), true);
-  assert.equal(inQuietHours(at(3), 1, 5), true); // same-day window
-  assert.equal(inQuietHours(at(6), 1, 5), false);
 });
 
 test("alert: one batched plain message, capped, clipped", () => {

@@ -31,12 +31,6 @@ export function planActions(results: Triage[], opts: { maxArchives: number }): P
   return plan;
 }
 
-// Quiet hours may wrap midnight (22 -> 7). The heartbeat idles inside them.
-export function inQuietHours(now: Date, startHour: number, endHour: number): boolean {
-  const h = now.getHours();
-  return startHour <= endHour ? h >= startHour && h < endHour : h >= startHour || h < endHour;
-}
-
 interface AlertItem {
   from: string;
   subject: string;

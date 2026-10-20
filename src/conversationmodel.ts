@@ -10,6 +10,7 @@ import { type Document } from "./document.ts";
 import { OWNER_SESSION_FILE } from "./session.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { OWNER, settings } from "./settings.ts";
+import { systemZone } from "./timezone.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-assistant/messenger";
@@ -113,6 +114,12 @@ export const onLogin = (conv: Pick<Conversation, "kind">): boolean => conv.kind 
 
 // Who the person in a private chat is called in the prompts built for it: the owner as always, a tenant by her name.
 export const speakerOf = (conv: Pick<Conversation, "tenantId">): string => (conv.tenantId ? (tenantById(conv.tenantId)?.name ?? "a friend") : OWNER);
+
+// The time zone a conversation's clock runs in (timezone.ts): a friend's own if her tenant.json names one, else the owner's, the Mac's (a group's included).
+export function zoneOf(conv: Pick<Conversation, "tenantId">): string {
+  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
+  return (rec && tenantContext(rec).config.timeZone) || systemZone();
+}
 
 // A message with its picture or document, once prepared (the bytes are held for this turn only; src/image.ts).
 export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; document?: Document; edit?: { before?: string } }; // voice: the text is a transcript of a voice message (set by hear); edit: an edit of a message that was answered already, with the version it replaces
