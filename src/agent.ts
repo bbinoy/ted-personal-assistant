@@ -8,7 +8,7 @@ import { disconnected, readConnectors } from "./connectors.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { userInput, type Picture } from "./image.ts";
 import type { Document } from "./document.ts";
-import { tenantKey } from "./send.ts";
+import { tenantKey } from "./ownerkey.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./permissions.ts";
 import { backgroundSystem, briefSystem, handlerSystem, radarSystem } from "./persona.ts";

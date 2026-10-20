@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createPipeline, owner } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
-import { OWNER_KEY, sendNow } from "../src/send.ts";
+import { sendNow } from "../src/send.ts";
+import { OWNER_KEY } from "../src/ownerkey.ts";
 import { FakeMessenger } from "@ted-assistant/messenger/testing";
 
 // The app against the Messenger interface alone: what it does with a platform that has everything, and how it degrades quietly when a

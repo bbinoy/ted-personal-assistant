@@ -20,7 +20,7 @@ const { keyNotices } = await import("../src/keynotice.ts");
 const { compactConversation } = await import("../src/chatsession.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recentIn } = await import("../src/recentchat.ts");
-const { tenantKey } = await import("../src/send.ts");
+const { tenantKey } = await import("../src/ownerkey.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 const KEY = "instance-key-for-the-payer-tests";

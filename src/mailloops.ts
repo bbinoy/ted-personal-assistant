@@ -11,7 +11,7 @@ import { createMailCheck, type MailContext, type MailSource } from "./heartbeat.
 import { readDone } from "./intakelinks.ts";
 import { isRefusal, mayRun } from "./payer.ts";
 import { approveIn, type Approve } from "./permissions.ts";
-import { tenantKey } from "./send.ts";
+import { tenantKey } from "./ownerkey.ts";
 import { settings } from "./settings.ts";
 import { listTenants, tenantContext, tenantById } from "./tenants.ts";
 import { mailFiles, recordTriage } from "./tenantmail.ts";

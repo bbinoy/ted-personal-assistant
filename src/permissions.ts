@@ -8,7 +8,7 @@ import type { MailView } from "./mailview.ts";
 import { mailSlot } from "./modules/index.ts";
 import { classify, denial, isReadTool } from "./policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "./toolmanifest.ts";
-import { OWNER_KEY } from "./send.ts";
+import { OWNER_KEY } from "./ownerkey.ts";
 import { OWNER, settings } from "./settings.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).

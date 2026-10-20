@@ -13,7 +13,7 @@ import { makeCanUseTool } from "../src/permissions.ts";
 import { loadProfile, ProfileStore, fieldFitsKey, kindOfKey, type Entries } from "../src/profile.ts";
 import { profileCli } from "../src/profilecli.ts";
 import { factsOf, validateQuestion } from "../src/questionfacts.ts";
-import { OWNER_KEY } from "../src/send.ts";
+import { OWNER_KEY } from "../src/ownerkey.ts";
 import { TenantSecrets } from "../src/secrets.ts";
 import { startFakeBao } from "./fakebao.ts";
 

@@ -14,7 +14,7 @@ import { KillSwitch, openCardAccess, type CardAccess, type CardRecord } from "..
 import { Ledger } from "../src/payments.ts";
 import { makeCanUseTool } from "../src/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
-import { OWNER_KEY } from "../src/send.ts";
+import { OWNER_KEY } from "../src/ownerkey.ts";
 import { dataPath } from "../src/state.ts";
 
 // Obviously fake: the public test card number, a made-up security code, a local fake checkout (`shop.test`, a hosted page on stripe.com) that exists

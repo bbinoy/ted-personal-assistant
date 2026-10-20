@@ -14,7 +14,7 @@ import { fence } from "./fence.ts";
 import { clip } from "./format.ts";
 import { isPaused } from "./pause.ts";
 import { loadProfile, type Profile } from "./profile.ts";
-import { OWNER_KEY } from "./send.ts";
+import { OWNER_KEY } from "./ownerkey.ts";
 import { cleanText, LIMITS } from "./sanitize.ts";
 import { adoptShots, newShotsDir } from "./shots.ts";
 import { OWNER, settings } from "./settings.ts";
