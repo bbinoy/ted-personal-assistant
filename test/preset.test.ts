@@ -33,7 +33,7 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
   assert.equal(p.name, "ted");
   assert.deepEqual(p.rhythm, {
     heartbeat: { everyMinutes: 5, dayMinutes: 30, quietFromHour: 22, quietToHour: 7, briefTime: "07:30", briefOverdueHour: 9 },
-    dream: { enabled: true, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
+    dream: { enabled: true, hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
   });
   assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status"]);
   assert.deepEqual(Object.keys(p.profiles).sort(), ["background", "chat", "group", "handler", "heartbeat"]);

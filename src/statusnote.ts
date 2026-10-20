@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { audit } from "./audit.ts";
-import { MAX_NOTE_CHARS, NOTES_DIR } from "./notes.ts";
+import { MAX_NOTE_CHARS, NOTES_DIR, STATUS_PREFIX } from "./notes.ts";
 import { localDay } from "./pause.ts";
 
 // The assistant's own state, as memory: status-<name>.md in the notes folder (category `status`, assistant-written records such as status-brief: whether today's daily
@@ -23,7 +23,7 @@ export function writeStatusNote(name: string, text: string, now: Date = new Date
   if (body.length > MAX_NOTE_CHARS) return { ok: false, error: `too long (${body.length} characters, the most is ${MAX_NOTE_CHARS}): keep the date, the status and the headlines only` };
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const file = `status-${name}.md`;
+  const file = `${STATUS_PREFIX}${name}.md`;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   writeFileSync(join(dir, file), `---\nexpires: ${localDay(tomorrow)}\n---\n${body}\n`);
   return { ok: true, file };

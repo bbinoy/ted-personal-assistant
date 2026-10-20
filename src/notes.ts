@@ -26,6 +26,7 @@ export const CATEGORIES: readonly string[] = preset().notes.categories;
 export type Category = string;
 
 export const MAX_NOTE_CHARS = 1200;
+export const STATUS_PREFIX = "status-"; // the assistant's own records (statusnote.ts): not the owner's memory (no notice), not the dream's (neither shown to it nor snapshotted or undone with it)
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;
 
 export function ensureNotesDir(): void {

@@ -19,7 +19,7 @@ export interface Rhythm {
   readonly heartbeat: { readonly everyMinutes: number; readonly dayMinutes: number; readonly quietFromHour: number; readonly quietToHour: number; readonly briefTime: string; readonly briefOverdueHour: number };
   // The nightly dream (dream.ts): the same for every conversation. A direct chat (the owner's, a friend's) is dreamt once she wrote `minNewLines.direct` lines since the
   // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
-  readonly dream: { readonly enabled: boolean; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
+  readonly dream: { readonly enabled: boolean; readonly hour: number; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
 export type ProfileKey = "chat" | "heartbeat" | "background" | "group" | "handler";
 export interface Preset {
@@ -188,6 +188,7 @@ export function loadPreset(dir: string): Preset {
       briefTime: typeof hb.briefTime === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(hb.briefTime) ? hb.briefTime : fail(at("rhythm.heartbeat.briefTime"), `must be a time like "07:30" (got ${JSON.stringify(hb.briefTime)})`), briefOverdueHour: int(at("rhythm.heartbeat.briefOverdueHour"), hb.briefOverdueHour, 0, 23) },
     dream: {
       enabled: bool(at("rhythm.dream.enabled"), dr.enabled),
+      hour: int(at("rhythm.dream.hour"), dr.hour, 0, 23),
       minNewLines: { direct: int(at("rhythm.dream.minNewLines.direct"), mn.direct, 1, 1000), group: int(at("rhythm.dream.minNewLines.group"), mn.group, 1, 1000) },
       maxGroupsPerNight: int(at("rhythm.dream.maxGroupsPerNight"), dr.maxGroupsPerNight, 1, 1000),
     },

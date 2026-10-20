@@ -67,7 +67,7 @@ export interface MailContext {
 // What the mail check needs of the mail client (Mailbird, the Gmail relay, or a fake in tests).
 export type MailSource = (Pick<Mailbird, "inboxes" | "call" | "close"> | Pick<GmailMail, "inboxes" | "call" | "close">) & { getMessages?: GmailMail["getMessages"] };
 
-// Starts every tick-driven job (wake-ups, dream, brief, the friends' mail checks): each in its own try/catch, none awaited, so a job that throws
+// Starts every tick-driven job (wake-ups, dream, the friends' mail checks): each in its own try/catch, none awaited, so a job that throws
 // (even synchronously) or hangs never keeps another from starting.
 export function startJobs(jobs: Record<string, () => unknown>): void {
   for (const [name, f] of Object.entries(jobs)) {

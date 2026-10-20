@@ -140,7 +140,7 @@ export const parseLanguages = (raw: string | undefined): string[] => {
 };
 
 export function loadSettings(env: Env) {
-  // The rhythm (when the heartbeat ticks, the brief, the radar, the dream) has its defaults in the assistant preset (preset.ts); each env variable below still overrides its own.
+  // The rhythm (when the heartbeat ticks, the quiet hours, the daily brief's words, the dream) has its defaults in the assistant preset (preset.ts); each env variable below still overrides its own.
   rejectArchiveSwitches(env);
   const rhythm = presetFor(env).rhythm;
   const kokoro = {
@@ -291,6 +291,7 @@ export function loadSettings(env: Env) {
     // nightly "dream" that keeps them up to date (dream.ts).
     memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 150, 10, 1000), // the one memory limit: how many notes a run reads (each is cut at MAX_NOTE_CHARS)
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
+    dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
     // Wake-ups (src/gate.ts, src/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").
