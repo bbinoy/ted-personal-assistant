@@ -1,5 +1,5 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
-import { isTriage, readAudit, type AuditEntry } from "../audit.ts";
+import { triageEntryFor } from "../digest.ts";
 import { createBrowseServer } from "../browse.ts";
 import { browseStatus, browserServer } from "../browseserver.ts";
 import { readConnectors } from "../connectors.ts";
@@ -107,7 +107,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 async function restoreMailbird(id: string): Promise<number> {
   const client = new Mailbird();
   await client.connect();
-  const entry: AuditEntry | undefined = readAudit((e) => isTriage(e) && e.meta?.id === id).pop();
+  const entry = triageEntryFor(id);
   const candidates = [id, ...(String(entry?.meta?.result ?? "").match(UUID) ?? []).filter((u: string) => u !== id)];
   for (const c of candidates) {
     try {

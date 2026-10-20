@@ -140,7 +140,7 @@ test("a friend's mail check: the first look only records the inbox; new mail is 
   const triageFile = readFileSync(mailFiles(T.tenantContext(T.tenantById(anna)!)).triage, "utf8");
   assert.match(triageFile, /URGENT: contract/);
   assert.match(triageFile, /would-archive/);
-  const rows = readAudit((e) => e.tool === "tenant_heartbeat_triage");
+  const rows = readAudit((e) => e.tool === "heartbeat_triage" && !!e.meta?.tenant);
   assert.equal(rows.length, 4);
   assert.ok(rows.every((r) => r.meta?.tenant === anna), "tagged with her id");
   assert.doesNotMatch(JSON.stringify(rows), /URGENT|Newsletter|boss@|Carl|contract/, "no sender, subject or reason in the audit log");
@@ -223,7 +223,7 @@ test("the cost guard: with no access (her cooldown, day's budget, suspension or 
   assert.equal(triaged.length, 1, "the mail was still unseen: it is classified now, once");
   reread();
   assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off) once GOOGLE_ARCHIVE_LIVE is on");
-  const rows = readAudit((e) => e.tool === "tenant_heartbeat_triage" && e.meta?.tenant === id);
+  const rows = readAudit((e) => e.tool === "heartbeat_triage" && e.meta?.tenant === id);
   assert.equal(rows.at(-1)!.decision, "archived");
 });
 

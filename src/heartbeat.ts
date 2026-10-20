@@ -7,6 +7,7 @@ import type { HandleItem } from "./handler.ts";
 import type { GmailMail } from "./gmail.ts";
 import type { Mailbird } from "./mailbird.ts";
 import { mailSlot } from "./modules/index.ts";
+import { OWNER_TRIAGE, recordTriage } from "./triagelog.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import { isRefusal, mayRun } from "./payer.ts";
 import { isPaused } from "./pause.ts";
@@ -329,7 +330,7 @@ export function ownerMailContext(triage: MailContext["triage"] = (mails) => tria
   return {
     files: { seen: OWNER_SEEN, liveness: OWNER_LIVENESS },
     triage,
-    record: (decision, row) => audit("heartbeat_triage", decision, "heartbeat", row),
+    record: (decision, row) => recordTriage(OWNER_TRIAGE, decision, row),
     archiveLogOnly,
     handler: () => !!mailSlot()?.handlerTask, // the provider can draft (its module says what the handler's task is)
     blocked: (what) => isRefusal(mayRun({ kind: "owner" }, what)),
