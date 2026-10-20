@@ -13,7 +13,9 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "admin-isolation-"));
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { tenantTools } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const { classify, isReadableData } = await import("../src/policy.ts");
 const { NOTES_DIR } = await import("../src/notes.ts");
 const MANIFEST = (await import("../src/toolmanifest.ts")).allRows();

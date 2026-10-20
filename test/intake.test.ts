@@ -16,7 +16,9 @@ import { startFakeBao, type FakeBao } from "./fakebao.ts";
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { tenantTools } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const L = await import("../src/intakelinks.ts");
 const { IntakeServer } = await import("../src/intakeserver.ts");
 const { createIntakeServer } = await import("../src/intaketools.ts");

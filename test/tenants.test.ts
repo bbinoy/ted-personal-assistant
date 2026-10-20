@@ -10,12 +10,16 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenants-test-"));
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { tenantTools } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const R = await import("../src/tenantroute.ts");
 const { createTenantRunner } = await import("../src/tenantrun.ts");
 const { keyNotices, createKeyNotices } = await import("../src/keynotice.ts");
 const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
-const { failure, TenantKeyError, RateLimitError } = await import("../src/errors.ts");
+const { failure, InstanceKeyError, RateLimitError } = await import("../src/errors.ts");
+const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
+const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", costFile: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
 const { recordCost, spentToday, tenantOverBudget } = await import("../src/budget.ts");
 const { tenant } = await import("../src/conversationmodel.ts");
 const { OneTimeCodes, CODE_PATTERN } = await import("../src/onetime.ts");
@@ -231,18 +235,20 @@ test("turn: no instance key means a plain 'not set up for friends' with the AI l
 test("turn: a refused instance key tells the owner's chat once, not once per tenant, in words that hold nothing of the friends", async () => {
   const [a, b] = [join_("Gus"), join_("Ivy")];
   // The failure is made where every run on the key makes it (errors.ts failure), which is what reports it: the same for a chat turn and for any unattended run.
-  const { r, alerts } = runner({ key: KEY_A, ask: async () => Promise.reject(failure("authentication_failed", "error_during_execution", "gus")) });
-  await assert.rejects(r.run(tenant(a.id), "hi"), TenantKeyError); // her own run still fails as it did (her notice is the error path's)
-  await assert.rejects(r.run(tenant(b.id), "hi"), TenantKeyError); // another tenant, the same key
+  const { r, alerts } = runner({ key: KEY_A, ask: async () => Promise.reject(failure("authentication_failed", "error_during_execution", PAYER("gus"))) });
+  await assert.rejects(r.run(tenant(a.id), "hi"), InstanceKeyError); // her own run still fails as it did (her notice is the error path's)
+  assert.match((await r.run(tenant(b.id), "hi")).text, /paused/, "another friend, the same key: it is cooling down for everybody, no second call is made"); // (a fixed notice)
   assert.equal(alerts.length, 1);
   assert.match(alerts[0]!, /The shared API key was refused .*check TENANT_ANTHROPIC_API_KEY/);
   assert.ok(!alerts[0]!.includes(KEY_A), "never the key");
   assert.ok(!/Gus|Ivy/.test(alerts[0]!), "no word and no name of a friend");
+  resetCooldown();
   const quiet = runner({ key: KEY_A, ask: async () => Promise.reject(new Error("a plain failure")) });
   await assert.rejects(quiet.r.run(tenant(a.id), "hi"), /plain failure/);
   assert.deepEqual(quiet.alerts, [], "only a refused key is the owner's business");
-  const busy = runner({ key: KEY_A, ask: async () => Promise.reject(failure("overloaded", "error_during_execution", "gus")) });
-  await assert.rejects(busy.r.run(tenant(a.id), "hi"), TenantKeyError);
+  resetCooldown();
+  const busy = runner({ key: KEY_A, ask: async () => Promise.reject(failure("overloaded", "error_during_execution", PAYER("gus"))) });
+  await assert.rejects(busy.r.run(tenant(a.id), "hi"), InstanceKeyError);
   assert.deepEqual(busy.alerts, [], "an overloaded API is not the key's fault");
 });
 
@@ -268,8 +274,8 @@ test("key notice: a failure on the key from an unattended run, a mail loop or th
   keyNotices.reset();
   keyNotices.sendTo((t) => void alerts.push(t));
   for (const source of ["gus", "ivy", "gus"]) {
-    const e = failure("billing_error", "error_during_execution", source);
-    assert.ok(e instanceof TenantKeyError && e.why === "billing");
+    const e = failure("billing_error", "error_during_execution", PAYER(source));
+    assert.ok(e instanceof InstanceKeyError && e.why === "billing");
   }
   assert.equal(alerts.length, 1, "three runs of two friends, one notice");
   assert.equal(failure("rate_limit", "error", undefined) instanceof RateLimitError, true, "the owner's own limit is not the friends' key");
@@ -295,30 +301,26 @@ test("turn: a suspended tenant (even mid-flight) gets nothing and costs nothing"
   assert.deepEqual(asked, []);
 });
 
-test("cooldown: one tenant's limit, 400 or 429 pauses only her", async () => {
+test("cooldown: a limit, 400 or 429 on the shared key pauses every friend (it is the key's), never the owner's login", async () => {
   const a = join_("Ann");
   const b = join_("Bea");
   const now = Date.now();
-  assert.ok(failure("rate_limit", "error", a.id) instanceof TenantKeyError);
-  assert.ok(failure("invalid_request", "error", b.id) instanceof TenantKeyError); // HTTP 400 on her key
-  resetCooldown(b.id);
-  assert.equal(coolingDown(now + 1000, a.id), true);
-  assert.equal(coolingDown(now + 1000, b.id), false);
-  assert.equal(coolingDown(now + 1000), false, "the instance's own cooldown (background jobs, the owner) is untouched");
-  assert.ok(failure("rate_limit", "error") instanceof RateLimitError, "without a tenant it is the old behaviour");
+  assert.ok(failure("rate_limit", "error", PAYER(a.id)) instanceof InstanceKeyError);
+  assert.ok(failure("invalid_request", "error", PAYER(b.id)) instanceof InstanceKeyError); // HTTP 400 on the key
+  assert.equal(coolingDown(now + 1000, INSTANCE_KEY_COOLDOWN), true);
+  assert.equal(coolingDown(now + 1000), false, "the owner's own cooldown (background jobs, the owner) is untouched");
+  assert.ok(failure("rate_limit", "error") instanceof RateLimitError, "without a friend it is the old behaviour");
   assert.equal(coolingDown(now + 1000), true);
   resetCooldown();
-  noteRateLimit(now, a.id);
+  noteRateLimit(now, INSTANCE_KEY_COOLDOWN);
   const { r, asked } = runner({ key: KEY_A });
-  const paused = await r.run(tenant(a.id), "hi");
-  assert.match(paused.text, /paused/);
-  const fine = await r.run(tenant(b.id), "hi");
-  assert.match(fine.text, /hello there/);
-  assert.deepEqual(asked.map((x) => x.id), [b.id], "only Bea's run was made");
-  assert.ok(cooldownUntil(a.id) !== undefined);
-  assert.equal(cooldownUntil(b.id), undefined);
-  assert.equal(failure("authentication_failed", "e", a.id) instanceof TenantKeyError, true, "her refused key is hers to fix, not the owner's login");
-  assert.equal(failure("server_error", "e", a.id) instanceof TenantKeyError, false);
+  assert.match((await r.run(tenant(a.id), "hi")).text, /paused/);
+  assert.match((await r.run(tenant(b.id), "hi")).text, /paused/);
+  assert.deepEqual(asked, [], "no call is made while the key is cooling down");
+  assert.ok(cooldownUntil(INSTANCE_KEY_COOLDOWN) !== undefined);
+  assert.equal(cooldownUntil(""), undefined);
+  assert.equal(failure("authentication_failed", "e", PAYER(a.id)) instanceof InstanceKeyError, true, "a refused key is the instance's to fix, not a login error");
+  assert.equal(failure("server_error", "e", PAYER(a.id)) instanceof InstanceKeyError, false);
 });
 
 test("budget: her day is her own ledger against her own limit; the instance's ledger is not touched either way", async () => {

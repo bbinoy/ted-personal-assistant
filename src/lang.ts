@@ -1,9 +1,7 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { withTimeout } from "./approvaljudge.ts";
-import { recordCost } from "./budget.ts";
 import { skipForCooldown } from "./cooldown.ts";
 import { fence } from "./fence.ts";
-import { haikuOptions } from "./haiku.ts";
+import { oneShot } from "./haiku.ts";
+import { LOGIN } from "./payer.ts";
 
 // Whether a reply may go out by voice. The voice speaks only the languages in TTS_LANGUAGES, and a German sentence read by an English
 // voice sounds bad, so a reply in an unsupported language goes out as text. The language is a model decision (one Haiku call) when a
@@ -33,33 +31,16 @@ const SYSTEM = "You identify the main language of a message. Answer with the ISO
 
 export const askLanguage: LanguageModel = async (text) => {
   if (skipForCooldown("lang")) throw new Error("usage limit cooldown");
-  const q = query({
+  const r = await oneShot({
+    system: SYSTEM,
     prompt: `Text:\n${fence("text", text, 2000)}`,
-    options: haikuOptions(SYSTEM, {
-      maxTurns: 3, // structured output can take a retry turn
-      maxBudgetUsd: 0.05,
-      outputFormat: { type: "json_schema", schema: { type: "object", properties: { language: { type: "string" } }, required: ["language"], additionalProperties: false } },
-      effort: "low",
-      thinking: { type: "disabled" },
-      persistSession: false,
-    }),
+    payer: LOGIN,
+    schema: { type: "json_schema", schema: { type: "object", properties: { language: { type: "string" } }, required: ["language"], additionalProperties: false } },
+    options: { maxTurns: 3, maxBudgetUsd: 0.05, effort: "low", thinking: { type: "disabled" }, persistSession: false }, // structured output can take a retry turn
+    timeoutMs: 10_000,
   });
-  try {
-    return await withTimeout(
-      (async () => {
-        for await (const m of q) {
-          if (m.type !== "result") continue;
-          recordCost(m.total_cost_usd);
-          const out = m.subtype === "success" && !m.is_error ? (m.structured_output as { language?: unknown } | undefined)?.language : undefined;
-          return typeof out === "string" ? out : undefined;
-        }
-        return undefined;
-      })(),
-      10_000,
-    );
-  } finally {
-    q.close(); // also ends a call that timed out
-  }
+  const out = (r.output as { language?: unknown } | undefined)?.language;
+  return typeof out === "string" ? out : undefined;
 };
 
 export const UNSURE = "unknown";

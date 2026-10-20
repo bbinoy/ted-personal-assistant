@@ -107,7 +107,7 @@ export interface BrowseContext {
   mode: BrowseMode;
   groupId?: string;
   tenant?: boolean; // a tenant's run: its audit rows carry no words (audit.ts wordless), and so do those of its guard and of the sub-run
-  spent?: () => boolean; // a tenant's run: her own ledger against her own ceiling, instead of the instance's daily guard (she pays for her own key)
+  spent?: () => boolean; // a tenant's run: her own ledger against her own ceiling, instead of the instance's daily guard (what she spends on the instance key is counted in her own ledger)
   key?: string; // the conversation the run is for (the owner's chat or a group): its screenshots are kept for that turn only. None for a wake-up
   // Runs the browse profile under this guard and gives back its structured output and cost. (agent.ts passes the run; no import cycle.)
   run: (prompt: string, guard: BrowseGuard) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;

@@ -1,11 +1,11 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "./audit.ts";
-import { recordCost } from "./budget.ts";
 import { withCeiling } from "./ceiling.ts";
-import { failure, TenantKeyError } from "./errors.ts";
+import { failure, isApiRefusal } from "./errors.ts";
+import type { Conversation } from "./conversationmodel.ts";
+import { charge, envFor, isRefusal, LOGIN, mayRun, observe, succeeded, type MayRunOptions, type Payer } from "./payer.ts";
 import { OWNER_SESSION_FILE, planSession, type ChatSession, type CompactMode } from "./session.ts";
 import { settings } from "./settings.ts";
-import { tenantEnv } from "./tenanttools.ts";
 import { readJson, writeJson } from "./state.ts";
 
 // Every conversation (the owner's chat, each group) persists across restarts, with the hygiene rules in
@@ -32,11 +32,11 @@ export function chatResume(file: string = OWNER_SESSION_FILE): Resume {
 // The options of the /compact run. A group's session was built under the group's isolation (buildOptions: no user settings,
 // no connectors, only the tools and shared skills of its capabilities, auto-memory = its own notes folder), and its compaction must load nothing more than
 // that: it is the same session, resumed. The owner's compaction is unchanged.
-export function compactOptions(sessionId: string | undefined, source: Source, notesDir?: string, tenant?: { apiKey: string }): Options {
+export function compactOptions(sessionId: string | undefined, source: Source, notesDir?: string, payer: Payer = LOGIN): Options {
   const isolated = source === "group";
   return {
     model: settings.model,
-    ...(tenant ? { env: tenantEnv({ ...process.env }, tenant.apiKey) } : {}), // a tenant's compaction is on the instance key, like her turns'
+    ...(payer.kind === "instance" ? { env: envFor(payer, { ...process.env }) } : {}), // a friend's compaction is on the instance key, like her turns'
 
     resume: sessionId,
     tools: [],
@@ -57,7 +57,7 @@ export function compactDue(file: string = OWNER_SESSION_FILE, now: Date = new Da
 // session.ts says so for this `mode`: "urgent" right after a reply that left the context far past the limit (the caller waits),
 // "quiet" from the heartbeat once the conversation has been still for COMPACT_QUIET_MINUTES. Always called from the conversation's
 // serial queue, so a message that arrives meanwhile waits behind it and nothing else touches the file. Never throws.
-export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, source: Source = "chat", notesDir?: string, mode: "quiet" | "urgent" = "urgent", tenant?: { id?: string; apiKey: string; costFile: string }): Promise<void> {
+export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, source: Source = "chat", notesDir?: string, mode: "quiet" | "urgent" = "urgent", payer: Payer = LOGIN): Promise<void> {
   try {
     const saved = readJson<ChatSession>(file, { costUsd: 0 });
     if (planSession(saved, new Date(), chatPlanOpts(mode)) !== "resume then compact") return;
@@ -66,16 +66,18 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
     await withCeiling(settings.compactMaxMinutes * 60_000, async (c) => {
       let boundary: { pre_tokens: number; post_tokens?: number } | undefined;
       let lastError: string | undefined;
-      for await (const message of query({ prompt: "/compact", options: { ...compactOptions(saved.sessionId, source, notesDir, tenant), abortController: c.controller } })) {
+      for await (const message of query({ prompt: "/compact", options: { ...compactOptions(saved.sessionId, source, notesDir, payer), abortController: c.controller } })) {
         if (message.type === "system" && message.subtype === "compact_boundary") boundary = message.compact_metadata;
+        observe(payer, message);
         if (message.type === "assistant" && message.error) lastError = message.error;
         if (message.type !== "result") continue;
-        recordCost(message.total_cost_usd - saved.costUsd, tenant?.costFile);
+        charge(payer, message.total_cost_usd - saved.costUsd);
         if (!boundary) {
-          // A friend's compaction that failed on the shared key is reported like any other run on it (errors.ts failure: her cooldown, the owner's one notice).
-          const refused = tenant?.id ? failure(lastError, message.subtype, tenant.id) : undefined;
-          throw refused instanceof TenantKeyError ? refused : new Error(`/compact produced no compact_boundary (${message.subtype})`);
+          // A compaction that failed is reported like any other call on its payer (errors.ts failure: the cooldown, the owner's one notice about a refused instance key).
+          const refused = failure(lastError, message.subtype, payer);
+          throw isApiRefusal(refused) ? refused : new Error(`/compact produced no compact_boundary (${message.subtype})`);
         }
+        if (!lastError) succeeded(payer);
         const { compactFailedAt: _cleared, untrustedIn: _held, ...rest } = saved;
         writeJson(file, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens, ...carriedTaint(saved, message.session_id) }); // (a compaction continues the session: its summary may still hold the untrusted text)
         console.log(`${source}: compacted ${boundary.pre_tokens} -> ${boundary.post_tokens ?? "?"} tokens (${mode})`);
@@ -89,6 +91,14 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
     audit("chat_session", "compact-failed", source);
     writeJson(file, { ...readJson<ChatSession>(file, { costUsd: 0 }), compactFailedAt: new Date().toISOString() });
   }
+}
+
+// Compaction of a conversation's session (the urgent one after a reply, the quiet one from the tick): like any call it asks payer.ts mayRun first, so a friend's runs on
+// the instance key and is billed to her, and waits while she is blocked (the key in a cooldown, her day's budget spent), urgent or quiet. The owner's and a group's urgent
+// one is never held back (somebody's next message waits for it); their quiet one stops with the pause switch, the cooldown and the budget.
+export async function compactConversation(conv: Pick<Conversation, "kind" | "tenantId" | "sessionFile" | "source" | "notesDir">, mode: "quiet" | "urgent", o: MayRunOptions = {}): Promise<void> {
+  const payer = mayRun(conv, "compaction", { chat: mode === "urgent", ...o });
+  if (!isRefusal(payer)) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, payer);
 }
 
 // A conversation never starts fresh just because time passed: its recent history is kept across days and compaction keeps it small.

@@ -69,12 +69,12 @@ function friend(name: string, extra: (typeof T.CAPABILITIES)[number][] = ["googl
 const notices: { id: string; text: string }[] = [];
 const triaged: { id: string; subjects: string[] }[] = [];
 const handled: { id: string; prompt: string; task: string }[] = [];
-const blocked = new Set<string>(); // friends whose access (key, cooldown, budget) is gone
+const blocked = new Set<string>(); // friends whose access is gone (here: the instance key is not set; the cooldown and budget cases are in tenantloops.test.ts)
 const cost = new Map<string, number>();
 const label = (subject: string) => (/URGENT/.test(subject) ? "act_now" : /Newsletter/.test(subject) ? "archive" : /Meeting/.test(subject) ? "handle" : "read_later");
 function loops(extra: Partial<Parameters<typeof createTenantMailLoops>[0]> = {}) {
   return createTenantMailLoops({
-    access: (id) => (blocked.has(id) ? undefined : { id, name: T.tenantById(id)!.name, apiKey: "instance-key-not-real", costFile: T.tenantContext(T.tenantById(id)!).costFile, ctx: T.tenantContext(T.tenantById(id)!) }),
+    key: () => (blocked.size ? undefined : "instance-key-not-real"),
     notify: async (id, text) => void notices.push({ id, text }),
     approve: () => async () => ({ approved: false }),
     source: (id) => new GoogleMail(hub.session(id)),

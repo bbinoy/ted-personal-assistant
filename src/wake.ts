@@ -3,20 +3,20 @@ import { inQuietHours } from "./actions.ts";
 import { clockLine } from "./brief.ts";
 import { budgetSpent } from "./budget.ts";
 import { fence } from "./fence.ts";
-import { skipForCooldown } from "./cooldown.ts";
 import { askGate, idleFingerprint, logTail, NOTHING, type Gate } from "./gate.ts";
 import { KEY_TTL_MS, lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";
 import { groupContext, listGroups } from "./groupstore.ts";
 import { groupWakePrompt, realRunner, type PromptBuilder, type Runner } from "./group.ts";
 import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
-import { allows, hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
+import { allows } from "./capabilities.ts";
+import { isRefusal, mayRun, type Payer, type Refusal } from "./payer.ts";
+import { hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
 import { localDay } from "./pause.ts";
 import { voiceOption } from "./voicereply.ts";
 import { isPaused } from "./pause.ts";
 import type { OwnerProfile } from "./profiles.ts";
 import { listTenants } from "./tenants.ts";
-import type { TenantAccess } from "./tenantrun.ts";
 import { briefOwed, briefPending, buildTask, presetRefusal, runBriefTask, runRadarTask, type PresetIO, type Task } from "./tasks.ts";
 import { settings } from "./settings.ts";
 import { MIN_GAP_MINUTES } from "./radar-rules.ts";
@@ -31,7 +31,9 @@ import { derivedTurn } from "./turnscope.ts";
 //   a group    the group run (src/agent.ts runConversation): its own notes and web search, nothing of the owner's
 //   a tenant   the same run on the instance key, with HER notes, session and cost file, her approvals in her chat, an answer to her chat only.
 //              She is looked in on only with the capabilities `heartbeat` and `wake` (a friend has the first, not the second), while she is
-//              active, out of a cooldown and within her day's budget; the gate's own call is billed to her the same way
+//              active, the key is out of a cooldown and she is within her day's budget; the gate's own call is billed to her the same way
+// Every model call of a look, a preset, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her
+// own budget and the shared key) and runs on the Payer it returns: no per-conversation branches here.
 //   the owner  a background run with the radar's rights (policy source "background"): reads, anything else asks on
 //              the phone; web search allowed, page fetches ask
 // For a conversation with the mail and calendar capabilities (the owner's) the gate also chooses the presets "brief" and "radar" (tasks.ts: WHEN is the
@@ -53,7 +55,7 @@ interface WakeDeps {
   runGroup?: Runner; // a group's or a tenant's run
   gate?: Gate;
   groups?: () => string[]; // known group ids
-  tenants?: { access: (id: string | undefined) => TenantAccess | undefined }; // what a tenant's unattended work runs on (tenantrun.ts); absent: tenants are not looked in on
+  key?: () => string | undefined; // where the instance key comes from for a friend's unattended work (default settings.tenantApiKey; tests)
   tenantIds?: () => string[]; // active tenants (default: the registry)
   context?: typeof groupContext;
   notesChangedAt?: (dir: string) => number;
@@ -83,8 +85,11 @@ export function createWakeups(deps: WakeDeps) {
   const paused = deps.guards?.paused ?? isPaused;
   const spent = deps.guards?.budgetSpent ?? budgetSpent;
   const changed = deps.notesChangedAt ?? notesChangedAt;
+  // May this conversation's unattended work run now, and on whom? (payer.ts: the pause switch, the usage-limit cooldown, the day's budget, a friend's own budget and the key.)
+  const may = (conv: Conversation, what: string): Payer | Refusal => mayRun(conv, what, { key: deps.key, paused: () => paused(clock()), spent });
+  const why = (r: Refusal): string => (r.refused === "cooldown" ? "cooldown" : r.refused === "paused" ? "guarded" : "blocked");
 
-  async function act(conv: Conversation, instructions: string, now: Date, apiKey?: string): Promise<"posted" | "silent" | "failed"> {
+  async function act(conv: Conversation, instructions: string, now: Date, payer: Payer): Promise<"posted" | "silent" | "failed"> {
     const speak = pipeline.canSpeak() && allows(conv, "voice");
     if (onLogin(conv)) {
       // The owner's run happens OUTSIDE the chat queue: it may ask for an approval and wait up to `BACKGROUND_APPROVAL_TIMEOUT_MINUTES` (2 h by default) for it, and the
@@ -108,7 +113,7 @@ export function createWakeups(deps: WakeDeps) {
             const { lines, seenAt } = (deps.context ?? groupContext)(conv.groupId!, since);
             return { prompt: groupWakePrompt(now, lines, instructions, !!since, speak), seenAt };
           };
-      const run = async () => ({ text: await derivedTurn(conv.key, "gate", instructions, () => (deps.runGroup ?? realRunner)(build, { conv, now, apiKey })) }); // the gate wrote the task: derived, for the approval judge
+      const run = async () => ({ text: await derivedTurn(conv.key, "gate", instructions, () => (deps.runGroup ?? realRunner)(build, { conv, now, apiKey: payer.kind === "instance" ? payer.apiKey : undefined })) }); // the gate wrote the task: derived, for the approval judge
       return outcome(await pipeline.runTurn(conv, { run, background: true, announce: false, kind: "chat" }));
     });
   }
@@ -159,7 +164,7 @@ export function createWakeups(deps: WakeDeps) {
   function quietCompact(conv: Conversation): void {
     const key = `compact:${conv.key}`;
     if (!deps.compact || running.has(key) || !deps.compact.due(conv)) return;
-    if (conv.tenantId ? !deps.tenants?.access(conv.tenantId) : skipForCooldown("compaction")) return; // hers is billed to her (and stops with her cooldown and budget)
+    if (isRefusal(may(conv, "compaction"))) return; // billed like any call: stops with the pause switch, the cooldown and the budget (hers: the key and her own budget)
     const run = deps.compact.run;
     const job = pipeline.enqueue(conv, () => run(conv)).then(
       () => "compact-done",
@@ -175,8 +180,8 @@ export function createWakeups(deps: WakeDeps) {
   // out incomplete. Not held back by quiet hours: a Mac that wakes late still gets that day's brief.
   async function backstop(conv: Conversation, st: LookState, now: Date): Promise<string | undefined> {
     if (!hasPresets(conv) || !briefOwed(st, now)) return undefined;
-    if (paused(clock()) || spent()) return "guarded";
-    if (skipForCooldown("brief")) return "cooldown"; // usage limit: the next tick after it lifts retries
+    const payer = may(conv, "brief");
+    if (isRefusal(payer)) return why(payer); // paused, a usage limit (the next tick after it lifts retries) or the day's budget spent
     return runPreset(conv, briefTask(), st, now);
   }
 
@@ -208,16 +213,15 @@ export function createWakeups(deps: WakeDeps) {
     const st = stateOf(conv, now);
     const owed = await backstop(conv, st, now);
     if (owed) return owed;
-    if (!settings.wakeups) return "off";
     if (!allows(conv, "heartbeat") || !allows(conv, "wake")) return "not-allowed"; // a tenant's record decides; nothing for her without both
     if (conv.direct && inQuietHours(now, settings.quietStartHour, settings.quietEndHour)) return "quiet-hours"; // a private chat: the owner's and each tenant's
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: changed(conv.notesDir), messagesCount: !tagged })) return "not-due";
 
-    // A tenant's look runs on the instance key and is billed to her: suspended, in her own cooldown, past her day's budget or no key set means no model call.
-    const access = conv.tenantId ? deps.tenants?.access(conv.tenantId) : undefined;
-    if (conv.tenantId && !access) return "blocked";
-    if (!conv.tenantId && skipForCooldown(`${conv.kind} look`)) return "cooldown"; // usage limit: no model call, nothing recorded, the next tick looks again
+    // A look is a model call on someone's account (a friend's: the instance key, billed to her): paused, in a cooldown, past the budget or no key set means no model call,
+    // nothing recorded, and the next tick looks again.
+    const access = may(conv, `${conv.kind} look`);
+    if (isRefusal(access)) return why(access);
 
     // Nothing relevant changed since the model last found nothing to do: its answer would be the same, so keep that look time.
     const tail = logTail(conv);
@@ -232,7 +236,7 @@ export function createWakeups(deps: WakeDeps) {
     let out = NOTHING;
     let answered = false;
     try {
-      out = await gate({ conv, trigger: "clock", now, tail, ...(access ? { tenant: { id: access.id, apiKey: access.apiKey, costFile: access.costFile } } : {}) });
+      out = await gate({ conv, trigger: "clock", now, tail, payer: access });
       answered = true;
     } catch (e) {
       console.error(`wake: gate failed (${conv.kind}):`, (e as Error).message); // fail closed; the default delay stops a retry on every tick
@@ -245,15 +249,15 @@ export function createWakeups(deps: WakeDeps) {
     }
     const task = buildTask(hasPresets(conv), out); // presets only where they exist (the owner's); anything else is the plain task, or nothing
     if (!task) return "no-instructions"; // a free-form look must say what to do
-    const again = conv.tenantId ? deps.tenants?.access(conv.tenantId) : undefined; // re-checked: the gate call itself took time and money (hers too)
-    if (paused(clock()) || (conv.tenantId ? !again : spent())) return "guarded";
+    const again = may(conv, `${conv.kind} run`); // re-checked: the gate call itself took time and money (hers too)
+    if (isRefusal(again)) return "guarded";
 
     if (task.name !== "task") {
       if (!hasPresets(conv)) return "no"; // defence in depth: buildTask never returns this
       // The wake line is written again when the run ends: the ledger lines it wrote are not news.
       return runPreset(conv, task, st, now, () => recordWake(pipeline, conv, out.nextCheckMinutes, now));
     }
-    const result = await act(conv, task.instructions, now, again?.apiKey).catch((e) => (console.error(`wake: ${conv.kind} run failed:`, (e as Error).message), "failed" as const));
+    const result = await act(conv, task.instructions, now, again).catch((e) => (console.error(`wake: ${conv.kind} run failed:`, (e as Error).message), "failed" as const));
     pipeline.record(conv, "action", Date.now(), `wake-up: ${task.instructions.slice(0, LIMITS.preview)} → ${result === "posted" ? "posted" : result === "silent" ? "stayed silent" : "failed"}`);
     audit("wake", result, source(conv));
     recordWake(pipeline, conv, out.nextCheckMinutes, now); // after the act: notes it wrote are not news
@@ -267,14 +271,12 @@ export function createWakeups(deps: WakeDeps) {
   const busy = new Set<string>();
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
-    const convs: Conversation[] = spent() ? [] : [owner()]; // the instance's daily budget is the owner's and the groups'; a tenant's is her own (her access)
+    const convs: Conversation[] = [owner()]; // (each conversation asks mayRun: the instance's day budget is the owner's and the groups', a friend's is her own)
     if (settings.wakeups && deps.groupChats) {
-      if (convs.length) {
-        const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
-        const vouched = await Promise.all(ids.map((id) => deps.vouch(id).catch(() => false))); // in parallel; a lookup is cached for minutes
-        ids.forEach((id, i) => vouched[i] && convs.push(group(id)));
-      }
-      if (settings.tenants && deps.tenants) {
+      const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
+      const vouched = await Promise.all(ids.map((id) => deps.vouch(id).catch(() => false))); // in parallel; a lookup is cached for minutes
+      ids.forEach((id, i) => vouched[i] && convs.push(group(id)));
+      if (settings.tenants) {
         for (const id of (deps.tenantIds ?? (() => listTenants().filter((r) => r.status === "active").map((r) => r.id)))()) {
           try {
             const conv = tenant(id);
@@ -288,7 +290,7 @@ export function createWakeups(deps: WakeDeps) {
     }
     await Promise.all(
       convs.map(async (conv) => {
-        if (paused(clock()) || (conv.tenantId ? false : spent())) return;
+        if (paused(clock())) return;
         quietCompact(conv);
         if (busy.has(conv.key)) return;
         busy.add(conv.key);

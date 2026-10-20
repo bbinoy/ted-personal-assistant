@@ -1,7 +1,7 @@
 import "./log.ts"; // first: timestamps, redaction and owner-only files for everything below
-import { createPipeline, group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
+import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation.ts";
 import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
-import { compactChatIfNeeded, compactDue } from "./chatsession.ts";
+import { compactConversation, compactDue } from "./chatsession.ts";
 import { approveIn, setApprovers } from "./permissions.ts";
 import { scopeOf } from "./turnscope.ts";
 import * as approvals from "./approvals.ts";
@@ -39,7 +39,7 @@ import { activeTenant, admitStranger } from "./tenantroute.ts";
 import { sweepStaleRuns } from "./browse.ts";
 import { createTenantRunner } from "./tenantrun.ts";
 import { tenantHooks } from "./tenanttools.ts";
-import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantById, tenantContext } from "./tenants.ts";
+import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantContext } from "./tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
 
 ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
@@ -122,13 +122,6 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one notice for the owner about the shared instance key (keynotice.ts), from every kind of run
 const tenantRunner = createTenantRunner({});
-// Compaction of a conversation's session (the urgent one after a reply, the quiet one from the tick): a tenant's runs on the instance key and is billed to her.
-async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<void> {
-  if (!conv.tenantId) return compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode);
-  const rec = tenantById(conv.tenantId);
-  const apiKey = settings.tenantApiKey;
-  if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { id: rec.id, apiKey, costFile: tenantContext(rec).costFile });
-}
 tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts LIFECYCLE: her Google server, her Notion) stop
 const pipeline: Pipeline = createPipeline({
   messenger,
@@ -153,7 +146,7 @@ const pipeline: Pipeline = createPipeline({
   vouch,
   isOwner: fromOwner,
   admitGroup: (_conv, m) => groupBrain(m),
-  compact, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it
+  compact: compactConversation, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it
   // The owner's chat is kept warm after each turn; the group that spoke last has its own warm process (group.ts).
   afterTurn: (conv) => void (conv.kind === "owner" ? warmChat() : conv.kind === "tenant" && tenantRunner.warm(conv)),
 });
@@ -230,7 +223,7 @@ handler?.resume();
 
 const dreamer = createDreamer();
 const groupDreamer = createGroupDreamer();
-const tenantDreamer = createTenantDreamer({ access: (id) => tenantRunner.access(id) });
+const tenantDreamer = createTenantDreamer();
 // The dream tidies the notes the brief then reads; it runs at most once a day, only when you said something new, and a
 // failure just moves on. The tenants' dreams start with it but are not waited for: the brief never waits for them, and each is its own.
 const dream = () => {
@@ -245,13 +238,11 @@ const wakeups = createWakeups({
   vouch,
   runProfile: (profile, prompt, extra) => runProfile(profile, prompt, approveBackground, extra),
   presets: { sendBrief: out.sendBriefSummary, notify: say, beforeBrief: dream },
-  tenants: tenantRunner,
-  compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compact(conv, "quiet") },
+  compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactConversation(conv, "quiet") },
 });
 
 // The friends' mail (TENANTS=on, the `google` and `mail` capabilities, a connected account): the heartbeat's own mail check and handler, once per friend, in her folder and her chat.
 const tenantMail = createTenantMailLoops({
-  access: (id) => tenantRunner.access(id),
   notify: async (id, text) => {
     const to = targetOf(id);
     if (to) await out.reply(text, { plain: true, kind: "notice", target: to });

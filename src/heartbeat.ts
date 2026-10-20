@@ -8,7 +8,7 @@ import type { GmailMail } from "./gmail.ts";
 import type { Mailbird } from "./mailbird.ts";
 import { mailSlot } from "./modules/index.ts";
 import { mailRuntime } from "./modules/runtime.ts";
-import { noteRateLimit, skipForCooldown } from "./cooldown.ts";
+import { isRefusal, mayRun } from "./payer.ts";
 import { isPaused } from "./pause.ts";
 import { settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
@@ -71,8 +71,7 @@ export interface MailContext {
   record: (decision: string, row: Record<string, unknown>) => void; // what was decided about one mail (the owner's: the audit log; a friend's: her own file, wordless in the audit log)
   archiveLogOnly: () => boolean; // classify and log "would-archive" but archive nothing
   handler: () => boolean; // a background handler exists for this conversation (it drafts replies with its own tools); without one the mail is kept for the brief
-  skipForCooldown: (what: string) => boolean; // a usage limit is on: no model call this tick (the owner's: the shared cooldown; a friend's: hers)
-  onRateLimit: () => void; // the triage call hit the limit
+  blocked: (what: string) => boolean; // the conversation may not run a model now (payer.ts mayRun: a usage limit, the day's budget, and for a friend the key and her own budget): no model call this tick
   tidyOwnBriefs: boolean; // older copies of the briefs mailed to oneself are archived (the owner's brief; a friend has none)
 }
 
@@ -197,8 +196,7 @@ async function processNewMail(mb: MailSource, fresh: NewMail[], hooks: MailHooks
   try {
     results = await ctx.triage(await fetchInputs(mb, fresh));
   } catch (e) {
-    if (!(e instanceof RateLimitError)) throw e;
-    ctx.onRateLimit();
+    if (!(e instanceof RateLimitError)) throw e; // (the cooldown was noted where the call failed: errors.ts failure)
     console.error("heartbeat: usage limit hit, the mail stays unseen and is retried next tick");
     return fresh;
   }
@@ -310,7 +308,7 @@ export function createMailCheck(mb: MailSource, ctx: MailContext, hooks: MailHoo
       if (mail.seeding) {
         console.log("heartbeat: baseline recorded, existing inbox treated as seen");
       } else {
-        if (mail.fresh.length > 0) for (const m of ctx.skipForCooldown("mail triage") ? mail.fresh : await processNewMail(mb, mail.fresh, hooks, ctx)) mail.unsee(m); // usage limit: no model call, the mail waits unseen (cooldown.ts)
+        if (mail.fresh.length > 0) for (const m of ctx.blocked("mail triage") ? mail.fresh : await processNewMail(mb, mail.fresh, hooks, ctx)) mail.unsee(m); // usage limit: no model call, the mail waits unseen (cooldown.ts)
         if (settings.heartbeatLive && !ctx.archiveLogOnly() && mail.staleBriefs.length > 0) await archiveStaleBriefs(mb, mail.staleBriefs);
       }
       mail.commit(); // only now are these messages "seen"
@@ -334,8 +332,7 @@ export function ownerMailContext(triage: MailContext["triage"] = (mails) => tria
     record: (decision, row) => audit("heartbeat_triage", decision, "heartbeat", row),
     archiveLogOnly,
     handler: () => mailSlot()?.handler !== false,
-    skipForCooldown: (what) => skipForCooldown(what),
-    onRateLimit: () => noteRateLimit(),
+    blocked: (what) => isRefusal(mayRun({ kind: "owner" }, what)),
     tidyOwnBriefs: true,
   };
 }

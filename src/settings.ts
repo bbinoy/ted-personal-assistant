@@ -378,5 +378,7 @@ export const settings = loadSettings(process.env);
 // The speech keys and the tenants' instance key were read into `settings` above. Nothing the agent starts (Claude Code and its MCP servers, ffmpeg, signal-cli)
 // needs them, and they are inherited by every child process unless dropped here (the owner's runs never see the tenants' key).
 for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN", "TENANT_ANTHROPIC_API_KEY", "GOOGLE_OAUTH_CLIENT_SECRET"]) delete process.env[name];
+// Is the instance's Google OAuth client set up? The one answer: without it nobody gets Google tools, a mail check of their own or a sign-in page for it.
+export const googleReady = (cfg: { clientId?: string; clientSecret?: string } = settings.google): boolean => !!cfg.clientId && !!cfg.clientSecret;
 export const OWNER = settings.owner;
 export const ASSISTANT = settings.assistant;

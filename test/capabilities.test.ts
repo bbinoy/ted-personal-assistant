@@ -9,7 +9,8 @@ process.env.INTAKE_BASE_URL = "";
 const { settings } = await import("../src/settings.ts");
 const { CAPABILITIES } = await import("../src/tenants.ts");
 type Capability = (typeof CAPABILITIES)[number];
-const { groupCapabilities, groupTools, runCapabilities, tenantTools, toolsFor } = await import("../src/capabilities.ts");
+const { groupCapabilities, groupTools, resolveCapabilities, toolsFor } = await import("../src/capabilities.ts");
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsFor(resolveCapabilities(ctx.capabilities, { own: ctx.config }));
 const { privateSkills, sharedSkills, skillsFor } = await import("../src/skills.ts");
 const PRIVATE_SKILLS = privateSkills();
 const SHARED_SKILLS = sharedSkills();
@@ -26,7 +27,7 @@ const WEATHER = ["get_distance", "get_forecast", "get_marine_forecast", "get_spo
 const CHAT = ["Edit", "Read", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send"];
 const sorted = (s: Iterable<string>) => [...s].sort();
 const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities });
-const caps = (...c: Capability[]) => runCapabilities(c);
+const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
   const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER]);
@@ -165,7 +166,7 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
 });
 
 test("capabilities: no private skill and no tool of the owner's login is ever offered, by any set or any name", () => {
-  const everything = runCapabilities([...CAPABILITIES]);
+  const everything = resolveCapabilities([...CAPABILITIES]);
   for (const set of [everything, groupCapabilities(), caps("chat")]) {
     const skills = skillsFor(set).map((s) => s.slice(s.indexOf(":") + 1));
     assert.deepEqual(skills.filter((s) => PRIVATE_SKILLS.includes(s)), []);

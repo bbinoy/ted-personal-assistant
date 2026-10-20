@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { settings } from "./settings.ts";
+import { googleReady, settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
 import type { Capability } from "./tenants.ts";
 
@@ -27,7 +27,7 @@ interface Stored {
 export const PURPOSE_CAPABILITY: Readonly<Record<string, Capability>> = { profile: "profile", card: "card", google: "google", notion: "notion" };
 // `google` is offered only while the instance's OAuth client is set up (settings.google): without it there is nothing to sign in with. `notion` needs nothing but the
 // page's public address (the instance registers its own client with Notion the first time, notionoauth.ts).
-const purposeAvailable = (purpose: string): boolean => purpose !== "google" || (!!settings.google.clientId && !!settings.google.clientSecret);
+const purposeAvailable = (purpose: string): boolean => purpose !== "google" || googleReady();
 export const purposesFor = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSE_CAPABILITY).filter(([p, c]) => capabilities.includes(c) && purposeAvailable(p)).map(([p]) => p);
 
 export const INTAKE_LINK_TOOL = "mcp__intake__get_setup_link";

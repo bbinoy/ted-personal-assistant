@@ -16,7 +16,9 @@ process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { tenantTools } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i]; // (written out by hand, apart from the modules' `ownerOnly`)
 const { classify, isReadableData, hiddenTools } = await import("../src/policy.ts");
 const { NOTES_DIR } = await import("../src/notes.ts");
@@ -32,7 +34,8 @@ const { BrowseGuard } = await import("../src/browseguard.ts");
 const { browse, startRefusal } = await import("../src/browse.ts");
 const { tenantEnv, createTenantServer } = await import("../src/tenanttools.ts");
 const { coolingDown, resetCooldown } = await import("../src/cooldown.ts");
-const { TenantKeyError } = await import("../src/errors.ts");
+const { InstanceKeyError } = await import("../src/errors.ts");
+const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
 const { spentToday } = await import("../src/budget.ts");
 const { createPipeline, group, owner, tenant } = await import("../src/conversation.ts");
 const { speaker } = await import("../src/group.ts");
@@ -271,18 +274,18 @@ test("the instance key: read into settings, gone from the process environment, i
   assert.ok(!JSON.stringify(tenantRunOptions(ann, INSTANCE_KEY, new Date()).systemPrompt).includes("INSTANCEINSTANCE"), "nor in the prompt");
 });
 
-test("a tenant's run that fails on her key pauses her alone", async () => {
+test("a tenant's run that fails on the instance key pauses the key (every friend), never the owner's login", async () => {
   const seen: { options?: Record<string, unknown> } = {};
   const bad: Msg[] = [
     { type: "assistant", error: "billing_error", message: { usage: {} }, parent_tool_use_id: null },
     { type: "result", subtype: "error_during_execution", is_error: true, total_cost_usd: 0, session_id: "s" },
   ];
-  await assert.rejects(askTenant(bea, KEY, "hello", [], undefined, [], { query: fakeQuery(bad, seen) }), (e) => e instanceof TenantKeyError && e.why === "billing");
-  assert.equal(coolingDown(Date.now() + 1000, bea.id), true);
-  assert.equal(coolingDown(Date.now() + 1000, ann.id), false);
+  await assert.rejects(askTenant(bea, KEY, "hello", [], undefined, [], { query: fakeQuery(bad, seen) }), (e) => e instanceof InstanceKeyError && e.why === "billing");
+  assert.equal(coolingDown(Date.now() + 1000, INSTANCE_KEY_COOLDOWN), true);
   assert.equal(coolingDown(Date.now() + 1000), false);
+  resetCooldown();
   const r = await askTenant(ann, KEY, "hello", [], undefined, [], { query: fakeQuery(ok, seen) });
-  assert.equal(r.text, "hi Ann", "another tenant's run goes on");
+  assert.equal(r.text, "hi Ann", "another tenant's run goes on once the key is accepted again");
 });
 
 // ---- the pipeline ----

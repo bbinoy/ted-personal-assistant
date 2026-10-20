@@ -1,16 +1,16 @@
 import { join } from "node:path";
 import { audit } from "./audit.ts";
-import { allows } from "./conversationmodel.ts";
+import { allows } from "./capabilities.ts";
 import { dreamOver, describePlan, dreamPrompt, conversationLines, readNoteFiles, runnerFor, type Runner } from "./dream.ts";
 import type { Scope } from "./dreamplan.ts";
 import { tenantDreamSystem } from "./persona.ts";
+import { isRefusal, mayRun, type InstancePayer } from "./payer.ts";
 import { isPaused, localDay } from "./pause.ts";
 import { messagesSince } from "./messages.ts";
 import { LIMITS } from "./sanitize.ts";
 import { settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
-import { listTenants, type TenantContext } from "./tenants.ts";
-import type { TenantAccess } from "./tenantrun.ts";
+import { listTenants, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
 
 // The dream of each tenant's notes: the same tidy-up as the owner's (dream.ts) and a group's (groupdream.ts), over HER notes and HER words only,
 // silently, once a day, on the instance key and billed to her (her cost file, her cooldown). Only for a tenant who is active, has the `dream`
@@ -24,11 +24,10 @@ interface DreamState {
   lastRunAt?: string; // when the last real run started: what it covered ends here
 }
 
-export function createTenantDreamer(deps: { access: (id: string) => TenantAccess | undefined; run?: (tenant: TenantAccess) => Runner; ids?: () => string[] }) {
+export function createTenantDreamer(deps: { key?: () => string | undefined; run?: (payer: InstancePayer, ctx: TenantContext) => Runner; ids?: () => string[] } = {}) {
   let inFlight: Promise<void> | undefined;
 
-  async function one(access: TenantAccess, now: Date): Promise<void> {
-    const ctx = access.ctx;
+  async function one(payer: InstancePayer, ctx: TenantContext, now: Date): Promise<void> {
     const stateFile = join(ctx.dir, "dream.json");
     const today = localDay(now);
     const state = readJson<DreamState>(stateFile, {});
@@ -38,7 +37,7 @@ export function createTenantDreamer(deps: { access: (id: string) => TenantAccess
     writeJson(stateFile, { ...state, day: today }); // before the run: no retry loops
     try {
       const { ownerText } = conversationLines(messages, ctx.name);
-      const run = deps.run?.(access) ?? runnerFor(access);
+      const run = deps.run?.(payer, ctx) ?? runnerFor(payer);
       const { plan, snapshot } = await dreamOver(scopeOf(ctx), dreamPrompt(now, readNoteFiles(ctx.notesDir), messages, ctx.name), tenantDreamSystem(ctx.name), ownerText, now, run);
       writeJson(stateFile, { day: today, lastRunAt: now.toISOString() });
       for (const r of plan.rejected) console.log(`tenant dream: rejected ${r.file || "(no file)"}: ${r.why}`);
@@ -51,12 +50,14 @@ export function createTenantDreamer(deps: { access: (id: string) => TenantAccess
   }
 
   async function once(now: Date): Promise<void> {
-    if (!settings.dream || !settings.tenants || isPaused(now)) return;
+    if (!settings.tenants) return;
     for (const id of deps.ids?.() ?? listTenants().map((r) => r.id)) {
       try {
-        if (!allows({ kind: "tenant", tenantId: id }, "dream")) continue; // her record: active, with the capability
-        const access = deps.access(id); // suspended, cooling down, over her budget or no key: nothing runs (and the admin hears of a missing key once)
-        if (access) await one(access, now);
+        const conv = { kind: "tenant", tenantId: id } as const;
+        if (!allows(conv, "dream")) continue; // her record: active, with the capability
+        const payer = mayRun(conv, "tenant dream", { key: deps.key, paused: () => isPaused(now) }); // paused, cooling down, over her budget or no key: nothing runs (and the admin hears of a missing key once)
+        const rec = tenantById(id);
+        if (!isRefusal(payer) && payer.kind === "instance" && rec) await one(payer, tenantContext(rec), now);
       } catch (e) {
         console.error(`tenant dream (${id}): failed:`, (e as Error).message);
       }

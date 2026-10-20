@@ -19,10 +19,12 @@ const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
 const { GoogleHub, GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/googlemcp.ts");
 const { serversFor, LIFECYCLE, stopAll, dropAll } = await import("../src/modules/runtime.ts");
-const { tenantCapabilities, tenantTools } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const { makeCanUseTool } = await import("../src/permissions.ts");
 const { classify } = await import("../src/policy.ts");
-const { allows } = await import("../src/conversationmodel.ts");
+const { allows } = await import("../src/capabilities.ts");
 const { GOOGLE_PREFIX } = await import("../src/modules/google.ts");
 
 const FAKE = new URL("./fakegoogle.ts", import.meta.url).pathname;

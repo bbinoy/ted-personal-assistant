@@ -7,8 +7,8 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 // The reset time is the SDK's own (rate_limit_event, status rejected) when it gave one, else a backoff of 15 minutes that
 // doubles per consecutive refusal up to 2 hours. A successful call clears everything. Per process; a restart forgets it
 // (one probing call is the cost).
-// A tenant has a cooldown of her own (a state per key, below): she pays for her own API key, so her limit, an invalid key or an
-// empty balance pauses HER and nobody else. The default key ("") is the instance's own login, exactly as before.
+// The cooldown is a state per payer (payer.ts cooldownKeyOf): the default key ("") is the instance's own login (the owner's and the groups'), and the instance key
+// that friends run on (INSTANCE_KEY_COOLDOWN) has one of its own: its limit, an invalid key or an empty balance is the KEY's, so it pauses every friend and never the owner.
 
 export const BASE_BACKOFF_MS = 15 * 60_000;
 export const MAX_BACKOFF_MS = 2 * 3600_000;

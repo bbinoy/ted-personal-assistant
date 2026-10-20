@@ -1,15 +1,14 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "./audit.ts";
-import { recordCost } from "./budget.ts";
 import { OWNER_KEY } from "./send.ts";
-import { createTenantServer, tenantEnv, type TenantRun } from "./tenanttools.ts";
+import { createTenantServer, type TenantRun } from "./tenanttools.ts";
+import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "./payer.ts";
 import { browseSystem } from "./browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "./browseguard.ts";
 import { hiddenBrowserTools } from "./browserules.ts";
 import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "./connectors.ts";
-import { noteSuccess, observeRateLimit } from "./cooldown.ts";
 import { failure } from "./errors.ts";
 import { announceMemoryChanges, noteWritten } from "./memorynotice.ts";
 import { builtinModule } from "./modules/builtin.ts";
@@ -68,6 +67,9 @@ export interface RunOptions {
   // made for a tenant, and never given the instance's login: without a key the run does not start.
   tenant?: TenantRun;
 }
+
+// Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
+const payerOf = (opts: Pick<RunOptions, "tenant">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, costFile: opts.tenant.costFile } : LOGIN);
 
 // Context size of one model call: everything it was sent.
 const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) =>
@@ -169,7 +171,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
         : undefined; // (every server a module built: a new one is never dropped here)
   // A tenant's run is on the instance key or it does not run: the owner's login is never a fallback (tenanttools.ts tenantEnv).
   const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
-  const env = opts.tenant ? tenantEnv(baseEnv, opts.tenant.apiKey) : baseEnv;
+  const env = envFor(payerOf(opts), baseEnv);
   return {
     model: settings.model,
     outputFormat: opts.outputFormat,
@@ -217,11 +219,12 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
 // The stream yields many message types (system, assistant, tool use...).
 // The one we want is the single "result" message that ends the turn.
 export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOptions, previousCost: number): Promise<AgentReply> {
+  const payer = payerOf(opts);
   let lastError: string | undefined;
   let first = false;
   let lastContext: number | undefined; // the last model call of the main loop shows how big the context is
   for await (const message of stream) {
-    observeRateLimit(message, opts.tenant?.id);
+    observe(payer, message);
     if (message.type === "system" && message.subtype === "init" && opts.source !== "group" && opts.source !== "browse") { // a group run has no connectors: its tool list says nothing about them
       recordToolsSeen(message.tools);
       recordConnectors(message.tools, message.mcp_servers);
@@ -240,12 +243,12 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
       writeJson(opts.sessionFile, next);
     }
-    recordCost(message.total_cost_usd - previousCost, opts.tenant?.costFile); // failures cost money too (a tenant's goes to her own ledger)
+    charge(payer, message.total_cost_usd - previousCost); // failures cost money too (a friend's goes to her own ledger)
     if (message.subtype === "success" && !message.is_error) {
-      noteSuccess(opts.tenant?.id);
+      succeeded(payer);
       return { text: message.result, costUsd: message.total_cost_usd - previousCost, structured: message.structured_output };
     }
-    throw failure(lastError, message.subtype, opts.tenant?.id);
+    throw failure(lastError, message.subtype, payer);
   }
   throw new Error("agent stream ended without a result");
 }
