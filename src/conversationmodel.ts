@@ -102,7 +102,7 @@ export const tenant = (id: string): Conversation => {
     attention: "always",
     optionalPictures: false,
     threadAlways: false,
-    noticeEveryMs: Math.min(5, settings.tenantNoticeMinutes) * 60_000, // she is waiting: told promptly, but not once per message of a flood
+    noticeEveryMs: settings.tenantReplyNoticeMinutes * 60_000, // she is waiting: told promptly, but not once per message of a flood
     notice: noticeFor("friend"), // no terminals, no logs
   });
 };

@@ -41,9 +41,9 @@ thread INBOX again). Nothing else:
 
 - **Never trash, delete or mark spam.** Those tools and the labels `TRASH` and `SPAM` (on any label tool)
   are blocked. Use archive even when the owner says "delete".
-- Archiving may be in **log-only mode** for the first week (`GMAIL_ARCHIVE_LIVE=false`): the call is
+- Archiving may be in **log-only mode** (`ARCHIVE=log`): the call is
   refused and recorded as "would archive". That is not an error and not a reason to retry. In the brief
-  say once that archiving is in the trial week and what you would have archived.
+  say once that archiving is switched to log-only and what you would have archived.
 
 When a mail asks about availability or proposes a time, follow "Scheduling emails: think a step ahead" in the calendar skill: check the calendar, draft the confirmation or slots, and ask once; the owner's yes sends it and adds the calendar entry.
 

@@ -1,7 +1,6 @@
 // npm run intake                         start the intake page (127.0.0.1:INTAKE_PORT; a tunnel puts it on the internet, docs/SETUP.md "The intake page")
 // npm run intake -- link owner <purpose> a one-time link on this Mac's loopback so the owner can enter a detail or a card without the chat
 // Local terminal only. The page writes with its own write-only OpenBao token (npm run openbao -- setup makes it); it prints no value, no code and no path.
-import { config } from "../src/config.ts";
 import { macKeychain } from "../src/keychain.ts";
 import { LinkStore, PURPOSE_CAPABILITY } from "../src/intakelinks.ts";
 import { purposeOf } from "../src/intakepurposes.ts";
@@ -11,7 +10,7 @@ import { OAuthFlows } from "../src/oauth.ts";
 import { IntakeServer } from "../src/intakeserver.ts";
 import { IntakeWriter } from "../src/intakestore.ts";
 import { appBao, keychainNames, OWNER } from "../src/secrets.ts";
-import { settings } from "../src/settings.ts";
+import { settings, signalIdentity } from "../src/settings.ts";
 import { ensureOwner, people } from "../src/tenants.ts";
 
 const [cmd, who, purpose] = process.argv.slice(2);
@@ -24,7 +23,7 @@ if (cmd === "link") {
     say(`usage: npm run intake -- link owner <purpose>   (purposes: ${Object.keys(PURPOSE_CAPABILITY).join(", ")})`);
     process.exit(1);
   }
-  const rec = ensureOwner({ number: config.ownerNumber, aci: config.ownerAci });
+  const rec = ensureOwner({ number: signalIdentity().ownerNumber, aci: signalIdentity().ownerAci });
   if (!people().some((r) => r.id === rec.id && r.capabilities.includes(cap))) {
     say(`The owner record lacks the ${cap} capability: npm run tenants -- grant owner ${cap}`);
     process.exit(1);

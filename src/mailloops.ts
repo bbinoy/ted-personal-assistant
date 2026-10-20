@@ -85,7 +85,6 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
           return triageBatch(mails, query, { who: { name: ctx.name, pronoun: "them" }, notesDir: ctx.notesDir, payer: p });
         }),
       record: (decision, row) => recordTriage(ctx, decision, row),
-      archiveLogOnly: () => !settings.google.archiveLive,
       handler: () => true,
       blocked: (what) => isRefusal(payer(id, what)), // the key's cooldown, her day's budget, suspension or a missing key: no model call
       tidyOwnBriefs: false,

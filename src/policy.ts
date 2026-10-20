@@ -5,8 +5,8 @@ import { isInside, realish } from "./contain.ts";
 import { isNotePath } from "./notes.ts";
 import { settings } from "./settings.ts";
 import { groupTools } from "./capabilities.ts";
-import { registered } from "./modules/index.ts";
-import type { Denial, HideConfig } from "./modules/types.ts";
+import { loaded, registered } from "./modules/index.ts";
+import type { Denial, HideConfig, ToolModule } from "./modules/types.ts";
 import { destinationIsTrashOrSpam, namesLocalFile, neverActionValue } from "./neverallowed.ts";
 import { isPeopleKey } from "./guests.ts";
 import { availableFor, entryFor, isFree, isReadTool, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
@@ -74,19 +74,20 @@ export function isReadableData(path: unknown, dirs: readonly string[] = [setting
 // --- what the model never sees ---
 // Every tool schema the model can see is re-sent on every model call, so hiding tools nobody
 // uses is the biggest saving there is: Notion alone was ~58k tokens of a ~118k floor, one of
-// its tools 21k. Hidden: the connectors in HIDDEN_CONNECTORS, Notion beyond NOTION_TOOLS, Mailbird beyond MAILBIRD_TOOLS (each module's `hide`), and
-// anything the never-allowed set denies by its name (it could never run). Both lists are settings
-// (.env): a skill that needs a hidden tool fails, so keep them in step with your skills.
+// its tools 21k. Hidden: the connectors in HIDDEN_CONNECTORS (except the one of the loaded mail module), the connector of a mail module that is not loaded, every connector
+// tool beyond the module's visible list (its `hide`; <MODULE>_TOOLS replaces the list), and anything the never-allowed set denies by its name (it could never run).
+// The lists are settings (.env): a skill that needs a hidden tool fails, so keep them in step with your skills.
 
 // Names come from the tools a run has seen (agent.ts records them), so a tool a connector
 // adds later is hidden from the run after the one that first saw it.
-export function hiddenTools(seen: readonly string[], cfg: HideConfig & { hiddenConnectors: readonly string[] } = settings): string[] {
-  const keeps = registered().flatMap((m) => {
-    const keep = m.hide?.keep(cfg); // undefined: the whole connector is hidden by prefix, or not in use
-    return m.hide && keep ? [{ prefix: m.hide.prefix, keep: new Set(keep) }] : [];
-  });
+export function hiddenTools(seen: readonly string[], cfg: { hiddenConnectors: readonly string[]; visibleTools: HideConfig; mailProvider?: string } = settings): string[] {
+  const hiding = registered().filter((m) => m.hide);
+  const server = (m: ToolModule) => m.hide!.prefix.replace(/__$/, ""); // the connector's server name, as HIDDEN_CONNECTORS writes it
+  const inUse = new Set(hiding.filter((m) => loaded(cfg.mailProvider).includes(m)).map(server));
+  const unused = hiding.filter((m) => !loaded(cfg.mailProvider).includes(m)).map(server);
+  const keeps = hiding.map((m) => ({ prefix: m.hide!.prefix, keep: new Set(cfg.visibleTools[m.name] ?? m.hide!.visible) }));
   const extra = seen.filter((t) => keeps.some((k) => t.startsWith(k.prefix) && !k.keep.has(t.slice(k.prefix.length))) || neverAllowedTool(t));
-  return [...cfg.hiddenConnectors, ...new Set(extra)];
+  return [...new Set([...cfg.hiddenConnectors.filter((c) => !inUse.has(c)), ...unused, ...extra])];
 }
 
 // The web. Pages and search results are untrusted content, like mail, and a fetched URL can carry data out in its query

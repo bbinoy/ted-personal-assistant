@@ -75,7 +75,7 @@ export class GoogleMail {
   constructor(session: Pick<GoogleSession, "call" | "account">, o: { query?: () => string; archiveLive?: () => boolean } = {}) {
     this.session = session;
     this.query = o.query ?? (() => settings.google.mailQuery);
-    this.archiveLive = o.archiveLive ?? (() => settings.google.archiveLive);
+    this.archiveLive = o.archiveLive ?? (() => settings.archiveLive);
   }
 
   private async tool(name: string, args: Record<string, unknown>): Promise<string> {
@@ -96,7 +96,7 @@ export class GoogleMail {
       case "get_message":
         return parseMessage(await this.tool("get_gmail_message_content", { message_id: String(args.messageId), body_format: "text" })) as T;
       case "archive_conversation":
-        if (!this.archiveLive()) return "log-only (GOOGLE_ARCHIVE_LIVE=false): not archived" as T;
+        if (!this.archiveLive()) return "log-only (ARCHIVE=log): not archived" as T;
         return (await this.tool("modify_gmail_message_labels", { message_id: String(args.conversationId), remove_label_ids: INBOX })) as T;
       case "move_conversation_to_inbox":
         return (await this.tool("modify_gmail_message_labels", { message_id: String(args.conversationId), add_label_ids: INBOX })) as T;

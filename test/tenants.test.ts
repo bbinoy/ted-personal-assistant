@@ -52,13 +52,13 @@ function join_(name = "Anna", aci = fresh()): import("../src/tenants.ts").Tenant
   return rec;
 }
 
-test("config: a tenant.json is checked, never trusted; connectors are only an extension point", () => {
-  const ok = T.parseTenantConfig({ language: "German", persona: "short and dry", dailyBudgetUsd: 3, maxTurns: 6, browse: false, timezone: "Europe/Berlin" });
+test("config: a tenant.json is checked, never trusted; the old timezone and connectors settings are unknown now", () => {
+  const ok = T.parseTenantConfig({ language: "German", persona: "short and dry", dailyBudgetUsd: 3, maxTurns: 6, browse: false });
   assert.deepEqual(ok.problems, []);
   assert.equal(ok.config.dailyBudgetUsd, 3);
-  const bad = T.parseTenantConfig({ dailyBudgetUsd: -1, maxTurns: "many", browse: "yes", timezone: "Mars/Base", color: "red", connectors: ["gmail"] });
+  const bad = T.parseTenantConfig({ dailyBudgetUsd: -1, maxTurns: "many", browse: "yes", timezone: "Europe/Berlin", color: "red", connectors: ["gmail"] });
   assert.deepEqual(bad.config, {});
-  assert.equal(bad.problems.length, 6);
+  assert.equal(bad.problems.length, 6); // three bad values, three unknown names (timezone and connectors were dead and are gone)
   assert.deepEqual(T.parseTenantConfig(undefined), { config: {}, problems: [] });
   assert.equal(T.parseTenantConfig([]).problems.length, 1);
 });

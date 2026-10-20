@@ -103,7 +103,7 @@ Then adjust:
 | `src/outbound.ts` | keep or drop the echo guard, as above. Chunk size (`CHUNK_LIMIT`) should respect the platform's message limit. |
 | `src/guards.ts` | allowlist by your platform's user/chat id. Keep it pure and keep the tests. |
 | `src/approvals.ts` | unchanged. It matches reactions to the approval message by id; any platform with message ids and reactions works. Without reactions, delete `answerReaction` and rely on text replies. |
-| `src/config.ts`, `.env.example` | credentials for the platform (a bot token, say), kept in `.env`. |
+| `src/settings.ts`, `.env.example` | credentials for the platform (a bot token, say), kept in `.env`. |
 
 ### Notes per platform
 

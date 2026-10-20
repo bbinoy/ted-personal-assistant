@@ -1,6 +1,5 @@
 import { isTriage, readAudit } from "./audit.ts";
 import { newMailSource, triageCheck } from "./heartbeat.ts";
-import { mailSlot } from "./modules/index.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import { localTime } from "./pause.ts";
 import { doctor } from "./doctor.ts";
@@ -47,8 +46,7 @@ async function report(hours: number) {
     judgeSummary(hours);
     return approvalSummary(hours);
   }
-  const note = mailSlot()?.reportNote();
-  if (note) console.log(note);
+  if (!settings.archiveLive) console.log("Archiving is in LOG-ONLY mode (ARCHIVE=log): \"would-archive\" below was classified but NOT archived.");
   const order = ["archived", "would-archive", "alerted", "kept-no-handler", "covered-by-brief", "queued-for-handler", "archive-deferred", "archive-failed", "alert-failed", "handler-queue-failed", "kept"];
   const decisions = [...order, ...new Set(rows.map((e) => e.decision).filter((d) => !order.includes(d)))];
   for (const decision of decisions) {

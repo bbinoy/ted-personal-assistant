@@ -33,7 +33,7 @@ const { handlerTask } = await import("../src/handler.ts");
 const FAKE = new URL("./fakegoogle.ts", import.meta.url).pathname;
 const STATE = join(dir, "mailboxes.json");
 const on = settings as unknown as Record<string, unknown>;
-Object.assign(on, { tenants: true, quietStartHour: 0, quietEndHour: 0, heartbeatLive: true });
+Object.assign(on, { archiveLive: false, tenants: true, quietStartHour: 0, quietEndHour: 0 });
 const google = settings.google as unknown as Record<string, unknown>;
 
 const TOKENS: Record<string, string> = {};
@@ -101,7 +101,7 @@ beforeEach(() => {
   blocked.clear();
   cost.clear();
   resetCooldown();
-  google.archiveLive = false;
+  on.archiveLive = false;
 });
 
 test("a friend's mail check: the first look only records the inbox; new mail is triaged once, alerts and handler reports go to HER chat, in her folder, and the owner's files are untouched", async () => {
@@ -218,12 +218,12 @@ test("the cost guard: with no access (her cooldown, day's budget, suspension or 
   await l.tick();
   assert.equal(triaged.length, 0, "no model call while she has no access");
   blocked.delete(id);
-  google.archiveLive = true;
+  on.archiveLive = true;
   await l.tick();
   await l.idle();
   assert.equal(triaged.length, 1, "the mail was still unseen: it is classified now, once");
   reread();
-  assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off) once GOOGLE_ARCHIVE_LIVE is on");
+  assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off) once ARCHIVE is live");
   const rows = readAudit((e) => e.tool === "tenant_heartbeat_triage" && e.meta?.tenant === id);
   assert.equal(rows.at(-1)!.decision, "archived");
 });

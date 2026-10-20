@@ -216,11 +216,11 @@ export async function doctor() {
     line(mode === "600", ".env is owner-only (600)", `mode ${mode}`);
     const env = await readFile(envPath, "utf8");
     line(/^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env), "SIGNAL_OWNER_NUMBER set");
-    line(!/^ANTHROPIC_API_KEY=./m.test(env) || process.env.HARNESS_AUTH === "api-key" ? true : "warn", "no API key shadowing the stored login", "API key lines override login mode only if HARNESS_AUTH=api-key");
+    line(!/^ANTHROPIC_API_KEY=./m.test(env) || settings.credential === "api-key" ? true : "warn", "no API key shadowing the stored login", "API key lines override login mode only if HARNESS_AUTH=api-key");
   }
 
   // The chat platform (MESSENGER): its own checks come from its package (for Signal: the mode, signal-cli installed and linked, the daemon reachable).
-  for (const l of await messengerDoctor(process.env.SIGNAL_ACCOUNT?.trim() || undefined)) line(l.ok, l.what, l.detail);
+  for (const l of await messengerDoctor(settings.signalOwnAccount)) line(l.ok, l.what, l.detail);
 
   await mailCheck(line, settings.mail);
 

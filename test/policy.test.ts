@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 import { idsOf } from "../src/permissions.ts";
 import { NOTES_DIR } from "../src/notes.ts";
 import { applyChanges, classify, hiddenTools, isReadTool } from "../src/policy.ts";
+import { loadSettings } from "../src/settings.ts";
+import { neverAllowedTool } from "../src/toolmanifest.ts";
 import { SOURCES } from "../src/audit.ts";
 
 test("policy: every source audit.ts names is classified", () => { // (the per-source rights table is gone: flags in the manifest say who may do what)
@@ -106,9 +108,31 @@ test("hidden tools: unused connectors, Notion beyond the skills' four, and alway
 
 test("hidden tools: both lists come from settings, so a skill that needs another Notion tool can have it", () => {
   const N = "mcp__claude_ai_Notion__notion-";
-  const cfg = { hiddenConnectors: ["mcp__claude_ai_Gmail"], notionTools: ["notion-fetch", "notion-query-data-sources"], mailbirdTools: ["get_message"] };
+  const cfg = { hiddenConnectors: ["mcp__claude_ai_Gmail"], visibleTools: { notion: ["notion-fetch", "notion-query-data-sources"], mailbird: ["get_message"] } };
   const hidden = hiddenTools([`${N}fetch`, `${N}query-data-sources`, `${N}search`], cfg);
   assert.deepEqual(hidden, ["mcp__claude_ai_Gmail", `${N}search`]);
+});
+
+// The pin of the refactor that made every module declare its own visible tools: what the model is hidden is exactly what the old per-provider settings gave, for every provider.
+test("hidden tools: the defaults hide exactly what the per-provider lists did, for mailbird, gmail and no mail", () => {
+  const MB = "mcp__mailbird__";
+  const GM = "mcp__claude_ai_Gmail__";
+  const NO = "mcp__claude_ai_Notion__notion-";
+  const mailbirdKeep = ["summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation", "list_attachments", "get_attachment_content", "archive_conversation", "select_conversation", "reply_to_conversation", "reply_all_to_conversation", "create_draft", "update_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing"];
+  const gmailKeep = ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"];
+  const notionKeep = ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"];
+  const seen = [...mailbirdKeep.map((t) => MB + t), `${MB}snooze_conversation`, `${MB}trash_conversation`, ...gmailKeep.map((t) => GM + t), `${GM}trash_thread`, `${GM}delete_label`, ...notionKeep.map((t) => `mcp__claude_ai_Notion__${t}`), `${NO}query-data-sources`, `${NO}create-comment`, "mcp__claude_ai_Google_Calendar__list_events"];
+  const base = ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"];
+  const oracle = (provider: "mailbird" | "gmail" | "none") => {
+    const connectors = [base[0]!, ...(provider === "gmail" ? [] : ["mcp__claude_ai_Gmail"]), ...base.slice(1), ...(provider !== "mailbird" ? ["mcp__mailbird"] : [])];
+    const extra = seen.filter((t) => (t.startsWith(MB) && !mailbirdKeep.includes(t.slice(MB.length))) || (t.startsWith(GM) && !gmailKeep.includes(t.slice(GM.length))) || (t.startsWith("mcp__claude_ai_Notion__") && !notionKeep.includes(t.slice("mcp__claude_ai_Notion__".length))) || neverAllowedTool(t));
+    return [...connectors, ...new Set(extra)];
+  };
+  for (const provider of ["mailbird", "gmail", "none"] as const) {
+    const cfg = loadSettings({ MAIL_PROVIDER: provider });
+    assert.deepEqual(hiddenTools(seen, cfg), oracle(provider), provider);
+  }
+  assert.deepEqual(loadSettings({}).hiddenConnectors, ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"]);
 });
 
 test("hidden tools: Mailbird tools the skills never use are hidden, the ones they use stay", () => {
