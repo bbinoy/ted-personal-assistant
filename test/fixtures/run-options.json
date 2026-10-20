@@ -3,7 +3,7 @@
     "run": {
       "source": "chat",
       "sessionFile": "state/session.json",
-      "systemPrompt": "sha:12c88e1515e09a31",
+      "systemPrompt": "sha:200ef3eaba87d680",
       "memory": {
         "dir": "<data>/memory/notes",
         "notify": "[fn]"
@@ -15,7 +15,7 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:12c88e1515e09a31",
+      "append": "sha:200ef3eaba87d680",
       "snapshot": false
     },
     "settings": {
@@ -157,7 +157,7 @@
     "run": {
       "source": "group",
       "sessionFile": "<data>/memory/groups/ff36ac23eadd/session.json",
-      "systemPrompt": "sha:48c3d0613a0ad2fc",
+      "systemPrompt": "sha:435b6d4e31d40d6d",
       "memory": {
         "dir": "<data>/memory/groups/ff36ac23eadd/notes",
         "groupId": "g-run-options"
@@ -193,7 +193,7 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:48c3d0613a0ad2fc",
+      "append": "sha:435b6d4e31d40d6d",
       "snapshot": false
     },
     "settings": {
@@ -243,7 +243,7 @@
     "run": {
       "source": "group",
       "sessionFile": "<data>/tenants/<ann>/session.json",
-      "systemPrompt": "sha:17cdffecb0cd312a",
+      "systemPrompt": "sha:dd92f8c1db131248",
       "memory": {
         "dir": "<data>/tenants/<ann>/notes"
       },
@@ -269,7 +269,7 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:17cdffecb0cd312a",
+      "append": "sha:dd92f8c1db131248",
       "snapshot": false
     },
     "settings": {
@@ -300,7 +300,7 @@
     "run": {
       "source": "group",
       "sessionFile": "<data>/tenants/<bea>/session.json",
-      "systemPrompt": "sha:0d14b999971e449d",
+      "systemPrompt": "sha:eeeea989353bc5f3",
       "memory": {
         "dir": "<data>/tenants/<bea>/notes"
       },
@@ -346,7 +346,7 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:0d14b999971e449d",
+      "append": "sha:eeeea989353bc5f3",
       "snapshot": false
     },
     "settings": {

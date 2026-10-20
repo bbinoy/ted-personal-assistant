@@ -11,8 +11,10 @@ import type { Document } from "./document.ts";
 import { tenantKey } from "./send.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./permissions.ts";
-import { backgroundSystem, briefSystem, handlerSystem, radarSystem, tenantHandlerSystem } from "./persona.ts";
-import { GOOGLE_PREFIX } from "./modules/google.ts";
+import { backgroundSystem, briefSystem, handlerSystem, radarSystem } from "./persona.ts";
+import { handlerToolsOf } from "./mailhandler.ts";
+import type { Payer } from "./payer.ts";
+import { categoriesFor } from "./preset.ts";
 import { tenantById, tenantContext } from "./tenants.ts";
 import { PROFILES, type OwnerProfile } from "./profiles.ts";
 import { settings } from "./settings.ts";
@@ -75,42 +77,35 @@ export function prepare(conv: Conversation, inputs: RunInputs, opts: { refresh?:
 // A tenant who was suspended or removed: her process is closed.
 export const dropTenantWarm = (id: string): void => pool.drop(tenantKey(id));
 
-// A friend's background mail handler run (mailloops.ts): a fresh run of hers on the instance key, with her Google tools and nothing else, her notes as data, and her
-// chat's approver, so that anything it would send or invite asks HER there. The standing task is the approval judge's provenance, as for the owner's handler.
-export function tenantHandlerOptions(conv: Conversation, access: { apiKey: string }, onToolSuccess: RunOptions["onToolSuccess"], task: string): RunOptions {
-  const base = runOptionsFor(conv, { apiKey: access.apiKey });
-  const rec = tenantById(conv.tenantId!);
-  const ctx = tenantContext(rec!);
+// The options of a conversation's background mail handler run (handler.ts), ONE for the owner and every friend: the conversation's own options (runoptions.ts), a
+// fresh session, its mail module's tools only (a friend's: from her capability set; the owner's: the connectors, as ever, under the handler's policy source), the
+// handler profile's limits (the preset), the notes of the profile's categories that conversation has, the standing task as the approval judge's provenance (fixed text,
+// no mail), and the conversation's own approver state. The payer is the conversation's (payer.ts): the login, or the instance key on her ledger.
+export function handlerOptions(conv: Conversation, payer: Payer, onToolSuccess: RunOptions["onToolSuccess"], task: string): RunOptions {
+  const own = conv.kind === "owner";
+  const p = PROFILES.handler;
+  const base = runOptionsFor(conv, payer.kind === "instance" ? { apiKey: payer.apiKey } : {});
+  const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
+  const categories = categoriesFor(conv.kind);
   return {
     ...base,
+    source: own ? p.source : base.source, // the owner's handler is its own policy source; a friend's is the isolated one
     sessionFile: undefined, // a fresh session every run
     memory: undefined,
     seenAt: undefined,
-    skills: [],
-    tools: new Set([...(base.tools ?? [])].filter((t) => t.startsWith(GOOGLE_PREFIX))),
-    systemPrompt: tenantHandlerSystem(ctx.name, memoryFor(["people", "scheduling", "context", "style"], new Date(), ctx.notesDir)),
-    maxTurns: Math.max(ctx.maxTurns, 25),
+    skills: own ? undefined : [],
+    tools: own ? base.tools : handlerToolsOf(conv, base.tools ?? new Set()),
+    systemPrompt: handlerSystem(memoryFor(p.notes.filter((c) => categories.includes(c)), new Date(), conv.notesDir), own ? { missing: missingSetup(readNotes(), down()), down: down() } : { who: ctx!.name }),
+    maxTurns: p.maxTurns,
+    maxBudgetUsd: own ? p.maxBudgetUsd : Math.min(p.maxBudgetUsd, base.maxBudgetUsd), // a friend's run is also held to her own per-run ceiling
     onToolSuccess,
-    provenance: fixed({ kind: "standing", task }), // (no chat message of hers is this run's provenance: the fixed task is)
-    conversation: conv.key, // her anti-repeat state is her conversation's, as in her chat
+    provenance: fixed({ kind: "standing", task }), // (no chat message is this run's provenance: the fixed task is)
+    conversation: conv.key, // its anti-repeat state is its conversation's, as in its chat
     untrusted: true, // it reads raw mail
   };
 }
 
-export const runTenantHandlerTurn = (conv: Conversation, access: { apiKey: string }, prompt: string, approve: Approve, onToolSuccess: RunOptions["onToolSuccess"], task: string): Promise<AgentReply> =>
-  runAgent(prompt, approve, tenantHandlerOptions(conv, access, onToolSuccess, task));
+export const runHandlerTurn = (conv: Conversation, payer: Payer, prompt: string, approve: Approve, onToolSuccess: RunOptions["onToolSuccess"], task: string): Promise<AgentReply> =>
+  runAgent(prompt, approve, handlerOptions(conv, payer, onToolSuccess, task));
 
-// ---- the other owner runs ----
 
-// Background handling of heartbeat-flagged mail: fresh session, least privilege (see policy.ts).
-export function runHandlerTurn(prompt: string, approve: Approve, onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void, task?: string): Promise<AgentReply> {
-  return runAgent(prompt, approve, {
-    source: "handler",
-    systemPrompt: handlerSystem(memoryFor(["people", "scheduling", "context", "style", "setup", "voice"]), missingSetup(readNotes(), down()), down()),
-    maxTurns: 40,
-    maxBudgetUsd: 2.0,
-    onToolSuccess,
-    provenance: fixed(task ? { kind: "standing", task } : undefined), // the standing task: the approval judge's provenance (fixed text, no mail)
-    untrusted: true, // it reads raw mail
-  });
-}

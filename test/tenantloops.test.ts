@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// The loops over every conversation (wake.ts, tenantdream.ts): a tenant with the capabilities is looked in on by the gate, woken and dreamt like the
+// The loops over every conversation (wake.ts, dream.ts): a tenant with the capabilities is looked in on by the gate, woken and dreamt like the
 // owner and a group, on the instance key, with HER notes, log, session and cost file, her approvals and her chat only; one without them gets nothing;
 // a suspended, cooling-down, over-budget or key-less one gets no model call; one tenant's failure leaves the others and the owner alone.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenant-loops-"));
@@ -14,7 +14,7 @@ process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token"; // the instance's own
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
 const { createWakeups } = await import("../src/wake.ts");
-const { createTenantDreamer } = await import("../src/tenantdream.ts");
+const { createDreamer } = await import("../src/dream.ts");
 const { createTenantRunner } = await import("../src/tenantrun.ts");
 const { keyNotices } = await import("../src/keynotice.ts");
 const { askGateWith, gateSystem, parseGate } = await import("../src/gate.ts");
@@ -271,6 +271,7 @@ test("the gate's rules for a tenant's chat name her, have no brief or radar and 
 
 // ---- the dream ----
 
+const friends = (ids: () => string[]) => () => (settings.tenants ? ids().map((id) => tenant(id)) : []); // (dreamConversations(["tenant"]) for chosen friends)
 const ownerNotesBefore = () => (existsSync(NOTES_DIR) ? readdirSync(NOTES_DIR).sort().join(",") : "");
 const WRITE = (evidence: string) => ({ ops: [{ op: "write", file: "people-sister.md", description: "her sister", text: "Her sister Eve is vegetarian.", evidence }] });
 
@@ -282,10 +283,10 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   for (const p of [anna, bob, noDream]) said(p, p === anna ? "my sister Eve is vegetarian, please remember" : "this is the private matter of someone else");
   const before = ownerNotesBefore();
   const prompts: { prompt: string; system?: string; key: string }[] = [];
-  const d = createTenantDreamer({
+  const d = createDreamer({
     key: () => KEY,
-    ids: () => created,
-    run: (payer) => async (prompt, system) => (prompts.push({ prompt, system, key: payer.apiKey }), WRITE("my sister Eve is vegetarian")),
+    conversations: friends(() => created),
+    run: (payer) => async (prompt, system) => (prompts.push({ prompt, system, key: (payer as { apiKey: string }).apiKey }), WRITE("my sister Eve is vegetarian")),
   });
   await d.run(NOON);
   assert.equal(prompts.length, 2, "Mia and Ned; not Oz");
@@ -298,6 +299,16 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   const hers = T.tenantContext(anna);
   assert.match(readFileSync(join(hers.notesDir, "people-sister.md"), "utf8"), /vegetarian/);
   assert.ok(existsSync(hers.backupDir) && readdirSync(hers.backupDir).length > 0, "a snapshot in her folder");
+  // she can undo it in her chat: her memory server has undo_dream, closed over HER scope (no `group` argument to name another)
+  const { createMemoryServer } = await import("../src/memory-tools.ts");
+  const { dreamScope } = await import("../src/dreamscope.ts");
+  const mem = createMemoryServer({ notesDir: hers.notesDir, tenantLog: hers.logFile, dream: dreamScope(tenant(anna.id)), record() {} }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
+  assert.deepEqual(Object.keys(mem.instance._registeredTools).sort(), ["forget_note", "search_logs", "undo_dream"]);
+  const undone = await mem.instance._registeredTools.undo_dream!.handler({}, {});
+  assert.match(undone.content[0]!.text, /Restored \d+ notes/);
+  assert.ok(!existsSync(join(hers.notesDir, "people-sister.md")), "her notes are back as before the dream");
+  assert.equal(readdirSync(hers.backupDir).length, 0, "the snapshot is used up");
+  writeFileSync(join(hers.notesDir, "people-sister.md"), "---\nname: sister\n---\n\nHer sister Eve is vegetarian.\n"); // (as the dream had left it, for the rest of this test)
   // Ned's evidence (her words) is not in his log: refused, so nothing of the quote lands in his notes
   assert.ok(!existsSync(join(T.tenantContext(bob).notesDir, "people-sister.md")));
   assert.ok(!existsSync(join(T.tenantContext(noDream).notesDir, "people-sister.md")));
@@ -322,14 +333,14 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
   keyNotices.reset();
   keyNotices.sendTo((t) => void alerts.push(t));
   const mk = (key: string | undefined) => {
-    return createTenantDreamer({
+    return createDreamer({
       key: () => key,
-      run: (payer) => async () => {
-        ran.push(payer.id);
-        if (payer.id === boom.id) throw new Error("model down");
+      run: (_payer, conv) => async () => {
+        ran.push(conv.tenantId!);
+        if (conv.tenantId === boom.id) throw new Error("model down");
         return { ops: [] };
       },
-      ids: () => [quiet.id, sus.id, poor.id, boom.id, fine.id],
+      conversations: friends(() => [quiet.id, sus.id, poor.id, boom.id, fine.id]),
     });
   };
   await mk(KEY).run(NOON);
@@ -351,8 +362,8 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
 test("her prompt says she can act later only when the loops will run for her", async () => {
   const { tenantSystem } = await import("../src/persona.ts");
   const { runOptionsFor } = await import("../src/runoptions.ts");
-  assert.match(tenantSystem({ name: "Vi", consented: true }), /You cannot act on your own later/);
-  assert.match(tenantSystem({ name: "Vi", consented: true, timed: true }), /You can act on your own at set times/);
+  assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set() }), /You cannot act on your own later/);
+  assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set(), timed: true }), /You can act on your own at set times/);
   const plain = person("Wes", []);
   const timed = person("Xan");
   assert.match(runOptionsFor(tenant(plain.id), { apiKey: KEY }).systemPrompt as string, /You cannot act on your own later/);
