@@ -41,7 +41,8 @@ test("config: loopback only, TLS 1.3 with the pinned certificate, Raft storage, 
 test("policies: the owner's token reaches tenants/owner/ and nothing else; the operator's reaches no secret", () => {
   const p = policyHcl("ted", "owner");
   const paths = [...p.matchAll(/path "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(paths, ["ted/data/tenants/owner/*", "ted/metadata/tenants/owner/*", "ted/data/tenants/+/google/*"]); // (the last: read of a friend's Google grant, nothing else of hers)
+  assert.deepEqual(paths, ["ted/data/tenants/owner/*", "ted/metadata/tenants/owner/*", "ted/data/tenants/+/google/*", "ted/data/tenants/+/notion/*"]); // (the last two: read of a friend's Google grant, read and write-back of her Notion grant, nothing else of hers)
+  assert.match(p, /notion\/\*" \{\s*capabilities = \["read", "create", "update"\]/);
   assert.match(p, /google\/\*" \{\s*capabilities = \["read"\]/);
   assert.ok(!/sudo|"\*"|sys\//.test(p));
   const op = [...OPERATOR_POLICY.matchAll(/path "([^"]+)"/g)].map((m) => m[1]);
@@ -49,10 +50,10 @@ test("policies: the owner's token reaches tenants/owner/ and nothing else; the o
   assert.ok(!op.some((x) => x!.startsWith("ted/")));
 });
 
-test("the intake page's policy is write-only: create and update of profile, card and google items of any tenant, nothing else", () => {
+test("the intake page's policy is write-only: create and update of profile, card, google and notion items of any tenant, nothing else", () => {
   const p = intakePolicyHcl("ted");
   const blocks = [...p.matchAll(/path "([^"]+)" \{\s*capabilities = \[([^\]]*)\]/g)].map((m) => [m[1], m[2]!.replace(/[" ]/g, "")]);
-  assert.deepEqual(blocks, [["ted/data/tenants/+/profile/*", "create,update"], ["ted/data/tenants/+/card/*", "create,update"], ["ted/data/tenants/+/google/*", "create,update"]]);
+  assert.deepEqual(blocks, [["ted/data/tenants/+/profile/*", "create,update"], ["ted/data/tenants/+/card/*", "create,update"], ["ted/data/tenants/+/google/*", "create,update"], ["ted/data/tenants/+/notion/*", "create,update"]]);
   assert.ok(!/read|list|delete|sudo|metadata|sys\//.test(p.replace(/^#.*$/m, "")));
 });
 

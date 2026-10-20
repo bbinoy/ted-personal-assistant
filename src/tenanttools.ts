@@ -3,6 +3,7 @@ import { z } from "zod";
 import { audit } from "./audit.ts";
 import { spentToday } from "./budget.ts";
 import { cooldownUntil } from "./cooldown.ts";
+import { connectionSummary } from "./connections.ts";
 import { deleteTenant, mintInvite, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
 import { TENANT_ID } from "./secrets.ts";
 import { settings } from "./settings.ts";
@@ -71,7 +72,8 @@ export interface AdminDeps {
 
 const when = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 
-// One line per person: id, name, role, status, capabilities, consent and today's spend. Everybody, the owner first (it is also what `npm run tenants -- list` shows).
+// One line per person: id, name, role, status, capabilities, which of her own accounts (Google, Notion) are connected (never a token), consent and today's spend.
+// Everybody, the owner first (it is also what `npm run tenants -- list` shows).
 export function describeTenants(): string[] {
   const lines: string[] = [];
   for (const rec of people()) {
@@ -81,7 +83,8 @@ export function describeTenants(): string[] {
     }
     const ctx = tenantContext(rec);
     const c = cooldownUntil(rec.id);
-    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}; consent ${readConsent(ctx) ? "given" : "not yet"}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
+    const connections = connectionSummary(rec);
+    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}; consent ${readConsent(ctx) ? "given" : "not yet"}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
   }
   return lines;
 }
@@ -103,7 +106,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
           return made ? reply(`Invite code: ${made.code} (single use, valid until ${new Date(made.expiresAt).toLocaleString()}).`) : reply("Too many invite codes are open already; wait for some to expire or be used.", true);
         },
       ),
-      tool("list_tenants", "List the tenants (friends who use this assistant): id, name, role, status, capabilities, whether her consent is in place, what she spent today against her own limit, and any pause. Never shows a key or anything she said.", {}, async () => {
+      tool("list_tenants", "List the tenants (friends who use this assistant): id, name, role, status, capabilities, whether her Google or Notion is connected, whether her consent is in place, what she spent today against her own limit, and any pause. Never shows a key or anything she said.", {}, async () => {
         const lines = describeTenants();
         return reply(lines.length ? lines.join("\n") : "No tenants yet.");
       }),

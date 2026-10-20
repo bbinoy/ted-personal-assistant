@@ -7,7 +7,7 @@ import { CARD_TENANTS } from "./secrets.ts";
 import type { Done } from "./intakelinks.ts";
 
 // What each purpose of a setup link asks for and where it puts it. The page (intakeserver.ts) knows nothing about a purpose by name: it renders the
-// fields, checks their shape and length, and hands the values to `store`. A new purpose (google, notion, cvc: built later) is one more entry in
+// fields, checks their shape and length, and hands the values to `store`. A new purpose (cvc: built later) is one more entry in
 // PURPOSES and in PURPOSE_CAPABILITY (intakelinks.ts). A purpose never echoes a value: everything it says about a problem is a fixed sentence.
 
 // A problem with what was typed, in words for the person at the form. Never holds a value.
@@ -23,12 +23,12 @@ export interface Field {
   options?: readonly string[]; // for a select: the only values accepted
 }
 // Writes one item of the tenant the link belongs to (intakestore.ts).
-export type Put = (kind: "profile" | "card" | "google", name: string, data: Data) => Promise<void>;
+export type Put = (kind: "profile" | "card" | "google" | "notion", name: string, data: Data) => Promise<void>;
 
 export interface Purpose {
   title: string;
   intro: string;
-  oauth?: true; // no form: the page shows a link to a sign-in at another service and its callback stores the result (googleoauth.ts); `store` is never called
+  oauth?: true; // no form: the page shows a link to a sign-in at another service (the OAuthProvider with this purpose's id, oauth.ts) and its callback stores the result; `store` is never called
   fields(tenant: string): Field[];
   // Stores the checked values; what it stored, as names and lengths only. Throws Invalid for a problem the person can fix.
   store(tenant: string, values: Record<string, string>, put: Put): Promise<Done["stored"]>;
@@ -108,6 +108,18 @@ const google: Purpose = {
   },
 };
 
-// EXTENSION POINT: notion and cvc go here when they are built.
-export const PURPOSES: Readonly<Record<string, Purpose>> = { profile, card, google };
+// ---- her Notion (notionoauth.ts): also a sign-in; the callback stores the grant under tenants/<id>/notion/oauth ----
+
+const notion: Purpose = {
+  title: "Connect Notion",
+  intro: "Connect your own Notion so your assistant can search and read the pages you share with it, and add or change pages when you ask. You sign in on Notion's own page and choose what to share, not here: nothing you type there reaches this page, and the assistant never sees a password or a key. It asks you in the chat before it changes anything. You can take the access away any time in Notion (Settings, Connections).",
+  oauth: true,
+  fields: () => [],
+  async store() {
+    throw new Invalid("This link connects Notion; use the button on the page.");
+  },
+};
+
+// EXTENSION POINT: cvc goes here when it is built.
+export const PURPOSES: Readonly<Record<string, Purpose>> = { profile, card, google, notion };
 export const purposeOf = (id: string): Purpose | undefined => (Object.hasOwn(PURPOSES, id) ? PURPOSES[id] : undefined);

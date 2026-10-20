@@ -1,4 +1,4 @@
-import { intakeToolsFor } from "./intakelinks.ts";
+import { baseUrlProblem, intakeToolsFor } from "./intakelinks.ts";
 import { settings } from "./settings.ts";
 import { skillsFor } from "./skills.ts";
 import { type Capability, type TenantContext } from "./tenants.ts";
@@ -13,9 +13,8 @@ import { manifest } from "./toolmanifest.ts";
 // What a group has: no record, a fixed set. Nothing of the owner's (no mail, calendar, notion, profile, card), and no secrets to set up (no intake).
 export const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw"];
 
-// Capabilities an isolated run can never have, whatever a record lists: they need the instance's own login (its connectors, its card, its Google
-// account) or the admin's powers. A run on the instance key has no connectors (strictMcpConfig), so there is nothing to give.
-const LOGIN_ONLY: readonly Capability[] = ["notion", "profile", "card", "admin"];
+// Capabilities an isolated run can never have, whatever a record lists: they need the instance's own login (its card and saved details) or the admin's powers. A run on the instance key has no connectors (strictMcpConfig), so there is nothing to give.
+const LOGIN_ONLY: readonly Capability[] = ["profile", "card", "admin"];
 
 // Never a tool of a group or a tenant, whatever the table says: the owner's connectors and tools, the browser's own tools, opening a page, payment and the
 // saved profile. Listed so a test can check that nothing here is reachable, and so that a row added to the manifest cannot slip one in unnoticed.
@@ -29,6 +28,9 @@ export function runCapabilities(granted: readonly Capability[], own: { browse?: 
   for (const c of LOGIN_ONLY) caps.delete(c);
   // Mail and calendar of a person on the instance key are her own Google (modules/google.ts): only with the `google` capability and an OAuth client set up.
   if (!caps.has("google") || !settings.google.clientId || !settings.google.clientSecret) for (const c of ["google", "mail", "calendar"] as const) caps.delete(c);
+  // Notion of a person on the instance key is her own, through the hosted Notion server (modules/notionhosted.ts): only with the `notion` capability and a page to sign in
+  // on (INTAKE_BASE_URL). The owner's Notion is the connector, which no isolated run ever has (NEVER_FOR_ISOLATED).
+  if (baseUrlProblem()) caps.delete("notion");
   if (!settings.browse || own.browse === false) caps.delete("browse");
   if (own.voice === false) caps.delete("voice");
   if (!settings.weather) caps.delete("weather");

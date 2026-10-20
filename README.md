@@ -54,6 +54,17 @@ Step by step: [docs/SETUP.md](docs/SETUP.md).
 
 Full details: [docs/SAFETY.md](docs/SAFETY.md).
 
+## Run it for yourself, your friends and family
+
+One Ted can look after you and the people around you. Give a friend or a family member Ted's Signal username (or number, whichever your setup shows) and they chat with it in private, just like you do: their own conversation, their own notes and memory, and nothing of yours.
+
+- **You look after it, you don't read along.** You hand out a one-time invite and then only switch things on or off for each person (what Ted may do for them) or pause them. When Ted wants to send something or change something for a friend, the question goes to that friend's own chat, not to you, and Ted's activity log keeps no words of theirs. One honest footnote: you run the computer, so you could technically open their files, and Ted tells each friend so in the first message.
+- **Their own budget.** Friends use a shared API key you set up in your Anthropic console, with a monthly spend limit, and each person also has a small daily limit. When someone runs into a limit, only they are paused, and you hear in your own chat if the shared key itself stops working.
+- **Their own Google Calendar, Gmail and Notion, if you set it up.** After a one-time setup of yours (a public address for a small private setup page, plus a Google Cloud project for Google; Notion needs nothing more from you), each friend connects their own account from a one-time link, with no password or key typed into the chat. Ted then reads their mail and calendar and their Notion pages for them, and asks them in their own chat before anything risky, like sending a mail or inviting someone.
+- **The honest limits.** Friends cost you money (they use the shared key). Google needs a Google Cloud project of yours, and while it is in test mode each friend reconnects about once a week. You, as the person running it, hold your friends' connection tokens. Saved details and a card are still only yours. This is a service for a small circle of people you know, not a product for strangers.
+
+Step by step: [docs/SETUP.md](docs/SETUP.md#more-than-one-person-optional).
+
 ## A day in the life: AFC Richmond edition
 
 *(Characters borrowed with love from Ted Lasso. Nobody at Richmond has been consulted.)*
@@ -124,7 +135,7 @@ Personal agents are having a moment. Ted sits in the middle: hosted products lik
 | **Runs on** | Your Mac | Your machine or server | xAI's cloud | The vendor's cloud |
 | **Where you talk to it** | Signal (Telegram next; other messengers plug into a generic interface) | WhatsApp, Telegram, Signal, Slack, iMessage and more | Desktop and iPhone app | iMessage, WhatsApp, phone calls |
 
-**Ted may suit you** if you want a readable assistant for one person that comes with personality and personal assistant skills out of the box, that you set up by chatting, and that you can run and change yourself. **OpenClaw** fits a broad, self-hosted agent platform with many channels and community skills, and more technical setup. **Grok Bot or Instinct** fit if you would rather have a hosted product than run anything yourself.
+**Ted may suit you** if you want a readable assistant for yourself (and, if you like, a few people you know) that comes with personality and personal assistant skills out of the box, that you set up by chatting, and that you can run and change yourself. **OpenClaw** fits a broad, self-hosted agent platform with many channels and community skills, and more technical setup. **Grok Bot or Instinct** fit if you would rather have a hosted product than run anything yourself.
 
 ## Make it yours
 
@@ -140,8 +151,7 @@ How to do each: [docs/ADAPTING.md](docs/ADAPTING.md).
 What is built but not switched on yet, and what is planned next. Order and dates can change.
 
 - **Secrets and payments.** A sealed card store (OpenBao), a typed YES in the chat for every payment, spending caps and a ledger. Built, not live yet: it is being tested with fake cards before it is switched on.
-- **Several people.** Give a friend their own Ted, with their own memory, notes and budget, isolated from yours and from each other. A first version exists and is off by default; invites, setting up Google and Notion access, and a one-time-link page for secrets come next.
-- **Mail, calendar and Notion for more than one person.** Sign in once with Google or Notion from a link, no secrets in chat.
+- **Several people.** Friends with their own memory, notes and budget, isolated from you and from each other, exist and are off by default. Their own Google and Notion, signed in from a one-time link, are built and tested against fakes, and the first live run with real accounts is still ahead. Saved details and a card for friends are not built.
 - **A generic messenger layer.** All Signal code moves behind one interface, so other messengers plug in without changes to the assistant. Stubs with setup instructions for WhatsApp and Slack, no full support planned yet.
 - **Telegram, and an even faster setup.** A Telegram bot as the default: create the bot, paste the token, scan a QR code, and finish the setup in the chat. Signal stays supported and remains the more private choice.
 - **Tools and assistant presets.** Tools as small modules and the personal assistant's persona and routines as data, so it is easier to add a tool or make a different kind of assistant. No marketplace of third-party modules, on purpose.

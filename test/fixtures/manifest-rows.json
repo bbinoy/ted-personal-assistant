@@ -121,5 +121,11 @@
 {"tool":"mcp__google__list_calendars","provider":"google","action":"read","cap":"calendar","only":["group"],"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__google__get_events","provider":"google","action":"read","cap":"calendar","only":["group"],"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__google__query_freebusy","provider":"google","action":"read","cap":"calendar","only":["group"],"view":null,"free":true,"untrusted":true},
-{"tool":"mcp__google__manage_event","provider":"google","action":"calendar-write","cap":"calendar","only":["group"],"view":null,"free":false,"untrusted":false}
+{"tool":"mcp__google__manage_event","provider":"google","action":"calendar-write","cap":"calendar","only":["group"],"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__notion__notion-fetch","provider":"notion","action":"read","cap":"notion","only":["group"],"view":null,"free":true,"untrusted":true},
+{"tool":"mcp__notion__notion-search","provider":"notion","action":"read","cap":"notion","only":["group"],"view":null,"free":true,"untrusted":true},
+{"tool":"mcp__notion__notion-create-pages","provider":"notion","action":"page-write","cap":"notion","only":["group"],"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__notion__notion-update-page","provider":"notion","action":"page-write","cap":"notion","only":["group"],"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__notion__notion-create-comment","provider":"notion","action":"comment-write","cap":"notion","only":["group"],"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__notion__notion-move-pages","provider":"notion","action":"page-move","cap":"notion","only":["group"],"view":null,"free":false,"untrusted":false}
 ]

@@ -13,6 +13,8 @@ import { createGroupDreamer } from "./groupdream.ts";
 import { createTenantDreamer } from "./tenantdream.ts";
 import { createTenantMailLoops } from "./mailloops.ts";
 import { googleHub } from "./googlemcp.ts";
+import { notionHub } from "./notionmcp.ts";
+import { keyNotices } from "./keynotice.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
@@ -117,15 +119,16 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 // Several people on one instance (TENANTS=on, src/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
 // Needs a messenger other people can write to: with Signal that is the assistant's own account (in Note to Self there is nobody else to talk to).
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
-const tenantRunner = createTenantRunner({ alertAdmin: (text) => void out.replyPlain(text, "notice") });
+keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one notice for the owner about the shared instance key (keynotice.ts), from every kind of run
+const tenantRunner = createTenantRunner({});
 // Compaction of a conversation's session (the urgent one after a reply, the quiet one from the tick): a tenant's runs on the instance key and is billed to her.
 async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<void> {
   if (!conv.tenantId) return compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode);
   const rec = tenantById(conv.tenantId);
   const apiKey = settings.tenantApiKey;
-  if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { apiKey, costFile: tenantContext(rec).costFile });
+  if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { id: rec.id, apiKey, costFile: tenantContext(rec).costFile });
 }
-tenantHooks.drop = (id) => (dropTenantWarm(id), googleHub.drop(id)); // a suspended or removed tenant: her warm process and her Google server process stop
+tenantHooks.drop = (id) => (dropTenantWarm(id), googleHub.drop(id), notionHub.drop(id)); // a suspended or removed tenant: her warm process, her Google server process and her Notion connection stop
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,

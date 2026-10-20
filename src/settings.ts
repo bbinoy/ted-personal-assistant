@@ -216,6 +216,15 @@ export function loadSettings(env: Env) {
       archiveLive: oneOf(env, "GOOGLE_ARCHIVE_LIVE", "false", ["true", "false"] as const) === "true", // friends' mail: false = the check classifies and logs "would-archive" and archives nothing, until you trust it
       mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model
     },
+    // Notion for friends (src/notionoauth.ts, src/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend with the `notion` capability connects her own Notion on the
+    // intake page (OAuth with PKCE against Notion's hosted MCP server) and her Notion tools are that hosted server, called by THIS process with her token through the
+    // same credentialed proxy as Google. Nothing to set up but the tunnel: the instance registers itself once (RFC 7591) and remembers the client in state/notion-client.json.
+    notion: {
+      mcpUrl: env.NOTION_MCP_URL?.trim() || "https://mcp.notion.com/mcp", // tests point this at a fake
+      refreshMarginSeconds: num(env, "NOTION_REFRESH_MARGIN_SECONDS", 300, 0, 3600), // an access token this close to its end is renewed first
+      idleMinutes: num(env, "NOTION_MCP_IDLE_MINUTES", 10, 1, 240), // a friend's connection to the hosted server is closed after this long unused
+      callSeconds: num(env, "NOTION_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
+    },
     // Screenshot vision for the browse worker (src/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
     // click: also clicks by coordinates, which the guard resolves to the element under the point itself (a debugging port on loopback, browsecdp.ts).
     browseVision: oneOf(env, "BROWSE_VISION", "off", ["off", "read", "click"] as const),
@@ -295,6 +304,7 @@ export function loadSettings(env: Env) {
     tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on the instance key (tenant.json may lower or raise it)
     inviteTtlHours: num(env, "INVITE_TTL_HOURS", 72, 1, 24 * 90), // how long a minted invite code works
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often
+    tenantKeyNoticeMinutes: num(env, "TENANT_KEY_NOTICE_MINUTES", 180, 0, 10_080), // the owner hears of a refused or missing instance key at most this often (keynotice.ts)
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none
 
     // Which chat platform the assistant talks on: the package @ted-personal-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.
