@@ -12,7 +12,7 @@ import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
 import { LAST_BRIEF, missingSetup, setupItems } from "../src/notes.ts";
 import { backgroundSystem, briefSystem, chatContext, chatSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy.ts";
-import { offeredSkills } from "../src/profiles.ts";
+import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { dataPath, readJson } from "../src/state.ts";
 
@@ -189,8 +189,8 @@ test("doctor: `npm run doctor` with MAIL_PROVIDER=none and no Mailbird anywhere 
 });
 
 test("offered skills: without mail the two mail skills are gone, the rest are unchanged", () => {
-  const all = offeredSkills(true);
-  const none = offeredSkills(false);
+  const all = ownerSkills(true);
+  const none = ownerSkills(false);
   assert.equal(all.length, 12);
   assert.deepEqual(none, all.filter((s) => !/:mailbird/.test(s)));
   assert.equal(none.length, 10);

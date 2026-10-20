@@ -16,7 +16,8 @@ process.env.TENANTS = "on";
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
 const L = await import("../src/intakelinks.ts");
-const { GoogleHub, GoogleSession } = await import("../src/googlemcp.ts");
+const { SessionHub } = await import("../src/mcpproxy.ts");
+const { GoogleSession } = await import("../src/googlemcp.ts");
 const { GoogleMail } = await import("../src/googlemail.ts");
 const { createTenantMailLoops } = await import("../src/mailloops.ts");
 const { mailFiles, mailDigest } = await import("../src/tenantmail.ts");
@@ -38,14 +39,14 @@ const google = settings.google as unknown as Record<string, unknown>;
 const TOKENS: Record<string, string> = {};
 const EMAILS: Record<string, string> = {};
 const TMP = mkdtempSync(join(dir, "tmp-")); // her credentials folders go here, not into the shared temp folder (other test files run at the same time)
-const hub = new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_STATE: STATE, FAKE_GOOGLE_LOG: join(dir, "calls.log") } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: EMAILS[t]! } : undefined)));
+const hub = new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_STATE: STATE, FAKE_GOOGLE_LOG: join(dir, "calls.log") } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: EMAILS[t]! } : undefined)));
 after(() => hub.closeAll());
 
 interface Msg { id: string; from: string; subject: string; date: string; body: string; labels: string[] }
 const mailboxes: Record<string, { messages: Msg[] }> = {};
 const save = () => writeFileSync(STATE, JSON.stringify(mailboxes));
 let seq = 0;
-const mail = (email: string, from: string, subject: string, body = "Body text."): Msg => ({ id: `m${++seq}`, from, subject, date: "Tue, 20 Oct 2026 08:00:00 +0000", body, labels: ["INBOX"] });
+const mail = (_email: string, from: string, subject: string, body = "Body text."): Msg => ({ id: `m${++seq}`, from, subject, date: "Tue, 20 Oct 2026 08:00:00 +0000", body, labels: ["INBOX"] });
 const deliver = (id: string, ...msgs: Msg[]) => {
   mailboxes[EMAILS[id]!]!.messages.push(...msgs);
   save();

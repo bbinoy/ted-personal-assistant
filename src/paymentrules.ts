@@ -9,7 +9,6 @@ import { registeredDomain } from "./domains.ts";
 // ---- the card fields ----
 
 export type FieldKind = "number" | "expiry" | "cvc" | "holder";
-export const FIELD_KINDS: readonly FieldKind[] = ["number", "expiry", "cvc", "holder"];
 export const CARD_PLACEHOLDER = /^\{\{card:(number|expiry|cvc|holder)\}\}$/i;
 export const HAS_CARD_PLACEHOLDER = /\{\{\s*card:/i;
 

@@ -139,8 +139,6 @@ export interface SetupNeed {
 
 // ---- the mail slot ----
 
-// What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
-// MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 // What a module with mail-SENDING tools tells the approval about them, whether or not it is a mail provider: how each row's `view` reads its call, and how the
 // mail client is asked what a send really holds (the read-back). A mail provider (MailSlot) has these; so does a friend's Google module, which is not a provider.
 export interface MailTools {
@@ -150,6 +148,8 @@ export interface MailTools {
   views: Partial<Record<ViewKind, (i: MailInput, draft?: Omit<MailView, "action">) => MailView | undefined>>; // how each row's `view` reads its call
 }
 
+// What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
+// MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 export interface MailSlot extends MailTools {
   handler: boolean; // a background mail handler exists (it drafts replies with this provider's tools); without one the heartbeat keeps what it would hand over
   archiveLogOnly: () => boolean; // the heartbeat classifies and logs "would-archive" but archives nothing

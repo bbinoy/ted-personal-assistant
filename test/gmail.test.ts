@@ -12,7 +12,7 @@ import { setGmailReaders } from "../src/modules/gmail.ts";
 import { gmailChecks } from "../src/modules/runtime.ts";
 import { makeCanUseTool } from "../src/permissions.ts";
 import { classify, hiddenTools } from "../src/policy.ts";
-import { offeredSkills } from "../src/profiles.ts";
+import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { readJson, writeJson } from "../src/state.ts";
 import { cleanToolOutput } from "../src/toolclean.ts";
@@ -386,10 +386,10 @@ test("brief: the sent body is captured only from a send to the owner's own addre
 // ---- skills, doctor ----
 
 test("skills and doctor: the gmail skill is offered instead of the Mailbird ones; doctor checks the address and the connector", () => {
-  assert.ok(offeredSkills(true, "gmail").includes("ted-personal-assistant:gmail"));
-  assert.ok(!offeredSkills(true, "gmail").some((s) => /mailbird/.test(s)));
-  assert.ok(!offeredSkills(true, "mailbird").some((s) => /gmail/.test(s)));
-  assert.ok(!offeredSkills(false, "gmail").some((s) => /gmail|mailbird/.test(s)));
+  assert.ok(ownerSkills(true, "gmail").includes("ted-personal-assistant:gmail"));
+  assert.ok(!ownerSkills(true, "gmail").some((s) => /mailbird/.test(s)));
+  assert.ok(!ownerSkills(true, "mailbird").some((s) => /gmail/.test(s)));
+  assert.ok(!ownerSkills(false, "gmail").some((s) => /gmail|mailbird/.test(s)));
   assert.ok(requiredSkills(true, "gmail").includes("gmail") && !requiredSkills(true, "gmail").includes("mailbird"));
   const out: [boolean | "warn", string][] = [];
   const line = (ok: boolean | "warn", what: string) => void out.push([ok, what]);

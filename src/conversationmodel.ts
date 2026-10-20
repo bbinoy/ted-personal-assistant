@@ -15,8 +15,6 @@ import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-personal-assistant/messenger";
 
-// The one pipeline every conversation goes through: the owner's private chat and each group. What differs
-
 // What a conversation is (the owner's chat or a group: data, never built by hand) and the types the pipeline (conversation.ts) works with.
 
 export interface Conversation {

@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { GoogleHub } from "../src/googlemcp.ts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 // A friend's Google tools (src/googlemcp.ts, src/modules/google.ts) against a fake stdio server (test/fakegoogle.ts): one process per friend with her own token,
@@ -17,7 +18,8 @@ process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { GoogleHub, GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/googlemcp.ts");
+const { SessionHub } = await import("../src/mcpproxy.ts");
+const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/googlemcp.ts");
 const { serversFor, LIFECYCLE, stopAll, dropAll } = await import("../src/modules/runtime.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
@@ -36,9 +38,9 @@ const msg = (id: string, from: string, subject: string, body: string) => ({ id, 
 writeFileSync(STATE, JSON.stringify({ "anna@example.com": { messages: [msg("a1", "Carl <carl@example.org>", "Lunch?", "Are you free Thursday?")] }, "bea@example.com": { messages: [msg("b1", "Dora <dora@example.org>", "Invoice", "Bea's private invoice 4711")] } }));
 
 const TMP = mkdtempSync(join(dir, "tmp-")); // her credentials folders go here, never into the shared temp folder (another test file may be running at the same time)
-const hub = () => new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: MAIL[t]! } : undefined)));
+const hub = () => new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: MAIL[t]! } : undefined)));
 const calls = (): Record<string, any>[] => (existsSync(LOG) ? readFileSync(LOG, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
-const probe = async (h: InstanceType<typeof GoogleHub>, id: string) => JSON.parse((await h.session(id).call("_probe", {})).text);
+const probe = async (h: GoogleHub, id: string) => JSON.parse((await h.session(id).call("_probe", {})).text);
 
 after(() => {
   /* the sessions of each test are closed by the test */
@@ -77,7 +79,7 @@ test("google: one server process per friend, each with her own token and address
 
 test("google: the token is in a private folder only while her server runs; it is on no command line and the folder is gone after", async () => {
   const root = mkdtempSync(join(TMP, "own-")); // this test's own temp root: nothing else can create or remove a folder in it
-  const h = new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
+  const h = new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
   const s = h.session("anna");
   try {
     await probe(h, "anna");
@@ -142,7 +144,7 @@ test("google: the proxy fails closed: without her address the call is not forwar
     }
   }
   const root = mkdtempSync(join(TMP, "closed-"));
-  const h = new GoogleHub((id) => new Unknown(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
+  const h = new SessionHub((id) => new Unknown(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
   try {
     const cfg = googleProxy("anna", () => true, h);
     const [a, b] = InMemoryTransport.createLinkedPair();

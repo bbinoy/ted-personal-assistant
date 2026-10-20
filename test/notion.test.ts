@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { NotionHub } from "../src/notionmcp.ts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { startFakeNotion } from "./fakenotion.ts";
 import type { FakeBao } from "./fakebao.ts";
@@ -34,7 +35,8 @@ const { IntakeServer } = await import("../src/intakeserver.ts");
 const { OAuthFlows } = await import("../src/oauth.ts");
 const { googleProvider } = await import("../src/googleoauth.ts");
 const N = await import("../src/notionoauth.ts");
-const { NotionHub, NotionSession, notionProxy, RECONNECT_TEXT } = await import("../src/notionmcp.ts");
+const { SessionHub } = await import("../src/mcpproxy.ts");
+const { NotionSession, notionProxy, RECONNECT_TEXT } = await import("../src/notionmcp.ts");
 const { UpstreamError } = await import("../src/mcpproxy.ts");
 const { createIntakeServer } = await import("../src/intaketools.ts");
 const { TenantSecrets } = await import("../src/secrets.ts");
@@ -357,8 +359,8 @@ test("notion: a refresh token that Notion refuses (expired, revoked) is a reconn
 
 // ---- the hosted server, through the credentialed proxy ----
 
-const hub = (tokens = tokensFor()) => new NotionHub((id) => new NotionSession(id, tokens, () => ({ url: fake.mcpUrl, idleMs: 60_000, callMs: 10_000 })));
-async function runClient(h: InstanceType<typeof NotionHub>, id: string, allowed: (n: string) => boolean = (name) => `${P}${name}` !== "" && NOTION_FRIEND_TOOLS.includes(P + name)) {
+const hub = (tokens = tokensFor()) => new SessionHub((id) => new NotionSession(id, tokens, () => ({ url: fake.mcpUrl, idleMs: 60_000, callMs: 10_000 })));
+async function runClient(h: NotionHub, id: string, allowed: (n: string) => boolean = (name) => `${P}${name}` !== "" && NOTION_FRIEND_TOOLS.includes(P + name)) {
   const cfg = notionProxy(id, allowed, NOTION_FRIEND_TOOLS.map((t) => t.slice(P.length)), h);
   const [a, b] = InMemoryTransport.createLinkedPair();
   await cfg.instance.connect(a as never);

@@ -4,7 +4,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { BRIEF_INSTRUCTIONS } from "../src/brief.ts";
 import { missingSetup, setupItems } from "../src/notes.ts";
 import { backgroundSystem, briefSystem, chatContext, chatSystem, GATE_DEFAULTS, groupSystem, handlerSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
-import { offeredSkills, PROFILES } from "../src/profiles.ts";
+import { PROFILES } from "../src/profiles.ts";
+import { ownerSkills } from "../src/skills.ts";
 import { settings } from "../src/settings.ts";
 
 // The default (MAIL_PROVIDER=mailbird) must not drift: every prompt and the offered skills are compared with a stored copy.
@@ -23,7 +24,7 @@ export function snapshot(): Record<string, unknown> {
     const missing = missingSetup([]);
     const down = ["notion", "calendar"] as const;
     return {
-      offeredSkills: offeredSkills(settings.mail),
+      offeredSkills: ownerSkills(settings.mail),
       profileSkills: Object.fromEntries(Object.entries(PROFILES).map(([k, p]) => [k, p.skills])),
       setupLabels: setupItems().map((i) => i.label),
       briefInstructions: BRIEF_INSTRUCTIONS,

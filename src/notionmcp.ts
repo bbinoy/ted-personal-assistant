@@ -58,13 +58,8 @@ export class NotionSession extends UpstreamSession {
   }
 }
 
-export class NotionHub extends SessionHub<NotionSession> {
-  constructor(make: (tenantId: string) => NotionSession = (id) => new NotionSession(id)) {
-    super(make);
-  }
-}
-
-export const notionHub = new NotionHub();
+export type NotionHub = SessionHub<NotionSession>;
+export const notionHub: NotionHub = new SessionHub((id) => new NotionSession(id));
 
 // What the model reads when her Notion cannot be used. A fixed sentence; the one thing it is told to DO is the reconnect.
 export const RECONNECT_TEXT =

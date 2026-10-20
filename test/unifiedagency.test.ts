@@ -188,7 +188,7 @@ test("judge error, timeout or junk output is ask, in any place", async () => {
   let asked = 0;
   for (const j of [async () => { throw new Error("boom"); }, async () => ({ decision: "yes" }), async () => undefined, () => new Promise(() => {})]) {
     const { judgeAction } = await import("../src/autojudge.ts");
-    const quick: typeof judgeAction = (i, run) => judgeAction(i, (j as never), 30);
+    const quick: typeof judgeAction = (i, _run) => judgeAction(i, (j as never), 30);
     const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "handler", undefined, quick, undefined, undefined, false, { ...HANDLER, provenance: standing(HANDLER_TASK) });
     assert.notEqual(((await canUse(`${MB}archive_conversation`, { conversationId: `x${asked}` }, opts)) as Out).behavior, "allow");
   }
