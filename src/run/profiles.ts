@@ -1,6 +1,5 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { Source } from "../core/audit.ts";
-import type { Category } from "../memory/notes.ts";
 import { BROWSE_SCHEMA } from "../modules/browse/browse.ts";
 import { groupCapabilities } from "../policy/capabilities.ts";
 import { preset } from "../core/preset.ts";
@@ -22,9 +21,8 @@ interface RunProfile {
   readonly mcpTools?: ReadonlySet<string>; // the connector tools the job sees; absent: the owner's whole set (profiletools.ts)
   readonly model?: string; // the run's own model (default: HARNESS_MODEL)
   readonly outputSchema?: Options["outputFormat"];
-  readonly notes: readonly Category[];
 }
-// The limits and the note categories of each profile are the assistant preset's (assistants/<name>/preset.json "profiles"); the policy source, the output
+// The limits of each profile are the assistant preset's (assistants/<name>/preset.json "profiles"); the policy source, the output
 // schema and the browse worker's settings are the harness's.
 const data = preset().profiles;
 export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
@@ -39,6 +37,6 @@ export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
   group: { source: "group", ...data.group, get skills() { return skillsFor(groupCapabilities()); } },
   // The browse sub-task (browse.ts): a fresh run per task with the headless browser, web search and nothing else (no skills, no notes,
   // no connectors, policy source "browse"); it answers with constrained JSON.
-  browse: { source: "browse", maxTurns: settings.browseMaxTurns, maxBudgetUsd: settings.browseMaxUsd, skills: [], outputSchema: BROWSE_SCHEMA, notes: [] },
+  browse: { source: "browse", maxTurns: settings.browseMaxTurns, maxBudgetUsd: settings.browseMaxUsd, skills: [], outputSchema: BROWSE_SCHEMA },
 };
 

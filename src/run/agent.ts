@@ -41,7 +41,7 @@ function heartbeatTexts(conv: Conversation, looker: Looker, now: Date): { run: s
   if (looker.own) {
     const off = down(); // (read once)
     const o = { missing: missingSetup(readNotes(), off), down: off };
-    const notes = memoryFor(PROFILES.heartbeat.notes, now, conv.notesDir, looker.zone);
+    const notes = memoryFor(undefined, now, conv.notesDir, looker.zone);
     return { run: heartbeatSystem(notes, o), expert: expertSystem(notes, o) };
   }
   const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;

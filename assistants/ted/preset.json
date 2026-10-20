@@ -12,9 +12,9 @@
     "tenant": ["people", "context", "scheduling", "style"]
   },
   "profiles": {
-    "chat": { "maxTurns": 40, "maxBudgetUsd": 2, "notes": [] },
-    "heartbeat": { "maxTurns": 120, "maxBudgetUsd": 2, "notes": ["triage", "people", "scheduling", "context", "style", "brief", "setup", "voice", "status"] },
-    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5, "notes": [] }
+    "chat": { "maxTurns": 40, "maxBudgetUsd": 2 },
+    "heartbeat": { "maxTurns": 120, "maxBudgetUsd": 2 },
+    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5 }
   },
   "expert": { "model": "sonnet", "maxTurns": 40 },
   "skills": {
