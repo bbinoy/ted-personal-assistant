@@ -188,7 +188,7 @@ test("google: the binding cookie is HttpOnly, SameSite=Lax, scoped to the callba
   assert.equal(tokenCalls.length, calls, "nothing exchanged");
   assert.equal(GRANT(), undefined, "nothing stored");
   const text = await (await callback(s.base, { code: AUTH_CODE, state: stateOfEve }, "")).text();
-  assert.equal(text, "Not found\n");
+  assert.match(text, /This link doesn.t work/);
   const bindings = [eve.setCookie!, victim.setCookie!].map((c) => c.split(";")[0]!.split("=")[1]!);
   const everything = [text, eve.html, printed.join("\n"), JSON.stringify(readAudit(() => true))].join("\n");
   for (const b of bindings) assert.ok(!everything.includes(b), "the binding is in no page, log or audit row");

@@ -67,7 +67,8 @@ const STYLE = `body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#f6f6
 h1{font-size:1.35rem;margin:0 0 .5rem}p{margin:.5rem 0}label{display:block;font-weight:600;margin-top:1rem}.help{font-weight:400;color:#555;font-size:.9rem;margin:.1rem 0 .3rem}
 input,select{box-sizing:border-box;width:100%;font:inherit;padding:.55rem;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 a.button{display:inline-block;margin-top:1.5rem;font:inherit;font-weight:600;padding:.65rem 1.2rem;border-radius:6px;background:#1c4fd8;color:#fff;text-decoration:none}button{margin-top:1.5rem;font:inherit;font-weight:600;padding:.65rem 1.2rem;border:0;border-radius:6px;background:#1c4fd8;color:#fff}.error{background:#fde8e8;border:1px solid #c33;border-radius:6px;padding:.6rem}.note{color:#555;font-size:.85rem;margin-top:2rem}
-@media (prefers-color-scheme:dark){body{background:#161616;color:#eee}input,select{background:#222;border-color:#777}.help,.note{color:#aaa}.error{background:#3a1c1c}}`;
+.nf{text-align:center;padding-top:12vh}.nf .mark{font-size:3.4rem;font-weight:700;letter-spacing:.06em;color:#1c4fd8;margin:0}.nf .note{margin-top:1.75rem}
+@media (prefers-color-scheme:dark){body{background:#161616;color:#eee}input,select{background:#222;border-color:#777}.help,.note{color:#aaa}.error{background:#3a1c1c}.nf .mark{color:#8fb0ff}}`;
 
 const cspFor = (nonce: string): string => `default-src 'none'; style-src 'nonce-${nonce}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
 const BASE_HEADERS = { "Cache-Control": "no-store", Pragma: "no-cache", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Cross-Origin-Resource-Policy": "same-origin" };
@@ -75,13 +76,18 @@ const BASE_HEADERS = { "Cache-Control": "no-store", Pragma: "no-cache", "Referre
 function sendText(res: ServerResponse, status: number, body: string, extra: Record<string, string> = {}): void {
   res.writeHead(status, { ...BASE_HEADERS, "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'", "Content-Type": "text/plain; charset=utf-8", ...extra }).end(body);
 }
-const NOT_FOUND = "Not found\n"; // the one answer for every path, code and method that is not a thing here
 
-function sendPage(res: ServerResponse, status: number, title: string, body: string, extra: Record<string, string> = {}): void {
-  const nonce = randomBytes(16).toString("base64");
+function sendPage(res: ServerResponse, status: number, title: string, body: string, extra: Record<string, string> = {}, nonce = randomBytes(16).toString("base64")): void {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title><style nonce="${nonce}">${STYLE}</style></head><body><main>${body}</main></body></html>`;
   res.writeHead(status, { ...BASE_HEADERS, "Content-Security-Policy": cspFor(nonce), "Content-Type": "text/html; charset=utf-8", ...extra }).end(html);
 }
+
+// The one answer for every path, code and method that is not a thing here: an expired, a used and a never-existing link look exactly alike (so the page tells nobody which),
+// and it says what a person who followed a real link most likely needs: setup links work once and only for a short time, ask the assistant for a new one.
+const NOT_FOUND_BODY = `<div class="nf"><p class="mark" aria-hidden="true">404</p><h1>This link doesn't work</h1><p>It may have expired, or it was already used. Setup links work only once, and only for a short time.</p><p>Go back to your chat with the assistant and ask for a new one. It takes a few seconds.</p><p class="note">If you did not expect to be here, you can close this page.</p></div>`;
+// A fixed style nonce: the page has no input and no script, and every answer must be the same bytes (the tests compare them).
+const NOT_FOUND_NONCE = "bm90LWZvdW5kLXBhZ2U=";
+const notFound = (res: ServerResponse): void => sendPage(res, 404, "Link not available", NOT_FOUND_BODY, {}, NOT_FOUND_NONCE);
 
 const input = (f: Field): string => {
   const common = `name="${esc(f.name)}" id="f-${esc(f.name)}" maxlength="${f.max}" ${f.required ? "required" : ""}`;
@@ -147,7 +153,7 @@ export class IntakeServer {
     this.all.add("*", now);
     this.perIp.add(ip, now);
 
-    if (route === "other") return sendText(res, 404, NOT_FOUND);
+    if (route === "other") return notFound(res);
     if (route === "healthz") return req.method === "GET" ? sendText(res, 200, "ok\n") : sendText(res, 405, "Method not allowed\n", { Allow: "GET" });
     if (route === "callback") return req.method === "GET" ? this.callback(callbackOf!, req, res, ip, now) : sendText(res, 405, "Method not allowed\n", { Allow: "GET" });
     if (req.method !== "GET" && req.method !== "POST") return sendText(res, 405, "Method not allowed\n", { Allow: "GET, POST" });
@@ -157,7 +163,7 @@ export class IntakeServer {
     const purpose = payload && this.allowed(payload.tenant, payload.purpose);
     if (!payload || !purpose) {
       this.bad.add(ip, now);
-      return sendText(res, 404, NOT_FOUND);
+      return notFound(res);
     }
     if (purpose.oauth) return req.method === "GET" ? this.signIn(res, code, payload.purpose, purpose, payload.tenant) : sendText(res, 405, "Method not allowed\n", { Allow: "GET" }); // a sign-in has no form to post
     if (req.method === "GET") return this.form(res, code, purpose, payload.tenant);
@@ -197,7 +203,7 @@ export class IntakeServer {
     const purpose = peek && peek.tenant === flow.tenant && peek.purpose === id ? this.allowed(peek.tenant, peek.purpose) : undefined;
     if (!flows || !provider || !flow || !peek || !purpose) {
       this.bad.add(ip, now);
-      return sendText(res, 404, NOT_FOUND);
+      return notFound(res);
     }
     if (q.has("error") || !q.get("code")) {
       // She said no (or the service did): the link stays open; she can start again from it.
@@ -206,7 +212,7 @@ export class IntakeServer {
     const claim = this.deps.links.claim(flow.code, now);
     if (!claim) {
       this.bad.add(ip, now);
-      return sendText(res, 404, NOT_FOUND);
+      return notFound(res);
     }
     try {
       const grant = await flows.exchange(id, q.get("code")!, flow.verifier);
@@ -252,7 +258,7 @@ export class IntakeServer {
     const claim = this.deps.links.claim(code, this.now());
     if (!claim) {
       this.bad.add(ip, this.now());
-      return sendText(res, 404, NOT_FOUND); // used a moment ago by another request
+      return notFound(res); // used a moment ago by another request
     }
     try {
       const stored = await purpose.store(who.tenant, values, this.deps.writer.for(who.tenant));

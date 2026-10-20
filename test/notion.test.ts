@@ -200,7 +200,7 @@ test("notion: the page shows Connect Notion; the callback exchanges the code, st
   // the consent address passed on to another browser (no cookie, or its own) finishes nothing and uses the state up
   const stolen = await at(href.searchParams.get("state")!);
   assert.equal(stolen.status, 404, "no cookie");
-  assert.equal(await stolen.text(), "Not found\n");
+  assert.match(await stolen.text(), /This link doesn.t work/);
   const r2 = await fetch(`${s.base}/i/${code}`); // the page again: a new state and a new binding
   const href2 = new URL(/href="([^"]+)"/.exec(await r2.text())![1]!.replaceAll("&amp;", "&"));
   const cookie2 = r2.headers.get("set-cookie")!.split(";")[0]!;
