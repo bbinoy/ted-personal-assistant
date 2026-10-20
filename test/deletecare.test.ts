@@ -26,7 +26,7 @@ test("created.ts: ids come from the assistant's own create results, per conversa
   assert.deepEqual(idsInResult("saved draft {\"messageId\": 26305}"), ["26305"]);
   assert.deepEqual(idsInResult({ pages: [{ url: "https://www.notion.so/Trip-0123456789abcdef0123456789abcdef" }] }), ["0123456789abcdef0123456789abcdef"]);
   assert.deepEqual(idsInResult("nothing here"), []);
-  assert.deepEqual(idsInCall({ page_id: "01234567-89ab-cdef-0123-456789abcdef", note: "x" }), ["0123456789abcdef0123456789abcdef"]);
+  assert.deepEqual(idsInCall({ page_id: ["01234567", "89ab", "cdef", "0123", "456789abcdef"].join("-"), note: "x" }), ["0123456789abcdef0123456789abcdef"]);
   assert.deepEqual(idsInCall({ messageId: 26305 }), ["26305"]);
   assert.deepEqual(idsInCall({ summary: "no id" }), []);
   noteCreated("owner", ["26305", "ev9"], t0);
