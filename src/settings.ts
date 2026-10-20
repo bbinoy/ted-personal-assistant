@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { presetFor } from "./preset.ts";
-import { isSafeUrl, type TtsProviderConfig } from "@ted-personal-assistant/speech/tts";
+import { isSafeUrl, type TtsProviderConfig } from "@ted-assistant/speech/tts";
 
 // Every tunable in one place, read from the environment (see .env.example) and validated
 // when the agent starts. A typo fails loudly instead of silently becoming NaN: an interval
@@ -324,7 +324,7 @@ export function loadSettings(env: Env) {
     tenantKeyNoticeMinutes: num(env, "TENANT_KEY_NOTICE_MINUTES", 180, 0, 10_080), // the owner hears of a refused or missing instance key at most this often (keynotice.ts)
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none
 
-    // Which chat platform the assistant talks on: the package @ted-personal-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.
+    // Which chat platform the assistant talks on: the package @ted-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.
     messenger: env.MESSENGER?.trim() || "signal",
     // Signal's own settings, handed to its package as options (src/messenger.ts). The owner's number is required by whoever starts the chat (signalIdentity below), not by every
     // command that reads the settings.

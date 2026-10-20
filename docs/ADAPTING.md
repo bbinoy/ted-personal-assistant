@@ -91,12 +91,12 @@ Signal via `signal-cli`, linked as a **secondary device**, reading the owner's *
 
 ### What each piece must provide
 
-The contract is the `Messenger` interface in `packages/messenger/src/index.ts`; Signal is the first implementation (`packages/signal/src/messenger.ts`) and `FakeMessenger` (`@ted-personal-assistant/messenger/testing`) is the one the app's tests run on. A new platform is a package `@ted-personal-assistant/<name>` with an entry point `/messenger` exporting `createMessenger(config)` and `doctor(config)`; `MESSENGER=<name>` loads it by name. `packages/telegram`, `packages/whatsapp` and `packages/slack` are skeletons with a README and a SETUP.md for exactly that. It must:
+The contract is the `Messenger` interface in `packages/messenger/src/index.ts`; Signal is the first implementation (`packages/signal/src/messenger.ts`) and `FakeMessenger` (`@ted-assistant/messenger/testing`) is the one the app's tests run on. A new platform is a package `@ted-assistant/<name>` with an entry point `/messenger` exporting `createMessenger(config)` and `doctor(config)`; `MESSENGER=<name>` loads it by name. `packages/telegram`, `packages/whatsapp` and `packages/slack` are skeletons with a README and a SETUP.md for exactly that. It must:
 
 - report what comes in neutrally (`onMessage`, `onReaction`, `onDeletion`, `onClose`) and send (`send`, `react`, `typing`, `markRead`, `groups`, `attachmentFile`, `readLongText`), with a target that is opaque to the app (undefined: the owner's chat; a group id; `directTarget(accountId)` for one other person);
 - declare what the platform cannot do (`capabilities`) instead of faking it: no reactions means no status icons, no typing means working / done icons, and so on;
 - take its settings as `options` (`unknown` to the interface): export their type, as Signal exports `SignalOptions`, and check them in `createMessenger` with a sentence that names the option;
-- **pass the contract suite**: `messengerContract(name, make)` from `@ted-personal-assistant/messenger/contract` is one test suite for every adapter (send and refusal, the best-effort calls that never throw, neutral incoming messages, one handler per kind, groups, attachments, `onClose` once). Give it a rig over your platform's fake server, as `packages/signal/test/contract.test.ts` does over the fake signal-cli daemon.
+- **pass the contract suite**: `messengerContract(name, make)` from `@ted-assistant/messenger/contract` is one test suite for every adapter (send and refusal, the best-effort calls that never throw, neutral incoming messages, one handler per kind, groups, attachments, `onClose` once). Give it a rig over your platform's fake server, as `packages/signal/test/contract.test.ts` does over the fake signal-cli daemon.
 
 Then adjust the app-side pieces that carry platform conventions:
 

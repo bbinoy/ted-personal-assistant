@@ -14,8 +14,8 @@ import { voiceNow, type VoiceDeps } from "../src/voicetool.ts";
 import {
   activeVoice, activeVoiceRel, buildReference, deleteVoice, listVoices, MAX_VOICES, sanitizeVoiceName, saveVoice, scopeRoot, setActiveVoice, voiceFiles,
   type ClipTools,
-} from "@ted-personal-assistant/speech/tts";
-import { synthesizeQwen, stopQwen } from "@ted-personal-assistant/speech/tts";
+} from "@ted-assistant/speech/tts";
+import { synthesizeQwen, stopQwen } from "@ted-assistant/speech/tts";
 
 // The cloned voice: a library per conversation, built from voice notes received in that conversation, read by the speech provider per reply.
 

@@ -6,7 +6,7 @@ import { createPipeline, group, type Pipeline } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
 import { groupName, createGroupBrain, groupPrompt, ownerInGroup, speaker } from "../src/group.ts";
 import { wakePrompt } from "../src/wakeprompt.ts";
-import { readLongText } from "@ted-personal-assistant/signal";
+import { readLongText } from "@ted-assistant/signal";
 import { groupCapabilities } from "../src/capabilities.ts";
 import { skillsFor } from "../src/skills.ts";
 import { classify } from "../src/policy.ts";
@@ -455,7 +455,7 @@ test("group dream: nightly, only groups with enough new talk, silently", async (
 });
 
 import { chatSystem, groupSystem, SELF_TIMED } from "../src/persona.ts";
-import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
+import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 test("prompts: Ted is told he can act later and on a schedule, in a private chat and in a group alike", () => {
   assert.ok(groupSystem({}).includes(SELF_TIMED));
   assert.ok(chatSystem(new Date()).includes(SELF_TIMED));

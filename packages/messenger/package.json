@@ -1,5 +1,5 @@
 {
-  "name": "@ted-personal-assistant/messenger",
+  "name": "@ted-assistant/messenger",
   "version": "0.1.0",
   "description": "The Messenger interface of the Ted personal assistant: what the assistant needs from a chat platform (types, a neutral addressing convention, loadMessenger and a fake for tests). Platform packages implement it.",
   "private": true,

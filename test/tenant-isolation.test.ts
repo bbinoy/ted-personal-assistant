@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
+import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 // A tenant is a "group" run with one person in it and a folder of her own. What this pins: her file tools reach her notes and nothing else (not
 // another tenant's, not the owner's, through "..", an absolute path or a symlink); the owner's chat does not read hers; her tool set has none of the
@@ -40,7 +40,7 @@ const { spentToday } = await import("../src/budget.ts");
 const { createPipeline, group, owner, tenant } = await import("../src/conversation.ts");
 const { speaker } = await import("../src/group.ts");
 const { createOutbound } = await import("../src/outbound.ts");
-const { toPerson } = await import("@ted-personal-assistant/signal");
+const { toPerson } = await import("@ted-assistant/signal");
 
 const CANARY_OWNER = "CANARY-OWNER-4711";
 const CANARY_B = "CANARY-BEA-0815";

@@ -444,7 +444,7 @@ test("ACI learning: the first message from the owner's number carries her accoun
 });
 
 test("envelope: the owner's own messages carry her account id (Note to Self and own-account mode), so there is something to learn", async () => {
-  const { interpretEnvelope } = await import("@ted-personal-assistant/signal");
+  const { interpretEnvelope } = await import("@ted-assistant/signal");
   const self = interpretEnvelope({ sourceNumber: OWNER_NUMBER, sourceUuid: OWNER_ACI, syncMessage: { sentMessage: { destinationNumber: OWNER_NUMBER, message: "hi", timestamp: 5 } } }, { account: OWNER_NUMBER });
   assert.equal(self.message?.direct, true);
   assert.equal(self.message?.fromUuid, OWNER_ACI);

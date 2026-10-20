@@ -18,8 +18,8 @@ try {
   run("npm", ["install", "--no-audit", "--no-fund", join(tmp, tgz)], tmp);
   writeFileSync(
     join(tmp, "smoke.mjs"),
-    `import { SignalClient } from "@ted-personal-assistant/signal";
-import { FakeSignalDaemon } from "@ted-personal-assistant/signal/testing";
+    `import { SignalClient } from "@ted-assistant/signal";
+import { FakeSignalDaemon } from "@ted-assistant/signal/testing";
 const d = await FakeSignalDaemon.start();
 const c = new SignalClient({ host: d.host, port: d.port, account: "+10000000000" });
 await c.connect();

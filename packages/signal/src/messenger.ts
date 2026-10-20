@@ -16,7 +16,7 @@ import {
   type OutgoingMessage,
   type Target,
   type TextStyle,
-} from "@ted-personal-assistant/messenger";
+} from "@ted-assistant/messenger";
 import { SignalClient, toPerson } from "./client.ts";
 import { ensureSignalDaemon, type DaemonOptions, type SignalDaemon } from "./daemon.ts";
 import { attachmentPath, readLongText } from "./envelope.ts";

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createPipeline, owner } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
 import { OWNER_KEY, sendNow } from "../src/send.ts";
-import { FakeMessenger } from "@ted-personal-assistant/messenger/testing";
+import { FakeMessenger } from "@ted-assistant/messenger/testing";
 
 // The app against the Messenger interface alone: what it does with a platform that has everything, and how it degrades quietly when a
 // capability is missing. No Signal anywhere.
@@ -70,7 +70,7 @@ test("the send tool's reaction: done where reactions exist, a plain sentence to 
 test("MESSENGER=signal (the default) is found by name, and the doctor reports the messenger first", async () => {
   const { settings } = await import("../src/settings.ts");
   assert.equal(settings.messenger, "signal");
-  const { loadMessengerModule } = await import("@ted-personal-assistant/messenger");
+  const { loadMessengerModule } = await import("@ted-assistant/messenger");
   const mod = await loadMessengerModule("signal");
   const m = await mod.createMessenger({ owner: { address: OWNER }, account: OWNER, options: { host: "127.0.0.1", port: 7583, attachmentsDir: "/x" }, logger: console });
   assert.equal(m.name, "signal");
@@ -80,13 +80,13 @@ test("MESSENGER=signal (the default) is found by name, and the doctor reports th
 });
 
 test("the skeleton platforms load by name and say they are not built yet, and the doctor says so too", async () => {
-  const { loadMessenger } = await import("@ted-personal-assistant/messenger");
+  const { loadMessenger } = await import("@ted-assistant/messenger");
   for (const name of ["telegram", "whatsapp", "slack"]) {
     await assert.rejects(
       loadMessenger(name, { owner: { address: OWNER }, account: OWNER, options: {}, logger: console }),
       new Error(`${name} messenger is not built yet: see packages/${name}/SETUP.md`),
     );
-    const lines = await (await (await import("@ted-personal-assistant/messenger")).loadMessengerModule(name)).doctor({ options: {} });
+    const lines = await (await (await import("@ted-assistant/messenger")).loadMessengerModule(name)).doctor({ options: {} });
     assert.deepEqual(lines.map((l) => [l.ok, l.what]), [[false, name]]);
     assert.match(lines[0]!.detail ?? "", /not built yet/);
   }

@@ -1,7 +1,7 @@
 import { closeSync, fstatSync, lstatSync, openSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { MAX_AUDIO_BYTES, MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_LONG_TEXT_BYTES, type AudioRef, type FileRef, type ImageRef, type IncomingDeletion, type IncomingMessage, type IncomingReaction, type LongTextRef, type Quote } from "@ted-personal-assistant/messenger";
+import { MAX_AUDIO_BYTES, MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_LONG_TEXT_BYTES, type AudioRef, type FileRef, type ImageRef, type IncomingDeletion, type IncomingMessage, type IncomingReaction, type LongTextRef, type Quote } from "@ted-assistant/messenger";
 
 // The types of what comes in (IncomingMessage, Quote, ...) and the size limits are the Messenger interface's (packages/messenger): the same
 // objects reach the app as signal-cli reports them here. Re-exported so this package's own API is unchanged.

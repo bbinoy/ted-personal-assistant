@@ -12,8 +12,8 @@ import { conversationLines } from "../src/dream.ts";
 import { groupContext, groupLogFile } from "../src/groupstore.ts";
 import { logTail, tailLine } from "../src/gate.ts";
 import { dataPath } from "../src/state.ts";
-import type { IncomingDeletion, IncomingMessage } from "@ted-personal-assistant/signal";
-import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
+import type { IncomingDeletion, IncomingMessage } from "@ted-assistant/signal";
+import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 // Edited and deleted messages, through the real pipeline, the real group brain and the real logs (the model, the gate and Signal are fakes).
 

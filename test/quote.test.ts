@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseQuote } from "@ted-personal-assistant/signal";
+import { parseQuote } from "@ted-assistant/signal";
 import { createOutbound } from "../src/outbound.ts";
 import { shouldThread, SLOW_REPLY_MS, withQuoteContext } from "../src/quote.ts";
-import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
+import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 test("quote: signal-cli's quote object is parsed; an empty or attachment-only quote is nothing", () => {
   assert.deepEqual(parseQuote({ id: 1760000000000, author: "+15555550105", authorNumber: "+15555550105", text: " Meeting at 15:00 " }), {

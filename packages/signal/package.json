@@ -1,5 +1,5 @@
 {
-  "name": "@ted-personal-assistant/signal",
+  "name": "@ted-assistant/signal",
   "version": "0.2.0",
   "description": "A small, dependency-free client for signal-cli's JSON-RPC daemon: Note to Self or a separate assistant account, quotes, reactions, groups, read receipts, typing, voice notes and files as attachments.",
   "type": "module",
@@ -60,7 +60,7 @@
     "test": "node --conditions=workspace-source --test test/*.test.ts"
   },
   "dependencies": {
-    "@ted-personal-assistant/messenger": "*"
+    "@ted-assistant/messenger": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

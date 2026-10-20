@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { messengerContract, type ContractRig } from "@ted-personal-assistant/messenger/contract";
-import type { GroupInfo } from "@ted-personal-assistant/messenger";
+import { messengerContract, type ContractRig } from "@ted-assistant/messenger/contract";
+import type { GroupInfo } from "@ted-assistant/messenger";
 import { createMessenger } from "../src/messenger.ts";
 import { FakeRpcError, FakeSignalDaemon } from "../src/testing.ts";
 

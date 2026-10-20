@@ -1,4 +1,4 @@
-# @ted-personal-assistant/signal
+# @ted-assistant/signal
 
 A small, dependency-free TypeScript client for [signal-cli](https://github.com/AsamK/signal-cli)'s JSON-RPC daemon, for building bots and personal assistants on Signal.
 
@@ -7,7 +7,7 @@ A small, dependency-free TypeScript client for [signal-cli](https://github.com/A
 - **A library that behaves.** It never calls `process.exit`, installs signal handlers or logs by default: you get a close event and a daemon handle and decide what happens.
 - **Testable.** `/testing` ships `FakeSignalDaemon`, a fake of signal-cli's socket, so a bot's tests need no Signal account.
 - **Voice messages as attachments.** An incoming voice note arrives as `IncomingMessage.audio` and an audio file you send is shown as a voice message. Turning speech into text and back is not part of this package: the assistant app keeps those libraries in `packages/speech`.
-- **A Messenger adapter.** The `/messenger` entry point implements the `Messenger` interface of `@ted-personal-assistant/messenger` (the assistant app loads it with `MESSENGER=signal`): the daemon, the client, targets, text styles, attachments and the doctor's checks behind one neutral interface.
+- **A Messenger adapter.** The `/messenger` entry point implements the `Messenger` interface of `@ted-assistant/messenger` (the assistant app loads it with `MESSENGER=signal`): the daemon, the client, targets, text styles, attachments and the doctor's checks behind one neutral interface.
 - **Typed and small.** No third-party dependencies (the only package it uses is the interface package it implements), compiled JavaScript with `.d.ts` files, Node 24+, MIT.
 
 It was written for, and is used every day by, a personal assistant ([Ted](https://github.com/bbinoy/ted-personal-assistant)) that lives in a Signal chat and in groups. Unofficial; not affiliated with Signal or signal-cli.
@@ -17,7 +17,7 @@ It was written for, and is used every day by, a personal assistant ([Ted](https:
 ## Install
 
 ```bash
-npm install @ted-personal-assistant/signal
+npm install @ted-assistant/signal
 ```
 
 (The name and scope are placeholders until the package is published.)
@@ -41,7 +41,7 @@ Own-account mode needs a Signal account for the bot (a spare number, or Signal L
 ## Use
 
 ```ts
-import { SignalClient, ensureSignalDaemon } from "@ted-personal-assistant/signal";
+import { SignalClient, ensureSignalDaemon } from "@ted-assistant/signal";
 
 const me = process.env.SIGNAL_NUMBER!;     // you, international format
 const bot = process.env.SIGNAL_ACCOUNT;    // optional: the bot's own account (a number or an account id)
@@ -65,7 +65,7 @@ Runnable examples, compiled with the package: [`examples/echo.ts`](examples/echo
 
 ## API
 
-Entry points: `@ted-personal-assistant/signal` (the core), `/messenger` (the Messenger adapter), `/testing` (a fake daemon). All public symbols carry JSDoc, so your editor shows the details.
+Entry points: `@ted-assistant/signal` (the core), `/messenger` (the Messenger adapter), `/testing` (a fake daemon). All public symbols carry JSDoc, so your editor shows the details.
 
 **`SignalClient`** (`new SignalClient({ host, port, account, peer?, logger?, rpcTimeoutMs?, ownReactionMs? })`)
 - `onMessage(h)` receives `IncomingMessage { from, text, timestamp, direct, quote?, audio?, image?, file?, longText?, edited?, group?, addressedToMe?, fromUuid?, fromName? }`. `direct` means a private one-to-one conversation with the bot (Note to Self, or its own chat), never a group. Mentions arrive as `@name` in `text`. There is one handler slot: calling it again replaces the previous handler.
@@ -91,7 +91,7 @@ Entry points: `@ted-personal-assistant/signal` (the core), `/messenger` (the Mes
 
 **Logging.** The package prints nothing by default. Pass `logger: console` (anything with `info`, `warn`, `error`) to see messages.
 
-**Testing your bot** with `@ted-personal-assistant/signal/testing`: `FakeSignalDaemon.start()` is a local fake of signal-cli's socket. It records the requests the client sends (`d.requests`), answers as you say, pushes incoming messages (`d.push(envelope)`) and can hang up (`d.dropConnections()`).
+**Testing your bot** with `@ted-assistant/signal/testing`: `FakeSignalDaemon.start()` is a local fake of signal-cli's socket. It records the requests the client sends (`d.requests`), answers as you say, pushes incoming messages (`d.push(envelope)`) and can hang up (`d.dropConnections()`).
 
 **Also exported:** `interpretEnvelope(envelope, { account, peer?, peerAci? })` (the pure function behind the receiving side; start here to understand or test it), `withMentions`, `parseQuote`, `parseAudio`, `parseImage`.
 

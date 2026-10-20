@@ -1,7 +1,7 @@
 // Note to Self echo: the bot is a linked device of YOUR Signal account and repeats what you write to yourself.
 //   SIGNAL_NUMBER=+10000000000 node examples/echo.ts
 // (signal-cli must be installed and the number registered or linked; see docs/signal-account.md)
-import { SignalClient, ensureSignalDaemon } from "@ted-personal-assistant/signal";
+import { SignalClient, ensureSignalDaemon } from "@ted-assistant/signal";
 
 const me = process.env.SIGNAL_NUMBER;
 if (!me) throw new Error("set SIGNAL_NUMBER to your own number, like +10000000000");

@@ -1,4 +1,4 @@
-import type { DoctorLine, Messenger, MessengerConfig } from "@ted-personal-assistant/messenger";
+import type { DoctorLine, Messenger, MessengerConfig } from "@ted-assistant/messenger";
 
 // Entry point "./messenger": a placeholder for Telegram (Bot API) as a Messenger (MESSENGER=telegram). Nothing is built yet; the design is in SETUP.md.
 

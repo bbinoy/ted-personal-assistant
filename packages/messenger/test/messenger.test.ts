@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { directOf, directTarget, loadMessenger, loadMessengerModule } from "@ted-personal-assistant/messenger";
-import { FakeMessenger, FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
+import { directOf, directTarget, loadMessenger, loadMessengerModule } from "@ted-assistant/messenger";
+import { FakeMessenger, FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 test("targets: a person's private chat round-trips, the owner's chat and a group are not people", () => {
   assert.equal(directOf(directTarget("11111111-2222-4333-8444-555555555555")), "11111111-2222-4333-8444-555555555555");

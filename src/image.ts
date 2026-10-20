@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { MAX_IMAGE_BYTES } from "@ted-personal-assistant/messenger";
+import { MAX_IMAGE_BYTES } from "@ted-assistant/messenger";
 import type { Document } from "./document.ts";
 import { LIMITS } from "./sanitize.ts";
 

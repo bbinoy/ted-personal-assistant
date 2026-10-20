@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { directTarget, type Messenger } from "@ted-personal-assistant/messenger";
+import { directTarget, type Messenger } from "@ted-assistant/messenger";
 import { createMessenger, doctor, toSignalStyles } from "../src/messenger.ts";
 import { FakeSignalDaemon } from "../src/testing.ts";
 

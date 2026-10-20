@@ -12,7 +12,7 @@ import { classify } from "../src/policy.ts";
 import { adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/shots.ts";
 import { OWNER_KEY, sendNow, withSend, type Content } from "../src/send.ts";
 import { access } from "./util.ts";
-import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
+import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 // send: the model's one way to say something mid-turn (text, voice note, picture, reaction). Text before a tool call is never sent.
 

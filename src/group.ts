@@ -14,7 +14,7 @@ import { documentNote, takeDocuments, type Document } from "./document.ts";
 import { group, type Batch, type Conversation, type Pipeline } from "./conversation.ts";
 import { quoteNote } from "./quote.ts";
 import { voiceOption } from "./voicereply.ts";
-import type { Quote } from "@ted-personal-assistant/messenger";
+import type { Quote } from "@ted-assistant/messenger";
 import { clean, defuseSpeakers, LIMITS, oneLine } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@ted-personal-assistant/speech",
+  "name": "@ted-assistant/speech",
   "version": "0.1.0",
   "description": "The speech libraries of the Ted personal assistant: text to speech (local Qwen3-TTS or Kokoro, optional ElevenLabs or your own HTTP server), speech to text (local whisper.cpp), voice libraries and reference clips. Messenger-agnostic.",
   "private": true,
@@ -19,7 +19,7 @@
   "license": "MIT",
   "author": "Ben",
   "dependencies": {
-    "@ted-personal-assistant/messenger": "*"
+    "@ted-assistant/messenger": "*"
   },
   "engines": {
     "node": ">=24"
