@@ -11,7 +11,7 @@ import { sweepStaleRuns } from "../src/browse.ts";
 import { registered } from "../src/modules/index.ts";
 import { applyChanges, classify, hiddenTools, isNeverAllowed } from "../src/policy.ts";
 import { SOURCES } from "../src/audit.ts";
-import { allRows, confirmsDelete, isFree, neverAllowedTool } from "../src/toolmanifest.ts";
+import { allRows, confirmsDelete, entryFor, isFree, neverAllowedTool } from "../src/toolmanifest.ts";
 import { groupTools } from "../src/capabilities.ts";
 import { SYSTEM } from "../src/approvaljudge.ts";
 
@@ -42,7 +42,7 @@ test("never allowed: a row's action in NEVER_ACTIONS decides, for every source a
   const expected = [
     `${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`,
     `${GM}trash_message`, `${GM}trash_thread`, `${GM}untrash_message`, `${GM}untrash_thread`, `${GM}mark_message_spam`, `${GM}mark_thread_spam`, `${GM}unmark_message_spam`, `${GM}unmark_thread_spam`, `${GM}delete_label`,
-    `${DRIVE}trash_file`, "mcp__claude_ai_Claude_Docs__delete",
+    "mcp__claude_ai_Claude_Docs__delete",
   ];
   const byRow = allRows().filter((e) => NEVER_ACTIONS.has(e.action)).map((e) => e.tool);
   assert.deepEqual([...byRow].sort(), [...expected].sort());
@@ -86,7 +86,7 @@ test("never allowed: the arguments, snake_case and camelCase, for tools that onl
     for (const t of [`${N}notion-update-page`, "mcp__notion__notion-update-page"]) {
       assert.equal(isNeverAllowed(t, { page_id: "p", ...input }), false, `${t} ${JSON.stringify(input)}`);
       assert.equal(confirmsDelete(t, { page_id: "p", ...input }), true);
-      assert.equal(isJudgeable(t, { page_id: "p", ...input }), false);
+      assert.equal(isJudgeable(t, { page_id: "p", ...input }), true, "judged with care");
       assert.equal(mayFix(t, { input: { page_id: "p", ...input } }), false);
       assert.equal(applyChanges(t, { page_id: "p", ...input }, [{ field: "page_id", value: "q" }]), undefined, "a reply cannot retarget a delete");
     }
@@ -102,27 +102,31 @@ test("never allowed: the arguments, snake_case and camelCase, for tools that onl
   assert.equal(classify("mcp__google__manage_event", { action: "delete", event_id: "e" }, "group", "/n", ME), "ask");
   assert.equal(classify("mcp__google__manage_event", { action: " Delete ", event_id: "e" }, "group", "/n", ME), "ask");
   for (const action of ["trash", "purge", "destroy"]) assert.equal(classify("mcp__google__manage_event", { action, event_id: "e" }, "group", "/n", ME), "deny", action);
-  assert.equal(isJudgeable("mcp__google__manage_event", { action: "delete", event_id: "e" }), false);
+  assert.equal(isJudgeable("mcp__google__manage_event", { action: "delete", event_id: "e" }), true);
+  assert.equal(isJudgeable("mcp__google__manage_event", { action: "delete", event_id: "e", attendees: ["a@example.org"] }), false, "a delete that names guests is asked");
   assert.equal(mayFix("mcp__google__manage_event", { input: { action: "delete", event_id: "e" } }), false);
   assert.equal(isNeverAllowed("mcp__x__manage_event", { action: "delete" }), true, "only her manage_event");
 });
 
-test("the four deletes the owner lets the person confirm: ask on every source, never judged, never fixed, never free, always titled; everything else stays denied", () => {
-  const four: [string, Record<string, unknown>, RegExp][] = [
+test("the five destructive actions the owner allows: ask on every source, judged with care (vetoed where guests are named), never fixed, never free, always titled; everything else stays denied", () => {
+  const five: [string, Record<string, unknown>, RegExp][] = [
     [`${MB}discard_draft`, { messageId: 7 }, /Delete draft[\s\S]*7/],
     [`${GM}delete_draft`, { draftId: "d1" }, /Delete draft[\s\S]*d1/],
     [`${CAL}delete_event`, { eventId: "e1", calendarId: "primary" }, /Delete calendar event[\s\S]*e1/],
     [`${N}notion-update-page`, { page_id: "p1", properties: { in_trash: true } }, /Move Notion page to the bin[\s\S]*p1/],
+    [`${DRIVE}trash_file`, { fileId: "f1" }, /Move Drive file to the bin[\s\S]*f1/],
   ];
+  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e1", attendees: ["a@example.org"] }), false, "a calendar delete that names guests is never judged");
+  assert.match(notifyNote(`${CAL}delete_event`, { eventId: "e1" }), /this call names no guests.*guests already on an existing event are not shown/);
   assert.ok(!NEVER_ACTIONS.has(DELETE_CONFIRM));
-  for (const [t, input, shown] of four) {
+  for (const [t, input, shown] of five) {
     for (const source of SOURCES) {
       if (source === "group") continue;
       assert.equal(classify(t, input, source), "ask", `${t} (${source})`);
     }
     assert.equal(neverAllowedTool(t), false, t);
     assert.equal(isNeverAllowed(t, input), false, t);
-    assert.equal(isJudgeable(t, input), false, t);
+    assert.equal(isJudgeable(t, input), !!entryFor(t), t); // (judged where the tool is loaded: Gmail only while it is the mail provider)
     assert.equal(mayFix(t, { input }), false, t);
     assert.equal(isFree(t, undefined, { input, source: "chat" }), false, t);
     assert.match(describeCall(t, input), shown, t);
@@ -130,14 +134,14 @@ test("the four deletes the owner lets the person confirm: ask on every source, n
   assert.equal(describeCall(`${CAL}delete_event`, { eventId: "e1", summary: "Dentist" }).includes("Dentist"), true, "the title the call carries is shown");
   // the tools are offered to the model: not in the hidden list when seen
   const hidden = hiddenTools([`${MB}discard_draft`, `${GM}delete_draft`, `${CAL}delete_event`, `${N}notion-update-page`]);
-  for (const [t] of four) assert.ok(!hidden.includes(t), t);
+  for (const [t] of five) assert.ok(!hidden.includes(t), t);
   // an isolated run only has what its capability set holds: the owner's connectors are not a friend's or a group's
   assert.equal(classify(`${CAL}delete_event`, { eventId: "e" }, "group"), "deny");
   // the neighbours stay denied
-  for (const t of [`${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`, `${GM}delete_label`, `${GM}trash_message`, `${GM}untrash_thread`, `${GM}mark_thread_spam`, `${DRIVE}trash_file`, "mcp__claude_ai_Claude_Docs__delete", "mcp__x__delete_draft", "mcp__claude_ai_Interactive_Brokers_IBKR__delete_alert"]) assert.equal(classify(t, {}, "chat"), "deny", t);
+  for (const t of [`${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`, `${GM}delete_label`, `${GM}trash_message`, `${GM}untrash_thread`, `${GM}mark_thread_spam`, "mcp__claude_ai_Claude_Docs__delete", "mcp__x__delete_draft", "mcp__claude_ai_Interactive_Brokers_IBKR__delete_alert"]) assert.equal(classify(t, {}, "chat"), "deny", t);
 });
 
-test("a Mailbird move is asked and never judged (the destination may be Trash or Junk); discard_draft is asked, never judged", () => {
+test("a Mailbird move is asked and never judged (the destination may be Trash or Junk); discard_draft is asked and judged with care", () => {
   assert.equal(classify(`${MB}move_conversation`, { conversationId: "c", destinationFolderId: "x" }, "chat"), "ask");
   assert.equal(isJudgeable(`${MB}move_conversation`, { conversationId: "c" }), false);
   assert.equal(mayFix(`${MB}move_conversation`), false);
@@ -195,7 +199,7 @@ const TABLE: [string, string, string, string][] = [
   [`${DRIVE}read_file_content`, "allow", "allow", "deny"],
   [`${DRIVE}update_file`, "ask", "ask", "deny"],
   [`${DRIVE}share_file`, "ask", "ask", "deny"],
-  [`${DRIVE}trash_file`, "deny", "deny", "deny"],
+  [`${DRIVE}trash_file`, "ask", "ask", "deny"],
   ["mcp__claude_ai_Google_Docs__read_doc", "allow", "allow", "deny"],
   ["mcp__claude_ai_Claude_Docs__read", "allow", "allow", "deny"],
   ["mcp__claude_ai_Claude_Docs__delete", "deny", "deny", "deny"],

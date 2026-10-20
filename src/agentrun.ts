@@ -12,7 +12,8 @@ import { recordConnectors } from "./connectors.ts";
 import { failure } from "./errors.ts";
 import { announceMemoryChanges, noteWritten } from "./memorynotice.ts";
 import { builtinModule } from "./modules/builtin.ts";
-import { isOwnerOnly } from "./toolmanifest.ts";
+import { createsOf, isOwnerOnly } from "./toolmanifest.ts";
+import { idsInResult, noteCreated } from "./created.ts";
 import { serversFor } from "./modules/runtime.ts";
 import type { RunContext } from "./modules/types.ts";
 import { approveIn, makeCanUseTool, type Approve } from "./permissions.ts";
@@ -112,6 +113,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
     if (opts.memory?.notify) noteWritten(tool, input);
     if (changesCalendar(tool)) nudgeRadar();
+    if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
   const hooks: Partial<Record<"PostToolUse", HookCallbackMatcher[]>> = {

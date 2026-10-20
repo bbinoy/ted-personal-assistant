@@ -1,5 +1,7 @@
 import { runJudge, withTimeout } from "./approvaljudge.ts";
 import { fence } from "./fence.ts";
+import { createdFact } from "./created.ts";
+import { DELETE_CONFIRM } from "./neverallowed.ts";
 import { OWNER } from "./settings.ts";
 import type { MailView } from "./mailview.ts";
 import { actionOf, confirmsDelete, entryFor, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
@@ -38,8 +40,8 @@ export { isPlainWebAddress, REBINDING_HOST } from "./webaddress.ts";
 export function isJudgeable(tool: string, input: Record<string, unknown>, view?: MailView): boolean {
   const action = entryFor(tool)?.action;
   const floor = moduleOf(tool)?.floor;
-  if (!action || neverAllowedTool(tool) || floor?.judgeNever?.includes(action) || confirmsDelete(tool, input)) return false; // (the never-allowed set is denied before the judge; this is the backstop. A delete the person confirms is theirs alone)
-  const veto = floor?.judgeVeto?.[action];
+  if (!action || neverAllowedTool(tool) || floor?.judgeNever?.includes(action)) return false; // (the never-allowed set is denied before the judge; this is the backstop)
+  const veto = floor?.judgeVeto?.[confirmsDelete(tool, input) ? DELETE_CONFIRM : action]; // a destructive call is vetoed as a delete (guests named: a cancellation is emailed), whatever the tool's action
   return veto ? veto(input, view) : true;
 }
 
@@ -72,6 +74,13 @@ export function mayFix(tool: string, o: { guardStep?: boolean; payment?: boolean
 // notifications. It only reads the call's own arguments; whether an existing event has guests is not known here, which is why the judge is told so.
 export function notifyNote(tool: string, input: Record<string, unknown>): string {
   return moduleOf(tool)?.floor?.judgeNote?.[actionOf(tool)]?.(input) ?? "";
+}
+
+// Pure: the code-built fact line for a destructive call (a draft, an event, a page or a file to the bin): did the assistant make this very thing in THIS conversation
+// (created.ts: its id came back in the assistant's own create result within 24 hours)? Empty for any other call. `unknown` when the call names no id to compare.
+export function createdNote(tool: string, input: Record<string, unknown>, conversation: string, now = Date.now()): string {
+  if (!confirmsDelete(tool, input)) return "";
+  return `\nCreated by the assistant in this conversation: ${createdFact(conversation, input, now)} (the id is compared with the ids that came back in the assistant's own create results in this conversation within the last 24 hours)`;
 }
 
 // PROVENANCE: whose words or which text led to the call. Written by code (the code that starts the run says it: RunOptions.provenance), never by the model and never

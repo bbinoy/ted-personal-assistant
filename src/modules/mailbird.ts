@@ -64,7 +64,7 @@ export const mailbirdModule: ToolModule = {
     // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS): trash, permanent delete of a conversation, spam, blocking a sender.
     ...mb("trash", "trash_conversation"),
     ...mb("delete", "delete_conversation_permanently"),
-    ...mb(DELETE_CONFIRM, "discard_draft"), // a draft thrown away: confirmed on the phone, not never-allowed (neverallowed.ts DELETE_CONFIRM); not judged, not fixed, not free
+    ...mb(DELETE_CONFIRM, "discard_draft"), // a draft thrown away: allowed but not routine (neverallowed.ts DELETE_CONFIRM): judged with care, never fixed, never free
     ...mb("spam", "set_conversation_spam"),
     ...mb("block", "set_sender_blocked"),
     // The destination may be Trash or Junk, so the call is the owner's own: filing mail is asked (and never judged), not denied.
@@ -83,7 +83,8 @@ export const mailbirdModule: ToolModule = {
   untrustedPrefix: MB, // (mail is written by third parties: every read is untrusted by default)
   floor: {
     judgeVeto: { send: (_input, view) => !!view && view.to.length > 0 }, // a mail nobody can be named for is not judged
-    judgeNever: ["move", DELETE_CONFIRM],
+    judgeNever: ["move"],
+    creates: (name) => ["create_draft", "reply_to_conversation", "reply_all_to_conversation", "forward_conversation"].includes(name), // they save a draft; its id is in the result
     noFix: ["send", "unsubscribe"],
   },
   skills: [{ name: "mailbird", required: true }, { name: "mailbird-troubleshooting" }],

@@ -115,7 +115,7 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
     return { r, judged: j.seen.length };
   };
   // never allowed, whatever anyone says: classify itself says deny (so this does not pass because an approver declined), and an approver who would say yes is never asked
-  for (const tool of ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", `${MB}delete_conversation_permanently`, `${MB}trash_conversation`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`, "mcp__claude_ai_Google_Drive__trash_file"]) {
+  for (const tool of ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", `${MB}delete_conversation_permanently`, `${MB}trash_conversation`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`]) {
     for (const source of ["chat", "brief", "handler", "background", "group"] as const) assert.equal(classify(tool, {}, source), "deny", `${tool} (${source})`);
     let asking = 0;
     const yes = makeCanUseTool(async () => (asking++, { approved: true }), "chat", undefined, fake("auto").fn, undefined, undefined, false, CHAT);
@@ -133,11 +133,7 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
     ["WebFetch", { url: "https://127.0.0.1.nip.io/x" }],
     ["mcp__tenants__remove_tenant", { id: "t" }],
     ["mcp__new_server__do_something", {}],
-    // the four deletes the owner lets the person confirm: asked, never judged (a judge that says auto still cannot skip the phone)
-    [`${MB}discard_draft`, { messageId: 7 }],
-    ["mcp__claude_ai_Gmail__delete_draft", { draftId: "d1" }],
-    [`${CAL}delete_event`, { eventId: "e1" }],
-    [`${NOTION}notion-update-page`, { page_id: "p", command: "update_properties", properties: { in_trash: true } }],
+    [`${CAL}delete_event`, { eventId: "e1", attendees: ["a@example.com"] }], // (a delete that names guests would email a cancellation)
   ] as const) {
     const before = asked.length;
     const x = await run(tool, input);

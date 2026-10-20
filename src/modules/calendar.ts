@@ -27,7 +27,7 @@ export const calendarModule: ToolModule = {
     ...cal("read", "list_calendars list_events get_event search_events suggest_time"),
     ...cal("calendar-write", "create_event update_event"), // the guest floor is below
     ...cal("calendar-respond", "respond_to_event"),
-    ...cal(DELETE_CONFIRM, "delete_event"), // asked on the phone, never judged (neverallowed.ts DELETE_CONFIRM)
+    ...cal(DELETE_CONFIRM, "delete_event"), // a destructive action the judge handles with care (neverallowed.ts DELETE_CONFIRM)
   ],
   free: ["read"],
   titles: {
@@ -37,10 +37,10 @@ export const calendarModule: ToolModule = {
     [`${CAL}delete_event`]: { icon: "🗑️", title: "Delete calendar event", labels: { eventId: "Event", calendarId: "Calendar" } },
   },
   floor: {
-    judgeVeto: { "calendar-write": namesNoGuests },
-    judgeNever: [DELETE_CONFIRM],
+    judgeVeto: { "calendar-write": namesNoGuests, [DELETE_CONFIRM]: namesNoGuests }, // a delete that names guests would email a cancellation: the owner's call
+    creates: (name) => name === "create_event", // (its result's event id is "created by the assistant", for the judge's care with a delete)
     noFix: ["calendar-respond"], // answering an invite is the owner's call, not a matter of wrong arguments
-    judgeNote: { "calendar-write": notifyLine },
+    judgeNote: { "calendar-write": notifyLine, [DELETE_CONFIRM]: notifyLine },
     editable: ["calendar-write"], // "yes, but make it 16:00" may edit an event
   },
   skills: [{ name: "calendar", required: true }],

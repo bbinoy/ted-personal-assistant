@@ -80,7 +80,7 @@
 {"tool":"mcp__claude_ai_Google_Drive__update_file","provider":"drive","action":"drive-write","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Google_Drive__copy_file","provider":"drive","action":"drive-write","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Google_Drive__share_file","provider":"drive","action":"share","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
-{"tool":"mcp__claude_ai_Google_Drive__trash_file","provider":"drive","action":"trash","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__claude_ai_Google_Drive__trash_file","provider":"drive","action":"delete-confirm","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Google_Docs__read_doc","provider":"docs","action":"read","cap":"drive","only":null,"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__claude_ai_Google_Docs__update_doc","provider":"docs","action":"doc-write","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Claude_Docs__read","provider":"claudedocs","action":"read","cap":"drive","only":null,"view":null,"free":true,"untrusted":true},

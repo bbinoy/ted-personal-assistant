@@ -417,7 +417,8 @@ src/kitespots.ts     the seed list of kite spots (assets/kitespots.json)
 src/logsearch.ts     the `search_logs` tool's plain-text search over the logs folder
 src/mailloops.ts     the mail check, triage and handler for every friend who has mail through her own Google, on the heartbeat's tick
 src/messenger.ts     the app's one meeting point with its chat platform (MESSENGER): load it by name, its options, the instance in use
-src/neverallowed.ts  THE never-allowed set as pure predicates (trading, trash, delete, spam, blocking)
+src/neverallowed.ts  THE never-allowed set as pure predicates (trading, trash, delete, spam, blocking), and the destructive-but-allowed class (DELETE_CONFIRM)
+src/created.ts       what the assistant itself made in a conversation (draft, event, page ids; 24 hours; per conversation), for the judge's care with a delete
 src/notetimes.ts     the times of day a conversation's notes name, for the idle fingerprint and the wake-ups
 src/notice.ts        informational messages written by a small tool-less model from facts code collected
 src/notionmcp.ts     a friend's Notion tools: the hosted Notion MCP server called with her token

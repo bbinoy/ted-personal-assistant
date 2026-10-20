@@ -130,3 +130,6 @@ export const mailToolsOf = (tool: string, mail: MailProvider = settings.mailProv
   const m = lookup(tool, mail)?.module;
   return m && (m.mail ?? m.mailTools);
 };
+
+// Does this call make something new whose id comes back in its result (a draft, an event, a page)? created.ts keeps those ids per conversation for the judge.
+export const createsOf = (tool: string, input: Record<string, unknown>): boolean => !!anyRow(tool)?.module.floor?.creates?.(tool.split("__").pop() ?? tool, input);

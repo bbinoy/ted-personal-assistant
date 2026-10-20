@@ -1,6 +1,6 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
+import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "./chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
@@ -213,7 +213,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask);
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
+      judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
       // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
       const fx = fixes.get(tool) ?? { n: 0, keys: new Set<string>() };

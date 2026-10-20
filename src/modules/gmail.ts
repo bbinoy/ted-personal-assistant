@@ -99,7 +99,7 @@ export const gmailModule: ToolModule = {
     ...gm("trash", "trash_message trash_thread untrash_message untrash_thread"),
     ...gm("spam", "mark_message_spam mark_thread_spam unmark_message_spam unmark_thread_spam"),
     ...gm("delete", "delete_label"),
-    ...gm(DELETE_CONFIRM, "delete_draft"), // a draft thrown away: confirmed on the phone, not never-allowed (neverallowed.ts DELETE_CONFIRM)
+    ...gm(DELETE_CONFIRM, "delete_draft"), // a draft thrown away: allowed but not routine (neverallowed.ts DELETE_CONFIRM), judged with care
   ],
   free: ["read"],
   // The brief the run emails to the owner's own address (BRIEF_EMAIL=on): one plain recipient that IS the configured address, nothing else (gmailrules.ts isSelfSend).
@@ -123,7 +123,7 @@ export const gmailModule: ToolModule = {
       return isGmailTool(tool) ? { withIds: true } : undefined;
     },
     judgeVeto: { send: named, reply: named, forward: named },
-    judgeNever: [DELETE_CONFIRM],
+    creates: (name) => name === "create_draft",
     noFix: ["send", "reply", "forward"],
   },
   skills: [{ name: "gmail", required: true }],

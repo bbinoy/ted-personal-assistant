@@ -17,7 +17,9 @@ test("judge floor: calendar events with a guest are never judged; the same floor
 
 test("judge floor: what the judge may see at all: routine upkeep yes; sharing, stopping a tenant, unknown tools and trading no", () => {
   for (const t of [`${MB}archive_conversation`, `${MB}create_draft`, `${MB}select_conversation`, `${MB}send_self_briefing`, `${CAL}respond_to_event`, "mcp__claude_ai_Notion__notion-update-page", "mcp__browse__browse", "mcp__browser__browser_navigate", "mcp__browser__browser_handle_dialog"]) assert.equal(isJudgeable(t, {}), true, t);
-  for (const t of ["mcp__claude_ai_Google_Drive__share_file", "mcp__tenants__remove_tenant", "mcp__tenants__suspend_tenant", `${CAL}delete_event`, "mcp__new_server__do_something", "Bash"]) assert.equal(isJudgeable(t, {}), false, t);
+  for (const t of ["mcp__claude_ai_Google_Drive__share_file", "mcp__tenants__remove_tenant", "mcp__tenants__suspend_tenant", "mcp__new_server__do_something", "Bash"]) assert.equal(isJudgeable(t, {}), false, t);
+  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e" }), true, "a delete is judged with care");
+  assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e", attendees: ["a@example.org"] }), false, "unless it names guests");
 });
 
 test("judge modes: auto lets an auto verdict skip the question; off never; an ask or fix never does", () => {

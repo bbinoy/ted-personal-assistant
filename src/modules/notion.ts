@@ -18,9 +18,9 @@ const OWNER_READS = "notion-ai-search notion-get-comments notion-get-users notio
 export const notionRows = (prefix: string, o: Parameters<ReturnType<typeof rowsOf>>[2] = {}) => NOTION_TOOLS_BY_ACTION.flatMap(([action, names]) => rowsOf(prefix, "notion", "notion")(action, names, o));
 
 // The floor of Notion's tools, shared by the owner's connector and a friend's own Notion (modules/notionhosted.ts spreads it): moving a page is always the
-// person's call (never judged). A page sent to the bin (notion-update-page with in_trash or archived true) is a delete the person confirms (neverallowed.ts
-// ConfirmDelete): asked, never judged, never fixed. The same flags on any other tool, and allow_deleting_content (it deletes child pages), stay never allowed.
-export const NOTION_FLOOR: ModuleFloor = { judgeNever: ["page-move"], confirmDelete: { tools: ["notion-update-page"], flags: ["in_trash", "archived"] } };
+// person's call (never judged). A page sent to the bin (notion-update-page with in_trash or archived true) is a destructive action the judge handles with care (neverallowed.ts
+// ConfirmDelete): never free, never fixed. The same flags on any other tool, and allow_deleting_content (it deletes child pages), stay never allowed.
+export const NOTION_FLOOR: ModuleFloor = { judgeNever: ["page-move"], confirmDelete: { tools: ["notion-update-page"], flags: ["in_trash", "archived"] }, creates: (name) => name === "notion-create-pages" };
 export const NOTION_UPDATE_TITLE = { icon: "📝", title: "Change Notion page", whenDeleting: "Move Notion page to the bin", labels: { page_id: "Page", in_trash: "In the bin", archived: "Archived" } } as const;
 
 export const notionModule: ToolModule = {
