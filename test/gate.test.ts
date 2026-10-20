@@ -8,7 +8,7 @@ import { group, owner, type Conversation } from "../src/conversation.ts";
 import { askGateWith, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/gate.ts";
 import { clampCheck, lookDue, lookState, wakeText } from "../src/ledger.ts";
 import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/messages.ts";
-import { groupConversation } from "../src/dream.ts";
+import { conversationLines } from "../src/dream.ts";
 import { groupContext, groupLogFile } from "../src/groupstore.ts";
 import { classify } from "../src/policy.ts";
 import { AuthError, RateLimitError } from "../src/errors.ts";
@@ -165,7 +165,7 @@ test("ledger kinds never reach anything that reads the log as conversation", asy
   assert.deepEqual(messagesSince(undefined, file).map((m) => m.kind), ["member", "chat"]);
   assert.equal(findMessage(2, file), undefined);
   assert.equal(findMessage(4, file)?.text, "Ted: Thursday it is");
-  assert.deepEqual(groupConversation(messagesSince(undefined, file)).lines.length, 2); // the member line and Ted's answer, no ledger
+  assert.deepEqual(conversationLines(messagesSince(undefined, file), "the group", "member").lines.length, 2); // the member line and Ted's answer, no ledger
   // the gate itself reads them, rendered as what Ted did and planned
   const tail = logTail({ logFile: file }, 10);
   assert.equal(tail.length, 4);

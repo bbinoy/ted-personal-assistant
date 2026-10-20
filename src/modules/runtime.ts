@@ -4,6 +4,7 @@ import { createBrowseServer } from "../browse.ts";
 import { browseStatus, browserServer } from "../browseserver.ts";
 import { readConnectors } from "../connectors.ts";
 import { createDrawServer } from "../drawtool.ts";
+import { dreamScope } from "../dreamscope.ts";
 import { googleHub, googleProxy, sweepStaleCredentialDirs } from "../googlemcp.ts";
 import { notionHub, notionProxy } from "../notionmcp.ts";
 import { GmailMail, gmailReaders } from "../gmail.ts";
@@ -37,7 +38,7 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
   weather: () => createWeatherServer(),
   draw: (ctx) => createDrawServer(ctx.key!),
   voice: (ctx) => createVoiceServer(ctx.key!),
-  memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
+  memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
   browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.memory?.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: (ctx) => {

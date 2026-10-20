@@ -20,7 +20,7 @@ export const offeredSkills = (mail: boolean, provider: string = settings.mailPro
 // denied), the system prompt, the skills offered, the turn and budget limits and the output schema. A Task (tasks.ts)
 // names one; the gate can choose a task but never edit a profile. `notes` are the note categories injected as data.
 // The skills are read from the loaded tool modules when asked for (a getter), so the table can be built before the modules are.
-export type ProfileName = "brief" | "radar" | "background" | "group" | "browse";
+export type ProfileName = "chat" | "brief" | "radar" | "background" | "group" | "handler" | "browse";
 interface RunProfile {
   readonly source: Source;
   readonly maxTurns: number;
@@ -33,6 +33,10 @@ interface RunProfile {
 // schema and the browse worker's settings are the harness's.
 const data = preset().profiles;
 export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
+  // The owner's chat: its resumed session, its own notes as memory. A cold prompt cache alone can cost most of a dollar, hence the budget.
+  chat: { source: "chat", ...data.chat, get skills() { return ownerSkills(); } },
+  // The mail handler (handler.ts), every conversation's: a fresh session, the mail module's tools, standing-task provenance.
+  handler: { source: "handler", ...data.handler, get skills() { return ownerSkills(); } },
   // Unattended daily brief: a fresh session each run, a bigger budget, no banter.
   brief: { source: "brief", ...data.brief, get skills() { return ownerSkills(); } },
   // The proactive radar: a fresh session each time; it answers with constrained JSON.
@@ -48,4 +52,4 @@ export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
   browse: { source: "browse", maxTurns: settings.browseMaxTurns, maxBudgetUsd: settings.browseMaxUsd, skills: [], outputSchema: BROWSE_SCHEMA, notes: [] },
 };
 
-export type OwnerProfile = Exclude<ProfileName, "group" | "browse">;
+export type OwnerProfile = "brief" | "radar" | "background";

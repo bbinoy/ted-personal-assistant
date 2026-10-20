@@ -14,6 +14,34 @@
     "ted-personal-assistant:draw"
   ],
   "profileSkills": {
+    "chat": [
+      "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mailbird",
+      "ted-personal-assistant:mailbird-troubleshooting",
+      "ted-personal-assistant:calendar",
+      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:meeting-prep",
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:follow-through",
+      "ted-personal-assistant:setup",
+      "ted-personal-assistant:radar",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
+    ],
+    "handler": [
+      "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mailbird",
+      "ted-personal-assistant:mailbird-troubleshooting",
+      "ted-personal-assistant:calendar",
+      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:meeting-prep",
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:follow-through",
+      "ted-personal-assistant:setup",
+      "ted-personal-assistant:radar",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
+    ],
     "brief": [
       "ted-personal-assistant:daily-brief",
       "ted-personal-assistant:mailbird",

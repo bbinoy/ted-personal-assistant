@@ -176,14 +176,11 @@ export function groupSystem(parts: { style?: string } = {}): string {
   );
 }
 
-// The nightly dream (dream.ts): reads what the owner said, proposes changes to their notes as JSON.
-export function dreamSystem(subject: "owner" | "group" = "owner"): string {
-  return say(subject === "group" ? "dreamGroup" : "dreamOwner");
-}
-
-// The dream of ONE tenant's notes (dream.ts): what she told the assistant to remember in her private chat.
-export function tenantDreamSystem(name: string): string {
-  return say("dreamTenant", { her: oneLineName(name) });
+// The nightly dream (dream.ts), one prompt for every conversation: reads what the owner, a friend or a group's members said and proposes changes to those notes as
+// JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three, `categories` the note categories that
+// conversation has (the preset's notes.dream, .tenant or .group).
+export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant"; categories: readonly string[] }): string {
+  return say("dream", { subject: oneLineName(d.subject), own: d.kind === "owner", group: d.kind === "group", categories: d.categories.join(", ") });
 }
 
 // The unattended daily brief: same rules, no banter. The brief itself is a document.

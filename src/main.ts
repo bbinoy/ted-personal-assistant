@@ -8,10 +8,8 @@ import * as approvals from "./approvals.ts";
 import { createApprovers } from "./approvers.ts";
 import { config, mask } from "./config.ts";
 import { acceptOwner } from "./guards.ts";
-import { createDreamer } from "./dream.ts";
+import { createDreamer, dreamConversations } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
-import { createGroupDreamer } from "./groupdream.ts";
-import { createTenantDreamer } from "./tenantdream.ts";
 import { createTenantMailLoops } from "./mailloops.ts";
 import { keyNotices } from "./keynotice.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
@@ -221,14 +219,13 @@ setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings
 const handler = mail?.propose ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: mail.propose }) : undefined;
 handler?.resume();
 
-const dreamer = createDreamer();
-const groupDreamer = createGroupDreamer();
-const tenantDreamer = createTenantDreamer();
-// The dream tidies the notes the brief then reads; it runs at most once a day, only when you said something new, and a
-// failure just moves on. The tenants' dreams start with it but are not waited for: the brief never waits for them, and each is its own.
+// One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, which the brief waits for, and the friends', which it does not
+// (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
+const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]) });
+const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]) });
 const dream = () => {
-  void tenantDreamer.run().catch(() => {});
-  return dreamer.run().then(() => groupDreamer.run()).catch(() => {});
+  void friendsDreamer.run().catch(() => {});
+  return dreamer.run().catch(() => {});
 };
 // The clock half of the gate: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's
 // gate also decides when the brief and the radar run, with a deterministic backstop for the brief.

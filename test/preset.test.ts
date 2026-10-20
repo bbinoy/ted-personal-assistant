@@ -35,10 +35,10 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
     heartbeat: { everyMinutes: 15, quietFromHour: 22, quietToHour: 7 },
     brief: { skill: "daily-brief", startHour: 7, backstopHour: 9, maxAttempts: 3 },
     radar: { skill: "radar", enabled: true, everyMinutes: 180 },
-    dream: { enabled: true },
+    dream: { enabled: true, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
   });
   assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"]);
-  assert.deepEqual(Object.keys(p.profiles).sort(), ["background", "brief", "group", "radar"]);
+  assert.deepEqual(Object.keys(p.profiles).sort(), ["background", "brief", "chat", "group", "handler", "radar"]);
   assert.deepEqual(Object.keys(p.persona).sort(), Object.keys(PROMPTS).sort());
   assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "setup", "radar"]);
   assert.strictEqual(presetFor({}), presetFor({ ASSISTANT_PRESET: "ted" }), "ted is the default, loaded once");
@@ -63,7 +63,7 @@ test("the prompts built from the preset are the stored ones (test/fixtures/defau
   } finally {
     if (account !== undefined) process.env.SIGNAL_ACCOUNT = account;
   }
-  assert.ok(dreamSystem("owner").startsWith(`You keep ${settings.owner}'s memory notes`));
+  assert.ok(dreamSystem({ subject: settings.owner, kind: "owner", categories: presetFor().notes.dream }).startsWith(`You keep the memory notes about ${settings.owner} for their personal assistant.`));
 });
 
 test("templates: variables, flags and their opposite, nesting", () => {
@@ -107,8 +107,8 @@ test("a second preset changes the persona, the rhythm and the limits without tou
     extends: "ted",
     name: "coach",
     rhythm: { brief: { startHour: 6, backstopHour: 8 }, radar: { enabled: false }, heartbeat: { everyMinutes: 30 } },
-    notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], group: ["people"] },
-    profiles: { brief: { maxTurns: 40, notes: ["goals", "style"] }, radar: { notes: ["goals"] }, background: { notes: ["goals"] } },
+    notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], group: ["people"], tenant: ["people", "style"] },
+    profiles: { brief: { maxTurns: 40, notes: ["goals", "style"] }, radar: { notes: ["goals"] }, background: { notes: ["goals"] }, handler: { notes: ["people", "style"] } },
   }));
   writeFileSync(join(dir, "persona", "personality.md"), "You talk like a calm, no-nonsense running coach: short sentences, one clear next step.\n");
   writeFileSync(join(dir, "persona", "radar.md"), "You are {{assistant}}, {{owner}}'s coach, checking in. Load the {{skill}} skill.\n");

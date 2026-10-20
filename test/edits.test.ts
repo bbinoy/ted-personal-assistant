@@ -8,7 +8,7 @@ import { createGroupBrain } from "../src/group.ts";
 import * as approvals from "./approvalrig.ts";
 import { FILE, findMessage, foldEdits, ledgerEntries, recordMessage, revisionsOf, withoutDeleted, type Extra, type Kind, type Sent } from "../src/messages.ts";
 import { editNote, isAuthor, normalised, sameText } from "../src/edit.ts";
-import { conversationLines, groupConversation } from "../src/dream.ts";
+import { conversationLines } from "../src/dream.ts";
 import { groupContext, groupLogFile } from "../src/groupstore.ts";
 import { logTail, tailLine } from "../src/gate.ts";
 import { dataPath } from "../src/state.ts";
@@ -132,10 +132,10 @@ test("log: folding makes an edit one message, not two; a deleted message is nobo
   assert.deepEqual(foldEdits(log).map((x) => x.text), ["I like blues", "my pin is 1234", "👍 on: x"]);
   assert.deepEqual(withoutDeleted(log).map((x) => x.ts), [1, 2, 4, 5]);
   const dream = conversationLines(log);
-  assert.equal(dream.ownerText, "I like blues"); // once, as edited; the deleted line is not evidence
+  assert.equal(dream.text, "I like blues"); // once, as edited; the deleted line is not evidence
   assert.equal(dream.lines.length, 2);
   const members = [e(1, "member", "Eve (a member): pizza on Fridays", { by: EVE }), e(2, "edit", "Eve (a member): pizza on Thursdays", { by: EVE, of: 1 }), e(3, "edit", "Eve (a member): orphan edit", { by: EVE, of: 99 })];
-  assert.equal(groupConversation(members).memberText, "Eve (a member): pizza on Thursdays");
+  assert.equal(conversationLines(members, "the group", "member").text, "Eve (a member): pizza on Thursdays");
 });
 
 test("log: the gate's tail and a group's context show an edit as one, hide what was deleted and keep the marker", () => {

@@ -28,7 +28,7 @@ import { OWNER, settings } from "./settings.ts";
 // A group has its own notes and its own history (groupstore.ts) and works like the owner's chat: the SDK's
 // auto-memory in the group's notes folder (the file tools reach nothing else, policy.ts), the memory tools
 // scoped to the group (memory-tools.ts), and a resumed session of its own (agent.ts runConversation). Anyone in
-// the group can ask it to remember or forget things; a nightly dream (groupdream.ts) tidies the group's notes
+// the group can ask it to remember or forget things; a nightly dream (dream.ts) tidies the group's notes
 // from the group's own words, touching nothing else.
 
 // Pure: who is speaking, as the model should see it. The owner is named; others are labelled by their
