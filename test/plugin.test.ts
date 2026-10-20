@@ -47,7 +47,7 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
   assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
-  assert.match(heartbeatSystem("", missing), /You cannot ask anyone[\s\S]*message "set up"/);
+  assert.match(heartbeatSystem("", { missing }), /You cannot ask anyone[\s\S]*message "set up"/);
   assert.match(handlerSystem("", { missing }), /Not set up yet/);
   assert.ok(!chatSystem(new Date()).includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
 });
@@ -77,7 +77,7 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 3);
   const chat = chatContext({ down: ["notion"] })!;
   assert.match(chat, /Not connected right now[\s\S]*Notion[\s\S]*Do not ask them to type in/);
-  assert.match(heartbeatSystem("", [], ["notion", "calendar"]), /🔌 Notion and Google Calendar aren't connected/);
+  assert.match(heartbeatSystem("", { down: ["notion", "calendar"] }), /🔌 Notion and Google Calendar aren't connected/);
   assert.ok(!chatSystem(new Date()).includes("Not connected") && chatContext({ down: [] }) === undefined);
   assert.equal(NAMES.calendar, "Google Calendar");
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");

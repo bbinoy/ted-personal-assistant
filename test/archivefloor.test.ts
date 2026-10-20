@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readAudit } from "../src/audit.ts";
 import { buildOptions } from "../src/agentrun.ts";
-import { profileOptions } from "../src/agent.ts";
+import { heartbeatOptions } from "../src/agent.ts";
+import { owner } from "../src/conversationmodel.ts";
+import { LOGIN } from "../src/payer.ts";
 import type { JudgeInput, Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { archivedId, createArchiveWatch, mailLinks, MAX_ARCHIVES_PER_RUN } from "../src/policy/archivefloor.ts";
@@ -112,7 +114,7 @@ test("the floor changes nothing else: the never-allowed set is unchanged, a run 
   // the owner's chat and a group have no watch at all
   const refuse = async () => ({ approved: false }) as never;
   const chat = buildOptions(refuse, { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined);
-  const hb = buildOptions(refuse, profileOptions("heartbeat"), undefined);
+  const hb = buildOptions(refuse, heartbeatOptions(owner(), LOGIN), undefined);
   assert.ok(chat.canUseTool && hb.canUseTool);
   // the heartbeat run's closure: an unread archive reaches the owner (declined here), never the real judge
   const r = await hb.canUseTool!(`${MB}archive_conversation`, { conversationId: "c-77" }, opts);

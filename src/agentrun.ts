@@ -48,6 +48,7 @@ export interface RunOptions {
   // Turns on the SDK's auto-memory: notes in `dir`, the only place the file tools may write (policy.ts).
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
+  groupId?: string; // a group's unattended run (the heartbeat run) has no memory but is still the group's: its send, its browse approvals and its questions go there (memory.groupId says the same for a chat turn)
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
   skills?: readonly string[]; // the skills offered (default: the owner's, skills.ts ownerSkills);a group's or tenant's are the shared ones its capabilities allow (skills.ts)
   mcpTools?: ReadonlySet<string>; // an unattended job's own list of MCP tools (profiles.ts): every other connector tool is out of the model's view (profiletools.ts); default: the owner's whole set
@@ -71,7 +72,7 @@ export interface RunOptions {
   // A tenant's run (tenants.ts): an isolated "group" run on HER OWN Anthropic API key, with her own cost ledger and cooldown. Never absent for a run
   // made for a tenant, and never given the instance's login: without a key the run does not start.
   tenant?: TenantRun;
-  // The owner's heartbeat run only: experts it may delegate heavy work to (heartbeat/delegation.ts). Gives the run the Agent tool, the SDK `agents` and the PreToolUse hook that
+  // A heartbeat run whose conversation has something to read (heartbeat/scope.ts): experts it may delegate heavy work to (heartbeat/delegation.ts). Gives the run the Agent tool, the SDK `agents` and the PreToolUse hook that
   // allows only these agents, at most two per look and no nesting, and keeps a `delegate:` skill out of the run's own hands. `onDelegate` is told each accepted delegation.
   experts?: { setup: ExpertSetup; onDelegate?: (d: Delegation) => void };
 }
@@ -163,17 +164,18 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // The entry tool (browse.ts) for the runs that may browse: the owner's chat, a wake-up and a group. It starts a separate browse run.
   // send (send.ts): the owner's chat and groups, never an unattended run (a wake-up included).
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
-  const tellKey = opts.source === "chat" ? OWNER_KEY : opts.source === "group" ? (tenant?.key ?? opts.memory?.groupId) : undefined;
+  const groupId = opts.groupId ?? opts.memory?.groupId;
+  const tellKey = opts.source === "chat" ? OWNER_KEY : opts.source === "group" ? (tenant?.key ?? groupId) : undefined;
   const mode: BrowseMode = opts.source === "group" ? "group" : "owner";
   // Whose words the approval judge reads as the provenance of this run's calls: what the code that started it said, else this conversation's own turn (turnscope.ts;
   // the browse worker: its parent's). `conversation` keys the per-conversation state of permissions.ts.
   const provenance = opts.provenance ?? (tellKey ? scopeOf(tellKey).read : undefined);
   const conversation = opts.conversation ?? tellKey ?? OWNER_KEY;
-  const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && opts.memory?.groupId ? approveIn(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
+  const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && groupId ? approveIn(groupId) : approve; // a tenant's browse run asks HER, in her chat
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId: opts.memory?.groupId, tenant, memory: opts.memory, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation }) };
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers

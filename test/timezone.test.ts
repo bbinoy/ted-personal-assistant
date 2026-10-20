@@ -11,6 +11,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "timezone-test-"));
 const Z = await import("../src/timezone.ts");
 const { clockLine } = await import("../src/brief.ts");
 const { lastLookText, lookInstruction, lookPrompt } = await import("../src/heartbeat/look.ts");
+const { lookerOf } = await import("../src/heartbeat/scope.ts");
 const { readNotes } = await import("../src/notes.ts");
 const { localDay } = await import("../src/pause.ts");
 const T = await import("../src/tenants/tenants.ts");
@@ -56,7 +57,7 @@ test("the clock line and the heartbeat instruction carry the conversation's zone
   assert.match(line, /Yesterday was Tuesday 2026-10-20\. Tomorrow is Thursday 2026-10-22\. The day after is Friday 2026-10-23/);
   assert.match(clockLine(AT, "America/New_York"), /it is now Tuesday 2026-10-20 19:30 \(America\/New_York\)/);
 
-  const text = lookInstruction(AT, "2026-10-20T20:00:00Z", "Pacific/Auckland"); // 09:00 the same day, there
+  const text = lookInstruction(AT, "2026-10-20T20:00:00Z", { ...lookerOf(owner()), zone: "Pacific/Auckland" }); // 09:00 the same day, there
   assert.match(text, /It is Wednesday 2026-10-21 12:30 \(Pacific\/Auckland,/);
   assert.match(text, /Your last look was at 09:00\./);
   assert.match(lookPrompt(AT, text, [], "Pacific/Auckland"), /^CURRENT TIME: it is now Wednesday 2026-10-21 12:30 \(Pacific\/Auckland\)/);

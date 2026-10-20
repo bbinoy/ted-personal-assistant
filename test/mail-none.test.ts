@@ -129,7 +129,7 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
   const missing = missingSetup([], [], false);
   const prompts = {
     chat: chatSystem(new Date("2026-10-12T09:00:00"), false),
-    heartbeat: heartbeatSystem("MEMORY", missing, down, false),
+    heartbeat: heartbeatSystem("MEMORY", { missing, down, mail: false }),
     background: backgroundSystem("MEMORY", missing, down, false),
   };
   const sentence = /There is no email in this setup[^\n]*?mail is off here\./;

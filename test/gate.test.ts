@@ -1,20 +1,16 @@
 import { test } from "node:test";
-import { scopeOf } from "../src/approvals/turnscope.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { group, owner, type Conversation } from "../src/conversation.ts";
+import { group, owner } from "../src/conversation.ts";
 import { askGateWith, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/gate.ts";
 import { clampCheck, lookDue, lookState, wakeText } from "../src/ledger.ts";
 import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/messages.ts";
 import { conversationLines } from "../src/dream.ts";
 import { groupContext, groupLogFile } from "../src/groupstore.ts";
-import { classify } from "../src/policy/policy.ts";
 import { AuthError, RateLimitError } from "../src/errors.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { dataPath } from "../src/state.ts";
-import { createWakeups } from "../src/wake.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.briefBackstopHour = 24; // the backstop has its own tests below
@@ -177,201 +173,6 @@ test("ledger kinds never reach anything that reads the log as conversation", asy
   for (let i = 0; i < 30; i++) rec(i % 2 ? "wake" : "chat", 100 + i, i % 2 ? JSON.stringify({ next: at(30), looked: at(0) }) : `Ted: line ${i} ${"y".repeat(80)}`, 10 + i);
   assert.equal(await compactIfNeeded(async (_p, old) => ((folded = [...old]), "short"), 1500, file), true);
   assert.ok(folded.length > 0 && folded.every((m) => m.kind !== "wake" && m.kind !== "action"));
-});
-
-// ---- wake-ups ----
-
-interface Calls { provenance: unknown[]; ownerRuns: string[]; groupRuns: string[]; sent: string[]; gates: string[]; profiles: string[]; recorded: [string, string][]; turns: any[] }
-function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; paused?: boolean; ownerAnswer?: string; groupAnswer?: string | (() => string); vouch?: boolean; groups?: string[]; now?: Date; separate?: boolean } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "wake-"));
-  mkdirSync(join(dir, "o-notes"));
-  const ownerConv: Conversation = { ...owner(), logFile: `logs/gate-wake-owner-${Math.random().toString(36).slice(2)}.jsonl`, notesDir: join(dir, "o-notes") };
-  const c: Calls = { provenance: [], ownerRuns: [], groupRuns: [], sent: [], gates: [], profiles: [], recorded: [], turns: [] };
-  let now = over.now ?? T0;
-  const groupConvs = new Map<string, Conversation>();
-  const pipeline = {
-    canSpeak: () => true,
-    enqueue: <T>(_c: Conversation, job: () => Promise<T>) => job(),
-    record: (conv: Conversation, kind: Kind, ts: number, text: string) => {
-      c.recorded.push([kind, text]);
-      recordMessage(kind, ts, text, now, conv.kind === "owner" ? ownerConv.logFile : conv.logFile);
-    },
-    runTurn: async (conv: Conversation, turn: any) => {
-      c.turns.push({ conv, turn });
-      try {
-        const { text } = await turn.run();
-        if (text.trim() !== "[[silent]]") c.sent.push(`${conv.kind}: ${text}`);
-        return { spoke: text.trim() !== "[[silent]]" };
-      } catch (e) {
-        return { spoke: false, error: e };
-      }
-    },
-  };
-  const wakeups = createWakeups({
-    pipeline: pipeline as any,
-    groupChats: over.separate ?? true,
-    vouch: async () => over.vouch ?? true,
-    runProfile: async (profile, prompt, extra) => (c.profiles.push(profile), c.ownerRuns.push(prompt), c.provenance.push(extra?.provenance), { text: over.ownerAnswer ?? "Morning! Fun fact: biscuits." }),
-    runGroup: async (build, ctx) => (c.groupRuns.push(`${ctx.conv.source}:${build().prompt}`), c.provenance.push(scopeOf(ctx.conv.key).read()), (typeof over.groupAnswer === "function" ? over.groupAnswer() : over.groupAnswer) ?? "Group fun fact!"),
-    gate: async ({ conv }) => (c.gates.push(conv.kind), parseGate((over.gate ?? (() => ({ act: true, instructions: "Post a fun fact", nextCheckMinutes: 30 })))(conv))),
-    groups: () => over.groups ?? [],
-    context: () => ({ lines: ["Eve (a member): hi"], seenAt: undefined }),
-    notesChangedAt: () => 0,
-    now: () => now,
-    guards: { paused: () => !!over.paused, budgetSpent: () => !!over.spent },
-  });
-  // The owner conversation is swapped for one with a test log: createWakeups uses owner() and group(); for the
-  // owner we call look() on ours directly.
-  return { c, wakeups, ownerConv, setNow: (d: Date) => (now = d), groupConvs };
-}
-const G = "wake-test-group-0123456789ab";
-// The owner's initiative is the heartbeat run (test/heartbeatrun.test.ts); the gate's look is a group's or a friend's. These tests look at a group.
-const groupOf = (id: string): Conversation => {
-  const g = group(id);
-  mkdirSync(g.notesDir!, { recursive: true });
-  return g;
-};
-
-test("wake: the gate says act, so the group runs its own runner (never the owner's), and the answer is an ordinary chat turn from a derived task", async () => {
-  const { c, wakeups } = rig();
-  const g = groupOf("wake-act-group-0123456789ab");
-  assert.equal(await wakeups.look(g, T0), "posted");
-  assert.equal(c.ownerRuns.length, 0, "no owner profile runs for a group");
-  assert.equal(c.groupRuns.length, 1);
-  assert.match(c.groupRuns[0]!, /Post a fun fact/);
-  assert.match(c.groupRuns[0]!, /<task>/);
-  assert.equal(c.turns[0].turn.background, true);
-  assert.equal(c.turns[0].turn.kind, "chat");
-  assert.equal(c.turns[0].turn.announce, false);
-  assert.deepEqual(c.recorded.map(([k]) => k), ["wake", "action", "wake"]); // chosen look before the run, the act, the schedule again after
-  assert.match(c.recorded[1]![1], /→ posted/);
-});
-
-test("wake: a group's wake-up runs the GROUP runner and never the owner's run", async () => {
-  const { c, wakeups } = rig({ groups: [G] });
-  await wakeups.tick(T0);
-  assert.ok(c.groupRuns.length === 1 && c.groupRuns[0]!.startsWith("group:"), "the group run, with group privileges");
-  assert.match(c.groupRuns[0]!, /Post a fun fact/);
-  assert.equal(c.ownerRuns.length, 1); // the owner's own look is a separate conversation, with its own run (the heartbeat run: it answered in no format, so it is silent)
-  assert.deepEqual(c.sent, ["group: Group fun fact!"]);
-  // the gate wrote the group's task from the notes: the judge is told it is derived (not anybody's words, never a standing task); the owner's heartbeat run is the owner's standing task
-  assert.deepEqual(c.provenance.map((p) => (p as { kind: string }).kind).sort(), ["derived", "standing"]);
-  assert.ok(c.provenance.some((p) => JSON.stringify(p) === JSON.stringify({ kind: "derived", by: "gate", of: "member", text: "Post a fun fact" })));
-  assert.equal(scopeOf(G).read(), undefined, "and nothing of it is left once the run is over");
-  // the only way a group conversation can run is as a group: its policy source is "group" whatever the gate said
-  const kinds = c.turns.map((t) => [t.conv.kind, t.conv.source]);
-  assert.deepEqual(kinds, [["group", "group"]]);
-  // and the unattended owner run has no web and no notes, only reads (everything else asks)
-  assert.equal(classify("WebSearch", {}, "background"), "allow"); // the owner's background run may search; a page fetch asks
-  assert.equal(classify("WebFetch", {}, "background"), "ask");
-  assert.equal(classify("Write", { file_path: "/x" }, "background"), "deny");
-  assert.equal(classify("mcp__memory__forget_note", {}, "background"), "deny");
-  assert.equal(classify("mcp__mailbird__get_message", {}, "background"), "allow");
-  assert.equal(classify("mcp__mailbird__archive_conversation", {}, "background"), "ask");
-  assert.equal(classify("mcp__claude_ai_Notion__notion-create-pages", {}, "background"), "ask"); // narrower than the owner's chat
-  assert.equal(classify("mcp__mailbird__get_message", {}, "group"), "deny");
-});
-
-test("wake: on Note to Self (no separate account) groups are never woken, whatever the gate says", async () => {
-  const { c, wakeups } = rig({ groups: [`${G}-nts`], separate: false });
-  await wakeups.tick(T0);
-  assert.deepEqual(c.groupRuns, []);
-  assert.deepEqual(c.gates, []); // only the owner's own look, and the owner has no gate
-  const own = rig({ groups: [`${G}-own`], separate: true }); // another group: the shared one has a look recorded already
-  await own.wakeups.tick(T0);
-  assert.equal(own.c.groupRuns.length, 1);
-});
-
-test("wake: the owner's heartbeat run does not hold the chat queue; only its delivery is queued", async () => {
-  let release!: () => void;
-  const slow = new Promise<void>((r) => (release = r));
-  const ownerConv: Conversation = { ...owner(), logFile: `logs/gate-wake-owner-${Math.random().toString(36).slice(2)}.jsonl` };
-  const queued: string[] = []; // the queue records when a job is entered: the run (waiting for an approval) must not be inside it
-  let running = false;
-  const w = createWakeups({
-    pipeline: { canSpeak: () => false, enqueue: async (_c: any, j: any) => (queued.push("queued"), j()), record: () => {}, runTurn: async (_c: any, t: any) => { const r = await t.run(); queued.push(`delivered ${r.text}`); return { spoke: true }; } } as any,
-    groupChats: true,
-    vouch: async () => true,
-    runProfile: async () => { running = true; await slow; return { text: "", structured: { message: "late", nextCheckMinutes: 20 } }; },
-    gate: async () => parseGate({ act: true, instructions: "do it", nextCheckMinutes: 20 }),
-    groups: () => [],
-    notesChangedAt: () => 0,
-    now: () => T0,
-    guards: { paused: () => false, budgetSpent: () => false },
-  });
-  const look = w.look(ownerConv, T0);
-  await new Promise((r) => setTimeout(r, 10));
-  assert.equal(running, true);
-  assert.deepEqual(queued, []); // still waiting for the (approval-asking) run, and the queue was never entered
-  release();
-  assert.equal(await look, "posted");
-  assert.deepEqual(queued, ["queued", "delivered late"]);
-});
-
-test("wake: [[silent]] posts nothing but is an action; a failing run is logged, silent and counted", async () => {
-  const quiet = rig({ groupAnswer: "[[silent]]" });
-  assert.equal(await quiet.wakeups.look(groupOf("wake-silent-group-0123456789a"), T0), "silent");
-  assert.deepEqual(quiet.c.sent, []);
-  assert.match(quiet.c.recorded[1]![1], /stayed silent/);
-  const broken = rig({ groupAnswer: () => { throw new Error("boom"); } });
-  assert.equal(await broken.wakeups.look(groupOf("wake-broken-group-0123456789a"), T0), "failed");
-  assert.match(broken.c.recorded.find(([k]) => k === "action")![1], /failed/);
-  assert.equal(broken.c.sent.length, 0);
-});
-
-test("wake: not due means no gate call; a recorded look is due again only at its time or on news", async () => {
-  const r = rig();
-  const g = groupOf("wake-notdue-group-0123456789a");
-  assert.equal(await r.wakeups.look(g, T0), "posted");
-  r.c.gates.length = 0;
-  assert.equal(await r.wakeups.look(g, new Date(T0.getTime() + 10 * 60_000)), "not-due");
-  assert.equal(r.c.gates.length, 0);
-  recordMessage("member", 99, "remind us about the pitch", new Date(T0.getTime() + 11 * 60_000), g.logFile); // a member wrote
-  r.setNow(new Date(T0.getTime() + 12 * 60_000));
-  assert.notEqual(await r.wakeups.look(g, new Date(T0.getTime() + 12 * 60_000)), "not-due");
-  assert.equal(r.c.gates.length, 1);
-});
-
-test("wake: guards in code, whatever the gate says", async () => {
-  // pause and budget stop the whole tick before any model call
-  for (const g of [{ paused: true }, { spent: true }]) {
-    const r = rig({ ...g, groups: [G] });
-    await r.wakeups.tick(T0);
-    assert.deepEqual([r.c.gates.length, r.c.ownerRuns.length, r.c.groupRuns.length], [0, 0, 0], JSON.stringify(g));
-  }
-  // quiet hours: a group is held back unless its notes name a time inside the quiet window (the owner's look has no such rule in code: the heartbeat run judges the night itself)
-  const night = new Date(2026, 9, 14, 3, 0, 0);
-  const NG = "wake-night-group-0123456789ab";
-  const q = rig({ now: night, groups: [NG] });
-  await q.wakeups.tick(night);
-  assert.deepEqual(q.c.gates, []);
-  assert.equal(q.c.ownerRuns.length, 1, "the owner's heartbeat run looks at night too");
-  const named = group(NG);
-  mkdirSync(named.notesDir!, { recursive: true });
-  writeFileSync(join(named.notesDir!, "scheduling-early.md"), "Post the weather at 6:30.");
-  await q.wakeups.tick(night);
-  assert.deepEqual(q.c.gates, ["group"]);
-  writeFileSync(join(named.notesDir!, "scheduling-early.md"), "Post the weather at 15:30.");
-  const q2 = rig({ now: night, groups: [NG] });
-  await q2.wakeups.tick(night);
-  assert.deepEqual(q2.c.gates, []); // a time outside the quiet window does not open the night
-  // a group we cannot vouch for is never woken
-  const stranger = rig({ vouch: false, groups: [G] });
-  await stranger.wakeups.tick(T0);
-  assert.equal(stranger.c.groupRuns.length, 0);
-});
-
-test("wake: bad gate output fails closed; a gate that throws or acts without instructions does nothing", async () => {
-  for (const out of [undefined, "act", { act: "true", instructions: "x" }, { act: true }, { act: true, instructions: "   " }]) {
-    const r = rig({ gate: () => out });
-    const res = await r.wakeups.look(groupOf(`wake-bad-group-${Math.random().toString(36).slice(2, 12)}`), T0);
-    assert.ok(res === "no" || res === "no-instructions", `${JSON.stringify(out)} -> ${res}`);
-    assert.deepEqual([r.c.groupRuns.length, r.c.sent.length], [0, 0]);
-    assert.ok(r.c.recorded.some(([k]) => k === "wake"), "a next look is still chosen, so a bad answer cannot loop on every tick");
-  }
-  const t = rig({ gate: () => { throw new Error("model down"); } });
-  assert.equal(await t.wakeups.look(groupOf("wake-down-group-0123456789ab"), T0), "no");
-  assert.equal(t.c.groupRuns.length, 0);
 });
 
 test("gate: a quick reaction must be exactly one emoji, otherwise it is dropped", () => {

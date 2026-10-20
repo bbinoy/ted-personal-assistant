@@ -309,7 +309,8 @@ src/chatsession.ts   when a conversation's session resumes, and compacting it in
 src/memorynotice.ts  the note changes of a chat turn and the one notice about them
 src/modules/         the tool modules, one file per tool or one folder per feature with module.ts and its code (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
 src/heartbeat.ts     the free tick (starts the jobs, writes the liveness line) and the friends' mail check (createMailCheck)
-src/heartbeat/look.ts   the owner's heartbeat run: when it is due, the prompt, the run (standing provenance), posting, the row
+src/heartbeat/look.ts   a conversation's heartbeat run (the owner's, a group's, a friend's): when it is due, the prompt, the run (standing provenance), posting, the row
+src/heartbeat/scope.ts  what a heartbeat run is made of for one conversation, from its capability set: who it is told about, what it reads, whether it may delegate; the rule for "anything to look at"
 src/heartbeat/rules.ts  its pure rules: output schema, the 10..120 clamp, the answer parser
 src/heartbeat/delegation.ts the general expert, the `expert-<skill>` variants and the Agent and Skill hooks that enforce delegation
 src/statusnote.ts      the one narrow note write of the heartbeat run and its experts: status-<name>.md (the brief's state)
