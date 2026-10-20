@@ -60,7 +60,7 @@
     "test": "node --conditions=workspace-source --test test/*.test.ts"
   },
   "dependencies": {
-    "@ted-assistant/messenger": "*"
+    "@ted-assistant/messenger": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

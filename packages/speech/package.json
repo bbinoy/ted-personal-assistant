@@ -19,7 +19,7 @@
   "license": "MIT",
   "author": "Ben",
   "dependencies": {
-    "@ted-assistant/messenger": "*"
+    "@ted-assistant/messenger": "^0.1.0"
   },
   "engines": {
     "node": ">=24"
