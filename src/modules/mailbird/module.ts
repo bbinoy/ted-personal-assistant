@@ -1,7 +1,7 @@
-import { nativeView } from "../policy/mailview.ts";
-import type { DraftView } from "../proposals.ts";
-import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
-import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
+import { nativeView } from "../../policy/mailview.ts";
+import type { DraftView } from "./proposals.ts";
+import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
+import { rowsOf, type MailSlot, type ToolModule } from "../types.ts";
 
 // Mailbird, the owner's desktop mail client, through its local MCP server (a user-scope entry of the owner's Claude settings): the default mail provider
 // (MAIL_PROVIDER=mailbird). The approval of a send is shown from the draft as Mailbird holds it. The client, `npm run restore` and the doctor check are runtime.ts.

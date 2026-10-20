@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/core/audit.ts";
-import { setDraftReader } from "../src/modules/mailbird.ts";
+import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { makeCanUseTool, type CallGuard } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
 

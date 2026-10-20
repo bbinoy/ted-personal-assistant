@@ -2,7 +2,7 @@ import { namesNoGuests } from "../../policy/guests.ts";
 import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
 import { nativeView } from "../../policy/mailview.ts";
 import { notifyLine } from "../calendar.ts";
-import { named } from "../gmail.ts";
+import { named } from "../gmail/module.ts";
 import { rowsOf, tenantOffered, type FloorVerdict, type ToolModule } from "../types.ts";
 
 // Google for friends (capability `google`, with `mail` and `calendar` for the tools): a friend's own Gmail and Calendar, served by a third-party MCP server that

@@ -12,7 +12,7 @@ import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readText } from "../src/core/state.ts";
-import { createWakeups } from "../src/wake.ts";
+import { createWakeups } from "../src/heartbeat/wake.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 
 const s = settings as unknown as Record<string, unknown>;

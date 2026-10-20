@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { extractMessageId } from "../src/policy/mailview.ts";
-import { authoredPart, sendApprovalText, viewDraft } from "../src/proposals.ts";
+import { authoredPart, sendApprovalText, viewDraft } from "../src/modules/mailbird/proposals.ts";
 
 const msg = (body: string, to = ["armon@example.com"], cc: string[] = []) => ({ to: to.map((email) => ({ email })), cc: cc.map((email) => ({ email })), subject: "Re: Coffee", body });
 

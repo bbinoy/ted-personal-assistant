@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
-import { startHeartbeat } from "../src/heartbeat.ts";
+import { startHeartbeat } from "../src/heartbeat/heartbeat.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
 import { missingSetup, setupItems } from "../src/modules/index.ts";
 import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";

@@ -1,14 +1,14 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { recordCost } from "./core/budget.ts";
+import { recordCost } from "../../core/budget.ts";
 import { GMAIL_PREFIX, gmailVerdict } from "./gmailrules.ts";
-import { attachmentsNamed as attachmentsOf } from "./policy/mailview.ts";
-import type { GmailReaders } from "./modules/gmail.ts";
-import { callKey } from "./approvals/permissions.ts";
-import { hiddenTools } from "./policy/policy.ts";
-import type { DraftView } from "./proposals.ts";
-import { settings } from "./core/settings.ts";
-import { cleanToolOutput } from "./core/toolclean.ts";
-import { toolsSeen } from "./policy/toolsseen.ts";
+import { attachmentsNamed as attachmentsOf } from "../../policy/mailview.ts";
+import type { GmailReaders } from "./module.ts";
+import { callKey } from "../../approvals/permissions.ts";
+import { hiddenTools } from "../../policy/policy.ts";
+import type { DraftView } from "../mailbird/proposals.ts";
+import { settings } from "../../core/settings.ts";
+import { cleanToolOutput } from "../../core/toolclean.ts";
+import { toolsSeen } from "../../policy/toolsseen.ts";
 
 // The Gmail provider (MAIL_PROVIDER=gmail). Gmail comes through the owner's Claude login (the claude.ai connector), exactly like Notion:
 // there is no server address or token the agent holds, so there is no direct client like Mailbird's. The approval of a send (it reads the draft back) and the restore command

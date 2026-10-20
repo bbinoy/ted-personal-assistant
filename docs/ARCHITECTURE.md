@@ -286,21 +286,14 @@ What is left is model time: a tool question is two or three model calls of 2 to 
 
 ## Project layout
 
+The `src/` root holds only the three entry points, `main.ts`, `cli.ts` and `doctor.ts`. Everything else is a folder, and folders depend downward only: `heartbeat/` on `conversation/` on `run/` on `modules/` on `approvals/` on `policy/` on `tenants/`, `intake/` and `memory/` (one box) on `secrets/` on `core/`. `test/boundaries.test.ts` enforces it on value imports; the subsections below say what each folder is for. A tool is a folder under `src/modules/` (see CONTRIBUTING.md).
+
 ```
 src/main.ts          wiring: Signal in (to the conversation pipeline), heartbeat, dream, approvals
 packages/messenger/  @ted-assistant/messenger (published, built): the Messenger interface (types, addressing, loadMessenger), a FakeMessenger for tests and the contract suite every platform package runs (/contract); platform packages implement it
 packages/signal/     @ted-assistant/signal: signal-cli JSON-RPC client, daemon start, the Messenger adapter (entry point /messenger), a workspace package with its own README and tests
 packages/speech/     @ted-assistant/speech (private): text to speech (Qwen3-TTS, Kokoro, optional ElevenLabs / HTTP), speech to text (whisper.cpp), voice libraries and reference clips, the Python scripts and docs/remote-tts.md; entry points /tts and /voice
 src/modules/         the tool modules, one file per tool or one folder per feature with module.ts and its code (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
-src/heartbeat.ts     the free tick: starts the jobs (every conversation's look, the dream) and writes the liveness line
-src/heartbeat/look.ts   a conversation's heartbeat run (the owner's, a group's, a friend's): when it is due, the prompt, the run (standing provenance), posting, the row
-src/heartbeat/rows.ts   state/heartbeat.jsonl: one counted row per look, no words
-src/heartbeat/report.ts `npm run heartbeat-report`: the rows as counts, dollars and the next-look distribution
-src/mailbird.ts      direct MCP client for the local mail server
-src/gmail.ts         the Gmail provider\'s relay: a Haiku run that makes exactly the planned connector calls (the approval\'s read-backs, `npm run restore`), parsers for the connector\'s results
-src/gmailrules.ts    Gmail rules a flag cannot say: TRASH/SPAM label values, attachments, the brief to oneself (pure, tested)
-src/proposals.ts     the draft rules: a draft as the mail client holds it, and the send-approval text built from it (pure, tested)
-src/wake.ts          the clock side: on each tick start the heartbeat run of every conversation that is due, with the code guards
 src/modules/connectors.ts    which connectors (Notion, Calendar, mail) the last run could see
 src/cli.ts           report / restore / doctor
 src/doctor.ts        `npm run doctor`
@@ -308,10 +301,8 @@ src/modules/skills.ts        which bundled skills a conversation may load
 src/modules/builtin.ts the assistant's own tools (web search, page fetch, skills, the notes' file tools)
 src/modules/calendar.ts Google Calendar through the owner's connector, with the guests floor
 src/modules/drive.ts Google Drive, Docs and Claude Docs connectors (hidden by default)
-src/modules/gmail.ts the Gmail connector (MAIL_PROVIDER=gmail) and its mail slot
 src/modules/ibkr.ts  Interactive Brokers: never allowed, for everyone
 src/modules/intake.ts intake: a tenant's one-time link tools
-src/modules/mailbird.ts Mailbird (MAIL_PROVIDER=mailbird) and its mail slot
 src/modules/notion.ts Notion through the owner's connector (default visible tools: NOTION_TOOLS)
 src/modules/tenants.ts the owner's tenant administration tools (TENANTS=on)
 src/modules/index.ts the list of tool modules and which are loaded; checkHideSettings
@@ -361,7 +352,7 @@ src/policy/mailview.ts      the one view of an outgoing mail, whatever the provi
 
 ### src/modules/draw/
 
-The draw feature (the `draw` tool: SVG in, a picture out). `module.ts` is the declaration: light, it imports only core and policy leaves. The other files are the code it wraps; only `src/modules/runtime.ts` binds them by name. Dependency rule for every feature folder: it may use the policy, tenants, secrets and core folders (and the root files not moved yet), never the conversation, run or heartbeat code above it (`test/boundaries.test.ts`).
+The draw feature (the `draw` tool: SVG in, a picture out). `module.ts` is the declaration: light, it imports only core and policy leaves. The other files are the code it wraps; only `src/modules/runtime.ts` binds them by name. Dependency rule for every feature folder: it may use `approvals/`, `policy/`, `tenants/`, `intake/`, `memory/`, `secrets/` and the core, never the run or heartbeat code above it. The one accepted reach upward is into `conversation/` (the voice tool sends through the messenger and lists the groups, the memory module scopes a group's notes); the pipeline in turn wires features in, so that is the one mutual pair (`test/boundaries.test.ts`).
 
 ```
 src/modules/draw/module.ts     draw
@@ -603,6 +594,38 @@ src/core/budget.ts     daily spend guard
 src/core/cooldown.ts   shared usage-limit cooldown for background model calls
 src/core/warmslot.ts   the slot that holds one warm model process (the owner's, the latest group's and the gate's), and the fallback to a cold start
 src/core/ownerkey.ts   the key of the owner's chat and sourceOfKey (policy source from a conversation key)
+```
+
+### src/heartbeat/
+
+The clock side of the unattended runs: the free tick that starts the jobs and writes the liveness line (`heartbeat.ts`), the wake-up of every conversation that is due (`wake.ts`), one conversation's look (`look.ts`), and the counted row each look leaves and its report. What a heartbeat run is made of (scope, rules, delegation) is in `run/`; the gate and the wake ledger it reads are `conversation/gate.ts` and `conversation/ledger.ts`, because group chats use them too. Dependency rule: the top of the app, may use every folder below; only the entry points import it (`test/boundaries.test.ts`).
+
+```
+src/heartbeat/heartbeat.ts  the free tick: starts the jobs (every conversation's look, the dream) and writes the liveness line
+src/heartbeat/wake.ts       the clock side: on each tick start the heartbeat run of every conversation that is due, with the code guards
+src/heartbeat/look.ts       a conversation's heartbeat run (the owner's, a group's, a friend's): when it is due, the prompt, the run (standing provenance), posting, the row
+src/heartbeat/rows.ts       state/heartbeat.jsonl: one counted row per look, no words
+src/heartbeat/report.ts     `npm run heartbeat-report`: the rows as counts, dollars and the next-look distribution
+```
+
+### src/modules/gmail/
+
+The Gmail provider (MAIL_PROVIDER=gmail): the module declaration and mail slot, the relay (a Haiku run that makes exactly the planned connector calls) and the pure Gmail rules. Bound in `src/modules/runtime.ts`. Same dependency rule as every feature folder.
+
+```
+src/modules/gmail/module.ts      the Gmail connector (MAIL_PROVIDER=gmail) and its mail slot
+src/modules/gmail/gmail.ts       the Gmail provider\'s relay: a Haiku run that makes exactly the planned connector calls (the approval\'s read-backs, `npm run restore`), parsers for the connector\'s results
+src/modules/gmail/gmailrules.ts  Gmail rules a flag cannot say: TRASH/SPAM label values, attachments, the brief to oneself (pure, tested)
+```
+
+### src/modules/mailbird/
+
+The Mailbird provider (MAIL_PROVIDER=mailbird): the module declaration and mail slot, the direct MCP client for the local mail server and the draft rules (a draft as the mail client holds it, and the send-approval text built from it). Bound in `src/modules/runtime.ts`. Same dependency rule as every feature folder.
+
+```
+src/modules/mailbird/module.ts     Mailbird (MAIL_PROVIDER=mailbird) and its mail slot
+src/modules/mailbird/mailbird.ts   direct MCP client for the local mail server
+src/modules/mailbird/proposals.ts  the draft rules: a draft as the mail client holds it, and the send-approval text built from it (pure, tested)
 ```
 
 ## Development

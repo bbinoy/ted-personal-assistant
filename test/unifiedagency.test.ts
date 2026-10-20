@@ -4,7 +4,7 @@ import { scopeOf } from "../src/approvals/turnscope.ts";
 import { standing } from "./util.ts";
 import { readFileSync } from "node:fs";
 import type { Verdict } from "../src/approvals/autojudge.ts";
-import { setDraftReader } from "../src/modules/mailbird.ts";
+import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { makeCanUseTool, type CallGuard, type JudgeSetup } from "../src/approvals/permissions.ts";
 import { classify } from "../src/policy/policy.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";

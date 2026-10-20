@@ -1,13 +1,13 @@
-import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "../gmailrules.ts";
-import { addrs, nativeView } from "../policy/mailview.ts";
-import type { DraftView } from "../proposals.ts";
-import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
-import { settings } from "../core/settings.ts";
-import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
+import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "./gmailrules.ts";
+import { addrs, nativeView } from "../../policy/mailview.ts";
+import type { DraftView } from "../mailbird/proposals.ts";
+import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
+import { settings } from "../../core/settings.ts";
+import { rowsOf, type MailSlot, type ToolModule } from "../types.ts";
 
 // The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot
 // say (sensitive labels, attachment content, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
-// Sending is only on the owner's word. The mail relay (src/gmail.ts), `npm run restore` and the doctor check are runtime.ts.
+// Sending is only on the owner's word. The mail relay (src/modules/gmail/gmail.ts), `npm run restore` and the doctor check are runtime.ts.
 
 // The approval's read-backs: a draft by its id (the approval of send_message with a draftId), and the original message of a reply (its sender and recipients,
 // so a reply that names none is shown with the people who really receive it). Set by runtime.ts when the app starts.

@@ -149,7 +149,7 @@ export function loadSettings(env: Env) {
     speed: num(env, "TTS_SPEED", 0.95, 0.5, 2),
   };
   // Where mail comes from. none: chat only, no mail client anywhere (heartbeat, brief, prompts and doctor all leave mail out).
-  // gmail: the claude.ai Gmail connector, inherited from the Claude login like Notion (src/gmail.ts, plugin/skills/gmail).
+  // gmail: the claude.ai Gmail connector, inherited from the Claude login like Notion (src/modules/gmail/gmail.ts, plugin/skills/gmail).
   const mailProvider = oneOf(env, "MAIL_PROVIDER", "mailbird", ["none", "mailbird", "gmail"] as const);
   // The owner's own address (Gmail only): the one place the brief may be emailed to. Checked by shape here, used by code in gmailrules.ts.
   const mailSelf = (env.MAIL_SELF_ADDRESS ?? "").trim().toLowerCase();
@@ -291,7 +291,7 @@ export function loadSettings(env: Env) {
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
     dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
-    // Wake-ups (src/conversation/gate.ts, src/wake.ts): on every heartbeat tick a small model looks at each conversation whose
+    // Wake-ups (src/conversation/gate.ts, src/heartbeat/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").
     wakeups: oneOf(env, "WAKEUPS", "on", ["on", "off"] as const) === "on",
 

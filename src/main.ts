@@ -12,8 +12,8 @@ import { createGroupBrain, groupName, ownerInGroup } from "./conversation/group.
 import { keyNotices } from "./tenants/keynotice.ts";
 import { groupDir, recordGroup } from "./conversation/groupstore.ts";
 import { logTail } from "./conversation/gate.ts";
-import { createWakeups } from "./wake.ts";
-import { startHeartbeat, startJobs } from "./heartbeat.ts";
+import { createWakeups } from "./heartbeat/wake.ts";
+import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";

@@ -6,12 +6,12 @@ import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "./memory/dreamscope.ts";
 import { googleHub, googleProxy, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
 import { notionHub, notionProxy } from "./notion/notionmcp.ts";
-import { gmailReaders, putBackInInbox } from "../gmail.ts";
+import { gmailReaders, putBackInInbox } from "./gmail/gmail.ts";
 import { createIntakeServer } from "../intake/intaketools.ts";
-import { Mailbird } from "../mailbird.ts";
+import { Mailbird } from "./mailbird/mailbird.ts";
 import { createMemoryServer } from "./memory/memory-tools.ts";
 import { recordMemoryChange } from "../memory/memorynotice.ts";
-import { viewDraft } from "../proposals.ts";
+import { viewDraft } from "./mailbird/proposals.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
@@ -22,10 +22,10 @@ import { createTenantAdminServer } from "../tenants/tenanttools.ts";
 import { createVoiceServer } from "./voice/voicetool.ts";
 import { createWeatherServer } from "./weather/weathertools.ts";
 import { loaded, mailModule } from "./index.ts";
-import { setGmailReaders } from "./gmail.ts";
+import { setGmailReaders } from "./gmail/module.ts";
 import { GOOGLE_PREFIX } from "./google/module.ts";
 import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notion/module.ts";
-import { setDraftReader } from "./mailbird.ts";
+import { setDraftReader } from "./mailbird/module.ts";
 import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types.ts";
 
 // The code the tool modules wrap, bound to them by name. The declarations (this folder's other files) are read by nearly everything, so they import nothing

@@ -12,7 +12,7 @@ process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token"; // the instance's own
 
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { createWakeups } = await import("../src/wake.ts");
+const { createWakeups } = await import("../src/heartbeat/wake.ts");
 const { createDreamer } = await import("../src/conversation/dream.ts");
 const { keyNotices } = await import("../src/tenants/keynotice.ts");
 const { askGateWith } = await import("../src/conversation/gate.ts");

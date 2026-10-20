@@ -20,11 +20,11 @@ If you do not use Proton, none of that is needed.
 
 ### Gmail: MAIL_PROVIDER=gmail
 
-Gmail is built in. Set `MAIL_PROVIDER=gmail` (and `MAIL_SELF_ADDRESS` if the brief may be emailed to you, `BRIEF_EMAIL=on`) and the Gmail module `src/modules/gmail.ts` is loaded instead of the Mailbird one: the mail check and the agent's turns use claude.ai's own Gmail connector (`mcp__claude_ai_Gmail__*`, inherited from your Claude login), the rows say what each tool is (reads and drafts run, `unlabel_thread` is the archive, `send_message`, `reply` and `forward` are judged and asked about with the real recipients, the rest asks), `src/gmailrules.ts` adds the rules a row cannot say (TRASH and SPAM labels, attachment content, the brief to oneself), and the `gmail` skill replaces the `mailbird` one. [SETUP.md](SETUP.md) walks through it; Nothing in `src/` needs replacing.
+Gmail is built in. Set `MAIL_PROVIDER=gmail` (and `MAIL_SELF_ADDRESS` if the brief may be emailed to you, `BRIEF_EMAIL=on`) and the Gmail module `src/modules/gmail/module.ts` is loaded instead of the Mailbird one: the mail check and the agent's turns use claude.ai's own Gmail connector (`mcp__claude_ai_Gmail__*`, inherited from your Claude login), the rows say what each tool is (reads and drafts run, `unlabel_thread` is the archive, `send_message`, `reply` and `forward` are judged and asked about with the real recipients, the rest asks), `src/modules/gmail/gmailrules.ts` adds the rules a row cannot say (TRASH and SPAM labels, attachment content, the brief to oneself), and the `gmail` skill replaces the `mailbird` one. [SETUP.md](SETUP.md) walks through it; Nothing in `src/` needs replacing.
 
 ### A different mail client or IMAP: a module in the `mail` slot
 
-A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird.ts` and `gmail.ts` are the two examples). What it must provide:
+A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird/module.ts` and `gmail.ts` are the two examples). What it must provide:
 
 1. **Rows** for its tools (see "Add a tool" below), with the actions the policy knows (`read`, `draft`, `reply-draft`, `send`, `reply`, `forward`, `archive`, `restore`, `label`, `select`, `send-self`...) and a `view` on the tools that send, so that an approval can show the real recipients.
 2. **The `mail` slot** (`MailSlot` in `src/modules/types.ts`): how the brief is delivered and which tool call is the brief, the brief's instructions, the chat prompt's note about drafts, and how a send is read back (`readBack`, `views`).

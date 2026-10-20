@@ -5,7 +5,7 @@ import { standing } from "./util.ts";
 import { judgeAction, judgePrompt, mayFix, notifyNote, parseVerdict, agreement, type Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
-import { setDraftReader } from "../src/modules/mailbird.ts";
+import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { makeCanUseTool, type CallGuard } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
 import { CHAT } from "./util.ts";

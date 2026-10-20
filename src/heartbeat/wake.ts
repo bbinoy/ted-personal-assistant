@@ -1,14 +1,14 @@
-import { budgetSpent } from "./core/budget.ts";
-import { lookState, notesChangedAt, type LookState } from "./conversation/ledger.ts";
-import { createHeartbeatLook, type HeartbeatDeps } from "./heartbeat/look.ts";
-import { listGroups } from "./conversation/groupstore.ts";
-import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation/conversation.ts";
-import { allows } from "./policy/capabilities.ts";
-import { isRefusal, mayRun, type Payer, type Refusal } from "./tenants/payer.ts";
-import { ledgerEntries, logSignature } from "./core/messages.ts";
-import { isPaused } from "./core/pause.ts";
-import { listTenants } from "./tenants/tenants.ts";
-import { settings } from "./core/settings.ts";
+import { budgetSpent } from "../core/budget.ts";
+import { lookState, notesChangedAt, type LookState } from "../conversation/ledger.ts";
+import { createHeartbeatLook, type HeartbeatDeps } from "./look.ts";
+import { listGroups } from "../conversation/groupstore.ts";
+import { group, owner, tenant, type Conversation, type Pipeline } from "../conversation/conversation.ts";
+import { allows } from "../policy/capabilities.ts";
+import { isRefusal, mayRun, type Payer, type Refusal } from "../tenants/payer.ts";
+import { ledgerEntries, logSignature } from "../core/messages.ts";
+import { isPaused } from "../core/pause.ts";
+import { listTenants } from "../tenants/tenants.ts";
+import { settings } from "../core/settings.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
