@@ -17,6 +17,7 @@ import { macKeychain, type Keychain } from "./secrets/keychain.ts";
 import { baseUrlProblem, connectionState } from "./intake/intakelinks.ts";
 import { clientRegistered } from "./intake/notionoauth.ts";
 import { connectionSummary } from "./tenants/connections.ts";
+import { capabilitiesOfRecord } from "./policy/capabilities.ts";
 import { PURPOSES } from "./intake/intakepurposes.ts";
 import { INTAKE_ROLE } from "./secrets/openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./secrets/openbao.ts";
@@ -120,8 +121,8 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
   }
 }
 
-// The services a friend connects herself (the OAuth purposes of the intake page, intakepurposes.ts: Google, Notion), ONE check for all of them: only for a service some friend
-// has the capability for. Is what the service needs set up (never its value) and the page that signs her in there (INTAKE_BASE_URL, https), then what is particular to the
+// The services a friend connects herself (the OAuth purposes of the intake page, intakepurposes.ts: Google, Notion), ONE check for all of them: only while some friend exists.
+// Every friend has them in principle; a service that is not set up is simply not offered (no tools, no skill, no connect link), which is no failure. Is what the service needs set up (never its value) and the page that signs her in there (INTAKE_BASE_URL, https), then what is particular to the
 // service (Google: the pinned server's command on this Mac's PATH; Notion: whether the instance's one client is registered yet), and per friend: connected (since when),
 // not yet, or needing to connect again (her permission expired or was withdrawn). The status is the intake page's own record (names and times); no token is read for this
 // and nothing is sent to the service.
@@ -152,21 +153,21 @@ export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
   const everyone = o.friends ?? people();
   for (const [id, purpose] of Object.entries(PURPOSES)) {
     if (!purpose.oauth) continue;
-    const friends = everyone.filter((r) => r.id !== OWNER_ID && r.capabilities.includes(purpose.capability));
+    const friends = everyone.filter((r) => r.id !== OWNER_ID);
     if (!friends.length) continue;
     const what = `${id} for friends`;
     const base = "baseUrl" in o ? o.baseUrl : settings.intake.baseUrl;
     const missing = [...(o.needs?.[id] ?? purpose.needs())];
     const problems = [...(missing.length ? [`${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not set`] : []), ...[baseUrlProblem({ baseUrl: base, allowHttpLoopback: settings.intake.allowHttpLoopback })].filter((x): x is string => !!x)];
     if (problems.length) {
-      line(false, what, `${friends.length} friend(s) have the ${id} capability but ${problems.join("; ")} (docs/SETUP.md "${purpose.title.replace(/^Connect /, "")} for friends")`);
+      line(true, what, `not set up (${problems.join("; ")}): friends are not offered it, no tools and no connect link (docs/SETUP.md "${purpose.title.replace(/^Connect /, "")} for friends")`);
       continue;
     }
     SERVICE_EXTRA[id]?.(line, o);
     const state = o.state ?? connectionState;
     for (const r of friends) {
       const c = state(r.id, id);
-      const tools = id === "google" ? `; tools: ${["mail", "calendar"].filter((k) => r.capabilities.includes(k as never)).join(", ") || "none (grant mail and calendar)"}` : "";
+      const tools = id === "google" ? `; tools: ${["mail", "calendar"].filter((k) => capabilitiesOfRecord(r).has(k as never)).join(", ") || "none"}` : "";
       const service = purpose.title.replace(/^Connect /, "");
       line(
         c.state === "connected" ? true : "warn",
@@ -196,7 +197,7 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
       spent >= ctx.dailyBudgetUsd ? "today's budget is spent" : "",
       paused ? `paused until ${localTime(new Date(paused).toISOString())}` : "",
     ].filter(Boolean);
-    line(rec.status === "suspended" || problems.length === 0 ? true : "warn", `tenant ${rec.id}`, `${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}${connectionSummary(rec) ? `; ${connectionSummary(rec)}` : ""}; today $${spent.toFixed(2)} of $${ctx.dailyBudgetUsd}${problems.length ? `; ${problems.join("; ")}` : ""}`);
+    line(rec.status === "suspended" || problems.length === 0 ? true : "warn", `tenant ${rec.id}`, `${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connectionSummary(rec) ? `; ${connectionSummary(rec)}` : ""}; today $${spent.toFixed(2)} of $${ctx.dailyBudgetUsd}${problems.length ? `; ${problems.join("; ")}` : ""}`);
   }
 }
 

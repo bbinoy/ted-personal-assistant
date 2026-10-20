@@ -11,7 +11,7 @@ import { IntakeServer } from "../src/intake/intakeserver.ts";
 import { IntakeWriter } from "../src/intake/intakestore.ts";
 import { appBao, keychainNames, OWNER } from "../src/secrets/secrets.ts";
 import { settings, signalIdentity } from "../src/core/settings.ts";
-import { ensureOwner, people } from "../src/tenants/tenants.ts";
+import { ensureOwner } from "../src/tenants/tenants.ts";
 
 const [cmd, who, purpose] = process.argv.slice(2);
 const say = (l: string) => console.log(l);
@@ -23,11 +23,7 @@ if (cmd === "link") {
     say(`usage: npm run intake -- link owner <purpose>   (purposes: ${Object.keys(PURPOSES).join(", ")})`);
     process.exit(1);
   }
-  const rec = ensureOwner({ number: signalIdentity().ownerNumber, aci: signalIdentity().ownerAci });
-  if (!people().some((r) => r.id === rec.id && r.capabilities.includes(wanted.capability))) {
-    say(`The owner record lacks the ${wanted.capability} capability: npm run tenants -- grant owner ${wanted.capability}`);
-    process.exit(1);
-  }
+  ensureOwner({ number: signalIdentity().ownerNumber, aci: signalIdentity().ownerAci });
   const code = new LinkStore().mint({ tenant: OWNER, purpose }, cfg.linkMinutes * 60_000);
   if (!code) {
     say("Too many setup links are open at the moment.");

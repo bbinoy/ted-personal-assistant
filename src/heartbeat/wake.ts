@@ -15,7 +15,7 @@ import { settings } from "../core/settings.ts";
 // (heartbeat/look.ts). It is one Haiku run with the conversation's own persona, notes, tools and approver; it looks at the chat log and whatever the conversation can read
 // (mail, calendar, tasks), acts through the normal floor, judge and phone, and answers with a message or [[silent]] and its next look (10..120 minutes). Which tools and
 // skills it has, whether it may call the expert and whether there is anything to look at at all is the conversation's capability set (capabilities.ts), not its kind.
-//   a tenant  is looked in on only with the capabilities `heartbeat` and `wake` (a friend has the first, not the second), while she is active, the key is out of a cooldown and
+//   a tenant  is looked in on only with the capabilities `heartbeat` and `wake` (a friend has both, unless the instance switches one off), while she is active, the key is out of a cooldown and
 //             she is within her day's budget; the run is on the instance key, billed to her, her approvals go to her chat and the answer to her chat only
 // Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her own budget and the shared
 // key) and runs on the Payer it returns: no per-conversation branches here.

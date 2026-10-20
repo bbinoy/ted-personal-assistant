@@ -27,8 +27,8 @@ test("purposes: a sign-in purpose has a provider of the same id, which stores in
     assert.equal(p.oauth, id);
     assert.equal(providers.get(p.oauth)?.store.kind, p.itemKind, id);
   }
-  assert.deepEqual(connectionServices(["google", "notion", "card", "profile"]).sort(), ["google", "notion"]);
-  assert.deepEqual(connectionServices(["card"]), []);
+  assert.deepEqual(connectionServices(new Set(["google", "notion", "card", "profile"] as const)).sort(), ["google", "notion"]);
+  assert.deepEqual(connectionServices(new Set(["card"] as const)), []);
 });
 
 test("purposes: one is offered only with its capability and only while its settings are there", () => {

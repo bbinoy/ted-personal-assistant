@@ -43,8 +43,8 @@ const { TenantSecrets } = await import("../src/secrets/secrets.ts");
 const { serversFor } = await import("../src/modules/runtime.ts");
 const { NOTION_FRIEND_PREFIX: P, NOTION_FRIEND_TOOLS } = await import("../src/modules/notion/module.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
-const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantCapabilities = (ctx: { id?: string; config: any }) => resolveCapabilities((ctx.id && held.get(ctx.id) && [...held.get(ctx.id)!]) || T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
@@ -75,10 +75,14 @@ after(async () => {
 });
 
 let n = 0;
+// What each test person has: a friend's real set is derived (capabilities.ts capabilitiesOfRecord) and has no profile or card, so the page and the tool are handed these (their `capabilities` seam).
+const held = new Map<string, Set<import("../src/tenants/tenants.ts").Capability>>();
+const capsOf = (rec: { id: string }) => held.get(rec.id) ?? new Set<import("../src/tenants/tenants.ts").Capability>();
 function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]) {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
-  for (const c of capabilities) T.grant(rec.id, c);
+  // (a real friend has the whole derived set; these tests choose who has Notion, so everybody starts without the services and gets what is named)
+  held.set(rec.id, new Set([...T.FRIEND_CAPABILITIES.filter((c) => !["google", "mail", "calendar", "notion", "intake"].includes(c)), ...capabilities]));
   return T.tenantById(rec.id)!;
 }
 T.ensureOwner({ number: "+15555550114" });
@@ -173,7 +177,7 @@ async function start() {
   const links = new L.LinkStore(mkdtempSync(join(tmpdir(), "notion-links-")));
   let base = "";
   const f = new OAuthFlows({ providers: [provider()], baseUrl: () => base });
-  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), oauth: f, limits: { perIpPerMinute: 1000, globalPerMinute: 10_000, badCodesPerIp: 1000 } });
+  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), capabilities: capsOf, oauth: f, limits: { perIpPerMinute: 1000, globalPerMinute: 10_000, badCodesPerIp: 1000 } });
   await new Promise<void>((r) => page.server.listen(0, "127.0.0.1", r));
   servers.push({ close: () => (page.server.closeAllConnections(), page.server.close()) });
   base = `http://127.0.0.1:${(page.server.address() as AddressInfo).port}`;
@@ -573,7 +577,7 @@ test("notion: get_setup_link and setup_status know notion: 'Notion is connected'
   assert.deepEqual(L.purposesFor(["intake", "notion"]), ["notion"]);
   assert.deepEqual(L.purposesFor(["intake"]), []);
   const [a, b] = InMemoryTransport.createLinkedPair();
-  await createIntakeServer({ id: cat.id }, links).instance.connect(a);
+  await createIntakeServer({ id: cat.id }, links, capsOf).instance.connect(a);
   const client = new Client({ name: "t", version: "1" });
   await client.connect(b);
   const text = async (name: string, purpose: string) => ((await client.callTool({ name, arguments: { purpose } })) as { content: { text: string }[] }).content[0]!.text;
@@ -606,23 +610,23 @@ test("admin: the tenants list shows each friend's capabilities and whether her G
   L.recordDone(dee.id, "notion", [{ name: "notion connection", chars: 40 }]);
   const lines = describeTenants();
   const mine = lines.find((l) => l.startsWith(`${dee.id} (`))!;
-  assert.match(mine, /capabilities [^;]*intake[^;]*notion[^;]*google[^;]*mail[^;]*calendar/);
+  assert.match(mine, /capabilities [^;]*mail[^;]*calendar[^;]*notion[^;]*intake[^;]*google/);
   assert.match(mine, /connections: google not connected yet, notion connected since \d{4}-\d\d-\d\d/);
   const pia = lines.find((l) => l.startsWith(`${plain.id} (`))!;
-  assert.ok(!/connections:/.test(pia), "nothing to connect: no connection words");
+  assert.match(pia, /connections: google not connected yet, notion not connected yet/, "every friend can connect both, none has yet");
   assert.match(lines[0]!, /^owner .*capabilities .*notion/, "the owner's line is as it was");
   assert.ok(!lines.join("\n").includes("fake-notion"));
 });
 
-test("doctor: a notion line appears only when a friend has the capability; it names what is missing, never a value, and each friend's connection", async () => {
+test("doctor: a notion line appears once there is a friend; a missing page is no failure (friends are just not offered it) and never a value, and each friend's connection", async () => {
   const out: { ok: unknown; what: string; detail: string }[] = [];
-  const line = (ok: boolean | "warn", what: string, detail = "") => void out.push({ ok, what, detail });
-  servicesCheck(line, { friends: T.people().filter((r) => !r.capabilities.includes("notion") && !r.capabilities.includes("google")) });
-  assert.equal(out.length, 0, "nobody has it: no line");
-  const friends = T.people().filter((r) => r.id !== "owner" && r.capabilities.includes("notion") && !r.capabilities.includes("google"));
+  const line = (ok: boolean | "warn", what: string, detail = "") => void (what.startsWith("notion") && out.push({ ok, what, detail })); // (Google has its own test)
+  servicesCheck(line, { friends: [] });
+  assert.equal(out.length, 0, "no friend: no line");
+  const friends = T.people().filter((r) => r.id !== "owner");
   servicesCheck(line, { friends, baseUrl: undefined });
-  assert.equal(out[0]!.ok, false);
-  assert.match(out[0]!.detail, /INTAKE_BASE_URL is not set/);
+  assert.equal(out[0]!.ok, true, "not set up is not a failure");
+  assert.match(out[0]!.detail, /not set up .*INTAKE_BASE_URL is not set.*not offered/);
   out.length = 0;
   servicesCheck(line, { friends, baseUrl: "https://ted.example.test", registered: false, state: (t) => (t === anna.id ? { state: "connected", at: "2026-10-20T10:00:00Z" } : t === bea.id ? { state: "reconnect", at: "2026-10-21T10:00:00Z" } : { state: "none" }) });
   assert.equal(out[0]!.what, "notion for friends: client");

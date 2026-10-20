@@ -421,9 +421,10 @@ People other than the owner: the tenant records and their capability set, how an
 
 ```
 src/tenants/tenants.ts      tenants: the registry of people, capabilities, her folder and limits
+src/tenants/capabilityset.ts what a person has: everything for the owner, everything but OWNER_ONLY for a friend, less what is not set up, switched off or turned off by her (derived, never stored)
 src/tenants/tenantroute.ts  who is this sender? The door for everybody who is not the owner
 src/tenants/registration.ts open registration: requests from strangers (held, bounded, expiring), declined senders, people the owner wrote to first
-src/tenants/tenanttools.ts  the in-process MCP servers of a tenant's run (record_consent) and the owner's tenant administration
+src/tenants/tenanttools.ts  the owner's tenant administration (list, invite, suspend, resume, remove)
 src/tenants/connections.ts  which of her own accounts (Google, Notion) a person has connected: the admin's list and the doctor
 src/tenants/keynotice.ts    the one notice for the owner about the shared instance key, called wherever a friend's run fails on it
 src/tenants/payer.ts        Payer (login or instance key), mayRun (who pays and may it run now), and the bookkeeping of a call: environment, cost, rate limit, success

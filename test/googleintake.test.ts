@@ -72,10 +72,13 @@ after(() => {
 });
 
 let n = 0;
+// What each test person has: a friend's real set is derived (capabilities.ts capabilitiesOfRecord) and has no profile or card, so the page and the tool are handed these (their `capabilities` seam).
+const held = new Map<string, Set<import("../src/tenants/tenants.ts").Capability>>();
+const capsOf = (rec: { id: string }) => held.get(rec.id) ?? new Set<import("../src/tenants/tenants.ts").Capability>();
 function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.setStatus(rec.id, "active");
-  for (const c of capabilities) T.grant(rec.id, c);
+  held.set(rec.id, new Set(capabilities));
   return rec;
 }
 T.ensureOwner({ number: "+15555550114" });
@@ -96,7 +99,7 @@ async function start() {
   const links = new L.LinkStore(mkdtempSync(join(tmpdir(), "google-links-")));
   let base = "";
   const oauth = new OAuthFlows({ providers: [googleProvider(() => ({ clientId: "fake-client-id.example", clientSecret: "fake-client-secret-not-real", authUrl: "https://accounts.example.test/o/oauth2/v2/auth", tokenUrl, scopes: ALL_SCOPES }))], baseUrl: () => base });
-  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), oauth, limits: { perIpPerMinute: 1000, globalPerMinute: 10_000, badCodesPerIp: 1000 } });
+  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), capabilities: capsOf, oauth, limits: { perIpPerMinute: 1000, globalPerMinute: 10_000, badCodesPerIp: 1000 } });
   await new Promise<void>((r) => page.server.listen(0, "127.0.0.1", r));
   servers.push({ close: () => (page.server.closeAllConnections(), page.server.close()) });
   base = `http://127.0.0.1:${(page.server.address() as AddressInfo).port}`;
@@ -231,11 +234,11 @@ test("google: wrong purpose and no capability: a profile link is a form (no sign
   assert.equal((await fetch(`${s.base}/i/${nora}`)).status, 404, "no google capability");
   const code = s.mint(anna.id);
   const state = (await signIn(s.base, code)).url!.searchParams.get("state")!;
-  T.revoke(anna.id, "google");
+  held.get(anna.id)!.delete("google");
   const calls = tokenCalls.length;
   assert.equal((await callback(s.base, { code: AUTH_CODE, state })).status, 404);
   assert.equal(tokenCalls.length, calls);
-  T.grant(anna.id, "google");
+  held.get(anna.id)!.add("google");
   // POSTing to a sign-in link is not a thing
   const again = s.mint(anna.id);
   assert.equal((await fetch(`${s.base}/i/${again}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "x=1" })).status, 405);
@@ -269,7 +272,7 @@ test("google: she says no, Google refuses the code, no refresh token comes back,
 test("google: the page says it is not available when the client is not set up, and the callback address answers GET only", async () => {
   const links = new L.LinkStore(mkdtempSync(join(tmpdir(), "google-links-")));
   const off = new OAuthFlows({ providers: [googleProvider(() => ({ clientId: undefined, clientSecret: undefined, authUrl: "x", tokenUrl, scopes: [] }))], baseUrl: () => "http://x" });
-  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), oauth: off });
+  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), capabilities: capsOf, oauth: off });
   await new Promise<void>((r) => page.server.listen(0, "127.0.0.1", r));
   servers.push({ close: () => (page.server.closeAllConnections(), page.server.close()) });
   const base = `http://127.0.0.1:${(page.server.address() as AddressInfo).port}`;
@@ -299,7 +302,7 @@ test("google: the chat tool offers the google purpose only with the capability a
   assert.ok(L.intakeToolsFor(["intake", "google"]).length > 0);
   const bea = person("Bea", ["intake", "google"]);
   const [a, b] = InMemoryTransport.createLinkedPair();
-  await createIntakeServer({ id: bea.id }, links).instance.connect(a);
+  await createIntakeServer({ id: bea.id }, links, capsOf).instance.connect(a);
   const client = new Client({ name: "t", version: "1" });
   await client.connect(b);
   const text = async (name: string, purpose: string) => ((await client.callTool({ name, arguments: { purpose } })) as { content: { text: string }[] }).content[0]!.text;
@@ -328,20 +331,20 @@ test("google: the write-only intake token cannot read the grant; the app's token
   await assert.rejects(other.get("google", "oauth"), "another friend's token reaches only her own folder");
 });
 
-test("doctor: a google line appears only when a friend has the capability; it names what is missing, never a value, and each friend's connection", async () => {
+test("doctor: a google line appears once there is a friend; a missing client is no failure (friends are just not offered it), never a value, and each friend's connection", async () => {
   const { servicesCheck } = await import("../src/doctor.ts");
   const out: { ok: unknown; what: string; detail: string }[] = [];
-  const line = (ok: boolean | "warn", what: string, detail = "") => void out.push({ ok, what, detail });
-  servicesCheck(line, { friends: T.people().filter((r) => !r.capabilities.includes("google") && !r.capabilities.includes("notion")) });
-  assert.equal(out.length, 0, "nobody has it: no line");
+  const line = (ok: boolean | "warn", what: string, detail = "") => void (what.startsWith("google") && out.push({ ok, what, detail })); // (Notion has its own test)
+  servicesCheck(line, { friends: [] });
+  assert.equal(out.length, 0, "no friend: no line");
   const friends = T.people().filter((r) => r.id === anna.id || r.id === noGoogle.id);
   servicesCheck(line, { needs: { google: ["GOOGLE_OAUTH_CLIENT_SECRET"] }, baseUrl: "https://ted.example.test", friends });
-  assert.equal(out[0]!.ok, false);
-  assert.match(out[0]!.detail, /GOOGLE_OAUTH_CLIENT_SECRET is not set/);
+  assert.equal(out[0]!.ok, true, "not set up is not a failure");
+  assert.match(out[0]!.detail, /not set up .*GOOGLE_OAUTH_CLIENT_SECRET is not set.*not offered/);
   out.length = 0;
   servicesCheck(line, { needs: { google: [] }, baseUrl: "https://ted.example.test", friends, onPath: () => true, state: (id) => (id === anna.id ? { state: "connected", at: "2026-10-20T08:00:00.000Z" } : { state: "none" }) });
-  assert.equal(out.length, 2, "the command and the one friend with the capability");
-  assert.deepEqual(out.map((x) => x.ok), [true, true]);
+  assert.equal(out.length, 3, "the command and each of the two friends");
+  assert.deepEqual(out.map((x) => x.ok), [true, true, "warn"]);
   assert.match(out[1]!.detail, /connected since 2026-10-20/);
   assert.match(out[1]!.detail, /tools: mail, calendar/);
   assert.ok(!JSON.stringify(out).includes("fake-client-secret"), "no secret in a doctor line");

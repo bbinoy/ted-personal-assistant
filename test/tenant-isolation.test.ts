@@ -17,8 +17,8 @@ process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
-const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i]; // (written out by hand, apart from the modules' `ownerOnly`)
 const { classify, isReadableData, hiddenTools } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
@@ -144,10 +144,10 @@ test("tenant tools: nothing of the owner's, no payment, no saved profile; only w
     assert.equal(asTenant(t, { file_path: join(ann.notesDir, "x.md") }), "deny", t);
   }
   // her own settings can only take tools away
-  assert.ok(!tenantTools({ config: { browse: false }, capabilities: ann.capabilities }).has("mcp__browse__browse"));
-  assert.ok(!tenantTools({ config: { voice: false }, capabilities: ann.capabilities }).has("mcp__voice__voice"));
-  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed, "listing a connector adds nothing in this phase");
-  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
+  assert.ok(!tenantTools({ config: { browse: false } }).has("mcp__browse__browse"));
+  assert.ok(!tenantTools({ config: { voice: false } }).has("mcp__voice__voice"));
+  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] } })].sort(), allowed, "listing a connector adds nothing in this phase");
+  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] } })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
   // and the owner-only admin tools are the owner's chat's, not hidden away from it
   assert.ok(!hiddenTools(["mcp__tenants__list_tenants", "mcp__tenants__remove_tenant"]).some((t) => t.startsWith("mcp__tenants")));
   assert.equal(classify("mcp__tenants__list_tenants", {}, "chat"), "allow");

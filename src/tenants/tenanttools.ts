@@ -5,6 +5,7 @@ import { spentToday } from "../core/budget.ts";
 import { cooldownUntil } from "../core/cooldown.ts";
 import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
+import { capabilitiesOfRecord } from "./capabilityset.ts";
 import { invitePerson } from "./registration.ts";
 import { deleteTenant, OWNER_ID, people, setStatus, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
@@ -45,13 +46,13 @@ export function describeTenants(): string[] {
   const lines: string[] = [];
   for (const rec of people()) {
     if (rec.id === OWNER_ID) {
-      lines.push(`${rec.id} (${rec.name}): ${rec.role}; capabilities ${rec.capabilities.join(", ") || "none"}`);
+      lines.push(`${rec.id} (${rec.name}): ${rec.role}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}`);
       continue;
     }
     const ctx = tenantContext(rec);
     const c = cooldownUntil(INSTANCE_KEY_COOLDOWN); // (the key is cooling down: for every friend alike)
     const connections = connectionSummary(rec);
-    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
+    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
   }
   return lines;
 }
