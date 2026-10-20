@@ -56,6 +56,16 @@ test("client: a document attachment arrives as a file with its id and name; only
   await done();
 });
 
+test("client: sendFirst addresses a number as recipient and a username as username, and reports the recipient's account id", async () => {
+  const uuid = "AAAAAAAA-2222-4333-8444-555555555555";
+  const { d, c } = await connected(undefined, (r) => (r.method === "send" ? { timestamp: 77, results: [{ recipientAddress: { uuid, number: null }, type: "SUCCESS" }] } : {}));
+  assert.deepEqual(await c.sendFirst("hello", "+15555550114"), { timestamp: 77, accountId: uuid.toLowerCase() });
+  assert.deepEqual(await c.sendFirst("hello", "vera.42"), { timestamp: 77, accountId: uuid.toLowerCase() });
+  assert.deepEqual(d.requests.map((r) => r.params), [{ recipient: ["+15555550114"], message: "hello" }, { username: ["vera.42"], message: "hello" }]);
+  const bare = await connected(undefined, (r) => (r.method === "send" ? { timestamp: 78 } : {}));
+  assert.deepEqual(await bare.c.sendFirst("hello", "+15555550114"), { timestamp: 78 }, "no account id when signal-cli does not say");
+});
+
 test("client: an unparseable line is skipped and later lines still work", async () => {
   const { d, c, done } = await connected();
   const got: string[] = [];

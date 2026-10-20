@@ -1,5 +1,6 @@
 import { audit } from "../core/audit.ts";
 import { readJson, writeJson } from "../core/state.ts";
+import { ASSISTANT, OWNER } from "../core/settings.ts";
 import { ACI, addTenant, type TenantRecord } from "./tenants.ts";
 
 // Open registration with the admin's approval. Anybody may write to the assistant; a stranger costs nothing and sees nothing: she gets ONE fixed line (tenantroute.ts),
@@ -170,4 +171,25 @@ export function describePending(now = Date.now()): string[] {
     ...s.requests.map((r) => `open: ${labelOf(r)}; asked ${when(r.at)}, expires ${when(r.at + EXPIRES_MS)}; ${r.held.length} message(s) held`),
     ...s.declined.map((d) => `declined: ${d.name} (${d.aci.slice(0, 8)}); ${when(d.at)}`),
   ];
+}
+
+// ---- the owner writes first (E2): one fixed hello to a number or a username ----
+
+const USERNAME = /^[A-Za-z_][A-Za-z0-9_]{2,31}\.\d{2,20}$/;
+export const isRecipient = (x: string): boolean => NUMBER.test(x) || USERNAME.test(x);
+// The only text the assistant ever sends to somebody who has not written to it: fixed, no model, never anything the owner or anybody else typed.
+export const helloText = (): string => `Hi, I'm ${ASSISTANT}, an AI assistant that works for ${OWNER}. ${OWNER} asked me to say hello. Reply here whenever you like and we can chat.`;
+
+// Owner-initiated (CLI `invite`, or the owner's chat tool, which asks her first): send the hello, then remember the person so that her reply makes her a friend with no question.
+// She is remembered by the account id the messenger reports (or her number); a username the messenger could not resolve leaves her to the ordinary request.
+export async function invitePerson(recipient: string, send: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }>, now = Date.now()): Promise<{ preapproved: boolean }> {
+  const to = recipient.trim();
+  if (!isRecipient(to)) throw new Error("a recipient is a phone number like +15555550114 or a username like name.42");
+  const sent = await send(to, helloText());
+  const aci = sent.accountId && ACI.test(sent.accountId) ? sent.accountId : undefined;
+  const number = NUMBER.test(to) ? to : undefined;
+  if (!aci && !number) return { preapproved: false };
+  markInvited({ aci, number }, now);
+  audit("tenant_register", "invited", "chat", { id: aci ? aci.slice(0, 8) : "number" });
+  return { preapproved: true };
 }

@@ -5,6 +5,7 @@ import { spentToday } from "../core/budget.ts";
 import { cooldownUntil } from "../core/cooldown.ts";
 import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
+import { invitePerson } from "./registration.ts";
 import { deleteTenant, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 
@@ -56,10 +57,11 @@ export function createTenantServer(t: Pick<TenantRun, "id" | "consentFile">) {
 // ---- the owner's side ----
 
 // Set by main.ts (a hook, so this file does not import the agent): stops what is in flight for a tenant who was suspended or deleted.
-export const tenantHooks: { drop?: (id: string) => void } = {};
+export const tenantHooks: { drop?: (id: string) => void; sendFirst?: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }> } = {};
 
 export interface AdminDeps {
   drop?: (id: string) => void; // stop anything in flight for her (warm process, queue state)
+  sendFirst?: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }>; // the messenger's first message to somebody (undefined: the platform has none)
 }
 
 const when = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
@@ -92,6 +94,23 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
         const lines = describeTenants();
         return reply(lines.length ? lines.join("\n") : "No tenants yet.");
       }),
+      tool(
+        "invite_person",
+        "Send ONE fixed first hello (written by code, not by you) to a person the owner names by phone number or Signal username, so that she can answer and is then a friend with no further question. Only when the owner asks for it. (Asks the owner's approval first.)",
+        { recipient: z.string().min(5).max(60).describe("A phone number with country code (+15555550114) or a Signal username (name.42), exactly as the owner gave it") },
+        async ({ recipient }) => {
+          const send = deps.sendFirst ?? tenantHooks.sendFirst;
+          if (!send) return reply("This chat platform cannot write first to a person.", true);
+          try {
+            const { preapproved } = await invitePerson(recipient, send);
+            audit("tenant_invite", "sent", "chat");
+            return reply(preapproved ? "The hello is sent. When she answers she is a friend, no further question." : "The hello is sent, but her account could not be recognised, so if she answers the owner is asked as for anyone else.");
+          } catch (e) {
+            audit("tenant_invite", "failed", "chat");
+            return reply(`The hello was not sent: ${(e as Error).message}`, true);
+          }
+        },
+      ),
       tool(
         "suspend_tenant",
         "Suspend a tenant: she gets no answers at all from now on, her data stays. (Asks the owner's approval first.)",

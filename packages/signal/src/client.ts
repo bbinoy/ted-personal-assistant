@@ -336,4 +336,18 @@ export class SignalClient {
     });
     return result.timestamp;
   }
+
+  /**
+   * Sends one message to somebody the account has not talked to: by phone number ("+15555550114") or by username ("name.42"; signal-cli's `username` parameter).
+   * @returns the timestamp and, when signal-cli reports it, the recipient's account id (the first result's `recipientAddress.uuid`)
+   * @throws if signal-cli refuses (unknown number or username, ...) or does not answer in time
+   */
+  async sendFirst(text: string, recipient: string): Promise<{ timestamp: number; accountId?: string }> {
+    const result = await this.call<{ timestamp: number; results?: { recipientAddress?: { uuid?: unknown } }[] }>("send", {
+      ...(recipient.startsWith("+") ? { recipient: [recipient] } : { username: [recipient] }),
+      message: text,
+    });
+    const uuid = result.results?.[0]?.recipientAddress?.uuid;
+    return { timestamp: result.timestamp, ...(typeof uuid === "string" && uuid ? { accountId: uuid.toLowerCase() } : {}) };
+  }
 }

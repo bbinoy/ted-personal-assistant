@@ -60,6 +60,15 @@ export class FakeMessenger implements Messenger {
     this.sent.push({ target, message, timestamp });
     return timestamp;
   }
+  /** What {@link sendFirst} was asked, and the account id it reports back (unset: none). */
+  readonly firsts: { recipient: string; text: string; timestamp: number }[] = [];
+  firstAccountId: string | undefined;
+  async sendFirst(recipient: string, text: string): Promise<{ timestamp: number; accountId?: string }> {
+    if (this.sendError) throw this.sendError;
+    const timestamp = ++this.nextTimestamp;
+    this.firsts.push({ recipient, text, timestamp });
+    return { timestamp, ...(this.firstAccountId ? { accountId: this.firstAccountId } : {}) };
+  }
   async react(target: Target, message: MessageRef, emoji: string): Promise<void> {
     this.reactions.push({ target, message, emoji });
   }

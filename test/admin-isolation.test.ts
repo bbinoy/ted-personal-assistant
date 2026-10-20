@@ -89,9 +89,10 @@ test("no run of the instance has Glob, Grep or Bash (they could list and read an
 
 test("the admin's powers are the instance's: invites, list, suspend, resume and remove, and nothing that reads what a tenant said", () => {
   const admin = MANIFEST.filter((e) => e.tool.startsWith("mcp__tenants__")).map((e) => e.tool.split("__")[2]).sort();
-  assert.deepEqual(admin, ["list_tenants", "remove_tenant", "resume_tenant", "suspend_tenant"]);
+  assert.deepEqual(admin, ["invite_person", "list_tenants", "remove_tenant", "resume_tenant", "suspend_tenant"]);
   assert.equal(classify("mcp__tenants__suspend_tenant", { id: ann.id }, "chat"), "ask");
   assert.equal(classify("mcp__tenants__remove_tenant", { id: ann.id }, "chat"), "ask");
+  assert.equal(classify("mcp__tenants__invite_person", { recipient: "+15555550114" }, "chat"), "ask", "the first hello to a person always asks the owner");
   // what list_tenants shows is the record: no note, no history line, no consent region
   const listed = describeTenants().join("\n");
   assert.match(listed, new RegExp(ann.id));

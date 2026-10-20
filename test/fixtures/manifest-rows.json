@@ -35,6 +35,7 @@
 {"tool":"mcp__tenant__record_consent","provider":"intake","action":"consent","cap":"admin","only":["group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__tenants__list_tenants","provider":"tenants","action":"tenants-read","cap":"admin","only":["chat"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__tenants__resume_tenant","provider":"tenants","action":"tenants-read","cap":"admin","only":["chat"],"view":null,"free":true,"untrusted":false},
+{"tool":"mcp__tenants__invite_person","provider":"tenants","action":"tenants-invite","cap":"admin","only":["chat"],"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__tenants__suspend_tenant","provider":"tenants","action":"tenants-stop","cap":"admin","only":["chat"],"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__tenants__remove_tenant","provider":"tenants","action":"tenants-stop","cap":"admin","only":["chat"],"view":null,"free":false,"untrusted":false},
 {"tool":"Skill","provider":"builtin","action":"skill","cap":"chat","only":null,"view":null,"free":true,"untrusted":false},
