@@ -100,7 +100,8 @@ const tenantRuns = (r: ReturnType<typeof rig>) => r.seen.runs.filter((x) => x.co
 
 test("a tenant with heartbeat and wake gets the heartbeat run, on the instance key, with her log and her chat only", async () => {
   const anna = person("Anna");
-  const other = person("Bo", []); // the friend defaults: no wake
+  const other = person("Bo", []);
+  T.revoke(other.id, "wake"); // a friend starts with wake; the admin took it away from Bo
   note(anna);
   note(other, "Bo is a secret");
   said(anna, "remind me about my sister's birthday on Friday");
@@ -122,6 +123,7 @@ test("a tenant with heartbeat and wake gets the heartbeat run, on the instance k
 
 test("without the capability, with TENANTS off, or while not active: no look at all", async () => {
   const noWake = person("Cy", []);
+  T.revoke(noWake.id, "wake");
   const noBeat = person("Di", ["wake"]);
   T.revoke(noBeat.id, "heartbeat");
   const susp = person("Ed");
@@ -371,6 +373,7 @@ test("her prompt says she can act later only when the loops will run for her", a
   assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set() }), /You cannot act on your own later/);
   assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set(), timed: true }), /You can act on your own at set times/);
   const plain = person("Wes", []);
+  T.revoke(plain.id, "wake");
   const timed = person("Xan");
   assert.match(runOptionsFor(tenant(plain.id), { apiKey: KEY }).systemPrompt as string, /You cannot act on your own later/);
   assert.match(runOptionsFor(tenant(timed.id), { apiKey: KEY }).systemPrompt as string, /You can act on your own at set times/);
