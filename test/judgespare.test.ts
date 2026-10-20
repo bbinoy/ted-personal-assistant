@@ -86,6 +86,26 @@ test("judge spare: a dead spare falls back to a cold call", async () => {
   }
 });
 
+test("judge spare: its own idle: an unused spare is dropped after it, while the default is the chat's WARM_IDLE_MINUTES", async () => {
+  const was = settings.warm;
+  setWarm(true);
+  try {
+    const r = rig();
+    const short = new JudgeSpare("short", { model: "haiku" }, () => 0.00005); // 3 ms
+    short.prepare(r.io);
+    await new Promise((res) => setTimeout(res, 40));
+    assert.equal(await drain(short.run("p", r.io)), false, "gone after its idle");
+    const dflt = new JudgeSpare("dflt", { model: "haiku" });
+    dflt.prepare(r.io);
+    await new Promise((res) => setTimeout(res, 40));
+    assert.equal(await drain(dflt.run("p", r.io)), true, "an hour by default");
+  } finally {
+    setWarm(was);
+  }
+  assert.equal(settings.judgeIdleMinutes, 10);
+  assert.ok(settings.judgeIdleMinutes < settings.warmIdleMinutes);
+});
+
 test("judge spare: each judge keeps its own spare; one prepared for another purpose is never used", async () => {
   const was = settings.warm;
   setWarm(true);

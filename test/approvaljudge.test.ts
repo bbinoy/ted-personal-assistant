@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { forTask, runJudge, discardJudge, prepareJudge, SYSTEM, withTimeout } from "../src/approvaljudge.ts";
+import { forTask, judgeTiming, runJudge, discardJudge, prepareJudge, SYSTEM, withTimeout } from "../src/approvaljudge.ts";
 import { judgeAnswer } from "../src/approvalmodel.ts";
 import { judgeAction } from "../src/autojudge.ts";
 import { OWNER, settings } from "../src/settings.ts";
@@ -39,6 +39,34 @@ const open = [{ id: "A1", background: false, ageMs: 1000, question: "Create even
 const yes = { task: "answer", target: "A1", outcome: "approve" };
 const judge = (io: any, ms?: number) => judgeAnswer("yes", open, [], undefined, io, ms);
 const input = { description: "Create event Pottery", provenance: { kind: "owner" as const, message: "put pottery in my calendar" } };
+
+test("timing: every judge call logs one line with warm|cold, phases, api and cost, and nothing of the prompt", async () => {
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (...a: unknown[]) => void lines.push(a.join(" "));
+  const was = settings.warm;
+  setWarm(true);
+  try {
+    const r = rig({ task: "answer", target: "A1", outcome: "approve" });
+    await runJudge("answer", "SECRETPROMPT yes", r.io);
+    prepareJudge(r.io);
+    await runJudge("answer", "SECRETPROMPT yes", r.io);
+    await settle();
+  } finally {
+    console.log = orig;
+    setWarm(was);
+  }
+  const t = lines.filter((l) => l.startsWith("timing judge "));
+  assert.equal(t.length, 2);
+  assert.match(t[0]!, /^timing judge answer cold prompt=\d+ init=\d+ result=\d+ total=\d+$/);
+  assert.match(t[1]!, /^timing judge answer warm prompt=\d+ init=\d+ result=\d+ total=\d+$/);
+  assert.ok(!t.join("\n").includes("SECRETPROMPT"));
+});
+
+test("timing: the judge line carries api and cost when the SDK reports them, and says failed without a result", () => {
+  assert.equal(judgeTiming("action", true, 812, { init: 40, result: 900 }, { apiMs: 700, costUsd: 0.00123, subtype: "success" }, 905), "timing judge action warm prompt=812 init=40 result=900 api=700 cost=$0.0012 total=905");
+  assert.equal(judgeTiming("write", false, 10, {}, undefined, 7), "timing judge write cold prompt=10  failed total=7");
+});
 
 test("task field: an answer for the other task is never accepted", () => {
   const action = { task: "action", decision: "auto", reason: "ok" };
