@@ -320,7 +320,7 @@ src/memorynotice.ts  the note changes of a chat turn and the one notice about th
 src/toolsseen.ts    tool names runs have seen (so unused ones are hidden)
 src/toolmanifest.ts  the tool manifest (the rows of the loaded tool modules: provider, action, capability, availability per tool), isFree, readsUntrusted and mailView (pure, tested)
 src/modules/         the tool modules, one file per tool (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
-src/mailview.ts      the one view of an outgoing mail, whatever the provider (the shape and shared helpers)
+src/mailview.ts      the one view of an outgoing mail, whatever the provider (the shape and shared helpers, and the draft id from a Mailbird result)
 src/oauth.ts         the sign-in every service shares: PKCE, the single-use state bound to the intake link, the flows in progress (googleoauth.ts and notionoauth.ts are its providers)
 src/mcpproxy.ts      the credentialed MCP proxy every service shares: a friend's session upstream and the in-process "sdk" server her run gets (googlemcp.ts, notionmcp.ts)
 src/notionoauth.ts   Notion: discovery, the one registered client, the grant, rotating refresh under a lock; src/notionmcp.ts the hosted server as a session and its proxy
@@ -348,6 +348,7 @@ src/gmail.ts         the Gmail provider: a relay run for the heartbeat's connect
 src/gmailrules.ts    Gmail rules a flag cannot say: TRASH/SPAM label values, attachments, log-only archive, the brief to oneself (pure, tested)
 src/budget.ts        daily spend guard
 src/settings.ts      every tunable, validated at startup (pure loader, tested)
+src/paths.ts         the repo root and the folders under it (plugin, assets, assistants), and the default data dir: the only file that locates itself (tested)
 src/state.ts         atomic, synchronous access to state/, logs/ and memory/ (tested)
 src/audit.ts         append-only audit log and its reader
 src/autojudge.ts     the "action" task: the floor in code and the input of the approval judge, one path for every tool in every place
@@ -355,7 +356,7 @@ src/propose.ts       shows the handler's reply drafts on Signal and reads a draf
 src/mailhandler.ts   which mail-tools module a conversation's handler works with, and its tools
 src/triagelog.ts     the triage record: a file per conversation with the words, a wordless audit row
 src/wakeprompt.ts    the one wake-up prompt (private chat or group)
-src/proposals.ts     the draft rules: id from the tool result, Signal text and send-approval text from the draft as Mailbird holds it (pure, tested)
+src/proposals.ts     the draft rules: Signal text and send-approval text from the draft as Mailbird holds it (pure, tested)
 src/radar.ts         the proactive radar: periodic calendar and mail look-around, sends only what matters
 src/radar-rules.ts   the radar's output schema, which of its messages may be sent (pure, tested)
 src/tasks.ts         the Task type, the gate's presets (brief, radar), their rules and runs
@@ -386,7 +387,7 @@ src/contain.ts       `isInside`: the one path-containment check (symlinks and `.
 src/logtrim.ts       cuts launchd-stderr.log down in place at start (pure part tested)
 src/session.ts       when a conversation's session resumes, starts fresh or gets compacted (pure, tested)
 src/fence.ts         fences untrusted or stored text as data inside a prompt (cleaned and defused first)
-src/sanitize.ts      the one shared text sanitiser: hidden characters, caps, run collapse, fence and header defusing
+src/sanitize.ts      the one shared text sanitiser: hidden characters, caps, run collapse, fence and header defusing, and `clip` (a visible, announced cut for text shown in an approval)
 src/html.ts          HTML to visible text (parse5; drops hidden content)
 src/mailtext.ts      a mail body: html.ts, then sanitize.ts
 src/toolclean.ts     cleans tool results (used by the PostToolUse hook in agentrun.ts)

@@ -4,7 +4,7 @@ import { callKey, type Approve } from "./permissions.ts";
 import { recentIn } from "./recentchat.ts";
 import { composeQuestion } from "./approvalmodel.ts";
 import { LIMITS } from "./sanitize.ts";
-import { isTenantKey } from "./send.ts";
+import { isTenantKey } from "./ownerkey.ts";
 
 // Asking the owner: a model writes the question in one call and code validates it against the exact arguments (approvalmodel.ts,
 // questionfacts.ts); if that fails nothing is asked. The ask is audited with the FULL arguments, the exact text sent and, afterwards,

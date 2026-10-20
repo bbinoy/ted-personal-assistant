@@ -1,7 +1,6 @@
-import { clip } from "./format.ts";
 import type { Change } from "./policy.ts";
 import { ASSISTANT, OWNER } from "./settings.ts";
-import { LIMITS } from "./sanitize.ts";
+import { clip, LIMITS } from "./sanitize.ts";
 
 // The prompts and strict parsers of the three extra tasks of the one approval judge (approvaljudge.ts): "answer" (what a reply
 // means among ALL open approvals), "write" (the question, validated by code, questionfacts.ts). Pure: no model call here (approvalmodel.ts makes them).

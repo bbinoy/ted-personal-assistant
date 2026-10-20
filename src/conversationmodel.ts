@@ -9,7 +9,7 @@ import { NOTES_DIR } from "./notes.ts";
 import { type Picture } from "./image.ts";
 import { type Document } from "./document.ts";
 import { OWNER_SESSION_FILE } from "./session.ts";
-import { tenantKey } from "./send.ts";
+import { tenantKey } from "./ownerkey.ts";
 import { OWNER, settings } from "./settings.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";

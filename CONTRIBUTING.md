@@ -28,3 +28,7 @@
 - Work on a branch and merge it with `git merge --no-ff`, so the branch stays visible as one unit in the history.
 - Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm test`, `npm run check:secrets` and `npm run check:isolation` all pass. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
 - Behaviour that changes on purpose gets its fixture regenerated on purpose (`SNAPSHOT_WRITE=1 npm test`) and the diff reviewed.
+
+**Layout**
+
+- `test/boundaries.test.ts` checks the value imports of every file under `src/` against a folder table (each folder may import only the folders below it); a new folder needs a row there, and `test/docs-layout.test.ts` wants a line for every file in `docs/ARCHITECTURE.md`.

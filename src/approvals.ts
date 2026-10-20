@@ -2,7 +2,7 @@ import { discardJudge, prepareJudge } from "./approvaljudge.ts";
 import { applyChanges, isModifiable, type Change } from "./policy.ts";
 import { settings } from "./settings.ts";
 import { audit, wordless, type Source } from "./audit.ts";
-import { isTenantKey } from "./send.ts";
+import { isTenantKey } from "./ownerkey.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
 import { recentIn } from "./recentchat.ts";

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { ASSISTANTS_DIR } from "./paths.ts";
 
 // The assistant preset: what makes this harness "Ted, the personal assistant" and not another assistant, as DATA.
 // A preset is a folder (assistants/<name>/): preset.json (the rhythm, the note categories, the profile limits, the assistant's own skills)
@@ -124,7 +124,7 @@ const PROMPT_KEYS = Object.keys(PROMPTS) as PromptKey[];
 
 // ---- loading ----
 
-export const ASSISTANTS_DIR = fileURLToPath(new URL("../assistants/", import.meta.url));
+export { ASSISTANTS_DIR };
 const NAME = /^[a-z][a-z0-9-]*$/;
 
 const fail = (where: string, what: string): never => {

@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createPipeline, owner } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
-import { OWNER_KEY, sendNow } from "../src/send.ts";
+import { sendNow } from "../src/send.ts";
+import { OWNER_KEY } from "../src/ownerkey.ts";
 import { FakeMessenger } from "@ted-assistant/messenger/testing";
 
 // The app against the Messenger interface alone: what it does with a platform that has everything, and how it degrades quietly when a
@@ -84,7 +85,7 @@ test("the skeleton platforms load by name and say they are not built yet, and th
   for (const name of ["telegram", "whatsapp", "slack"]) {
     await assert.rejects(
       loadMessenger(name, { owner: { address: OWNER }, account: OWNER, options: {}, logger: console }),
-      new Error(`${name} messenger is not built yet: see packages/${name}/SETUP.md`),
+      new Error(`${name} messenger is not built yet: see packages/${name}/README.md`),
     );
     const lines = await (await (await import("@ted-assistant/messenger")).loadMessengerModule(name)).doctor({ options: {} });
     assert.deepEqual(lines.map((l) => [l.ok, l.what]), [[false, name]]);
