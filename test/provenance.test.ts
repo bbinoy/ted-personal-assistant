@@ -2,12 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { browseRunOptions } from "../src/agentrun.ts";
+import { browseRunOptions } from "../src/run/agentrun.ts";
 import { judgePrompt, provenanceFor, type Verdict } from "../src/approvals/autojudge.ts";
 import type { BrowseGuard } from "../src/modules/browse/browseguard.ts";
 import * as permissions from "../src/approvals/permissions.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { derivedTurn, scopeOf } from "../src/approvals/turnscope.ts";
 
 // Provenance is code: the turn scope of a conversation, derived text for what nobody wrote, the browse sub-run inheriting its parent's.
@@ -58,7 +58,7 @@ test("derivedTurn: the task is derived while the run goes on, gone after it, eve
 
 test("no message state is process-global in permissions.ts, and the mail handler's provenance is passed in, not a made-up speaker", () => {
   for (const gone of ["setConversationMessage", "setChatOwnerMessage", "setChatAssistantMessage"]) assert.equal(gone in permissions, false, gone);
-  for (const file of ["src/approvals/permissions.ts", "src/agent.ts", "src/agentrun.ts"]) {
+  for (const file of ["src/approvals/permissions.ts", "src/run/agent.ts", "src/run/agentrun.ts"]) {
     const code = readFileSync(join(import.meta.dirname, "..", file), "utf8").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
     assert.doesNotMatch(code, /mail-handler:|recentMessages|chatAssistantMessage|judgeContext|\bspeaker\b/, file);
   }

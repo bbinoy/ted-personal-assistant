@@ -15,15 +15,15 @@ const OTHER_KEY = "sk-" + "ant-api03-OTHEROTHEROTHEROTHEROTHER";
 process.env.ANTHROPIC_API_KEY = "sk-" + "ant-api03-OWNEROWNEROWNEROWNEROWNER";
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { pool, runWarmOrCold, warmUp } = await import("../src/agentwarm.ts");
-const { runOptionsFor } = await import("../src/runoptions.ts");
-const { chatResume } = await import("../src/chatsession.ts");
+const { pool, runWarmOrCold, warmUp } = await import("../src/run/agentwarm.ts");
+const { runOptionsFor } = await import("../src/run/runoptions.ts");
+const { chatResume } = await import("../src/run/chatsession.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
-const { dropTenantWarm } = await import("../src/agent.ts");
-const { userInput } = await import("../src/image.ts");
-const { writeJson } = await import("../src/state.ts");
+const { dropTenantWarm } = await import("../src/run/agent.ts");
+const { userInput } = await import("../src/run/image.ts");
+const { writeJson } = await import("../src/core/state.ts");
 
 const result = { type: "result", subtype: "success", is_error: false, result: "hi", session_id: "sess-new", total_cost_usd: 0.001 };
 const stream = (log: string[], name: string) => (async function* () { log.push(name); yield result; })();
@@ -192,7 +192,7 @@ test("warm pool: a renewal of an unchanged spare that stays fresh starts nothing
 });
 
 test("warm pool: a spare that would go stale before the next renewal is renewed (has, with the time it must last)", async () => {
-  const { SpareSlot } = await import("../src/warmslot.ts");
+  const { SpareSlot } = await import("../src/core/warmslot.ts");
   let t = 0;
   const slot = new SpareSlot<{ close(): void }>({ maxAgeMs: 60 * 60_000, now: () => t });
   slot.put("a", "k", Promise.resolve({ close() {} }));

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { logFiles, matchLines, searchLogs } from "../src/logsearch.ts";
+import { logFiles, matchLines, searchLogs } from "../src/core/logsearch.ts";
 
 const now = Date.parse("2026-10-13T12:00:00Z");
 

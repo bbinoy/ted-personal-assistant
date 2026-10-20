@@ -1,6 +1,6 @@
 import { readdirSync, statSync } from "node:fs";
 import type { Conversation } from "./conversation.ts";
-import type { Kind, Sent } from "../messages.ts";
+import type { Kind, Sent } from "../core/messages.ts";
 
 // The wake/action ledger: the conversation's own log (messages.ts) holds kind "wake" lines (the chosen next look, the last
 // one is the state) and kind "action" lines (something done without posting). Everything

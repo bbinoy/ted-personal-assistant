@@ -5,9 +5,9 @@ import { conversationLines, createDreamer, describePlan } from "../src/conversat
 import { applyPlan, undoLatest } from "../src/memory/dreamapply.ts";
 import { noteContent, planOps, type NoteFile } from "../src/memory/dreamplan.ts";
 import { NOTES_DIR, parseNote } from "../src/memory/notes.ts";
-import { dataPath } from "../src/state.ts";
-import type { Sent } from "../src/messages.ts";
-import { recordMessage } from "../src/messages.ts";
+import { dataPath } from "../src/core/state.ts";
+import type { Sent } from "../src/core/messages.ts";
+import { recordMessage } from "../src/core/messages.ts";
 
 const now = new Date("2026-10-14T07:00:00");
 const today = "2026-10-14";

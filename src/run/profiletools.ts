@@ -1,4 +1,4 @@
-import { loaded, registered } from "./modules/index.ts";
+import { loaded, registered } from "../modules/index.ts";
 
 // What an unattended job (a run profile, profiles.ts) can SEE of the connectors. Every tool schema the model sees is sent on every model call, and a fresh
 // session pays for the whole list once more, so a job that reads the calendar should not carry the mail client's. A profile names what it needs as

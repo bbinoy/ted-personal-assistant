@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { splitReaction } from "../src/reaction.ts";
+import { splitReaction } from "../src/core/reaction.ts";
 
 test("reaction: one emoji at the very start is a reaction; the rest is still said", () => {
   assert.deepEqual(splitReaction("[[react: 👍]]"), { reaction: "👍", text: "" });

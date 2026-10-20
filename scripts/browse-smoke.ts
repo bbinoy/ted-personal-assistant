@@ -2,11 +2,11 @@
 //   npm run browse:smoke            runs the first two (example, form); also: submit, big
 //   npm run browse:smoke -- example only the first
 // Commit steps are DECLINED here (the approval callback says no), so the form is filled but never submitted.
-import { browseRunner } from "../src/agentrun.ts";
-import { readAudit } from "../src/audit.ts";
+import { browseRunner } from "../src/run/agentrun.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { browse } from "../src/modules/browse/browse.ts";
 import { browseStatus } from "../src/modules/browse/browseserver.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 
 const status = browseStatus();
 if (!status.ok) {

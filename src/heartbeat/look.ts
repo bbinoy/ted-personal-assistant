@@ -1,22 +1,23 @@
-import { audit } from "../audit.ts";
-import { clockLine } from "../brief.ts";
+import { audit } from "../core/audit.ts";
+import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
-import { onLogin, owner } from "../conversation/conversationmodel.ts";
-import { fence } from "../fence.ts";
+import { owner } from "../conversation/conversationmodel.ts";
+import { onLogin } from "../core/ownerkey.ts";
+import { fence } from "../core/fence.ts";
 import { logTail } from "../conversation/gate.ts";
 import { lookDue, recordWake, type LookState } from "../conversation/ledger.ts";
-import { isRefusal, type Payer, type Refusal } from "../payer.ts";
-import { heartbeatInstruction } from "../persona.ts";
-import { delegatedText, expertSetup } from "./delegation.ts";
+import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
+import { heartbeatInstruction } from "../run/persona.ts";
+import { delegatedText, expertSetup } from "../run/delegation.ts";
 import { mailSlot } from "../modules/index.ts";
-import { preset } from "../preset.ts";
-import { settings } from "../settings.ts";
-import { dayAt, inQuietHours, systemZone, timeIn } from "../timezone.ts";
+import { preset } from "../core/preset.ts";
+import { settings } from "../core/settings.ts";
+import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
-import { clampLook, parseAnswer } from "./rules.ts";
+import { clampLook, parseAnswer } from "../run/rules.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
-import { hasSomethingToLookAt, lookerOf, type Looker } from "./scope.ts";
+import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model

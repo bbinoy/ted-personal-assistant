@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createPipeline, owner } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
 import { sendNow } from "../src/modules/send/send.ts";
-import { OWNER_KEY } from "../src/ownerkey.ts";
+import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { FakeMessenger } from "@ted-assistant/messenger/testing";
 
 // The app against the Messenger interface alone: what it does with a platform that has everything, and how it degrades quietly when a
@@ -69,7 +69,7 @@ test("the send tool's reaction: done where reactions exist, a plain sentence to 
 });
 
 test("MESSENGER=signal (the default) is found by name, and the doctor reports the messenger first", async () => {
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   assert.equal(settings.messenger, "signal");
   const { loadMessengerModule } = await import("@ted-assistant/messenger");
   const mod = await loadMessengerModule("signal");

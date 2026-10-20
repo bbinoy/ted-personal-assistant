@@ -4,18 +4,19 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// A conversation's own clock (src/timezone.ts): the pure helpers, the friend's tenant.json setting and the places that read it (the clock line, the heartbeat
+// A conversation's own clock (src/core/timezone.ts): the pure helpers, the friend's tenant.json setting and the places that read it (the clock line, the heartbeat
 // instruction, the day a note expires on). The default is the owner's, the Mac's.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "timezone-test-"));
 
-const Z = await import("../src/timezone.ts");
-const { clockLine } = await import("../src/brief.ts");
+const Z = await import("../src/core/timezone.ts");
+const { clockLine } = await import("../src/core/brief.ts");
 const { lastLookText, lookInstruction, lookPrompt } = await import("../src/heartbeat/look.ts");
-const { lookerOf } = await import("../src/heartbeat/scope.ts");
+const { lookerOf } = await import("../src/run/scope.ts");
 const { readNotes } = await import("../src/memory/notes.ts");
-const { localDay } = await import("../src/pause.ts");
+const { localDay } = await import("../src/core/pause.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { group, owner, tenant, zoneOf } = await import("../src/conversation/conversationmodel.ts");
+const { group, owner, tenant } = await import("../src/conversation/conversationmodel.ts");
+const { zoneOf } = T;
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
 
 // 23:30 UTC on 20 October 2026: still Tuesday in New York (19:30), already Wednesday in Lisbon (00:30, summer time until the 25th) and Auckland (12:30).

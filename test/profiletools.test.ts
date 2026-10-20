@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { heartbeatOptions } from "../src/agent.ts";
+import { heartbeatOptions } from "../src/run/agent.ts";
 import { owner } from "../src/conversation/conversationmodel.ts";
-import { LOGIN } from "../src/payer.ts";
-import { buildOptions } from "../src/agentrun.ts";
-import { hiddenOutside, toolsFor } from "../src/profiletools.ts";
-import { PROFILES } from "../src/profiles.ts";
+import { LOGIN } from "../src/tenants/payer.ts";
+import { buildOptions } from "../src/run/agentrun.ts";
+import { hiddenOutside, toolsFor } from "../src/run/profiletools.ts";
+import { PROFILES } from "../src/run/profiles.ts";
 import { classify } from "../src/policy/policy.ts";
 
 const CAL = "mcp__claude_ai_Google_Calendar__";

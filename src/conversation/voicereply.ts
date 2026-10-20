@@ -2,7 +2,7 @@
 // Same shape as the emoji reaction (reaction.ts): strict and only at the very start, so ordinary
 // text can never be mistaken for it. Pure.
 
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 
 const MARK = /^\s*\[\[voice\]\]\s*/i;
 

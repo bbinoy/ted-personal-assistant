@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Verdict } from "../src/approvals/autojudge.ts";
-import { readAudit } from "../src/audit.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { BrowseGuard, FAST_NAVIGATIONS } from "../src/modules/browse/browseguard.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { standing } from "./util.ts";
 
 // The navigate fast path: a navigate skips the judge only for a site this run was already cleared for (judged auto, or approved by the owner), when the address is

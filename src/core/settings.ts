@@ -186,7 +186,7 @@ export function loadSettings(env: Env) {
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
     backgroundApprovalTimeoutMinutes: num(env, "BACKGROUND_APPROVAL_TIMEOUT_MINUTES", 120, 1, 2880),
 
-    // The longest one model run may take on the wall clock (src/ceiling.ts), so a hung turn cannot block its conversation until a
+    // The longest one model run may take on the wall clock (src/run/ceiling.ts), so a hung turn cannot block its conversation until a
     // restart. Chat: the owner's chat and every group. Background: the heartbeat run and its expert; the time a background run
     // spends waiting for an approval is not counted, so BACKGROUND_APPROVAL_TIMEOUT_MINUTES never cuts into it.
     compactMaxMinutes: num(env, "COMPACT_MAX_MINUTES", 10, 1, 120), // a compaction that takes longer is abandoned (chatsession.ts); the failure backoff applies
@@ -338,7 +338,7 @@ export function loadSettings(env: Env) {
     // it as one turn.
     settleSeconds: num(env, "SETTLE_SECONDS", 2, 0, 60),
     settleMaxSeconds: num(env, "SETTLE_MAX_SECONDS", 10, 1, 120), // the longest a burst waits since its first message, so continuous chatter cannot postpone the answer forever
-    // Warm model processes (src/agent.ts, src/conversation/gate.ts): a process started ahead of the next message skips the ~3 s start-up. At most
+    // Warm model processes (src/run/agent.ts, src/conversation/gate.ts): a process started ahead of the next message skips the ~3 s start-up. At most
     // three exist: the owner's chat, the group that spoke last, and one small Haiku process for the participation gate. Each costs
     // about 150 to 200 MB resident and no tokens, and is dropped after WARM_IDLE_MINUTES without use. WARM=off: every turn starts cold.
     warm: oneOf(env, "WARM", "on", ["on", "off"] as const) === "on",

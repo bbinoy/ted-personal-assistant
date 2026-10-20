@@ -1,12 +1,13 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { audit, type Source } from "./audit.ts";
+import { audit, type Source } from "../core/audit.ts";
 import { withCeiling } from "./ceiling.ts";
-import { failure, isApiRefusal } from "./errors.ts";
-import type { Conversation } from "./conversation/conversationmodel.ts";
-import { charge, envFor, isRefusal, LOGIN, mayRun, observe, succeeded, type MayRunOptions, type Payer } from "./payer.ts";
-import { OWNER_SESSION_FILE, planSession, type ChatSession, type CompactMode } from "./session.ts";
-import { settings } from "./settings.ts";
-import { readJson, writeJson } from "./state.ts";
+import { failure, isApiRefusal } from "../tenants/errors.ts";
+import type { Conversation } from "../conversation/conversationmodel.ts";
+import { charge, envFor, isRefusal, LOGIN, mayRun, observe, succeeded, type MayRunOptions, type Payer } from "../tenants/payer.ts";
+import { OWNER_SESSION_FILE } from "../core/ownerkey.ts";
+import { planSession, type ChatSession, type CompactMode } from "./session.ts";
+import { settings } from "../core/settings.ts";
+import { readJson, writeJson } from "../core/state.ts";
 import { forgetShown } from "./turncontext.ts";
 
 // Every conversation (the owner's chat, each group) persists across restarts, with the hygiene rules in

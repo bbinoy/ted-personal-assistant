@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 import type { ItemKind } from "../secrets/secrets.ts";
 
 // "Connect <service>" on the intake page (intakeserver.ts) for EVERY service a friend signs in to (Google: googleoauth.ts, Notion: notionoauth.ts): the OAuth

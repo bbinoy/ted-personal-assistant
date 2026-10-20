@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { startup, type SDKMessage, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
 import { RunTimeout } from "./ceiling.ts";
 import { forgetUnresumable, type Resume } from "./chatsession.ts";
-import type { Conversation } from "./conversation/conversationmodel.ts";
+import type { Conversation } from "../conversation/conversationmodel.ts";
 import { userInput } from "./image.ts";
-import { NOTES_DIR } from "./memory/notes.ts";
-import { approveIn } from "./approvals/permissions.ts";
+import { NOTES_DIR } from "../memory/notes.ts";
+import { approveIn } from "../approvals/permissions.ts";
 import { buildOptions, consume, underCeiling, type AgentReply, type RunOptions } from "./agentrun.ts";
-import { settings } from "./settings.ts";
-import { firstWarm, SpareSlot } from "./warmslot.ts";
+import { settings } from "../core/settings.ts";
+import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 
 // --- warm processes for the next message ---
 // Starting Claude Code (process, config, skills, connectors) takes ~3s before the model is even asked. After a reply the

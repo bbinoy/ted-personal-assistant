@@ -1,4 +1,4 @@
-import { localDay } from "../pause.ts";
+import { localDay } from "../core/pause.ts";
 import type { HeartbeatRow } from "./rows.ts";
 
 // `npm run heartbeat-report [days]`: what the heartbeat run did for every conversation, from its rows (state/heartbeat.jsonl): counts and dollars, never words or names.

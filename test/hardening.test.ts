@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { acceptOwner } from "../src/conversation/guards.ts";
-import { redact } from "../src/redact.ts";
+import { redact } from "../src/core/redact.ts";
 
 const OWNER = "+15555550114";
 const OWNER_ACI = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

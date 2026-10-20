@@ -18,9 +18,9 @@ process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 process.env.INTAKE_BASE_URL = "http://127.0.0.1:9";
 process.env.INTAKE_ALLOW_HTTP_LOOPBACK = "on";
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const { startFakeBao } = await import("./fakebao.ts");
-const { readAudit } = await import("../src/audit.ts");
+const { readAudit } = await import("../src/core/audit.ts");
 const { IntakeWriter } = await import("../src/intake/intakestore.ts");
 const T = await import("../src/tenants/tenants.ts");
 const L = await import("../src/intake/intakelinks.ts");

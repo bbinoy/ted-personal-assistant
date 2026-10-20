@@ -3,7 +3,7 @@
 // paraphrases can misrepresent the call it is meant to guard.
 
 import type { MailView } from "../policy/mailview.ts";
-import { clip } from "../sanitize.ts";
+import { clip } from "../core/sanitize.ts";
 import { mailView, titleOf } from "../policy/toolmanifest.ts";
 
 // The titles of tools shown generically are the tool modules' (`titles`, src/modules). (Mail tools are shown from mailView() below, whatever the provider; the

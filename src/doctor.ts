@@ -1,16 +1,16 @@
-import { LIMITS } from "./sanitize.ts";
+import { LIMITS } from "./core/sanitize.ts";
 import { providerReady, qwenReady } from "@ted-assistant/speech/tts";
 import { voiceReady } from "@ted-assistant/speech/voice";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { ROOT } from "./paths.ts";
-import { spentToday } from "./budget.ts";
+import { ROOT } from "./core/paths.ts";
+import { spentToday } from "./core/budget.ts";
 import { readRows } from "./heartbeat/rows.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
-import { ownerSkills } from "./skills.ts";
-import { isPaused, localTime } from "./pause.ts";
+import { ownerSkills } from "./modules/skills.ts";
+import { isPaused, localTime } from "./core/pause.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./modules/browse/browseserver.ts";
 import { killSwitch } from "./modules/browse/card.ts";
 import { macKeychain, type Keychain } from "./secrets/keychain.ts";
@@ -24,11 +24,11 @@ import { appBao, ITEM_KINDS, keychainNames, looksLikeApiKey, OWNER } from "./sec
 import { invites, listTenants, OWNER_ID, pausedUntil, people, readConsent, tenantContext } from "./tenants/tenants.ts";
 import { Ledger } from "./modules/browse/payments.ts";
 import { messengerDoctor } from "./conversation/messenger.ts";
-import { settings } from "./settings.ts";
-import { disconnected, NAMES, readConnectors } from "./connectors.ts";
+import { settings } from "./core/settings.ts";
+import { disconnected, NAMES, readConnectors } from "./modules/connectors.ts";
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
-import { dataPath, readJson, readText } from "./state.ts";
+import { dataPath, readJson, readText } from "./core/state.ts";
 
 type Line = DoctorLine;
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { judgePrompt, type Verdict } from "../src/approvals/autojudge.ts";
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 
 // The judge's rules apply to the ACTION, not to what triggered the run: a chat message, a wake-up of the owner, of a group or of a friend are judged the same.
 

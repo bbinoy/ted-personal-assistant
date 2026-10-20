@@ -13,7 +13,7 @@ import { BaoError } from "../src/secrets/openbao.ts";
 import { Admin, configHcl, ensureCert, ensureDirs, installBinary, layoutOf, writeConfig } from "../src/secrets/openbaoadmin.ts";
 import { ProfileStore } from "../src/modules/browse/profile.ts";
 import { appBao, keychainNames, TenantSecrets } from "../src/secrets/secrets.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 
 // A real OpenBao, started by this test as a THROWAWAY server (its own temporary folder, its own port, its own random unseal keys, an in-memory
 // stand-in for the Keychain) from the locally installed binary. Only obviously fake values go in, and everything is deleted at the end. It is

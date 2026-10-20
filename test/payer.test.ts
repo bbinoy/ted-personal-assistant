@@ -9,18 +9,18 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "payer-test-"));
 process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token"; // the instance's own login, which a call on the instance key must never carry
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { INSTANCE_KEY_COOLDOWN, LOGIN, isRefusal, mayRun } = await import("../src/payer.ts");
-const { oneShot } = await import("../src/haiku.ts");
-const { AuthError, InstanceKeyError, RateLimitError, noticeFor } = await import("../src/errors.ts");
-const { coolingDown, noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
-const { recordCost, spentToday } = await import("../src/budget.ts");
+const { INSTANCE_KEY_COOLDOWN, LOGIN, isRefusal, mayRun } = await import("../src/tenants/payer.ts");
+const { oneShot } = await import("../src/tenants/haiku.ts");
+const { AuthError, InstanceKeyError, RateLimitError, noticeFor } = await import("../src/tenants/errors.ts");
+const { coolingDown, noteRateLimit, resetCooldown } = await import("../src/core/cooldown.ts");
+const { recordCost, spentToday } = await import("../src/core/budget.ts");
 const { keyNotices } = await import("../src/tenants/keynotice.ts");
-const { compactConversation } = await import("../src/chatsession.ts");
-const { recordMessage } = await import("../src/messages.ts");
+const { compactConversation } = await import("../src/run/chatsession.ts");
+const { recordMessage } = await import("../src/core/messages.ts");
 const { recentIn } = await import("../src/approvals/recentchat.ts");
-const { tenantKey } = await import("../src/ownerkey.ts");
+const { tenantKey } = await import("../src/core/ownerkey.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 const KEY = "instance-key-for-the-payer-tests";

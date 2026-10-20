@@ -10,7 +10,7 @@ import { OAuthFlows } from "../src/intake/oauth.ts";
 import { IntakeServer } from "../src/intake/intakeserver.ts";
 import { IntakeWriter } from "../src/intake/intakestore.ts";
 import { appBao, keychainNames, OWNER } from "../src/secrets/secrets.ts";
-import { settings, signalIdentity } from "../src/settings.ts";
+import { settings, signalIdentity } from "../src/core/settings.ts";
 import { ensureOwner, people } from "../src/tenants/tenants.ts";
 
 const [cmd, who, purpose] = process.argv.slice(2);

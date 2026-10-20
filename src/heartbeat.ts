@@ -1,6 +1,6 @@
-import { isPaused } from "./pause.ts";
-import { settings } from "./settings.ts";
-import { writeJson } from "./state.ts";
+import { isPaused } from "./core/pause.ts";
+import { settings } from "./core/settings.ts";
+import { writeJson } from "./core/state.ts";
 
 // The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (every conversation's look, the dream). What a conversation does on a tick is the
 // heartbeat run (src/heartbeat/look.ts, started from wake.ts): there is no separate mail check; the run reads the mail itself when it is due.

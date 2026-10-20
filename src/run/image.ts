@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { MAX_IMAGE_BYTES } from "@ted-assistant/messenger";
-import type { Document } from "./conversation/document.ts";
-import { LIMITS } from "./sanitize.ts";
+import type { Document } from "../conversation/document.ts";
+import { LIMITS } from "../core/sanitize.ts";
 
 // Pictures people send, made ready for the model: checked by their bytes (not the name or the claimed type), shrunk,
 // and wrapped as image content next to the text. The bytes live only in memory for the one turn: never in a log or a note.

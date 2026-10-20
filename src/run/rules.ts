@@ -1,5 +1,5 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 
 // The heartbeat run's pure rules: what its answer looks like, and how its next look is clamped. Code keeps these whatever the model decides.
 

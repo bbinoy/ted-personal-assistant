@@ -1,6 +1,6 @@
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { settings } from "../../settings.ts";
+import { settings } from "../../core/settings.ts";
 
 // Pictures of a turn, kept so the model can send one with the `send` tool (send.ts): screenshots of a browse run and drawings (drawtool.ts). The worker
 // keeps each screenshot as a small jpeg in a private folder (state/browse/shots); the browse result lists them by short id (shot1, shot2...). A drawing is

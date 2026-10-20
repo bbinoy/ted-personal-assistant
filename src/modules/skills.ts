@@ -1,10 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loaded, registered } from "./modules/index.ts";
-import type { ModuleSkill, ToolModule } from "./modules/types.ts";
-import { PLUGIN, preset } from "./preset.ts";
-import { settings } from "./settings.ts";
-import type { Capability } from "./tenants/tenants.ts";
+import { loaded, registered } from "./index.ts";
+import type { ModuleSkill, ToolModule } from "./types.ts";
+import { PLUGIN, preset } from "../core/preset.ts";
+import { settings } from "../core/settings.ts";
+import type { Capability } from "../tenants/tenants.ts";
 
 // Which bundled skills (plugin/skills/) a conversation may load. A skill comes from a tool module (the calendar module brings `calendar`, a mail module its
 // mail skill, weather `surf-conditions`, draw `draw`, browse `research-booking`) or is the assistant's own (CORE_SKILLS: the brief, the radar, setup...).

@@ -1,5 +1,5 @@
 import { createHash, randomInt } from "node:crypto";
-import { readJson, writeJson } from "../state.ts";
+import { readJson, writeJson } from "../core/state.ts";
 
 // One-time codes: an invitation to a friend, or, later, the ticket of a one-time link. A code is shown once, to whoever minted it;
 // only its hash is kept, with an expiry and a small payload. Redeeming one removes it in the same synchronous step that finds it

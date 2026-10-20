@@ -1,6 +1,6 @@
 // Small helpers several test files used to define for themselves.
 
-import type { Source } from "../src/audit.ts";
+import type { Source } from "../src/core/audit.ts";
 import { availableFor, isFree, type MailProvider } from "../src/policy/toolmanifest.ts";
 import type { JudgeSetup } from "../src/approvals/permissions.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";

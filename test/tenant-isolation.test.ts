@@ -14,7 +14,7 @@ process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token";
 const INSTANCE_KEY = "sk-" + "ant-api03-INSTANCEINSTANCEINSTANCE"; // TENANT_ANTHROPIC_API_KEY: the shared key tenants run on, in .env
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
@@ -23,20 +23,20 @@ const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude
 const { classify, isReadableData, hiddenTools } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
-const { searchLogs } = await import("../src/logsearch.ts");
+const { searchLogs } = await import("../src/core/logsearch.ts");
 const { searchHistoryFile, groupDir, groupNotesDir, GROUPS_DIR } = await import("../src/conversation/groupstore.ts");
-const { runConversation } = await import("../src/agent.ts");
+const { runConversation } = await import("../src/run/agent.ts");
 const askTenant = (ctx: { id: string }, apiKey: string, prompt: string, _pictures: unknown[], hooks: { firstOutput: () => void } | undefined, _documents: unknown[], io: { query?: never }) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt }), hooks?.firstOutput, io);
-const { runOptionsFor } = await import("../src/runoptions.ts");
+const { runOptionsFor } = await import("../src/run/runoptions.ts");
 const tenantRunOptions = (ctx: { id: string }, apiKey: string, now?: Date) => runOptionsFor(tenant(ctx.id), { apiKey, now });
-const { browseRunOptions, buildOptions } = await import("../src/agentrun.ts");
+const { browseRunOptions, buildOptions } = await import("../src/run/agentrun.ts");
 const { BrowseGuard } = await import("../src/modules/browse/browseguard.ts");
 const { browse, startRefusal } = await import("../src/modules/browse/browse.ts");
 const { tenantEnv, createTenantServer } = await import("../src/tenants/tenanttools.ts");
-const { coolingDown, resetCooldown } = await import("../src/cooldown.ts");
-const { InstanceKeyError } = await import("../src/errors.ts");
-const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
-const { spentToday } = await import("../src/budget.ts");
+const { coolingDown, resetCooldown } = await import("../src/core/cooldown.ts");
+const { InstanceKeyError } = await import("../src/tenants/errors.ts");
+const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
+const { spentToday } = await import("../src/core/budget.ts");
 const { createPipeline, group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { speaker } = await import("../src/conversation/group.ts");
 const { createOutbound } = await import("../src/conversation/outbound.ts");

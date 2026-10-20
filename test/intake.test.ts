@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { readAudit } from "../src/audit.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { ProfileStore } from "../src/modules/browse/profile.ts";
 import { IntakeWriter } from "../src/intake/intakestore.ts";
 import { startFakeBao, type FakeBao } from "./fakebao.ts";
@@ -14,7 +14,7 @@ import { startFakeBao, type FakeBao } from "./fakebao.ts";
 // The intake page: links (single use, expiry, bound to a person and a purpose), the form and the store, the hardening of the HTTP side, and the
 // tenant's two tools. Fakes only: a fake OpenBao, fake values, fake cards (4242 4242 4242 4242).
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)

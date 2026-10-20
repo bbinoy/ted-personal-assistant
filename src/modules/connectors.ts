@@ -1,5 +1,5 @@
-import { registered } from "./modules/index.ts";
-import { readJson, writeJson } from "./state.ts";
+import { registered } from "./index.ts";
+import { readJson, writeJson } from "../core/state.ts";
 
 // Which connectors the last run could actually see. Notion and Google Calendar come through the
 // owner's Claude account (settings, then connectors); if one is not connected its tools simply do

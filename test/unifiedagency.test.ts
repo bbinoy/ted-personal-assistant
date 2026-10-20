@@ -7,7 +7,7 @@ import type { Verdict } from "../src/approvals/autojudge.ts";
 import { setDraftReader } from "../src/modules/mailbird.ts";
 import { makeCanUseTool, type CallGuard, type JudgeSetup } from "../src/approvals/permissions.ts";
 import { classify } from "../src/policy/policy.ts";
-import { loadSettings, settings } from "../src/settings.ts";
+import { loadSettings, settings } from "../src/core/settings.ts";
 import * as manifest from "../src/policy/toolmanifest.ts";
 import { CHAT } from "./util.ts";
 

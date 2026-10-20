@@ -1,11 +1,11 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { budgetSpent, recordCost, tenantOverBudget } from "./budget.ts";
-import type { Conversation } from "./conversation/conversationmodel.ts";
-import { cooldownUntil, coolingDown, noteSuccess, observeRateLimit, skipForCooldown } from "./cooldown.ts";
-import { reportKeyProblem } from "./tenants/keynotice.ts";
-import { isPaused } from "./pause.ts";
-import { settings } from "./settings.ts";
-import { tenantById, tenantContext } from "./tenants/tenants.ts";
+import { budgetSpent, recordCost, tenantOverBudget } from "../core/budget.ts";
+import type { Conversation } from "../conversation/conversationmodel.ts";
+import { cooldownUntil, coolingDown, noteSuccess, observeRateLimit, skipForCooldown } from "../core/cooldown.ts";
+import { reportKeyProblem } from "./keynotice.ts";
+import { isPaused } from "../core/pause.ts";
+import { settings } from "../core/settings.ts";
+import { tenantById, tenantContext } from "./tenants.ts";
 
 // WHO PAYS for a model call and MAY IT RUN NOW: one answer for every call, whoever started it (a chat turn, a wake-up, the gate, the dream, the mail check and its
 // handler, compaction, a notice, the log summary, the approval judge).

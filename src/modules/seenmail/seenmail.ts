@@ -1,9 +1,9 @@
 import { dirname, join } from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../../audit.ts";
+import { audit } from "../../core/audit.ts";
 import type { Conversation } from "../../conversation/conversationmodel.ts";
-import { readJson, writeJson } from "../../state.ts";
+import { readJson, writeJson } from "../../core/state.ts";
 import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 // "Mail since your last look" is not a time window but a memory of ids: the mail the conversation's heartbeat run has already worked through. The run lists the inbox with

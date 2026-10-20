@@ -1,7 +1,7 @@
 // npm run tenants -- list | invite [note] | grant <id> <capability> | revoke <id> <capability> | timezone <id> <zone|default> | set-admin <id>: the administrator's terminal side of tenants
 // (docs/SETUP.md "More than one person"). Local terminal only. This is the ONLY place the admin role and the capabilities change: no tool, no chat path,
 // no model can reach them (test/tenants.test.ts walks every tool).
-import { settings, signalIdentity } from "../src/settings.ts";
+import { settings, signalIdentity } from "../src/core/settings.ts";
 import { describeTenants } from "../src/tenants/tenanttools.ts";
 import { CAPABILITIES, ensureOwner, grant, isCapability, mintInvite, revoke, setAdmin, setTimeZone } from "../src/tenants/tenants.ts";
 

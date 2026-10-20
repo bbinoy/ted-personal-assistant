@@ -1,18 +1,16 @@
 import { join } from "node:path";
-import { noticeFor } from "../errors.ts";
+import { noticeFor } from "../tenants/errors.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
-import { FILE as OWNER_LOG, type Extra, type Kind } from "../messages.ts";
+import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
-import { type Picture } from "../image.ts";
+import { type Picture } from "../run/image.ts";
 import { type Document } from "./document.ts";
-import { OWNER_SESSION_FILE } from "../session.ts";
-import { tenantKey } from "../ownerkey.ts";
-import { OWNER, settings } from "../settings.ts";
-import { systemZone } from "../timezone.ts";
-import { clean, LIMITS, oneLine } from "../sanitize.ts";
-import { type Timing } from "../timing.ts";
+import { OWNER_SESSION_FILE, tenantKey } from "../core/ownerkey.ts";
+import { settings } from "../core/settings.ts";
+import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
+import { type Timing } from "../core/timing.ts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-assistant/messenger";
 
 // What a conversation is (the owner's chat or a group: data, never built by hand) and the types the pipeline (conversation.ts) works with.
@@ -108,20 +106,9 @@ export const tenant = (id: string): Conversation => {
 };
 
 // ---- what a conversation may do: capabilities.ts capabilitiesOf (its record, the instance's switches and what is set up), not its kind ----
+// (onLogin: core/ownerkey.ts; speakerOf and zoneOf: tenants/tenants.ts)
 
-// Is this the conversation that runs on the instance's own Claude login, with its connectors (the owner's)? A group is isolated, a friend runs on the instance key.
-export const onLogin = (conv: Pick<Conversation, "kind">): boolean => conv.kind === "owner";
-
-// Who the person in a private chat is called in the prompts built for it: the owner as always, a tenant by her name.
-export const speakerOf = (conv: Pick<Conversation, "tenantId">): string => (conv.tenantId ? (tenantById(conv.tenantId)?.name ?? "a friend") : OWNER);
-
-// The time zone a conversation's clock runs in (timezone.ts): a friend's own if her tenant.json names one, else the owner's, the Mac's (a group's included).
-export function zoneOf(conv: Pick<Conversation, "tenantId">): string {
-  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-  return (rec && tenantContext(rec).config.timeZone) || systemZone();
-}
-
-// A message with its picture or document, once prepared (the bytes are held for this turn only; src/image.ts).
+// A message with its picture or document, once prepared (the bytes are held for this turn only; src/run/image.ts).
 export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; document?: Document; edit?: { before?: string } }; // voice: the text is a transcript of a voice message (set by hear); edit: an edit of a message that was answered already, with the version it replaces
 
 export type Incoming = { type: "message"; m: IncomingMessage } | { type: "reaction"; r: IncomingReaction } | { type: "deletion"; d: IncomingDeletion };

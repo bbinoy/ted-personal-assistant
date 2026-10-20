@@ -7,14 +7,14 @@ import { group as groupConversation, owner } from "../src/conversation/conversat
 import { createDreamer, dreamConversations, dreamPrompt, type Runner } from "../src/conversation/dream.ts";
 import { dreamScope, dreamStateFile } from "../src/modules/memory/dreamscope.ts";
 import { groupDir, groupLogFile, groupNotesDir } from "../src/conversation/groupstore.ts";
-import { readAudit } from "../src/audit.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { createMemoryServer } from "../src/modules/memory/memory-tools.ts";
-import { recordMessage } from "../src/messages.ts";
+import { recordMessage } from "../src/core/messages.ts";
 import { NOTES_DIR } from "../src/memory/notes.ts";
-import { dreamSystem } from "../src/persona.ts";
-import { preset } from "../src/preset.ts";
-import { settings } from "../src/settings.ts";
-import { dataPath, readJson, writeJson } from "../src/state.ts";
+import { dreamSystem } from "../src/run/persona.ts";
+import { preset } from "../src/core/preset.ts";
+import { settings } from "../src/core/settings.ts";
+import { dataPath, readJson, writeJson } from "../src/core/state.ts";
 
 // The ONE dreamer (dream.ts createDreamer): the owner's chat and every group go through the same gates (the `dream` capability, the day guard, the preset's
 // minimum of new lines), the same run and the same audit row; only the data differs (dreamscope.ts).

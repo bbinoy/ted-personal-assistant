@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { audit } from "../audit.ts";
+import { audit } from "../core/audit.ts";
 import { LINK_CODE, LinkStore, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
 import type { Put } from "./intakepurposes.ts";

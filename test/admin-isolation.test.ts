@@ -11,7 +11,7 @@ import { tick as settle } from "./util.ts";
 // holds no word of a tenant's chat. The host's own administrator can of course read the files on the Mac (docs/SAFETY.md).
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "admin-isolation-"));
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
@@ -19,12 +19,12 @@ const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => tool
 const { classify, isReadableData } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
-const { searchLogs } = await import("../src/logsearch.ts");
+const { searchLogs } = await import("../src/core/logsearch.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
 const approvals = await import("../src/approvals/approvals.ts");
 const { makeApprove } = await import("../src/approvals/approvalask.ts");
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
-const { buildOptions } = await import("../src/agentrun.ts");
+const { buildOptions } = await import("../src/run/agentrun.ts");
 
 const CANARY = "CANARY-ANN-4242";
 const made = T.mintInvite()!;

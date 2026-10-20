@@ -1,5 +1,5 @@
-import { appendLine, readText } from "../../state.ts";
-import { localDay } from "../../pause.ts";
+import { appendLine, readText } from "../../core/state.ts";
+import { localDay } from "../../core/pause.ts";
 
 // The payment ledger: an append-only file (state/payments.jsonl, 0600) with one row per status change of a card payment. It holds NO card
 // data: the merchant, the amount, the last four digits, a hash of the cart and the status. It is what makes a payment happen once (a

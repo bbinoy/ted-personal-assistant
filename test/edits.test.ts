@@ -6,12 +6,12 @@ import { createPipeline, group, owner, type Incoming } from "../src/conversation
 import { createOutbound } from "../src/conversation/outbound.ts";
 import { createGroupBrain } from "../src/conversation/group.ts";
 import * as approvals from "./approvalrig.ts";
-import { FILE, findMessage, foldEdits, ledgerEntries, recordMessage, revisionsOf, withoutDeleted, type Extra, type Kind, type Sent } from "../src/messages.ts";
+import { FILE, findMessage, foldEdits, ledgerEntries, recordMessage, revisionsOf, withoutDeleted, type Extra, type Kind, type Sent } from "../src/core/messages.ts";
 import { editNote, isAuthor, normalised, sameText } from "../src/conversation/edit.ts";
 import { conversationLines } from "../src/conversation/dream.ts";
 import { groupContext, groupLogFile } from "../src/conversation/groupstore.ts";
 import { logTail, tailLine } from "../src/conversation/gate.ts";
-import { dataPath } from "../src/state.ts";
+import { dataPath } from "../src/core/state.ts";
 import type { IncomingDeletion, IncomingMessage } from "@ted-assistant/signal";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 

@@ -1,6 +1,6 @@
-import type { Kind as MessageKind } from "../messages.ts";
-import { settings } from "../settings.ts";
-import { clean } from "../sanitize.ts";
+import type { Kind as MessageKind } from "../core/messages.ts";
+import { settings } from "../core/settings.ts";
+import { clean } from "../core/sanitize.ts";
 import { renderMarkdown } from "./markdown.ts";
 import type { Messenger, Quote, Target, TextStyle } from "@ted-assistant/messenger";
 

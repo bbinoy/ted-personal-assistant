@@ -1,7 +1,7 @@
-import "./log.ts"; // first: timestamps, redaction and owner-only files for everything below
+import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
-import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./agent.ts";
-import { compactConversation, compactDue } from "./chatsession.ts";
+import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
+import { compactConversation, compactDue } from "./run/chatsession.ts";
 import { approveIn, setApprovers } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
@@ -15,20 +15,20 @@ import { logTail } from "./conversation/gate.ts";
 import { createWakeups } from "./wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
-import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./messages.ts";
+import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
 import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
-import { preparePicture } from "./image.ts";
+import { preparePicture } from "./run/image.ts";
 import { prepareFile, type AudioTools } from "./conversation/document.ts";
 import { createOutbound } from "./conversation/outbound.ts";
 import { Ledger } from "./modules/browse/payments.ts";
-import { applyCredentialMode, mask, settings, signalIdentity } from "./settings.ts";
+import { applyCredentialMode, mask, settings, signalIdentity } from "./core/settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
 import { unsupportedForVoice } from "./conversation/lang.ts";
 import { directOf, type IncomingMessage } from "@ted-assistant/messenger";
 import { loadMessengerInUse } from "./conversation/messenger.ts";
 import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-assistant/speech/tts";
-import { Limiter } from "./limiter.ts";
+import { Limiter } from "./core/limiter.ts";
 import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
 import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";

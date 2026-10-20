@@ -1,4 +1,4 @@
-import { audit, type Source } from "../audit.ts";
+import { audit, type Source } from "../core/audit.ts";
 import { runJudge, withTimeout } from "./approvaljudge.ts";
 import type { JudgeIO } from "./judgespare.ts";
 import { factsOf, validateQuestion } from "./questionfacts.ts";

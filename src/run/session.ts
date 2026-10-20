@@ -5,10 +5,7 @@
 //     for a while, or right after a reply if it grew far past the limit.
 // The decision is a pure function so the boundaries are unit-tested.
 
-import { settings } from "./settings.ts";
-
-// The owner's session pointer; a group's is session.json in its own folder (groupstore.ts).
-export const OWNER_SESSION_FILE = "state/session.json";
+import { settings } from "../core/settings.ts";
 
 export interface ChatSession {
   sessionId?: string;

@@ -1,22 +1,22 @@
-import { clockLine } from "../brief.ts";
-import { budgetSpent } from "../budget.ts";
+import { clockLine } from "../core/brief.ts";
+import { budgetSpent } from "../core/budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
-import { fence } from "../fence.ts";
-import { prepare, runConversation } from "../agent.ts";
+import { fence } from "../core/fence.ts";
+import { prepare, runConversation } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { AuthError, RateLimitError } from "../errors.ts";
+import { AuthError, RateLimitError } from "../tenants/errors.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
 import { groupContext } from "./groupstore.ts";
-import { isPaused } from "../pause.ts";
-import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "../image.ts";
+import { isPaused } from "../core/pause.ts";
+import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "../run/image.ts";
 import { documentNote, takeDocuments, type Document } from "./document.ts";
 import { group, type Batch, type Conversation, type Pipeline } from "./conversation.ts";
 import { quoteNote } from "./quote.ts";
 import { voiceOption } from "./voicereply.ts";
 import type { Quote } from "@ted-assistant/messenger";
-import { clean, defuseSpeakers, LIMITS, oneLine } from "../sanitize.ts";
-import { OWNER, settings } from "../settings.ts";
+import { clean, defuseSpeakers, LIMITS, oneLine } from "../core/sanitize.ts";
+import { OWNER, settings } from "../core/settings.ts";
 
 // Group chats. In its own Signal account the assistant can be added to a group. There it is a friendly
 // participant: every message is judged (cheaply, see gate below) and it speaks when it makes sense, always

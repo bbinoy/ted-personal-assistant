@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { sleep } from "./util.ts";
 const tick = () => sleep(10);
 import { startHeartbeat, startJobs } from "../src/heartbeat.ts";
-import { readJson } from "../src/state.ts";
+import { readJson } from "../src/core/state.ts";
 
 // The heartbeat tick and the jobs it starts (every conversation's look, the dream) are independent: a failing or hanging one never keeps another from
 // running. What a conversation does on a tick is the heartbeat run (test/heartbeatrun.test.ts).

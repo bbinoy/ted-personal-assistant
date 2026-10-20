@@ -1,11 +1,11 @@
-import { allows, capabilitiesOf, groupCapabilities } from "./policy/capabilities.ts";
-import { fence } from "./fence.ts";
-import type { Capability } from "./tenants/tenants.ts";
-import { mailSlot } from "./modules/index.ts";
-import { localDay } from "./pause.ts";
-import { NAMES, SKIPPED, type Connector } from "./connectors.ts";
-import { categoriesFor, PLUGIN, preset, render, type PromptKey, type Value } from "./preset.ts";
-import { ASSISTANT, OWNER, settings } from "./settings.ts";
+import { allows, capabilitiesOf, groupCapabilities } from "../policy/capabilities.ts";
+import { fence } from "../core/fence.ts";
+import type { Capability } from "../tenants/tenants.ts";
+import { mailSlot } from "../modules/index.ts";
+import { localDay } from "../core/pause.ts";
+import { NAMES, SKIPPED, type Connector } from "../modules/connectors.ts";
+import { categoriesFor, PLUGIN, preset, render, type PromptKey, type Value } from "../core/preset.ts";
+import { ASSISTANT, OWNER, settings } from "../core/settings.ts";
 
 // System prompts. The WORDS are the assistant preset's (assistants/<name>/persona/*.md, loaded by preset.ts): who the assistant is,
 // how it talks, what each kind of run is told. This file is the other half: it fills in what only code knows (the owner's name, which

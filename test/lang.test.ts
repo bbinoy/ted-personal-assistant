@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseLanguages } from "../src/settings.ts";
+import { parseLanguages } from "../src/core/settings.ts";
 import { scriptLanguage, unsupportedForVoice, UNSURE, type LanguageModel } from "../src/conversation/lang.ts";
 import { voiceOption } from "../src/conversation/voicereply.ts";
 

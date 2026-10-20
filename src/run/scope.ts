@@ -1,10 +1,12 @@
-import { onLogin, speakerOf, zoneOf, type Conversation } from "../conversation/conversationmodel.ts";
+import type { Conversation } from "../conversation/conversationmodel.ts";
+import { onLogin } from "../core/ownerkey.ts";
+import { speakerOf, zoneOf } from "../tenants/tenants.ts";
 import { readNotes } from "../memory/notes.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
-import { PROFILES } from "../profiles.ts";
-import { OWNER } from "../settings.ts";
-import { PLUGIN, skillsFor } from "../skills.ts";
+import { PROFILES } from "./profiles.ts";
+import { OWNER } from "../core/settings.ts";
+import { PLUGIN, skillsFor } from "../modules/skills.ts";
 
 // What a heartbeat run is made of for ONE conversation, read from its capability set (capabilities.ts capabilitiesOf) and nothing else: the owner, a group and a friend
 // are asked the same way and differ only in data. A conversation that can read mail, a calendar or tasks is told to be proactive and may delegate heavy work to the

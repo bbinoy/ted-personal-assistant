@@ -1,10 +1,10 @@
-import { prepare as prepareWarm, runConversation } from "../agent.ts";
+import { prepare as prepareWarm, runConversation } from "../run/agent.ts";
 import { tenant } from "./conversationmodel.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
-import type { Picture } from "../image.ts";
+import type { Picture } from "../run/image.ts";
 import type { Document } from "./document.ts";
-import { InstanceKeyError } from "../errors.ts";
-import { cooldownOf, isRefusal, mayRun } from "../payer.ts";
+import { InstanceKeyError } from "../tenants/errors.ts";
+import { cooldownOf, isRefusal, mayRun } from "../tenants/payer.ts";
 import { mayNotice, markDisclosed, setPaused, tenantById, tenantContext, wasDisclosed, type TenantContext } from "../tenants/tenants.ts";
 import { DISCLOSURE, notSetUpReply } from "../tenants/tenantroute.ts";
 

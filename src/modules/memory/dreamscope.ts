@@ -2,8 +2,8 @@ import { join } from "node:path";
 import type { Conversation } from "../../conversation/conversationmodel.ts";
 import { OWNER_SCOPE, type Scope } from "../../memory/dreamplan.ts";
 import { groupDir, groupScope } from "../../conversation/groupstore.ts";
-import { preset } from "../../preset.ts";
-import { settings } from "../../settings.ts";
+import { preset } from "../../core/preset.ts";
+import { settings } from "../../core/settings.ts";
 import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 // WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it, the note categories it has (the preset's notes.dream for the owner,

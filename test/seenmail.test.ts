@@ -10,14 +10,14 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "seenmail-test-"));
 
 const { createSeenMail, createSeenMailServer, seenFileOf, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
 const { createHeartbeatLook } = await import("../src/heartbeat/look.ts");
-const { heartbeatOptions } = await import("../src/agent.ts");
-const { buildOptions } = await import("../src/agentrun.ts");
+const { heartbeatOptions } = await import("../src/run/agent.ts");
+const { buildOptions } = await import("../src/run/agentrun.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
-const { LOGIN } = await import("../src/payer.ts");
+const { LOGIN } = await import("../src/tenants/payer.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { settings } = await import("../src/settings.ts");
-const { readJson } = await import("../src/state.ts");
-const { recordMessage } = await import("../src/messages.ts");
+const { settings } = await import("../src/core/settings.ts");
+const { readJson } = await import("../src/core/state.ts");
+const { recordMessage } = await import("../src/core/messages.ts");
 
 const dir = join(settings.dataDir, "seenmail-files");
 mkdirSync(dir, { recursive: true });

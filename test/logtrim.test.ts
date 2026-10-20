@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { keepTail, trimLogInPlace } from "../src/logtrim.ts";
+import { keepTail, trimLogInPlace } from "../src/core/logtrim.ts";
 
 test("keepTail: the last bytes from a line boundary; small input unchanged", () => {
   const b = Buffer.from("aaaa\nbbbb\ncccc\n");

@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { audit } from "../audit.ts";
+import { audit } from "../core/audit.ts";
 import { OWNER_SCOPE, type Plan, type Scope } from "./dreamplan.ts";
 import { forgetNote, STATUS_PREFIX } from "./notes.ts";
 

@@ -1,4 +1,4 @@
-import { settings } from "../../settings.ts";
+import { settings } from "../../core/settings.ts";
 import { rowsOf, type ToolModule } from "../types.ts";
 
 // browse (browse.ts): the entry tool starts a sandboxed run with the browser; it is judged like everything else. What it brings back is the web, so reading it

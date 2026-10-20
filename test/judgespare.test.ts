@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick } from "./util.ts";
 import { JudgeSpare } from "../src/approvals/judgespare.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 
 const setWarm = (v: boolean) => ((settings as { warm: boolean }).warm = v);
 const result = (outcome: string) => ({ type: "result", subtype: "success", is_error: false, structured_output: { task: "answer", target: "A1", outcome } }) as any;

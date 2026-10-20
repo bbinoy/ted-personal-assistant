@@ -5,7 +5,7 @@ import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { credentialedProxy, SessionHub, UpstreamError, UpstreamSession, type Opened, type SessionLimits } from "../../intake/mcpproxy.ts";
 import { appBao, GOOGLE_ITEM, TenantSecrets } from "../../secrets/secrets.ts";
-import { settings } from "../../settings.ts";
+import { settings } from "../../core/settings.ts";
 
 // A friend's Google tools (the `google` capability): the pinned third-party MCP server (docs/SETUP.md "Google for friends", settings.google: GOOGLE_MCP_COMMAND and
 // GOOGLE_MCP_ARGS, by default taylorwilsdon/google_workspace_mcp as `workspace-mcp`, stdio, single-user) run as ONE PROCESS PER FRIEND, started by THIS process.

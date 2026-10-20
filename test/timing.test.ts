@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startTiming } from "../src/timing.ts";
+import { startTiming } from "../src/core/timing.ts";
 import { createPipeline, group, owner } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";

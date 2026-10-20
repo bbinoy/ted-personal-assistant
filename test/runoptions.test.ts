@@ -14,10 +14,10 @@ process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token";
 const INSTANCE_KEY = "sk-" + "ant-api03-INSTANCEINSTANCEINSTANCE";
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { buildOptions } = await import("../src/agentrun.ts");
-const { runOptionsFor } = await import("../src/runoptions.ts");
+const { buildOptions } = await import("../src/run/agentrun.ts");
+const { runOptionsFor } = await import("../src/run/runoptions.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 
 const FIXTURE = new URL("./fixtures/run-options.json", import.meta.url);

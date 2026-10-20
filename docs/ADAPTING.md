@@ -41,7 +41,7 @@ A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird.ts
 | `search_conversations(query, limit)` | restore fallback by subject | `[{ conversationId, subject }]` |
 
 4. **Hide what the model does not need**: `hide: { prefix, visible, valid, hint }` names the connector's tools the model is shown (every tool schema is sent on every model call); `<MODULE>_TOOLS` in `.env` replaces the list.
-5. **A skill** for the provider in `plugin/skills/<name>/` (`skills: [{ name, required: true }]`), and the provider name added to `MAIL_PROVIDER`'s accepted values in `src/settings.ts`.
+5. **A skill** for the provider in `plugin/skills/<name>/` (`skills: [{ name, required: true }]`), and the provider name added to `MAIL_PROVIDER`'s accepted values in `src/core/settings.ts`.
 
 IMAP maps cleanly onto the table: list = `SEARCH`/`FETCH` on INBOX by UID, archive = `MOVE` to the archive mailbox, conversation id = Message-ID or UID (and note that moving a message changes its UID, which is why `restore` tries several ids). `test/modules.test.ts` and `test/manifestrows.test.ts` check the shape of a new module and pin its rows.
 
@@ -67,7 +67,7 @@ What a module may not do: decide policy. Whether a call is allowed, asked or den
 What makes the harness "Ted" is data in a folder, `assistants/<name>/` (`ASSISTANT_PRESET=<name or folder path>` picks it; default `ted`). To make a different assistant, copy the folder or start a new one that extends it:
 
 1. `assistants/<name>/preset.json` with `"extends": "ted"` and only the keys you change: the **rhythm** (heartbeat interval and quiet hours, the brief's skill and hours, the heartbeat run's day interval, the dream), the **note categories**, the **profile table** (turns, budget and notes of each unattended run) and the assistant's own **skills** (`core`, with the ones the doctor requires, and the `order` of the owner's list). The environment variables of the rhythm still override their defaults.
-2. `assistants/<name>/persona/<prompt>.md` for any prompt whose words you change (the personality, the chat, a group, the brief, the gates' default rules...). A text is a template: `{{name}}`, `{{#flag}}...{{/flag}}`, `{{^flag}}...{{/flag}}`; the names each text may use are listed in `PROMPTS` in `src/preset.ts`. A text that uses another name, a missing file or an out-of-range number stops the start with a message naming the file.
+2. `assistants/<name>/persona/<prompt>.md` for any prompt whose words you change (the personality, the chat, a group, the brief, the gates' default rules...). A text is a template: `{{name}}`, `{{#flag}}...{{/flag}}`, `{{^flag}}...{{/flag}}`; the names each text may use are listed in `PROMPTS` in `src/core/preset.ts`. A text that uses another name, a missing file or an out-of-range number stops the start with a message naming the file.
 3. Skills it brings are folders in `plugin/skills/`; a preset lists them as core skills and, for a skill that belongs to a tool, the module brings it instead.
 4. `ASSISTANT_NAME`, `OWNER_NAME` in `.env` set the names.
 
@@ -106,7 +106,7 @@ Then adjust the app-side pieces that carry platform conventions:
 | `src/conversation/outbound.ts` | keep or drop the echo guard, as above. The platform's message limit is `capabilities.maxMessageBytes`. |
 | `src/conversation/guards.ts` | allowlist by your platform's user/chat id. Keep it pure and keep the tests. |
 | `src/approvals/approvals.ts` | unchanged. It matches reactions to the approval message by id; any platform with message ids and reactions works. Without reactions, the approval is a text reply. |
-| `src/settings.ts`, `.env.example` | the platform's settings (a bot token, say), kept in `.env`. |
+| `src/core/settings.ts`, `.env.example` | the platform's settings (a bot token, say), kept in `.env`. |
 
 ### Notes per platform
 
@@ -128,7 +128,7 @@ These are starting points, not tested here; check each platform's current docs.
 - **What may run unattended**: the rows of the tool modules in `src/modules` (the manifest, `src/policy/toolmanifest.ts`, is their union). Start by reading them (a read or the assistant's own plumbing is free, everything else is judged by the approval judge, whose prompt is in `src/approvals/approvaljudge.ts`); unknown tools ask. The default policy denies one financial connector (Interactive Brokers) by name as an example; add any other sensitive connector you have.
 - **What gets archived**: the heartbeat run decides from the sender, subject and headers, by the judgement and examples in `assistants/<name>/persona/heartbeat.md` (the "New mail" paragraph): archive what is clearly routine or handled, open a mail only when unsure, leave anything that may need you. Adjust the wording, or tell the assistant a preference in chat ("remember that mail from X is never urgent", a `triage-` note). There is no keyword blocklist; the safety net is that archiving is judged, audited with the mail's id and reversible (`npm run restore`).
 - **What may be auto-archived**: `ARCHIVE_KINDS` and the per-tick cap in `src/actions.ts`.
-- **Schedule and limits**: every tunable is an env var, validated at startup in `src/settings.ts`.
+- **Schedule and limits**: every tunable is an env var, validated at startup in `src/core/settings.ts`.
 - **The brief's shape**: it is whatever `plugin/skills/daily-brief/SKILL.md` says. Headings (`## `) become separate Signal messages.
 
 Back to the [README](../README.md) · [Setup](SETUP.md) · [Architecture](ARCHITECTURE.md) · [Safety](SAFETY.md)

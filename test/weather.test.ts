@@ -4,8 +4,8 @@ import { getForecast, getMarineForecast, getSpotInfo, searchPlaces, type Weather
 import { nearestSpot } from "../src/modules/weather/kitespots.ts";
 import { exposure, featuresFrom, rings, type Ring } from "../src/modules/weather/shore.ts";
 import { access } from "./util.ts";
-import { ownerSkills } from "../src/skills.ts";
-import { settings } from "../src/settings.ts";
+import { ownerSkills } from "../src/modules/skills.ts";
+import { settings } from "../src/core/settings.ts";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const io = (body: unknown, status = 200): WeatherIo => ({ fetch: async () => json(body, status), now: () => new Date("2026-10-19T08:30:00Z") }); // 10:30 local (UTC+2)

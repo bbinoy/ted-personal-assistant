@@ -1,17 +1,17 @@
 import { createHash } from "node:crypto";
 import type { RunOptions } from "./agentrun.ts";
-import { tenantOverBudget } from "./budget.ts";
-import { disconnected, readConnectors } from "./connectors.ts";
-import type { Conversation } from "./conversation/conversationmodel.ts";
-import { recentNotices } from "./messages.ts";
-import { readNotes } from "./memory/notes.ts";
-import { missingSetup } from "./modules/index.ts";
+import { tenantOverBudget } from "../core/budget.ts";
+import { disconnected, readConnectors } from "../modules/connectors.ts";
+import type { Conversation } from "../conversation/conversationmodel.ts";
+import { recentNotices } from "../core/messages.ts";
+import { readNotes } from "../memory/notes.ts";
+import { missingSetup } from "../modules/index.ts";
 import { chatContext, chatSystem, groupSystem, tenantSystem } from "./persona.ts";
-import { allows, capabilitiesOf, groupTools, toolsFor } from "./policy/capabilities.ts";
-import { GOOGLE_MAIL_TOOL } from "./modules/google/module.ts";
+import { allows, capabilitiesOf, groupTools, toolsFor } from "../policy/capabilities.ts";
+import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
 import { PROFILES } from "./profiles.ts";
-import { skillsFor } from "./skills.ts";
-import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "./tenants/tenants.ts";
+import { skillsFor } from "../modules/skills.ts";
+import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "../tenants/tenants.ts";
 
 // The ONE builder of the options of a conversation's run: the owner's chat, a group and a tenant. What a run is made of comes from the
 // conversation's record (conversationmodel.ts: kind, source, notes folder, session file, the group's id) and, for a person with a registry record,

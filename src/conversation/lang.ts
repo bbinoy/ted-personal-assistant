@@ -1,7 +1,7 @@
-import { skipForCooldown } from "../cooldown.ts";
-import { fence } from "../fence.ts";
-import { oneShot } from "../haiku.ts";
-import { LOGIN } from "../payer.ts";
+import { skipForCooldown } from "../core/cooldown.ts";
+import { fence } from "../core/fence.ts";
+import { oneShot } from "../tenants/haiku.ts";
+import { LOGIN } from "../tenants/payer.ts";
 
 // Whether a reply may go out by voice. The voice speaks only the languages in TTS_LANGUAGES, and a German sentence read by an English
 // voice sounds bad, so a reply in an unsupported language goes out as text. The language is a model decision (one Haiku call) when a

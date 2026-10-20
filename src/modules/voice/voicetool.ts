@@ -8,11 +8,11 @@ import {
   type ClipTools,
 } from "@ted-assistant/speech/tts";
 import { z } from "zod";
-import { audit } from "../../audit.ts";
+import { audit } from "../../core/audit.ts";
 import { askingIn, quotedVoiceNote, voiceNote, voiceNotes, type VoiceNote } from "./voicenote.ts";
-import { oneLine } from "../../sanitize.ts";
-import { settings } from "../../settings.ts";
-import { OWNER_KEY, sourceOfKey } from "../../ownerkey.ts";
+import { oneLine } from "../../core/sanitize.ts";
+import { settings } from "../../core/settings.ts";
+import { OWNER_KEY, sourceOfKey } from "../../core/ownerkey.ts";
 import { listGroups } from "../../conversation/groupstore.ts";
 
 // The voice tool: the cloned voice of a conversation (Qwen only). Each conversation has its own library and active voice (voices.ts):

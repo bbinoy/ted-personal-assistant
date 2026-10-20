@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { categoryOf, forgetNote, isIndex, isNotePath, MAX_NOTE_CHARS, memoryFor, NOTES_DIR, notesBlock, parseNote, readNotes } from "../src/memory/notes.ts";
-import { fence } from "../src/fence.ts";
-import { settings } from "../src/settings.ts";
-import { chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
+import { fence } from "../src/core/fence.ts";
+import { settings } from "../src/core/settings.ts";
+import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
 
 const reset = () => {
   rmSync(NOTES_DIR, { recursive: true, force: true });

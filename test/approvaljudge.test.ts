@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { forTask, judgeTiming, runJudge, discardJudge, prepareJudge, SYSTEM, withTimeout } from "../src/approvals/approvaljudge.ts";
 import { judgeAnswer } from "../src/approvals/approvalmodel.ts";
 import { judgeAction } from "../src/approvals/autojudge.ts";
-import { OWNER, settings } from "../src/settings.ts";
+import { OWNER, settings } from "../src/core/settings.ts";
 
 const setWarm = (v: boolean) => ((settings as { warm: boolean }).warm = v);
 const result = (out: unknown) => ({ type: "result", subtype: "success", is_error: false, structured_output: out }) as any;

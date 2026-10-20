@@ -8,13 +8,13 @@ import { join } from "node:path";
 // turn's message, and only when the session has not been told it yet. The system prompt, and with it the warm process and the cached session, stays put.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "turncontext-"));
 
-const { runConversation } = await import("../src/agent.ts");
+const { runConversation } = await import("../src/run/agent.ts");
 const { owner } = await import("../src/conversation/conversation.ts");
-const { runOptionsFor } = await import("../src/runoptions.ts");
-const { recordMessage } = await import("../src/messages.ts");
-const { recordConnectors } = await import("../src/connectors.ts");
-const { forgetShown, markShown, unseen } = await import("../src/turncontext.ts");
-const { settings } = await import("../src/settings.ts");
+const { runOptionsFor } = await import("../src/run/runoptions.ts");
+const { recordMessage } = await import("../src/core/messages.ts");
+const { recordConnectors } = await import("../src/modules/connectors.ts");
+const { forgetShown, markShown, unseen } = await import("../src/run/turncontext.ts");
+const { settings } = await import("../src/core/settings.ts");
 
 const NOW = new Date("2026-10-12T09:00:00");
 const conv = { ...owner(), sessionFile: "state/turncontext-session.json" };

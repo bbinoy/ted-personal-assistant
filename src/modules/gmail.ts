@@ -2,7 +2,7 @@ import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } f
 import { addrs, nativeView } from "../policy/mailview.ts";
 import type { DraftView } from "../proposals.ts";
 import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot

@@ -2,11 +2,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // The one place that knows where the repo sits on disk. Every other file asks here instead of
-// computing "../" from its own import.meta.url, so moving a file into a folder cannot silently
+// computing "../../" from its own import.meta.url, so moving a file into a folder cannot silently
 // change a path (a data dir that quietly became src/ would hide behind tests that set HARNESS_DATA_DIR).
-// This is the only file that locates itself: it lives at src/paths.ts, so the repo root is one level up.
+// This is the only file that locates itself: it lives at src/core/paths.ts, so the repo root is two levels up.
 // If this file ever moves, change PATHS_DEPTH and test/paths.test.ts will tell you it was missed.
-const PATHS_DEPTH = 1;
+const PATHS_DEPTH = 2;
 let root = dirname(fileURLToPath(import.meta.url));
 for (let i = 0; i < PATHS_DEPTH; i++) root = dirname(root);
 

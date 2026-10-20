@@ -1,6 +1,6 @@
 import { expiryText, maskCard, type CardInfo, type CardRecord } from "./card.ts";
 import { formatMoney, type FieldKind, type Money } from "./paymentrules.ts";
-import { clip, cleanText, LIMITS } from "../../sanitize.ts";
+import { clip, cleanText, LIMITS } from "../../core/sanitize.ts";
 
 // The state of a card payment inside one browse run (browseguard.ts decides every call; the rules are paymentrules.ts). One per guard.
 // The card's plaintext exists in `card` only between the owner's typed yes and the pay click (or the end of the run).

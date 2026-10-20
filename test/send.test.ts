@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildOptions } from "../src/agentrun.ts";
+import { buildOptions } from "../src/run/agentrun.ts";
 import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
 import { sanitizeResult, shotCaptions } from "../src/modules/browse/browse.ts";
 import { createPipeline, group, owner } from "../src/conversation/conversation.ts";
@@ -11,7 +11,7 @@ import { createOutbound } from "../src/conversation/outbound.ts";
 import { classify } from "../src/policy/policy.ts";
 import { adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/modules/send/shots.ts";
 import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
-import { OWNER_KEY } from "../src/ownerkey.ts";
+import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { access } from "./util.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 

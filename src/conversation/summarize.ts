@@ -1,10 +1,10 @@
-import { oneShot } from "../haiku.ts";
-import { LOGIN } from "../payer.ts";
-import { fence } from "../fence.ts";
-import type { Sent, Summarize } from "../messages.ts";
-import { summarySystem } from "../persona.ts";
-import { OWNER, settings } from "../settings.ts";
-import { LIMITS } from "../sanitize.ts";
+import { oneShot } from "../tenants/haiku.ts";
+import { LOGIN } from "../tenants/payer.ts";
+import { fence } from "../core/fence.ts";
+import type { Sent, Summarize } from "../core/messages.ts";
+import { summarySystem } from "../run/persona.ts";
+import { OWNER, settings } from "../core/settings.ts";
+import { LIMITS } from "../core/sanitize.ts";
 
 // The small model that folds old messages into the log's one-line summary (messages.ts).
 

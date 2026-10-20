@@ -9,9 +9,9 @@ import { mailSlot } from "../src/modules/index.ts";
 import { gmailChecks } from "../src/modules/runtime.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { classify, hiddenTools } from "../src/policy/policy.ts";
-import { ownerSkills } from "../src/skills.ts";
-import { loadSettings, settings } from "../src/settings.ts";
-import { cleanToolOutput } from "../src/toolclean.ts";
+import { ownerSkills } from "../src/modules/skills.ts";
+import { loadSettings, settings } from "../src/core/settings.ts";
+import { cleanToolOutput } from "../src/core/toolclean.ts";
 import { addrs, mailView } from "../src/policy/toolmanifest.ts";
 
 // MAIL_PROVIDER=gmail. Everything here runs on fake connector output (the shapes follow the connector's published tool descriptions);

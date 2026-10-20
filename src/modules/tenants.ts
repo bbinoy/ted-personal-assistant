@@ -1,4 +1,4 @@
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // The owner's tenant administration (tenanttools.ts), only while TENANTS=on: minting an invite and looking are free; stopping a tenant or deleting her and

@@ -1,25 +1,25 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { audit } from "../audit.ts";
+import { audit } from "../core/audit.ts";
 import { allows } from "../policy/capabilities.ts";
-import { owner as ownerConversation, group as groupConversation, speakerOf, tenant as tenantConversation, type Conversation } from "./conversationmodel.ts";
-import { oneShot } from "../haiku.ts";
-import { isRefusal, LOGIN, mayRun, type Payer, type Refusal } from "../payer.ts";
+import { owner as ownerConversation, group as groupConversation, tenant as tenantConversation, type Conversation } from "./conversationmodel.ts";
+import { oneShot } from "../tenants/haiku.ts";
+import { isRefusal, LOGIN, mayRun, type Payer, type Refusal } from "../tenants/payer.ts";
 import { applyPlan } from "../memory/dreamapply.ts";
 import { planOps, type NoteFile, type Plan, type Scope } from "../memory/dreamplan.ts";
 import { dreamScope, dreamStateFile } from "../modules/memory/dreamscope.ts";
-import { clockLine } from "../brief.ts";
-import { fence } from "../fence.ts";
+import { clockLine } from "../core/brief.ts";
+import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
-import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../messages.ts";
+import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { NOTES_DIR, STATUS_PREFIX } from "../memory/notes.ts";
-import { isPaused, localDay } from "../pause.ts";
-import { dreamSystem } from "../persona.ts";
-import { preset } from "../preset.ts";
-import { OWNER, settings } from "../settings.ts";
-import { readJson, writeJson } from "../state.ts";
-import { listTenants } from "../tenants/tenants.ts";
-import { LIMITS, oneLine } from "../sanitize.ts";
+import { isPaused, localDay } from "../core/pause.ts";
+import { dreamSystem } from "../run/persona.ts";
+import { preset } from "../core/preset.ts";
+import { OWNER, settings } from "../core/settings.ts";
+import { readJson, writeJson } from "../core/state.ts";
+import { listTenants, speakerOf } from "../tenants/tenants.ts";
+import { LIMITS, oneLine } from "../core/sanitize.ts";
 
 // The dream: once a day, on the first tick at or after DREAM_HOUR (dreamTrigger, a plain tick job: nothing else starts it), a model with NO tools reads what a conversation's person said since the last dream (their messages and
 // reactions) next to that conversation's notes, and proposes changes to the notes as JSON: things worth remembering, and a tidy-up (merge duplicates,

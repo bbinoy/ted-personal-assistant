@@ -1,11 +1,11 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, truncateSync, writeFileSync } from "node:fs";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildOptions } from "../src/agentrun.ts";
+import { buildOptions } from "../src/run/agentrun.ts";
 import { classify } from "../src/policy/policy.ts";
 import { access } from "./util.ts";
 import { holdQuote, holdVoiceNote, resetVoiceNotes } from "../src/modules/voice/voicenote.ts";

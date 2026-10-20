@@ -2,9 +2,9 @@ import { looksLikeCardNumber, sensitiveKind } from "../modules/browse/browserule
 import { CARD_ITEM, cardProblem, parseExpiry } from "../modules/browse/card.ts";
 import type { Data } from "../secrets/openbao.ts";
 import { checkNewValue, cleanDomains, isSensitive, KEY_NAME, KINDS, kindOfKey, type Kind } from "../modules/browse/profile.ts";
-import { LIMITS } from "../sanitize.ts";
+import { LIMITS } from "../core/sanitize.ts";
 import { CARD_TENANTS, type ItemKind } from "../secrets/secrets.ts";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 import type { Capability } from "../tenants/tenants.ts";
 import type { Done } from "./intakelinks.ts";
 

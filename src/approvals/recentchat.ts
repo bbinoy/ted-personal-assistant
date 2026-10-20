@@ -1,6 +1,6 @@
-import { foldEdits, ledgerEntries, withoutDeleted } from "../messages.ts";
+import { foldEdits, ledgerEntries, withoutDeleted } from "../core/messages.ts";
 import type { Recent } from "./approvalprompt.ts";
-import { isTenantKey, OWNER_KEY } from "../ownerkey.ts";
+import { isTenantKey, OWNER_KEY } from "../core/ownerkey.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
 
 // The last few lines of a private chat (the owner's, or a friend's: `logFile`), for the approval judge and the question writer: what the person said and what the

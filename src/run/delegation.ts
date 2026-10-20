@@ -1,7 +1,7 @@
 import type { AgentDefinition, HookCallback } from "@anthropic-ai/claude-agent-sdk";
-import { audit, type Source } from "../audit.ts";
-import { PLUGIN, preset } from "../preset.ts";
-import { skillHint, type SkillHint } from "../skills.ts";
+import { audit, type Source } from "../core/audit.ts";
+import { PLUGIN, preset } from "../core/preset.ts";
+import { skillHint, type SkillHint } from "../modules/skills.ts";
 
 // Delegation in the owner's heartbeat run: a cheap model decides, a stronger one (an SDK subagent, the "expert") does the heavy work.
 //   * ONE general expert, `expert`: the preset's model and turn limit (preset.json "expert"), persona/expert.md for its words, and the run's whole tool set (a subagent

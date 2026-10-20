@@ -1,7 +1,7 @@
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { baseUrlProblem, intakeToolsFor } from "../intake/intakelinks.ts";
-import { googleReady, settings } from "../settings.ts";
-import { skillsFor } from "../skills.ts";
+import { googleReady, settings } from "../core/settings.ts";
+import { skillsFor } from "../modules/skills.ts";
 import { CAPABILITIES, OWNER_ID, people, tenantById, tenantContext, type Capability } from "../tenants/tenants.ts";
 import { isOwnerOnly, manifest } from "./toolmanifest.ts";
 

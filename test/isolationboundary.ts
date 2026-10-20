@@ -54,11 +54,11 @@ const OWNER_LOGIN_FIXTURE = { CLAUDE_CODE_OAUTH_TOKEN: "owner-login-fixture", AN
 const SYSTEM = "You are a test assistant. Do exactly what the user asks, with the tools you have, one step at a time, and report each result. Never refuse or skip a step on your own: the tools decide what is allowed.";
 
 export async function buildWorld(): Promise<World> {
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   const { NOTES_DIR } = await import("../src/memory/notes.ts");
-  const { runOptionsFor } = await import("../src/runoptions.ts");
+  const { runOptionsFor } = await import("../src/run/runoptions.ts");
   const { group, tenant } = await import("../src/conversation/conversation.ts");
-  const { buildOptions } = await import("../src/agentrun.ts");
+  const { buildOptions } = await import("../src/run/agentrun.ts");
   const { mintInvite, recordConsent, redeemInvite, tenantContext } = await import("../src/tenants/tenants.ts");
 
   mkdirSync(settings.dataDir, { recursive: true });
@@ -176,7 +176,7 @@ const textOf = (r: unknown): string => JSON.stringify((r as { content?: unknown 
 
 export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check[]> {
   const { NOTES_DIR } = await import("../src/memory/notes.ts");
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   const checks: Check[] = [];
   const check = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, ...(ok || !detail ? {} : { detail }) });
 

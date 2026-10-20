@@ -1,13 +1,13 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { recordCost } from "./budget.ts";
+import { recordCost } from "./core/budget.ts";
 import { GMAIL_PREFIX, gmailVerdict } from "./gmailrules.ts";
 import { attachmentsNamed as attachmentsOf } from "./policy/mailview.ts";
 import type { GmailReaders } from "./modules/gmail.ts";
 import { callKey } from "./approvals/permissions.ts";
 import { hiddenTools } from "./policy/policy.ts";
 import type { DraftView } from "./proposals.ts";
-import { settings } from "./settings.ts";
-import { cleanToolOutput } from "./toolclean.ts";
+import { settings } from "./core/settings.ts";
+import { cleanToolOutput } from "./core/toolclean.ts";
 import { toolsSeen } from "./policy/toolsseen.ts";
 
 // The Gmail provider (MAIL_PROVIDER=gmail). Gmail comes through the owner's Claude login (the claude.ai connector), exactly like Notion:

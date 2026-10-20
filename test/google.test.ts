@@ -16,7 +16,7 @@ process.env.HARNESS_DATA_DIR = dir;
 process.env.GOOGLE_OAUTH_CLIENT_ID = "fake-client-id.example";
 process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { SessionHub } = await import("../src/intake/mcpproxy.ts");
 const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/modules/google/googlemcp.ts");
@@ -339,7 +339,7 @@ test("google: nothing of the owner's or of the Google tools exists for a person 
 });
 
 test("google: the default server command pins the package and the day its dependencies resolve to", async () => {
-  const { loadSettings } = await import("../src/settings.ts");
+  const { loadSettings } = await import("../src/core/settings.ts");
   const a = loadSettings({}).google.args;
   assert.equal(a[a.indexOf("--exclude-newer") + 1], "2026-10-20T00:00:00Z");
   assert.ok(a.indexOf("--exclude-newer") < a.indexOf("workspace-mcp==2.1.0"), "an option of uvx comes before the package");
@@ -347,7 +347,7 @@ test("google: the default server command pins the package and the day its depend
 });
 
 test("google: her server stays up between mail ticks: the idle default is the heartbeat interval plus a margin, at least 20 minutes, and an explicit value wins", async () => {
-  const { loadSettings } = await import("../src/settings.ts");
+  const { loadSettings } = await import("../src/core/settings.ts");
   const hb = loadSettings({}).heartbeatMinutes;
   assert.equal(loadSettings({}).google.idleMinutes, Math.max(20, hb + 5));
   assert.ok(loadSettings({}).google.idleMinutes > hb, "longer than the heartbeat: a tick finds the server running");

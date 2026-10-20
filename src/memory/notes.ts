@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { isInside } from "../contain.ts";
-import { fence } from "../fence.ts";
-import { preset } from "../preset.ts";
-import { localDay } from "../pause.ts";
-import { settings } from "../settings.ts";
+import { isInside } from "../core/contain.ts";
+import { fence } from "../core/fence.ts";
+import { preset } from "../core/preset.ts";
+import { localDay } from "../core/pause.ts";
+import { settings } from "../core/settings.ts";
 
 // Owner notes: the SDK's own auto-memory, in memory/notes/. The chat agent keeps them as small
 // markdown files (one fact each) plus an index, MEMORY.md, that the SDK loads into every chat

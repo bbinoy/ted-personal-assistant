@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GATE_DEFAULTS, summarySystem } from "../src/persona.ts";
-import { PROMPTS } from "../src/preset.ts";
+import { GATE_DEFAULTS, summarySystem } from "../src/run/persona.ts";
+import { PROMPTS } from "../src/core/preset.ts";
 
 // The small models' prompts are the preset's. The participation gate has one default text (a group's); what a conversation does on its own when nobody wrote is the heartbeat run's
 // one instruction (test/heartbeatrun.test.ts, test/heartbeatconv.test.ts), not a gate.

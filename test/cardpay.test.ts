@@ -4,7 +4,7 @@ import { standing } from "./util.ts";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readAudit } from "../src/audit.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { browse, browseSystem } from "../src/modules/browse/browse.ts";
@@ -14,8 +14,8 @@ import { KillSwitch, openCardAccess, type CardAccess, type CardRecord } from "..
 import { Ledger } from "../src/modules/browse/payments.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
-import { OWNER_KEY } from "../src/ownerkey.ts";
-import { dataPath } from "../src/state.ts";
+import { OWNER_KEY } from "../src/core/ownerkey.ts";
+import { dataPath } from "../src/core/state.ts";
 
 // Obviously fake: the public test card number, a made-up security code, a local fake checkout (`shop.test`, a hosted page on stripe.com) that exists
 // only as page text in these tests. No real merchant, card or money.

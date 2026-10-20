@@ -2,8 +2,8 @@ import { closeSync, fstatSync, lstatSync, openSync, readSync, readFileSync } fro
 import { MAX_FILE_BYTES } from "@ted-assistant/messenger";
 import { AUDIO_FILE_MAX_SECONDS, audioMagic, MAX_AUDIO_FILE_BYTES, type AudioInfo } from "@ted-assistant/speech/voice";
 import { looksLikeSpeech } from "@ted-assistant/speech/tts";
-import { fence } from "../fence.ts";
-import { oneLine, LIMITS } from "../sanitize.ts";
+import { fence } from "../core/fence.ts";
+import { oneLine, LIMITS } from "../core/sanitize.ts";
 
 // Files people send that are not pictures, made ready for the model, the way image.ts does for pictures: the BYTES decide what
 // a file is (never its name or the type the sender claimed), it is read only from the one file signal-cli saved (the caller

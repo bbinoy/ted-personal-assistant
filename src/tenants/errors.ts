@@ -1,7 +1,7 @@
-import { noteRateLimit } from "./cooldown.ts";
-import { reportKeyProblem } from "./tenants/keynotice.ts";
+import { noteRateLimit } from "../core/cooldown.ts";
+import { reportKeyProblem } from "./keynotice.ts";
 import { cooldownKeyOf, LOGIN, type Payer } from "./payer.ts";
-import { OWNER } from "./settings.ts";
+import { OWNER } from "../core/settings.ts";
 
 // The failures that have their own message, instead of "something broke".
 export class AuthError extends Error {} // the Claude login expired

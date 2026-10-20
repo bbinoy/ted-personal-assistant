@@ -2,7 +2,7 @@
 // exists on your phone (an account without a phone number cannot be found by number). Run it
 // while the agent is running with SIGNAL_ACCOUNT set; it uses the agent's own signal-cli daemon.
 import { loadMessengerInUse } from "../src/conversation/messenger.ts";
-import { settings, signalIdentity } from "../src/settings.ts";
+import { settings, signalIdentity } from "../src/core/settings.ts";
 
 const identity = signalIdentity();
 if (identity.account === identity.ownerNumber) {

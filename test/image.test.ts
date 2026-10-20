@@ -4,7 +4,7 @@ import { mkdtempSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
-import { MAX_SIDE, preparePicture, sniff, userInput } from "../src/image.ts";
+import { MAX_SIDE, preparePicture, sniff, userInput } from "../src/run/image.ts";
 
 // A solid-colour PNG made by hand (a few KB however large it is).
 function png(w: number, h: number): Buffer {

@@ -2,9 +2,9 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { audit } from "../../audit.ts";
+import { audit } from "../../core/audit.ts";
 import { MAX_NOTE_CHARS, NOTES_DIR, STATUS_PREFIX } from "../../memory/notes.ts";
-import { localDay } from "../../pause.ts";
+import { localDay } from "../../core/pause.ts";
 
 // The assistant's own state, as memory: status-<name>.md in the notes folder (category `status`, assistant-written records such as status-brief: whether today's daily
 // brief went out). The heartbeat run and its experts have NO note tools (their notes are injected as data); this one tool is the only note write they have, and it is

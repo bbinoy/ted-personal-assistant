@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Agent, fetch as undiciFetch } from "undici";
-import { LIMITS } from "./sanitize.ts";
+import { LIMITS } from "./core/sanitize.ts";
 
 // Direct MCP client for Mailbird's local server: no model call, no mcp-remote.
 // Connection details come from the same entry Claude Code uses, read here so the

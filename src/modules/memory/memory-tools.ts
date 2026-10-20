@@ -1,11 +1,11 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../../audit.ts";
+import { audit } from "../../core/audit.ts";
 import { undoLatest } from "../../memory/dreamapply.ts";
 import type { Scope } from "../../memory/dreamplan.ts";
-import { searchLogs } from "../../logsearch.ts";
+import { searchLogs } from "../../core/logsearch.ts";
 import { forgetNote } from "../../memory/notes.ts";
-import { settings } from "../../settings.ts";
+import { settings } from "../../core/settings.ts";
 
 // The SDK's auto-memory lets an agent create and edit notes with ordinary file tools (limited to ONE notes
 // folder by policy.ts), but it has no way to delete one, to search older history or to undo the nightly dream.

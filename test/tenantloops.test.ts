@@ -10,7 +10,7 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenant-loops-"));
 process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token"; // the instance's own login, which a tenant's call must never carry
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { createWakeups } = await import("../src/wake.ts");
 const { createDreamer } = await import("../src/conversation/dream.ts");
@@ -18,13 +18,13 @@ const { keyNotices } = await import("../src/tenants/keynotice.ts");
 const { askGateWith } = await import("../src/conversation/gate.ts");
 const { owner, tenant } = await import("../src/conversation/conversation.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
-const { onLogin } = await import("../src/conversation/conversationmodel.ts");
-const { recordMessage } = await import("../src/messages.ts");
-const { recordCost, spentToday } = await import("../src/budget.ts");
-const { noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
+const { onLogin } = await import("../src/core/ownerkey.ts");
+const { recordMessage } = await import("../src/core/messages.ts");
+const { recordCost, spentToday } = await import("../src/core/budget.ts");
+const { noteRateLimit, resetCooldown } = await import("../src/core/cooldown.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
-const { InstanceKeyError } = await import("../src/errors.ts");
-const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
+const { InstanceKeyError } = await import("../src/tenants/errors.ts");
+const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 on.briefBackstopHour = 24;
@@ -270,7 +270,7 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
   assert.equal(spentToday(ctx.costFile), 0.25);
   assert.equal(spentToday(), before, "not the instance's own ledger");
   await assert.rejects(askGateWith(input, fake("rate_limit")), InstanceKeyError);
-  const { coolingDown } = await import("../src/cooldown.ts");
+  const { coolingDown } = await import("../src/core/cooldown.ts");
   assert.equal(coolingDown(Date.now(), INSTANCE_KEY_COOLDOWN), true, "the key's refusal is the key's: one cooldown for every friend");
   assert.equal(coolingDown(Date.now(), ""), false, "the owner's login cooldown is untouched");
 });
@@ -366,8 +366,8 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
 });
 
 test("her prompt says she can act later only when the loops will run for her", async () => {
-  const { tenantSystem } = await import("../src/persona.ts");
-  const { runOptionsFor } = await import("../src/runoptions.ts");
+  const { tenantSystem } = await import("../src/run/persona.ts");
+  const { runOptionsFor } = await import("../src/run/runoptions.ts");
   assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set() }), /You cannot act on your own later/);
   assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set(), timed: true }), /You can act on your own at set times/);
   const plain = person("Wes", []);

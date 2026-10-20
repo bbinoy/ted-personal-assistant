@@ -1,5 +1,5 @@
 import type { Note } from "../memory/notes.ts";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 import { browseModule, browserModule } from "./browse/module.ts";
 import { builtinModule } from "./builtin.ts";
 import { calendarModule } from "./calendar.ts";

@@ -2,7 +2,7 @@ import { cardProblem, capsFromSettings, expiryText, parseExpiry, CardStore, type
 import { formatMoney } from "./paymentrules.ts";
 import type { Ledger } from "./payments.ts";
 import { ProfileError } from "./profile.ts";
-import { LIMITS } from "../../sanitize.ts";
+import { LIMITS } from "../../core/sanitize.ts";
 
 // The owner's local command for the payment card: npm run card -- set|list|enable|disable|delete|payments|clear. The card number, expiry
 // and security code are typed at hidden terminal prompts, never given as an argument (shell history, process list) and never through

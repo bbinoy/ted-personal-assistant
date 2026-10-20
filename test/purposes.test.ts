@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PURPOSES, purposeAvailable } from "../src/intake/intakepurposes.ts";
 import { purposesFor } from "../src/intake/intakelinks.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { ITEM_KINDS } from "../src/secrets/secrets.ts";
 import { CAPABILITIES } from "../src/tenants/tenants.ts";
 import { googleProvider } from "../src/intake/googleoauth.ts";
