@@ -1,14 +1,12 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type Verdict } from "./autojudge.ts";
+import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "./mailview.ts";
 import { mailSlot } from "./modules/index.ts";
 import { classify, denial, isReadTool } from "./policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "./toolmanifest.ts";
-import { OWNER_KEY } from "./send.ts";
-import { LIMITS } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
@@ -52,17 +50,6 @@ export function publicArgs(tool: string, input: Record<string, unknown>): Record
   return Object.keys(args).length ? { args } : undefined;
 }
 
-// What the person behind a conversation just said, and the two messages before it, for the approval judge's provenance (a send is judged against what
-// was said about it, which may have been a message ago: "reply to Armon that Tuesday works" ... "send it"). Keyed by conversation (the owner's chat,
-// a group id, a tenant's key). Module-level because the warm chat process is built before the message arrives; a conversation's turns run one at a time.
-// A group's or a tenant's message is cleared when its turn ends, so a later wake-up of it never reads an old one as its provenance.
-const recentMessages = new Map<string, string[]>();
-export const setConversationMessage = (key: string, text: string | undefined) => void (text === undefined ? recentMessages.delete(key) : recentMessages.set(key, [...(recentMessages.get(key) ?? []), text].slice(-3)));
-export const setChatOwnerMessage = (text: string) => setConversationMessage(OWNER_KEY, text);
-// What the assistant last told the owner in chat (a draft it showed, a plan it announced): context for the judge, so that a plain "yes, send"
-// is read against what it answers. Never consent by itself (autojudge.ts says so to the judge).
-let chatAssistantMessage = "";
-export const setChatAssistantMessage = (text: string) => void (chatAssistantMessage = text.slice(0, LIMITS.quote));
 const MAIL_OUT = new Set(["mbSend", "gmSend", "gmReply", "gmForward", "ggSend"]); // the mail views of the calls that put mail in front of other people (not the bare action "send": mcp__send__send is the conversation's own), judged against the owner's words
 // An action the owner approved is done: the same call again (same tool, same arguments) within half an hour is refused
 // without a question, because repeating it would send, create or change it twice (a model once retried a send after a
@@ -110,15 +97,20 @@ export interface CallGuard {
   decide: (tool: string, input: Record<string, unknown>) => Promise<GuardDecision>;
 }
 
-// What the approval judge is told about the run, set by code from how the run was started (never by the model): `speaker`: the conversation whose
-// message started it (the owner's chat; `member`: a group or a tenant); `untrusted`: the run reads raw mail or web pages from its first call (the mail
-// handler, the browse worker). Either way the flag also turns on once the run has read mail or a page.
+// What the approval judge is told about the run, set by code from how the run was started (never by the model): `provenance`: whose words or which fixed or derived
+// text started it (autojudge.ts RunProvenance; read at every call, since a warm process is built before the message that uses it arrives); `browseTask`: the task the
+// assistant wrote for its browser worker, shown next to the provenance the sub-run inherited; `untrusted`: the run reads raw mail or web pages from its first call (the
+// mail handler, the browse worker); Either way the
+// flag also turns on once the run has read mail or a page. `conversation`: the conversation the run acts for (Conversation.key), handed to the
+// mail read-back.
 export interface JudgeSetup {
-  speaker?: { key: string; member?: boolean };
+  provenance?: () => RunProvenance | undefined;
+  browseTask?: string;
   untrusted?: boolean;
+  conversation?: string;
 }
 
-export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judgeContext?: string, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
+export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
   let untrusted = !!setup.untrusted;
   const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
@@ -169,7 +161,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (MAIL_OUT.has(entryFor(tool)?.view ?? "")) {
       // Show what the mail client holds right now, not what the model says it is sending (a send of a draft), and the same view for
       // every provider. If that cannot be read, the owner would be approving blind, so the send does not happen.
-      const draft = await (mailToolsOf(tool) ?? mailSlot())?.readBack(entryFor(tool)?.view, input, setup.speaker?.key);
+      const draft = await (mailToolsOf(tool) ?? mailSlot())?.readBack(entryFor(tool)?.view, input, setup.conversation);
       view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
       if (!view || (view.action !== "forward" && view.to.length === 0)) {
         log(tool, "deny-unreadable-draft", source);
@@ -180,8 +172,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     let judged: Verdict | undefined;
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
-    const speaker = setup.speaker;
-    const provenance = provenanceFor({ source, speaker: speaker && (speaker.member ? "member" : "owner"), messages: speaker && [...(recentMessages.get(speaker.key) ?? [])].reverse(), assistantSaid: speaker?.key === OWNER_KEY && !speaker.member ? chatAssistantMessage : undefined, task: judgeContext });
+    const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask);
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input), provenance, untrustedInput: untrusted, approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step

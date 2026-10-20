@@ -1,5 +1,6 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
+import { standing } from "./util.ts";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:https";
@@ -110,7 +111,7 @@ async function start(t: TestContext, o: { ads?: boolean } = {}): Promise<Env | u
   const g = new BrowseGuard({ mode: "owner", task: "buy the ticket", outDir, resolver: publicDns, card: access, frames: cdpFrames(cdpPort) });
   const asked: string[] = [];
   const judge = async (): Promise<Verdict> => ({ decision: "auto", reason: "test" });
-  const canUse = makeCanUseTool(async (description) => (asked.push(description), { approved: true }), "browse", undefined, "buy the ticket", judge, g);
+  const canUse = makeCanUseTool(async (description) => (asked.push(description), { approved: true }), "browse", undefined, judge, g, undefined, false, { provenance: standing("buy the ticket") });
   const opts = { signal: new AbortController().signal } as never;
 
   const call: Env["call"] = async (name, input) => {

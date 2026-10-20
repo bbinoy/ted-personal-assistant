@@ -15,6 +15,7 @@ import { GOOGLE_PREFIX } from "./modules/google.ts";
 import { tenantById, tenantContext } from "./tenants.ts";
 import { PROFILES, type OwnerProfile } from "./profiles.ts";
 import { settings } from "./settings.ts";
+import type { RunProvenance } from "./autojudge.ts";
 
 const down = () => disconnected(readConnectors());
 
@@ -24,14 +25,22 @@ function profileSystem(name: OwnerProfile): string {
   return name === "brief" ? briefSystem(notes, missing, down()) : name === "radar" ? radarSystem(notes, missing, down()) : backgroundSystem(notes, missing, down());
 }
 
+// What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's and the radar's
+// instructions), `derived` for a wake-up, whose task a gate model wrote.
+export interface ProfileExtra {
+  onToolSuccess?: RunOptions["onToolSuccess"];
+  provenance?: RunProvenance;
+}
+const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
+
 // The options of an owner profile's run (a fresh session).
-function profileOptions(name: OwnerProfile, extra: { onToolSuccess?: RunOptions["onToolSuccess"]; judgeContext?: string } = {}): RunOptions {
+function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
   const p = PROFILES[name];
-  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, judgeContext: extra.judgeContext };
+  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
 }
 
 // One run under a named owner profile: always a fresh session.
-export const runProfile = (name: OwnerProfile, prompt: string, approve: Approve, extra: { onToolSuccess?: RunOptions["onToolSuccess"]; judgeContext?: string } = {}): Promise<AgentReply> =>
+export const runProfile = (name: OwnerProfile, prompt: string, approve: Approve, extra: ProfileExtra = {}): Promise<AgentReply> =>
   runAgent(prompt, approve, profileOptions(name, extra));
 
 // ---- a conversation's chat: the owner's, a group's, a tenant's ----
@@ -77,9 +86,9 @@ export function tenantHandlerOptions(conv: Conversation, access: { apiKey: strin
     systemPrompt: tenantHandlerSystem(ctx.name, memoryFor(["people", "scheduling", "context", "style"], new Date(), ctx.notesDir)),
     maxTurns: Math.max(ctx.maxTurns, 25),
     onToolSuccess,
-    judgeContext: task,
+    provenance: fixed({ kind: "standing", task }), // (no chat message of hers is this run's provenance: the fixed task is)
+    conversation: conv.key, // her anti-repeat state is her conversation's, as in her chat
     untrusted: true, // it reads raw mail
-    speaker: { key: `mail-handler:${conv.tenantId}`, member: true }, // (no chat message of hers is this run's provenance: the standing task is)
   };
 }
 
@@ -96,7 +105,7 @@ export function runHandlerTurn(prompt: string, approve: Approve, onToolSuccess?:
     maxTurns: 40,
     maxBudgetUsd: 2.0,
     onToolSuccess,
-    judgeContext: task, // the standing task: the approval judge's provenance (fixed text, no mail)
+    provenance: fixed(task ? { kind: "standing", task } : undefined), // the standing task: the approval judge's provenance (fixed text, no mail)
     untrusted: true, // it reads raw mail
   });
 }

@@ -1,5 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { scopeOf } from "../src/turnscope.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -40,7 +41,7 @@ const { TenantSecrets } = await import("../src/secrets.ts");
 const { serversFor } = await import("../src/modules/runtime.ts");
 const { NOTION_FRIEND_PREFIX: P, NOTION_FRIEND_TOOLS } = await import("../src/modules/notionhosted.ts");
 const { tenantCapabilities, tenantTools } = await import("../src/capabilities.ts");
-const { makeCanUseTool, setConversationMessage } = await import("../src/permissions.ts");
+const { makeCanUseTool } = await import("../src/permissions.ts");
 const { classify } = await import("../src/policy.ts");
 const { describeTenants } = await import("../src/tenanttools.ts");
 const { connectionSummary } = await import("../src/connections.ts");
@@ -507,13 +508,13 @@ function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = 
   const judged: { description: string; untrustedInput?: boolean }[] = [];
   const approve = async (description: string) => (asked.push(description), { approved: true });
   const judge = (async (i: { description: string; untrustedInput?: boolean }) => (judged.push(i), { decision: verdict, reason: "t" })) as never;
-  const can = makeCanUseTool(approve as never, "group", ctx.notesDir, undefined, judge, undefined, tenantTools(ctx), true, { speaker: { key: `tenant:${ctx.id}`, member: true } });
+  const can = makeCanUseTool(approve as never, "group", ctx.notesDir, judge, undefined, tenantTools(ctx), true, { provenance: scopeOf(`tenant:${ctx.id}`).read, conversation: `tenant:${ctx.id}` });
   return { asked, judged, run: (tool: string, input: Record<string, unknown>) => can(P + tool, input, opts) as Promise<Out> };
 }
 
 test("notion: reads run free and are shown to the judge as outside text; a page write goes to the judge and, unless it passes, to HER chat; a move, a trashing and anything unlisted are never judged or never offered", async () => {
   const ctx = ctxOf(anna);
-  setConversationMessage(`tenant:${ctx.id}`, "add a page for the trip to my Notion");
+  scopeOf(`tenant:${ctx.id}`).say("add a page for the trip to my Notion");
   let r = rig(ctx);
   assert.equal((await r.run("notion-search", { query: "trip" })).behavior, "allow");
   assert.equal((await r.run("notion-fetch", { id: "p1" })).behavior, "allow");
@@ -546,7 +547,7 @@ test("notion: reads run free and are shown to the judge as outside text; a page 
 
 test("notion: the audit of her calls is wordless: the page content she wrote or read is in no audit row, and no row holds a token", async () => {
   const ctx = ctxOf(anna);
-  setConversationMessage(`tenant:${ctx.id}`, "save the secret plan page");
+  scopeOf(`tenant:${ctx.id}`).say("save the secret plan page");
   const r = rig(ctx, "auto");
   await r.run("notion-create-pages", { pages: [{ title: "ZZ-PRIVATE-TITLE-ZZ", content: "ZZ-PRIVATE-BODY-ZZ" }] });
   const rows = JSON.stringify(readAudit((e) => String(e.tool).startsWith(P)));

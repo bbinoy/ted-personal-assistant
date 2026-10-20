@@ -20,6 +20,9 @@ export function splitReaction(reply: string): { reaction?: string; text: string 
   return { reaction: m[1]!, text: reply.slice(m[0].length).trim() };
 }
 
+// What the owner said by reacting, for the approval judge's provenance: the reaction itself, never the text of the message it is on.
+export const reactionMessage = (emoji: string): string => `${OWNER} reacted ${emoji}`;
+
 // The prompt for a reaction the owner put on a message: what they reacted with, and the message
 // (from the message log; it is fenced because it may quote mail). It carries no instruction on
 // what to do: the model judges, and the owner's notes can tune it.
@@ -27,5 +30,5 @@ export function reactionPrompt(emoji: string, msg?: { at: string; kind: string; 
   const about = msg
     ? `to this message of yours (${msg.kind}, sent ${msg.at.slice(0, 16).replace("T", " ")} UTC):\n${fence("reacted_message", msg.text)}`
     : "to a message that is no longer in your log (or to one of their own).";
-  return `${OWNER} reacted ${emoji} ${about}`;
+  return `${reactionMessage(emoji)} ${about}`;
 }

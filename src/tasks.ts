@@ -9,6 +9,7 @@ import { radarInstructions, radarPrompt } from "./radar.ts";
 import { acceptMessages, MIN_GAP_MINUTES, WINDOW_MINUTES } from "./radar-rules.ts";
 import { settings } from "./settings.ts";
 import { LIMITS } from "./sanitize.ts";
+import type { RunProvenance } from "./autojudge.ts";
 
 // The one Task type: everything the gate can start. `profile` is HOW the run may work (agent.ts PROFILES: policy source,
 // system prompt, skills, turns, budget, output schema), fixed in code. `after` is what happens with the result.
@@ -78,7 +79,7 @@ export function presetRefusal(task: Task, st: LookState, now: Date): string | un
 // ---- running the presets (the HOW) ----
 
 export interface PresetIO {
-  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; judgeContext?: string }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
+  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
   sendBrief: (markdown: string) => Promise<void>; // the Signal summary
   notify: (text: string) => Promise<void>; // a message to the owner
   record: (text: string) => void; // an "action" line in the owner's log (the ledger)
@@ -93,7 +94,7 @@ export async function runBriefTask(io: PresetIO, task: Task, st: LookState, now:
   console.log(`brief: starting (gate, attempt ${attempt}/${cap})`);
   let completed = false;
   const outcome = await runBriefAttempt(
-    { run: (p, cb) => io.runProfile("brief", p, { onToolSuccess: cb, judgeContext: task.instructions }).then((r) => ({ text: r.text, costUsd: r.costUsd ?? 0 })), sendBrief: io.sendBrief, notify: io.notify, delivery: briefDelivery() },
+    { run: (p, cb) => io.runProfile("brief", p, { onToolSuccess: cb, provenance: { kind: "standing", task: task.instructions } }).then((r) => ({ text: r.text, costUsd: r.costUsd ?? 0 })), sendBrief: io.sendBrief, notify: io.notify, delivery: briefDelivery() },
     currentBriefPrompt(now, undefined, task.instructions),
     attempt,
     () => ((completed = true), markBriefDone(now, attempt)),
@@ -109,7 +110,7 @@ export async function runRadarTask(io: PresetIO, task: Task, st: LookState, now:
   try {
     const since = st.lastRadarAt ?? new Date(now.getTime() - settings.radarMinutes * 60_000).toISOString();
     const started = Date.now();
-    const { structured, costUsd } = await io.runProfile("radar", radarPrompt(now, since, WINDOW_MINUTES, buildDigest(readTriageSince(since), since), recentNotices(now), Object.keys(st.radarKeys), task.instructions), { judgeContext: task.instructions });
+    const { structured, costUsd } = await io.runProfile("radar", radarPrompt(now, since, WINDOW_MINUTES, buildDigest(readTriageSince(since), since), recentNotices(now), Object.keys(st.radarKeys), task.instructions), { provenance: { kind: "standing", task: task.instructions } });
     const seen = Number((structured as { eventsSeen?: unknown } | undefined)?.eventsSeen ?? 0);
     if (!(seen > 0)) console.error("radar: the run reports it read no calendar events (calendar empty, or it did not look)");
     // Message-rate rules: the cap on the radar's OWN messages per day (mail alerts do not count; read from its ledger lines), 3 per run, no repeated key (the ledger).

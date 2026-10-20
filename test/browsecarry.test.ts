@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { standing } from "./util.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAudit } from "../src/audit.ts";
@@ -134,7 +135,7 @@ test("Luma sequence: the first Register click is asked, the form fill is automat
     assert.equal((await approvals.answer("yes", () => {}, undefined, {}, { scope: "g-luma", by: "member" })).outcome, "approved");
   };
   const g = guard();
-  const canUse = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, "browse", undefined, "register Ben", judge, g)(tool, input, opts)) as { behavior: string });
+  const canUse = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, "browse", undefined, judge, g, undefined, false, { provenance: standing("register Ben") })(tool, input, opts)) as { behavior: string });
   g.shape(`${B}snapshot`, {}, EVENT());
 
   const first = canUse(`${B}click`, { target: "e97" });
@@ -159,7 +160,7 @@ test("Luma sequence: the first Register click is asked, the form fill is automat
   // the same plan, but the form now holds another address: the judge is offered the text, says ask, and the owner is asked again
   const g2 = guard();
   g2.shape(`${B}snapshot`, {}, EVENT());
-  const canUse2 = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, "browse", undefined, "register Ben", judge, g2)(tool, input, opts)) as { behavior: string });
+  const canUse2 = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, "browse", undefined, judge, g2, undefined, false, { provenance: standing("register Ben") })(tool, input, opts)) as { behavior: string });
   posted.length = 0;
   const f2 = canUse2(`${B}click`, { target: "e97", element: "second run" });
   await answerYes();

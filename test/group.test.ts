@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defer, tick } from "./util.ts";
+import { scopeOf } from "../src/turnscope.ts";
 import { createPipeline, group, type Pipeline } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
 import { groupName, createGroupBrain, groupPrompt, groupWakePrompt, ownerInGroup, speaker } from "../src/group.ts";
@@ -640,4 +641,25 @@ test("groups: a long message that addressed us reaches the model whole (the LIMI
   await (r as any).pipelineOn(g, { from: "+15555550105", text: long.slice(0, 2000), timestamp: 3, direct: false, addressedToMe: true, longText: { id: "lt", size: long.length } });
   assert.ok(prompts[0]!.includes("Point 299 about the plan."));
   assert.ok(r.recorded[0]!.length <= LIMITS.logLine + 100); // the log line is cut as before
+});
+
+test("groups: the approval judge is told the message that ADDRESSED us (not the newest of the burst), a gate-chosen turn has the gate's task as derived text, and nothing stays after the turn", async () => {
+  const g = gid();
+  const seen: unknown[] = [];
+  const hold = defer<void>();
+  const run = async (_build: unknown, ctx: { conv: { key: string } }) => (seen.push(scopeOf(ctx.conv.key).read()), "ok");
+  const r = rig({ wait: () => hold.promise, run });
+  const first = r.on(mk({ groupId: g, text: "@Ted please look up the opening hours", timestamp: 1 }));
+  const second = r.on(mk({ groupId: g, text: "ha, nice weather today", timestamp: 2, addressedToMe: false }));
+  await tick();
+  hold.resolve();
+  await Promise.all([first, second]);
+  assert.deepEqual(seen, [{ kind: "member", message: "a member: @Ted please look up the opening hours" }], "the addressing message, with its speaker label; the later chatter is not her request");
+  assert.equal(scopeOf(g).read(), undefined, "forgotten when the turn ends");
+  // nobody addressed us: the gate chose to act, and its hint is not anybody's words
+  const g2 = gid();
+  const gated = rig({ run, gate: async () => ({ act: true, task: "task" as const, instructions: "answer the question about the ball", delaySeconds: 0, nextCheckMinutes: 30 }) });
+  await gated.on(mk({ groupId: g2, text: "so who is bringing the ball?", addressedToMe: false }));
+  assert.deepEqual(seen[1], { kind: "derived", by: "gate", text: "answer the question about the ball" });
+  assert.equal(scopeOf(g2).read(), undefined);
 });

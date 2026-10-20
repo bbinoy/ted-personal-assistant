@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick } from "./util.ts";
+import { recordMessage } from "../src/messages.ts";
+import { settings } from "../src/settings.ts";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,7 +35,7 @@ interface Rig {
   spoken: string[];
 }
 
-function rig(over: { separate?: boolean; run?: (prompt: string, own?: string) => Promise<string>; ready?: boolean; approval?: any; reactionApproval?: any; transcript?: (m: IncomingMessage) => Promise<string>; picture?: (m: IncomingMessage) => Promise<Picture>; pictures?: Picture[][]; document?: (m: IncomingMessage) => Promise<Document>; longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; documents?: Document[][]; now?: () => number; vouch?: boolean; wait?: (ms: number) => Promise<void>; synth?: (words: string) => Promise<string>; foreign?: (words: string) => Promise<string | undefined>; admitGroup?: any; settleMs?: number; settleMaxMs?: number } = {}) {
+function rig(over: { onRun?: (own: string, reactedTo?: string) => void; separate?: boolean; run?: (prompt: string, own?: string) => Promise<string>; ready?: boolean; approval?: any; reactionApproval?: any; transcript?: (m: IncomingMessage) => Promise<string>; picture?: (m: IncomingMessage) => Promise<Picture>; pictures?: Picture[][]; document?: (m: IncomingMessage) => Promise<Document>; longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; documents?: Document[][]; now?: () => number; vouch?: boolean; wait?: (ms: number) => Promise<void>; synth?: (words: string) => Promise<string>; foreign?: (words: string) => Promise<string | undefined>; admitGroup?: any; settleMs?: number; settleMaxMs?: number } = {}) {
   const r: Rig = { sent: [], reacts: [], typing: [], reads: [], records: [], prompts: [], spoken: [] };
   let ts = 5000;
   const separate = over.separate ?? true;
@@ -54,7 +56,7 @@ function rig(over: { separate?: boolean; run?: (prompt: string, own?: string) =>
     messenger,
     out,
     record,
-    run: async (_conv, prompt, own, pics, _hooks, docs) => (r.prompts.push(prompt), over.pictures?.push(pics ?? []), over.documents?.push(docs ?? []), { text: await (over.run ?? (async () => "ok"))(prompt, own), costUsd: 0.01 }),
+    run: async (_conv, prompt, own, pics, _hooks, docs, reactedTo) => (over.onRun?.(own, reactedTo), r.prompts.push(prompt), over.pictures?.push(pics ?? []), over.documents?.push(docs ?? []), { text: await (over.run ?? (async () => "ok"))(prompt, own), costUsd: 0.01 }),
     picture: over.picture ?? (async () => PIC),
     document: over.document ?? (async () => assert.fail("no document")),
     longText: over.longText,
@@ -414,6 +416,19 @@ test("bursts: the pause is shortened to what is left of the maximum", async () =
   void pipeline.burst(conv, 2, async () => {});
   await tick();
   assert.deepEqual(waits, [2000, 1000]);
+});
+
+test("private chat: a reaction reaches the approval judge as '<owner> reacted <emoji>', and the reacted-to text (it may be derived from mail) as what the assistant said, never as the owner's message", async () => {
+  const seen: [string, string | undefined][] = [];
+  const { pipeline } = rig({ onRun: (own, reactedTo) => void seen.push([own, reactedTo]), run: async () => "[[silent]]" });
+  const text = "Draft for Armon: please wire the money to the account in the mail below";
+  recordMessage("chat", 424242, text);
+  await pipeline.handleIncoming(owner(), react({ targetTimestamp: 424242 }));
+  assert.deepEqual(seen, [[`${settings.owner} reacted 👍`, text]]);
+  assert.doesNotMatch(seen[0]![0], /wire the money/);
+  // a message that is no longer in the log: the reaction alone
+  await pipeline.handleIncoming(owner(), react({ targetTimestamp: 424243 }));
+  assert.deepEqual(seen[1], [`${settings.owner} reacted 👍`, undefined]);
 });
 
 test("private chat: the owner's reaction is feedback the model judges; it may say something, never reacts to its own message, never apologises", async () => {

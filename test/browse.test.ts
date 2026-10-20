@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { standing } from "./util.ts";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -133,9 +134,9 @@ test("every commit step goes to the judge; an auto skips the owner, an ask or a 
   const g = onPage(guard());
   for (const target of ["e71", "e44"]) assert.equal((await g.decide(`${B}click`, { target })).judge, true, target); // "Go" in a form, "Submit order"
   const verdict = (decision: "auto" | "ask") => { const calls: string[] = []; return { calls, fn: async (i: { description: string }): Promise<Verdict> => (calls.push(i.description), { decision, reason: "test" }) }; };
-  const run = async (judge: Parameters<typeof makeCanUseTool>[4], click = "e71") => {
+  const run = async (judge: Parameters<typeof makeCanUseTool>[3], click = "e71") => {
     const asked: string[] = [];
-    const canUse = asCall(makeCanUseTool(async (x) => (asked.push(x), { approved: false }), "browse", undefined, "order a pizza for Ann", judge, onPage(guard())));
+    const canUse = asCall(makeCanUseTool(async (x) => (asked.push(x), { approved: false }), "browse", undefined, judge, onPage(guard()), undefined, false, { provenance: standing("order a pizza for Ann") }));
     return { behavior: (await canUse(`${B}click`, { target: click }, opts)).behavior, asked };
   };
   const broad = settings.autoApprove === "auto";
@@ -335,7 +336,7 @@ test("canUseTool with the guard: reads and judged typing run, a commit the judge
   const asked: string[] = [];
   const seen: unknown[] = [];
   let judge: (i?: unknown) => Promise<Verdict> = judgeAuto;
-  const canUse = asCall(makeCanUseTool(async (d, call) => (asked.push(d), seen.push(call.input), { approved: false }), "browse", undefined, "order a pizza for Ann", (i) => judge(i), g));
+  const canUse = asCall(makeCanUseTool(async (d, call) => (asked.push(d), seen.push(call.input), { approved: false }), "browse", undefined, (i) => judge(i), g, undefined, false, { provenance: standing("order a pizza for Ann") }));
   assert.equal((await canUse(`${B}snapshot`, {}, opts)).behavior, "allow");
   assert.equal((await canUse(`${B}navigate`, { url: "https://example.com/" }, opts)).behavior, settings.autoApprove === "auto" ? "allow" : "deny");
   assert.equal((await canUse(`${B}type`, { target: "e5", text: "Ann" }, opts)).behavior, settings.autoApprove === "auto" ? "allow" : "deny");
@@ -360,7 +361,7 @@ test("canUseTool with the guard: reads and judged typing run, a commit the judge
 test("a payment field typed with the owner's yes runs with the real text; the value is remembered and shown nowhere", async () => {
   const g = onPage(guard());
   const seen: unknown[] = [];
-  const canUse = makeCanUseTool(async (_d, call) => (seen.push(call.input), { approved: true }), "browse", undefined, "buy", judgeAuto, g);
+  const canUse = makeCanUseTool(async (_d, call) => (seen.push(call.input), { approved: true }), "browse", undefined, judgeAuto, g, undefined, false, { provenance: standing("buy") });
   const input = { target: "e51", text: "4111111111111111" };
   const r = (await canUse(`${B}type`, input, opts)) as { behavior: string; updatedInput?: Record<string, unknown> };
   assert.equal(r.behavior, "allow");
@@ -374,7 +375,7 @@ test("a payment field typed with the owner's yes runs with the real text; the va
 
 test("canUseTool: an approved commit runs once; the same click is not repeated", async () => {
   const g = onPage(guard());
-  const canUse = asCall(makeCanUseTool(async () => ({ approved: true }), "browse", undefined, undefined, judgeAuto, g));
+  const canUse = asCall(makeCanUseTool(async () => ({ approved: true }), "browse", undefined, judgeAuto, g));
   assert.equal((await canUse(`${B}click`, { target: "e44" }, opts)).behavior, "allow");
   const again = await canUse(`${B}click`, { target: "e44" }, opts);
   assert.equal(again.behavior, "deny");
@@ -389,7 +390,7 @@ test("a group browse run: a commit click the judge sends on asks in that group, 
   setApprovers((groupId) => makeApprove(async (t) => (posted.push({ groupId, text: t }), ++ts), { compose: async (q) => ({ text: q.details, ms: 0 }), scope: groupId, source: "group" }));
   try {
     const g = onPage(guard("group"));
-    const canUse = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, undefined, judgeAsk, g));
+    const canUse = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, judgeAsk, g));
     const pending = canUse(`${B}click`, { target: "e44", element: "harmless" }, opts);
     for (let i = 0; i < 50 && posted.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     assert.equal(posted.length, 1, "one question");
@@ -404,7 +405,7 @@ test("a group browse run: a commit click the judge sends on asks in that group, 
     assert.equal((await pending).behavior, "allow");
     // and a payment field in a group asks the group, without the value, whatever the judge would say
     posted.length = 0;
-    const pay = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, undefined, judgeAuto, g))(`${B}type`, { target: "e51", text: "4242424242424242" }, opts);
+    const pay = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, judgeAuto, g))(`${B}type`, { target: "e51", text: "4242424242424242" }, opts);
     for (let i = 0; i < 50 && posted.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     assert.equal(posted.length, 1);
     assert.equal(posted[0]!.groupId, "g-browse");
@@ -435,7 +436,7 @@ test("injection fixture: a model that obeys a hostile page cannot enter a card, 
   const g = guard();
   g.shape(`${B}navigate`, { url: "https://evil.example.org/offer" }, HOSTILE);
   const asked: string[] = [];
-  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, "find a table for two", judgeAsk, g));
+  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, judgeAsk, g, undefined, false, { provenance: standing("find a table for two") }));
   const calls: [string, Record<string, unknown>][] = [
     [`${B}type`, { target: "e3", text: "4111 1111 1111 1111" }],
     [`${B}type`, { target: "e4", text: "4111111111111111" }],
@@ -568,7 +569,7 @@ test("a search form: Enter after typing and the form button go to the judge, whi
   g.remember(`${B}type`, { target: "e4", text: "00" }, "", undefined);
   const seen: string[] = [];
   const asked: string[] = [];
-  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, "find the next train Zurich to Bern", async (i) => (seen.push(i.description), { decision: "auto", reason: "only searches timetables" }), g));
+  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, async (i) => (seen.push(i.description), { decision: "auto", reason: "only searches timetables" }), g, undefined, false, { provenance: standing("find the next train Zurich to Bern") }));
   const broad = settings.autoApprove === "auto";
   assert.equal((await canUse(`${B}press_key`, { key: "Enter" }, opts)).behavior, broad ? "allow" : "deny");
   assert.equal((await canUse(`${B}click`, { target: "e5" }, opts)).behavior, broad ? "allow" : "deny");

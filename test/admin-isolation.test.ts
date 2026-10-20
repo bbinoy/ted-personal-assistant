@@ -103,7 +103,7 @@ const search = (dir = settings.logsDir) => searchLogs(dir, { query: CANARY });
 
 test("search_logs for the admin: a tenant's approvals, replies, searches and judge reasons leave no word in the audit log; the owner's own rows are unchanged", async () => {
   // a tenant's run: a web search (its query is logged for the owner's runs) and an approval answered in her chat
-  const tenantRun = makeCanUseTool(async () => ({ approved: true }), "group", ann.notesDir, undefined, undefined, undefined, tenantTools(ann), true);
+  const tenantRun = makeCanUseTool(async () => ({ approved: true }), "group", ann.notesDir, undefined, undefined, tenantTools(ann), true);
   await tenantRun("WebSearch", call.input, { signal: new AbortController().signal } as never);
   let ts = 100;
   const ask = (scope: string, source: "chat" | "group") => {

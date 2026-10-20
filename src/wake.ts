@@ -21,6 +21,8 @@ import { briefOwed, briefPending, buildTask, presetRefusal, runBriefTask, runRad
 import { settings } from "./settings.ts";
 import { MIN_GAP_MINUTES } from "./radar-rules.ts";
 import { LIMITS } from "./sanitize.ts";
+import type { RunProvenance } from "./autojudge.ts";
+import { derivedTurn } from "./turnscope.ts";
 
 // The clock half of the gate (gate.ts). On every heartbeat tick, for the owner's chat, every group the owner is in and
 // every tenant (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look),
@@ -45,7 +47,7 @@ interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
   pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "canSpeak">;
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
-  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; judgeContext?: string }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // the owner's runs by profile (agent.ts runProfile)
+  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // the owner's runs by profile (agent.ts runProfile)
   presets?: { sendBrief: (markdown: string) => Promise<void>; notify: (text: string) => Promise<void>; beforeBrief?: () => Promise<void> }; // what the brief and radar presets need
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
   runGroup?: Runner; // a group's or a tenant's run
@@ -89,7 +91,7 @@ export function createWakeups(deps: WakeDeps) {
       // owner's chat must not wait with it. Only the delivery of the answer takes its place in the queue.
       let done: { text: string; costUsd?: number } | undefined;
       let failure: unknown;
-      await deps.runProfile("background", wakePrompt(speakerOf(conv), now, instructions, logTail(conv, 20), speak), { judgeContext: instructions }).then((r) => void (done = r), (e) => void (failure = e));
+      await deps.runProfile("background", wakePrompt(speakerOf(conv), now, instructions, logTail(conv, 20), speak), { provenance: { kind: "derived", by: "gate", text: instructions } }).then((r) => void (done = r), (e) => void (failure = e));
       return pipeline.enqueue(conv, async () => {
         const run = async () => {
           if (done) return done;
@@ -106,7 +108,7 @@ export function createWakeups(deps: WakeDeps) {
             const { lines, seenAt } = (deps.context ?? groupContext)(conv.groupId!, since);
             return { prompt: groupWakePrompt(now, lines, instructions, !!since, speak), seenAt };
           };
-      const run = async () => ({ text: await (deps.runGroup ?? realRunner)(build, { conv, now, apiKey }) });
+      const run = async () => ({ text: await derivedTurn(conv.key, "gate", instructions, () => (deps.runGroup ?? realRunner)(build, { conv, now, apiKey })) }); // the gate wrote the task: derived, for the approval judge
       return outcome(await pipeline.runTurn(conv, { run, background: true, announce: false, kind: "chat" }));
     });
   }

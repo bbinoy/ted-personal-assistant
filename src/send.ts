@@ -4,6 +4,7 @@ import { audit } from "./audit.ts";
 import { isOneEmoji } from "./reaction.ts";
 import { dropShots, loadShot } from "./shots.ts";
 import { setAsking, type Asking } from "./voicenote.ts";
+import { OWNER_KEY } from "./ownerkey.ts";
 
 // send: the model's way to put something in the conversation NOW while it keeps working: a message ("On it, researching now"), a voice note,
 // a picture (a screenshot of this run's browse, or a drawing from the draw tool), or an emoji reaction. Text the model writes before a tool call stays internal; only this tool
@@ -21,7 +22,7 @@ export type Content =
 // Delivers one piece of content of the running turn; returns what the model is told.
 export type SendSink = (c: Content) => Promise<string>;
 
-export const OWNER_KEY = "owner"; // the owner's chat; a group's key is its group id, a tenant's is tenantKey(id)
+export { OWNER_KEY }; // the owner's chat; a group's key is its group id, a tenant's is tenantKey(id)
 export const tenantKey = (id: string): string => `tenant:${id}`;
 export const isTenantKey = (key: string): boolean => key.startsWith("tenant:");
 

@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { scopeOf } from "../src/turnscope.ts";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -191,12 +192,12 @@ test("ledger kinds never reach anything that reads the log as conversation", asy
 
 // ---- wake-ups ----
 
-interface Calls { ownerRuns: string[]; groupRuns: string[]; sent: string[]; gates: string[]; profiles: string[]; recorded: [string, string][]; turns: any[] }
+interface Calls { provenance: unknown[]; ownerRuns: string[]; groupRuns: string[]; sent: string[]; gates: string[]; profiles: string[]; recorded: [string, string][]; turns: any[] }
 function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; paused?: boolean; ownerAnswer?: string; groupAnswer?: string; vouch?: boolean; groups?: string[]; now?: Date; separate?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "wake-"));
   mkdirSync(join(dir, "o-notes"));
   const ownerConv: Conversation = { ...owner(), logFile: `logs/gate-wake-owner-${Math.random().toString(36).slice(2)}.jsonl`, notesDir: join(dir, "o-notes") };
-  const c: Calls = { ownerRuns: [], groupRuns: [], sent: [], gates: [], profiles: [], recorded: [], turns: [] };
+  const c: Calls = { provenance: [], ownerRuns: [], groupRuns: [], sent: [], gates: [], profiles: [], recorded: [], turns: [] };
   let now = over.now ?? T0;
   const groupConvs = new Map<string, Conversation>();
   const pipeline = {
@@ -221,8 +222,8 @@ function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; pa
     pipeline: pipeline as any,
     groupChats: over.separate ?? true,
     vouch: async () => over.vouch ?? true,
-    runProfile: async (profile, prompt) => (c.profiles.push(profile), c.ownerRuns.push(prompt), { text: over.ownerAnswer ?? "Morning! Fun fact: biscuits." }),
-    runGroup: async (build, ctx) => (c.groupRuns.push(`${ctx.conv.source}:${build().prompt}`), over.groupAnswer ?? "Group fun fact!"),
+    runProfile: async (profile, prompt, extra) => (c.profiles.push(profile), c.ownerRuns.push(prompt), c.provenance.push(extra?.provenance), { text: over.ownerAnswer ?? "Morning! Fun fact: biscuits." }),
+    runGroup: async (build, ctx) => (c.groupRuns.push(`${ctx.conv.source}:${build().prompt}`), c.provenance.push(scopeOf(ctx.conv.key).read()), over.groupAnswer ?? "Group fun fact!"),
     gate: async ({ conv }) => (c.gates.push(conv.kind), parseGate((over.gate ?? (() => ({ act: true, instructions: "Post a fun fact", nextCheckMinutes: 30 })))(conv))),
     groups: () => over.groups ?? [],
     context: () => ({ lines: ["Eve (a member): hi"], seenAt: undefined }),
@@ -257,6 +258,9 @@ test("wake: a group's wake-up runs the GROUP runner and never the owner's run", 
   assert.match(c.groupRuns[0]!, /Post a fun fact/);
   assert.equal(c.ownerRuns.length, 1); // the owner's own look is a separate conversation, with its own run
   assert.deepEqual(c.sent.sort(), ["group: Group fun fact!", "owner: Morning! Fun fact: biscuits."]);
+  // the gate wrote both tasks from the notes: the judge is told they are derived (not anybody's words, never a standing task), for the owner's wake-up and a group's alike
+  assert.deepEqual(c.provenance, [{ kind: "derived", by: "gate", text: "Post a fun fact" }, { kind: "derived", by: "gate", text: "Post a fun fact" }]);
+  assert.equal(scopeOf(G).read(), undefined, "and nothing of it is left once the run is over");
   // the only way a group conversation can run is as a group: its policy source is "group" whatever the gate said
   const kinds = c.turns.map((t) => [t.conv.kind, t.conv.source]);
   assert.deepEqual(kinds.sort(), [["group", "group"], ["owner", "chat"]]);

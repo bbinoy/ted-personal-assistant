@@ -2,7 +2,8 @@ import "./log.ts"; // first: timestamps, redaction and owner-only files for ever
 import { createPipeline, group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
 import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
 import { compactChatIfNeeded, compactDue } from "./chatsession.ts";
-import { approveIn, setApprovers, setChatOwnerMessage, setConversationMessage } from "./permissions.ts";
+import { approveIn, setApprovers } from "./permissions.ts";
+import { scopeOf } from "./turnscope.ts";
 import * as approvals from "./approvals.ts";
 import { createApprovers } from "./approvers.ts";
 import { config, mask } from "./config.ts";
@@ -134,10 +135,11 @@ const pipeline: Pipeline = createPipeline({
   out,
   record,
   // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
-  run: (conv, prompt, ownerMessage, pictures, hooks, documents) =>
-    conv.tenantId
-      ? (setConversationMessage(conv.key, ownerMessage), tenantRunner.run(conv, prompt, pictures, hooks, documents).finally(() => setConversationMessage(conv.key, undefined)))
-      : (setChatOwnerMessage(ownerMessage), runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)),
+  run: (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo) => {
+    const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
+    turn.say(ownerMessage, reactedTo);
+    return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
+  },
   picture: async (m) => preparePicture(await messenger.attachmentFile(m.image!)), // the messenger resolves the id to its own file (Signal: a plain file name inside signal-cli's folder)
   document: async (m) => prepareFile(await messenger.attachmentFile(m.file!), m.file!.name, audioTools), // the same; an audio file is transcribed (queued with voice messages)
   longText: (m) => messenger.readLongText(m.longText!), // the same

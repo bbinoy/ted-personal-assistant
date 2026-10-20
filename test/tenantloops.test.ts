@@ -1,5 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { scopeOf } from "../src/turnscope.ts";
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,7 +58,7 @@ function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversati
   const runner = createTenantRunner({ apiKey: () => ("key" in o ? o.key : KEY) });
   keyNotices.reset(); // (one notice for the owner about the shared key, whatever the run: keynotice.ts)
   keyNotices.sendTo((t) => void alerts.push(t));
-  const seen = { gates: [] as { conv: import("../src/conversation.ts").Conversation; tenant?: unknown; tail: readonly string[] }[], runs: [] as { conv: import("../src/conversation.ts").Conversation; apiKey?: string; prompt: string }[], sent: [] as { conv: import("../src/conversation.ts").Conversation; text: string }[], profiles: [] as string[] };
+  const seen = { provenance: [] as unknown[], gates: [] as { conv: import("../src/conversation.ts").Conversation; tenant?: unknown; tail: readonly string[] }[], runs: [] as { conv: import("../src/conversation.ts").Conversation; apiKey?: string; prompt: string }[], sent: [] as { conv: import("../src/conversation.ts").Conversation; text: string }[], profiles: [] as string[] };
   const now = o.now ?? NOON;
   const pipeline = {
     canSpeak: () => false,
@@ -80,6 +81,7 @@ function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversati
     runProfile: async (profile) => (seen.profiles.push(profile), { text: "owner ran" }),
     runGroup: async (build, ctx) => {
       seen.runs.push({ conv: ctx.conv, apiKey: ctx.apiKey, prompt: build().prompt });
+      seen.provenance.push(scopeOf(ctx.conv.key).read());
       return (o.run ?? (() => "Good morning! A reminder from me."))(ctx.conv);
     },
     gate: async (input) => {
@@ -112,6 +114,7 @@ test("a tenant with heartbeat and wake gets the gate's look and a wake-up, on th
   assert.equal(r.seen.runs.length, 1);
   assert.equal(r.seen.runs[0]!.conv.tenantId, anna.id, "the run is hers, in her conversation (her notes, session and approvals)");
   assert.equal(r.seen.runs[0]!.apiKey, KEY);
+  assert.deepEqual(r.seen.provenance, [{ kind: "derived", by: "gate", text: "Remind her about her sister's birthday" }], "the gate wrote the task: the judge is told it is derived, so it can decide (no question for every call)");
   assert.match(r.seen.runs[0]!.prompt, /Remind her about her sister's birthday/);
   assert.match(r.seen.runs[0]!.prompt, /Anna: remind me about my sister's birthday/);
   assert.doesNotMatch(r.seen.runs[0]!.prompt, /secret of Bo/);

@@ -2,6 +2,8 @@
 
 import type { Source } from "../src/audit.ts";
 import { availableFor, isFree, type MailProvider } from "../src/toolmanifest.ts";
+import type { JudgeSetup } from "../src/permissions.ts";
+import { scopeOf } from "../src/turnscope.ts";
 
 // What the manifest says about a tool for a source (what the one path in permissions.ts starts from): undefined = the tool does not exist there
 // (denied outright), "free" = runs without the judge (a read, the assistant's own plumbing), "judged" = goes floor -> judge -> approval question.
@@ -19,5 +21,8 @@ export const defer = <T>() => {
   return { promise, resolve };
 };
 
-// The judge setup of a run started from the owner's own chat (what agentrun.ts gives it): their recent messages are the provenance.
-export const CHAT = { speaker: { key: "owner" } };
+// The judge setup of a run started from the owner's own chat (what agentrun.ts gives it): their recent messages are the provenance (turnscope.ts).
+export const CHAT: JudgeSetup = { provenance: scopeOf("owner").read, conversation: "owner" };
+
+// The provenance of a job with fixed text (RunOptions.provenance).
+export const standing = (task: string): JudgeSetup["provenance"] => () => ({ kind: "standing", task });
