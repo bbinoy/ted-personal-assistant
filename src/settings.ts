@@ -174,7 +174,6 @@ export function loadSettings(env: Env) {
     mail: mailProvider !== "none", // is there any mail to look at? Every mail-only path asks this, never the provider's name
 
     heartbeatMinutes: num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240),
-    maxArchivesPerTick: num(env, "HEARTBEAT_MAX_ARCHIVES", 25, 0, 500),
     quietStartHour: num(env, "QUIET_START_HOUR", rhythm.heartbeat.quietFromHour, 0, 23),
     quietEndHour: num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23),
 
@@ -188,7 +187,7 @@ export function loadSettings(env: Env) {
     backgroundApprovalTimeoutMinutes: num(env, "BACKGROUND_APPROVAL_TIMEOUT_MINUTES", 120, 1, 2880),
 
     // The longest one model run may take on the wall clock (src/ceiling.ts), so a hung turn cannot block its conversation until a
-    // restart. Chat: the owner's chat and every group. Background: gate tasks, brief, radar, mail handler; the time a background run
+    // restart. Chat: the owner's chat and every group. Background: the heartbeat run and its expert; the time a background run
     // spends waiting for an approval is not counted, so BACKGROUND_APPROVAL_TIMEOUT_MINUTES never cuts into it.
     compactMaxMinutes: num(env, "COMPACT_MAX_MINUTES", 10, 1, 120), // a compaction that takes longer is abandoned (chatsession.ts); the failure backoff applies
     runMaxMinutesChat: num(env, "RUN_MAX_MINUTES_CHAT", 40, 1, 1440),
@@ -243,11 +242,10 @@ export function loadSettings(env: Env) {
       tokenUrl: env.GOOGLE_OAUTH_TOKEN_URL?.trim() || "https://oauth2.googleapis.com/token", // tests point this at a fake
       scopes: words(env, "GOOGLE_OAUTH_SCOPES", ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"]),
       // A friend's server process is closed after this long unused (started again on demand: OpenBao read, temp folder, Python start, token refresh). The default is
-      // the heartbeat interval plus a margin (at least 20), so the 15-minute mail check finds her server running; the price is one resident Python process per friend
+      // the heartbeat interval plus a margin (at least 20), so a look within the hour finds her server running; the price is one resident Python process per friend
       // with Google while the heartbeat ticks (it stops after the last tick, at night, and with the app).
       idleMinutes: num(env, "GOOGLE_MCP_IDLE_MINUTES", Math.max(20, num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240) + 5), 1, 240),
       callSeconds: num(env, "GOOGLE_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
-      mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model
     },
     // Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend with the `notion` capability connects her own Notion on the
     // intake page (OAuth with PKCE against Notion's hosted MCP server) and her Notion tools are that hosted server, called by THIS process with her token through the
@@ -356,7 +354,6 @@ export function loadSettings(env: Env) {
     slowReplySeconds: num(env, "SLOW_REPLY_SECONDS", 20, 0, 600), // an answer later than this is threaded under the message (quote.ts)
     echoWindowMinutes: num(env, "ECHO_WINDOW_MINUTES", 5, 1, 60), // our own sent text coming back within this long is an echo, not the owner (outbound.ts)
     warmRefreshMinutes: num(env, "WARM_REFRESH_MINUTES", 25, 1, 1440), // the owner's warm process is renewed this often, so it is still fresh after a quiet hour (main.ts)
-    seenMailDays: num(env, "SEEN_MAIL_DAYS", 14, 1, 365), // how long the heartbeat remembers it has seen a mail (heartbeat.ts)
     noticeAgeHours: num(env, "NOTICE_AGE_HOURS", 24, 1, 168), // what the assistant sent on its own stays "recent" for the chat this long (messages.ts)
     compactBackoffMinutes: num(env, "COMPACT_BACKOFF_MINUTES", 60, 1, 1440), // after a failed compaction, no new try for this long (session.ts)
     compactQuietMinutes: num(env, "COMPACT_QUIET_MINUTES", 5, 1, 240), // a grown conversation is compacted in the background once its last turn is this old (session.ts, wake.ts)
@@ -384,7 +381,7 @@ export const settings = loadSettings(process.env);
 // The speech keys and the tenants' instance key were read into `settings` above. Nothing the agent starts (Claude Code and its MCP servers, ffmpeg, signal-cli)
 // needs them, and they are inherited by every child process unless dropped here (the owner's runs never see the tenants' key).
 for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN", "TENANT_ANTHROPIC_API_KEY", "GOOGLE_OAUTH_CLIENT_SECRET"]) delete process.env[name];
-// Is the instance's Google OAuth client set up? The one answer: without it nobody gets Google tools, a mail check of their own or a sign-in page for it.
+// Is the instance's Google OAuth client set up? The one answer: without it nobody gets Google tools or a sign-in page for it.
 export const googleReady = (cfg: { clientId?: string; clientSecret?: string } = settings.google): boolean => !!cfg.clientId && !!cfg.clientSecret;
 // The agent calls this once when it starts: the SDK picks whatever credential is in the environment, so the ones HARNESS_AUTH did not choose are removed from this process
 // (a command that only reads the settings keeps its environment as it is).

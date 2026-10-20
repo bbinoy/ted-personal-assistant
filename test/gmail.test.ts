@@ -1,12 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Verdict } from "../src/approvals/autojudge.ts";
-import { readAudit } from "../src/audit.ts";
 import { requiredSkills } from "../src/doctor.ts";
-import { GmailMail, gmailReaders, parseDraft, parseMessage, parseOriginal, parseThreads, payload, relayAllowed, type Call, type Relay } from "../src/gmail.ts";
+import { gmailReaders, parseDraft, parseOriginal, payload, putBackInInbox, relayAllowed, type Call, type Relay } from "../src/gmail.ts";
 import { isInboxArchive, isSelfSend } from "../src/gmailrules.ts";
-import { createMailCheck, type MailSource } from "../src/heartbeat.ts";
-import { recordTriage } from "../src/triagelog.ts";
 import { setGmailReaders } from "../src/modules/gmail.ts";
 import { mailSlot } from "../src/modules/index.ts";
 import { gmailChecks } from "../src/modules/runtime.ts";
@@ -14,7 +11,6 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { classify, hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
-import { readJson, writeJson } from "../src/state.ts";
 import { cleanToolOutput } from "../src/toolclean.ts";
 import { addrs, mailView } from "../src/policy/toolmanifest.ts";
 
@@ -196,28 +192,9 @@ test("drafts go to the judge in every place (the draft step), reads are free, no
 // ---- parsing the connector's output (fake MCP results) ----
 
 const mcp = (obj: unknown) => ({ content: [{ type: "text", text: JSON.stringify(obj) }] });
-const THREADS = mcp({
-  threads: [
-    { id: "t-new", messages: [{ id: "m-a", subject: "Hello", sender: "Dana <dana@example.com>", date: "2026-10-14T08:00:00Z", snippet: "hi", label_ids: ["INBOX"] }, { id: "m-b", subject: "Re: Hello", sender: "Dana <dana@example.com>", date: "2026-10-14T09:30:00Z", snippet: "ping", label_ids: ["INBOX", "UNREAD"] }] },
-    { id: "t-brief", messages: [{ id: "m-c", subject: "☀️ Daily brief", sender: SELF, date: "2026-10-14T05:00:00Z" }] },
-    { messages: [{ id: "no-thread-id" }] },
-  ],
-});
-
-test("parsing: search_threads becomes rows (latest message of each thread; the owner's own mail is shown as the owner)", () => {
-  const rows = parseThreads(THREADS, SELF, "me");
-  assert.equal(rows.length, 2);
-  assert.deepEqual(rows[0], { conversationId: "t-new", subject: "Re: Hello", lastSender: "Dana", receivedAtUtc: "2026-10-14T09:30:00.000Z", lastMessageId: "m-b" });
-  assert.equal(rows[1]!.lastSender, "me");
-  assert.deepEqual(parseThreads({}, SELF, "me"), []);
-  assert.deepEqual(parseThreads("not json", SELF, "me"), []);
-  // camelCase and a bare JSON string work too
-  assert.equal(parseThreads(JSON.stringify({ threads: [{ id: "x", relatedMessages: [{ id: "y", sender: { name: "N", email: "n@example.com" }, subject: "S", date: "1760000000000" }] }] }), SELF, "me")[0]!.lastSender, "N");
-});
 
 test("parsing: a message, a draft and the original of a reply", () => {
   const msg = mcp({ id: "m1", subject: "S", sender: "Dana <dana@example.com>", to_recipients: [SELF, "x@example.com"], cc_recipients: ["boss@example.com"], plaintext_body: "Hello there" });
-  assert.deepEqual(parseMessage(msg), { body: "Hello there", from: { displayName: "Dana", email: "dana@example.com" } });
   assert.deepEqual(parseOriginal(msg, SELF), { to: ["dana@example.com", "x@example.com"], cc: ["boss@example.com"], bcc: [], subject: "S", body: "", hasAttachments: false });
   assert.equal(parseOriginal(mcp({ subject: "no sender" }), SELF), undefined);
   const draft = parseDraft(mcp({ id: "d1", message: { subject: "Re", to_recipients: ["A@Example.com"], bcc_recipients: ["b@example.com"], plaintext_body: "text", attachments: [{ filename: "f.pdf" }] } }));
@@ -240,13 +217,13 @@ test("sanitiser: Gmail output is cleaned like Mailbird's, and attachment content
 
 test("relay: only the planned, allowed Gmail calls run", () => {
   const ok = (tool: string, input: Record<string, unknown>) => relayAllowed({ tool: GM + tool, input });
-  assert.ok(ok("search_threads", { query: "in:inbox" }));
-  assert.ok(ok("get_message", { messageId: "m", messageFormat: "PLAIN_TEXT" }));
-  assert.ok(ok("unlabel_thread", { threadId: "t", labelIds: ["INBOX"] }));
+  assert.ok(ok("get_message", { messageId: "m", messageFormat: "MINIMAL" }));
+  assert.ok(ok("get_draft", { draftId: "d" }));
+  assert.ok(!ok("search_threads", { query: "in:inbox" }), "there is no mail check any more: the relay only reads back what an approval needs");
+  assert.ok(!ok("unlabel_thread", { threadId: "t", labelIds: ["INBOX"] }), "an archive is the run's own call, never the relay's");
   assert.ok(ok("label_thread", { threadId: "t", labelIds: ["INBOX"] }));
   assert.ok(!ok("label_thread", { threadId: "t", labelIds: ["TRASH"] }));
   assert.ok(!ok("label_thread", { threadId: "t", labelIds: ["STARRED"] }));
-  assert.ok(!ok("unlabel_thread", { threadId: "t", labelIds: ["UNREAD"] }));
   assert.ok(!ok("get_thread", { threadId: "t", messageFormat: "RAW" }));
   for (const t of ["send_message", "reply", "forward", "trash_thread", "create_draft", "delete_draft", "mark_thread_spam"]) assert.ok(!ok(t, { to: ["a@example.com"], threadId: "t" }), t);
 });
@@ -256,22 +233,10 @@ function fakeRelay(responses: Record<string, unknown>): { relay: Relay; calls: C
   return { calls, relay: async (cs) => cs.map((c) => (calls.push(c), responses[c.tool.slice(GM.length)])) };
 }
 
-test("GmailMail: Mailbird-shaped calls over the connector; archive removes INBOX, restore adds it back", async () => {
-  await withGmail({}, async () => {
-    const { relay, calls } = fakeRelay({ search_threads: THREADS, get_message: mcp({ sender: "Dana <dana@example.com>", plaintext_body: "body text" }), unlabel_thread: mcp({}), label_thread: mcp({}) });
-    const mail = new GmailMail(relay);
-    assert.deepEqual(await mail.inboxes(), [{ accountId: 0, email: SELF, senderName: "me", folderId: 0 }]);
-    const rows = await mail.call<{ conversationId: string }[]>("list_conversations", { folderId: 0, limit: 100 });
-    assert.equal(rows[0]!.conversationId, "t-new");
-    assert.deepEqual(calls[0], { tool: `${GM}search_threads`, input: { query: "in:inbox newer_than:7d", pageSize: 50, view: "THREAD_VIEW_MINIMAL" } });
-    assert.equal((await mail.call<{ body: string }>("get_message", { messageId: "m-b" })).body, "body text");
-    assert.equal(calls[1]!.input.messageFormat, "PLAIN_TEXT");
-    await mail.call("archive_conversation", { conversationId: "t-new" });
-    assert.deepEqual(calls.at(-1), { tool: `${GM}unlabel_thread`, input: { threadId: "t-new", labelIds: ["INBOX"] } });
-    await mail.call("move_conversation_to_inbox", { conversationId: "t-new" });
-    assert.deepEqual(calls.at(-1), { tool: `${GM}label_thread`, input: { threadId: "t-new", labelIds: ["INBOX"] } });
-    await assert.rejects(() => mail.call("trash_conversation", { conversationId: "t" }), /not supported/);
-  });
+test("restore: a thread goes back to the inbox by adding INBOX to it", async () => {
+  const { relay, calls } = fakeRelay({ label_thread: mcp({}) });
+  await putBackInInbox("t-new", relay);
+  assert.deepEqual(calls, [{ tool: `${GM}label_thread`, input: { threadId: "t-new", labelIds: ["INBOX"] } }]);
 });
 
 test("approval read-backs go through the relay with read-only calls", async () => {
@@ -282,45 +247,6 @@ test("approval read-backs go through the relay with read-only calls", async () =
     assert.deepEqual((await r.original("m1"))?.to, ["d@example.com"], "the owner is left out");
     assert.deepEqual(calls.map((c) => c.tool.slice(GM.length)), ["get_draft", "get_message"]);
   });
-});
-
-// ---- the heartbeat on Gmail ----
-
-async function heartbeatOnce(relayCalls: Call[]) {
-  return withGmail({}, async () => {
-    const was = readJson("state/seen.json", undefined);
-    writeJson("state/seen.json", { seededAt: "2026-01-01T00:00:00.000Z", keys: {} });
-    const { relay } = fakeRelay({ search_threads: THREADS, get_message: mcp({ sender: "Newsletter <news@example.com>", plaintext_body: "weekly digest" }), unlabel_thread: mcp({}) });
-    const mail: MailSource = new GmailMail(async (cs) => (relayCalls.push(...cs), relay(cs)));
-    const log = console.log;
-    console.log = () => {};
-    try {
-      const check = createMailCheck(
-        mail,
-        {
-          files: { seen: "state/seen.json", liveness: "state/heartbeat.json" },
-          triage: async (m) => m.map(() => ({ label: "archive" as const, kind: "newsletter" as const, reason: "weekly newsletter", protected: false })),
-          record: (decision, row) => recordTriage("state/triage.jsonl", decision, row),
-          handler: () => false,
-          blocked: () => false,
-        },
-        { alert: async () => {}, handle: () => assert.fail("no Mailbird handler for Gmail") },
-      );
-      await check();
-    } finally {
-      console.log = log;
-      writeJson("state/seen.json", was ?? { keys: {} });
-    }
-  });
-}
-
-test("heartbeat on Gmail: the thread loses INBOX (the audit id is the thread id, for restore)", async () => {
-  const calls: Call[] = [];
-  await heartbeatOnce(calls);
-  const archive = calls.filter((c) => c.tool.endsWith("unlabel_thread"));
-  assert.ok(archive.length >= 1);
-  assert.deepEqual(archive[0]!.input, { threadId: "t-new", labelIds: ["INBOX"] });
-  assert.ok(readAudit((e) => e.tool === "heartbeat_triage" && e.decision === "archived" && e.meta?.id === "t-new").length >= 1);
 });
 
 // ---- the brief ----
@@ -354,44 +280,3 @@ test("skills and doctor: the gmail skill is offered instead of the Mailbird ones
 
 // ---- batching: one relay run per tick ----
 
-test("getMessages: the messages of a tick go through ONE relay run, in order, duplicates once", async () => {
-  await withGmail({}, async () => {
-    const runs: Call[][] = [];
-    const relay: Relay = async (cs) => (runs.push(cs), cs.map((c) => mcp({ sender: `Person ${c.input.messageId} <${c.input.messageId}@example.com>`, plaintext_body: `body ${c.input.messageId}` })));
-    const got = await new GmailMail(relay).getMessages(["a", "b", "a", "c"]);
-    assert.equal(runs.length, 1);
-    assert.deepEqual(runs[0]!.map((c) => c.input), [{ messageId: "a", messageFormat: "PLAIN_TEXT" }, { messageId: "b", messageFormat: "PLAIN_TEXT" }, { messageId: "c", messageFormat: "PLAIN_TEXT" }]);
-    assert.deepEqual(got.map((m) => (m as { body: string }).body), ["body a", "body b", "body a", "body c"]);
-    assert.deepEqual(await new GmailMail(relay).getMessages([]), []);
-    assert.equal(runs.length, 1); // nothing to fetch, no run
-  });
-});
-
-test("getMessages: a big tick is split into runs of ten; a failed run fails only its own messages; a short result is an error for the missing one", async () => {
-  await withGmail({}, async () => {
-    const ids = Array.from({ length: 23 }, (_, i) => `m${i}`);
-    const sizes: number[] = [];
-    const relay: Relay = async (cs) => {
-      sizes.push(cs.length);
-      if (sizes.length === 2) throw new Error("relay down");
-      return cs.slice(0, sizes.length === 3 ? 2 : cs.length).map((c) => mcp({ sender: "d@example.com", plaintext_body: String(c.input.messageId) }));
-    };
-    const got = await new GmailMail(relay).getMessages(ids);
-    assert.deepEqual(sizes, [10, 10, 3]);
-    assert.equal((got[0] as { body: string }).body, "m0");
-    assert.match((got[10] as Error).message, /relay down/);
-    assert.equal((got[20] as { body: string }).body, "m20");
-    assert.match((got[22] as Error).message, /no result/);
-  });
-});
-
-test("getMessages: only calls the relay allows are sent (get_message, never raw), whatever the ids look like", async () => {
-  await withGmail({}, async () => {
-    assert.equal(relayAllowed({ tool: GM + "get_message", input: { messageId: "a", messageFormat: "RAW" } }), false);
-    const seen: Call[][] = [];
-    const relay: Relay = async (cs) => (seen.push(cs), cs.map(() => mcp({ sender: "d@example.com", plaintext_body: "x" })));
-    const got = await new GmailMail(relay).getMessages(["a", 7 as unknown as string]);
-    assert.equal(got.length, 2);
-    assert.ok(seen[0]!.every((c) => relayAllowed(c) && c.tool === GM + "get_message"));
-  });
-});

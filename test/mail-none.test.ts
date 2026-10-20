@@ -10,7 +10,7 @@ import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { startHeartbeat } from "../src/heartbeat.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
 import { missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
+import { chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
@@ -130,7 +130,6 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
   const prompts = {
     chat: chatSystem(new Date("2026-10-12T09:00:00"), false),
     heartbeat: heartbeatSystem("MEMORY", { missing, down, mail: false }),
-    background: backgroundSystem("MEMORY", missing, down, false),
   };
   const sentence = /There is no email in this setup[^\n]*?mail is off here\./;
   for (const [name, p] of Object.entries(prompts)) {

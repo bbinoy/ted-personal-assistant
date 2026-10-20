@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { missingSetup, setupItems, type Note } from "../src/notes.ts";
-import { chatContext, chatSystem, handlerSystem, heartbeatSystem } from "../src/persona.ts";
+import { chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
 import { settings } from "../src/settings.ts";
 
 const skillsDir = join(settings.pluginDir, "skills");
@@ -48,7 +48,6 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   const missing = missingSetup([]);
   assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
   assert.match(heartbeatSystem("", { missing }), /You cannot ask anyone[\s\S]*message "set up"/);
-  assert.match(handlerSystem("", { missing }), /Not set up yet/);
   assert.ok(!chatSystem(new Date()).includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
 });
 
@@ -95,10 +94,8 @@ test("connectors: judged by the server status in the start-up message, so a slow
   assert.deepEqual(disconnected(detect([], [server("mailbird", "connected"), server("claude.ai Gmail", "connected")])), ["notion", "calendar"]); // never added
 });
 
-test("plugin: follow-through is a private skill the calendar and task skills and the mail handler point to", async () => {
-  const { handlerPrompt } = await import("../src/handler.ts");
+test("plugin: follow-through is a private skill the calendar and task skills point to", async () => {
   const { privateSkills } = await import("../src/skills.ts");
   assert.ok(privateSkills().includes("follow-through"));
   for (const s of ["calendar", "notion-tasks"]) assert.match(readFileSync(join(skillsDir, s, "SKILL.md"), "utf8"), /ted-personal-assistant:follow-through/, s);
-  assert.match(handlerPrompt([]), /ted-personal-assistant:follow-through/);
 });

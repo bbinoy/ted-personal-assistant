@@ -11,10 +11,9 @@ import { ownerSkills, skillsFor } from "./skills.ts";
 
 // ---- run profiles ----
 // HOW a run is allowed to work, fixed in code and named: the policy source (policy.ts: which tools are allowed, asked,
-// denied), the system prompt, the skills offered, the turn and budget limits and the output schema. The gate can
-// choose the instructions of a free-form wake-up but never name or edit a profile. `notes` are the note categories injected as data.
+// denied), the system prompt, the skills offered, the turn and budget limits and the output schema. No model can name or edit a profile. `notes` are the note categories injected as data.
 // The skills are read from the loaded tool modules when asked for (a getter), so the table can be built before the modules are.
-export type ProfileName = "chat" | "heartbeat" | "background" | "group" | "handler" | "browse";
+export type ProfileName = "chat" | "heartbeat" | "group" | "browse";
 interface RunProfile {
   readonly source: Source;
   readonly maxTurns: number;
@@ -31,15 +30,10 @@ const data = preset().profiles;
 export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
   // The owner's chat: its resumed session, its own notes as memory. A cold prompt cache alone can cost most of a dollar, hence the budget.
   chat: { source: "chat", ...data.chat, get skills() { return ownerSkills(); } },
-  // The mail handler (handler.ts), every conversation's: a fresh session, the mail module's tools, standing-task provenance.
-  handler: { source: "handler", ...data.handler, get skills() { return ownerSkills(); } },
   // A conversation's heartbeat run (heartbeat/look.ts): one look at everything it can see, a fresh session each time, on HEARTBEAT_MODEL (Haiku by default). The owner's has every
   // connector tool she has (policy source "background"); a friend's or a group's has the tools of its capability set (policy source "group", agent.ts heartbeatOptions). Every call
   // passes the same floor, judge and phone as anywhere; it answers with constrained JSON.
   heartbeat: { source: "background", ...data.heartbeat, get skills() { return ownerSkills(); }, get model() { return settings.heartbeatModel; }, outputSchema: HEARTBEAT_SCHEMA },
-  // An unprompted free-form run in a conversation (a wake-up): reads are free, anything else asks on the phone,
-  // web search allowed (page fetches ask), no memory tools (policy.ts, source "background").
-  background: { source: "background", ...data.background, get skills() { return ownerSkills(); } },
   // A group's run: its own resumed session, its own notes folder as memory, nothing of the owner's (policy source "group"). Its skills are the shared
   // ones its capability set allows (skills.ts); a tenant's come from her record in the same way (runoptions.ts).
   group: { source: "group", ...data.group, get skills() { return skillsFor(groupCapabilities()); } },
@@ -48,4 +42,3 @@ export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
   browse: { source: "browse", maxTurns: settings.browseMaxTurns, maxBudgetUsd: settings.browseMaxUsd, skills: [], outputSchema: BROWSE_SCHEMA, notes: [] },
 };
 
-export type OwnerProfile = "heartbeat" | "background";

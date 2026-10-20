@@ -176,7 +176,7 @@ messenger.onDeletion((d) => {
 
 // The mail provider's own start-up (its module, src/modules): Mailbird's connection (the approval of any send shows the draft read back from it), or the Gmail connector's read-backs for the same approval.
 // MAIL_PROVIDER=none: no mail client is made at all, so there is no proposer either.
-if (settings.mail) mailRuntime()?.start({ reply: (t) => out.replyPlain(t, "draft") });
+if (settings.mail) mailRuntime()?.start();
 
 // A 👍 / 👎 on the pending approval message answers it (the pipeline checks); any other reaction of the
 // owner is feedback. (Our own status icons come back as reactions; the messenger does not deliver those.)

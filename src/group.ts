@@ -196,7 +196,7 @@ export function createGroupBrain(brain: Brain) {
     const judge = () => {
       const looked = new Date();
       const gate = brain.gate ?? askGate;
-      return (async () => gate({ conv, trigger: "message", now, tail: brain.recent(m.groupId), secondsSinceMine: st.lastSpoke ? Math.round((Date.now() - st.lastSpoke) / 1000) : undefined, duringLastReply: st.runStart !== undefined && m.timestamp > st.runStart && (st.running || m.timestamp <= (st.runEnd ?? 0)) }))().then(
+      return (async () => gate({ conv, now, tail: brain.recent(m.groupId), secondsSinceMine: st.lastSpoke ? Math.round((Date.now() - st.lastSpoke) / 1000) : undefined, duringLastReply: st.runStart !== undefined && m.timestamp > st.runStart && (st.running || m.timestamp <= (st.runEnd ?? 0)) }))().then(
         (v) => ({ ok: true as const, v, looked, ms: Date.now() - looked.getTime() }),
         (e: unknown) => ({ ok: false as const, e }),
       );

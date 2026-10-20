@@ -11,9 +11,8 @@ import type { Document } from "./document.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./approvals/permissions.ts";
-import { expertSystem, handlerSystem, heartbeatSystem } from "./persona.ts";
+import { expertSystem, heartbeatSystem } from "./persona.ts";
 import { expertSetup } from "./heartbeat/delegation.ts";
-import { handlerToolsOf } from "./mailhandler.ts";
 import type { Payer } from "./payer.ts";
 import { categoriesFor } from "./preset.ts";
 import { tenantById, tenantContext } from "./tenants/tenants.ts";
@@ -106,36 +105,3 @@ export function prepare(conv: Conversation, inputs: RunInputs, opts: { refresh?:
 
 // A tenant who was suspended or removed: her process is closed.
 export const dropTenantWarm = (id: string): void => pool.drop(tenantKey(id));
-
-// The options of a conversation's background mail handler run (handler.ts), ONE for the owner and every friend: the conversation's own options (runoptions.ts), a
-// fresh session, its mail module's tools only (a friend's: from her capability set; the owner's: the connectors, as ever, under the handler's policy source), the
-// handler profile's limits (the preset), the notes of the profile's categories that conversation has, the standing task as the approval judge's provenance (fixed text,
-// no mail), and the conversation's own approver state. The payer is the conversation's (payer.ts): the login, or the instance key on her ledger.
-export function handlerOptions(conv: Conversation, payer: Payer, onToolSuccess: RunOptions["onToolSuccess"], task: string): RunOptions {
-  const own = conv.kind === "owner";
-  const p = PROFILES.handler;
-  const base = runOptionsFor(conv, payer.kind === "instance" ? { apiKey: payer.apiKey } : {});
-  const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
-  const categories = categoriesFor(conv.kind);
-  return {
-    ...base,
-    source: own ? p.source : base.source, // the owner's handler is its own policy source; a friend's is the isolated one
-    sessionFile: undefined, // a fresh session every run
-    memory: undefined,
-    seenAt: undefined,
-    skills: own ? undefined : [],
-    tools: own ? base.tools : handlerToolsOf(conv, base.tools ?? new Set()),
-    systemPrompt: handlerSystem(memoryFor(p.notes.filter((c) => categories.includes(c)), new Date(), conv.notesDir), own ? { missing: missingSetup(readNotes(), down()), down: down() } : { who: ctx!.name }),
-    maxTurns: p.maxTurns,
-    maxBudgetUsd: own ? p.maxBudgetUsd : Math.min(p.maxBudgetUsd, base.maxBudgetUsd), // a friend's run is also held to her own per-run ceiling
-    onToolSuccess,
-    provenance: fixed({ kind: "standing", task }), // (no chat message is this run's provenance: the fixed task is)
-    conversation: conv.key, // its anti-repeat state is its conversation's, as in its chat
-    untrusted: true, // it reads raw mail
-  };
-}
-
-export const runHandlerTurn = (conv: Conversation, payer: Payer, prompt: string, approve: Approve, onToolSuccess: RunOptions["onToolSuccess"], task: string): Promise<AgentReply> =>
-  runAgent(prompt, approve, handlerOptions(conv, payer, onToolSuccess, task));
-
-

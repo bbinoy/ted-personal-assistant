@@ -66,6 +66,6 @@ ids, not names).
 
 ## Automated runs
 
-The heartbeat triages new mail every 15 minutes (not at night) with a small model and, once archiving is
-live, archives clear noise; mail that needs the owner arrives as one Signal message. Operate with
+The heartbeat run works through new mail about every 30 minutes in the day, archives clear noise, and
+tells the owner on Signal only what is worth interrupting for. Operate with
 `npm run doctor`, `npm run report` and `npm run restore <threadId>`.

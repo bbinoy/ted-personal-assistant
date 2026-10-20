@@ -294,21 +294,21 @@ packages/speech/     @ted-assistant/speech (private): text to speech (Qwen3-TTS,
 src/markdown.ts      Markdown → Signal text styles (UTF-16 offsets)
 src/outbound.ts      sending (one message, however long), echo guard
 src/guards.ts        owner check: the sender resolves to the admin record (pure, tested)
-src/agent.ts         the entry points of Agent SDK runs: runConversation and prepare for the owner's chat, groups and tenants; the profiles (brief, heartbeat run, wake-up) and the handler
+src/agent.ts         the entry points of Agent SDK runs: runConversation and prepare for the owner\'s chat, groups and tenants; heartbeatOptions and runHeartbeat, the one heartbeat run of every conversation
 src/runoptions.ts    the ONE builder of a conversation's run options (runOptionsFor), from its record: owner, group, tenant
 src/agentrun.ts      the core of a run: RunOptions and buildOptions, the stream consumer, the run ceiling, runAgent, the browse sub-run
 src/agentwarm.ts     the keyed pool of warm processes (WarmPool) for the next message, and the warm-or-cold run
 src/domains.ts       registered domain (eTLD+1) with a compact suffix list, for profile domain binding
 src/ceiling.ts       the wall-clock ceiling of one run (pausable while an approval waits)
 src/preset.ts        the assistant preset: loader, validation and templates (assistants/<name>/preset.json and persona/*.md)
-src/profiles.ts      the run profiles (heartbeat, background, group; limits and note categories from the preset) and the skills offered
+src/profiles.ts      the run profiles (chat, heartbeat, group, browse; limits and note categories from the preset) and the skills offered
 src/errors.ts        the failures with their own message (expired login, usage limit, refused instance key), one notice table by error and audience, and `failure`: how the SDK reports a refused call
 src/payer.ts         Payer (login or instance key), mayRun (who pays and may it run now), and the bookkeeping of a call: environment, cost, rate limit, success
 src/haiku.ts         the shared base options of every small one-shot Haiku call (no tools, no connectors, no memory) and `oneShot`, the one call that pays its Payer
 src/chatsession.ts   when a conversation's session resumes, and compacting it in place
 src/memorynotice.ts  the note changes of a chat turn and the one notice about them
 src/modules/         the tool modules, one file per tool or one folder per feature with module.ts and its code (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
-src/heartbeat.ts     the free tick (starts the jobs, writes the liveness line) and the friends' mail check (createMailCheck)
+src/heartbeat.ts     the free tick: starts the jobs (every conversation's look, the dream) and writes the liveness line
 src/heartbeat/look.ts   a conversation's heartbeat run (the owner's, a group's, a friend's): when it is due, the prompt, the run (standing provenance), posting, the row
 src/heartbeat/scope.ts  what a heartbeat run is made of for one conversation, from its capability set: who it is told about, what it reads, whether it may delegate; the rule for "anything to look at"
 src/heartbeat/rules.ts  its pure rules: output schema, the 10..120 clamp, the answer parser
@@ -316,24 +316,16 @@ src/heartbeat/delegation.ts the general expert, the `expert-<skill>` variants an
 src/statusnote.ts      the one narrow note write of the heartbeat run and its experts: status-<name>.md (the brief's state)
 src/heartbeat/rows.ts   state/heartbeat.jsonl: one counted row per look, no words
 src/heartbeat/report.ts `npm run heartbeat-report`: the rows as counts, dollars and the next-look distribution
-src/triage.ts        batched classifier + injection isolation (its prompt is the preset's triage.md)
-src/actions.ts       what to do with a classification (pure, tested)
-src/handler.ts       Sonnet handler for a friend's routine mail (persistent queue)
 src/brief.ts         the clock line every unattended prompt starts with
-src/digest.ts        the owner's triage rows since a time, for the report and restore
 src/mailbird.ts      direct MCP client for the local mail server
-src/gmail.ts         the Gmail provider: a relay run for the heartbeat's connector calls (the get_message calls of one tick share one run, `getMessages`, ten per run), parsers for the connector's results, the approval read-backs
+src/gmail.ts         the Gmail provider\'s relay: a Haiku run that makes exactly the planned connector calls (the approval\'s read-backs, `npm run restore`), parsers for the connector\'s results
 src/gmailrules.ts    Gmail rules a flag cannot say: TRASH/SPAM label values, attachments, the brief to oneself (pure, tested)
 src/budget.ts        daily spend guard
 src/settings.ts      every tunable, validated at startup (pure loader, tested)
 src/paths.ts         the repo root and the folders under it (plugin, assets, assistants), and the default data dir: the only file that locates itself (tested)
 src/state.ts         atomic, synchronous access to state/, logs/ and memory/ (tested)
 src/audit.ts         append-only audit log and its reader
-src/propose.ts       shows the handler's reply drafts on Signal and reads a draft back from the mail client (Mailbird's or Gmail's)
-src/mailhandler.ts   which mail-tools module a conversation's handler works with, and its tools
-src/triagelog.ts     the triage record: a file per conversation with the words, a wordless audit row
-src/wakeprompt.ts    the one wake-up prompt (private chat or group)
-src/proposals.ts     the draft rules: Signal text and send-approval text from the draft as Mailbird holds it (pure, tested)
+src/proposals.ts     the draft rules: a draft as the mail client holds it, and the send-approval text built from it (pure, tested)
 src/messages.ts      the log of every message the assistant sent (with Signal timestamps): reaction lookup, "what I told you" context, edit and delete lines (revisionsOf, foldEdits, withoutDeleted), size-bounded with a model-written summary of the oldest
 src/edit.ts          edited and deleted messages, the pure parts: same text after normalisation, the prompt note, who may edit (pure, tested)
 src/summarize.ts     the small model that writes that summary (its prompt is the preset's summary.md)
@@ -341,10 +333,10 @@ src/conversation.ts  the one pipeline for the private chat and every group: read
 src/conversationmodel.ts  Conversation (owner() / group(id)), the pipeline's types and cleanIncoming; conversation.ts re-exports them
 src/timing.ts        the per-turn timing line (durations only)
 src/warmslot.ts      the slot that holds one warm model process (the owner's, the latest group's and the gate's), and the fallback to a cold start
-src/gate.ts          the one gate (message or clock): prompt, strict parsing
+src/gate.ts          the participation gate for an untagged group message: prompt, strict parsing
 src/ledger.ts        the wake/action ledger in the log: look state, when a look is due, the clamped next look
 src/cooldown.ts      shared usage-limit cooldown for background model calls
-src/wake.ts          the clock side: on each tick wake the conversations that are due, with the code guards
+src/wake.ts          the clock side: on each tick start the heartbeat run of every conversation that is due, with the code guards
 src/group.ts         group chats: a participant with no private data; a cheap gate judges every message and reaction, always answers when addressed; its prompt (unseen messages prepended to a resumed session)
 src/groupstore.ts    a group's own notes folder and history, in the same formats as the owner's but in separate folders; what a run is shown of the log
 src/voicereply.ts    the [[voice]] marker and the voice option offered with every prompt when speech is set up: the model chooses to answer by voice and is told to write the words for the ear (short sentences, numbers, dates and symbols spelled out as spoken, never any emoji: done by the model's instructions, never by rewriting code). The speech engine is chosen by `TTS_PROVIDER` (packages/speech/src/tts-provider.ts): the local Qwen voice (the default, Kokoro stands in), Kokoro (tts.ts, local) or an optional remote one, each a small file with plain `fetch` and a timeout: tts-elevenlabs.ts, tts-http.ts (contract in docs/REMOTE-TTS.md), sharing tts-remote.ts (https check, audio sniffing, the same ffmpeg step); any failure throws and the reply goes out as text, unless `TTS_FALLBACK=kokoro`; `TTS_VOICE` picks the Kokoro voice, `TTS_SPEED` the pace
@@ -374,17 +366,13 @@ src/redact.ts        keeps phone numbers and credentials out of logs
 src/cli.ts           report / restore / doctor
 src/doctor.ts        `npm run doctor`
 src/document.ts      files people send that are not pictures, made ready for the model (the bytes decide what a file is)
-src/googlemail.ts    a friend's mailbox for the mail check, through her own Google server
 src/image.ts         pictures people send, checked by their bytes, shrunk, wrapped as image content
 src/logsearch.ts     the `search_logs` tool's plain-text search over the logs folder
-src/mailloops.ts     the mail check, triage and handler for every friend who has mail through her own Google, on the tick
 src/messenger.ts     the app's one meeting point with its chat platform (MESSENGER): load it by name, its options, the instance in use
-src/notetimes.ts     the times of day a conversation's notes name, for the idle fingerprint and the wake-ups
 src/ownerkey.ts      the key of the owner's chat and sourceOfKey (policy source from a conversation key)
 src/persona.ts       system prompts: the words are the preset's, this fills in what only code knows
 src/profiletools.ts  what an unattended job can see of the connectors
 src/skills.ts        which bundled skills a conversation may load
-src/tenantmail.ts    a friend's mail check state in her own folder (tenants/<id>/mail/)
 src/turncontext.ts   what a conversation's session is told at the start of a turn
 src/modules/status.ts  the status tool's module (the heartbeat run's one note write, statusnote.ts)
 src/modules/builtin.ts the assistant's own tools (web search, page fetch, skills, the notes' file tools)
@@ -394,7 +382,6 @@ src/modules/gmail.ts the Gmail connector (MAIL_PROVIDER=gmail) and its mail slot
 src/modules/ibkr.ts  Interactive Brokers: never allowed, for everyone
 src/modules/intake.ts intake: a tenant's one-time link tools
 src/modules/mailbird.ts Mailbird (MAIL_PROVIDER=mailbird) and its mail slot
-src/modules/mailtask.ts  the handler task text every mail module fills in (handlerTaskText): one handler path for all providers
 src/modules/memory.ts memory: forget a note, search the logs, undo the dream
 src/modules/notion.ts Notion through the owner's connector (default visible tools: NOTION_TOOLS)
 src/modules/tenants.ts the owner's tenant administration tools (TENANTS=on)

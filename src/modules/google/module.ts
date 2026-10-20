@@ -3,7 +3,6 @@ import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
 import { nativeView } from "../../policy/mailview.ts";
 import { notifyLine } from "../calendar.ts";
 import { named } from "../gmail.ts";
-import { handlerTaskText } from "../mailtask.ts";
 import { rowsOf, tenantOffered, type FloorVerdict, type ToolModule } from "../types.ts";
 
 // Google for friends (capability `google`, with `mail` and `calendar` for the tools): a friend's own Gmail and Calendar, served by a third-party MCP server that
@@ -34,16 +33,6 @@ function verdict(tool: string, input: Record<string, unknown>): Exclude<FloorVer
   if (/^get_gmail_(message|messages_content_batch|thread|threads_content_batch)/.test(name) && (input.full === true || /^raw$/i.test(String(input.body_format ?? "")))) return "deny";
   return undefined;
 }
-
-// The standing task of a friend's mail handler: the same job as the owner's (mailtask.ts), in the names of her tools.
-const handlerTask = (who: string): string =>
-  handlerTaskText(who, {
-    read: "get_gmail_message_content(message_id)",
-    calendar: "get_events",
-    draft: "save an in-thread DRAFT reply with draft_gmail_message (to: the sender; in_reply_to: the mail's Message-ID header as get_gmail_message_content shows it)",
-    sendBy: `${who} sends the draft herself, or asks you to in her chat.`,
-    event: `create the event with manage_event (action create, for ${who} alone, no guests).`,
-  });
 
 const calendarAction = (input: Record<string, unknown>): string => String(input.action ?? "").toLowerCase();
 
@@ -82,7 +71,6 @@ export const googleModule: ToolModule = {
     editable: ["calendar-write"],
   },
   mailTools: {
-    handlerTask, // her handler (drafts only; a send asks HER in her chat)
     // Every send names its recipients in its own arguments (the model is told to; a reply that names none cannot be shown, so it is refused): there is nothing to read back.
     readBack: async () => undefined,
     views: {

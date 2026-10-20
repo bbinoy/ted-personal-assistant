@@ -30,16 +30,8 @@ export function connectionFrom(cfg: { args?: unknown } | undefined): { url: stri
 
 const connectionDetails = () => connectionFrom(JSON.parse(readFileSync(`${process.env.HOME}/.claude.json`, "utf8")).mcpServers?.mailbird);
 
-interface Inbox {
-  accountId: number;
-  email: string;
-  senderName: string;
-  folderId: number;
-}
-
 export class Mailbird {
   private client: Client | undefined;
-  private inboxCache: Inbox[] | undefined;
 
   async connect(): Promise<void> {
     const { url, headerName, headerValue } = connectionDetails();
@@ -54,24 +46,10 @@ export class Mailbird {
     this.client = client;
   }
 
-  // Every account's Inbox folder. Accounts and folders rarely change, so this is cached for
-  // the life of the connection (two calls per account saved on every heartbeat tick).
-  async inboxes(): Promise<Inbox[]> {
-    if (this.inboxCache) return this.inboxCache;
-    const accounts = await this.call<{ id: number; email: string; senderName: string }[]>("list_accounts");
-    const found: Inbox[] = [];
-    for (const a of accounts) {
-      const folders = await this.call<{ id: number; identity: string }[]>("list_folders", { accountId: a.id });
-      const inbox = folders.find((f) => f.identity === "Inbox");
-      if (inbox) found.push({ accountId: a.id, email: a.email, senderName: a.senderName, folderId: inbox.id });
-    }
-    return (this.inboxCache = found);
-  }
-
   // Calls a tool and returns parsed JSON when the result is JSON text, else the raw text.
   async call<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T> {
     if (!this.client) await this.connect();
-    // A hung call must not stall the heartbeat forever: fail after 60s, reconnect next time.
+    // A hung call must not stall a command forever: fail after 60s, reconnect next time.
     const res: any = await this.client!.callTool({ name, arguments: args }, undefined, { timeout: 60_000 });
     const text: string = res.content?.find((c: any) => c.type === "text")?.text ?? "";
     if (res.isError) throw new Error(`mailbird ${name} failed: ${text.slice(0, LIMITS.preview)}`);
@@ -85,7 +63,6 @@ export class Mailbird {
   async close() {
     const client = this.client;
     this.client = undefined;
-    this.inboxCache = undefined;
     await client?.close();
   }
 }

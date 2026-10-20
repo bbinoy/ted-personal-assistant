@@ -15,7 +15,7 @@ const T = await import("../src/tenants/tenants.ts");
 const { createWakeups } = await import("../src/wake.ts");
 const { createDreamer } = await import("../src/dream.ts");
 const { keyNotices } = await import("../src/tenants/keynotice.ts");
-const { askGateWith, gateSystem } = await import("../src/gate.ts");
+const { askGateWith } = await import("../src/gate.ts");
 const { owner, tenant } = await import("../src/conversation.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
 const { onLogin } = await import("../src/conversationmodel.ts");
@@ -273,16 +273,6 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
   const { coolingDown } = await import("../src/cooldown.ts");
   assert.equal(coolingDown(Date.now(), INSTANCE_KEY_COOLDOWN), true, "the key's refusal is the key's: one cooldown for every friend");
   assert.equal(coolingDown(Date.now(), ""), false, "the owner's login cooldown is untouched");
-});
-
-test("the gate's rules for a tenant's chat name her, have no brief and nothing of the owner's", () => {
-  const anna = person("Lea");
-  const sys = gateSystem(tenant(anna.id), "clock", "");
-  assert.match(sys, /Lea's private chat/);
-  assert.match(sys, /Acting on your own/);
-  assert.doesNotMatch(sys, /"brief"|"radar"/);
-  assert.doesNotMatch(sys, new RegExp(settings.owner));
-  assert.match(gateSystem(owner(), "clock", ""), new RegExp(`${settings.owner}'s private chat`));
 });
 
 // ---- the dream ----

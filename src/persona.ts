@@ -117,9 +117,6 @@ export function chatContext(parts: { missing?: readonly string[]; down?: readonl
   return out || undefined;
 }
 
-// A friend's mail digest (tenantmail.ts mailDigest), the one part of her chat's prompt that changes with every mail check: also told at the start of the turn.
-export const digestContext = (digest: string | undefined): string | undefined => (digest ? say("digest", { digest: fence("mail_digest", digest) }) : undefined);
-
 // Shared by the private chat and groups (not the background presets). Text you write before a tool call stays internal; the send tool (send.ts) is how the person hears something while you work.
 // The voice tool exists only with the cloned voice (TTS_PROVIDER=qwen); the rule is only said then.
 // The sentence comes from the preset (persona/voice.md) with the kind of conversation as flags; the run's own capability set says whether it has the tool.
@@ -138,18 +135,14 @@ const PARTICIPATION = say("participation");
 // that the gate (gate.ts) reads. Without this line it assumes it can only speak when someone writes.
 export const SELF_TIMED = say("selfTimed");
 
-// What the gate (gate.ts) is told by default, per kind of conversation. The conversation's notes tweak it
-// ("don't reply so fast", "every morning post a fun fact", "no posts on weekends"); the owner's style notes too.
+// What the participation gate (gate.ts) is told by default in a group. The group's notes tweak it
+// ("don't reply so fast", "only reply when tagged"); the owner's style notes too.
 const UNPROMPTED = say("unprompted");
 export const GATE_DEFAULTS = {
   group: say("gateGroup", { participation: PARTICIPATION, unprompted: UNPROMPTED }),
 } as const;
 
-// A tenant's private chat (tenants.ts): only what her notes ask for. (The owner's chat has no gate: the heartbeat run looks at it, heartbeat/look.ts.)
-export const directGateDefaults = (name: string): string => say("gateDirect", { name, unprompted: UNPROMPTED });
-
-// The small models' system prompts are the preset's too: the mail triage (triage.ts) and the log summary (summarize.ts).
-export const triagePrompt = (who: string): string => say("triage", { who: oneLineName(who) });
+// The log summary's system prompt (summarize.ts) is the preset's too.
 export const summarySystem = (): string => say("summary");
 
 // A group chat the assistant was added to (group.ts). Other people write here, so it gets no private data:
@@ -208,25 +201,6 @@ export function expertSystem(memory: string, o: { missing?: readonly string[]; d
 
 // The words of one look (persona/heartbeat.md); the chat log goes after it as data (heartbeat/look.ts). `delegated`: the heavy skills it must hand to the expert, or "".
 export const heartbeatInstruction = (vars: { now: string; timeZone: string; lastLook: string; quietFrom: string; quietTo: string; dayMinutes: string; delegated: string; briefTime: string; briefOverdueHour: string; briefHow: string; who: string; own: boolean; reads: boolean; experts: boolean; brief: boolean; sources: string }): string => say("heartbeat", { ...vars, Who: vars.own ? vars.who : vars.who.slice(0, 1).toUpperCase() + vars.who.slice(1) }); // (Who: the same name at the start of a sentence; the owner's is written as it is)
-
-// Background handling of routine email the heartbeat flagged as "the assistant can deal with this", ONE prompt for every conversation that has mail (only runs when
-// there is mail: the heartbeat never hands anything over without it). `who` is a friend's name; without it the mail is the owner's, and the run also gets the owner's
-// capabilities and rules (the approvals go to their phone) and what is connected and set up. A friend's has her name, her notes and nothing of the owner's.
-export function handlerSystem(memory: string, o: { who?: string; missing?: readonly string[]; down?: readonly Connector[] } = {}): string {
-  const own = o.who === undefined;
-  return join(say("handler", { who: own ? OWNER : oneLineName(o.who!), own }), own ? rules(true) : undefined, own ? connectorLine(o.down ?? [], false) : undefined, own ? setupLine(o.missing ?? [], false) : undefined, memory);
-}
-
-// An unprompted run in the owner's chat (a wake-up, wake.ts): least privilege, web search but no page fetches without asking, nothing written without asking.
-export function backgroundSystem(memory: string, missing: readonly string[] = [], down: readonly Connector[] = [], mail: boolean = settings.mail): string {
-  return join(
-    say("background", { mail, personality: PERSONALITY }),
-    rules(mail),
-    connectorLine(down, false),
-    setupLine(missing, false),
-    memory,
-  );
-}
 
 // A friend who was invited to use the assistant on this instance (a tenant, tenants.ts): a private one-to-one chat with a run that has NONE of the
 // owner's data and none of any other conversation's, only her own notes and the web. Her API key pays for it, which the prompt says plainly.

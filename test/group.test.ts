@@ -5,7 +5,6 @@ import { scopeOf } from "../src/approvals/turnscope.ts";
 import { createPipeline, group, type Pipeline } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
 import { groupName, createGroupBrain, groupPrompt, ownerInGroup, speaker } from "../src/group.ts";
-import { wakePrompt } from "../src/wakeprompt.ts";
 import { readLongText } from "@ted-assistant/signal";
 import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/skills.ts";
@@ -85,11 +84,6 @@ test("groups: messages nobody answered are prepended on the next turn of a resum
   const p = groupPrompt(new Date("2026-10-14T10:00:00"), ["[10:00] Eve (a member): hi"], undefined, true);
   assert.match(p, /since your last turn/);
   assert.doesNotMatch(groupPrompt(new Date(), [], undefined, false), /since your last turn/);
-});
-
-test("groups: the wake-up prompt offers the voice option when speech is available", () => {
-  assert.match(wakePrompt({ who: "", where: "group", now: new Date(), instructions: "post a fun fact", lines: [], speak: true }), /Voice: you may answer by voice[\s\S]*\[\[voice\]\]/);
-  assert.doesNotMatch(wakePrompt({ who: "", where: "group", now: new Date(), instructions: "post a fun fact", lines: [] }), /Voice:/);
 });
 
 test("groups: a quoted message and a voice transcript reach the prompt as data; the voice option is separate", () => {

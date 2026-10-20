@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { delegatedText, expertSetup } from "../src/heartbeat/delegation.ts";
 import { mailSlot } from "../src/modules/index.ts";
 import { missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, handlerSystem, heartbeatInstruction, heartbeatSystem } from "../src/persona.ts";
+import { chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, heartbeatInstruction, heartbeatSystem } from "../src/persona.ts";
 import { PROFILES } from "../src/profiles.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { settings } from "../src/settings.ts";
@@ -37,8 +37,6 @@ export function snapshot(): Record<string, unknown> {
       heartbeat: portable(heartbeatSystem("MEMORY", { missing, down })),
       expert: portable(expertSystem("MEMORY", { missing, down })),
       heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", lastLook: "Your last look was at 08:30.", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30", delegated: delegatedText(expertSetup(PROFILES.heartbeat.skills, "")), briefTime: "07:30", briefOverdueHour: "09:00", briefHow: mailSlot()!.brief.how(), who: settings.owner, own: true, reads: true, experts: true, brief: true, sources: "mail since your last look, the calendar for the next 36 hours, tasks, and your notes and their schedules" }),
-      handler: portable(handlerSystem("MEMORY", { missing, down })),
-      background: portable(backgroundSystem("MEMORY", missing, down)),
       group: portable(groupSystem()),
       gateGroup: GATE_DEFAULTS.group,
     };

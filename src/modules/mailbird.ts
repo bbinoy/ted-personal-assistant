@@ -1,12 +1,10 @@
-import { extractMessageId, nativeView } from "../policy/mailview.ts";
+import { nativeView } from "../policy/mailview.ts";
 import type { DraftView } from "../proposals.ts";
-import { handlerTaskText } from "./mailtask.ts";
 import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // Mailbird, the owner's desktop mail client, through its local MCP server (a user-scope entry of the owner's Claude settings): the default mail provider
-// (MAIL_PROVIDER=mailbird). The background handler drafts replies with its tools and they are shown on the phone; the approval of a send is shown from the
-// draft as Mailbird holds it. The client, `npm run restore` and the doctor check are runtime.ts.
+// (MAIL_PROVIDER=mailbird). The approval of a send is shown from the draft as Mailbird holds it. The client, `npm run restore` and the doctor check are runtime.ts.
 const MB = "mcp__mailbird__";
 
 const mb = rowsOf(MB, "mailbird", "mail");
@@ -15,23 +13,11 @@ const mb = rowsOf(MB, "mailbird", "mail");
 let draftReader: ((messageId: number) => Promise<DraftView | undefined>) | undefined;
 export const setDraftReader = (fn: typeof draftReader) => void (draftReader = fn);
 
-const REPLY_TOOLS = new Set([`${MB}reply_to_conversation`, `${MB}reply_all_to_conversation`]);
-
 const mail: MailSlot = {
-  handlerTask: (who) =>
-    handlerTaskText(who, {
-      read: "get_message(messageId)",
-      calendar: "list_events",
-      draft: "create an in-thread DRAFT reply",
-      sendBy: `${who} gets the draft on their phone and sends it from there, so write it ready to send, in their voice.`,
-      event: "create the calendar event.",
-      followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled.",
-    }),
-  createdDraft: (tool, response) => (REPLY_TOOLS.has(tool) ? extractMessageId(response) : undefined), // the reply tools save the draft; its id is in their result
   brief: { how: () => "Deliver the full brief by email with the Mailbird send_self_briefing tool, exactly once, with the subject the skill names (never its default subject)." },
   chat: {
     skill: "ted-personal-assistant:mailbird",
-    note: (owner) => `Reply drafts: the background handler shows ${owner} drafts as "✉️ Reply ready (draft #<id>)". When ${owner} replies to such a message (you get the quoted message) with "send" or similar, call get_message with that id to be sure which draft it is, then send_message_now with messageId and confirm true; ${owner} is then asked to approve, with the draft shown exactly as Mailbird holds it. If they ask for a change, edit the draft (update_draft) and say so; do not send. If it is unclear which draft they mean, ask. Never send anything ${owner} has not told you to send; a plain yes, ok or 👍 to your offer to send counts.
+    note: (owner) => `Reply drafts: a reply you (or a background look of yours) saved is a Mailbird draft, and you tell ${owner} it is ready. When ${owner} answers with "send" or similar, find the draft they mean (get_message with its id if you know it, else look in the drafts) to be sure which one it is, then send_message_now with messageId and confirm true; ${owner} is then asked to approve, with the draft shown exactly as Mailbird holds it. If they ask for a change, edit the draft (update_draft) and say so; do not send. If it is unclear which draft they mean, ask. Never send anything ${owner} has not told you to send; a plain yes, ok or 👍 to your offer to send counts.
 
 `,
   },

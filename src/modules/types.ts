@@ -2,8 +2,6 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentReply, RunOptions } from "../agentrun.ts";
 import type { Source } from "../audit.ts";
 import type { BrowseGuard } from "./browse/browseguard.ts";
-import type { MailSource } from "../heartbeat.ts";
-import type { createProposer } from "../propose.ts";
 import type { DraftView } from "../proposals.ts";
 import type { Capability } from "../tenants/tenants.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
@@ -154,10 +152,6 @@ export interface MailTools {
   // conversation whose tools these are ("tenant:<id>"), for a module whose client is per conversation.
   readBack: (kind: ViewKind | undefined, input: Record<string, unknown>, conversation?: string) => Promise<DraftView | undefined>;
   views: Partial<Record<ViewKind, (i: MailInput, draft?: Omit<MailView, "action">) => MailView | undefined>>; // how each row's `view` reads its call
-  // The background mail handler (handler.ts): present when a handler can run with these tools. `handlerTask` is its standing task for `who` in the names of these
-  // tools (mailtask.ts), `createdDraft` names the reply draft a successful call left behind (to be shown to the person), absent when drafts are not shown.
-  handlerTask?: (who: string) => string;
-  createdDraft?: (tool: string, response: unknown) => string | number | undefined;
 }
 
 // What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
@@ -170,9 +164,8 @@ export interface MailSlot extends MailTools {
 
 // The code behind a mail slot (runtime.ts): the client, putting a mail back, what to start while the app runs, the doctor check.
 export interface MailRuntime {
-  source: () => MailSource & { connect?: () => Promise<void> }; // a mail client for the provider (the friends' mail check has its own)
   restore: (id: string) => Promise<number>; // `npm run restore <id>`: put an archived mail back in the inbox; prints what happened, returns the exit code
-  start: (io: { reply: (text: string) => Promise<number> }) => { propose?: ReturnType<typeof createProposer>["show"] }; // Mailbird's connection and the proposer that shows reply drafts; Gmail's read-backs
+  start: () => void; // what the approval of a send reads a draft back with: Mailbird's connection, Gmail's read-backs
   check: (line: DoctorLine) => void | Promise<void>;
 }
 
