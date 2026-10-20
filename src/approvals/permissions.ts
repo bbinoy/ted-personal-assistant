@@ -177,8 +177,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "allow", updatedInput: f.input };
     }
     if (verdict === "deny") {
-      // A tool module may have more to say about its own denied tool (Gmail archive in log-only mode: recorded like the heartbeat's, so the report and
-      // the brief show it, and the model is told to carry on).
+      // A tool module may have more to say about its own denied tool (a record for the audit log, or a message for the model).
       const d = denial(tool, input);
       if (d?.record) {
         log(d.record.tool, d.record.decision, source, d.record.meta);

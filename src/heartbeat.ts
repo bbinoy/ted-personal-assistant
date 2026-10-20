@@ -175,10 +175,6 @@ async function processNewMail(mb: MailSource, fresh: NewMail[], hooks: MailHooks
   const extra: Record<number, Record<string, unknown>> = {};
 
   for (const i of plan.archive) {
-    if (!settings.archiveLive) {
-      decision[i] = "would-archive"; // ARCHIVE=log: classified and recorded, nothing archived
-      continue;
-    }
     try {
       // Mailbird may assign a new id on archive: the response is kept so `npm run restore` can find it.
       extra[i] = { result: short(await mb.call("archive_conversation", { conversationId: fresh[i]!.conversationId })) };

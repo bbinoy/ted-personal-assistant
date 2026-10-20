@@ -54,7 +54,7 @@ test("modules: a module's floor keeps restricting when it is not loaded (the Gma
   assert.equal(settings.mailProvider, "mailbird");
   assert.equal(classify(`${GM}apply_sensitive_message_label`, {}, "chat"), "deny");
   assert.equal(classify(`${GM}get_attachment`, {}, "chat"), "deny");
-  assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX"] }, "chat"), "deny"); // archiving is log-only unless the Gmail provider is live
+  assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX"] }, "chat"), "deny"); // an archive is the Gmail provider's: refused under Mailbird
 });
 
 test("modules: every server a module names is built under that name in runtime.ts, and runtime.ts builds no other", () => {

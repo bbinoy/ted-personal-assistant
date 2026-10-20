@@ -55,21 +55,17 @@ test("google mail: a message's headers and body, the attachment list left out", 
   assert.deepEqual(senderOf("a@b.c"), { name: "", email: "a@b.c" });
 });
 
-test("google mail: only a search, a read and the INBOX label exist; archive is log-only unless switched on; a failing tool is a plain error", async () => {
+test("google mail: only a search, a read and the INBOX label exist; archive removes INBOX; a failing tool is a plain error", async () => {
   const calls: { tool: string; args: Record<string, unknown> }[] = [];
-  let live = false;
   let fail = false;
   const session = {
     account: async () => "anna@example.com",
     call: async (tool: string, args: Record<string, unknown>) => (calls.push({ tool, args }), { text: fail ? "server words that quote a mail" : SEARCH, isError: fail, content: [] }),
   };
-  const mb = new GoogleMail(session, { query: () => "in:inbox newer_than:2d", archiveLive: () => live });
+  const mb = new GoogleMail(session, { query: () => "in:inbox newer_than:2d" });
   assert.deepEqual((await mb.inboxes())[0], { accountId: 0, email: "anna@example.com", senderName: "me", folderId: 0 });
   assert.equal((await mb.call<unknown[]>("list_conversations", { folderId: 0, limit: 100 })).length, 2);
   assert.deepEqual(calls[0], { tool: "search_gmail_messages", args: { query: "in:inbox newer_than:2d", page_size: 50, include_headers: true } });
-  await mb.call("archive_conversation", { conversationId: "18f0a1" });
-  assert.equal(calls.length, 1, "log-only: no call");
-  live = true;
   await mb.call("archive_conversation", { conversationId: "18f0a1" });
   assert.deepEqual(calls[1], { tool: "modify_gmail_message_labels", args: { message_id: "18f0a1", remove_label_ids: ["INBOX"] } });
   await mb.call("move_conversation_to_inbox", { conversationId: "18f0a1" });

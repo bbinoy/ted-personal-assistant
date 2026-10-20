@@ -44,16 +44,15 @@ const NEVER = /attachment|download|apply_sensitive|batch_|update_label/i;
 
 export type GmailVerdict = "ask" | "deny";
 
-// A restriction for a Gmail tool call, or undefined to let the manifest decide. `archiveLive`: ARCHIVE=live. It never grants: the brief to oneself
+// A restriction for a Gmail tool call, or undefined to let the manifest decide. It never grants: the brief to oneself
 // is a `freeWhen` of the module's send action (modules/gmail.ts), not a verdict.
-export function gmailVerdict(tool: string, input: Record<string, unknown>, o: { archiveLive: boolean }): GmailVerdict | undefined {
+export function gmailVerdict(tool: string, input: Record<string, unknown>): GmailVerdict | undefined {
   if (!isGmailTool(tool)) return undefined;
   if (NEVER.test(name(tool))) return "deny";
   if (destinationIsTrashOrSpam(input)) return "deny";
   if (/^raw$/i.test(String(input.messageFormat ?? ""))) return "deny"; // raw MIME carries attachment content
   if (name(tool) === "unlabel_thread") {
-    if (!isInboxArchive(tool, input)) return "ask"; // other label removals (UNREAD, a user label) are the owner's call
-    return o.archiveLive ? undefined : "deny"; // log-only: recorded as would-archive (permissions.ts), not done
+    return isInboxArchive(tool, input) ? undefined : "ask"; // other label removals (UNREAD, a user label) are the owner's call
   }
   return undefined;
 }

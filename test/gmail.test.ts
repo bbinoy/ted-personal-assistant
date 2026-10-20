@@ -4,7 +4,6 @@ import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/audit.ts";
 import { briefInstructions, briefDelivery, runBriefAttempt } from "../src/brief.ts";
 import { requiredSkills } from "../src/doctor.ts";
-import { buildDigest } from "../src/digest.ts";
 import { GmailMail, gmailReaders, parseDraft, parseMessage, parseOriginal, parseThreads, payload, relayAllowed, type Call, type Relay } from "../src/gmail.ts";
 import { isInboxArchive, isSelfSend } from "../src/gmailrules.ts";
 import { createMailCheck, type MailSource } from "../src/heartbeat.ts";
@@ -29,9 +28,9 @@ const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test"
 
 async function withGmail<T>(over: Record<string, unknown>, f: () => Promise<T> | T): Promise<T> {
   const s = settings as unknown as Record<string, unknown>;
-  const keys = ["mail", "mailProvider", "mailSelfAddress", "archiveLive", "briefEmail", "quietStartHour", "quietEndHour"];
+  const keys = ["mail", "mailProvider", "mailSelfAddress", "briefEmail", "quietStartHour", "quietEndHour"];
   const was = Object.fromEntries(keys.map((k) => [k, s[k]]));
-  Object.assign(s, { mail: true, mailProvider: "gmail", mailSelfAddress: SELF, archiveLive: false, briefEmail: false, quietStartHour: 0, quietEndHour: 0 }, over);
+  Object.assign(s, { mail: true, mailProvider: "gmail", mailSelfAddress: SELF, briefEmail: false, quietStartHour: 0, quietEndHour: 0 }, over);
   try {
     return await f();
   } finally {
@@ -41,16 +40,15 @@ async function withGmail<T>(over: Record<string, unknown>, f: () => Promise<T> |
 
 // ---- settings ----
 
-test("settings: gmail is accepted; archiving follows the one ARCHIVE switch and the email brief is off by default; the Gmail connector stays visible, Mailbird hidden", () => {
+test("settings: gmail is accepted; the email brief is off by default; the Gmail connector stays visible, Mailbird hidden", () => {
   const g = loadSettings({ MAIL_PROVIDER: "gmail", MAIL_SELF_ADDRESS: " Owner@Example.com " });
   assert.equal(g.mailProvider, "gmail");
   assert.equal(g.mail, true);
   assert.equal(g.mailSelfAddress, SELF);
-  assert.equal(g.archiveLive, true);
   assert.equal(g.briefEmail, false);
   assert.ok(!hiddenTools([], g).includes("mcp__claude_ai_Gmail"));
   assert.ok(hiddenTools([], g).includes("mcp__mailbird"));
-  assert.equal(loadSettings({ MAIL_PROVIDER: "gmail", ARCHIVE: "log", BRIEF_EMAIL: "on" }).archiveLive, false);
+  assert.equal(loadSettings({ MAIL_PROVIDER: "gmail", BRIEF_EMAIL: "on" }).briefEmail, true);
   assert.throws(() => loadSettings({ MAIL_SELF_ADDRESS: "Owner <o@example.com>" }), /MAIL_SELF_ADDRESS must be a plain email address/);
   // Mailbird is untouched
   const mb = loadSettings({});
@@ -68,7 +66,7 @@ test("the model sees only the Gmail tools the skills need: the rest of the conne
 // ---- the rules code adds to the manifest ----
 
 test("policy: trash, spam, deletion and attachment content are denied however they are asked; label values TRASH and SPAM too", async () => {
-  await withGmail({ archiveLive: true }, () => {
+  await withGmail({}, () => {
     for (const t of ["trash_thread", "trash_message", "untrash_thread", "mark_thread_spam", "mark_message_spam", "unmark_message_spam", "delete_label", "update_label", "apply_sensitive_message_label", "apply_sensitive_thread_label", "get_attachment", "download_attachment"]) {
       assert.equal(classify(GM + t, { threadId: "t1", messageId: "m1" }, "chat"), "deny", t);
     }
@@ -92,25 +90,14 @@ test("policy: trash, spam, deletion and attachment content are denied however th
   });
 });
 
-test("policy: archiving is exactly 'remove INBOX from a thread'; log-only denies it, live sends it to the judge in every place", async () => {
+test("policy: archiving is exactly 'remove INBOX from a thread', and it is sent to the judge in every place", async () => {
   const call = { threadId: "t1", labelIds: ["INBOX"] };
   assert.ok(isInboxArchive(`${GM}unlabel_thread`, call));
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["INBOX", "UNREAD"] }));
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { labelIds: ["INBOX"] }));
-  await withGmail({ archiveLive: false }, () => assert.equal(classify(`${GM}unlabel_thread`, call, "chat"), "deny"));
-  await withGmail({ archiveLive: true }, () => {
+  await withGmail({}, () => {
     for (const source of ["chat", "brief", "handler"] as const) assert.equal(classify(`${GM}unlabel_thread`, call, source), "ask", source); // judged, the same everywhere
     assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["UNREAD"] }, "chat"), "ask");
-  });
-});
-
-test("log-only archive: a model's archive call is refused politely and recorded as would-archive", async () => {
-  await withGmail({ archiveLive: false }, async () => {
-    const canUse = makeCanUseTool(async () => assert.fail("never asks"), "chat", undefined, noJudge);
-    const r = await canUse(`${GM}unlabel_thread`, { threadId: "thread-log-only", labelIds: ["INBOX"] }, opts);
-    assert.equal(r!.behavior, "deny");
-    assert.match((r as { message: string }).message, /log-only/);
-    assert.ok(readAudit((e) => e.tool === "gmail_archive" && e.decision === "would-archive" && e.meta?.id === "thread-log-only").length >= 1);
   });
 });
 
@@ -269,22 +256,16 @@ function fakeRelay(responses: Record<string, unknown>): { relay: Relay; calls: C
   return { calls, relay: async (cs) => cs.map((c) => (calls.push(c), responses[c.tool.slice(GM.length)])) };
 }
 
-test("GmailMail: Mailbird-shaped calls over the connector; archive follows ARCHIVE; restore adds INBOX back", async () => {
+test("GmailMail: Mailbird-shaped calls over the connector; archive removes INBOX, restore adds it back", async () => {
   await withGmail({}, async () => {
     const { relay, calls } = fakeRelay({ search_threads: THREADS, get_message: mcp({ sender: "Dana <dana@example.com>", plaintext_body: "body text" }), unlabel_thread: mcp({}), label_thread: mcp({}) });
-    let live = false;
-    const mail = new GmailMail(relay, () => live);
+    const mail = new GmailMail(relay);
     assert.deepEqual(await mail.inboxes(), [{ accountId: 0, email: SELF, senderName: "me", folderId: 0 }]);
     const rows = await mail.call<{ conversationId: string }[]>("list_conversations", { folderId: 0, limit: 100 });
     assert.equal(rows[0]!.conversationId, "t-new");
     assert.deepEqual(calls[0], { tool: `${GM}search_threads`, input: { query: "in:inbox newer_than:7d", pageSize: 50, view: "THREAD_VIEW_MINIMAL" } });
     assert.equal((await mail.call<{ body: string }>("get_message", { messageId: "m-b" })).body, "body text");
     assert.equal(calls[1]!.input.messageFormat, "PLAIN_TEXT");
-    // log-only: no connector call at all
-    const before = calls.length;
-    assert.match(String(await mail.call("archive_conversation", { conversationId: "t-new" })), /log-only/);
-    assert.equal(calls.length, before);
-    live = true;
     await mail.call("archive_conversation", { conversationId: "t-new" });
     assert.deepEqual(calls.at(-1), { tool: `${GM}unlabel_thread`, input: { threadId: "t-new", labelIds: ["INBOX"] } });
     await mail.call("move_conversation_to_inbox", { conversationId: "t-new" });
@@ -305,12 +286,12 @@ test("approval read-backs go through the relay with read-only calls", async () =
 
 // ---- the heartbeat on Gmail ----
 
-async function heartbeatOnce(live: boolean, relayCalls: Call[]) {
-  return withGmail({ archiveLive: live }, async () => {
+async function heartbeatOnce(relayCalls: Call[]) {
+  return withGmail({}, async () => {
     const was = readJson("state/seen.json", undefined);
     writeJson("state/seen.json", { seededAt: "2026-01-01T00:00:00.000Z", keys: {} });
     const { relay } = fakeRelay({ search_threads: THREADS, get_message: mcp({ sender: "Newsletter <news@example.com>", plaintext_body: "weekly digest" }), unlabel_thread: mcp({}) });
-    const mail: MailSource = new GmailMail(async (cs) => (relayCalls.push(...cs), relay(cs)), () => settings.archiveLive);
+    const mail: MailSource = new GmailMail(async (cs) => (relayCalls.push(...cs), relay(cs)));
     const log = console.log;
     console.log = () => {};
     try {
@@ -333,21 +314,9 @@ async function heartbeatOnce(live: boolean, relayCalls: Call[]) {
   });
 }
 
-test("heartbeat on Gmail, log-only week: threads are triaged and recorded as would-archive, nothing is archived", async () => {
+test("heartbeat on Gmail: the thread loses INBOX (the audit id is the thread id, for restore)", async () => {
   const calls: Call[] = [];
-  await heartbeatOnce(false, calls);
-  assert.ok(!calls.some((c) => c.tool.endsWith("unlabel_thread")), "no archive call");
-  const rows = readAudit((e) => e.tool === "heartbeat_triage" && e.decision === "would-archive" && e.meta?.id === "t-new");
-  assert.ok(rows.length >= 1);
-  assert.equal(rows.at(-1)!.meta?.messageId, "m-b");
-  const digest = buildDigest(rows.map((e) => ({ ts: e.ts, decision: e.decision, meta: e.meta as never })).concat([{ ts: "x", decision: "kept", meta: { label: "act_now", from: "Dana", subject: "Q" } } as never]), undefined);
-  assert.match(digest, /LOG-ONLY mode \(ARCHIVE=log\)/);
-  assert.match(digest, /STILL IN THE INBOX/);
-});
-
-test("heartbeat on Gmail, archiving live: the thread loses INBOX (the audit id is the thread id, for restore)", async () => {
-  const calls: Call[] = [];
-  await heartbeatOnce(true, calls);
+  await heartbeatOnce(calls);
   const archive = calls.filter((c) => c.tool.endsWith("unlabel_thread"));
   assert.ok(archive.length >= 1);
   assert.deepEqual(archive[0]!.input, { threadId: "t-new", labelIds: ["INBOX"] });
@@ -400,10 +369,10 @@ test("skills and doctor: the gmail skill is offered instead of the Mailbird ones
   assert.ok(requiredSkills(true, "gmail").includes("gmail") && !requiredSkills(true, "gmail").includes("mailbird"));
   const out: [boolean | "warn", string][] = [];
   const line = (ok: boolean | "warn", what: string) => void out.push([ok, what]);
-  gmailChecks(line, { self: undefined, connector: false, archiveLive: false, briefEmail: false });
+  gmailChecks(line, { self: undefined, connector: false, briefEmail: false });
   assert.deepEqual(out.slice(0, 2), [[false, "MAIL_SELF_ADDRESS set"], [false, "Gmail connector available"]]);
   out.length = 0;
-  gmailChecks(line, { self: SELF, connector: undefined, archiveLive: true, briefEmail: true });
+  gmailChecks(line, { self: SELF, connector: undefined, briefEmail: true });
   assert.deepEqual(out.slice(0, 2), [[true, "MAIL_SELF_ADDRESS set"], ["warn", "Gmail connector available"]]);
   assert.deepEqual(addrs(SELF), [SELF]);
 });

@@ -8,7 +8,7 @@ import { settings } from "../settings.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot
-// say (sensitive labels, attachment content, archiving in log-only mode, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
+// say (sensitive labels, attachment content, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
 // The background handler (handler.ts) drafts replies with create_draft and they are shown on the phone like Mailbird's; sending is only on the owner's word. The mail client (src/gmail.ts), `npm run restore`
 // and the doctor check are runtime.ts.
 
@@ -112,16 +112,10 @@ export const gmailModule: ToolModule = {
   },
   untrustedPrefix: GMAIL_PREFIX,
   floor: {
-    // Gmail's rules a row cannot say: attachment content, raw MIME, label renames, archive log-only (gmailrules.ts). They hold whichever provider is
+    // Gmail's rules a row cannot say: attachment content, raw MIME, label renames (gmailrules.ts). They hold whichever provider is
     // active: they only restrict, so the connector's tools stay as refused as before if it is ever seen under another provider.
-    verdict: (tool, input) => gmailVerdict(tool, input, { archiveLive: active() && settings.archiveLive }),
-    // Archive in log-only mode (ARCHIVE=log) is recorded like the heartbeat's, so the report and the brief show it.
-    onDeny: (tool, input) => {
-      if (isInboxArchive(tool, input) && active()) {
-        return { record: { tool: "gmail_archive", decision: "would-archive", meta: { id: input.threadId } }, message: "Archiving is in log-only mode (ARCHIVE=log): it was recorded as would-archive and the thread stays in the inbox. Carry on without archiving." };
-      }
-      return isGmailTool(tool) ? { withIds: true } : undefined;
-    },
+    verdict: (tool, input) => (isInboxArchive(tool, input) && !active() ? "deny" : gmailVerdict(tool, input)), // an archive is the Gmail provider's: under another provider the connector stays refused
+    onDeny: (tool) => (isGmailTool(tool) ? { withIds: true } : undefined),
     judgeVeto: { send: named, reply: named, forward: named },
     creates: (name) => name === "create_draft",
     noFix: ["send", "reply", "forward"],

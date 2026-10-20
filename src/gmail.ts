@@ -30,10 +30,10 @@ export type Relay = (calls: Call[]) => Promise<unknown[]>;
 const RELAY_TOOLS = ["search_threads", "get_thread", "get_message", "get_draft", "unlabel_thread", "label_thread"].map((t) => GMAIL_PREFIX + t);
 
 // The relay may do only what the heartbeat, the report and the restore command need. An archive is exactly "remove INBOX from a thread",
-// a restore exactly "add INBOX to a thread"; whether archiving is live is decided by the caller (GmailMail), not here.
+// a restore exactly "add INBOX to a thread".
 export function relayAllowed(c: Call): boolean {
   if (!RELAY_TOOLS.includes(c.tool)) return false;
-  const verdict = gmailVerdict(c.tool, c.input, { archiveLive: true });
+  const verdict = gmailVerdict(c.tool, c.input);
   if (verdict === "deny") return false;
   if (c.tool.endsWith("unlabel_thread")) return verdict === undefined;
   if (c.tool.endsWith("label_thread")) {
@@ -241,10 +241,8 @@ const WINDOW = "in:inbox newer_than:7d"; // shorter than the seen-mail memory (S
 
 export class GmailMail {
   private relay: Relay;
-  private archiveLive: () => boolean;
-  constructor(relay: Relay = sdkRelay, archiveLive: () => boolean = () => settings.archiveLive) {
+  constructor(relay: Relay = sdkRelay) {
     this.relay = relay;
-    this.archiveLive = archiveLive;
   }
 
   async inboxes() {
@@ -264,7 +262,6 @@ export class GmailMail {
         return parseMessage(r) as T;
       }
       case "archive_conversation": {
-        if (!this.archiveLive()) return "log-only (ARCHIVE=log): not archived" as T;
         const [r] = await this.relay([g("unlabel_thread", { threadId: String(args.conversationId), labelIds: ["INBOX"] })]);
         return (typeof r === "string" ? r : JSON.stringify(r ?? "")) as T;
       }
