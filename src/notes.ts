@@ -26,6 +26,10 @@ export const LAST_BRIEF = "memory/last-brief.md"; // summary memory: the latest 
 export const CATEGORIES: readonly string[] = preset().notes.categories;
 export type Category = string;
 
+// The categories a classifier or a gate may read: where the owner's calendars and Notion pages are (setup) and how they write (voice) cannot help it decide,
+// and are not for it to see.
+export const readableByJudges = (category: string): boolean => category !== "setup" && category !== "voice";
+
 export const MAX_NOTE_CHARS = 1200;
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;
 

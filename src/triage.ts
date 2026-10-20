@@ -1,7 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { oneShot } from "./haiku.ts";
 import { RateLimitError } from "./errors.ts";
-import { CATEGORIES, memoryFor } from "./notes.ts";
+import { CATEGORIES, memoryFor, readableByJudges } from "./notes.ts";
 import { LOGIN, type Payer } from "./payer.ts";
 import { clean, defuseLines, defuseTags, LIMITS, oneLine } from "./sanitize.ts";
 import { OWNER } from "./settings.ts";
@@ -147,7 +147,7 @@ async function classifyGroup(mails: MailInput[], memory: string, run: typeof que
 // Classifies all new mail. Returns one Triage per input, same order. Throws RateLimitError when the usage limit is hit.
 export async function triageBatch(mails: MailInput[], run: typeof query = query, ctx: TriageCtx = {}): Promise<Triage[]> {
   const results: Triage[] = mails.map(() => fallback("not classified"));
-  const memory = memoryFor(CATEGORIES, new Date(), ctx.notesDir);
+  const memory = memoryFor(CATEGORIES.filter(readableByJudges), new Date(), ctx.notesDir); // (no setup and no voice notes: calendar ids and Notion pages cannot help to classify mail)
   const suspicious = mails.map((m) => INSTRUCTION_LIKE.test(`${m.subject}\n${m.body}`));
 
   // Normal mail goes in shared batches; suspicious mail is isolated, one call each.

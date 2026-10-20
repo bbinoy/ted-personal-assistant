@@ -8,7 +8,7 @@ import { groupNotesBlock } from "./groupstore.ts";
 import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES, parseWake } from "./ledger.ts";
 import { ledgerEntries, withoutDeleted, type Sent } from "./messages.ts";
 import { hasPresets, speakerOf, type Conversation } from "./conversationmodel.ts";
-import { readNotes } from "./notes.ts";
+import { readableByJudges, readNotes } from "./notes.ts";
 import { dayPart, namedTimes, passedTimes, TIME_HINT } from "./notetimes.ts";
 import { localDay } from "./pause.ts";
 import { isOneEmoji } from "./reaction.ts";
@@ -111,7 +111,7 @@ export const styleSummary = (now: Date): string =>
 // The conversation's notes as data, bounded like every other prompt that includes notes. The owner's setup and
 // voice notes are not for a gate to read; a group has no such categories.
 export function notesText(conv: Conversation, now: Date): string {
-  const notes = readNotes(now, conv.notesDir).filter((n) => n.category !== "setup" && n.category !== "voice");
+  const notes = readNotes(now, conv.notesDir).filter((n) => readableByJudges(n.category));
   return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
 
