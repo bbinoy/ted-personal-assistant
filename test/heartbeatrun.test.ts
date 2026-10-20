@@ -23,7 +23,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
 
-interface Answer { message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
+interface Answer { sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[] } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -31,8 +31,9 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
   const conv: Conversation = { ...owner(), logFile: `logs/hb-owner-${Math.random().toString(36).slice(2)}.jsonl`, notesDir: join(dir, "n") };
   const seen = { runs: [] as string[], prompts: [] as string[], provenance: [] as (RunProvenance | undefined)[], posted: [] as string[], recorded: [] as [string, string][] };
   let now = DAY;
+  let sends = 0; // what the run sent with the send tool while it worked (the real tool is the pipeline's sendWhile)
   const pipeline = {
-    canSpeak: () => false,
+    canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>, onSend?: () => void) => { const r = await run(); for (let i = 0; i < sends; i++) onSend?.(); return r; },
     enqueue: <T>(_c: Conversation, job: () => Promise<T>) => job(),
     record: (c: Conversation, kind: Kind, ts: number, text: string) => (seen.recorded.push([kind, text]), recordMessage(kind, ts, text, now, c.kind === "owner" ? conv.logFile : c.logFile)),
     runTurn: async (_c: Conversation, turn: any) => {
@@ -51,6 +52,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       seen.prompts.push(prompt);
       seen.provenance.push(extra.provenance);
       const a = answer();
+      sends = a.sends ?? 0;
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
       for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
@@ -96,7 +98,10 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   assert.match(text, /very few messages: a handful at most/);
   assert.match(text, /working late, tell me everything tonight/);
   assert.match(text, /memory note/);
-  assert.match(text, /at most 5 mails per look/);
+  assert.match(text, /seen_mail tool/);
+  assert.match(text, /Unread mail is archived like any other/);
+  assert.match(text, /with the send tool/);
+  assert.doesNotMatch(text, /at most 5 mails|never mail you have not read/, "the archive floor is gone");
   assert.match(text, /\[\[silent\]\]/);
   assert.doesNotMatch(text, /idle fingerprint|nextCheckMinutes|"act"/i);
   assert.match(lastLookText(undefined, DAY), /first look/);
@@ -119,7 +124,7 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.equal(Date.parse(wake.looked), DAY.getTime());
   const rows = readRows();
   assert.equal(rows.length, 1);
-  assert.deepEqual(rows[0], { at: DAY.toISOString(), kind: "owner", night: false, message: true, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
+  assert.deepEqual(rows[0], { at: DAY.toISOString(), kind: "owner", night: false, message: true, sent: 0, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
   assert.doesNotMatch(readText(HEARTBEAT_LOG)!, /Eve|Friday|waits/, "the row carries no words");
   assert.ok(seen.recorded.some(([k, t]) => k === "action" && /\[heartbeat\] look: 3 tool call\(s\), 2 mail archived, message sent/.test(t)), "the log gets a counted summary line");
 });
@@ -129,6 +134,14 @@ test("owner's look: the delegations to experts are counted in the row and the lo
   assert.equal(await w.look(conv, DAY), "silent", "the expert delivered itself; the run answered [[silent]]");
   assert.deepEqual(readRows().map((r) => [r.delegations, r.toolCalls, r.costUsd]), [[2, 3, 0.02]]);
   assert.ok(seen.recorded.some(([k, t]) => k === "action" && /look: 3 tool call\(s\), 0 mail archived, 2 delegated, no message/.test(t)));
+});
+
+test("owner's look: a run that spoke with the send tool while it worked counts as having said something, even when its final answer is [[silent]]", async () => {
+  const { w, conv, seen } = rig(() => ({ sends: 2, delegates: 1, calls: ["Agent"] }));
+  assert.equal(await w.look(conv, DAY), "posted");
+  assert.deepEqual(seen.posted, [], "the final answer had nothing to add: nothing is posted twice");
+  assert.deepEqual(readRows().map((r) => [r.message, r.sent, r.outcome]), [[true, 2, "posted"]]);
+  assert.ok(seen.recorded.some(([k, t]) => k === "action" && /message sent/.test(t)));
 });
 
 test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, and at night the clamp holds too", async () => {
@@ -220,7 +233,7 @@ test("groups get the same heartbeat run: one per look, with their own notes, in 
   assert.doesNotMatch(groupPrompt, /archive|calendar for the next 36 hours|expert/i, "a group has no mail, calendar or expert in its instruction");
   assert.deepEqual(readRows().map((r) => r.kind).sort(), ["group", "owner"]);
   const nts = rig(() => ({}), { groups: [G] });
-  const wakeups = createWakeups({ pipeline: { canSpeak: () => false, enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never, groupChats: false, vouch: async () => true, groups: () => [G], run: async (c) => (nts.seen.runs.push(c.kind), { text: "" }), notesChangedAt: () => 0, now: () => DAY, guards: { paused: () => false, budgetSpent: () => false } });
+  const wakeups = createWakeups({ pipeline: { canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never, groupChats: false, vouch: async () => true, groups: () => [G], run: async (c) => (nts.seen.runs.push(c.kind), { text: "" }), notesChangedAt: () => 0, now: () => DAY, guards: { paused: () => false, budgetSpent: () => false } });
   await wakeups.tick(DAY);
   assert.deepEqual(nts.seen.runs, ["owner"], "groups are not woken on Note to Self");
 });

@@ -9,7 +9,8 @@ export interface HeartbeatRow {
   at: string; // ISO: when the look began
   kind?: "owner" | "group" | "tenant"; // whose look (absent in older rows: the owner's)
   night: boolean; // inside the quiet window (for the report; the model, not code, decides how quiet to be)
-  message: boolean; // a message was posted to the owner
+  message: boolean; // something was said in the conversation: the final answer or a piece sent while it worked
+  sent?: number; // pieces sent with the send tool while the run worked (the final answer is not counted); absent in older rows
   nextCheckMinutes: number; // the next look it chose, clamped
   costUsd: number;
   toolCalls: number; // tool calls that ran (the run's own and its subagents')

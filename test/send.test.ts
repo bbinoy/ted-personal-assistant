@@ -35,22 +35,25 @@ test("send_picture: the guard keeps only real jpeg bytes, under names code choos
 });
 
 
-test("send: manifest and policy: chat and group only, never background or unattended", () => {
+test("send: manifest and policy: free in a chat turn and in every conversation's heartbeat run (group, background), never in the other unattended runs", () => {
   assert.equal(access(TOOL, "chat"), "free");
   assert.equal(classify(TOOL, { text: "On it." }, "chat"), "allow");
   assert.equal(classify(TOOL, { text: "On it." }, "group"), "allow");
-  for (const source of ["radar", "handler", "heartbeat", "dream", "browse", "background"] as const) {
+  assert.equal(access(TOOL, "background"), "free", "the owner's heartbeat run: the same tool, the same floor");
+  assert.equal(classify(TOOL, { text: "x" }, "background"), "allow");
+  for (const source of ["radar", "handler", "heartbeat", "dream", "browse"] as const) {
     assert.equal(access(TOOL, source), undefined, source);
     assert.equal(classify(TOOL, { text: "x" }, source), "deny", source);
   }
 });
 
-test("send: only chat and group runs are given the tool server (and the old tools are gone)", () => {
+test("send: chat, group and heartbeat runs are given the tool server, the other unattended runs are not (and the old tools are gone)", () => {
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {});
   assert.equal(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes("send"), true);
   assert.equal(servers({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g1" } }).includes("send"), true);
-  for (const source of ["radar", "handler", "background", "dream"] as const) assert.equal(servers({ ...base, source }).includes("send"), false, source);
+  assert.equal(servers({ ...base, source: "background" }).includes("send"), true, "the owner's heartbeat run (policy source background) speaks in her chat");
+  for (const source of ["radar", "handler", "dream"] as const) assert.equal(servers({ ...base, source }).includes("send"), false, source);
   for (const old of ["tell", "picture"]) assert.equal(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes(old), false, old);
   assert.equal(classify("mcp__tell__tell_user", { message: "x" }, "group"), "deny");
   assert.equal(classify("mcp__picture__send_picture", { id: "shot1" }, "group"), "deny");
@@ -175,6 +178,25 @@ function rig(o: { speech?: boolean; foreign?: string; synthFails?: boolean } = {
 
 const TARGET = { author: "+2", timestamp: 77 };
 const sentOf = (r: ReturnType<typeof rig>) => r.sent.map((s) => s.text || (s.attachments ? "<attachment>" : ""));
+
+test("send: a heartbeat run (outside the queue) speaks through the same delivery, counts each piece, and gives a running chat turn its sink back", async () => {
+  const r = rig();
+  let counted = 0;
+  const chatSink: string[] = [];
+  await withSend(OWNER_KEY, async (c) => (chatSink.push(c.kind === "text" ? c.text : c.kind), "chat"), async () => {
+    const out = await r.pipeline.sendWhile(owner(), async () => {
+      assert.match(await sendNow(OWNER_KEY, { text: "Long task: halfway there." }), /Sent\./);
+      assert.match(await sendNow(OWNER_KEY, { react: "👍" }), /Nothing to react to/, "no message is being answered in a look");
+      return "run result";
+    }, () => void counted++);
+    assert.equal(out, "run result");
+    assert.equal(await sendNow(OWNER_KEY, { text: "back in the chat turn" }), "chat", "the chat turn's own sink is back");
+  });
+  assert.deepEqual(r.sent.map((s) => s.text), ["Long task: halfway there."]);
+  assert.equal(counted, 1, "only what was delivered is counted");
+  assert.deepEqual(chatSink, ["back in the chat turn"]);
+  assert.match(await sendNow(OWNER_KEY, { text: "x" }), /Nobody to send/, "and nothing is left behind afterwards");
+});
 
 test("send: text, voice note, reaction and picture, several in order, then the final reply still goes out; typing resumes after each", async () => {
   const r = rig({ speech: true });

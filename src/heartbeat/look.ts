@@ -15,6 +15,7 @@ import { dayAt, inQuietHours, systemZone, timeIn } from "../timezone.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseAnswer } from "./rules.ts";
+import { createSeenMail, seenFileOf, type SeenMail } from "../seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "./scope.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 
@@ -31,10 +32,11 @@ export interface RunExtra {
   onToolSuccess?: (tool: string, input: unknown) => void;
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
+  seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
 }
 
 export interface HeartbeatDeps {
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile">;
   run: (conv: Conversation, payer: Payer, prompt: string, extra: RunExtra) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // agent.ts runHeartbeat
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
@@ -72,6 +74,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     who: looker.who,
     own: looker.own,
     reads: looker.reads,
+    mail: looker.mail,
     experts: looker.experts,
     brief: looker.brief,
     sources: looker.sources,
@@ -101,17 +104,25 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let toolCalls = 0;
     let archived = 0;
     let delegations = 0;
+    const seenMail = createSeenMail(seenFileOf(conv)); // the ids the run is told are new count as seen only if this look ends well
+    let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     try {
-      reply = await deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
-        provenance: { kind: "standing", task: instruction },
-        onDelegate: () => void delegations++,
-        onToolSuccess: (tool) => {
-          toolCalls++;
-          if (entryFor(tool)?.action === "archive") archived++;
-        },
-      });
+      reply = await pipeline.sendWhile(
+        conv,
+        () =>
+          deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
+            provenance: { kind: "standing", task: instruction },
+            seenMail,
+            onDelegate: () => void delegations++,
+            onToolSuccess: (tool) => {
+              toolCalls++;
+              if (entryFor(tool)?.action === "archive") archived++;
+            },
+          }),
+        () => void sent++,
+      );
     } catch (e) {
       console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
     }
@@ -125,9 +136,12 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
       outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
+    if (outcome === "failed") seenMail.discard();
+    else seenMail.commit();
+    if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
     audit("wake", outcome, onLogin(conv) ? "background" : "group"); // (a friend's rows carry no words: permissions.ts)
-    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
+    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
     recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }

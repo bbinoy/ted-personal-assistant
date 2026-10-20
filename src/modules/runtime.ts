@@ -14,7 +14,9 @@ import { recordMemoryChange } from "../memorynotice.ts";
 import { viewDraft } from "../proposals.ts";
 import { LIMITS } from "../sanitize.ts";
 import { createSendServer } from "./send/send.ts";
+import { OWNER_KEY } from "../ownerkey.ts";
 import { createStatusServer } from "../statusnote.ts";
+import { createSeenMailServer } from "../seenmail.ts";
 import { settings } from "../settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
 import { createVoiceServer } from "./voice/voicetool.ts";
@@ -34,12 +36,13 @@ import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types
 
 // By the `name` of a module's in-process or external connection. The module says WHEN a run has the server (`when`); this builds it.
 export const SERVERS: Readonly<Record<string, ServerFactory>> = {
-  send: (ctx) => createSendServer(ctx.key!),
+  send: (ctx) => createSendServer(ctx.key ?? OWNER_KEY), // (no key: the owner's heartbeat run, policy source "background", the only unattended run with a conversation of its own on the login)
   weather: () => createWeatherServer(),
   draw: (ctx) => createDrawServer(ctx.key!),
   voice: (ctx) => createVoiceServer(ctx.key!),
   memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
   status: () => createStatusServer(),
+  seenmail: (ctx) => createSeenMailServer(ctx.seenMail!),
   browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: (ctx) => {

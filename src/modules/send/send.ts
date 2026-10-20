@@ -8,8 +8,9 @@ import { sourceOfKey } from "../../ownerkey.ts";
 
 // send: the model's way to put something in the conversation NOW while it keeps working: a message ("On it, researching now"), a voice note,
 // a picture (a screenshot of this run's browse, or a drawing from the draw tool), or an emoji reaction. Text the model writes before a tool call stays internal; only this tool
-// sends. The owner's chat and groups have it; unattended runs (brief, radar, handler, browse worker, dream, compaction, wake-ups) do not
-// (agentrun.ts, toolmanifest.ts). The final reply stays the default last message and needs no tool call.
+// sends. Every conversation's chat turn has it, and so does its heartbeat run (and the expert that run calls, which inherits the run's tools): the SAME tool, the same
+// delivery and the same floor (free: it reaches only the conversation the run belongs to, never a recipient of the model's choosing). The browse worker, the dream and
+// compaction do not (agentrun.ts, toolmanifest.ts). The final reply stays the default last message and needs no tool call.
 // ONE kind of content per call (text, optionally spoken; a picture, optionally with a caption; or a reaction), any number of calls in any order.
 // Delivery is the conversation's own (conversation.ts runTurn, the same function as the final reply): sanitiser, target, quote and thread rules,
 // the voice language check, group rules, typing, logging. How often to send is the model's call; the run's turn, budget and time limits bound a runaway loop.
@@ -26,15 +27,17 @@ const sinks = new Map<string, SendSink>();
 
 // Around a conversation's turn: the sink is found by key while it runs (a warm process is built before its turn exists); afterwards the
 // turn's screenshots are removed.
+// A run that starts while another is under way (a heartbeat run during a chat turn) takes the sink over and gives it back when it ends.
 export async function withSend<T>(key: string, sink: SendSink | undefined, run: () => Promise<T>, asking?: Asking): Promise<T> {
+  const before = sinks.get(key);
   if (sink) sinks.set(key, sink);
-  setAsking(key, asking); // who is asking in this turn (the voice tool records the requester)
+  if (asking) setAsking(key, asking); // who is asking in this turn (the voice tool records the requester)
   try {
     return await run();
   } finally {
-    if (sink && sinks.get(key) === sink) sinks.delete(key);
+    if (sink && sinks.get(key) === sink) (before ? sinks.set(key, before) : sinks.delete(key));
     dropShots(key);
-    setAsking(key, undefined);
+    if (asking) setAsking(key, undefined);
   }
 }
 

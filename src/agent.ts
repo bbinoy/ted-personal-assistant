@@ -17,6 +17,7 @@ import type { Payer } from "./payer.ts";
 import { categoriesFor } from "./preset.ts";
 import { tenantById, tenantContext } from "./tenants/tenants.ts";
 import { PROFILES } from "./profiles.ts";
+import type { SeenMail } from "./seenmail.ts";
 import { lookerOf, unattendedTools, type Looker } from "./heartbeat/scope.ts";
 import { settings } from "./settings.ts";
 import type { RunProvenance } from "./approvals/autojudge.ts";
@@ -28,6 +29,7 @@ export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
+  seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
@@ -68,6 +70,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     outputFormat: p.outputSchema,
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
+    ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
   };
 }

@@ -30,7 +30,7 @@ export function lookerOf(conv: Conversation): Looker {
   const own = onLogin(conv);
   const skills = own ? PROFILES.heartbeat.skills : skillsFor(caps);
   const reads = READS.some((c) => caps.has(c));
-  const parts = [caps.has("mail") && "mail since your last look", caps.has("calendar") && "the calendar for the next 36 hours", caps.has("notion") && "tasks"].filter(Boolean);
+  const parts = [caps.has("mail") && "the inbox mail you have not looked at yet (see below)", caps.has("calendar") && "the calendar for the next 36 hours", caps.has("notion") && "tasks"].filter(Boolean);
   return {
     who: own ? OWNER : conv.kind === "group" ? "the group" : speakerOf(conv),
     zone: zoneOf(conv),

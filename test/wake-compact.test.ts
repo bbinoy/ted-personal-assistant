@@ -10,7 +10,7 @@ test("wake: a grown, quiet conversation is compacted from the tick inside its qu
   const events: string[] = [];
   const mk = (guards: { paused: boolean; spent: boolean }, due: () => boolean) =>
     createWakeups({
-      pipeline: { canSpeak: () => false, enqueue: async (c: Conversation, job: () => Promise<unknown>) => (events.push(`queued:${c.kind}`), job()), record: () => {}, runTurn: async () => ({ spoke: false }) } as any,
+      pipeline: { canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (c: Conversation, job: () => Promise<unknown>) => (events.push(`queued:${c.kind}`), job()), record: () => {}, runTurn: async () => ({ spoke: false }) } as any,
       groupChats: true,
       vouch: async () => true,
       run: async () => ({ text: "" }),

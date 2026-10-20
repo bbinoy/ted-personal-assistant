@@ -1,6 +1,7 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentReply, RunOptions } from "../agentrun.ts";
 import type { Source } from "../audit.ts";
+import type { SeenMail } from "../seenmail.ts";
 import type { BrowseGuard } from "./browse/browseguard.ts";
 import type { DraftView } from "../proposals.ts";
 import type { Capability } from "../tenants/tenants.ts";
@@ -58,6 +59,7 @@ export interface RunContext {
   groupId?: string;
   tenant?: TenantRun; // a tenant's run (her key, her ledger)
   memory?: RunOptions["memory"];
+  seenMail?: SeenMail; // a heartbeat run of a conversation with mail: its tracker of the inbox mail already worked through (seenmail.ts)
   guard?: BrowseGuard; // the browse run's guard
   mode: "owner" | "group";
   offers: (tool: string) => boolean; // an isolated conversation: is this tool in its capability set? (the owner's and unattended runs: always)

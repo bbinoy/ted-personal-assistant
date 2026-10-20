@@ -149,7 +149,7 @@ test("the owner's run is unchanged by all of it: the login, the background sourc
   assert.ok(o.experts);
   const l = lookerOf(owner());
   assert.deepEqual([l.own, l.reads, l.mail, l.experts, l.brief], [true, true, true, true, true]);
-  assert.match(l.sources, /^mail since your last look, the calendar for the next 36 hours, tasks, and your notes and their schedules$/);
+  assert.match(l.sources, /^the inbox mail you have not looked at yet \(see below\), the calendar for the next 36 hours, tasks, and your notes and their schedules$/);
 });
 
 test("something to look at: the capability to read mail, a calendar or tasks, or a note; nothing else opens a look", () => {
