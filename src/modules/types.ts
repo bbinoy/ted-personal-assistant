@@ -48,8 +48,8 @@ export const rowsOf =
 // ---- how a module connects ----
 
 // What a run is for, as far as a module's connection can depend on it. The tools of one conversation may be served differently from another's: the owner's
-// run gets the claude.ai connector, a tenant's run could get its own server process with her token (the Google and Notion modules of the next jobs), a
-// group's gets none. So a connection is chosen per run from this, never once for the whole process.
+// run gets the claude.ai connector, a tenant's run gets its own server process or connection with her token (the Google and Notion modules), a group's gets
+// none. So whether a server exists is decided per run by the connection's `when`, never once for the whole process.
 export interface RunContext {
   source: Source;
   browsing: boolean; // the browse sub-run (browse.ts): the browser and nothing else
@@ -64,12 +64,18 @@ export interface RunContext {
 }
 
 // The server runtime.ts builds under `name` when `when` holds for the run: a server made in this process ("in-process": send, draw, memory, ...) or a separate
-// server process or URL ("external": the browser, a tenant's Google server to come). `forBrowse`: it belongs to the browse sub-run, which has the browser and
+// server process or URL ("external": the browser, a friend's Google server, a friend's Notion connection). `forBrowse`: it belongs to the browse sub-run, which has the browser and
 // nothing else; every other server belongs to the other runs.
 export type Connection =
   | { kind: "builtin" } // the SDK's own tools (Skill, Read, WebSearch, ...); nothing to connect
   | { kind: "connector"; key?: string; server: RegExp; prefix: string } // the owner's claude.ai connector or user-scope MCP server, inherited from the login; `server` and `prefix` say how to see whether it is up, `key` is its name in connectors.ts (absent: not reported)
   | { kind: "in-process" | "external"; name: string; when: (ctx: RunContext) => boolean; forBrowse?: true };
+
+// For a friend's own connection: she is a tenant and her capability set offers at least one of the module's tools (the capability table decides, as for every tool).
+export const tenantOffered =
+  (rows: readonly ToolEntry[]) =>
+  (ctx: RunContext): boolean =>
+    !!ctx.tenant && rows.some((r) => ctx.offers(r.tool));
 
 export type ServerFactory = (ctx: RunContext) => McpServerConfig;
 
@@ -167,9 +173,6 @@ export interface ToolModule {
   name: string; // the module's name, also the key of its code in runtime.ts; for the mail slot, the value of MAIL_PROVIDER
   slot?: "mail"; // one module per slot is loaded, the one settings names; every module without a slot is always loaded
   connection: Connection;
-  // A different connection for some conversations (not used yet): the Google and Notion modules answer here with a tenant's own server process and
-  // leave the owner on the connector. Returns undefined to keep `connection`.
-  connectionFor?: (ctx: RunContext) => Connection | undefined;
   rows: readonly ToolEntry[];
   free?: true | readonly string[]; // rows that run without the judge: all of the module's, or those with these actions (a read, the assistant's own plumbing)
   untrusted?: true | readonly string[]; // reading these shows the run text a third party wrote (mail, a web page): after one, the run's arguments may be steered

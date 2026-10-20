@@ -2,7 +2,7 @@ import { sensitiveLabel } from "../gmailrules.ts";
 import { nativeView } from "../mailview.ts";
 import { namesNoGuests, notifyLine } from "./calendar.ts";
 import { named } from "./gmail.ts";
-import { rowsOf, type Connection, type FloorVerdict, type RunContext, type ToolModule } from "./types.ts";
+import { rowsOf, tenantOffered, type FloorVerdict, type ToolModule } from "./types.ts";
 
 // Google for friends (capability `google`, with `mail` and `calendar` for the tools): a friend's own Gmail and Calendar, served by a third-party MCP server that
 // runs as one process per friend with her own token (src/googlemcp.ts). The owner never has these tools (her mail and calendar are the connectors above); a friend
@@ -18,8 +18,8 @@ const gm = rowsOf(GOOGLE_PREFIX, "google", "mail");
 const gc = rowsOf(GOOGLE_PREFIX, "google", "calendar");
 const only = { only: ["group"] } as const; // a friend's run is an isolated "group" run; the owner's policy source has no such tool
 
-// The tool a run must be offered for her server to be started at all: any of her Google tools would do, this one is in every set that has mail.
-export const GOOGLE_PROBES = [`${GOOGLE_PREFIX}search_gmail_messages`, `${GOOGLE_PREFIX}get_events`] as const;
+// A friend's mail tool: whether her set has it says whether she has Google mail at all (the system prompt names it, runoptions.ts).
+export const GOOGLE_MAIL_TOOL = `${GOOGLE_PREFIX}search_gmail_messages`;
 
 const given = (v: unknown): boolean => v !== undefined && v !== null && v !== "" && v !== false && !(Array.isArray(v) && v.length === 0);
 
@@ -49,21 +49,20 @@ export function googleHandlerTask(who: string): string {
 
 const calendarAction = (input: Record<string, unknown>): string => String(input.action ?? "").toLowerCase();
 
-const connection = (when: (ctx: RunContext) => boolean): Connection => ({ kind: "external", name: "google", when });
-
-export const googleModule: ToolModule = {
-  name: "google",
-  // Nobody has her server by default; a friend's run does when her capability set has any of its tools (connectionFor). The owner's run never does.
-  connection: connection(() => false),
-  connectionFor: (ctx) => (ctx.tenant && !ctx.browsing ? connection((c) => !!c.tenant && GOOGLE_PROBES.some((t) => c.offers(t))) : undefined),
-  rows: [
+const rows = [
     ...gm("read", "search_gmail_messages get_gmail_message_content get_gmail_messages_content_batch get_gmail_thread_content get_gmail_threads_content_batch list_gmail_labels", only),
     ...gm("draft", "draft_gmail_message", { ...only, view: "ggDraft" }),
     ...gm("send", "send_gmail_message", { ...only, view: "ggSend" }), // a new mail, a reply (thread_id, in_reply_to) and a forward (forward_message_id) are one tool: all are sends
     ...gm("label", "modify_gmail_message_labels", only), // removing INBOX is an archive; TRASH and SPAM are refused by the floor
     ...gc("read", "list_calendars get_events query_freebusy", only),
     ...gc("calendar-write", "manage_event", only), // create, update, delete and rsvp by its `action`; only create and update without guests are ever judged (below)
-  ],
+];
+
+export const googleModule: ToolModule = {
+  name: "google",
+  // Her server exists for a friend's run whose capability set offers any of its tools; the owner's run never has it (his are the connectors), nor does a group's.
+  connection: { kind: "external", name: "google", when: tenantOffered(rows) },
+  rows,
   personal: true,
   free: ["read"],
   untrusted: ["read"], // mail and event text are written by third parties

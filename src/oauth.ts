@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { settings } from "./settings.ts";
 
 // "Connect <service>" on the intake page (intakeserver.ts) for EVERY service a friend signs in to (Google: googleoauth.ts, Notion: notionoauth.ts): the OAuth
@@ -6,6 +6,10 @@ import { settings } from "./settings.ts";
 // a link to the service's consent screen (made when the page is shown), the service sends her browser back to /oauth/<service>/callback?code=...&state=..., and the
 // page exchanges the code at the token endpoint with the PKCE verifier for a grant. The grant goes straight into HER OpenBao path through the write-only intake
 // token; the model never sees it, and nothing here logs or returns it: every message is a fixed sentence.
+//
+// The state is bound to the BROWSER too: the page that shows the consent link sets an HttpOnly cookie holding a random binding (scoped to the callback path), the
+// flow keeps only its hash, and the callback needs the same cookie. Without it, a consent address copied from one person's page and opened by another person
+// would store the second person's grant under the first one's path (a login-CSRF); with it, that callback finds nothing.
 //
 // Everything that is the same for every service is here (the flows in progress, the state, the PKCE pair, the token request). What differs is an OAuthProvider:
 // its consent address, how its token endpoint is asked and what it hands back, and where the grant is stored. The endpoints are settings or discovered, so tests
@@ -16,6 +20,19 @@ export class OAuthProblem extends Error {} // a fixed sentence for the person at
 export const STATE = /^[A-Za-z0-9_-]{43}$/; // 256 random bits as base64url
 export const callbackPath = (provider: string): string => `/oauth/${provider}/callback`;
 export const CALLBACK = /^\/oauth\/([a-z][a-z0-9-]{0,19})\/callback$/;
+
+// The cookie that binds a flow to the browser that was shown its link: HttpOnly, SameSite=Lax (sent on the service's redirect back, a top-level GET), only for the
+// callback path, Secure when the page is on https, gone when the flow would expire.
+const COOKIE_PREFIX = "ted_oauth_";
+export const bindingCookie = (provider: string, binding: string, secure: boolean, maxAgeSec: number): string =>
+  `${COOKIE_PREFIX}${provider}=${binding}; Path=${callbackPath(provider)}; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure ? "; Secure" : ""}`;
+export function bindingFrom(cookieHeader: string | undefined, provider: string): string {
+  for (const part of (cookieHeader ?? "").split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === `${COOKIE_PREFIX}${provider}`) return v.join("=");
+  }
+  return "";
+}
 
 const sha = (s: string) => createHash("sha256").update(s).digest();
 const b64 = (b: Buffer) => b.toString("base64url");
@@ -54,7 +71,8 @@ export interface OAuthProvider {
   // The consent screen's address. May register the instance's client the first time (Notion); fails with an OAuthProblem in a fixed sentence.
   authorizeUrl(a: { state: string; challenge: string; redirectUri: string; fetch: typeof fetch }): Promise<string>;
   // The code from the redirect for a grant: the item to store (fields of the item, never logged), and what the status line says about it (a count, no value).
-  exchange(a: { code: string; verifier: string; redirectUri: string; fetch: typeof fetch }): Promise<{ data: Record<string, unknown>; chars: number }>;
+  // `account`: whom the grant is for, when the service says (shown on the "connected" page so that a mismatch is visible; not logged).
+  exchange(a: { code: string; verifier: string; redirectUri: string; fetch: typeof fetch }): Promise<{ data: Record<string, unknown>; chars: number; account?: string }>;
 }
 
 export interface Pending {
@@ -62,6 +80,7 @@ export interface Pending {
   code: string; // the one-time link this flow started from
   tenant: string;
   verifier: string;
+  binding: string; // sha256 (hex) of the cookie value that was set on the browser shown the link
   expires: number;
 }
 
@@ -100,6 +119,13 @@ export class OAuthFlows {
   ready(id: string): boolean {
     return !!this.providers.get(id)?.ready() && !!this.baseUrl();
   }
+  get ttlSeconds(): number {
+    return Math.ceil(this.ttl / 1000);
+  }
+  // Is the page on https (then the binding cookie is Secure)?
+  secure(): boolean {
+    return /^https:/i.test(this.baseUrl() ?? "");
+  }
   redirectUri(id: string): string {
     return `${this.baseUrl()}${callbackPath(id)}`;
   }
@@ -109,8 +135,9 @@ export class OAuthFlows {
     for (const [h, p] of this.byState) if (p.expires <= t) (this.byState.delete(h), this.byLink.get(p.code) === h && this.byLink.delete(p.code));
   }
 
-  // The consent address for this link. A link that is shown again gets a new state (the old one stops working).
-  async begin(id: string, code: string, tenant: string): Promise<string> {
+  // The consent address for this link and the binding the page must set as a cookie on this browser. A link that is shown again gets a new state and binding
+  // (the old ones stop working).
+  async begin(id: string, code: string, tenant: string): Promise<{ url: string; binding: string }> {
     const provider = this.providers.get(id);
     if (!provider) throw new OAuthProblem("This sign-in is not available.");
     this.sweep();
@@ -121,13 +148,15 @@ export class OAuthFlows {
     const { verifier, challenge } = pkce();
     const url = await provider.authorizeUrl({ state, challenge, redirectUri: this.redirectUri(id), fetch: this.doFetch });
     const h = sha(state).toString("hex");
-    this.byState.set(h, { provider: id, code, tenant, verifier, expires: this.now() + this.ttl });
+    const binding = b64(randomBytes(32));
+    this.byState.set(h, { provider: id, code, tenant, verifier, binding: sha(binding).toString("hex"), expires: this.now() + this.ttl });
     this.byLink.set(code, h);
-    return url;
+    return { url, binding };
   }
 
-  // The flow a callback's state belongs to, used up by this call: a replayed or forged state, or one of another service, finds nothing.
-  take(id: string, state: string): Pending | undefined {
+  // The flow a callback's state belongs to, used up by this call: a replayed or forged state, one of another service, or one that arrives without the binding
+  // cookie of the browser that was shown the link (compared in constant time) finds nothing.
+  take(id: string, state: string, binding: string): Pending | undefined {
     this.sweep();
     if (!STATE.test(state)) return undefined;
     const h = sha(state).toString("hex");
@@ -135,11 +164,13 @@ export class OAuthFlows {
     if (!p || p.provider !== id) return undefined;
     this.byState.delete(h);
     if (this.byLink.get(p.code) === h) this.byLink.delete(p.code);
-    return p;
+    const want = Buffer.from(p.binding);
+    const got = Buffer.from(sha(binding).toString("hex"));
+    return want.length === got.length && timingSafeEqual(want, got) ? p : undefined;
   }
 
   // The code from the redirect for a grant. Every failure is one fixed sentence.
-  async exchange(id: string, authCode: string, verifier: string): Promise<{ data: Record<string, unknown>; chars: number }> {
+  async exchange(id: string, authCode: string, verifier: string): Promise<{ data: Record<string, unknown>; chars: number; account?: string }> {
     return this.providers.get(id)!.exchange({ code: authCode, verifier, redirectUri: this.redirectUri(id), fetch: this.doFetch });
   }
 }

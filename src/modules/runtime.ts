@@ -4,8 +4,8 @@ import { createBrowseServer } from "../browse.ts";
 import { browseStatus, browserServer } from "../browseserver.ts";
 import { readConnectors } from "../connectors.ts";
 import { createDrawServer } from "../drawtool.ts";
-import { googleProxy } from "../googlemcp.ts";
-import { notionProxy } from "../notionmcp.ts";
+import { googleHub, googleProxy, sweepStaleCredentialDirs } from "../googlemcp.ts";
+import { notionHub, notionProxy } from "../notionmcp.ts";
 import { GmailMail, gmailReaders } from "../gmail.ts";
 import { createIntakeServer } from "../intaketools.ts";
 import { Mailbird } from "../mailbird.ts";
@@ -18,7 +18,7 @@ import { settings } from "../settings.ts";
 import { createTenantAdminServer } from "../tenanttools.ts";
 import { createVoiceServer } from "../voicetool.ts";
 import { createWeatherServer } from "../weathertools.ts";
-import { connectionOf, loaded, mailModule } from "./index.ts";
+import { loaded, mailModule } from "./index.ts";
 import { setGmailReaders } from "./gmail.ts";
 import { GOOGLE_PREFIX } from "./google.ts";
 import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notionhosted.ts";
@@ -58,12 +58,37 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
   tenants: () => createTenantAdminServer(),
 };
 
+// ---- what runs between runs ----
+
+// A server that outlives a run (a friend's Google process with her token in a private folder, her Notion connection) is stopped by the application, not left to the
+// idle timer: `start` once when the application starts (clearing what a process that died left behind), `stop` when it exits, `drop` for one person who is suspended or
+// removed. By the same `name` as SERVERS; a module whose servers keep nothing between runs has no entry.
+export interface ModuleLifecycle {
+  start?: () => void;
+  stop: () => void;
+  drop: (tenantId: string) => void;
+}
+export const LIFECYCLE: Readonly<Record<string, ModuleLifecycle>> = {
+  google: {
+    start: () => {
+      const n = sweepStaleCredentialDirs();
+      if (n) console.log(`google: removed ${n} credentials folder(s) a stopped process left behind`);
+    },
+    stop: () => googleHub.closeAll(),
+    drop: (id) => googleHub.drop(id),
+  },
+  notion: { stop: () => notionHub.closeAll(), drop: (id) => notionHub.drop(id) },
+};
+export const startAll = (): void => void Object.values(LIFECYCLE).forEach((l) => l.start?.());
+export const stopAll = (): void => void Object.values(LIFECYCLE).forEach((l) => l.stop());
+export const dropAll = (tenantId: string): void => void Object.values(LIFECYCLE).forEach((l) => l.drop(tenantId));
+
 // The MCP servers of a run, by the name the run knows them under: every loaded module's in-process or external server for this conversation, in module order.
 // The browse sub-run has only the servers marked `forBrowse` (the browser); every other run has all the others. A connector is not here: it comes with the login.
 export function serversFor(ctx: RunContext): Record<string, McpServerConfig> {
   const servers: Record<string, McpServerConfig> = {};
   for (const m of loaded()) {
-    const c = connectionOf(m, ctx);
+    const c = m.connection;
     if ((c.kind !== "in-process" && c.kind !== "external") || !!c.forBrowse !== ctx.browsing || !c.when(ctx)) continue;
     const make = SERVERS[c.name];
     if (!make) throw new Error(`module ${m.name}: no server is built under the name ${c.name}`);

@@ -1,5 +1,5 @@
 import { notionRows } from "./notion.ts";
-import { rowsOf, type Connection, type RunContext, type ToolModule } from "./types.ts";
+import { rowsOf, tenantOffered, type ToolModule } from "./types.ts";
 
 // Notion for friends (capability `notion`): a friend's OWN Notion, through Notion's hosted MCP server and her own OAuth grant (src/notionoauth.ts, src/notionmcp.ts). The
 // owner never has these tools (his Notion is the connector, modules/notion.ts); a friend never has the owner's. The tools are the same ones with the same actions as the
@@ -13,21 +13,17 @@ const only = { only: ["group"] } as const; // a friend's run is an isolated "gro
 const notion = rowsOf(NOTION_FRIEND_PREFIX, "notion", "notion");
 
 // The tools a friend's run is shown for her Notion (the hosted server has many more: sessions, databases, views, ...; they are not offered).
-export const NOTION_FRIEND_TOOLS: readonly string[] = [...notionRows(NOTION_FRIEND_PREFIX, only), ...notion("page-move", "notion-move-pages", only)].map((e) => e.tool);
-// Any of her tools would start her connection; this one is in every set that has the capability.
-export const NOTION_PROBE = `${NOTION_FRIEND_PREFIX}notion-search`;
-
-const connection = (when: (ctx: RunContext) => boolean): Connection => ({ kind: "external", name: "notion", when });
+const rows = [...notionRows(NOTION_FRIEND_PREFIX, only), ...notion("page-move", "notion-move-pages", only)];
+export const NOTION_FRIEND_TOOLS: readonly string[] = rows.map((e) => e.tool);
 
 // A page sent to the bin is a destructive change however the tool names it: never judged, always asked.
 const TRASHES = /"(?:in_trash|archived|trash)"\s*:\s*(?:true|"true")/i;
 
 export const notionHostedModule: ToolModule = {
   name: "notionhosted",
-  // Nobody has her connection by default; a friend's run does when her capability set has its tools (connectionFor). The owner's run never does.
-  connection: connection(() => false),
-  connectionFor: (ctx) => (ctx.tenant && !ctx.browsing ? connection((c) => !!c.tenant && c.offers(NOTION_PROBE)) : undefined),
-  rows: [...notionRows(NOTION_FRIEND_PREFIX, only), ...notion("page-move", "notion-move-pages", only)],
+  // Her connection exists for a friend's run whose capability set offers any of its tools; the owner's run never has it (his Notion is the connector), nor does a group's.
+  connection: { kind: "external", name: "notion", when: tenantOffered(rows) },
+  rows,
   personal: true,
   free: ["read"],
   untrusted: ["read"], // page and comment text is written by whoever can edit the page

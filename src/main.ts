@@ -12,8 +12,6 @@ import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
 import { createGroupDreamer } from "./groupdream.ts";
 import { createTenantDreamer } from "./tenantdream.ts";
 import { createTenantMailLoops } from "./mailloops.ts";
-import { googleHub } from "./googlemcp.ts";
-import { notionHub } from "./notionmcp.ts";
 import { keyNotices } from "./keynotice.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
@@ -24,7 +22,7 @@ import { writeNotice } from "./notice.ts";
 import { ensureNotesDir } from "./notes.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./messages.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
-import { mailRuntime } from "./modules/runtime.ts";
+import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
 import { preparePicture } from "./image.ts";
 import { prepareFile, type AudioTools } from "./document.ts";
 import { createOutbound } from "./outbound.ts";
@@ -128,7 +126,7 @@ async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<vo
   const apiKey = settings.tenantApiKey;
   if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { id: rec.id, apiKey, costFile: tenantContext(rec).costFile });
 }
-tenantHooks.drop = (id) => (dropTenantWarm(id), googleHub.drop(id), notionHub.drop(id)); // a suspended or removed tenant: her warm process, her Google server process and her Notion connection stop
+tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts LIFECYCLE: her Google server, her Notion) stop
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,
@@ -209,8 +207,10 @@ messenger.onClose(({ reason }) => {
   console.error(`${reason}; exiting so launchd restarts us`);
   process.exit(1);
 });
-process.once("exit", () => messenger.stop());
-for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, () => (messenger.stop(), stopQwen(), process.exit(0)));
+// The friends' server processes and the private folders that hold their tokens go with the application, whichever way it ends (exit also runs for the exit above).
+startAll();
+process.once("exit", () => (stopAll(), messenger.stop()));
+for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, () => (stopAll(), messenger.stop(), stopQwen(), process.exit(0)));
 await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(config.ownerNumber)}; auth: ${config.credential}`);
 

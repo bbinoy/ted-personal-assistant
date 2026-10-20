@@ -13,7 +13,7 @@ import { memoryModule } from "./memory.ts";
 import { notionModule } from "./notion.ts";
 import { sendModule } from "./send.ts";
 import { tenantsModule } from "./tenants.ts";
-import type { Connection, MailSlot, RunContext, ToolModule } from "./types.ts";
+import type { MailSlot, ToolModule } from "./types.ts";
 import { voiceModule } from "./voice.ts";
 import { weatherModule } from "./weather.ts";
 
@@ -33,7 +33,3 @@ export const loaded = (mail: string = settings.mailProvider): readonly ToolModul
 export const mailProviders = (): string[] => registered().filter((m) => m.slot === "mail").map((m) => m.name);
 export const mailModule = (mail: string = settings.mailProvider): (ToolModule & { mail: MailSlot }) | undefined => loaded(mail).find((m): m is ToolModule & { mail: MailSlot } => m.slot === "mail" && !!m.mail);
 export const mailSlot = (mail?: string): MailSlot | undefined => mailModule(mail)?.mail;
-
-// The connection a module uses for this run: its own, unless it picks another for this conversation (connectionFor). The servers themselves are built in
-// runtime.ts (serversFor).
-export const connectionOf = (m: ToolModule, ctx: RunContext): Connection => m.connectionFor?.(ctx) ?? m.connection;

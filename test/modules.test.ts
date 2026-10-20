@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { classify } from "../src/policy.ts";
 import { settings } from "../src/settings.ts";
-import { connectionOf, loaded, mailModule, mailProviders, mailSlot, registered } from "../src/modules/index.ts";
+import { loaded, mailModule, mailProviders, mailSlot, registered } from "../src/modules/index.ts";
 import { MAIL, SERVERS, mailRuntime } from "../src/modules/runtime.ts";
-import type { Connection, RunContext, ToolModule } from "../src/modules/types.ts";
+import type { RunContext, ToolModule } from "../src/modules/types.ts";
 import { INTAKE_LINK_TOOL } from "../src/intakelinks.ts";
 import { allRows, entryFor, manifest } from "../src/toolmanifest.ts";
 import { ownerSkills, privateSkills, sharedSkills, skillsFor } from "../src/skills.ts";
@@ -92,13 +92,18 @@ test("modules: each module decides from the run whether it has a server (a conve
   assert.ok(module("intake").rows.some((e) => e.tool === INTAKE_LINK_TOOL));
 });
 
-test("modules: a connection can differ per conversation (a friend's own Google server process and Notion connection; only those two modules use it)", () => {
-  const connector: Connection = { kind: "connector", key: "google", server: /google/i, prefix: "mcp__claude_ai_Google_" };
-  const own: Connection = { kind: "external", name: "google-tenant", when: (c) => !!c.tenant };
-  const fake: ToolModule = { name: "fake", connection: connector, connectionFor: (c) => (c.tenant ? own : undefined), rows: [] };
-  assert.equal(connectionOf(fake, ctx()), connector, "the owner stays on her connector");
-  assert.equal(connectionOf(fake, ctx({ source: "group", tenant: {} as never })), own, "a tenant gets a server of her own");
-  assert.deepEqual(registered().filter((m) => m.connectionFor).map((m) => m.name), ["google", "notionhosted"], "only a friend's Google and Notion have a connection of their own");
+test("modules: a friend's own connection exists for a tenant run whose capability set offers one of the module's tools, and for nobody else", () => {
+  for (const name of ["google", "notionhosted"]) {
+    const m = module(name);
+    const c = m.connection;
+    assert.ok(c.kind === "external");
+    const when = c.when;
+    const tool = m.rows[0]!.tool;
+    assert.equal(when(ctx({ offers: () => true })), false, `${name}: the owner's chat never has it`);
+    assert.equal(when(ctx({ source: "group", key: "g", mode: "group", offers: () => true })), false, `${name}: a group never has it`);
+    assert.equal(when(ctx({ source: "group", tenant: {} as never, offers: () => false })), false, `${name}: a friend whose set offers none of its tools`);
+    assert.equal(when(ctx({ source: "group", tenant: {} as never, offers: (t) => t === tool })), true, `${name}: a friend whose set offers one`);
+  }
 });
 
 test("modules: the mail slot answers for the provider, so central code never asks for its name", () => {

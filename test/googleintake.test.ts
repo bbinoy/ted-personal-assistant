@@ -26,7 +26,7 @@ const T = await import("../src/tenants.ts");
 const L = await import("../src/intakelinks.ts");
 const { IntakeServer } = await import("../src/intakeserver.ts");
 const { googleProvider } = await import("../src/googleoauth.ts");
-const { OAuthFlows, pkce } = await import("../src/oauth.ts");
+const { OAuthFlows, pkce, bindingCookie } = await import("../src/oauth.ts");
 const { createIntakeServer } = await import("../src/intaketools.ts");
 const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
 const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
@@ -108,9 +108,17 @@ async function signIn(base: string, code: string) {
   const r = await fetch(`${base}/i/${code}`);
   const html = await r.text();
   const href = /href="([^"]+)"/.exec(html)?.[1]?.replaceAll("&amp;", "&");
-  return { r, html, url: href ? new URL(href) : undefined };
+  const url = href ? new URL(href) : undefined;
+  const setCookie = r.headers.get("set-cookie") ?? undefined;
+  if (url && setCookie) cookieOfState.set(url.searchParams.get("state")!, setCookie.split(";")[0]!);
+  return { r, html, url, setCookie };
 }
-const callback = (base: string, params: Record<string, string>) => fetch(`${base}/oauth/google/callback?${new URLSearchParams(params)}`);
+// The browser that was shown the link sends back the cookie the page set for that state, unless a test says otherwise (`cookie`: another browser's, or "" for none).
+const cookieOfState = new Map<string, string>();
+const callback = (base: string, params: Record<string, string>, cookie?: string) => {
+  const c = cookie ?? cookieOfState.get(params.state ?? "");
+  return fetch(`${base}/oauth/google/callback?${new URLSearchParams(params)}`, c ? { headers: { cookie: c } } : {});
+};
 const GRANT = () => bao.store.get(`tenants/${anna.id}/google/oauth`);
 
 test("google: the link opens a sign-in with offline access, PKCE (S256), the scopes and a state; the callback exchanges the code, stores the grant in HER path and says connected", async () => {
@@ -135,7 +143,7 @@ test("google: the link opens a sign-in with offline access, PKCE (S256), the sco
   const done = await callback(s.base, { code: AUTH_CODE, state: q.get("state")! });
   const text = await done.text();
   assert.equal(done.status, 200);
-  assert.match(text, /Google is connected/);
+  assert.match(text, /Google is connected as anna@example\.com/, "the account is shown so that a mismatch is visible");
   // the token endpoint was asked with the PKCE verifier of this flow, the secret and the same redirect address
   assert.equal(tokenCalls.length, 1);
   const body = tokenCalls[0]!.body;
@@ -159,6 +167,31 @@ test("google: the link opens a sign-in with offline access, PKCE (S256), the sco
   for (const secret of [REFRESH, ACCESS, AUTH_CODE, code, "fake-client-secret-not-real"]) assert.ok(!html.includes(secret), "the sign-in page holds none of them (only the state, in the address of the link to Google)");
   const rows = readAudit((e) => e.tool === "intake_store" && e.meta?.tenant === anna.id);
   assert.deepEqual(rows[0]!.meta!.purpose, "google");
+});
+
+test("google: the binding cookie is HttpOnly, SameSite=Lax, scoped to the callback path and not Secure on http; a callback from a browser without it or with another browser's is refused (nothing exchanged, nothing stored, the state is used up)", async () => {
+  const s = await start();
+  const eve = await signIn(s.base, s.mint(anna.id));
+  assert.match(eve.setCookie!, /^ted_oauth_google=[A-Za-z0-9_-]{43}; Path=\/oauth\/google\/callback; HttpOnly; SameSite=Lax; Max-Age=600$/);
+  const victim = await signIn(s.base, s.mint(anna.id)); // another page view: a different binding
+  const stateOfEve = eve.url!.searchParams.get("state")!;
+  const calls = tokenCalls.length;
+  bao.store.delete(`tenants/${anna.id}/google/oauth`);
+  // the consent address passed on: the other browser has no cookie, or has its own
+  assert.equal((await callback(s.base, { code: AUTH_CODE, state: stateOfEve }, "")).status, 404, "no cookie");
+  assert.equal(tokenCalls.length, calls);
+  const again = await signIn(s.base, s.mint(anna.id));
+  const st2 = again.url!.searchParams.get("state")!;
+  const other = victim.setCookie!.split(";")[0]!;
+  assert.equal((await callback(s.base, { code: AUTH_CODE, state: st2 }, other)).status, 404, "another browser's cookie");
+  assert.equal((await callback(s.base, { code: AUTH_CODE, state: st2 })).status, 404, "and the state is used up either way");
+  assert.equal(tokenCalls.length, calls, "nothing exchanged");
+  assert.equal(GRANT(), undefined, "nothing stored");
+  const text = await (await callback(s.base, { code: AUTH_CODE, state: stateOfEve }, "")).text();
+  assert.equal(text, "Not found\n");
+  const bindings = [eve.setCookie!, victim.setCookie!].map((c) => c.split(";")[0]!.split("=")[1]!);
+  const everything = [text, eve.html, printed.join("\n"), JSON.stringify(readAudit(() => true))].join("\n");
+  for (const b of bindings) assert.ok(!everything.includes(b), "the binding is in no page, log or audit row");
 });
 
 test("google: a replayed callback, a state from nowhere and a state of a link that was used all get the page's one 404, and nothing is exchanged or stored", async () => {
@@ -251,10 +284,12 @@ test("google: pkce and the consent address are well formed", async () => {
   assert.match(p.verifier, /^[A-Za-z0-9_-]{43,128}$/);
   assert.equal(createHash("sha256").update(p.verifier).digest("base64url"), p.challenge);
   const flows = new OAuthFlows({ providers: [googleProvider(() => ({ clientId: "c", clientSecret: "s", authUrl: "https://a.example/auth", tokenUrl: "t", scopes: ["a", "b"] }))], baseUrl: () => "https://ted.example" });
-  const u = new URL(await flows.begin("google", "LINKCODE", "anna"));
+  const u = new URL((await flows.begin("google", "LINKCODE", "anna")).url);
   assert.equal(u.searchParams.get("redirect_uri"), "https://ted.example/oauth/google/callback");
   assert.equal(u.searchParams.get("prompt"), "consent");
   assert.equal(u.searchParams.get("scope"), "a b");
+  assert.equal(flows.secure(), true, "https: the binding cookie is Secure");
+  assert.match(bindingCookie("google", "x", flows.secure(), 600), /; HttpOnly; SameSite=Lax; Max-Age=600; Secure$/);
 });
 
 test("google: the chat tool offers the google purpose only with the capability and a configured client, and reports 'connected', never a token", async () => {
