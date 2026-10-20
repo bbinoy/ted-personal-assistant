@@ -4,9 +4,8 @@ import type { Category } from "./notes.ts";
 import { BROWSE_SCHEMA } from "./browse.ts";
 import { groupCapabilities } from "./capabilities.ts";
 import { preset } from "./preset.ts";
-import { RADAR_SCHEMA } from "./radar-rules.ts";
+import { HEARTBEAT_SCHEMA } from "./heartbeat/rules.ts";
 import { settings } from "./settings.ts";
-import { toolsFor } from "./profiletools.ts";
 import { ownerSkills, skillsFor } from "./skills.ts";
 
 
@@ -15,13 +14,14 @@ import { ownerSkills, skillsFor } from "./skills.ts";
 // denied), the system prompt, the skills offered, the turn and budget limits and the output schema. A Task (tasks.ts)
 // names one; the gate can choose a task but never edit a profile. `notes` are the note categories injected as data.
 // The skills are read from the loaded tool modules when asked for (a getter), so the table can be built before the modules are.
-export type ProfileName = "chat" | "brief" | "radar" | "background" | "group" | "handler" | "browse";
+export type ProfileName = "chat" | "brief" | "heartbeat" | "background" | "group" | "handler" | "browse";
 interface RunProfile {
   readonly source: Source;
   readonly maxTurns: number;
   readonly maxBudgetUsd: number;
   readonly skills: readonly string[];
   readonly mcpTools?: ReadonlySet<string>; // the connector tools the job sees; absent: the owner's whole set (profiletools.ts)
+  readonly model?: string; // the run's own model (default: HARNESS_MODEL)
   readonly outputSchema?: Options["outputFormat"];
   readonly notes: readonly Category[];
 }

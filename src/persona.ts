@@ -149,29 +149,14 @@ export const SELF_TIMED = say("selfTimed");
 const UNPROMPTED = say("unprompted");
 export const GATE_DEFAULTS = {
   group: say("gateGroup", { participation: PARTICIPATION, unprompted: UNPROMPTED }),
-  owner: say("gateDirect", { name: OWNER, presets: true, mail: settings.mail, unprompted: UNPROMPTED }), // the owner's chat also runs the brief and the radar (the gate's note about them)
 } as const;
 
-// The same for a tenant's private chat (tenants.ts): no brief, no radar, only what her notes ask for.
-export const directGateDefaults = (name: string): string => say("gateDirect", { name, presets: false, mail: false, unprompted: UNPROMPTED });
+// A tenant's private chat (tenants.ts): only what her notes ask for. (The owner's chat has no gate: the heartbeat run looks at it, heartbeat/look.ts.)
+export const directGateDefaults = (name: string): string => say("gateDirect", { name, unprompted: UNPROMPTED });
 
 // The small models' system prompts are the preset's too: the mail triage (triage.ts) and the log summary (summarize.ts).
 export const triagePrompt = (who: string): string => say("triage", { who: oneLineName(who) });
 export const summarySystem = (): string => say("summary");
-
-// The owner's gate when it also decides WHEN the daily brief and the radar run (SCHEDULER=gate, tasks.ts). These are
-// the defaults; the owner's notes tweak them ("brief at 6:30", "no radar on weekends"). The HOW stays in code.
-export function ownerGateDefaults(o: { briefHour: number; backstopHour: number; radarMinutes: number; radar: boolean; minGapMinutes: number; mail?: boolean }): string {
-  return say("gateScheduler", {
-    mail: o.mail ?? settings.mail,
-    radar: o.radar,
-    briefHour: String(o.briefHour).padStart(2, "0"),
-    backstop: o.backstopHour >= 24 ? "any hour" : `${String(o.backstopHour).padStart(2, "0")}:00`,
-    hours: String(Math.round((o.radarMinutes / 60) * 10) / 10),
-    minGap: String(o.minGapMinutes),
-    unprompted: UNPROMPTED,
-  });
-}
 
 // A group chat the assistant was added to (group.ts). Other people write here, so it gets no private data:
 // only its personality (the owner's style notes) and the group's own notes (its auto-memory, loaded by the SDK).
@@ -214,16 +199,13 @@ export function briefSystem(memory: string, missing: readonly string[] = [], dow
   );
 }
 
-// The proactive radar: a periodic look at calendar and mail that speaks up only when it matters.
-export function radarSystem(memory: string, missing: readonly string[] = [], down: readonly Connector[] = [], mail: boolean = settings.mail): string {
-  return join(
-    say("radar", { skill: wakeSkill("radar") }),
-    rules(mail),
-    connectorLine(down, false),
-    setupLine(missing, false),
-    memory,
-  );
+// The owner's heartbeat run (heartbeat/look.ts): the persona, the rules every run has and the notes; what the look is asked is heartbeatInstruction.
+export function heartbeatSystem(memory: string, missing: readonly string[] = [], down: readonly Connector[] = [], mail: boolean = settings.mail): string {
+  return join(say("heartbeatSystem", { personality: PERSONALITY }), rules(mail), connectorLine(down, false), setupLine(missing, false), memory);
 }
+
+// The words of one look (persona/heartbeat.md); the chat log goes after it as data (heartbeat/look.ts).
+export const heartbeatInstruction = (vars: { now: string; timeZone: string; lastLook: string; quietFrom: string; quietTo: string; dayMinutes: string }): string => say("heartbeat", vars);
 
 // Background handling of routine email the heartbeat flagged as "the assistant can deal with this", ONE prompt for every conversation that has mail (only runs when
 // there is mail: the heartbeat never hands anything over without it). `who` is a friend's name; without it the mail is the owner's, and the run also gets the owner's
@@ -233,7 +215,7 @@ export function handlerSystem(memory: string, o: { who?: string; missing?: reado
   return join(say("handler", { who: own ? OWNER : oneLineName(o.who!), own }), own ? rules(true) : undefined, own ? connectorLine(o.down ?? [], false) : undefined, own ? setupLine(o.missing ?? [], false) : undefined, memory);
 }
 
-// An unprompted run in the owner's chat (a wake-up, wake.ts): least privilege like the radar, web search but no page fetches without asking, nothing written without asking.
+// An unprompted run in the owner's chat (a wake-up, wake.ts): least privilege, web search but no page fetches without asking, nothing written without asking.
 export function backgroundSystem(memory: string, missing: readonly string[] = [], down: readonly Connector[] = [], mail: boolean = settings.mail): string {
   return join(
     say("background", { mail, personality: PERSONALITY }),

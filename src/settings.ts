@@ -182,11 +182,12 @@ export function loadSettings(env: Env) {
     quietStartHour: num(env, "QUIET_START_HOUR", rhythm.heartbeat.quietFromHour, 0, 23),
     quietEndHour: num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23),
 
-    // The radar: while the owner is awake, a model looks at calendar and mail every few hours and
-    // writes to them only when something deserves it (src/radar.ts).
-    proactive: oneOf(env, "PROACTIVE", rhythm.radar.enabled ? "on" : "off", ["on", "off"] as const) === "on",
-    radarMinutes: num(env, "RADAR_MINUTES", rhythm.radar.everyMinutes, 30, 720),
-    maxProactivePerDay: num(env, "MAX_PROACTIVE_PER_DAY", 8, 0, 50),
+    // The owner's heartbeat run (src/heartbeat/look.ts): on every look a model (HEARTBEAT_MODEL: haiku, sonnet, or a full model id) reads the chat, mail, calendar and
+    // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). Over the night window a code cap
+    // of NIGHT_MESSAGES proactive messages holds the rest for the morning look.
+    heartbeatModel: env.HEARTBEAT_MODEL?.trim() || "haiku",
+    heartbeatDayMinutes: rhythm.heartbeat.dayMinutes,
+    nightMessages: num(env, "NIGHT_MESSAGES", 2, 0, 20),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
