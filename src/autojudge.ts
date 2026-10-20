@@ -2,12 +2,12 @@ import { runJudge, withTimeout } from "./approvaljudge.ts";
 import { fence } from "./fence.ts";
 import { OWNER } from "./settings.ts";
 import type { MailView } from "./mailview.ts";
-import { actionOf, entryFor, moduleOf } from "./toolmanifest.ts";
+import { actionOf, entryFor, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
 import type { Source } from "./audit.ts";
 import { LIMITS } from "./sanitize.ts";
 
 // The approval judge: a small second opinion on every action that is not a plain read. The same path in every place (chat, group, tenant, mail
-// handler, brief, radar, wake-up, browse): the code floor first (policy.ts, isJudgeable below), then this judge, then the question on the owner's phone.
+// handler, brief, radar, wake-up, browse): the code floor first (policy.ts classify, isJudgeable below), then this judge, then the question on the owner's phone.
 //
 // It can only LOOSEN, and only inside the floor that code sets (isJudgeable): a call the floor forbids judging (an address that can carry data out,
 // guests on a calendar event, a send nobody can be named for, sharing, stopping a tenant) always asks, whatever the judge says. It sees the exact
@@ -38,7 +38,7 @@ export { isPlainWebAddress, REBINDING_HOST } from "./webaddress.ts";
 export function isJudgeable(tool: string, input: Record<string, unknown>, view?: MailView): boolean {
   const action = entryFor(tool)?.action;
   const floor = moduleOf(tool)?.floor;
-  if (!action || floor?.judgeNever?.includes(action)) return false;
+  if (!action || neverAllowedTool(tool) || floor?.judgeNever?.includes(action)) return false; // (the never-allowed set is denied before the judge; this is the backstop)
   const veto = floor?.judgeVeto?.[action];
   return veto ? veto(input, view) : true;
 }
@@ -59,13 +59,13 @@ export interface CarriedApproval {
   question: string;
 }
 
-// Where `fix` is never allowed: the question there is whether the action may happen at all, not whether its arguments are right. A mail
-// send, reply or forward, anything that deletes, shares or pays, and a guard-built step (a browse commit step, a payment) are downgraded to ask. The actions
-// are the modules' (noFix: a mail send, a share, answering an invite).
-// By name as well as by manifest action, so it holds for the mail provider that is not active and for a tool the manifest does not know.
-const NEVER_BY_NAME = /(^|[_-])(delete|trash|remove|unsubscribe|spam|send|reply|forward|share|respond|pay)([_-]|$)/i;
+// Where `fix` is never allowed: the question there is whether the action may happen at all, not whether its arguments are right. A guard-built step (a browse commit
+// step, a payment), an action the module never lets the judge see (judgeNever: sharing, stopping a tenant, moving mail), an action it marks noFix (a mail send, reply or
+// forward, unsubscribing, answering an invite) and a tool no module lists (never judged anyway) are downgraded to ask. The never-allowed set is denied before this.
 export function mayFix(tool: string, o: { guardStep?: boolean; payment?: boolean } = {}): boolean {
-  return !o.guardStep && !o.payment && !moduleOf(tool)?.floor?.noFix?.includes(actionOf(tool)) && !NEVER_BY_NAME.test(tool.split("__").pop() ?? tool);
+  const entry = entryFor(tool);
+  const floor = moduleOf(tool)?.floor;
+  return !!entry && !o.guardStep && !o.payment && !neverAllowedTool(tool) && !floor?.judgeNever?.includes(entry.action) && !floor?.noFix?.includes(entry.action);
 }
 
 // Pure: one line for the judge (not the owner) that a module may add about its own call: for a calendar write, whether the call names guests or asks for

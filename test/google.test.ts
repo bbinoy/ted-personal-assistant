@@ -236,7 +236,7 @@ test("google: reads run free; a send, a draft and a label go to the judge and, u
   assert.equal(r.judged.length, 1);
 });
 
-test("google: a calendar write that names guests, and every delete or answer to an invite, always asks her and is never judged; a plain one is judged", async () => {
+test("google: a calendar write that names guests, and every answer to an invite, always asks her, a delete is denied and is never judged; a plain one is judged", async () => {
   const ctx = friend(["google", "mail", "calendar"]);
   const { setConversationMessage } = await import("../src/permissions.ts");
   setConversationMessage(`tenant:${ctx.id}`, "put the dentist on Wednesday");
@@ -250,10 +250,12 @@ test("google: a calendar write that names guests, and every delete or answer to 
   assert.equal(r.judged.length, 0, "guests: the judge is not asked");
   assert.equal(r.asked.length, 1, "she is");
   r = rig(ctx, "auto");
-  await r.run("manage_event", { action: "delete", event_id: "e1" });
+  assert.equal((await r.run("manage_event", { action: "delete", event_id: "e1" })).behavior, "deny", "a delete is never allowed, for a friend as for the owner");
   await r.run("manage_event", { action: "rsvp", event_id: "e2", response: "accepted" });
+  // the real field names of the calendar schema all count as guests
+  for (const guests of [{ attendeeEmails: ["a@example.org"] }, { addedAttendees: [{ email: "a@example.org" }] }, { addedAttendeeEmails: ["a@example.org"] }]) await r.run("manage_event", { action: "update", event_id: "e3", ...guests });
   assert.equal(r.judged.length, 0);
-  assert.equal(r.asked.length, 2);
+  assert.equal(r.asked.length, 4, "the answer to an invite and three updates that name guests are her call"); // (the delete was denied)
 });
 
 test("google: nothing of the owner's or of the Google tools exists for a person without the capability, and the owner's source has none of these tools", () => {

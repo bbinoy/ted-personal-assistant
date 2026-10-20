@@ -1,5 +1,5 @@
-import type { Source } from "./audit.ts";
 import { addrs } from "./mailview.ts";
+import { destinationIsTrashOrSpam } from "./neverallowed.ts";
 
 // The Gmail connector's rules that a manifest flag cannot say (all pure; policy.ts and permissions.ts call them). The connector's tools
 // are named mcp__claude_ai_Gmail__*; their arguments are camelCase (labelIds, messageFormat, ...).
@@ -9,15 +9,6 @@ export const isGmailTool = (tool: string): boolean => tool.startsWith(GMAIL_PREF
 const name = (tool: string) => tool.slice(GMAIL_PREFIX.length);
 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v : v === undefined ? [] : [v]).map((x) => String(x));
-
-// Every label value a call names, whatever the tool calls the field.
-export function labelValues(input: Record<string, unknown>): string[] {
-  // (the snake_case names are the friends' Google server's: modules/google.ts, which holds the same rule for its tools)
-  return [...strings(input.labelIds), ...strings(input.addLabelIds), ...strings(input.removeLabelIds), ...strings(input.labelOption), ...strings(input.labelId), ...strings(input.label), ...strings(input.label_ids), ...strings(input.add_label_ids), ...strings(input.remove_label_ids)];
-}
-
-// TRASH and SPAM are never a label value, however a tool is asked to set or clear them (adding trashes, removing untrashes).
-export const sensitiveLabel = (input: Record<string, unknown>): boolean => labelValues(input).some((l) => /^\s*(trash|spam)\s*$/i.test(l));
 
 // An archive in Gmail is removing the INBOX label from a thread, and nothing else in the same call.
 export function isInboxArchive(tool: string, input: Record<string, unknown>): boolean {
@@ -47,21 +38,22 @@ export function isSelfSend(tool: string, input: Record<string, unknown>, self: s
   );
 }
 
-// Tools that must never run, however they are asked: attachment content, sensitive labels, labels deleted or renamed.
-const NEVER = /attachment|download|apply_sensitive|batch_|delete_label|update_label/i;
+// Tools this connector must never run, beyond the never-allowed set (neverallowed.ts: trash, delete, spam, block): attachment content, sensitive labels,
+// labels renamed. (The names of its trash, spam and delete tools are rows of the Gmail module.)
+const NEVER = /attachment|download|apply_sensitive|batch_|update_label/i;
 
-export type GmailVerdict = "allow" | "ask" | "deny";
+export type GmailVerdict = "ask" | "deny";
 
-// A verdict for a Gmail tool call, or undefined to let the manifest decide. `archiveLive`: GMAIL_ARCHIVE_LIVE.
-export function gmailVerdict(tool: string, input: Record<string, unknown>, source: Source, o: { archiveLive: boolean; self: string | undefined; briefEmail: boolean }): GmailVerdict | undefined {
+// A restriction for a Gmail tool call, or undefined to let the manifest decide. `archiveLive`: GMAIL_ARCHIVE_LIVE. It never grants: the brief to oneself
+// is a `freeWhen` of the module's send action (modules/gmail.ts), not a verdict.
+export function gmailVerdict(tool: string, input: Record<string, unknown>, o: { archiveLive: boolean }): GmailVerdict | undefined {
   if (!isGmailTool(tool)) return undefined;
   if (NEVER.test(name(tool))) return "deny";
-  if (sensitiveLabel(input)) return "deny";
+  if (destinationIsTrashOrSpam(input)) return "deny";
   if (/^raw$/i.test(String(input.messageFormat ?? ""))) return "deny"; // raw MIME carries attachment content
   if (name(tool) === "unlabel_thread") {
     if (!isInboxArchive(tool, input)) return "ask"; // other label removals (UNREAD, a user label) are the owner's call
     return o.archiveLive ? undefined : "deny"; // log-only: recorded as would-archive (permissions.ts), not done
   }
-  if (source === "brief" && o.briefEmail && isSelfSend(tool, input, o.self)) return "allow";
   return undefined;
 }

@@ -1,5 +1,5 @@
 import { authoredPart, cutBody, mailHeader, mailText } from "./format.ts";
-import { addrs, type MailView } from "./mailview.ts";
+import { addrs, attachmentsNamed as attachmentsOf, type MailView } from "./mailview.ts";
 
 export { authoredPart };
 
@@ -25,7 +25,7 @@ export function extractMessageId(response: unknown): number | undefined {
 export function viewDraft(msg: unknown): DraftView | undefined {
   const m = msg as { to?: unknown; cc?: unknown; bcc?: unknown; subject?: unknown; body?: unknown; attachments?: unknown } | null;
   if (!m || typeof m.body !== "string") return undefined;
-  return { to: addrs(m.to), cc: addrs(m.cc), bcc: addrs(m.bcc), subject: String(m.subject ?? ""), body: m.body, hasAttachments: Array.isArray(m.attachments) && m.attachments.length > 0 };
+  return { to: addrs(m.to), cc: addrs(m.cc), bcc: addrs(m.bcc), subject: String(m.subject ?? ""), body: m.body, hasAttachments: Array.isArray(m.attachments) && m.attachments.length > 0, ...attachmentsOf(m.attachments) };
 }
 
 // Pure: the Signal text. Shows who it goes to and the whole reply (cut and announced if long).

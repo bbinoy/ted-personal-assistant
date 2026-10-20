@@ -1,6 +1,7 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { recordCost } from "./budget.ts";
 import { GMAIL_PREFIX, gmailVerdict } from "./gmailrules.ts";
+import { attachmentsNamed as attachmentsOf } from "./mailview.ts";
 import type { GmailReaders } from "./modules/gmail.ts";
 import { callKey } from "./permissions.ts";
 import { hiddenTools } from "./policy.ts";
@@ -32,7 +33,7 @@ const RELAY_TOOLS = ["search_threads", "get_thread", "get_message", "get_draft",
 // a restore exactly "add INBOX to a thread"; whether archiving is live is decided by the caller (GmailMail), not here.
 export function relayAllowed(c: Call): boolean {
   if (!RELAY_TOOLS.includes(c.tool)) return false;
-  const verdict = gmailVerdict(c.tool, c.input, "heartbeat", { archiveLive: true, self: undefined, briefEmail: false });
+  const verdict = gmailVerdict(c.tool, c.input, { archiveLive: true });
   if (verdict === "deny") return false;
   if (c.tool.endsWith("unlabel_thread")) return verdict === undefined;
   if (c.tool.endsWith("label_thread")) {
@@ -211,6 +212,7 @@ export function parseDraft(resp: unknown): DraftView | undefined {
     subject: str(m.subject),
     body,
     hasAttachments: Array.isArray(att) && att.length > 0,
+    ...attachmentsOf(att),
   };
 }
 

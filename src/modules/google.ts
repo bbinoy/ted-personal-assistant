@@ -1,6 +1,6 @@
-import { sensitiveLabel } from "../gmailrules.ts";
+import { namesNoGuests } from "../guests.ts";
 import { nativeView } from "../mailview.ts";
-import { namesNoGuests, notifyLine } from "./calendar.ts";
+import { notifyLine } from "./calendar.ts";
 import { named } from "./gmail.ts";
 import { rowsOf, type Connection, type FloorVerdict, type RunContext, type ToolModule } from "./types.ts";
 
@@ -24,11 +24,10 @@ export const GOOGLE_PROBES = [`${GOOGLE_PREFIX}search_gmail_messages`, `${GOOGLE
 const given = (v: unknown): boolean => v !== undefined && v !== null && v !== "" && v !== false && !(Array.isArray(v) && v.length === 0);
 
 // The floor, in addition to the central one: what these tools can do that the manifest cannot say. A send or draft with attachments (the server reads local files
-// and URLs for them), a "Send As" alias, a message exported to a file or as raw MIME (attachments inside, files written), and TRASH or SPAM as a label are refused.
-function verdict(tool: string, input: Record<string, unknown>): FloorVerdict | undefined {
+// and URLs for them), a "Send As" alias, or a message exported to a file or as raw MIME (attachments inside, files written) are refused. (TRASH and SPAM as a label, and a delete, are never allowed for anyone: neverallowed.ts.)
+function verdict(tool: string, input: Record<string, unknown>): Exclude<FloorVerdict, "allow"> | undefined {
   if (!tool.startsWith(GOOGLE_PREFIX)) return undefined;
   const name = tool.slice(GOOGLE_PREFIX.length);
-  if (sensitiveLabel(input)) return "deny";
   if ((name === "send_gmail_message" || name === "draft_gmail_message") && (given(input.attachments) || given(input.from_email))) return "deny";
   if (/^get_gmail_(message|messages_content_batch|thread|threads_content_batch)/.test(name) && (input.full === true || /^raw$/i.test(String(input.body_format ?? "")))) return "deny";
   return undefined;
@@ -64,9 +63,7 @@ export const googleModule: ToolModule = {
     ...gc("read", "list_calendars get_events query_freebusy", only),
     ...gc("calendar-write", "manage_event", only), // create, update, delete and rsvp by its `action`; only create and update without guests are ever judged (below)
   ],
-  personal: true,
   free: ["read"],
-  untrusted: ["read"], // mail and event text are written by third parties
   untrustedPrefix: GOOGLE_PREFIX,
   titles: {
     [`${GOOGLE_PREFIX}send_gmail_message`]: { icon: "✉️", title: "Send email" },
@@ -78,7 +75,7 @@ export const googleModule: ToolModule = {
     verdict,
     onDeny: (tool) => (tool.startsWith(GOOGLE_PREFIX) ? { withIds: true } : undefined),
     // A mail nobody can be named for is not judged; a calendar event is judged only when it is created or changed and names no guest (anything that would email
-    // people, and every delete or answer to an invite, is the person's call).
+    // people, and every answer to an invite, is the person's call; a delete is never allowed: neverallowed.ts neverActionValue).
     judgeVeto: { send: named, "calendar-write": (input) => ["create", "update"].includes(calendarAction(input)) && namesNoGuests(input) },
     noFix: ["send"],
     judgeNote: { "calendar-write": notifyLine },

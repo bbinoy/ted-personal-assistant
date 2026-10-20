@@ -491,7 +491,7 @@ test("grant and revoke: one capability at a time, on a real record, no duplicate
   assert.deepEqual(ctx().capabilities, T.tenantById(rec.id)!.capabilities);
   const lines = describeTenants().filter((l) => l.startsWith(rec.id));
   assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, weather, draw/);
-  assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities chat, browse, voice, heartbeat, dream, wake, mail, calendar, notion, profile, card, notes, intake, weather, draw, google, admin/);
+  assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities chat, browse, voice, heartbeat, dream, wake, mail, calendar, notion, profile, card, notes, intake, weather, draw, google, drive, admin/);
 });
 
 test("the per-tenant key plumbing is gone: no set-key, forget-key, KeyStore, intake or setup-incomplete state", () => {

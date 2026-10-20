@@ -9,7 +9,7 @@ process.env.INTAKE_BASE_URL = "";
 const { settings } = await import("../src/settings.ts");
 const { CAPABILITIES } = await import("../src/tenants.ts");
 type Capability = (typeof CAPABILITIES)[number];
-const { groupCapabilities, groupTools, NEVER_FOR_ISOLATED, runCapabilities, tenantTools, toolsFor } = await import("../src/capabilities.ts");
+const { groupCapabilities, groupTools, runCapabilities, tenantTools, toolsFor } = await import("../src/capabilities.ts");
 const { privateSkills, sharedSkills, skillsFor } = await import("../src/skills.ts");
 const PRIVATE_SKILLS = privateSkills();
 const SHARED_SKILLS = sharedSkills();
@@ -17,6 +17,9 @@ const { classify } = await import("../src/policy.ts");
 const MANIFEST = (await import("../src/toolmanifest.ts")).allRows();
 const { buildOptions } = await import("../src/agentrun.ts");
 const { offeredSkills } = await import("../src/profiles.ts");
+
+// A safety net written out by hand, apart from the modules' own `ownerOnly`: whatever the rows say, none of these is ever a tool of an isolated conversation.
+const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i];
 
 const P = (s: string) => `ted-personal-assistant:${s}`;
 const WEATHER = ["get_distance", "get_forecast", "get_marine_forecast", "get_spot_info", "search_places"].map((t) => `mcp__weather__${t}`);
@@ -63,6 +66,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     calendar: { tools: [], skills: [] },
     notion: { tools: [], skills: [] },
     google: { tools: [], skills: [] },
+    drive: { tools: [], skills: [] }, // the owner's Drive and Docs connectors, a capability of their own (not a friend's Google)
     profile: { tools: [], skills: [] },
     card: { tools: [], skills: [] },
     admin: { tools: [], skills: [] },
@@ -153,7 +157,7 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
   const A = "allow";
   const D = "deny";
   assert.deepEqual(row(owner), [A, "ask", A, D, A, A, A, A, A, A, "ask", "ask", D, A, "ask", A, A, A, D, A, D, "ask", "ask", "ask"], "owner");
-  const g = [A, D, A, A, A, A, A, A, A, A, D, A, D, D, D, D, D, D, D, D, D, D, D, D];
+  const g = [A, D, A, A, A, A, A, A, A, A, D, "ask", D, D, D, D, D, D, D, D, D, D, D, D]; // (browse is judged in a group like in the owner's chat, with the member's words as provenance)
   assert.deepEqual(row(group), g, "group");
   assert.deepEqual(row(friend), g, "friend (the default record)");
   assert.deepEqual(row(bare), [A, D, D, A, A, D, A, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D], "chat only");
@@ -182,7 +186,7 @@ test("capabilities: no private skill and no tool of the owner's login is ever of
 test("capabilities: every manifest row names its capability, and a group never has a row of a connector or of the admin", () => {
   for (const e of MANIFEST) assert.ok((CAPABILITIES as readonly string[]).includes(e.cap), e.tool);
   const GROUP_ONLY_CAPS = new Set<string>(groupCapabilities());
-  for (const e of MANIFEST.filter((x) => ["mail", "calendar", "notion", "google", "admin", "profile", "card"].includes(x.cap))) {
+  for (const e of MANIFEST.filter((x) => ["mail", "calendar", "notion", "google", "drive", "admin", "profile", "card"].includes(x.cap))) {
     assert.ok(!GROUP_ONLY_CAPS.has(e.cap), e.tool);
     assert.ok(!groupTools().has(e.tool), e.tool);
     assert.equal(classify(e.tool, {}, "group"), "deny", e.tool);

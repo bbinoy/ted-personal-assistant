@@ -14,9 +14,10 @@ import type { MailInput, MailView } from "../mailview.ts";
 // names its tools. There is no framework: a module is a plain object, the list of modules is a function in index.ts, and you add a tool by adding a file
 // there and a line to that list. Modules are local code reviewed like any code; nothing is loaded from outside.
 //
-// What a module may NOT do: decide policy. Whether a call is allowed, asked or denied, the never-allowed set, the capability sets of groups and tenants,
-// the approval judge and its prompt, payments, the address checks, the browse guard, the approvers and the tenant isolation stay central. A module adds
-// rows (what a tool IS) and floor DATA that the central code reads; the floor can only restrict (a veto, a deny), never grant.
+// What a module may NOT do: decide policy. Whether a call is allowed, asked or denied, the never-allowed set (neverallowed.ts: a module only names the ACTION of a
+// row, or marks itself `never`), the capability sets of groups and tenants, the approval judge and its prompt, payments, the address checks, the browse guard,
+// the approvers and the tenant isolation stay central. A module adds rows (what a tool IS) and floor DATA that the central code reads; its floor can only
+// restrict (a veto, a deny, an ask), never grant: the one thing it may declare as free is a call of an action (`freeWhen`), which the central code still folds.
 //
 // Two halves, on purpose. The DECLARATION (this folder's files) is read by nearly everything: the manifest, policy, the judge, skills, notes, connectors,
 // the prompts. So it imports almost nothing. The code a module WRAPS (the servers it starts, the mail clients it talks to, its doctor check) is bound in
@@ -35,9 +36,10 @@ export interface ToolEntry {
   cap: Capability; // what gates it: the capability a conversation needs to be offered the tool
   only?: readonly Source[];
   view?: ViewKind; // a mail tool: how the module's mail view reads its input
+  offeredTo?: readonly Source[]; // a built-in tool (no MCP server): the sources whose run is handed it, for an owner run (agentrun.ts builtinTools; an isolated run gets the ones in its capability set)
 }
 
-type RowOpts = { only?: readonly Source[]; view?: ViewKind; cap?: Capability };
+type RowOpts = { only?: readonly Source[]; view?: ViewKind; cap?: Capability; offeredTo?: readonly Source[] };
 
 // Rows for one family of tools: `rowsOf(prefix, provider, cap)` returns a function (action, "name name ...", options) that makes the rows.
 export const rowsOf =
@@ -87,14 +89,15 @@ export interface Denial {
 
 // What a module may say about its own tools to the central code. All of it restricts or describes; none of it grants more than the manifest.
 export interface ModuleFloor {
-  // policy.ts classify, before the manifest: a hard rule for this module's tools that a row cannot say (sensitive labels, attachment content).
-  verdict?: (tool: string, input: Record<string, unknown>, source: Source) => FloorVerdict | undefined;
+  // policy.ts classify, one step of the fold: a hard rule for this module's tools that a row cannot say (attachment content, archive log-only). It may only
+  // restrict: "ask" or "deny", never "allow" (the verdict is the minimum of deny < ask < allow over the manifest and every floor).
+  verdict?: (tool: string, input: Record<string, unknown>, source: Source) => Exclude<FloorVerdict, "allow"> | undefined;
   // permissions.ts, when classify denied the call: what to record and tell the model instead of the plain "blocked by policy".
   onDeny?: (tool: string, input: Record<string, unknown>) => Denial | undefined;
   // autojudge.ts isJudgeable: actions that are never judged (always asked), and a per-action veto on the call's own arguments (false: not judged).
   judgeNever?: readonly string[];
   judgeVeto?: Readonly<Record<string, (input: Record<string, unknown>, view?: MailView) => boolean>>;
-  // autojudge.ts mayFix: actions whose `fix` verdict is always `ask` (a send, a share, a respond).
+  // autojudge.ts mayFix: actions whose `fix` verdict is always `ask` (a send, answering an invite). An action in judgeNever needs no entry: it is never judged.
   noFix?: readonly string[];
   // autojudge.ts: per action, a code-built line for the judge about the call (not shown to the owner).
   judgeNote?: Readonly<Record<string, (input: Record<string, unknown>) => string>>;
@@ -172,9 +175,12 @@ export interface ToolModule {
   connectionFor?: (ctx: RunContext) => Connection | undefined;
   rows: readonly ToolEntry[];
   free?: true | readonly string[]; // rows that run without the judge: all of the module's, or those with these actions (a read, the assistant's own plumbing)
-  untrusted?: true | readonly string[]; // reading these shows the run text a third party wrote (mail, a web page): after one, the run's arguments may be steered
+  freeWhen?: Readonly<Record<string, (input: Record<string, unknown>, source: Source) => boolean>>; // a call of this action that is free though the action is not (the Gmail brief to the owner's own address)
+  untrusted?: true | readonly string[]; // reading these shows the run text a third party wrote (mail, a web page): after one, the run's arguments may be steered. Default: the module's `read` rows (every data kind is someone's text) unless `trusted`
+  trusted?: true; // opt OUT of the default: its reads show nothing a third party wrote (public weather data)
   untrustedPrefix?: string; // an unlisted tool with a read verb under this prefix counts as untrusted too
-  personal?: true; // tools of the person's own accounts (a friend's Google): in an isolated run, where the capability set is otherwise enough, each non-free call goes to the floor, the judge and her chat (policy.ts classify)
+  never?: true; // every tool of the connector (its prefix) is never allowed, for everyone (the trading connector)
+  ownerOnly?: true | readonly string[]; // all rows, or the rows with these actions, belong to the owner alone: never in the tool set of a group or a tenant (capabilities.ts)
   floor?: ModuleFloor;
   titles?: Readonly<Record<string, CallTitle>>; // by tool name
   skills?: readonly ModuleSkill[];

@@ -31,4 +31,5 @@ export const browserModule: ToolModule = {
   ],
   free: ["browser-read"],
   untrusted: true,
+  ownerOnly: true, // the browse run alone
 };

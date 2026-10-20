@@ -80,22 +80,24 @@ export const gmailModule: ToolModule = {
     ...gm("forward", "forward", { view: "gmForward" }),
     ...gm("archive", "unlabel_thread"), // removing INBOX is an archive; undoing it adds a label, which is a different action
     ...gm("label", "label_thread label_message unlabel_message update_message_labels create_label update_label apply_sensitive_message_label apply_sensitive_thread_label"),
+    // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS); untrash and unmark are the same family and stay out of reach too.
+    ...gm("trash", "trash_message trash_thread untrash_message untrash_thread"),
+    ...gm("spam", "mark_message_spam mark_thread_spam unmark_message_spam unmark_thread_spam"),
+    ...gm("delete", "delete_draft delete_label"),
   ],
   free: ["read"],
+  // The brief the run emails to the owner's own address (BRIEF_EMAIL=on): one plain recipient that IS the configured address, nothing else (gmailrules.ts isSelfSend).
+  freeWhen: { send: (input, source) => source === "brief" && active() && settings.briefEmail && isSelfSend(`${GMAIL_PREFIX}send_message`, input, settings.mailSelfAddress) },
   titles: {
     [`${GMAIL_PREFIX}send_message`]: { icon: "✉️", title: "Send email" },
     [`${GMAIL_PREFIX}forward`]: { icon: "✉️", title: "Forward email" },
     [`${GMAIL_PREFIX}reply`]: { icon: "✉️", title: "Reply to email" },
   },
-  untrusted: ["read"],
   untrustedPrefix: GMAIL_PREFIX,
   floor: {
-    // Gmail's rules a row cannot say: sensitive labels, attachment content, archive log-only, the brief to oneself (gmailrules.ts). They hold whichever provider is
+    // Gmail's rules a row cannot say: attachment content, raw MIME, label renames, archive log-only (gmailrules.ts). They hold whichever provider is
     // active: they only restrict, so the connector's tools stay as refused as before if it is ever seen under another provider.
-    verdict: (tool, input, source) => {
-      const on = active();
-      return gmailVerdict(tool, input, source, { archiveLive: on && settings.gmailArchiveLive, self: on ? settings.mailSelfAddress : undefined, briefEmail: on && settings.briefEmail });
-    },
+    verdict: (tool, input) => gmailVerdict(tool, input, { archiveLive: active() && settings.gmailArchiveLive }),
     // Archive in log-only mode (GMAIL_ARCHIVE_LIVE=false) is recorded like the heartbeat's, so the report and the brief show it.
     onDeny: (tool, input) => {
       if (isInboxArchive(tool, input) && active()) {

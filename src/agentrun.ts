@@ -12,6 +12,8 @@ import { recordConnectors } from "./connectors.ts";
 import { noteSuccess, observeRateLimit } from "./cooldown.ts";
 import { failure } from "./errors.ts";
 import { announceMemoryChanges, noteWritten } from "./memorynotice.ts";
+import { builtinModule } from "./modules/builtin.ts";
+import { isOwnerOnly } from "./toolmanifest.ts";
 import { serversFor } from "./modules/runtime.ts";
 import type { RunContext } from "./modules/types.ts";
 import { approveIn, makeCanUseTool, type Approve, type JudgeSetup } from "./permissions.ts";
@@ -86,15 +88,12 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, speaker
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
 export const browseRunner = (approve: Approve, tenant?: TenantRun, speaker?: RunOptions["speaker"]) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, speaker));
 
-// The built-in tools of a run (everything else is an MCP tool): the browse run only searches; a group or a tenant has the built-ins of its tool set (its
-// own notes, search, skills; before a tenant's age and region are confirmed none); the owner's chat adds skills and opening pages; a background run
-// has no notes; the rest only load skills.
-const BUILTINS = ["Skill", "Read", "Write", "Edit", "WebSearch"]; // the built-in tools a group or tenant can have (never WebFetch), in the order the owner's list has them
-function builtinTools(opts: RunOptions, browsing: boolean, tools: ReadonlySet<string> | undefined): string[] {
-  if (browsing) return ["WebSearch"];
-  if (tools) return BUILTINS.filter((t) => tools.has(t));
-  if (opts.memory) return ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"];
-  return opts.source === "background" ? ["Skill", "WebSearch", "WebFetch"] : ["Skill"];
+// The built-in tools of a run (everything else is an MCP tool), from the rows of the builtin module (modules/builtin.ts), one list for every run: a group or a
+// tenant has the rows its capability set holds (its own notes, search, skills; before a tenant's age and region are confirmed none, and never opening a page);
+// any other run has the rows offered to its source: the owner's chat everything (skills, its notes, search, opening pages), a background run skills, search and
+// pages, the browse run search only, the brief, the radar and the other unattended runs only skills.
+function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): string[] {
+  return builtinModule.rows.filter((r) => (tools ? tools.has(r.tool) && !isOwnerOnly(r.tool) : !!r.offeredTo?.includes(source))).map((r) => r.tool);
 }
 
 export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined): Options {
@@ -188,7 +187,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // Built-ins: Skill, and for chat Read / Write / Edit (confined to the notes folder by
     // policy.ts) and WebSearch / WebFetch (search freely, open a page only after approval). No Bash. Everything else the agent can do is an MCP tool (Mailbird,
     // Notion, Calendar...), gated by canUseTool.
-    tools: builtinTools(opts, browsing, tools),
+    tools: builtinTools(opts.source, tools),
     // "user" loads user-scope MCP servers (Mailbird) and CLAUDE.md; the skills offered are
     // limited to the bundled ones below.
     // Not "project": there is no project here.

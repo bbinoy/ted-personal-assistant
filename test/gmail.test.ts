@@ -234,7 +234,7 @@ test("parsing: a message, a draft and the original of a reply", () => {
   assert.deepEqual(parseOriginal(msg, SELF), { to: ["dana@example.com", "x@example.com"], cc: ["boss@example.com"], bcc: [], subject: "S", body: "", hasAttachments: false });
   assert.equal(parseOriginal(mcp({ subject: "no sender" }), SELF), undefined);
   const draft = parseDraft(mcp({ id: "d1", message: { subject: "Re", to_recipients: ["A@Example.com"], bcc_recipients: ["b@example.com"], plaintext_body: "text", attachments: [{ filename: "f.pdf" }] } }));
-  assert.deepEqual(draft, { to: ["a@example.com"], cc: [], bcc: ["b@example.com"], subject: "Re", body: "text", hasAttachments: true });
+  assert.deepEqual(draft, { to: ["a@example.com"], cc: [], bcc: ["b@example.com"], subject: "Re", body: "text", hasAttachments: true, attachments: ["f.pdf"] });
   assert.equal(parseDraft(mcp({ id: "d" })), undefined);
   assert.deepEqual(payload([{ type: "text", text: "{\"a\":1}" }]), { a: 1 });
 });

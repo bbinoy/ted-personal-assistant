@@ -88,12 +88,17 @@ test("a run that reads mail or a page tells the judge from then on, even when it
   assert.equal(((await canUse(`${MB}get_message`, { messageId: 1 }, opts)) as Out).behavior, "allow"); // a free read
   assert.equal(((await canUse(`${MB}archive_conversation`, { conversationId: "b" }, opts)) as Out).behavior, "allow");
   assert.deepEqual(j.seen.map((s) => s.untrustedInput), [false, true]);
-  // a calendar read does not count: it shows the owner's own data
+  // a calendar read counts too (an event's text is written by whoever invited the owner), and so does any other read of a data kind; public weather data does not
   const k = fake("auto");
   const cal = makeCanUseTool(async () => ({ approved: false }), "chat", undefined, undefined, k.fn, undefined, undefined, false, CHAT);
   await cal(`${CAL}list_events`, {}, opts);
   await cal(`${MB}archive_conversation`, { conversationId: "c" }, opts);
-  assert.deepEqual(k.seen.map((s) => s.untrustedInput), [false]);
+  assert.deepEqual(k.seen.map((s) => s.untrustedInput), [true]);
+  const w = fake("auto");
+  const weather = makeCanUseTool(async () => ({ approved: false }), "chat", undefined, undefined, w.fn, undefined, undefined, false, CHAT);
+  await weather("mcp__weather__get_forecast", {}, opts);
+  await weather(`${MB}archive_conversation`, { conversationId: "d" }, opts);
+  assert.deepEqual(w.seen.map((s) => s.untrustedInput), [false]);
 });
 
 test("the floor holds whatever the verdict: payments, the never-allowed set, sharing, guests, unknown tools, addresses that carry data out, groups' boundaries", async () => {
@@ -107,12 +112,16 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
     const r = (await makeCanUseTool(async (d, _c, _s, o) => (asked.push(d), typed.push(o?.typedYes), { approved: false }), source, undefined, "the standing task", j.fn, guard, undefined, false, setup)(tool, input, opts)) as Out;
     return { r, judged: j.seen.length };
   };
-  // never allowed, whatever anyone says
-  for (const tool of ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", `${MB}delete_conversation_permanently`, `${MB}trash_conversation`, `${MB}set_conversation_spam`, "mcp__claude_ai_Google_Drive__trash_file"]) {
-    const x = await run(tool, {});
-    assert.equal(x.r.behavior, "deny", tool);
-    assert.equal(x.judged, 0, tool);
+  // never allowed, whatever anyone says: classify itself says deny (so this does not pass because an approver declined), and an approver who would say yes is never asked
+  for (const tool of ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", `${MB}delete_conversation_permanently`, `${MB}trash_conversation`, `${MB}set_conversation_spam`, `${MB}discard_draft`, `${MB}set_sender_blocked`, "mcp__claude_ai_Google_Drive__trash_file", `${CAL}delete_event`]) {
+    for (const source of ["chat", "brief", "handler", "background", "group"] as const) assert.equal(classify(tool, {}, source), "deny", `${tool} (${source})`);
+    let asking = 0;
+    const yes = makeCanUseTool(async () => (asking++, { approved: true }), "chat", undefined, "the standing task", fake("auto").fn, undefined, undefined, false, CHAT);
+    assert.equal(((await yes(tool, {}, opts)) as Out).behavior, "deny", tool);
+    assert.equal(asking, 0, `${tool}: nobody is asked`);
   }
+  // and by their arguments
+  for (const [tool, input] of [[`${MB}create_draft`, { attachments: ["file:///home/someone/.ssh/id"] }], ["mcp__claude_ai_Gmail__label_thread", { labelIds: ["SPAM"] }], [`${NOTION}notion-update-page`, { page_id: "p", archived: true }]] as const) assert.equal(classify(tool, input, "chat"), "deny", tool);
   // asks, and is never judged
   for (const [tool, input] of [
     ["mcp__claude_ai_Google_Drive__share_file", { fileId: "f" }],

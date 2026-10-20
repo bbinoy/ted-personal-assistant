@@ -23,7 +23,7 @@ test("reads are allowed, including Notion's prefixed names (regression: brief hu
     `${N}notion-get-comments`, `${N}notion-list-recent-pages`,
     `${M}get_message`, `${M}list_conversations`, `${M}summarize_all_inboxes`, `${M}search_conversations`,
     `${C}list_events`, `${C}get_event`, `${C}suggest_time`,
-    "mcp__claude_ai_Gmail__search_threads", "mcp__claude_ai_Google_Drive__read_file_content",
+    "mcp__claude_ai_Google_Drive__read_file_content", "mcp__claude_ai_Google_Docs__read_doc",
   ]) assert.equal(chat(t), "allow", t);
 });
 

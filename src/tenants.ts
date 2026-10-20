@@ -43,7 +43,7 @@ export const ROLES: readonly Role[] = ["admin", "member"];
 // What a person may use; everything else about her is data. The owner has all of them, a friend starts with FRIEND_DEFAULTS. Each tool of the manifest
 // (toolmanifest.ts) and each shared skill (skills.ts) names the capability that gates it; capabilities.ts turns a set of them into tools and skills.
 // weather and draw are free (public data, a sanitised render), so they are on by default; every other capability a friend gets is granted.
-export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "google", "admin"] as const;
+export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "google", "drive", "admin"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 export const FRIEND_DEFAULTS: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "weather", "draw"];
 export const isCapability = (x: unknown): x is Capability => (CAPABILITIES as readonly unknown[]).includes(x);
