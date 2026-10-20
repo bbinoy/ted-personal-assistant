@@ -1,7 +1,7 @@
 {
   "name": "@ted-assistant/telegram",
   "version": "0.0.0",
-  "description": "Skeleton of the Telegram (Bot API) messenger for the Ted personal assistant. Not built yet: see SETUP.md.",
+  "description": "Skeleton of the Telegram (Bot API) messenger for the Ted personal assistant. Not built yet: see README.md.",
   "private": true,
   "type": "module",
   "sideEffects": false,

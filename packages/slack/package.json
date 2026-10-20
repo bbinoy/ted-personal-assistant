@@ -1,7 +1,7 @@
 {
   "name": "@ted-assistant/slack",
   "version": "0.0.0",
-  "description": "Skeleton of the Slack (Socket Mode) messenger for the Ted personal assistant. Not built yet: see SETUP.md.",
+  "description": "Skeleton of the Slack (Socket Mode) messenger for the Ted personal assistant. Not built yet: see README.md.",
   "private": true,
   "type": "module",
   "sideEffects": false,

@@ -1,7 +1,7 @@
 {
   "name": "@ted-assistant/whatsapp",
   "version": "0.0.0",
-  "description": "Skeleton of the WhatsApp (Business Cloud API) messenger for the Ted personal assistant. Not built yet: see SETUP.md.",
+  "description": "Skeleton of the WhatsApp (Business Cloud API) messenger for the Ted personal assistant. Not built yet: see README.md.",
   "private": true,
   "type": "module",
   "sideEffects": false,
