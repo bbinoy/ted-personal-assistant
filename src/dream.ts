@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
-import { allows } from "./capabilities.ts";
+import { allows } from "./policy/capabilities.ts";
 import { owner as ownerConversation, group as groupConversation, speakerOf, tenant as tenantConversation, type Conversation } from "./conversationmodel.ts";
 import { oneShot } from "./haiku.ts";
 import { isRefusal, LOGIN, mayRun, type Payer, type Refusal } from "./payer.ts";
@@ -18,7 +18,7 @@ import { dreamSystem } from "./persona.ts";
 import { preset } from "./preset.ts";
 import { OWNER, settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
-import { listTenants } from "./tenants.ts";
+import { listTenants } from "./tenants/tenants.ts";
 import { LIMITS, oneLine } from "./sanitize.ts";
 
 // The dream: once a day, before the daily brief, a model with NO tools reads what a conversation's person said since the last dream (their messages and

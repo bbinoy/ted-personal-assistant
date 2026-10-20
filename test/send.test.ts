@@ -4,13 +4,13 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildOptions } from "../src/agentrun.ts";
-import { BrowseGuard } from "../src/browseguard.ts";
-import { sanitizeResult, shotCaptions } from "../src/browse.ts";
+import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
+import { sanitizeResult, shotCaptions } from "../src/modules/browse/browse.ts";
 import { createPipeline, group, owner } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
-import { classify } from "../src/policy.ts";
-import { adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/shots.ts";
-import { sendNow, withSend, type Content } from "../src/send.ts";
+import { classify } from "../src/policy/policy.ts";
+import { adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/modules/send/shots.ts";
+import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { OWNER_KEY } from "../src/ownerkey.ts";
 import { access } from "./util.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";

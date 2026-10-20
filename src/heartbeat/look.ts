@@ -9,8 +9,8 @@ import { isRefusal, type Payer, type Refusal } from "../payer.ts";
 import { heartbeatInstruction } from "../persona.ts";
 import type { OwnerProfile } from "../profiles.ts";
 import { settings } from "../settings.ts";
-import { entryFor } from "../toolmanifest.ts";
-import type { RunProvenance } from "../autojudge.ts";
+import { entryFor } from "../policy/toolmanifest.ts";
+import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, mayPostNow, parseAnswer } from "./rules.ts";
 import { appendRow, HEARTBEAT_LOG, readRows, type HeartbeatRow } from "./rows.ts";
 

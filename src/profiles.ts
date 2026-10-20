@@ -1,8 +1,8 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { Source } from "./audit.ts";
 import type { Category } from "./notes.ts";
-import { BROWSE_SCHEMA } from "./browse.ts";
-import { groupCapabilities } from "./capabilities.ts";
+import { BROWSE_SCHEMA } from "./modules/browse/browse.ts";
+import { groupCapabilities } from "./policy/capabilities.ts";
 import { preset } from "./preset.ts";
 import { HEARTBEAT_SCHEMA } from "./heartbeat/rules.ts";
 import { settings } from "./settings.ts";

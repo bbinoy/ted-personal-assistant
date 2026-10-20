@@ -1,16 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick as settle } from "./util.ts";
-import type { AnswerDeps } from "../src/approvals.ts";
+import type { AnswerDeps } from "../src/approvals/approvals.ts";
 import { answer, answerReaction, request } from "./approvalrig.ts";
-import { makeApprove, sameArgs } from "../src/approvalask.ts";
-import { approvalLines } from "../src/approvalreport.ts";
-import { composeQuestion } from "../src/approvalmodel.ts";
-import { answerPrompt, parseAnswer, parseWrite, writePrompt, type OpenView } from "../src/approvalprompt.ts";
-import { factsOf, validateQuestion } from "../src/questionfacts.ts";
-import { runJudge } from "../src/approvaljudge.ts";
+import { makeApprove, sameArgs } from "../src/approvals/approvalask.ts";
+import { approvalLines } from "../src/approvals/approvalreport.ts";
+import { composeQuestion } from "../src/approvals/approvalmodel.ts";
+import { answerPrompt, parseAnswer, parseWrite, writePrompt, type OpenView } from "../src/approvals/approvalprompt.ts";
+import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
+import { runJudge } from "../src/approvals/approvaljudge.ts";
 import { settings } from "../src/settings.ts";
-import type { AnswerJudgement } from "../src/approvalprompt.ts";
+import type { AnswerJudgement } from "../src/approvals/approvalprompt.ts";
 
 // No model process is started here: the judge is injected, and warm spares are off.
 (settings as { warm: boolean }).warm = false;

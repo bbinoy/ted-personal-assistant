@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,14 +12,14 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenant-loops-"));
 process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token"; // the instance's own login, which a tenant's call must never carry
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
+const T = await import("../src/tenants/tenants.ts");
 const { createWakeups } = await import("../src/wake.ts");
 const { createDreamer } = await import("../src/dream.ts");
-const { createTenantRunner } = await import("../src/tenantrun.ts");
-const { keyNotices } = await import("../src/keynotice.ts");
+const { createTenantRunner } = await import("../src/tenants/tenantrun.ts");
+const { keyNotices } = await import("../src/tenants/keynotice.ts");
 const { askGateWith, gateSystem, parseGate } = await import("../src/gate.ts");
 const { owner, tenant } = await import("../src/conversation.ts");
-const { allows } = await import("../src/capabilities.ts");
+const { allows } = await import("../src/policy/capabilities.ts");
 const { hasPresets, onLogin } = await import("../src/conversationmodel.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recordCost, spentToday } = await import("../src/budget.ts");
@@ -45,7 +45,7 @@ beforeEach(() => {
 
 let n = 0;
 // A tenant by the real path (invite, consent), with the given capabilities on top of the friend defaults.
-function person(name: string, extra: (typeof T.CAPABILITIES)[number][] = ["wake"]): import("../src/tenants.ts").TenantRecord {
+function person(name: string, extra: (typeof T.CAPABILITIES)[number][] = ["wake"]): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
   T.recordConsent(T.tenantContext(rec), "Germany");

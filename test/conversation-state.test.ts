@@ -1,7 +1,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import type { Verdict } from "../src/autojudge.ts";
-import { failureCount, makeCanUseTool } from "../src/permissions.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
+import { failureCount, makeCanUseTool } from "../src/approvals/permissions.ts";
 
 // The anti-repeat state of permissions.ts ("already done", failed asks) is kept per conversation.
 

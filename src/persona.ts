@@ -1,6 +1,6 @@
-import { allows, capabilitiesOf, groupCapabilities } from "./capabilities.ts";
+import { allows, capabilitiesOf, groupCapabilities } from "./policy/capabilities.ts";
 import { fence } from "./fence.ts";
-import type { Capability } from "./tenants.ts";
+import type { Capability } from "./tenants/tenants.ts";
 import { mailSlot } from "./modules/index.ts";
 import { localDay } from "./pause.ts";
 import { NAMES, SKIPPED, type Connector } from "./connectors.ts";

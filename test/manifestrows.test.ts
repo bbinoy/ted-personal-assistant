@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { allRows, isFree, readsUntrusted } from "../src/toolmanifest.ts";
+import { allRows, isFree, readsUntrusted } from "../src/policy/toolmanifest.ts";
 
 // The full set of manifest rows, pinned: every tool the model might get, with its provider, action, capability, sources and mail view, and the two
 // things the rows decide for it (runs free of the judge; reading it makes the run's arguments untrusted). Recorded from the code before the tool

@@ -4,7 +4,7 @@ import { profileOptions } from "../src/agent.ts";
 import { buildOptions } from "../src/agentrun.ts";
 import { hiddenOutside, toolsFor } from "../src/profiletools.ts";
 import { PROFILES } from "../src/profiles.ts";
-import { classify } from "../src/policy.ts";
+import { classify } from "../src/policy/policy.ts";
 
 const CAL = "mcp__claude_ai_Google_Calendar__";
 const NOTION = "mcp__claude_ai_Notion__";

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describeCall } from "../src/format.ts";
+import { describeCall } from "../src/approvals/format.ts";
 
 test("approval text: a long email body is shown generously and the cut is announced", () => {
   const body = "Hello. ".repeat(300); // 2100 chars

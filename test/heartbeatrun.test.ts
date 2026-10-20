@@ -14,7 +14,7 @@ import { lookState, parseWake } from "../src/ledger.ts";
 import { settings } from "../src/settings.ts";
 import { dataPath, readText } from "../src/state.ts";
 import { createWakeups } from "../src/wake.ts";
-import type { RunProvenance } from "../src/autojudge.ts";
+import type { RunProvenance } from "../src/approvals/autojudge.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.briefBackstopHour = 24; // the brief is the brief tests' (test/tasks.test.ts); here the owner's look is all that runs

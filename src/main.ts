@@ -2,15 +2,15 @@ import "./log.ts"; // first: timestamps, redaction and owner-only files for ever
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation.ts";
 import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
 import { compactConversation, compactDue } from "./chatsession.ts";
-import { approveIn, setApprovers } from "./permissions.ts";
-import { scopeOf } from "./turnscope.ts";
-import * as approvals from "./approvals.ts";
-import { createApprovers } from "./approvers.ts";
+import { approveIn, setApprovers } from "./approvals/permissions.ts";
+import { scopeOf } from "./approvals/turnscope.ts";
+import * as approvals from "./approvals/approvals.ts";
+import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./guards.ts";
 import { createDreamer, dreamConversations } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
 import { createTenantMailLoops } from "./mailloops.ts";
-import { keyNotices } from "./keynotice.ts";
+import { keyNotices } from "./tenants/keynotice.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
@@ -22,7 +22,7 @@ import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
 import { preparePicture } from "./image.ts";
 import { prepareFile, type AudioTools } from "./document.ts";
 import { createOutbound } from "./outbound.ts";
-import { Ledger } from "./payments.ts";
+import { Ledger } from "./modules/browse/payments.ts";
 import { OWNER_KEY } from "./ownerkey.ts";
 import { applyCredentialMode, mask, settings, signalIdentity } from "./settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
@@ -31,11 +31,11 @@ import { directOf, type IncomingMessage } from "@ted-assistant/messenger";
 import { loadMessengerInUse } from "./messenger.ts";
 import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-assistant/speech/tts";
 import { Limiter } from "./limiter.ts";
-import { activeTenant, admitStranger } from "./tenantroute.ts";
-import { sweepStaleRuns } from "./browse.ts";
-import { createTenantRunner } from "./tenantrun.ts";
-import { tenantHooks } from "./tenanttools.ts";
-import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantContext } from "./tenants.ts";
+import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
+import { sweepStaleRuns } from "./modules/browse/browse.ts";
+import { createTenantRunner } from "./tenants/tenantrun.ts";
+import { tenantHooks } from "./tenants/tenanttools.ts";
+import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
@@ -110,7 +110,7 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 // Both kinds of conversation run through one pipeline (src/conversation.ts). Spoken replies need the
 // assistant's own chat (in Note to Self our own voice message would echo back as if the owner had sent
 // it) and the local speech setup.
-// Several people on one instance (TENANTS=on, src/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
+// Several people on one instance (TENANTS=on, src/tenants/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
 // Needs a messenger other people can write to: with Signal that is the assistant's own account (in Note to Self there is nobody else to talk to).
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one notice for the owner about the shared instance key (keynotice.ts), from every kind of run

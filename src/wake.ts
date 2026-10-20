@@ -8,7 +8,7 @@ import { groupContext, listGroups } from "./groupstore.ts";
 import { realRunner, type PromptBuilder, type Runner } from "./group.ts";
 import { wakePrompt } from "./wakeprompt.ts";
 import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
-import { allows } from "./capabilities.ts";
+import { allows } from "./policy/capabilities.ts";
 import { isRefusal, mayRun, type Payer, type Refusal } from "./payer.ts";
 import { hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
@@ -16,12 +16,12 @@ import { localDay } from "./pause.ts";
 import { namesTimeInQuietHours } from "./notetimes.ts";
 import { isPaused } from "./pause.ts";
 import type { OwnerProfile } from "./profiles.ts";
-import { listTenants } from "./tenants.ts";
+import { listTenants } from "./tenants/tenants.ts";
 import { briefOwed, briefTask, buildTask, presetRefusal, runBriefTask, type PresetIO, type Task } from "./tasks.ts";
 import { settings } from "./settings.ts";
 import { LIMITS } from "./sanitize.ts";
-import type { RunProvenance } from "./autojudge.ts";
-import { derivedTurn } from "./turnscope.ts";
+import type { RunProvenance } from "./approvals/autojudge.ts";
+import { derivedTurn } from "./approvals/turnscope.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant
 // (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look):

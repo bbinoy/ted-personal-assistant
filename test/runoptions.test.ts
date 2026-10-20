@@ -15,7 +15,7 @@ const INSTANCE_KEY = "sk-" + "ant-api03-INSTANCEINSTANCEINSTANCE";
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
+const T = await import("../src/tenants/tenants.ts");
 const { buildOptions } = await import("../src/agentrun.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
 const { group, owner, tenant } = await import("../src/conversation.ts");

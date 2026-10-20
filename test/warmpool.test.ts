@@ -16,7 +16,7 @@ process.env.ANTHROPIC_API_KEY = "sk-" + "ant-api03-OWNEROWNEROWNEROWNEROWNER";
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
+const T = await import("../src/tenants/tenants.ts");
 const { pool, runWarmOrCold, warmUp } = await import("../src/agentwarm.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
 const { chatResume } = await import("../src/chatsession.ts");

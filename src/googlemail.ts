@@ -1,4 +1,4 @@
-import type { GoogleSession } from "./googlemcp.ts";
+import type { GoogleSession } from "./modules/google/googlemcp.ts";
 import { settings } from "./settings.ts";
 
 // A friend's mailbox for the heartbeat (heartbeat.ts createMailCheck), through her own Google server (googlemcp.ts). The owner's Gmail relay runs a small model that may

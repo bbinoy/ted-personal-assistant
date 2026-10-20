@@ -2,7 +2,7 @@ import { fence } from "./fence.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { handlerTaskFor } from "./mailhandler.ts";
 import { oneLine, LIMITS } from "./sanitize.ts";
-import type { Approve } from "./permissions.ts";
+import type { Approve } from "./approvals/permissions.ts";
 import { audit } from "./audit.ts";
 import { draftCollector, type DraftId } from "./propose.ts";
 import { OWNER } from "./settings.ts";

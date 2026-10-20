@@ -200,7 +200,7 @@ export function loadSettings(env: Env) {
     runMaxMinutesChat: num(env, "RUN_MAX_MINUTES_CHAT", 40, 1, 1440),
     runMaxMinutesBackground: num(env, "RUN_MAX_MINUTES_BACKGROUND", 180, 1, 2880),
 
-    // The browser sub-task (src/browse.ts): a separate run that opens pages, reads them and fills forms for the owner's chat, background
+    // The browser sub-task (src/modules/browse/browse.ts): a separate run that opens pages, reads them and fills forms for the owner's chat, background
     // jobs and groups. Pages are untrusted; the run holds no mail, calendar or notes. A commit step (book, buy, send...) asks the owner,
     // payment and login fields are never filled. A group asks in the group, with the same limits. BROWSE=off turns it all off.
     browse: oneOf(env, "BROWSE", "on", ["on", "off"] as const) === "on",
@@ -208,12 +208,12 @@ export function loadSettings(env: Env) {
     browseMaxUsd: num(env, "BROWSE_MAX_USD", 1.5, 0.05, 50),
     browseMaxMinutes: num(env, "BROWSE_MAX_MINUTES", 10, 1, 120),
     browseMaxCommits: num(env, "BROWSE_MAX_COMMITS", 8, 0, 20),
-    // Paying with the owner's dedicated debit card (src/card.ts, browseguard.ts): only the owner's chat run, only after a typed YES. These caps are
+    // Paying with the owner's dedicated debit card (src/modules/browse/card.ts, browseguard.ts): only the owner's chat run, only after a typed YES. These caps are
     // ours, in code and in the card's currency, independent of the card issuer's own limit. 0 turns card payments off.
     cardCapPurchase: num(env, "CARD_CAP_PURCHASE", 25, 0, 10_000), // the most one payment may be
     cardCapDay: num(env, "CARD_CAP_DAY", 50, 0, 100_000), // the most paid in one local day (clicked, confirmed and unconfirmed payments count)
     browseMaxPayments: num(env, "BROWSE_MAX_PAYMENTS", 1, 0, 3), // card payments one browse run may start
-    // OpenBao, the secret store (src/openbao.ts, docs/SETUP.md): the saved profile, the card and later tokens and keys. None of these is a secret;
+    // OpenBao, the secret store (src/secrets/openbao.ts, docs/SETUP.md): the saved profile, the card and later tokens and keys. None of these is a secret;
     // the app's token is in the macOS Keychain, never in .env.
     openbao: {
       addr: env.OPENBAO_ADDR?.trim() || "https://127.0.0.1:8200", // loopback only (checked by the client)
@@ -225,7 +225,7 @@ export function loadSettings(env: Env) {
       timeoutMs: num(env, "OPENBAO_TIMEOUT_SECONDS", 5, 1, 60) * 1000,
       cacheMs: num(env, "OPENBAO_CACHE_SECONDS", 30, 0, 300) * 1000, // how long profile reads may be served from memory (the card is never cached)
     },
-    // The intake page (src/intakeserver.ts, docs/SETUP.md "The intake page"): a separate process on loopback where a tenant types a saved detail or a card
+    // The intake page (src/intake/intakeserver.ts, docs/SETUP.md "The intake page"): a separate process on loopback where a tenant types a saved detail or a card
     // instead of telling it to the chat. Off until INTAKE_BASE_URL (the public https address a tunnel gives it) is set; without it no setup link is offered.
     intake: {
       baseUrl: env.INTAKE_BASE_URL?.trim().replace(/\/+$/, "") || undefined,
@@ -234,7 +234,7 @@ export function loadSettings(env: Env) {
       linkMinutes: num(env, "INTAKE_LINK_MINUTES", 15, 1, 60), // how long a setup link works (once)
       dir: join(dataDir, "state/intake"), // the open links (hashed) and what was stored (lengths only)
     },
-    // Google for friends (src/googlemcp.ts, src/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend with the `google` capability connects her own Google
+    // Google for friends (src/modules/google/googlemcp.ts, src/intake/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend with the `google` capability connects her own Google
     // account on the intake page (OAuth, offline) and her mail and calendar tools are served by a pinned third-party MCP server that THIS process starts for her, with
     // her refresh token from her own OpenBao path. Off until the OAuth client is set. The client secret is a secret like TENANT_ANTHROPIC_API_KEY: in .env, dropped from
     // process.env below, handed only to her server process. The server's command and arguments are plain settings (pinned by version or commit, never auto-updated).
@@ -255,7 +255,7 @@ export function loadSettings(env: Env) {
       callSeconds: num(env, "GOOGLE_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
       mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model
     },
-    // Notion for friends (src/notionoauth.ts, src/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend with the `notion` capability connects her own Notion on the
+    // Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend with the `notion` capability connects her own Notion on the
     // intake page (OAuth with PKCE against Notion's hosted MCP server) and her Notion tools are that hosted server, called by THIS process with her token through the
     // same credentialed proxy as Google. Nothing to set up but the tunnel: the instance registers itself once (RFC 7591) and remembers the client in state/notion-client.json.
     notion: {
@@ -264,13 +264,13 @@ export function loadSettings(env: Env) {
       idleMinutes: num(env, "NOTION_MCP_IDLE_MINUTES", 10, 1, 240), // a friend's connection to the hosted server is closed after this long unused
       callSeconds: num(env, "NOTION_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
     },
-    // Screenshot vision for the browse worker (src/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
+    // Screenshot vision for the browse worker (src/modules/browse/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
     // click: also clicks by coordinates, which the guard resolves to the element under the point itself (a debugging port on loopback, browsecdp.ts).
     browseVision: oneOf(env, "BROWSE_VISION", "off", ["off", "read", "click"] as const),
     browseLocale: env.BROWSE_LOCALE?.trim() || "en-GB", // the browser's language (Accept-Language, navigator.language): an ordinary one, not the headless default en-US
     browseBrowserPath: env.BROWSE_BROWSER_PATH?.trim() || undefined, // advanced: a Chromium or Chrome executable instead of the one npm run setup:browse installs
 
-    // The one switch for the approval judge (src/autojudge.ts): auto (default) lets it skip the question for what follows from your request
+    // The one switch for the approval judge (src/approvals/autojudge.ts): auto (default) lets it skip the question for what follows from your request
     // or your standing tasks, inside the floor that code sets; off asks you about everything that is not a plain read.
     autoApprove: autoApprove(env),
 
@@ -308,7 +308,7 @@ export function loadSettings(env: Env) {
 
     dailyBudgetUsd: num(env, "DAILY_BUDGET_USD", 20, 0, 10_000),
 
-    // Several people on one instance (src/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Off: nothing changes, an unknown sender is ignored as always.
+    // Several people on one instance (src/tenants/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Off: nothing changes, an unknown sender is ignored as always.
     // On: an unknown sender gets a fixed invitation reply (no model call), the owner can mint invite codes, and each friend is a tenant with
     // her own folder, her own limits, and runs on the instance key below. The bot never writes first to anybody.
     tenants: oneOf(env, "TENANTS", "off", ["on", "off"] as const) === "on",

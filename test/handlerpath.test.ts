@@ -9,7 +9,7 @@ import { LOGIN } from "../src/payer.ts";
 import { handlerSystem } from "../src/persona.ts";
 import { PROFILES } from "../src/profiles.ts";
 import { createProposer, draftCollector } from "../src/propose.ts";
-import { classify } from "../src/policy.ts";
+import { classify } from "../src/policy/policy.ts";
 import { settings } from "../src/settings.ts";
 import { readJson, writeJson } from "../src/state.ts";
 

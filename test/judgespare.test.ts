@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick } from "./util.ts";
-import { JudgeSpare } from "../src/judgespare.ts";
+import { JudgeSpare } from "../src/approvals/judgespare.ts";
 import { settings } from "../src/settings.ts";
 
 const setWarm = (v: boolean) => ((settings as { warm: boolean }).warm = v);

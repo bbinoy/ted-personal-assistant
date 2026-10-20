@@ -1,4 +1,4 @@
-// Downloads the headless Chromium that the browse tool uses (src/browse.ts), into state/browse/browsers inside the data folder:
+// Downloads the headless Chromium that the browse tool uses (src/modules/browse/browse.ts), into state/browse/browsers inside the data folder:
 // nothing global, and deleting that folder removes it. Runs after `npm install` (never fails the install) and as `npm run setup:browse`.
 // Skipped with BROWSE=off or BROWSE_SKIP_INSTALL=1. About 100 MB.
 import { execFileSync } from "node:child_process";

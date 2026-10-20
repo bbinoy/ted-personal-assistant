@@ -1,11 +1,11 @@
 import { readAudit } from "./audit.ts";
-import { entryFor } from "./toolmanifest.ts";
+import { entryFor } from "./policy/toolmanifest.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import { localTime } from "./pause.ts";
 import { doctor } from "./doctor.ts";
 import { settings } from "./settings.ts";
-import { agreement } from "./autojudge.ts";
-import { APPROVAL_DECISIONS, approvalLines } from "./approvalreport.ts";
+import { agreement } from "./approvals/autojudge.ts";
+import { APPROVAL_DECISIONS, approvalLines } from "./approvals/approvalreport.ts";
 
 // Small operator tools:
 //   npm run report [hours]        what was archived, which actions the judge let through, how approvals went (default 24h)
@@ -14,7 +14,7 @@ import { APPROVAL_DECISIONS, approvalLines } from "./approvalreport.ts";
 //   npm run heartbeat-report [d]  what the heartbeat run did in the last d days (scripts/heartbeat-report.ts)
 
 
-// What the approval judge (src/autojudge.ts) did: the actions it let through without asking the owner (newest last), and how its "ask" verdicts
+// What the approval judge (src/approvals/autojudge.ts) did: the actions it let through without asking the owner (newest last), and how its "ask" verdicts
 // compared with the owner's own answers.
 function judgeSummary(hours: number) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();

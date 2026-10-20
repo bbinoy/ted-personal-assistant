@@ -2,7 +2,7 @@ import type { OwnerProfile, ProfileName } from "./profiles.ts";
 import { briefDelivery, briefInstructions, currentBriefPrompt, markBriefDone, runBriefAttempt, type BriefOutcome } from "./brief.ts";
 import { ledger, type LookState } from "./ledger.ts";
 import { settings } from "./settings.ts";
-import type { RunProvenance } from "./autojudge.ts";
+import type { RunProvenance } from "./approvals/autojudge.ts";
 
 // The one Task type: what a look can start. `profile` is HOW the run may work (agent.ts PROFILES: policy source, system prompt, skills, turns, budget, output
 // schema), fixed in code. The gate chooses only the instructions of a free-form task and can never edit a profile.

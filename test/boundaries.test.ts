@@ -27,16 +27,17 @@ export const ALLOWED: Record<string, readonly string[]> = {
   modules: [".", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   // a feature folder: its declaration (light) and its server, guard, rules and store files.
   "modules/*": [".", "modules", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // folders that exist (R3, R4): policy decides from data only, approvals sit above it; tenants and intake are one box, above the secrets.
+  approvals: [".", "modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
+  policy: [".", "modules", "tenants", "intake", "secrets", "core"], // reads modules/index lazily; never imports approvals; capabilities.ts reads the intake links (tenants and intake are one box in the diagram)
+  tenants: [".", "intake", "memory", "secrets", "core"],
+  intake: [".", "modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
+  secrets: [".", "core"],
   // the folders of the target layout that do not exist yet (rows stay until their chunk lands):
   heartbeat: [".", "conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   conversation: [".", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   run: [".", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  approvals: [".", "modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
-  policy: [".", "modules", "tenants", "secrets", "core"], // reads modules/index lazily
-  tenants: [".", "intake", "memory", "secrets", "core"],
-  intake: [".", "modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
   memory: [".", "tenants", "intake", "secrets", "core"],
-  secrets: [".", "core"],
   core: ["."],
 };
 
@@ -89,6 +90,13 @@ test("boundaries: every relative value import stays inside src/ and names a file
   const graph = srcGraph();
   const bad = Object.entries(graph).flatMap(([f, deps]) => deps.filter((d) => d.startsWith("..") || !(d in graph)).map((d) => `${f} -> ${d}`));
   assert.deepEqual(bad, [], "packages are imported by name (@ted-assistant/...), never by a relative path");
+});
+
+test("boundaries: every feature folder under src/modules/ holds its declaration as module.ts", () => {
+  const features = readdirSync(join(SRC, "modules"), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  assert.ok(features.length > 0, "the walk found the feature folders");
+  const without = features.filter((f) => !readdirSync(join(SRC, "modules", f)).includes("module.ts"));
+  assert.deepEqual(without, [], "module.ts is the light declaration; the server, guard, rules and store files sit next to it");
 });
 
 test("boundaries: the checker rejects a deliberately wrong import", () => {

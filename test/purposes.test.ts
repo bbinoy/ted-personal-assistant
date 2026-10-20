@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PURPOSES, purposeAvailable } from "../src/intakepurposes.ts";
-import { purposesFor } from "../src/intakelinks.ts";
+import { PURPOSES, purposeAvailable } from "../src/intake/intakepurposes.ts";
+import { purposesFor } from "../src/intake/intakelinks.ts";
 import { settings } from "../src/settings.ts";
-import { ITEM_KINDS } from "../src/secrets.ts";
-import { CAPABILITIES } from "../src/tenants.ts";
-import { googleProvider } from "../src/googleoauth.ts";
-import { notionProvider } from "../src/notionoauth.ts";
-import { connectionServices } from "../src/connections.ts";
+import { ITEM_KINDS } from "../src/secrets/secrets.ts";
+import { CAPABILITIES } from "../src/tenants/tenants.ts";
+import { googleProvider } from "../src/intake/googleoauth.ts";
+import { notionProvider } from "../src/intake/notionoauth.ts";
+import { connectionServices } from "../src/tenants/connections.ts";
 
 // The purposes and the item kinds are two views of one table: a Purpose says its capability, the kind it writes, what it needs and (for a sign-in) its provider; everything else
 // (the page's writer, the OpenBao policies, the doctor's probe, the admin's list) is derived.

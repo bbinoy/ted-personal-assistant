@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agreement, isJudgeable, isPlainWebAddress, judgeAction, judgePrompt, mayAutoApprove, parseVerdict, provenanceFor, type Provenance } from "../src/autojudge.ts";
+import { agreement, isJudgeable, isPlainWebAddress, judgeAction, judgePrompt, mayAutoApprove, parseVerdict, provenanceFor, type Provenance } from "../src/approvals/autojudge.ts";
 
 const CAL = "mcp__claude_ai_Google_Calendar__";
 const MB = "mcp__mailbird__";

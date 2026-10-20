@@ -14,10 +14,10 @@ process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token";
 process.env.TENANTS = "on";
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
-const L = await import("../src/intakelinks.ts");
-const { SessionHub } = await import("../src/mcpproxy.ts");
-const { GoogleSession } = await import("../src/googlemcp.ts");
+const T = await import("../src/tenants/tenants.ts");
+const L = await import("../src/intake/intakelinks.ts");
+const { SessionHub } = await import("../src/intake/mcpproxy.ts");
+const { GoogleSession } = await import("../src/modules/google/googlemcp.ts");
 const { GoogleMail } = await import("../src/googlemail.ts");
 const { createTenantMailLoops } = await import("../src/mailloops.ts");
 const { mailFiles, mailDigest } = await import("../src/tenantmail.ts");

@@ -1,5 +1,5 @@
 import { test } from "node:test";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { clampCheck, lookDue, lookState, wakeText } from "../src/ledger.ts";
 import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/messages.ts";
 import { conversationLines } from "../src/dream.ts";
 import { groupContext, groupLogFile } from "../src/groupstore.ts";
-import { classify } from "../src/policy.ts";
+import { classify } from "../src/policy/policy.ts";
 import { AuthError, RateLimitError } from "../src/errors.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { dataPath } from "../src/state.ts";

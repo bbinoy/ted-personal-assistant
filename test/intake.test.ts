@@ -7,22 +7,22 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { readAudit } from "../src/audit.ts";
-import { ProfileStore } from "../src/profile.ts";
-import { IntakeWriter } from "../src/intakestore.ts";
+import { ProfileStore } from "../src/modules/browse/profile.ts";
+import { IntakeWriter } from "../src/intake/intakestore.ts";
 import { startFakeBao, type FakeBao } from "./fakebao.ts";
 
 // The intake page: links (single use, expiry, bound to a person and a purpose), the form and the store, the hardening of the HTTP side, and the
 // tenant's two tools. Fakes only: a fake OpenBao, fake values, fake cards (4242 4242 4242 4242).
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
-const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const T = await import("../src/tenants/tenants.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
-const L = await import("../src/intakelinks.ts");
-const { IntakeServer } = await import("../src/intakeserver.ts");
-const { createIntakeServer } = await import("../src/intaketools.ts");
-const { classify } = await import("../src/policy.ts");
+const L = await import("../src/intake/intakelinks.ts");
+const { IntakeServer } = await import("../src/intake/intakeserver.ts");
+const { createIntakeServer } = await import("../src/intake/intaketools.ts");
+const { classify } = await import("../src/policy/policy.ts");
 const { intakeCheck } = await import("../src/doctor.ts");
 
 // everything the process prints is captured, to prove that no value and no code is in it
@@ -45,7 +45,7 @@ const FAKE_CVC = "737";
 
 let n = 0;
 const fresh = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
-function person(name: string, capabilities: import("../src/tenants.ts").Capability[]): import("../src/tenants.ts").TenantRecord {
+function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: fresh(), name })!;
   T.setStatus(rec.id, "active");
   for (const c of capabilities) T.grant(rec.id, c);
@@ -374,7 +374,7 @@ test("the intake token is write-only: it creates and updates profile and card it
 test("the minted link: a tenant's tool, offered only with INTAKE_BASE_URL, the intake capability and a purpose she may use", async () => {
   const cfg = settings.intake as { baseUrl: string | undefined; allowHttpLoopback: boolean };
   const was = { ...cfg };
-  const caps = (...c: import("../src/tenants.ts").Capability[]) => ({ config: {}, capabilities: c });
+  const caps = (...c: import("../src/tenants/tenants.ts").Capability[]) => ({ config: {}, capabilities: c });
   const has = (c: ReturnType<typeof caps>) => [...tenantTools(c)].filter((t) => t.startsWith("mcp__intake__"));
   try {
     cfg.baseUrl = undefined;

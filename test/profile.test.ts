@@ -4,17 +4,17 @@ import { standing } from "./util.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAudit } from "../src/audit.ts";
-import type { Verdict } from "../src/autojudge.ts";
-import { browse, browseSystem } from "../src/browse.ts";
-import { BrowseGuard } from "../src/browseguard.ts";
-import { findTotal, parseSnapshot } from "../src/browserules.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
+import { browse, browseSystem } from "../src/modules/browse/browse.ts";
+import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
+import { findTotal, parseSnapshot } from "../src/modules/browse/browserules.ts";
 import { hostMatches, normalizeDomain, registeredDomain } from "../src/domains.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
-import { loadProfile, ProfileStore, fieldFitsKey, kindOfKey, type Entries } from "../src/profile.ts";
-import { profileCli } from "../src/profilecli.ts";
-import { factsOf, validateQuestion } from "../src/questionfacts.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
+import { loadProfile, ProfileStore, fieldFitsKey, kindOfKey, type Entries } from "../src/modules/browse/profile.ts";
+import { profileCli } from "../src/modules/browse/profilecli.ts";
+import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 import { OWNER_KEY } from "../src/ownerkey.ts";
-import { TenantSecrets } from "../src/secrets.ts";
+import { TenantSecrets } from "../src/secrets/secrets.ts";
 import { startFakeBao } from "./fakebao.ts";
 
 // Obviously fake values only. No test touches the real OpenBao or Keychain: the store talks to an in-process fake of OpenBao's HTTP API (fakebao.ts).
@@ -394,6 +394,6 @@ test("the browse tool manifest is unchanged: a saved detail is a browser_type ca
   assert.equal(access(`${B}type`, "browse"), "judged");
   assert.equal(access(`${B}type`, "chat"), undefined);
   assert.equal(access(`${B}type`, "group"), undefined);
-  assert.ok(!(await import("../src/browserules.ts")).ALLOWED_BROWSER_TOOLS.some((t) => /profile/.test(t)));
+  assert.ok(!(await import("../src/modules/browse/browserules.ts")).ALLOWED_BROWSER_TOOLS.some((t) => /profile/.test(t)));
   void parseSnapshot;
 });

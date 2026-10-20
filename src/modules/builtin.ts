@@ -1,5 +1,5 @@
 import type { Source } from "../audit.ts";
-import { isPlainWebAddress } from "../webaddress.ts";
+import { isPlainWebAddress } from "../policy/webaddress.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // The assistant's own tools: web search and page fetch, skills, the notes' file tools. Nothing to connect: they are the SDK's.
