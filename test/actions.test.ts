@@ -60,4 +60,5 @@ test("handler prompt: mail metadata cannot break out of its line", () => {
   const line = p.split("\n").find((l) => l.startsWith("[1]"))!;
   assert.ok(!line.includes("<script>") && !line.includes("\n"));
   assert.equal(p.split("\n").filter((l) => /^(SYSTEM|Ignore)/.test(l)).length, 0);
+  assert.match(p, /<emails>\n\[1\] account=a@x\.com[^\n]*\n<\/emails>$/, "the list is fenced as data");
 });
