@@ -18,7 +18,7 @@ import { settings } from "../settings.ts";
 import { createTenantAdminServer } from "../tenanttools.ts";
 import { createVoiceServer } from "../voicetool.ts";
 import { createWeatherServer } from "../weathertools.ts";
-import { connectionOf, loaded, mailModule } from "./index.ts";
+import { loaded, mailModule } from "./index.ts";
 import { setGmailReaders } from "./gmail.ts";
 import { GOOGLE_PREFIX } from "./google.ts";
 import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notionhosted.ts";
@@ -88,7 +88,7 @@ export const dropAll = (tenantId: string): void => void Object.values(LIFECYCLE)
 export function serversFor(ctx: RunContext): Record<string, McpServerConfig> {
   const servers: Record<string, McpServerConfig> = {};
   for (const m of loaded()) {
-    const c = connectionOf(m, ctx);
+    const c = m.connection;
     if ((c.kind !== "in-process" && c.kind !== "external") || !!c.forBrowse !== ctx.browsing || !c.when(ctx)) continue;
     const make = SERVERS[c.name];
     if (!make) throw new Error(`module ${m.name}: no server is built under the name ${c.name}`);

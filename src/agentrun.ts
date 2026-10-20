@@ -150,16 +150,16 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && opts.memory?.groupId ? approveIn(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
-  // the browser: the browse run only) and builds it. A tenant's own server process (the Google and Notion modules to come) would be answered here the same way.
+  // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
   const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId: opts.memory?.groupId, tenant, memory: opts.memory, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, speaker) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
     : tenant && !tenant.consented
       ? { tenant: createTenantServer(tenant) }
-      : opts.memory || servers.browse || servers.send || servers.google
+      : Object.keys(servers).length
         ? servers
-        : undefined;
+        : undefined; // (every server a module built: a new one is never dropped here)
   // A tenant's run is on the instance key or it does not run: the owner's login is never a fallback (tenanttools.ts tenantEnv).
   const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
   const env = opts.tenant ? tenantEnv(baseEnv, opts.tenant.apiKey) : baseEnv;

@@ -1,7 +1,7 @@
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // Notion, through the owner's claude.ai connector. The model sees only the tools in NOTION_TOOLS (settings): every tool schema is re-sent on every model call
-// and Notion alone was ~58k tokens of a ~118k floor. For friends the next job gives this module a per-conversation connection (hosted Notion MCP, her token).
+// and Notion alone was ~58k tokens of a ~118k floor. A friend's own Notion is another module (notionhosted.ts: the hosted Notion MCP with her token).
 const NOTION = "mcp__claude_ai_Notion__";
 
 // WHAT the tools are, by action (the hosted server's names are the connector's): shared by this module and by a friend's own Notion (modules/notionhosted.ts), which
