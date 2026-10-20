@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { CardStore, type CardRecord } from "../src/modules/browse/card.ts";
-import { OpenBao } from "../src/openbao.ts";
-import { TenantSecrets } from "../src/secrets.ts";
+import { OpenBao } from "../src/secrets/openbao.ts";
+import { TenantSecrets } from "../src/secrets/secrets.ts";
 
 // An in-process stand-in for OpenBao's HTTP API (KV v2, health, token lookup, capabilities), for the unit tests. No real OpenBao and no real
 // secret: tests put obviously fake values in. It enforces the same prefix rule the real policy does (a token reaches only its tenant's folder),

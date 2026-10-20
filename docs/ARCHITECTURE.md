@@ -291,11 +291,6 @@ src/agent.ts         the entry points of Agent SDK runs: runConversation and pre
 src/runoptions.ts    the ONE builder of a conversation's run options (runOptionsFor), from its record: owner, group, tenant
 src/agentrun.ts      the core of a run: RunOptions and buildOptions, the stream consumer, the run ceiling, runAgent, the browse sub-run
 src/agentwarm.ts     the keyed pool of warm processes (WarmPool) for the next message, and the warm-or-cold run
-src/openbao.ts       the OpenBao HTTP client (KV v2, loopback, pinned certificate, fail closed)
-src/secrets.ts       tenants/<id>/<kind>/<name> paths, the card-for-owner-only rule, the app's connection
-src/keychain.ts      the macOS Keychain through `security` (app token, unseal shares)
-src/openbaoadmin.ts  install, config, init, unseal, policies, tokens, snapshots (npm run openbao)
-src/openbaoservice.ts the two launchd jobs of the secret store
 src/domains.ts       registered domain (eTLD+1) with a compact suffix list, for profile domain binding
 src/ceiling.ts       the wall-clock ceiling of one run (pausable while an approval waits)
 src/preset.ts        the assistant preset: loader, validation and templates (assistants/<name>/preset.json and persona/*.md)
@@ -306,11 +301,6 @@ src/haiku.ts         the shared base options of every small one-shot Haiku call 
 src/chatsession.ts   when a conversation's session resumes, and compacting it in place
 src/memorynotice.ts  the note changes of a chat turn and the one notice about them
 src/modules/         the tool modules, one file per tool or one folder per feature with module.ts and its code (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
-src/oauth.ts         the sign-in every service shares: PKCE, the single-use state bound to the intake link, the flows in progress (googleoauth.ts and notionoauth.ts are its providers)
-src/mcpproxy.ts      the credentialed MCP proxy every service shares: a friend's session upstream and the in-process "sdk" server her run gets (googlemcp.ts, notionmcp.ts)
-src/notionoauth.ts   Notion: discovery, the one registered client, the grant, rotating refresh under a lock; src/notionmcp.ts the hosted server as a session and its proxy
-src/connections.ts   which of her own accounts (Google, Notion) a person has connected: the admin's list and the doctor
-src/keynotice.ts     the one notice for the owner about the shared instance key, called wherever a friend's run fails on it
 src/brieftext.ts     the words of the daily brief's preset that the mail modules and brief.ts share
 src/heartbeat.ts     the tick: check mail, triage, act, hand off
 src/triage.ts        batched classifier + injection isolation (its prompt is the preset's triage.md)
@@ -374,44 +364,29 @@ src/cli.ts           report / restore / triage-check
 src/doctor.ts        `npm run doctor`
 src/document.ts      files people send that are not pictures, made ready for the model (the bytes decide what a file is)
 src/googlemail.ts    a friend's mailbox for the mail check, through her own Google server
-src/googlemcp.ts     a friend's Google tools: the pinned third-party MCP server, one process per friend
-src/googleoauth.ts   Google as an OAuthProvider (offline access, the scopes the tools need)
 src/image.ts         pictures people send, checked by their bytes, shrunk, wrapped as image content
-src/intakelinks.ts   the single-use setup links of the intake page: minting, claiming, what was stored
-src/intakepurposes.ts the purposes of a link (PURPOSES): capability, item kind, what it needs, its fields and where it stores
-src/intakeserver.ts  the intake page: a separate loopback process where a tenant types a secret herself
-src/intakestore.ts   the intake page's write-only way into OpenBao
-src/intaketools.ts   a tenant's two tools for the intake page (get_setup_link, setup_status)
 src/logsearch.ts     the `search_logs` tool's plain-text search over the logs folder
 src/mailloops.ts     the mail check, triage and handler for every friend who has mail through her own Google, on the heartbeat's tick
 src/messenger.ts     the app's one meeting point with its chat platform (MESSENGER): load it by name, its options, the instance in use
 src/notetimes.ts     the times of day a conversation's notes name, for the idle fingerprint and the wake-ups
 src/notice.ts        informational messages written by a small tool-less model from facts code collected
-src/notionmcp.ts     a friend's Notion tools: the hosted Notion MCP server called with her token
-src/onetime.ts       one-time codes (invitations): shown once, only the hash kept
 src/ownerkey.ts      the key of the owner's chat and sourceOfKey (policy source from a conversation key)
 src/persona.ts       system prompts: the words are the preset's, this fills in what only code knows
 src/profiletools.ts  what an unattended job can see of the connectors
 src/radar-nudge.ts   the calendar changed by the assistant: the radar looks again soon
 src/skills.ts        which bundled skills a conversation may load
 src/tenantmail.ts    a friend's mail check state in her own folder (tenants/<id>/mail/)
-src/tenantroute.ts   who is this sender? The door for everybody who is not the owner
-src/tenantrun.ts     a tenant's turn around the run: the gates that need no model, in code
-src/tenants.ts       tenants: the registry of people, capabilities, invites, her folder and limits
-src/tenanttools.ts   the in-process MCP servers of a tenant's run (record_consent) and the owner's tenant administration
 src/turncontext.ts   what a conversation's session is told at the start of a turn
 src/modules/builtin.ts the assistant's own tools (web search, page fetch, skills, the notes' file tools)
 src/modules/calendar.ts Google Calendar through the owner's connector, with the guests floor
 src/modules/drive.ts Google Drive, Docs and Claude Docs connectors (hidden by default)
 src/modules/gmail.ts the Gmail connector (MAIL_PROVIDER=gmail) and its mail slot
-src/modules/google.ts Google for friends (capability `google`): mail and calendar tools of a friend's own account
 src/modules/ibkr.ts  Interactive Brokers: never allowed, for everyone
 src/modules/intake.ts intake: a tenant's one-time link tools
 src/modules/mailbird.ts Mailbird (MAIL_PROVIDER=mailbird) and its mail slot
 src/modules/mailtask.ts  the handler task text every mail module fills in (handlerTaskText): one handler path for all providers
 src/modules/memory.ts memory: forget a note, search the logs, undo the dream
 src/modules/notion.ts Notion through the owner's connector (default visible tools: NOTION_TOOLS)
-src/modules/notionhosted.ts Notion for friends (capability `notion`): the hosted Notion MCP server
 src/modules/tenants.ts the owner's tenant administration tools (TENANTS=on)
 src/modules/index.ts the list of tool modules and which are loaded; checkHideSettings
 src/modules/runtime.ts the code the modules wrap (servers, mail clients, doctor checks), bound to them by name
@@ -520,6 +495,66 @@ The send feature (the `send` tool: a message, file or picture to the owner or a 
 src/modules/send/module.ts  send
 src/modules/send/send.ts    the send tool: a message, voice note, picture or reaction in the conversation NOW while the run continues
 src/modules/send/shots.ts   pictures of a turn (browse screenshots, drawings) kept so the `send` tool can deliver one
+```
+
+### src/tenants/
+
+People other than the owner: the tenant records and their capability set, how an incoming message is routed to a tenant, the runner for a tenant's turn, the tools that administer tenants, the connections each one has, and the notice that her keys are missing. Dependency rule: may use `intake/`, `memory/`, `secrets/` and the core; policy, approvals and the feature folders sit above it (`test/boundaries.test.ts`).
+
+```
+src/tenants/tenants.ts      tenants: the registry of people, capabilities, invites, her folder and limits
+src/tenants/tenantroute.ts  who is this sender? The door for everybody who is not the owner
+src/tenants/tenantrun.ts    a tenant's turn around the run: the gates that need no model, in code
+src/tenants/tenanttools.ts  the in-process MCP servers of a tenant's run (record_consent) and the owner's tenant administration
+src/tenants/connections.ts  which of her own accounts (Google, Notion) a person has connected: the admin's list and the doctor
+src/tenants/keynotice.ts    the one notice for the owner about the shared instance key, called wherever a friend's run fails on it
+```
+
+### src/intake/
+
+How a friend connects her own accounts: the one-time intake page and its links, what each purpose stores, the OAuth flows (Google, Notion) and the credentialed MCP proxy that serves whatever she connected. Dependency rule: may use `tenants/`, `memory/`, `secrets/` and the core, and the browse feature folder (the intake page stores the card and profile items); nothing below it imports approvals or the run code.
+
+```
+src/intake/intakeserver.ts    the intake page: a separate loopback process where a tenant types a secret herself
+src/intake/intakelinks.ts     the single-use setup links of the intake page: minting, claiming, what was stored
+src/intake/intakepurposes.ts  the purposes of a link (PURPOSES): capability, item kind, what it needs, its fields and where it stores
+src/intake/intakestore.ts     the intake page's write-only way into OpenBao
+src/intake/intaketools.ts     a tenant's two tools for the intake page (get_setup_link, setup_status)
+src/intake/oauth.ts           the sign-in every service shares: PKCE, the single-use state bound to the intake link, the flows in progress (googleoauth.ts and notionoauth.ts are its providers)
+src/intake/googleoauth.ts     Google as an OAuthProvider (offline access, the scopes the tools need)
+src/intake/notionoauth.ts     Notion: discovery, the one registered client, the grant, rotating refresh under a lock; src/notionmcp.ts the hosted server as a session and its proxy
+src/intake/mcpproxy.ts        the credentialed MCP proxy every service shares: a friend's session upstream and the in-process "sdk" server her run gets (googlemcp.ts, notionmcp.ts)
+```
+
+### src/secrets/
+
+Where secrets live: the OpenBao client and its admin (install, certificate, launchd units), the per-tenant paths and rules over it, the macOS keychain wrapper for the app's own credentials and the one-time secret handoff. Dependency rule: imports only the core; everything that holds a secret goes through here.
+
+```
+src/secrets/openbao.ts         the OpenBao HTTP client (KV v2, loopback, pinned certificate, fail closed)
+src/secrets/openbaoadmin.ts    install, config, init, unseal, policies, tokens, snapshots (npm run openbao)
+src/secrets/openbaoservice.ts  the two launchd jobs of the secret store
+src/secrets/secrets.ts         tenants/<id>/<kind>/<name> paths, the card-for-owner-only rule, the app's connection
+src/secrets/keychain.ts        the macOS Keychain through `security` (app token, unseal shares)
+src/secrets/onetime.ts         one-time codes (invitations): shown once, only the hash kept
+```
+
+### src/modules/google/
+
+Google for friends (capability `google`): the module declaration and the friend's own Gmail and Calendar MCP server process (started on first use, closed when idle), bound in `src/modules/runtime.ts`. Same dependency rule as every feature folder.
+
+```
+src/modules/google/module.ts     Google for friends (capability `google`): mail and calendar tools of a friend's own account
+src/modules/google/googlemcp.ts  a friend's Google tools: the pinned third-party MCP server, one process per friend
+```
+
+### src/modules/notion/
+
+Notion for friends (capability `notion`): the module declaration (`module.ts`, formerly `notionhosted.ts`) and the hosted Notion MCP server. The owner's Notion through the claude.ai connector stays the single-file declaration `src/modules/notion.ts`. Same dependency rule as every feature folder.
+
+```
+src/modules/notion/module.ts     Notion for friends (capability `notion`): the hosted Notion MCP server
+src/modules/notion/notionmcp.ts  a friend's Notion tools: the hosted Notion MCP server called with her token
 ```
 
 ## Development

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { noticeFor } from "./errors.ts";
 import { allows } from "./policy/capabilities.ts";
-import { tenantById, tenantContext } from "./tenants.ts";
+import { tenantById, tenantContext } from "./tenants/tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
 import { FILE as OWNER_LOG, type Extra, type Kind } from "./messages.ts";

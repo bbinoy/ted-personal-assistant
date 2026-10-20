@@ -1,5 +1,5 @@
 import { OAuthProblem, postForm, type OAuthProvider } from "./oauth.ts";
-import { googleReady, settings } from "./settings.ts";
+import { googleReady, settings } from "../settings.ts";
 
 // Google as an OAuthProvider (oauth.ts has the flow): the consent screen asks for offline access (a refresh token comes back every time she connects) with the
 // scopes the tools need, the token endpoint is asked with the client secret and the PKCE verifier, and the answer must name the account (an id_token) and carry every

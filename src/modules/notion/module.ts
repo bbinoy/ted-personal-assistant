@@ -1,7 +1,7 @@
-import { NOTION_FLOOR, NOTION_UPDATE_TITLE, notionRows } from "./notion.ts";
-import { tenantOffered, type ToolModule } from "./types.ts";
+import { NOTION_FLOOR, NOTION_UPDATE_TITLE, notionRows } from "../notion.ts";
+import { tenantOffered, type ToolModule } from "../types.ts";
 
-// Notion for friends (capability `notion`): a friend's OWN Notion, through Notion's hosted MCP server and her own OAuth grant (src/notionoauth.ts, src/notionmcp.ts). The
+// Notion for friends (capability `notion`): a friend's OWN Notion, through Notion's hosted MCP server and her own OAuth grant (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts). The
 // owner never has these tools (his Notion is the connector, modules/notion.ts); a friend never has the owner's. The tools are the same ones with the same actions as the
 // owner's (notionRows is shared, not copied); the server calls them under the name `notion`, so a friend's are mcp__notion__notion-search and so on.
 //

@@ -1,5 +1,5 @@
-import { connectionState } from "./intakelinks.ts";
-import { PURPOSES } from "./intakepurposes.ts";
+import { connectionState } from "../intake/intakelinks.ts";
+import { PURPOSES } from "../intake/intakepurposes.ts";
 import type { Capability } from "./tenants.ts";
 
 // Which of her own accounts a person has connected (Google, Notion: the sign-in purposes of the intake page), for the admin's list and the doctor. Whether, and since

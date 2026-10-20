@@ -9,22 +9,22 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenants-test-"));
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
+const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
-const R = await import("../src/tenantroute.ts");
-const { createTenantRunner } = await import("../src/tenantrun.ts");
-const { keyNotices, createKeyNotices } = await import("../src/keynotice.ts");
+const R = await import("../src/tenants/tenantroute.ts");
+const { createTenantRunner } = await import("../src/tenants/tenantrun.ts");
+const { keyNotices, createKeyNotices } = await import("../src/tenants/keynotice.ts");
 const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
 const { failure, InstanceKeyError, RateLimitError } = await import("../src/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
 const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", costFile: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
 const { recordCost, spentToday, tenantOverBudget } = await import("../src/budget.ts");
 const { tenant } = await import("../src/conversationmodel.ts");
-const { OneTimeCodes, CODE_PATTERN } = await import("../src/onetime.ts");
-const { looksLikeApiKey } = await import("../src/secrets.ts");
-const { describeTenants } = await import("../src/tenanttools.ts");
+const { OneTimeCodes, CODE_PATTERN } = await import("../src/secrets/onetime.ts");
+const { looksLikeApiKey } = await import("../src/secrets/secrets.ts");
+const { describeTenants } = await import("../src/tenants/tenanttools.ts");
 const { NOTES_DIR } = await import("../src/notes.ts");
 const { FILE: OWNER_LOG } = await import("../src/messages.ts");
 const { OWNER_SESSION_FILE } = await import("../src/session.ts");
@@ -45,7 +45,7 @@ beforeEach(() => {
 let n = 0;
 const fresh = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
 // A new tenant by the real path: an invite code, redeemed.
-function join_(name = "Anna", aci = fresh()): import("../src/tenants.ts").TenantRecord {
+function join_(name = "Anna", aci = fresh()): import("../src/tenants/tenants.ts").TenantRecord {
   const made = T.mintInvite("test")!;
   const rec = T.redeemInvite(made.code, { aci, name });
   assert.ok(rec);
@@ -470,7 +470,7 @@ test("set-admin: the role moves to one record and only the local CLI does it; no
   const { readdirSync } = await import("node:fs");
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : e.name.endsWith(".ts") ? [join(dir, e.name)] : []));
   const importing = files(new URL("../src", import.meta.url).pathname).filter((f) => !f.endsWith("/tenants.ts")).filter((f) => {
-    const imports = [...readFileSync(f, "utf8").matchAll(/import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*"\.\/tenants\.ts"/g)].flatMap((m) => m[1]!.split(",").map((x) => x.trim().split(/\s+as\s+/)[0]!));
+    const imports = [...readFileSync(f, "utf8").matchAll(/import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*"(?:\.\.?\/)+(?:tenants\/)?tenants\.ts"/g)].flatMap((m) => m[1]!.split(",").map((x) => x.trim().split(/\s+as\s+/)[0]!));
     return imports.some((x) => ["setAdmin", "grant", "revoke"].includes(x));
   });
   assert.deepEqual(importing, [], "no module under src/ can change the admin role or a capability");
@@ -501,7 +501,7 @@ test("the per-tenant key plumbing is gone: no set-key, forget-key, KeyStore, int
   assert.ok(!/set-key|forget-key|tenantKeys|localIntake/.test(cli));
   assert.equal(existsSync(new URL("../src/intake.ts", import.meta.url)), false);
   assert.equal((R as Record<string, unknown>).setupIncompleteReply, undefined);
-  assert.ok(!/anthropic_api_key|keyRef/.test(readFileSync(new URL("../src/tenants.ts", import.meta.url), "utf8")));
+  assert.ok(!/anthropic_api_key|keyRef/.test(readFileSync(new URL("../src/tenants/tenants.ts", import.meta.url), "utf8")));
 });
 
 test("registry cache: read again only when the file changed (stat), at once after this process's own write, and a change by another process is seen", () => {

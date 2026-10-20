@@ -1,11 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { audit } from "./audit.ts";
+import { audit } from "../audit.ts";
 import { LINK_CODE, LinkStore, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
 import type { Put } from "./intakepurposes.ts";
 import { CALLBACK, OAuthProblem, bindingCookie, bindingFrom, type OAuthFlows } from "./oauth.ts";
-import { people } from "./tenants.ts";
+import { people } from "../tenants/tenants.ts";
 
 // The intake page: a separate process (scripts/intake.ts), on 127.0.0.1 only, that is the one place a tenant types a secret. A tunnel the owner sets up
 // (docs/SETUP.md) puts it on the internet over https; this file knows nothing of that. Nothing secret goes through Signal, and the model never sees a

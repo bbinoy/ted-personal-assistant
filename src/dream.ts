@@ -18,7 +18,7 @@ import { dreamSystem } from "./persona.ts";
 import { preset } from "./preset.ts";
 import { OWNER, settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
-import { listTenants } from "./tenants.ts";
+import { listTenants } from "./tenants/tenants.ts";
 import { LIMITS, oneLine } from "./sanitize.ts";
 
 // The dream: once a day, before the daily brief, a model with NO tools reads what a conversation's person said since the last dream (their messages and

@@ -1,13 +1,13 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "./audit.ts";
-import { spentToday } from "./budget.ts";
-import { cooldownUntil } from "./cooldown.ts";
-import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
+import { audit } from "../audit.ts";
+import { spentToday } from "../budget.ts";
+import { cooldownUntil } from "../cooldown.ts";
+import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "../payer.ts";
 import { connectionSummary } from "./connections.ts";
 import { deleteTenant, mintInvite, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
-import { TENANT_ID } from "./secrets.ts";
-import { settings } from "./settings.ts";
+import { TENANT_ID } from "../secrets/secrets.ts";
+import { settings } from "../settings.ts";
 
 // Two small in-process MCP servers (like memory-tools.ts):
 //   tenant   in a tenant's run: record_consent, her one-time confirmation of age and region (the only tool she has until it is made)

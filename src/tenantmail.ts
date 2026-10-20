@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { oneLine } from "./sanitize.ts";
-import type { TenantContext } from "./tenants.ts";
+import type { TenantContext } from "./tenants/tenants.ts";
 import { readTriage, recordTriage as recordTriageRow } from "./triagelog.ts";
 
 // A friend's mail check keeps its state in her own folder (tenants/<id>/mail/), like everything of hers: what it has seen, when it last ticked, the queue of its

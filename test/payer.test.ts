@@ -10,13 +10,13 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "payer-test-"));
 process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token"; // the instance's own login, which a call on the instance key must never carry
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
+const T = await import("../src/tenants/tenants.ts");
 const { INSTANCE_KEY_COOLDOWN, LOGIN, isRefusal, mayRun } = await import("../src/payer.ts");
 const { oneShot } = await import("../src/haiku.ts");
 const { AuthError, InstanceKeyError, RateLimitError, noticeFor } = await import("../src/errors.ts");
 const { coolingDown, noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
 const { recordCost, spentToday } = await import("../src/budget.ts");
-const { keyNotices } = await import("../src/keynotice.ts");
+const { keyNotices } = await import("../src/tenants/keynotice.ts");
 const { compactConversation } = await import("../src/chatsession.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recentIn } = await import("../src/approvals/recentchat.ts");
@@ -28,7 +28,7 @@ const owner = { kind: "owner" } as const;
 const group = { kind: "group" } as const;
 
 let n = 0;
-function friend(name: string): import("../src/tenants.ts").TenantRecord {
+function friend(name: string): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
   T.setStatus(rec.id, "active");

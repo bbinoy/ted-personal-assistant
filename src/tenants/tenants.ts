@@ -1,15 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { audit } from "./audit.ts";
-import { isInside } from "./contain.ts";
-import { OneTimeCodes } from "./onetime.ts";
-import { FILE as OWNER_LOG, type Summarize } from "./messages.ts";
-import { NOTES_DIR } from "./notes.ts";
-import { clean, LIMITS, oneLine } from "./sanitize.ts";
-import { TENANT_ID } from "./secrets.ts";
-import { OWNER_SESSION_FILE } from "./session.ts";
-import { settings } from "./settings.ts";
-import { dataPath, readJson, writeJson } from "./state.ts";
+import { audit } from "../audit.ts";
+import { isInside } from "../contain.ts";
+import { OneTimeCodes } from "../secrets/onetime.ts";
+import { FILE as OWNER_LOG, type Summarize } from "../messages.ts";
+import { NOTES_DIR } from "../notes.ts";
+import { clean, LIMITS, oneLine } from "../sanitize.ts";
+import { TENANT_ID } from "../secrets/secrets.ts";
+import { OWNER_SESSION_FILE } from "../session.ts";
+import { settings } from "../settings.ts";
+import { dataPath, readJson, writeJson } from "../state.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
 // Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (the folders and files the

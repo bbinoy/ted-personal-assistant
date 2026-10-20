@@ -15,7 +15,7 @@ import { localDay } from "./pause.ts";
 import { namesTimeInQuietHours } from "./notetimes.ts";
 import { isPaused } from "./pause.ts";
 import type { OwnerProfile } from "./profiles.ts";
-import { listTenants } from "./tenants.ts";
+import { listTenants } from "./tenants/tenants.ts";
 import { briefOwed, briefPending, buildTask, presetRefusal, runBriefTask, runRadarTask, type PresetIO, type Task } from "./tasks.ts";
 import { settings } from "./settings.ts";
 import { MIN_GAP_MINUTES } from "./radar-rules.ts";

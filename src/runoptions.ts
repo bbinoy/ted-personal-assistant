@@ -7,12 +7,12 @@ import { recentNotices } from "./messages.ts";
 import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
 import { chatContext, chatSystem, digestContext, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, groupTools, toolsFor } from "./policy/capabilities.ts";
-import { GOOGLE_MAIL_TOOL } from "./modules/google.ts";
+import { GOOGLE_MAIL_TOOL } from "./modules/google/module.ts";
 import { mailDigest } from "./tenantmail.ts";
 import { PROFILES } from "./profiles.ts";
 import { readText } from "./state.ts";
 import { skillsFor } from "./skills.ts";
-import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
+import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "./tenants/tenants.ts";
 
 // The ONE builder of the options of a conversation's run: the owner's chat, a group and a tenant. What a run is made of comes from the
 // conversation's record (conversationmodel.ts: kind, source, notes folder, session file, the group's id) and, for a person with a registry record,

@@ -6,10 +6,10 @@ import { settings } from "../src/settings.ts";
 import { loaded, mailModule, mailProviders, mailSlot, registered } from "../src/modules/index.ts";
 import { MAIL, SERVERS, mailRuntime } from "../src/modules/runtime.ts";
 import type { RunContext, ToolModule } from "../src/modules/types.ts";
-import { INTAKE_LINK_TOOL } from "../src/intakelinks.ts";
+import { INTAKE_LINK_TOOL } from "../src/intake/intakelinks.ts";
 import { allRows, entryFor, manifest } from "../src/policy/toolmanifest.ts";
 import { ownerSkills, privateSkills, sharedSkills, skillsFor } from "../src/skills.ts";
-import { CAPABILITIES } from "../src/tenants.ts";
+import { CAPABILITIES } from "../src/tenants/tenants.ts";
 
 // The tool modules (src/modules): what a module is, which are loaded, what central code reads from them. The set of rows itself is pinned in
 // manifestrows.test.ts; the policy, the judge and the isolation are tested where they live.

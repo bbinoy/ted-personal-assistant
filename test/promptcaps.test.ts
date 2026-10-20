@@ -10,7 +10,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "promptcaps-"));
 process.env.TENANT_ANTHROPIC_API_KEY = "instance-key-for-prompt-tests";
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
+const T = await import("../src/tenants/tenants.ts");
 const { capabilitiesOf } = await import("../src/policy/capabilities.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
 const { group, tenant } = await import("../src/conversation.ts");

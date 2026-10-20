@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openbaoCheck } from "../src/doctor.ts";
-import type { Keychain } from "../src/keychain.ts";
-import { BaoError, OpenBao, checkPath } from "../src/openbao.ts";
-import { appBao, ITEM_NAME, keychainNames, SecretsError, TenantSecrets, TENANT_ID } from "../src/secrets.ts";
+import type { Keychain } from "../src/secrets/keychain.ts";
+import { BaoError, OpenBao, checkPath } from "../src/secrets/openbao.ts";
+import { appBao, ITEM_NAME, keychainNames, SecretsError, TenantSecrets, TENANT_ID } from "../src/secrets/secrets.ts";
 import { settings } from "../src/settings.ts";
 import { startFakeBao } from "./fakebao.ts";
 

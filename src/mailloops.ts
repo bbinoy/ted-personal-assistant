@@ -5,15 +5,15 @@ import { audit } from "./audit.ts";
 import { tenant as tenantConversation } from "./conversation.ts";
 import { allows } from "./policy/capabilities.ts";
 import { GoogleMail } from "./googlemail.ts";
-import { googleHub } from "./googlemcp.ts";
+import { googleHub } from "./modules/google/googlemcp.ts";
 import { createHandler, handlerTask, type HandlerContext } from "./handler.ts";
 import { createMailCheck, type MailContext, type MailSource } from "./heartbeat.ts";
-import { readDone } from "./intakelinks.ts";
+import { readDone } from "./intake/intakelinks.ts";
 import { isRefusal, mayRun } from "./payer.ts";
 import { approveIn, type Approve } from "./approvals/permissions.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { settings } from "./settings.ts";
-import { listTenants, tenantContext, tenantById } from "./tenants.ts";
+import { listTenants, tenantContext, tenantById } from "./tenants/tenants.ts";
 import { mailFiles, recordTriage } from "./tenantmail.ts";
 import { triageBatch } from "./triage.ts";
 

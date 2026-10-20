@@ -2,7 +2,7 @@ import { existsSync, rmSync } from "node:fs";
 import { luhnValid } from "./browserules.ts";
 import { Ledger } from "./payments.ts";
 import { inTenant, ProfileError } from "./profile.ts";
-import { CARD_TENANTS, SecretsError, type TenantSecrets } from "../../secrets.ts";
+import { CARD_TENANTS, SecretsError, type TenantSecrets } from "../../secrets/secrets.ts";
 import { dataPath, readText, writeText } from "../../state.ts";
 import { LIMITS } from "../../sanitize.ts";
 import { settings } from "../../settings.ts";

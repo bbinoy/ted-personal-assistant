@@ -7,7 +7,7 @@ import { cardCli } from "../src/modules/browse/cardcli.ts";
 import { capProblem, Ledger } from "../src/modules/browse/payments.ts";
 import { approvalId, cartHash, cartLines, findPayableTotal, frameVerdict, isTypedYes, kindOfFieldName, expirySplit, parseAmount, parseMoney, paymentOutcome, riskyBoxes } from "../src/modules/browse/paymentrules.ts";
 import { ProfileStore, type Entries } from "../src/modules/browse/profile.ts";
-import { TenantSecrets } from "../src/secrets.ts";
+import { TenantSecrets } from "../src/secrets/secrets.ts";
 import { fakeCardStore, startFakeBao } from "./fakebao.ts";
 
 // Obviously fake values only: the public test card number of the card networks (a Luhn-valid number that belongs to nobody), a made-up security code,

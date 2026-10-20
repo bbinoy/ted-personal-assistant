@@ -15,7 +15,7 @@ import { backgroundSystem, briefSystem, handlerSystem, radarSystem } from "./per
 import { handlerToolsOf } from "./mailhandler.ts";
 import type { Payer } from "./payer.ts";
 import { categoriesFor } from "./preset.ts";
-import { tenantById, tenantContext } from "./tenants.ts";
+import { tenantById, tenantContext } from "./tenants/tenants.ts";
 import { PROFILES, type OwnerProfile } from "./profiles.ts";
 import { settings } from "./settings.ts";
 import type { RunProvenance } from "./approvals/autojudge.ts";

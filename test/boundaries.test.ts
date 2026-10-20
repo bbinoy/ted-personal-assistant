@@ -27,17 +27,17 @@ export const ALLOWED: Record<string, readonly string[]> = {
   modules: [".", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   // a feature folder: its declaration (light) and its server, guard, rules and store files.
   "modules/*": [".", "modules", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  // folders that exist (R3): policy decides from data only, approvals sit above it.
+  // folders that exist (R3, R4): policy decides from data only, approvals sit above it; tenants and intake are one box, above the secrets.
   approvals: [".", "modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
-  policy: [".", "modules", "tenants", "secrets", "core"], // reads modules/index lazily; never imports approvals
+  policy: [".", "modules", "tenants", "intake", "secrets", "core"], // reads modules/index lazily; never imports approvals; capabilities.ts reads the intake links (tenants and intake are one box in the diagram)
+  tenants: [".", "intake", "memory", "secrets", "core"],
+  intake: [".", "modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
+  secrets: [".", "core"],
   // the folders of the target layout that do not exist yet (rows stay until their chunk lands):
   heartbeat: [".", "conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   conversation: [".", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   run: [".", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  tenants: [".", "intake", "memory", "secrets", "core"],
-  intake: [".", "modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
   memory: [".", "tenants", "intake", "secrets", "core"],
-  secrets: [".", "core"],
   core: ["."],
 };
 

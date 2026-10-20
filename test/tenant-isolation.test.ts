@@ -15,7 +15,7 @@ const INSTANCE_KEY = "sk-" + "ant-api03-INSTANCEINSTANCEINSTANCE"; // TENANT_ANT
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
+const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
@@ -32,7 +32,7 @@ const tenantRunOptions = (ctx: { id: string }, apiKey: string, now?: Date) => ru
 const { browseRunOptions, buildOptions } = await import("../src/agentrun.ts");
 const { BrowseGuard } = await import("../src/modules/browse/browseguard.ts");
 const { browse, startRefusal } = await import("../src/modules/browse/browse.ts");
-const { tenantEnv, createTenantServer } = await import("../src/tenanttools.ts");
+const { tenantEnv, createTenantServer } = await import("../src/tenants/tenanttools.ts");
 const { coolingDown, resetCooldown } = await import("../src/cooldown.ts");
 const { InstanceKeyError } = await import("../src/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
@@ -46,7 +46,7 @@ const CANARY_OWNER = "CANARY-OWNER-4711";
 const CANARY_B = "CANARY-BEA-0815";
 const KEY = "sk-" + "ant-api03-ANNANNANNANNANNANNANNANN";
 let n = 0;
-const join_ = (name: string): import("../src/tenants.ts").TenantRecord => {
+const join_ = (name: string): import("../src/tenants/tenants.ts").TenantRecord => {
   const made = T.mintInvite()!;
   const rec = T.redeemInvite(made.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name });
   assert.ok(rec);

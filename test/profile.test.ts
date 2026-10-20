@@ -14,7 +14,7 @@ import { loadProfile, ProfileStore, fieldFitsKey, kindOfKey, type Entries } from
 import { profileCli } from "../src/modules/browse/profilecli.ts";
 import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 import { OWNER_KEY } from "../src/ownerkey.ts";
-import { TenantSecrets } from "../src/secrets.ts";
+import { TenantSecrets } from "../src/secrets/secrets.ts";
 import { startFakeBao } from "./fakebao.ts";
 
 // Obviously fake values only. No test touches the real OpenBao or Keychain: the store talks to an in-process fake of OpenBao's HTTP API (fakebao.ts).

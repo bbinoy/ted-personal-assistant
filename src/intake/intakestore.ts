@@ -1,5 +1,5 @@
-import type { Data, OpenBao } from "./openbao.ts";
-import { cvcProblem, ITEM_KINDS, ITEM_NAME, SecretsError, TENANT_ID, type ItemKind } from "./secrets.ts";
+import type { Data, OpenBao } from "../secrets/openbao.ts";
+import { cvcProblem, ITEM_KINDS, ITEM_NAME, SecretsError, TENANT_ID, type ItemKind } from "../secrets/secrets.ts";
 import type { Put } from "./intakepurposes.ts";
 
 // The intake page's way into OpenBao: it can write an item and nothing else (there is no read, list or delete here, and the page's token is

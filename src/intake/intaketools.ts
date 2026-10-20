@@ -1,10 +1,10 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "./audit.ts";
+import { audit } from "../audit.ts";
 import { baseUrlProblem, connectionState, INTAKE_LINK_TOOL, INTAKE_STATUS_TOOL, LinkStore, linkUrl, purposesFor, readDone } from "./intakelinks.ts";
 import { purposeOf } from "./intakepurposes.ts";
-import { settings } from "./settings.ts";
-import { tenantById } from "./tenants.ts";
+import { settings } from "../settings.ts";
+import { tenantById } from "../tenants/tenants.ts";
 
 // A tenant's two tools for the intake page (intakeserver.ts), in her run only (agentrun.ts) and only when her tool set has them (capabilities.ts):
 //   get_setup_link   mints a single-use link, valid a few minutes, for ONE purpose, bound to her; the assistant puts it in her chat

@@ -1,11 +1,11 @@
-import { looksLikeCardNumber, sensitiveKind } from "./modules/browse/browserules.ts";
-import { CARD_ITEM, cardProblem, parseExpiry } from "./modules/browse/card.ts";
-import type { Data } from "./openbao.ts";
-import { checkNewValue, cleanDomains, isSensitive, KEY_NAME, KINDS, kindOfKey, type Kind } from "./modules/browse/profile.ts";
-import { LIMITS } from "./sanitize.ts";
-import { CARD_TENANTS, type ItemKind } from "./secrets.ts";
-import { settings } from "./settings.ts";
-import type { Capability } from "./tenants.ts";
+import { looksLikeCardNumber, sensitiveKind } from "../modules/browse/browserules.ts";
+import { CARD_ITEM, cardProblem, parseExpiry } from "../modules/browse/card.ts";
+import type { Data } from "../secrets/openbao.ts";
+import { checkNewValue, cleanDomains, isSensitive, KEY_NAME, KINDS, kindOfKey, type Kind } from "../modules/browse/profile.ts";
+import { LIMITS } from "../sanitize.ts";
+import { CARD_TENANTS, type ItemKind } from "../secrets/secrets.ts";
+import { settings } from "../settings.ts";
+import type { Capability } from "../tenants/tenants.ts";
 import type { Done } from "./intakelinks.ts";
 
 // What each purpose of a setup link asks for and where it puts it. The page (intakeserver.ts) knows nothing about a purpose by name: it renders the

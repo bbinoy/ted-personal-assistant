@@ -1,13 +1,13 @@
-import { namesNoGuests } from "../policy/guests.ts";
-import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
-import { nativeView } from "../policy/mailview.ts";
-import { notifyLine } from "./calendar.ts";
-import { named } from "./gmail.ts";
-import { handlerTaskText } from "./mailtask.ts";
-import { rowsOf, tenantOffered, type FloorVerdict, type ToolModule } from "./types.ts";
+import { namesNoGuests } from "../../policy/guests.ts";
+import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
+import { nativeView } from "../../policy/mailview.ts";
+import { notifyLine } from "../calendar.ts";
+import { named } from "../gmail.ts";
+import { handlerTaskText } from "../mailtask.ts";
+import { rowsOf, tenantOffered, type FloorVerdict, type ToolModule } from "../types.ts";
 
 // Google for friends (capability `google`, with `mail` and `calendar` for the tools): a friend's own Gmail and Calendar, served by a third-party MCP server that
-// runs as one process per friend with her own token (src/googlemcp.ts). The owner never has these tools (her mail and calendar are the connectors above); a friend
+// runs as one process per friend with her own token (src/modules/google/googlemcp.ts). The owner never has these tools (her mail and calendar are the connectors above); a friend
 // never has the owner's. The tools are those of taylorwilsdon/google_workspace_mcp at the pinned version (docs/SETUP.md); the names, arguments and result shapes
 // are read from its code and UNVERIFIED LIVE: the first live run is the check (plans/google-mcp-spike.md).
 //

@@ -2,9 +2,9 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PURPOSES, purposeAvailable } from "./intakepurposes.ts";
-import { settings } from "./settings.ts";
-import { readJson, writeJson } from "./state.ts";
-import type { Capability } from "./tenants.ts";
+import { settings } from "../settings.ts";
+import { readJson, writeJson } from "../state.ts";
+import type { Capability } from "../tenants/tenants.ts";
 
 // The setup links of the intake page (intakeserver.ts): a single-use code in a URL, minted by the chat tool or the local CLI, redeemed by the page.
 // Like the invites (onetime.ts) a code is shown once and only its hash is kept, with an expiry and a payload (WHO it is for and WHICH purpose).

@@ -6,12 +6,12 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { NotionHub } from "../src/notionmcp.ts";
+import type { NotionHub } from "../src/modules/notion/notionmcp.ts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { startFakeNotion } from "./fakenotion.ts";
 import type { FakeBao } from "./fakebao.ts";
 
-// Notion for friends (src/notionoauth.ts, src/notionmcp.ts, src/modules/notionhosted.ts, the shared src/oauth.ts and src/mcpproxy.ts) against FAKES: a fake Notion OAuth server
+// Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, src/modules/notion/module.ts, the shared src/intake/oauth.ts and src/intake/mcpproxy.ts) against FAKES: a fake Notion OAuth server
 // with discovery, dynamic registration and ROTATING refresh tokens, a fake hosted MCP endpoint that answers only a live bearer, and a fake OpenBao. Nothing talks to Notion.
 // Every token is an obviously fake string. The point of the tests: the client is registered once, the grant lands in HER path through the write-only token, a refresh
 // never loses the rotated token (not even with several at once), the new refresh token is stored before the new access token is used, an expired or revoked grant is told
@@ -28,27 +28,27 @@ process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 const { settings } = await import("../src/settings.ts");
 const { startFakeBao } = await import("./fakebao.ts");
 const { readAudit } = await import("../src/audit.ts");
-const { IntakeWriter } = await import("../src/intakestore.ts");
-const T = await import("../src/tenants.ts");
-const L = await import("../src/intakelinks.ts");
-const { IntakeServer } = await import("../src/intakeserver.ts");
-const { OAuthFlows } = await import("../src/oauth.ts");
-const { googleProvider } = await import("../src/googleoauth.ts");
-const N = await import("../src/notionoauth.ts");
-const { SessionHub } = await import("../src/mcpproxy.ts");
-const { NotionSession, notionProxy, RECONNECT_TEXT } = await import("../src/notionmcp.ts");
-const { UpstreamError } = await import("../src/mcpproxy.ts");
-const { createIntakeServer } = await import("../src/intaketools.ts");
-const { TenantSecrets } = await import("../src/secrets.ts");
+const { IntakeWriter } = await import("../src/intake/intakestore.ts");
+const T = await import("../src/tenants/tenants.ts");
+const L = await import("../src/intake/intakelinks.ts");
+const { IntakeServer } = await import("../src/intake/intakeserver.ts");
+const { OAuthFlows } = await import("../src/intake/oauth.ts");
+const { googleProvider } = await import("../src/intake/googleoauth.ts");
+const N = await import("../src/intake/notionoauth.ts");
+const { SessionHub } = await import("../src/intake/mcpproxy.ts");
+const { NotionSession, notionProxy, RECONNECT_TEXT } = await import("../src/modules/notion/notionmcp.ts");
+const { UpstreamError } = await import("../src/intake/mcpproxy.ts");
+const { createIntakeServer } = await import("../src/intake/intaketools.ts");
+const { TenantSecrets } = await import("../src/secrets/secrets.ts");
 const { serversFor } = await import("../src/modules/runtime.ts");
-const { NOTION_FRIEND_PREFIX: P, NOTION_FRIEND_TOOLS } = await import("../src/modules/notionhosted.ts");
+const { NOTION_FRIEND_PREFIX: P, NOTION_FRIEND_TOOLS } = await import("../src/modules/notion/module.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { classify } = await import("../src/policy/policy.ts");
-const { describeTenants } = await import("../src/tenanttools.ts");
-const { connectionSummary } = await import("../src/connections.ts");
+const { describeTenants } = await import("../src/tenants/tenanttools.ts");
+const { connectionSummary } = await import("../src/tenants/connections.ts");
 const { servicesCheck, intakeCheck } = await import("../src/doctor.ts");
 
 const printed: string[] = [];
@@ -75,7 +75,7 @@ after(async () => {
 });
 
 let n = 0;
-function person(name: string, capabilities: import("../src/tenants.ts").Capability[]) {
+function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]) {
   const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
   T.recordConsent(T.tenantContext(rec), "Germany");
@@ -90,7 +90,7 @@ const plain = person("Pia", ["intake"]);
 const grantPath = (id: string) => `tenants/${id}/notion/oauth`;
 const grantOf = (id: string) => bao.store.get(grantPath(id)) as Record<string, any> | undefined;
 // The app's own access to her item (its token reads and writes tenants/+/notion/*): what the harness uses at run time.
-const store = (): import("../src/notionoauth.ts").GrantStore => ({
+const store = (): import("../src/intake/notionoauth.ts").GrantStore => ({
   read: (t) => new TenantSecrets(bao.bao({ token: bao.token }), t).get("notion", "oauth", { cache: false }),
   write: (t, d) => new TenantSecrets(bao.bao({ token: bao.token }), t).put("notion", "oauth", d),
 });

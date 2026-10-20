@@ -5,8 +5,8 @@ import type { BrowseGuard } from "./browse/browseguard.ts";
 import type { MailSource } from "../heartbeat.ts";
 import type { createProposer } from "../propose.ts";
 import type { DraftView } from "../proposals.ts";
-import type { Capability } from "../tenants.ts";
-import type { TenantRun } from "../tenanttools.ts";
+import type { Capability } from "../tenants/tenants.ts";
+import type { TenantRun } from "../tenants/tenanttools.ts";
 import type { ConfirmDelete } from "../policy/neverallowed.ts";
 import type { MailInput, MailView } from "../policy/mailview.ts";
 

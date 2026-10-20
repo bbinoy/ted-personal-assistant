@@ -7,7 +7,7 @@ import { join } from "node:path";
 // record's. The tables below are pinned; adding a capability to a record must change exactly its tools and skills and nothing else.
 process.env.INTAKE_BASE_URL = "";
 const { settings } = await import("../src/settings.ts");
-const { CAPABILITIES } = await import("../src/tenants.ts");
+const { CAPABILITIES } = await import("../src/tenants/tenants.ts");
 type Capability = (typeof CAPABILITIES)[number];
 const { groupCapabilities, groupTools, resolveCapabilities, toolsFor } = await import("../src/policy/capabilities.ts");
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsFor(resolveCapabilities(ctx.capabilities, { own: ctx.config }));

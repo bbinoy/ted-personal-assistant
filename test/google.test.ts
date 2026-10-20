@@ -5,10 +5,10 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { GoogleHub } from "../src/googlemcp.ts";
+import type { GoogleHub } from "../src/modules/google/googlemcp.ts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-// A friend's Google tools (src/googlemcp.ts, src/modules/google.ts) against a fake stdio server (test/fakegoogle.ts): one process per friend with her own token,
+// A friend's Google tools (src/modules/google/googlemcp.ts, src/modules/google/module.ts) against a fake stdio server (test/fakegoogle.ts): one process per friend with her own token,
 // the token only in a private folder and that process (never an argument, never the model's environment), the tools her capability set allows and no others,
 // and the same floor, judge and approval path as the owner's mail and calendar, asked in HER chat.
 const dir = mkdtempSync(join(tmpdir(), "google-"));
@@ -17,9 +17,9 @@ process.env.GOOGLE_OAUTH_CLIENT_ID = "fake-client-id.example";
 process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 
 const { settings } = await import("../src/settings.ts");
-const T = await import("../src/tenants.ts");
-const { SessionHub } = await import("../src/mcpproxy.ts");
-const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/googlemcp.ts");
+const T = await import("../src/tenants/tenants.ts");
+const { SessionHub } = await import("../src/intake/mcpproxy.ts");
+const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/modules/google/googlemcp.ts");
 const { serversFor, LIFECYCLE, stopAll, dropAll } = await import("../src/modules/runtime.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
@@ -27,7 +27,7 @@ const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => tool
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
-const { GOOGLE_PREFIX } = await import("../src/modules/google.ts");
+const { GOOGLE_PREFIX } = await import("../src/modules/google/module.ts");
 
 const FAKE = new URL("./fakegoogle.ts", import.meta.url).pathname;
 const LOG = join(dir, "google.log");

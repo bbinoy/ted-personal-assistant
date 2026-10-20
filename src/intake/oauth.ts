@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { settings } from "./settings.ts";
-import type { ItemKind } from "./secrets.ts";
+import { settings } from "../settings.ts";
+import type { ItemKind } from "../secrets/secrets.ts";
 
 // "Connect <service>" on the intake page (intakeserver.ts) for EVERY service a friend signs in to (Google: googleoauth.ts, Notion: notionoauth.ts): the OAuth
 // authorisation-code flow with PKCE (S256) and a `state` that is random, single-use, short-lived and BOUND TO THE ONE-TIME LINK it was started from. The page shows
