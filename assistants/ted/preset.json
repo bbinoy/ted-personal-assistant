@@ -20,6 +20,7 @@
     "group": { "maxTurns": 8, "maxBudgetUsd": 0.5, "notes": [] },
     "handler": { "maxTurns": 40, "maxBudgetUsd": 2, "notes": ["people", "scheduling", "context", "style", "setup", "voice"] }
   },
+  "expert": { "model": "sonnet", "maxTurns": 40 },
   "skills": {
     "core": [
       { "name": "daily-brief", "required": true },

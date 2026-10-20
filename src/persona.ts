@@ -204,8 +204,13 @@ export function heartbeatSystem(memory: string, missing: readonly string[] = [],
   return join(say("heartbeatSystem", { personality: PERSONALITY }), rules(mail), connectorLine(down, false), setupLine(missing, false), memory);
 }
 
-// The words of one look (persona/heartbeat.md); the chat log goes after it as data (heartbeat/look.ts).
-export const heartbeatInstruction = (vars: { now: string; timeZone: string; lastLook: string; quietFrom: string; quietTo: string; dayMinutes: string }): string => say("heartbeat", vars);
+// The general expert the heartbeat run delegates heavy work to (heartbeat/delegation.ts): the persona's expert text, the rules every run has and the same notes as the run.
+export function expertSystem(memory: string, missing: readonly string[] = [], down: readonly Connector[] = [], mail: boolean = settings.mail): string {
+  return join(say("expert", { personality: PERSONALITY }), rules(mail), connectorLine(down, false), setupLine(missing, false), memory);
+}
+
+// The words of one look (persona/heartbeat.md); the chat log goes after it as data (heartbeat/look.ts). `delegated`: the heavy skills it must hand to the expert, or "".
+export const heartbeatInstruction = (vars: { now: string; timeZone: string; lastLook: string; quietFrom: string; quietTo: string; dayMinutes: string; delegated: string }): string => say("heartbeat", vars);
 
 // Background handling of routine email the heartbeat flagged as "the assistant can deal with this", ONE prompt for every conversation that has mail (only runs when
 // there is mail: the heartbeat never hands anything over without it). `who` is a friend's name; without it the mail is the owner's, and the run also gets the owner's

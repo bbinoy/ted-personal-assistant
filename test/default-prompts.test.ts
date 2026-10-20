@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { BRIEF_INSTRUCTIONS } from "../src/brief.ts";
 import { missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, briefSystem, chatContext, chatSystem, GATE_DEFAULTS, groupSystem, handlerSystem, heartbeatInstruction, heartbeatSystem } from "../src/persona.ts";
+import { backgroundSystem, briefSystem, chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, handlerSystem, heartbeatInstruction, heartbeatSystem } from "../src/persona.ts";
 import { PROFILES } from "../src/profiles.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { settings } from "../src/settings.ts";
@@ -36,7 +36,8 @@ export function snapshot(): Record<string, unknown> {
       chatContextSetup: portable(chatContext({ missing, down }) ?? ""),
       brief: portable(briefSystem("MEMORY", missing, down)),
       heartbeat: portable(heartbeatSystem("MEMORY", missing, down)),
-      heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", lastLook: "Your last look was at 08:30.", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30" }),
+      expert: portable(expertSystem("MEMORY", missing, down)),
+      heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", lastLook: "Your last look was at 08:30.", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30", delegated: "" }),
       handler: portable(handlerSystem("MEMORY", { missing, down })),
       background: portable(backgroundSystem("MEMORY", missing, down)),
       group: portable(groupSystem()),

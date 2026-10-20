@@ -11,7 +11,8 @@ import type { Document } from "./document.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./approvals/permissions.ts";
-import { backgroundSystem, briefSystem, handlerSystem, heartbeatSystem } from "./persona.ts";
+import { backgroundSystem, briefSystem, expertSystem, handlerSystem, heartbeatSystem } from "./persona.ts";
+import { expertSetup } from "./heartbeat/delegation.ts";
 import { handlerToolsOf } from "./mailhandler.ts";
 import type { Payer } from "./payer.ts";
 import { categoriesFor } from "./preset.ts";
@@ -29,18 +30,25 @@ function profileSystem(name: OwnerProfile): string {
   return name === "brief" ? briefSystem(notes, missing, off) : name === "heartbeat" ? heartbeatSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
 }
 
+// The expert's whole system text: its persona and the same notes as the heartbeat run (it reads no notes of its own).
+function expertPrompt(): string {
+  const off = down();
+  return expertSystem(memoryFor(PROFILES.heartbeat.notes), missingSetup(readNotes(), off), off);
+}
+
 // What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's
 // instructions, the heartbeat run's look), `derived` for a wake-up, whose task a gate model selected from the notes (the person's standing instruction, judged like their chat message).
 export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
+  onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
 // The options of an owner profile's run (a fresh session).
 export function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
   const p = PROFILES[name];
-  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, model: p.model, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
+  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, model: p.model, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance), ...(name === "heartbeat" ? { experts: { setup: expertSetup(p.skills, expertPrompt()), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}) };
 }
 
 // One run under a named owner profile: always a fresh session.

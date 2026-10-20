@@ -24,7 +24,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
 
-interface Answer { message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[] }
+interface Answer { message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[] } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -56,6 +56,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       const a = answer();
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra?.onToolSuccess?.(t, {});
+      for (let i = 0; i < (a.delegates ?? 0); i++) extra?.onDelegate?.("expert");
       return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30 } };
     },
     gate: async () => (seen.gates++, parseGate(o.groups ? { act: true, instructions: "Post a fun fact", nextCheckMinutes: 30 } : { act: false, nextCheckMinutes: 30 })),
@@ -126,6 +127,13 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.deepEqual(rows[0], { at: DAY.toISOString(), night: false, message: true, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
   assert.doesNotMatch(readText(HEARTBEAT_LOG)!, /Eve|Friday|waits/, "the row carries no words");
   assert.ok(seen.recorded.some(([k, t]) => k === "action" && /\[heartbeat\] look: 3 tool call\(s\), 2 mail archived, message sent/.test(t)), "the log gets a counted summary line");
+});
+
+test("owner's look: the delegations to experts are counted in the row and the log line; the expert's cost is in the run's cost", async () => {
+  const { w, conv, seen } = rig(() => ({ delegates: 2, calls: ["Agent", "mcp__claude_ai_Notion__notion-fetch", "Agent"] }));
+  assert.equal(await w.look(conv, DAY), "silent", "the expert delivered itself; the run answered [[silent]]");
+  assert.deepEqual(readRows().map((r) => [r.delegations, r.toolCalls, r.costUsd]), [[2, 3, 0.02]]);
+  assert.ok(seen.recorded.some(([k, t]) => k === "action" && /look: 3 tool call\(s\), 0 mail archived, 2 delegated, no message/.test(t)));
 });
 
 test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, and at night the clamp holds too", async () => {

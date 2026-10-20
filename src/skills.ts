@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { loaded, registered } from "./modules/index.ts";
 import type { ModuleSkill, ToolModule } from "./modules/types.ts";
 import { PLUGIN, preset } from "./preset.ts";
@@ -38,4 +40,35 @@ export function ownerSkills(mail: boolean = settings.mail, provider: string = se
   return skillsOf(loaded(mail ? provider : "none"))
     .filter((s) => (!s.when || s.when()) && (!o.required || s.required))
     .map((s) => (o.required ? s.name : withPlugin(s.name)));
+}
+
+// ---- hints in a skill's frontmatter (plugin/skills/<name>/SKILL.md) ----
+// `delegate: sonnet|opus`: a heavy skill. The owner's heartbeat run (a cheap model) never runs it itself: it hands it to an expert subagent on that model
+// (heartbeat/delegation.ts). Absent: a light skill, the run does it itself.
+// `tools: [mcp__calendar__*, mcp__send__send, Skill]`: optional, the lean tool set of that skill's expert (tool names as the SDK writes them; `mcp__server__*` is every
+// tool of a server). Absent: the expert has the run's whole tool set.
+export interface SkillHint {
+  readonly delegate?: "sonnet" | "opus";
+  readonly tools?: readonly string[];
+}
+
+const FRONT = /^---\r?\n([\s\S]*?)\r?\n---/;
+const TOOL_NAME = /^[A-Za-z][A-Za-z0-9_]*(\*|__\*)?$/;
+
+// Pure: the hints in one SKILL.md's text. A typo fails loudly (a skill file is code): an unknown model or a malformed tool name throws.
+export function parseHint(text: string, where = "skill"): SkillHint {
+  const front = FRONT.exec(text)?.[1] ?? "";
+  const field = (key: string) => new RegExp(`^${key}:[ \\t]*(.*)$`, "m").exec(front)?.[1]?.trim();
+  const delegate = field("delegate");
+  if (delegate !== undefined && delegate !== "sonnet" && delegate !== "opus") throw new Error(`${where}: delegate must be sonnet or opus (got "${delegate}")`);
+  const rawTools = field("tools");
+  const tools = rawTools === undefined ? undefined : rawTools.replace(/^\[|\]$/g, "").split(",").map((t) => t.trim()).filter(Boolean);
+  for (const t of tools ?? []) if (!TOOL_NAME.test(t)) throw new Error(`${where}: tools has "${t}", which is not a tool name`);
+  return { ...(delegate ? { delegate } : {}), ...(tools?.length ? { tools } : {}) };
+}
+
+// The hints of a bundled skill (by its plain name, without the plugin prefix); none when it has no file or declares nothing.
+export function skillHint(name: string, dir: string = settings.pluginDir): SkillHint {
+  const file = join(dir, "skills", name, "SKILL.md");
+  return existsSync(file) ? parseHint(readFileSync(file, "utf8"), `skills/${name}/SKILL.md`) : {};
 }

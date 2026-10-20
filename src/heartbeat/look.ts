@@ -7,7 +7,8 @@ import { logTail } from "../gate.ts";
 import { lookDue, recordWake, type LookState } from "../ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../payer.ts";
 import { heartbeatInstruction } from "../persona.ts";
-import type { OwnerProfile } from "../profiles.ts";
+import { delegatedText, expertSetup } from "./delegation.ts";
+import { PROFILES, type OwnerProfile } from "../profiles.ts";
 import { settings } from "../settings.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
@@ -23,7 +24,7 @@ import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 
 export interface HeartbeatDeps {
   pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record">;
-  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
+  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance; onDelegate?: (agent: string) => void }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
   notesChangedAt: (dir: string) => number;
@@ -49,6 +50,7 @@ export function lookInstruction(now: Date, looked: string | undefined): string {
     quietFrom: `${String(settings.quietStartHour).padStart(2, "0")}:00`,
     quietTo: `${String(settings.quietEndHour).padStart(2, "0")}:00`,
     dayMinutes: String(settings.heartbeatDayMinutes),
+    delegated: delegatedText(expertSetup(PROFILES.heartbeat.skills, "")),
   });
 }
 
@@ -71,11 +73,13 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour);
     let toolCalls = 0;
     let archived = 0;
+    let delegations = 0;
     const instruction = lookInstruction(now, st.wake?.looked);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     try {
       reply = await deps.runProfile("heartbeat", lookPrompt(now, instruction, logTail(conv, 40)), {
         provenance: { kind: "standing", task: instruction },
+        onDelegate: () => void delegations++,
         onToolSuccess: (tool) => {
           toolCalls++;
           if (entryFor(tool)?.action === "archive") archived++;
@@ -94,9 +98,9 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
       outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
-    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived, ${outcome === "posted" ? "message sent" : "no message"}`);
+    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
     audit("wake", outcome, "background");
-    appendRow({ at: now.toISOString(), night, message: outcome === "posted", nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations: 0, outcome }, file);
+    appendRow({ at: now.toISOString(), night, message: outcome === "posted", nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
     recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }

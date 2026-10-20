@@ -29,6 +29,7 @@ export interface Preset {
   readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[]; readonly tenant: readonly string[] };
   readonly profiles: Readonly<Record<ProfileKey, ProfileData>>;
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
+  readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert the heartbeat run delegates heavy work to (heartbeat/delegation.ts)
   readonly persona: Readonly<Record<PromptKey, Template>>;
 }
 
@@ -113,7 +114,8 @@ export const PROMPTS = {
   dream: ["subject", "own", "group", "categories"],
   brief: ["mail", "skill"],
   heartbeatSystem: ["personality"],
-  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes"],
+  expert: ["personality"],
+  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated"],
   handler: ["who", "own"],
   background: ["mail", "personality"],
   gateGroup: ["participation", "unprompted"],
@@ -221,6 +223,9 @@ export function loadPreset(dir: string): Preset {
   const order = words(at("skills.order"), s.order);
   for (const w of [rhythm.brief.skill]) if (!core.some((c) => c.name === w)) fail(at("rhythm"), `the skill "${w}" is not in skills.core, so no run could follow it`);
 
+  const ex = sec("expert");
+  const expert = { model: typeof ex.model === "string" && /^[a-z][a-z0-9.-]*$/.test(ex.model) ? ex.model : fail(at("expert.model"), `must be a model alias or id like "sonnet" (got ${JSON.stringify(ex.model)})`), maxTurns: int(at("expert.maxTurns"), ex.maxTurns, 1, 200) };
+
   const persona = {} as Record<PromptKey, Template>;
   for (const key of PROMPT_KEYS) {
     const source = files.get(key);
@@ -231,7 +236,7 @@ export function loadPreset(dir: string): Preset {
     for (const used of namesIn(t.nodes)) if (!allowed.has(used)) fail(file, `{{${used}}} is not available here (this text may use ${[...allowed].map((a) => `{{${a}}}`).join(", ") || "nothing"})`);
     persona[key] = t;
   }
-  return { name, rhythm, notes, profiles, skills: { core, order }, persona };
+  return { name, rhythm, notes, profiles, skills: { core, order }, expert, persona };
 }
 
 // The preset this process runs: ASSISTANT_PRESET is the name of a folder in assistants/ (default "ted") or the path of one.

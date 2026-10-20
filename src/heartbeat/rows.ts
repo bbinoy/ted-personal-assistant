@@ -13,7 +13,7 @@ export interface HeartbeatRow {
   costUsd: number;
   toolCalls: number; // tool calls that ran (the run's own and its subagents')
   archived: number; // mail archived in this look
-  delegations: number; // experts it called (none exist yet)
+  delegations: number; // experts it called (heartbeat/delegation.ts); their cost is in costUsd (the SDK's total includes subagents)
   outcome: "posted" | "silent" | "failed";
 }
 

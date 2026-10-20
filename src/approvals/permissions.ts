@@ -122,6 +122,10 @@ export interface JudgeSetup {
   untrusted?: boolean;
   taint?: Taint;
   conversation?: string;
+  // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
+  // subagent's), and the type of a subagent by its id (for the audit log).
+  expertBriefs?: () => readonly string[];
+  agentTypeOf?: (agentID: string | undefined) => string | undefined;
 }
 
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
@@ -135,7 +139,8 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     setup.taint?.mark();
   };
   const conversation = setup.conversation ?? OWNER_KEY;
-  const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
+  const baseLog: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit;
+  const log = baseLog; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
@@ -152,7 +157,10 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "deny", message: FAILED_CLOSED };
     }
   };
-  async function decide(tool: string, input: Record<string, unknown>, { signal }: { signal: AbortSignal }): Promise<PermissionResult> {
+  async function decide(tool: string, input: Record<string, unknown>, { signal, agentID }: { signal: AbortSignal; agentID?: string }): Promise<PermissionResult> {
+    // A call of an expert subagent (the SDK gives its id): its audit rows say which agent type made it, and the judge reads the run's briefs for the experts next to the provenance.
+    const agentType = agentID ? (setup.agentTypeOf?.(agentID) ?? "subagent") : undefined;
+    const log: typeof audit = agentType ? (t, decision, src, meta) => baseLog(t, decision, src, { ...meta, agent_type: agentType }) : baseLog;
     const g = guard ? await guard.decide(tool, input) : undefined;
     if (g?.kind === "deny") {
       log(tool, "deny-guard", source);
@@ -210,7 +218,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     let judged: Verdict | undefined;
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
-    const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask);
+    const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
