@@ -216,6 +216,15 @@ export function loadSettings(env: Env) {
       archiveLive: oneOf(env, "GOOGLE_ARCHIVE_LIVE", "false", ["true", "false"] as const) === "true", // friends' mail: false = the check classifies and logs "would-archive" and archives nothing, until you trust it
       mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model
     },
+    // Notion for friends (src/notionoauth.ts, src/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend with the `notion` capability connects her own Notion on the
+    // intake page (OAuth with PKCE against Notion's hosted MCP server) and her Notion tools are that hosted server, called by THIS process with her token through the
+    // same credentialed proxy as Google. Nothing to set up but the tunnel: the instance registers itself once (RFC 7591) and remembers the client in state/notion-client.json.
+    notion: {
+      mcpUrl: env.NOTION_MCP_URL?.trim() || "https://mcp.notion.com/mcp", // tests point this at a fake
+      refreshMarginSeconds: num(env, "NOTION_REFRESH_MARGIN_SECONDS", 300, 0, 3600), // an access token this close to its end is renewed first
+      idleMinutes: num(env, "NOTION_MCP_IDLE_MINUTES", 10, 1, 240), // a friend's connection to the hosted server is closed after this long unused
+      callSeconds: num(env, "NOTION_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
+    },
     // Screenshot vision for the browse worker (src/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
     // click: also clicks by coordinates, which the guard resolves to the element under the point itself (a debugging port on loopback, browsecdp.ts).
     browseVision: oneOf(env, "BROWSE_VISION", "off", ["off", "read", "click"] as const),

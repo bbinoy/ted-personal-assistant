@@ -340,7 +340,7 @@ test("doctor: shows the instance key (set or not, never its value) and each tena
   tenantCheck(line, { on: true, key: KEY_A });
   const mine = lines.find((l) => l.includes(`tenant ${rec.id}`))!;
   assert.match(mine, /^warn /);
-  assert.match(mine, /active; today \$0\.25 of \$2; paused until [\d-]+ \d\d:\d\d/);
+  assert.match(mine, /active; capabilities [^;]+; today \$0\.25 of \$2; paused until [\d-]+ \d\d:\d\d/);
   assert.ok(!mine.includes(KEY_A));
   assert.match(lines.find((l) => l.includes("tenant API key"))!, /^ok tenant API key .*separate Console workspace key with a spend limit/);
   assert.ok(!lines.join("\n").includes(KEY_A));

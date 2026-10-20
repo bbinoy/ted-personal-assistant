@@ -170,6 +170,10 @@ path "${mount}/metadata/tenants/${tenant}/*" {
 path "${mount}/data/tenants/+/google/*" {
   capabilities = ["read"]
 }
+# A friend's Notion grant: read, and create and update, because Notion's refresh tokens rotate and the new one is written back before it is used (notionoauth.ts). No delete, no list.
+path "${mount}/data/tenants/+/notion/*" {
+  capabilities = ["read", "create", "update"]
+}
 `;
 
 // The setup tool's own token. It can only ask for a root token (which also needs the unseal shares) and take a snapshot; it reads no secret.
@@ -193,6 +197,9 @@ path "${mount}/data/tenants/+/card/*" {
   capabilities = ["create", "update"]
 }
 path "${mount}/data/tenants/+/google/*" {
+  capabilities = ["create", "update"]
+}
+path "${mount}/data/tenants/+/notion/*" {
   capabilities = ["create", "update"]
 }
 `;

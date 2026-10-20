@@ -25,7 +25,8 @@ const { IntakeWriter } = await import("../src/intakestore.ts");
 const T = await import("../src/tenants.ts");
 const L = await import("../src/intakelinks.ts");
 const { IntakeServer } = await import("../src/intakeserver.ts");
-const { GoogleOAuth, pkce, authorizeUrl } = await import("../src/googleoauth.ts");
+const { googleProvider } = await import("../src/googleoauth.ts");
+const { OAuthFlows, pkce } = await import("../src/oauth.ts");
 const { createIntakeServer } = await import("../src/intaketools.ts");
 const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
 const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
@@ -94,8 +95,8 @@ after(async () => {
 async function start() {
   const links = new L.LinkStore(mkdtempSync(join(tmpdir(), "google-links-")));
   let base = "";
-  const oauth = new GoogleOAuth({ cfg: () => ({ clientId: "fake-client-id.example", clientSecret: "fake-client-secret-not-real", authUrl: "https://accounts.example.test/o/oauth2/v2/auth", tokenUrl, scopes: ALL_SCOPES, baseUrl: base }) });
-  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), google: oauth, limits: { perIpPerMinute: 1000, globalPerMinute: 10_000, badCodesPerIp: 1000 } });
+  const oauth = new OAuthFlows({ providers: [googleProvider(() => ({ clientId: "fake-client-id.example", clientSecret: "fake-client-secret-not-real", authUrl: "https://accounts.example.test/o/oauth2/v2/auth", tokenUrl, scopes: ALL_SCOPES }))], baseUrl: () => base });
+  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), oauth, limits: { perIpPerMinute: 1000, globalPerMinute: 10_000, badCodesPerIp: 1000 } });
   await new Promise<void>((r) => page.server.listen(0, "127.0.0.1", r));
   servers.push({ close: () => (page.server.closeAllConnections(), page.server.close()) });
   base = `http://127.0.0.1:${(page.server.address() as AddressInfo).port}`;
@@ -234,8 +235,8 @@ test("google: she says no, Google refuses the code, no refresh token comes back,
 
 test("google: the page says it is not available when the client is not set up, and the callback address answers GET only", async () => {
   const links = new L.LinkStore(mkdtempSync(join(tmpdir(), "google-links-")));
-  const off = new GoogleOAuth({ cfg: () => ({ clientId: undefined, clientSecret: undefined, authUrl: "x", tokenUrl, scopes: [], baseUrl: "http://x" }) });
-  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), google: off });
+  const off = new OAuthFlows({ providers: [googleProvider(() => ({ clientId: undefined, clientSecret: undefined, authUrl: "x", tokenUrl, scopes: [] }))], baseUrl: () => "http://x" });
+  const page = new IntakeServer({ links, writer: new IntakeWriter(bao.bao({ token: bao.intakeToken })), oauth: off });
   await new Promise<void>((r) => page.server.listen(0, "127.0.0.1", r));
   servers.push({ close: () => (page.server.closeAllConnections(), page.server.close()) });
   const base = `http://127.0.0.1:${(page.server.address() as AddressInfo).port}`;
@@ -245,11 +246,12 @@ test("google: the page says it is not available when the client is not set up, a
   assert.equal((await fetch(`${base}/oauth/google/other`)).status, 404);
 });
 
-test("google: pkce and the consent address are pure and well formed", () => {
+test("google: pkce and the consent address are well formed", async () => {
   const p = pkce();
   assert.match(p.verifier, /^[A-Za-z0-9_-]{43,128}$/);
   assert.equal(createHash("sha256").update(p.verifier).digest("base64url"), p.challenge);
-  const u = new URL(authorizeUrl({ clientId: "c", clientSecret: "s", authUrl: "https://a.example/auth", tokenUrl: "t", scopes: ["a", "b"], baseUrl: "https://ted.example" }, "STATE", "CHAL"));
+  const flows = new OAuthFlows({ providers: [googleProvider(() => ({ clientId: "c", clientSecret: "s", authUrl: "https://a.example/auth", tokenUrl: "t", scopes: ["a", "b"] }))], baseUrl: () => "https://ted.example" });
+  const u = new URL(await flows.begin("google", "LINKCODE", "anna"));
   assert.equal(u.searchParams.get("redirect_uri"), "https://ted.example/oauth/google/callback");
   assert.equal(u.searchParams.get("prompt"), "consent");
   assert.equal(u.searchParams.get("scope"), "a b");

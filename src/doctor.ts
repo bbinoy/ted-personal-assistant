@@ -14,7 +14,9 @@ import { isPaused, localTime } from "./pause.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./browseserver.ts";
 import { killSwitch } from "./card.ts";
 import { macKeychain, type Keychain } from "./keychain.ts";
-import { baseUrlProblem } from "./intakelinks.ts";
+import { baseUrlProblem, connectionState } from "./intakelinks.ts";
+import { clientRegistered } from "./notionoauth.ts";
+import { connectionSummary } from "./connections.ts";
 import { readDone } from "./intakelinks.ts";
 import { INTAKE_ROLE } from "./openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./openbao.ts";
@@ -92,17 +94,17 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
     const bao = (o.bao ?? (() => appBao({ keychain, as: "intake", ...(o.prefix ? { cfg: { ...settings.openbao, keychainPrefix: o.prefix } } : {}) })))();
     const t = await bao.lookupSelf();
     const w = (kind: string) => `data/tenants/x/${kind}/y`;
-    const caps = await bao.capabilities([w("profile"), w("card"), w("google"), w("other"), "metadata/tenants/x/profile", "metadata/tenants/x/card", "metadata/tenants/x/google"]);
+    const caps = await bao.capabilities([w("profile"), w("card"), w("google"), w("notion"), w("other"), "metadata/tenants/x/profile", "metadata/tenants/x/card", "metadata/tenants/x/google", "metadata/tenants/x/notion"]);
     const has = (p: string, c: string) => (caps[p] ?? []).includes(c) || (caps[p] ?? []).includes("root");
     const problems: string[] = [];
     if (t.policies.includes("root") || t.policies.some((p) => p !== "default" && p !== INTAKE_ROLE)) problems.push(`the token has policies besides ${INTAKE_ROLE}`);
-    for (const kind of ["profile", "card", "google"]) {
+    for (const kind of ["profile", "card", "google", "notion"]) {
       if (!has(w(kind), "create") || !has(w(kind), "update")) problems.push(`the token cannot write ${kind} items`);
       if (["read", "delete", "list"].some((c) => has(w(kind), c)) || ["read", "list", "delete", "update"].some((c) => has(`metadata/tenants/x/${kind}`, c))) problems.push(`the token can do more than write ${kind} items`);
     }
-    if ((caps[w("other")] ?? []).some((c) => c !== "deny")) problems.push("the token reaches beyond profile, card and google items");
+    if ((caps[w("other")] ?? []).some((c) => c !== "deny")) problems.push("the token reaches beyond profile, card, google and notion items");
     if (problems.length) line(false, "intake write-only token", `${problems.join("; ")}: npm run openbao -- setup repairs it`);
-    else line(true, "intake write-only token", `policy ${INTAKE_ROLE}: create and update of profile, card and google items, no read, list or delete`);
+    else line(true, "intake write-only token", `policy ${INTAKE_ROLE}: create and update of profile, card, google and notion items, no read, list or delete`);
   } catch (e) {
     line("warn", "intake write-only token", e instanceof BaoError ? e.message.slice(0, LIMITS.reason) : "the check failed");
   }
@@ -134,6 +136,25 @@ export function googleCheck(line: Line, o: { cfg?: typeof settings.google; baseU
   }
 }
 
+// Notion for friends (modules/notionhosted.ts): only when some friend has the `notion` capability. Is the page that signs her in there (INTAKE_BASE_URL, https), is the
+// instance's one client registered with Notion yet (it registers itself on the first Connect Notion; its id is no secret and is not printed), and per friend: connected
+// (since when), not yet, or needing to connect again (her permission expired or was withdrawn). Nothing is read from her secrets for this and nothing is sent to Notion.
+export function notionCheck(line: Line, o: { baseUrl?: string | undefined; registered?: boolean; friends?: ReturnType<typeof people>; state?: typeof connectionState } = {}): void {
+  const friends = (o.friends ?? people()).filter((r) => r.id !== OWNER_ID && r.capabilities.includes("notion"));
+  if (!friends.length) return;
+  const what = "notion for friends";
+  const base = "baseUrl" in o ? o.baseUrl : settings.intake.baseUrl;
+  const problem = baseUrlProblem({ baseUrl: base, allowHttpLoopback: settings.intake.allowHttpLoopback });
+  if (problem) return line(false, what, `${friends.length} friend(s) have the notion capability but ${problem} (docs/SETUP.md "Notion for friends")`);
+  const registered = o.registered ?? clientRegistered(base);
+  line(true, `${what}: client`, registered ? `registered with Notion for ${new URL(base!).origin}` : "not registered yet: it registers itself the first time a friend opens a Connect Notion link");
+  const state = o.state ?? connectionState;
+  for (const r of friends) {
+    const c = state(r.id, "notion");
+    line(c.state === "connected" ? true : "warn", `${what}: ${r.id}`, c.state === "connected" ? `connected since ${(c.at ?? "").slice(0, 10)}` : c.state === "reconnect" ? `Notion no longer accepts her connection (since ${(c.at ?? "").slice(0, 10)}); she is told to reconnect and gets a new link when she asks` : "has not connected yet (she asks the assistant for a Notion link)");
+  }
+}
+
 // The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today against her own limit,
 // and whether she is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
 export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number } = {}): void {
@@ -154,7 +175,7 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
       spent >= ctx.dailyBudgetUsd ? "today's budget is spent" : "",
       paused ? `paused until ${localTime(new Date(paused).toISOString())}` : "",
     ].filter(Boolean);
-    line(rec.status === "suspended" || problems.length === 0 ? true : "warn", `tenant ${rec.id}`, `${rec.status}; today $${spent.toFixed(2)} of $${ctx.dailyBudgetUsd}${problems.length ? `; ${problems.join("; ")}` : ""}`);
+    line(rec.status === "suspended" || problems.length === 0 ? true : "warn", `tenant ${rec.id}`, `${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}${connectionSummary(rec) ? `; ${connectionSummary(rec)}` : ""}; today $${spent.toFixed(2)} of $${ctx.dailyBudgetUsd}${problems.length ? `; ${problems.join("; ")}` : ""}`);
   }
 }
 
@@ -246,6 +267,7 @@ export async function doctor() {
   await intakeCheck(line);
   tenantCheck(line);
   googleCheck(line);
+  notionCheck(line);
 
   line(true, "proactive radar", settings.proactive ? `chosen by your chat's gate, about every ${settings.radarMinutes} min (its "[radar] ran" lines are in the log)` : "off (PROACTIVE=off)");
 

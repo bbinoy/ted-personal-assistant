@@ -22,10 +22,11 @@ interface Stored {
   payload: LinkPayload;
 }
 
-// The purposes of a link and the capability a person needs for each. EXTENSION POINT: `google`, `notion` and `cvc` are added here and in
-// intakepurposes.ts when they are built; nothing else needs to know a purpose by name.
-export const PURPOSE_CAPABILITY: Readonly<Record<string, Capability>> = { profile: "profile", card: "card", google: "google" };
-// `google` is offered only while the instance's OAuth client is set up (settings.google): without it there is nothing to sign in with.
+// The purposes of a link and the capability a person needs for each. EXTENSION POINT: `cvc` is added here and in intakepurposes.ts when it is built; nothing
+// else needs to know a purpose by name.
+export const PURPOSE_CAPABILITY: Readonly<Record<string, Capability>> = { profile: "profile", card: "card", google: "google", notion: "notion" };
+// `google` is offered only while the instance's OAuth client is set up (settings.google): without it there is nothing to sign in with. `notion` needs nothing but the
+// page's public address (the instance registers its own client with Notion the first time, notionoauth.ts).
 const purposeAvailable = (purpose: string): boolean => purpose !== "google" || (!!settings.google.clientId && !!settings.google.clientSecret);
 export const purposesFor = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSE_CAPABILITY).filter(([p, c]) => capabilities.includes(c) && purposeAvailable(p)).map(([p]) => p);
 
@@ -149,6 +150,25 @@ export interface Done {
   stored: { name: string; chars: number }[];
 }
 type StatusFile = Record<string, Record<string, Done>>; // tenant -> purpose -> the last completed form
+
+// Written by the process that uses a connection (the agent) when a service no longer accepts it: her permission expired, was withdrawn or was never complete. She is
+// told in the chat to reconnect; the admin's list and the doctor show it. It is cleared by connecting again (a newer completed form than this mark).
+export const PROBLEMS_FILE = "state/intake-problems.json";
+type ProblemFile = Record<string, Record<string, string>>; // tenant -> purpose -> ISO time
+
+export function markNeedsReconnect(tenant: string, purpose: string, now = new Date()): void {
+  const all = readJson<ProblemFile>(PROBLEMS_FILE, {});
+  writeJson(PROBLEMS_FILE, { ...all, [tenant]: { ...all[tenant], [purpose]: now.toISOString() } });
+}
+
+// Is her connection to a service there? Times only, never a token. "reconnect": it was made and no longer works.
+export function connectionState(tenant: string, purpose: string): { state: "connected" | "reconnect" | "none"; at?: string } {
+  const done = readJson<StatusFile>(STATUS_FILE, {})[tenant]?.[purpose];
+  const problem = readJson<ProblemFile>(PROBLEMS_FILE, {})[tenant]?.[purpose];
+  if (done && (!problem || problem <= done.at)) return { state: "connected", at: done.at };
+  if (problem) return { state: "reconnect", at: problem };
+  return { state: "none" };
+}
 
 export const readDone = (tenant: string, purpose: string): Done | undefined => readJson<StatusFile>(STATUS_FILE, {})[tenant]?.[purpose];
 // Written by the intake page only (one writer).

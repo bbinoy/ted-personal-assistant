@@ -66,7 +66,7 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
     if (p === "sys/health") return send(200, { initialized: true, sealed: f.mode.sealed, version: "2.7.1-fake" });
     if (f.mode.sealed) return send(503, { errors: ["Vault is sealed"] });
     if (token === f.intakeToken) {
-      const writable = (full: string) => new RegExp(`^${mount}/data/tenants/[^/]+/(profile|card|google)/[^/]+$`).test(full);
+      const writable = (full: string) => new RegExp(`^${mount}/data/tenants/[^/]+/(profile|card|google|notion)/[^/]+$`).test(full);
       if (p === "auth/token/lookup-self") return send(200, { data: { policies: ["default", "ted-intake"], ttl: f.mode.ttl, renewable: true } });
       if (p === "sys/capabilities-self") {
         const out: Record<string, string[]> = {};
@@ -74,7 +74,7 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
         return send(200, { ...out, data: out });
       }
       const w = new RegExp(`^${mount}/(data|metadata)/(.+)$`).exec(p);
-      const ok = w?.[1] === "data" && (req.method === "POST" || req.method === "PUT") && /^tenants\/[^/]+\/(profile|card|google)\/[^/]+$/.test(w[2]!);
+      const ok = w?.[1] === "data" && (req.method === "POST" || req.method === "PUT") && /^tenants\/[^/]+\/(profile|card|google|notion)\/[^/]+$/.test(w[2]!);
       if (!ok) return send(403, { errors: ["permission denied"] });
       store.set(w![2]!, JSON.parse(raw).data);
       return send(200, { data: { version: 1 } });
@@ -96,8 +96,10 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
     if (!m) return send(404, { errors: [] });
     const [, kind, rest] = m as unknown as [string, "data" | "metadata", string];
     // (the app's policy also reads any friend's Google grant, openbaoadmin.ts policyHcl, and nothing else of hers)
+    // (and a friend's Notion grant is read and written back, because its refresh tokens rotate: no delete, no list)
     const readsGoogle = tenant === "owner" && kind === "data" && req.method === "GET" && /^tenants\/[^/]+\/google\/[^/]+$/.test(rest);
-    if (!allowed(tenant, rest.replace(/\/$/, "")) && !readsGoogle) return send(403, { errors: ["permission denied"] });
+    const usesNotion = tenant === "owner" && kind === "data" && ["GET", "POST", "PUT"].includes(req.method ?? "") && /^tenants\/[^/]+\/notion\/[^/]+$/.test(rest);
+    if (!allowed(tenant, rest.replace(/\/$/, "")) && !readsGoogle && !usesNotion) return send(403, { errors: ["permission denied"] });
     if (kind === "data" && req.method === "GET") {
       const d = store.get(rest);
       return d ? send(200, { data: { data: d, metadata: { version: 1 } } }) : send(404, { errors: [] });

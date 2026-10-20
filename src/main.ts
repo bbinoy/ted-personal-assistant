@@ -13,6 +13,7 @@ import { createGroupDreamer } from "./groupdream.ts";
 import { createTenantDreamer } from "./tenantdream.ts";
 import { createTenantMailLoops } from "./mailloops.ts";
 import { googleHub } from "./googlemcp.ts";
+import { notionHub } from "./notionmcp.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
@@ -125,7 +126,7 @@ async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<vo
   const apiKey = settings.tenantApiKey;
   if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { apiKey, costFile: tenantContext(rec).costFile });
 }
-tenantHooks.drop = (id) => (dropTenantWarm(id), googleHub.drop(id)); // a suspended or removed tenant: her warm process and her Google server process stop
+tenantHooks.drop = (id) => (dropTenantWarm(id), googleHub.drop(id), notionHub.drop(id)); // a suspended or removed tenant: her warm process, her Google server process and her Notion connection stop
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,

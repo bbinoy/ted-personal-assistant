@@ -4,11 +4,19 @@ import { rowsOf, type ToolModule } from "./types.ts";
 // and Notion alone was ~58k tokens of a ~118k floor. For friends the next job gives this module a per-conversation connection (hosted Notion MCP, her token).
 const NOTION = "mcp__claude_ai_Notion__";
 
-const notion = rowsOf(NOTION, "notion", "notion");
+// WHAT the tools are, by action (the hosted server's names are the connector's): shared by this module and by a friend's own Notion (modules/notionhosted.ts), which
+// serves the same tools under another prefix and adds nothing to what they are.
+export const NOTION_TOOLS_BY_ACTION: readonly (readonly [action: string, names: string])[] = [
+  ["read", "notion-fetch notion-search"],
+  ["page-write", "notion-create-pages notion-update-page"],
+  ["comment-write", "notion-create-comment"],
+];
+export const notionRows = (prefix: string, o: Parameters<ReturnType<typeof rowsOf>>[2] = {}) => NOTION_TOOLS_BY_ACTION.flatMap(([action, names]) => rowsOf(prefix, "notion", "notion")(action, names, o));
+
 export const notionModule: ToolModule = {
   name: "notion",
   connection: { kind: "connector", key: "notion", server: /\bnotion\b/i, prefix: NOTION },
-  rows: [...notion("read", "notion-fetch notion-search"), ...notion("page-write", "notion-create-pages notion-update-page"), ...notion("comment-write", "notion-create-comment")],
+  rows: notionRows(NOTION),
   free: ["read"],
   skills: [{ name: "notion-tasks", required: true }],
   setup: [

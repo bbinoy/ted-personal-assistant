@@ -6,7 +6,7 @@ import type { Put } from "./intakepurposes.ts";
 // write-only in OpenBao too, openbaoadmin.ts INTAKE_ROLE). It does not use TenantSecrets, which also reads, and which refuses a card for a tenant
 // altogether; the rule that matters here is the one the card store keeps: a friend's security code is never written.
 
-export const WRITE_KINDS = ["profile", "card", "google"] as const;
+export const WRITE_KINDS = ["profile", "card", "google", "notion"] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
 export class IntakeWriter {

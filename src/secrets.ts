@@ -15,9 +15,12 @@ export const ITEM_NAME = /^[a-z][a-z0-9._-]{0,39}$/;
 // (PCI DSS forbids keeping it after authorisation, and it is no help to anyone but a thief). Enforced here, whatever the caller asks.
 // `google`: a friend's Google OAuth grant (tenants/<id>/google/oauth: her refresh token and her address), written by the intake page's callback (googleoauth.ts),
 // read only by the process that starts her Google server (googlemcp.ts). Her own folder like any other kind.
-export type ItemKind = "profile" | "card" | "google";
-export const ITEM_KINDS: readonly ItemKind[] = ["profile", "card", "google"];
+// `notion`: the same for her Notion grant (tenants/<id>/notion/oauth: access token, ROTATING refresh token, the client id they were issued to), written by the
+// callback and by the refresh (notionoauth.ts), read only by the process that calls the hosted Notion server (notionmcp.ts).
+export type ItemKind = "profile" | "card" | "google" | "notion";
+export const ITEM_KINDS: readonly ItemKind[] = ["profile", "card", "google", "notion"];
 export const GOOGLE_ITEM = "oauth";
+export const NOTION_ITEM = "oauth";
 export const CARD_TENANTS: ReadonlySet<string> = new Set([OWNER]);
 
 // The same rule for what the intake page writes (intakestore.ts): a card record of anyone but the owner has no security code in it, under any name.
