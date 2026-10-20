@@ -8,10 +8,11 @@ const ROOT = new URL("../", import.meta.url);
 const doc = readFileSync(new URL("docs/ARCHITECTURE.md", ROOT), "utf8");
 const layout = doc.slice(doc.indexOf("## Project layout"));
 const listed = new Set([...layout.matchAll(/^(src\/[\w./-]+\.ts)\s/gm)].map((m) => m[1]!));
-const files = (dir: string): string[] => readdirSync(new URL(`${dir}/`, ROOT)).filter((f) => f.endsWith(".ts")).map((f) => `${dir}/${f}`);
+// Every .ts under src/, at any depth (the folders the restructure adds are covered the day they appear).
+const files = (dir: string): string[] => readdirSync(new URL(`${dir}/`, ROOT), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(`${dir}/${e.name}`) : e.name.endsWith(".ts") ? [`${dir}/${e.name}`] : []));
 
-test("docs: every file in src/ and src/modules/ appears in the project layout", () => {
-  const missing = [...files("src"), ...files("src/modules")].filter((f) => !listed.has(f));
+test("docs: every .ts under src/ (any depth) appears in the project layout", () => {
+  const missing = files("src").filter((f) => !listed.has(f));
   assert.deepEqual(missing, [], `add a line for each to "Project layout" in docs/ARCHITECTURE.md`);
 });
 
