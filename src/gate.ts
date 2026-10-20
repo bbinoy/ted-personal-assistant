@@ -8,7 +8,8 @@ import { groupNotesBlock } from "./groupstore.ts";
 import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES, parseWake } from "./ledger.ts";
 import { ledgerEntries, withoutDeleted, type Sent } from "./messages.ts";
 import { hasPresets, speakerOf, type Conversation } from "./conversationmodel.ts";
-import { readNotes } from "./notes.ts";
+import { readableByJudges, readNotes } from "./notes.ts";
+import { dayPart, namedTimes, passedTimes, TIME_HINT } from "./notetimes.ts";
 import { localDay } from "./pause.ts";
 import { isOneEmoji } from "./reaction.ts";
 import { directGateDefaults, GATE_DEFAULTS, ownerGateDefaults } from "./persona.ts";
@@ -89,6 +90,7 @@ interface GateInput {
   tail: readonly string[]; // the tail of the conversation's log (logTail)
   secondsSinceMine?: number; // message look: how long ago we last spoke here
   duringLastReply?: boolean; // message look: this message arrived while our last message was being written, so that message is not an answer to it
+  notes?: string; // this look's notes text (notesText) when the caller has read it already
   payer?: Payer; // a friend's look: on the instance key, her cost file (payer.ts mayRun); default the login
 }
 export type Gate = (input: GateInput) => Promise<GateOutput>;
@@ -108,8 +110,8 @@ export const styleSummary = (now: Date): string =>
 
 // The conversation's notes as data, bounded like every other prompt that includes notes. The owner's setup and
 // voice notes are not for a gate to read; a group has no such categories.
-function notesText(conv: Conversation, now: Date): string {
-  const notes = readNotes(now, conv.notesDir).filter((n) => n.category !== "setup" && n.category !== "voice");
+export function notesText(conv: Conversation, now: Date): string {
+  const notes = readNotes(now, conv.notesDir).filter((n) => readableByJudges(n.category));
   return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
 
@@ -139,13 +141,18 @@ export const logTail = (conv: Pick<Conversation, "logFile" | "tenantId">, n = 40
 }; // what its author took back is not shown
 
 // What the clock look would be shown, as a hash: used to skip a look when nothing relevant changed since the last quiet
-// answer (wake.ts). The model's own ledger lines ("you looked") are left out, they change on every look. The hour is part
-// of it. A note that names a time of day could come due inside the hour, so then the minute is part of it and nothing is
-// skipped. `extra` is what code knows that the prompt does not spell out (the radar's age, the brief's state).
-const TIME_OF_DAY = /\d{1,2}[:.]\d{2}|\b\d{1,2}\s?(am|pm|h|uhr)\b|\b(at|um|ab|from|until|by|before|after)\s+\d{1,2}\b|o'clock|noon|midnight|mittag/i;
-export function idleFingerprint(input: Pick<GateInput, "conv" | "now" | "tail">, extra = ""): string {
-  const notes = notesText(input.conv, input.now);
-  const when = TIME_OF_DAY.test(notes) ? Math.floor(input.now.getTime() / 60_000) : `${localDay(input.now)}T${input.now.getHours()}`;
+// answer (wake.ts). The model's own ledger lines ("you looked") are left out, they change on every look. The clock part:
+//   notes name times of day   the day, a coarse part of it and WHICH OF THOSE TIMES HAVE PASSED: it changes when a named
+//                             time is crossed (a schedule is never missed) and not otherwise
+//   a time hint, none parsed  the minute (nothing is skipped: the safety net for a phrasing the extraction does not know)
+//   no time at all            the hour
+// `extra` is what code knows that the prompt does not spell out (the radar's age, the brief's state). `notes` is this
+// look's notes text when the caller has read it already (notesText reads the folder).
+export function idleFingerprint(input: Pick<GateInput, "conv" | "now" | "tail">, extra = "", notes: string = notesText(input.conv, input.now)): string {
+  const times = namedTimes(notes);
+  const when = times.length
+    ? `${localDay(input.now)}|${dayPart(input.now)}|${passedTimes(times, input.now)}`
+    : TIME_HINT.test(notes) ? Math.floor(input.now.getTime() / 60_000) : `${localDay(input.now)}T${input.now.getHours()}`;
   const log = input.tail.filter((l) => !/^\[[^\]]*\] \(you looked/.test(l));
   return createHash("sha1").update(JSON.stringify([notes, log, when, extra])).digest("hex");
 }
@@ -198,8 +205,7 @@ export const gateSpare = new SpareSlot<WarmQuery>({ maxAgeMs: settings.warmIdleM
 const spareSystem = (now: Date) => gateSystem({ kind: "group" }, "message", styleSummary(now));
 const usesSpare = (input: Pick<GateInput, "conv" | "trigger">) => input.trigger === "message" && input.conv.kind === "group";
 
-export function prepareGate(now: Date = new Date(), start: typeof startup = startup): void {
-  const system = spareSystem(now);
+export function prepareGate(now: Date = new Date(), start: typeof startup = startup, system: string = spareSystem(now)): void {
   if (!settings.warm) return;
   if (gateSpare.has(SPARE_ID, system)) return void gateSpare.touch(SPARE_ID); // a group is active: keep it
   const warm = start({ options: gateOptions(system) });
@@ -218,8 +224,8 @@ export interface GateIO {
 //   result     call -> the result message (init..result is the model)
 //   api        the model time the SDK itself reports
 export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<GateOutput> {
-  const prompt = gatePrompt(input, notesText(input.conv, input.now));
-  const system = gateSystem(input.conv, input.trigger, styleSummary(input.now));
+  const prompt = gatePrompt(input, input.notes ?? notesText(input.conv, input.now));
+  const system = gateSystem(input.conv, input.trigger, input.conv.kind === "group" ? styleSummary(input.now) : ""); // (the style is only told to a group's gate: read only then)
   const t0 = Date.now();
   const at: Record<string, number> = {};
   const mark = (k: string) => void (k in at || (at[k] = Date.now() - t0));
@@ -243,7 +249,7 @@ export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<Ga
       spare: usesSpare(input)
         ? async (p, cold, track) => {
             const w = await gateSpare.take(SPARE_ID, system)?.catch((e: Error) => console.error("gate: warm process unavailable, starting normally:", e.message));
-            setImmediate(() => prepareGate(input.now, io.start)); // a spare serves one look: the next is already on its way
+            setImmediate(() => prepareGate(input.now, io.start, system)); // a spare serves one look: the next is already on its way (the same system prompt: this look was a group message look)
             if (!w) return cold();
             warm = true;
             return firstWarm(() => track(w.query(p)), cold, (e) => console.error("gate: warm process failed, starting normally:", e.message));

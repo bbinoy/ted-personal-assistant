@@ -10,7 +10,7 @@ import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
 import { LAST_BRIEF, missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, briefSystem, chatSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
+import { backgroundSystem, briefSystem, chatContext, chatSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy.ts";
 import { offeredSkills } from "../src/profiles.ts";
 import { loadSettings, settings } from "../src/settings.ts";
@@ -200,7 +200,7 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
   const down = [] as const;
   const missing = missingSetup([], [], false);
   const prompts = {
-    chat: chatSystem("yesterday's brief", new Date("2026-10-12T09:00:00"), missing, down, ["10:00 an alert"], false),
+    chat: chatSystem(new Date("2026-10-12T09:00:00"), false),
     brief: briefSystem("MEMORY", missing, down, false),
     radar: radarSystem("MEMORY", missing, down, false),
     background: backgroundSystem("MEMORY", missing, down, false),
@@ -214,7 +214,9 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
     assert.match(rest, /ted-personal-assistant:daily-brief/, name); // the other skills are still listed
   }
   assert.doesNotMatch(prompts.chat, /how you write|voice \(how/i);
-  assert.match(prompts.chat, /Signal only got a short version/);
+  const context = chatContext({ lastBrief: "yesterday's brief", missing, down, pings: ["10:00 an alert"] }, false)!; // what moved out of the chat's system prompt
+  assert.match(context, /Signal only got a short version/);
+  assert.doesNotMatch(context, /mailbird|Reply ready|send_message_now|update_draft|get_message|inbox|by email|email drafts|writes email|handled mail/i);
   const gate = ownerGateDefaults({ briefHour: 7, backstopHour: 9, radarMinutes: 180, radar: true, minGapMinutes: 60, mail: false });
   assert.doesNotMatch(gate, /mail/i);
 });

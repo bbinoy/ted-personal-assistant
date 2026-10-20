@@ -342,12 +342,22 @@ test("wake: guards in code, whatever the gate says", async () => {
     await r.wakeups.tick(T0);
     assert.deepEqual([r.c.gates.length, r.c.ownerRuns.length, r.c.groupRuns.length], [0, 0, 0], JSON.stringify(g));
   }
-  // owner quiet hours: no look, no gate, no run (a group has no such hours)
+  // quiet hours: no look, no gate, no run for the owner; a group is held back too unless its notes name a time inside the quiet window
   const night = new Date(2026, 9, 14, 3, 0, 0);
-  const q = rig({ now: night, groups: ["wake-night-group-0123456789ab"] });
+  const NG = "wake-night-group-0123456789ab";
+  const q = rig({ now: night, groups: [NG] });
+  await q.wakeups.tick(night);
+  assert.deepEqual(q.c.gates, []);
+  assert.equal(q.c.ownerRuns.length, 0);
+  const named = group(NG);
+  mkdirSync(named.notesDir!, { recursive: true });
+  writeFileSync(join(named.notesDir!, "scheduling-early.md"), "Post the weather at 6:30.");
   await q.wakeups.tick(night);
   assert.deepEqual(q.c.gates, ["group"]);
-  assert.equal(q.c.ownerRuns.length, 0);
+  writeFileSync(join(named.notesDir!, "scheduling-early.md"), "Post the weather at 15:30.");
+  const q2 = rig({ now: night, groups: [NG] });
+  await q2.wakeups.tick(night);
+  assert.deepEqual(q2.c.gates, []); // a time outside the quiet window does not open the night
   // a group we cannot vouch for is never woken
   const stranger = rig({ vouch: false, groups: [G] });
   await stranger.wakeups.tick(T0);
@@ -370,6 +380,15 @@ test("wake: bad gate output fails closed; a gate that throws or acts without ins
 test("gate: a quick reaction must be exactly one emoji, otherwise it is dropped", () => {
   assert.equal(parseGate({ act: false, reaction: " 😂 ", nextCheckMinutes: 30 }).reaction, "😂");
   for (const bad of ["haha", "😂😂", "", 5, null]) assert.equal(parseGate({ act: false, reaction: bad, nextCheckMinutes: 30 }).reaction, undefined, String(bad));
+});
+
+test("gate: a look is shown the notes the caller already read, not a second read of the folder; the owner's style notes are read only for a group", async () => {
+  const seen: { prompt: string; system: string }[] = [];
+  const io = { query: ((p: any) => (seen.push({ prompt: String(p.prompt), system: String(p.options.systemPrompt) }), Object.assign((async function* () { yield { type: "result", subtype: "success", is_error: false, total_cost_usd: 0, duration_api_ms: 0, structured_output: { act: false, nextCheckMinutes: 30 } }; })(), { close() {} }))) as never };
+  const base = { trigger: "clock" as const, now: new Date("2026-10-14T10:00:00Z"), tail: [] };
+  await askGateWith({ ...base, conv: owner(), notes: "- [scheduling] fun.md: given by the caller" }, io);
+  assert.match(seen[0]!.prompt, /given by the caller/);
+  assert.doesNotMatch(seen[0]!.system, /personality_notes/); // a private chat's gate is told no style
 });
 
 test("gate: a refused call (usage limit, expired login) is an error, not a quiet 'no'; any other empty answer is still 'no'", async () => {

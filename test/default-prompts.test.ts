@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { BRIEF_INSTRUCTIONS } from "../src/brief.ts";
 import { missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, briefSystem, chatSystem, GATE_DEFAULTS, groupSystem, handlerSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
+import { backgroundSystem, briefSystem, chatContext, chatSystem, GATE_DEFAULTS, groupSystem, handlerSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
 import { offeredSkills, PROFILES } from "../src/profiles.ts";
 import { settings } from "../src/settings.ts";
 
@@ -28,8 +28,9 @@ export function snapshot(): Record<string, unknown> {
       setupLabels: setupItems().map((i) => i.label),
       briefInstructions: BRIEF_INSTRUCTIONS,
       hiddenConnectors: settings.hiddenConnectors,
-      chat: portable(chatSystem("yesterday's brief", NOW, [], [], ["10:00 an alert"])),
-      chatSetup: portable(chatSystem(undefined, NOW, missing, down)),
+      chat: portable(chatSystem(NOW)),
+      chatContext: portable(chatContext({ lastBrief: "yesterday's brief", pings: ["10:00 an alert"] }) ?? ""),
+      chatContextSetup: portable(chatContext({ missing, down }) ?? ""),
       brief: portable(briefSystem("MEMORY", missing, down)),
       radar: portable(radarSystem("MEMORY", missing, down)),
       handler: portable(handlerSystem("MEMORY", missing, down)),

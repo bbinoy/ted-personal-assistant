@@ -50,6 +50,7 @@ from now, or `null` if there is none in the 36 hours you read.
   calendar. **key** `clash:<the two event ids sorted>@<first start>`.
 - **kind `mail`: mail the calendar makes urgent.** Only when something unanswered is
   tied to an event that is soon (for example, a reschedule request for tomorrow's call).
+  You have no mail tools in this run: judge from what the task gives you of the heartbeat's mail.
   **key** `mail:<conversation id or subject>`.
 - **kind `other`:** anything else that clearly cannot wait for the daily brief. Rare.
 

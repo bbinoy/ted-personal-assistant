@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
 import { isInside } from "./contain.ts";
@@ -9,7 +9,7 @@ import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { TENANT_ID } from "./secrets.ts";
 import { OWNER_SESSION_FILE } from "./session.ts";
 import { settings } from "./settings.ts";
-import { readJson, writeJson } from "./state.ts";
+import { dataPath, readJson, writeJson } from "./state.ts";
 import { directOf, directTarget, type Target } from "@ted-personal-assistant/messenger";
 
 // Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (the folders and files the
@@ -241,10 +241,32 @@ function normalise(x: unknown): TenantRecord | undefined {
 }
 
 // Everybody: the owner (once seeded) and every tenant.
-export const people = (): TenantRecord[] => (readJson<Partial<Registry>>(REGISTRY, {}).tenants ?? []).map(normalise).filter((r): r is TenantRecord => !!r);
+export const people = (): TenantRecord[] => registry().map(normalise).filter((r): r is TenantRecord => !!r);
+
+// `allows`, `tenantById` and every routing question read the registry, on every message and every tick. The file is read and parsed again only when it changed (its
+// stat: size, modification time in ns, inode: a write is a rename to a new file, also another process's, `npm run tenants`) and not after this process's own
+// write (`save` forgets it). The parsed JSON is shared, the records made from it (`normalise`) are new objects each time.
+let cached: { sig: string; tenants: unknown[] } | undefined;
+let reads = 0;
+export const registryReads = (): number => reads; // (tests)
+function registry(): unknown[] {
+  let sig: string | undefined;
+  try {
+    const path = dataPath(REGISTRY);
+    const s = statSync(path, { bigint: true });
+    sig = `${path}:${s.ino}:${s.size}:${s.mtimeNs}`;
+  } catch {
+    /* no registry yet */
+  }
+  if (sig && cached?.sig === sig) return cached.tenants;
+  reads++;
+  const tenants = readJson<Partial<Registry>>(REGISTRY, {}).tenants ?? [];
+  cached = sig ? { sig, tenants } : undefined;
+  return tenants;
+}
 // The tenants: everybody but the owner. What the invitations, routing, suspension and removal work on; none of it can reach the owner's record.
 export const listTenants = (): TenantRecord[] => people().filter((r) => r.id !== OWNER_ID);
-const save = (all: TenantRecord[]) => writeJson(REGISTRY, { tenants: all });
+const save = (all: TenantRecord[]) => (writeJson(REGISTRY, { tenants: all }), (cached = undefined));
 const update = (id: string, change: (r: TenantRecord) => TenantRecord): TenantRecord | undefined => {
   const all = people();
   const at = all.findIndex((t) => t.id === id);

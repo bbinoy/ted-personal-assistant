@@ -84,9 +84,12 @@ const labelOf = (conv: Who) => (conv.kind === "owner" ? "chat" : conv.kind); // 
 export function warmUp(conv: Who, o: RunOptions, r: Resume, start: typeof startup = startup, refresh = false): void {
   const slot = pool.slot(conv, true);
   if (!slot) return;
+  const key = spareKey(conv.key, o, r);
+  // A renewal of a spare that is built from exactly this and stays fresh until the next renewal changes nothing: no new process.
+  if (refresh && slot.has(conv.key, key, settings.warmRefreshMinutes * 60_000)) return;
   const warm = start({ options: buildOptions(approveIn(conv.key), o, r.resume) });
   warm.catch((e) => console.error(`${labelOf(conv)} warm-up failed:`, (e as Error).message));
-  slot.put(conv.key, spareKey(conv.key, o, r), warm, { refresh });
+  slot.put(conv.key, key, warm, { refresh });
 }
 
 // One turn: on the conversation's warm process when it still fits, else a cold start. A warm process serves one query; one that no

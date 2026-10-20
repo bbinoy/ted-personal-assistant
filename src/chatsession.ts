@@ -7,6 +7,7 @@ import { charge, envFor, isRefusal, LOGIN, mayRun, observe, succeeded, type MayR
 import { OWNER_SESSION_FILE, planSession, type ChatSession, type CompactMode } from "./session.ts";
 import { settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
+import { forgetShown } from "./turncontext.ts";
 
 // Every conversation (the owner's chat, each group) persists across restarts, with the hygiene rules in
 // session.ts (fresh after idle, compacted when large). total_cost_usd is cumulative across a resumed
@@ -80,6 +81,7 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
         if (!lastError) succeeded(payer);
         const { compactFailedAt: _cleared, untrustedIn: _held, ...rest } = saved;
         writeJson(file, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens, ...carriedTaint(saved, message.session_id) }); // (a compaction continues the session: its summary may still hold the untrusted text)
+        forgetShown(file); // the summary may have lost what the conversation was last told at the start of a turn (turncontext.ts)
         console.log(`${source}: compacted ${boundary.pre_tokens} -> ${boundary.post_tokens ?? "?"} tokens (${mode})`);
         audit("chat_session", "compacted", source);
         return;

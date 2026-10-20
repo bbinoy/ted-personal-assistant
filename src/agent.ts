@@ -1,7 +1,8 @@
 import { query, startup } from "@anthropic-ai/claude-agent-sdk";
 import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
 import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
-import { runOptionsFor, type RunInputs } from "./runoptions.ts";
+import { runOptionsFor, turnContext, type RunInputs } from "./runoptions.ts";
+import { markShown, unseen } from "./turncontext.ts";
 import { chatResume } from "./chatsession.ts";
 import { disconnected, readConnectors } from "./connectors.ts";
 import type { Conversation } from "./conversationmodel.ts";
@@ -21,8 +22,9 @@ const down = () => disconnected(readConnectors());
 
 function profileSystem(name: OwnerProfile): string {
   const notes = memoryFor(PROFILES[name].notes);
-  const missing = missingSetup(readNotes(), down());
-  return name === "brief" ? briefSystem(notes, missing, down()) : name === "radar" ? radarSystem(notes, missing, down()) : backgroundSystem(notes, missing, down());
+  const off = down(); // (read once)
+  const missing = missingSetup(readNotes(), off);
+  return name === "brief" ? briefSystem(notes, missing, off) : name === "radar" ? radarSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
 }
 
 // What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's and the radar's
@@ -34,9 +36,9 @@ export interface ProfileExtra {
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
 // The options of an owner profile's run (a fresh session).
-function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
+export function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
   const p = PROFILES[name];
-  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
+  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
 }
 
 // One run under a named owner profile: always a fresh session.
@@ -54,8 +56,11 @@ export async function runConversation(conv: Conversation, inputs: RunInputs, bui
   const r = chatResume(conv.sessionFile);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const o = { ...runOptionsFor(conv, inputs), seenAt, onFirstOutput };
-  const input = userInput(prompt, pictures, documents);
-  return runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume), abortController } }));
+  const context = unseen(conv.sessionFile, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
+  const input = userInput(context ? `${context}\n\n${prompt}` : prompt, pictures, documents);
+  const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume), abortController } }));
+  if (context) markShown(conv.sessionFile, chatResume(conv.sessionFile).resume, context); // the turn went through: the session has it now
+  return reply;
 }
 
 // Keep a process warm for the conversation's next message. `refresh`: only renew one that is in use (a timer; it does not keep an idle one alive).

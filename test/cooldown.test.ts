@@ -157,20 +157,45 @@ test("idle: an unchanged quiet look is not asked again; a message, a new hour or
   assert.equal(r.calls(), 4);
 });
 
-test("idle: a note that names a time of day is never skipped within the hour, and a due schedule that acts runs", async () => {
-  const r = rig((n) => (n < 3 ? QUIET : { act: true, instructions: "Post the fact", nextCheckMinutes: 30 }));
+test("idle: a note that names a time is looked at again exactly when that time has passed, and a due schedule that acts runs", async () => {
+  const r = rig((n) => (n < 2 ? QUIET : { act: true, instructions: "Post the fact", nextCheckMinutes: 30 }));
   writeFileSync(join(r.notesDir, "scheduling-fact.md"), "Post a fun fact at 9:40.");
   assert.equal(await r.w.look(r.conv, T0), "no");
   r.at(min(15));
-  assert.equal(await r.w.look(r.conv, min(15)), "no");
-  r.at(min(40));
-  assert.equal(await r.w.look(r.conv, min(40)), "posted");
-  assert.equal(r.calls(), 3);
+  assert.equal(await r.w.look(r.conv, min(15)), "idle"); // 9:15: the named time has not come, nothing changed
+  r.at(min(30));
+  assert.equal(await r.w.look(r.conv, min(30)), "idle");
+  assert.equal(r.calls(), 1);
+  r.at(min(45));
+  assert.equal(await r.w.look(r.conv, min(45)), "posted"); // 9:40 crossed: the look that is due next asks again
+  assert.equal(r.calls(), 2);
   assert.equal(r.ran.length, 1);
   const f = (d: Date) => idleFingerprint({ conv: r.conv, now: d, tail: [] });
-  assert.notEqual(f(T0), f(min(15)));
+  assert.notEqual(f(T0), f(min(40)));
+  assert.equal(f(T0), f(min(15)));
   rmNotes(r.notesDir);
   assert.equal(f(T0), f(min(15)));
+});
+
+test("idle: a time hint the extraction cannot read keeps the minute (nothing is skipped)", () => {
+  const r = rig(() => QUIET);
+  writeFileSync(join(r.notesDir, "scheduling-fact.md"), "Post a fun fact at o'clock sharp.");
+  const f = (d: Date) => idleFingerprint({ conv: r.conv, now: d, tail: [] });
+  assert.notEqual(f(T0), f(min(1)));
+});
+
+test("idle: with named times the fingerprint moves with the day part and the passed times only", () => {
+  const r = rig(() => QUIET);
+  const at = (h: number, m = 0, day = 14) => new Date(2026, 9, day, h, m);
+  const f = (d: Date) => idleFingerprint({ conv: r.conv, now: d, tail: [] });
+  writeFileSync(join(r.notesDir, "scheduling-fact.md"), "Fun fact at 9:40 and at 18 Uhr.");
+  assert.equal(f(at(6, 0)), f(at(6, 59))); // same part, nothing crossed
+  assert.equal(f(at(7, 0)), f(at(8, 30)));
+  assert.notEqual(f(at(9, 39)), f(at(9, 40))); // crossed
+  assert.equal(f(at(10, 0)), f(at(11, 30)));
+  assert.notEqual(f(at(11, 59)), f(at(12, 0))); // the afternoon begins
+  assert.notEqual(f(at(17, 59)), f(at(18, 0))); // crossed
+  assert.notEqual(f(at(9, 0)), f(at(9, 0, 15))); // a new day
 });
 
 test("idle: a failed gate call is not a quiet decision, and the model's own look lines do not change the fingerprint", async () => {
