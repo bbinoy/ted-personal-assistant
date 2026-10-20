@@ -15,6 +15,7 @@ const T = await import("../src/tenants.ts");
 const { createWakeups } = await import("../src/wake.ts");
 const { createTenantDreamer } = await import("../src/tenantdream.ts");
 const { createTenantRunner } = await import("../src/tenantrun.ts");
+const { keyNotices } = await import("../src/keynotice.ts");
 const { askGateWith, gateSystem, parseGate } = await import("../src/gate.ts");
 const { owner, tenant } = await import("../src/conversation.ts");
 const { allows, hasPresets, onLogin } = await import("../src/conversationmodel.ts");
@@ -53,7 +54,9 @@ const said = (rec: { id: string }, text: string, at = NOON, kind: Kind = "owner"
 
 function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversation.ts").Conversation) => unknown; run?: (c: import("../src/conversation.ts").Conversation) => string; ids?: string[]; now?: Date } = {}) {
   const alerts: string[] = [];
-  const runner = createTenantRunner({ apiKey: () => ("key" in o ? o.key : KEY), alertAdmin: (t) => void alerts.push(t) });
+  const runner = createTenantRunner({ apiKey: () => ("key" in o ? o.key : KEY) });
+  keyNotices.reset(); // (one notice for the owner about the shared key, whatever the run: keynotice.ts)
+  keyNotices.sendTo((t) => void alerts.push(t));
   const seen = { gates: [] as { conv: import("../src/conversation.ts").Conversation; tenant?: unknown; tail: readonly string[] }[], runs: [] as { conv: import("../src/conversation.ts").Conversation; apiKey?: string; prompt: string }[], sent: [] as { conv: import("../src/conversation.ts").Conversation; text: string }[], profiles: [] as string[] };
   const now = o.now ?? NOON;
   const pipeline = {
@@ -314,8 +317,10 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
   recordCost(100, T.tenantContext(poor).costFile);
   const ran: string[] = [];
   const alerts: string[] = [];
+  keyNotices.reset();
+  keyNotices.sendTo((t) => void alerts.push(t));
   const mk = (key: string | undefined) => {
-    const runner = createTenantRunner({ apiKey: () => key, alertAdmin: (t) => void alerts.push(t) });
+    const runner = createTenantRunner({ apiKey: () => key });
     return createTenantDreamer({
       access: (id) => runner.access(id),
       run: (access) => async () => {

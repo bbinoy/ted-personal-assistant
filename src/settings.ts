@@ -304,6 +304,7 @@ export function loadSettings(env: Env) {
     tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on the instance key (tenant.json may lower or raise it)
     inviteTtlHours: num(env, "INVITE_TTL_HOURS", 72, 1, 24 * 90), // how long a minted invite code works
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often
+    tenantKeyNoticeMinutes: num(env, "TENANT_KEY_NOTICE_MINUTES", 180, 0, 10_080), // the owner hears of a refused or missing instance key at most this often (keynotice.ts)
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none
 
     // Which chat platform the assistant talks on: the package @ted-personal-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.

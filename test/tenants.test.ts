@@ -13,6 +13,7 @@ const T = await import("../src/tenants.ts");
 const { tenantTools } = await import("../src/capabilities.ts");
 const R = await import("../src/tenantroute.ts");
 const { createTenantRunner } = await import("../src/tenantrun.ts");
+const { keyNotices, createKeyNotices } = await import("../src/keynotice.ts");
 const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
 const { failure, TenantKeyError, RateLimitError } = await import("../src/errors.ts");
 const { recordCost, spentToday, tenantOverBudget } = await import("../src/budget.ts");
@@ -195,9 +196,10 @@ test("consent: a one-time record; recording it makes an invited tenant active", 
 function runner(over: { key?: string | undefined; ask?: (key: string) => Promise<{ text: string; costUsd: number }>; now?: () => number } = {}) {
   const asked: { id: string; key: string; prompt: string }[] = [];
   const alerts: string[] = [];
+  keyNotices.reset();
+  keyNotices.sendTo((t) => void alerts.push(t)); // the one notice for the owner about the shared key (keynotice.ts)
   const r = createTenantRunner({
     apiKey: () => over.key,
-    alertAdmin: (t) => void alerts.push(t),
     ask: (async (ctx: { id: string }, key: string, prompt: string) => (asked.push({ id: ctx.id, key, prompt }), (over.ask ?? (async () => ({ text: "hello there", costUsd: 0.01 })))(key))) as never,
     now: over.now,
   });
@@ -226,22 +228,52 @@ test("turn: no instance key means a plain 'not set up for friends' with the AI l
   assert.deepEqual(asked, []);
 });
 
-test("turn: a refused instance key tells the owner's chat once, not once per tenant, and again only after the notice interval", async () => {
+test("turn: a refused instance key tells the owner's chat once, not once per tenant, in words that hold nothing of the friends", async () => {
   const [a, b] = [join_("Gus"), join_("Ivy")];
-  let t = 10_000_000;
-  const { r, alerts } = runner({ key: KEY_A, now: () => t, ask: async () => Promise.reject(new TenantKeyError("refused")) });
+  // The failure is made where every run on the key makes it (errors.ts failure), which is what reports it: the same for a chat turn and for any unattended run.
+  const { r, alerts } = runner({ key: KEY_A, ask: async () => Promise.reject(failure("authentication_failed", "error_during_execution", "gus")) });
   await assert.rejects(r.run(tenant(a.id), "hi"), TenantKeyError); // her own run still fails as it did (her notice is the error path's)
   await assert.rejects(r.run(tenant(b.id), "hi"), TenantKeyError); // another tenant, the same key
   assert.equal(alerts.length, 1);
-  assert.match(alerts[0]!, /friends' API key was refused \(expired\? limit\?\) - replace TENANT_ANTHROPIC_API_KEY in \.env/);
+  assert.match(alerts[0]!, /The shared API key was refused .*check TENANT_ANTHROPIC_API_KEY/);
   assert.ok(!alerts[0]!.includes(KEY_A), "never the key");
-  t += on.tenantNoticeMinutes * 60_000 + 1;
-  resetCooldown();
-  await assert.rejects(r.run(tenant(a.id), "again"), TenantKeyError);
-  assert.equal(alerts.length, 2, "rate limited like the other notices, not silenced for good");
+  assert.ok(!/Gus|Ivy/.test(alerts[0]!), "no word and no name of a friend");
   const quiet = runner({ key: KEY_A, ask: async () => Promise.reject(new Error("a plain failure")) });
   await assert.rejects(quiet.r.run(tenant(a.id), "hi"), /plain failure/);
   assert.deepEqual(quiet.alerts, [], "only a refused key is the owner's business");
+  const busy = runner({ key: KEY_A, ask: async () => Promise.reject(failure("overloaded", "error_during_execution", "gus")) });
+  await assert.rejects(busy.r.run(tenant(a.id), "hi"), TenantKeyError);
+  assert.deepEqual(busy.alerts, [], "an overloaded API is not the key's fault");
+});
+
+test("key notice: one mechanism for every kind of run, rate limited by a clock it is given, per problem, and it never throws", () => {
+  const sent: string[] = [];
+  const n = createKeyNotices({ everyMs: () => 3 * 3600_000 });
+  assert.equal(n.report("refused", 1000), false, "no owner chat to send to yet: recorded, not sent");
+  n.reset();
+  n.sendTo((t) => void sent.push(t));
+  assert.equal(n.report("refused", 1000), true);
+  assert.equal(n.report("refused", 1000 + 2 * 3600_000), false, "within the interval");
+  assert.equal(n.report("missing", 1000 + 2 * 3600_000), true, "another problem is another notice");
+  assert.equal(n.report("refused", 1000 + 3 * 3600_000), true, "and again after the interval");
+  assert.equal(sent.length, 3);
+  n.sendTo(() => {
+    throw new Error("the chat is down");
+  });
+  assert.doesNotThrow(() => n.report("missing", 1000 + 9 * 3600_000));
+});
+
+test("key notice: a failure on the key from an unattended run, a mail loop or the dream reaches the same notice as a chat turn (they all end in failure())", () => {
+  const alerts: string[] = [];
+  keyNotices.reset();
+  keyNotices.sendTo((t) => void alerts.push(t));
+  for (const source of ["gus", "ivy", "gus"]) {
+    const e = failure("billing_error", "error_during_execution", source);
+    assert.ok(e instanceof TenantKeyError && e.why === "billing");
+  }
+  assert.equal(alerts.length, 1, "three runs of two friends, one notice");
+  assert.equal(failure("rate_limit", "error", undefined) instanceof RateLimitError, true, "the owner's own limit is not the friends' key");
+  assert.equal(alerts.length, 1);
 });
 
 test("turn: the run gets the instance key, and the first reply carries the AI line exactly once", async () => {

@@ -1,4 +1,5 @@
 import { noteRateLimit } from "./cooldown.ts";
+import { reportKeyProblem } from "./keynotice.ts";
 import { OWNER } from "./settings.ts";
 
 // The two failures that have their own message for the owner, instead of "something broke".
@@ -48,7 +49,12 @@ export function groupErrorNotice(e: unknown): string {
 export function failure(lastError: string | undefined, subtype: string, tenant?: string): Error {
   if (tenant) {
     const why = lastError === "rate_limit" || lastError === "overloaded" ? "limit" : lastError === "billing_error" || lastError === "account_on_hold" ? "billing" : lastError === "authentication_failed" || lastError === "invalid_request" || lastError === "oauth_org_not_allowed" || lastError === "verification_required" ? "refused" : undefined;
-    if (why) return noteRateLimit(Date.now(), tenant), new TenantKeyError(why);
+    // The one place a friend's run is found to have failed on the shared key, whoever started the run: her cooldown, and the owner's one notice (keynotice.ts).
+    if (why) {
+      noteRateLimit(Date.now(), tenant);
+      if (lastError !== "overloaded") reportKeyProblem("refused"); // (an overloaded API is not the key's fault)
+      return new TenantKeyError(why);
+    }
     return new Error(`agent turn ended with ${subtype}${lastError ? ` (${lastError})` : ""}`);
   }
   if (lastError === "authentication_failed") return new AuthError("authentication_failed");

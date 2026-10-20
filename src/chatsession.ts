@@ -2,6 +2,7 @@ import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "./audit.ts";
 import { recordCost } from "./budget.ts";
 import { withCeiling } from "./ceiling.ts";
+import { failure, TenantKeyError } from "./errors.ts";
 import { OWNER_SESSION_FILE, planSession, type ChatSession, type CompactMode } from "./session.ts";
 import { settings } from "./settings.ts";
 import { tenantEnv } from "./tenanttools.ts";
@@ -56,7 +57,7 @@ export function compactDue(file: string = OWNER_SESSION_FILE, now: Date = new Da
 // session.ts says so for this `mode`: "urgent" right after a reply that left the context far past the limit (the caller waits),
 // "quiet" from the heartbeat once the conversation has been still for COMPACT_QUIET_MINUTES. Always called from the conversation's
 // serial queue, so a message that arrives meanwhile waits behind it and nothing else touches the file. Never throws.
-export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, source: Source = "chat", notesDir?: string, mode: "quiet" | "urgent" = "urgent", tenant?: { apiKey: string; costFile: string }): Promise<void> {
+export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, source: Source = "chat", notesDir?: string, mode: "quiet" | "urgent" = "urgent", tenant?: { id?: string; apiKey: string; costFile: string }): Promise<void> {
   try {
     const saved = readJson<ChatSession>(file, { costUsd: 0 });
     if (planSession(saved, new Date(), chatPlanOpts(mode)) !== "resume then compact") return;
@@ -64,11 +65,17 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
     // Bounded in time like every run (ceiling.ts): it runs inside the conversation's queue, and a hung one would block it.
     await withCeiling(settings.compactMaxMinutes * 60_000, async (c) => {
       let boundary: { pre_tokens: number; post_tokens?: number } | undefined;
+      let lastError: string | undefined;
       for await (const message of query({ prompt: "/compact", options: { ...compactOptions(saved.sessionId, source, notesDir, tenant), abortController: c.controller } })) {
         if (message.type === "system" && message.subtype === "compact_boundary") boundary = message.compact_metadata;
+        if (message.type === "assistant" && message.error) lastError = message.error;
         if (message.type !== "result") continue;
         recordCost(message.total_cost_usd - saved.costUsd, tenant?.costFile);
-        if (!boundary) throw new Error(`/compact produced no compact_boundary (${message.subtype})`);
+        if (!boundary) {
+          // A friend's compaction that failed on the shared key is reported like any other run on it (errors.ts failure: her cooldown, the owner's one notice).
+          const refused = tenant?.id ? failure(lastError, message.subtype, tenant.id) : undefined;
+          throw refused instanceof TenantKeyError ? refused : new Error(`/compact produced no compact_boundary (${message.subtype})`);
+        }
         const { compactFailedAt: _cleared, ...rest } = saved;
         writeJson(file, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens });
         console.log(`${source}: compacted ${boundary.pre_tokens} -> ${boundary.post_tokens ?? "?"} tokens (${mode})`);
