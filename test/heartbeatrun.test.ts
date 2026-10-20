@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { owner, type Conversation } from "../src/conversation.ts";
 import { parseGate } from "../src/gate.ts";
-import { clampLook, mayPostNow, nightCount, nightStart, parseAnswer, HEARTBEAT_SCHEMA } from "../src/heartbeat/rules.ts";
+import { clampLook, parseAnswer, HEARTBEAT_SCHEMA } from "../src/heartbeat/rules.ts";
 import { lastLookText, lookInstruction, lookPrompt } from "../src/heartbeat/look.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { HEARTBEAT_LOG, readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
@@ -20,9 +20,8 @@ const s = settings as unknown as Record<string, unknown>;
 s.briefBackstopHour = 24; // the brief is the brief tests' (test/tasks.test.ts); here the owner's look is all that runs
 const DAY = new Date(2026, 9, 14, 14, 0, 0); // a Wednesday, 14:00 local
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
-const SMALL_HOURS = new Date(2026, 9, 15, 3, 0, 0);
 const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
-const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), night: false, message: false, held: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
+const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
 
 interface Answer { message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[] }
@@ -67,16 +66,6 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
   const wakeLine = () => ledgerEntries(conv.logFile).filter((e) => e.kind === "wake").map((e) => parseWake(e.text)!).at(-1)!;
   return { w, conv, seen, at: (d: Date) => (now = d), wakeLine };
 }
-const withSettings = async (over: Record<string, unknown>, f: () => Promise<void>) => {
-  const was = Object.fromEntries(Object.keys(over).map((k) => [k, s[k]]));
-  Object.assign(s, over);
-  try {
-    await f();
-  } finally {
-    Object.assign(s, was);
-  }
-};
-
 test("the next look is clamped to 10..120 minutes, whatever the model says, and falls back to the day default", () => {
   assert.equal(clampLook(1), 10);
   assert.equal(clampLook(0), 10);
@@ -101,27 +90,15 @@ test("the answer: a message or [[silent]]; anything that does not follow the for
   assert.equal(parseAnswer(undefined, "").nextCheckMinutes, 30);
 });
 
-test("the night cap: the window, the count, and at most NIGHT_MESSAGES proactive messages per night", () => {
-  assert.equal(nightStart(NIGHT, 22, 7).getTime(), new Date(2026, 9, 14, 22, 0).getTime());
-  assert.equal(nightStart(SMALL_HOURS, 22, 7).getTime(), new Date(2026, 9, 14, 22, 0).getTime(), "after midnight the night began yesterday");
-  const rows = [row(new Date(2026, 9, 14, 21, 59), { message: true, night: false }), row(new Date(2026, 9, 14, 22, 30), { message: true, night: true }), row(new Date(2026, 9, 14, 23, 0), { message: false, held: true })];
-  assert.equal(nightCount(rows, DAY), 0, "never in the day");
-  assert.equal(nightCount(rows, NIGHT), 1, "the 21:59 message is yesterday evening's; held ones do not count");
-  assert.equal(mayPostNow(rows, NIGHT, 2), true);
-  assert.equal(mayPostNow([...rows, row(new Date(2026, 9, 15, 1, 0), { message: true, night: true })], SMALL_HOURS, 2), false, "the second message of the night used the cap");
-  assert.equal(mayPostNow(rows, SMALL_HOURS, 2), true);
-  assert.equal(mayPostNow([...rows, row(new Date(2026, 9, 15, 1, 0), { message: true })], DAY, 2), true, "the morning is free again");
-  // the next night starts fresh
-  assert.equal(nightCount(rows, new Date(2026, 9, 15, 22, 30)), 0);
-  assert.equal(mayPostNow(rows, NIGHT, 0), false, "NIGHT_MESSAGES=0: no proactive message at night");
-});
-
 test("the instruction: the clock, the zone, the last look and the quiet window as text; no brief status, no gate vocabulary", () => {
   const text = lookInstruction(DAY, new Date(2026, 9, 14, 13, 30).toISOString());
   assert.match(text, /Wednesday 2026-10-14 14:00/);
   assert.ok(text.includes(Intl.DateTimeFormat().resolvedOptions().timeZone));
   assert.match(text, /Your last look was at 13:30\./);
-  assert.match(text, /Quiet hours are 22:00-07:00 unless the notes or the chat say/);
+  assert.match(text, /Quiet hours \(night\) are 22:00-07:00/);
+  assert.match(text, /very few messages: a handful at most/);
+  assert.match(text, /working late, tell me everything tonight/);
+  assert.match(text, /memory note/);
   assert.match(text, /at most 5 mails per look/);
   assert.match(text, /\[\[silent\]\]/);
   assert.doesNotMatch(text, /brief status|daily brief today|OVERDUE/i);
@@ -146,7 +123,7 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.equal(Date.parse(wake.looked), DAY.getTime());
   const rows = readRows();
   assert.equal(rows.length, 1);
-  assert.deepEqual(rows[0], { at: DAY.toISOString(), night: false, message: true, held: false, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
+  assert.deepEqual(rows[0], { at: DAY.toISOString(), night: false, message: true, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
   assert.doesNotMatch(readText(HEARTBEAT_LOG)!, /Eve|Friday|waits/, "the row carries no words");
   assert.ok(seen.recorded.some(([k, t]) => k === "action" && /\[heartbeat\] look: 3 tool call\(s\), 2 mail archived, message sent/.test(t)), "the log gets a counted summary line");
 });
@@ -162,27 +139,16 @@ test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, an
   assert.deepEqual(readRows().map((r) => [r.night, r.nextCheckMinutes]), [[true, 120]]);
 });
 
-test("owner's look at night: there is no quiet-hours rule in code (the model judges), but the cap holds the extra messages for the morning", async () => {
+test("owner's look at night: no cap in code, every message the model writes is posted (night behaviour is the instruction's)", async () => {
   const { w, conv, seen, at } = rig(() => ({ message: `urgent #${seen.posted.length + 1}`, nextCheckMinutes: 10 }));
-  at(NIGHT);
-  assert.equal(await w.look(conv, NIGHT), "posted");
-  const t2 = min(NIGHT, 11);
-  at(t2);
-  assert.equal(await w.look(conv, t2), "posted");
-  const t3 = min(NIGHT, 22);
-  at(t3);
-  assert.equal(await w.look(conv, t3), "held", "the third message of the night is held");
-  assert.deepEqual(seen.posted, ["urgent #1", "urgent #2"]);
-  assert.ok(seen.recorded.some(([k, t]) => k === "action" && /held for the morning look.*urgent #3/.test(t)), "the held message is a line in the log for the morning look");
-  assert.deepEqual(readRows().map((r) => r.outcome), ["posted", "posted", "held"]);
-  // in the morning it speaks again
-  const morning = new Date(2026, 9, 15, 7, 30);
-  at(morning);
-  assert.equal(await w.look(conv, morning), "posted");
-  await withSettings({ nightMessages: 0 }, async () => {
-    const z = rig(() => ({ message: "psst" }));
-    assert.equal(await z.w.look(z.conv, NIGHT), "held");
-  });
+  for (let i = 0; i < 4; i++) {
+    const t = min(NIGHT, i * 11);
+    at(t);
+    assert.equal(await w.look(conv, t), "posted");
+  }
+  assert.deepEqual(seen.posted, ["urgent #1", "urgent #2", "urgent #3", "urgent #4"]);
+  assert.deepEqual(readRows().map((r) => [r.night, r.outcome]), [[true, "posted"], [true, "posted"], [true, "posted"], [true, "posted"]]);
+  assert.ok(!seen.recorded.some(([, t]) => /held/.test(t)));
 });
 
 test("owner's look: due only when the chosen time has come, the owner wrote or a note changed", async () => {
@@ -247,19 +213,19 @@ test("groups keep today's path: the gate decides, the group run answers, and no 
   assert.equal(readRows().length, 1, "one row: the owner's");
 });
 
-test("the report: counts per day, messages by day and night, held, dollars and the next looks it chose, from the rows only", () => {
+test("the report: counts per day, messages by day and night, dollars and the next looks it chose, from the rows only", () => {
   const rows = [
     row(new Date(2026, 9, 13, 10, 0), { message: true, costUsd: 0.03, toolCalls: 4, archived: 2, nextCheckMinutes: 30, outcome: "posted" }),
     row(new Date(2026, 9, 13, 23, 0), { message: true, night: true, costUsd: 0.02, nextCheckMinutes: 120, outcome: "posted" }),
-    row(new Date(2026, 9, 13, 23, 40), { held: true, night: true, costUsd: 0.01, nextCheckMinutes: 12, outcome: "held" }),
+    row(new Date(2026, 9, 13, 23, 40), { night: true, costUsd: 0.01, nextCheckMinutes: 12 }),
     row(new Date(2026, 9, 14, 9, 0), { costUsd: 0.01, nextCheckMinutes: 45 }),
     row(new Date(2026, 8, 1, 9, 0)), // too old
   ];
   const text = heartbeatReport(rows, DAY, 7).join("\n");
   assert.match(text, /4 look\(s\) on 2 day\(s\)/);
-  assert.match(text, /2026-10-13 {2}\s*3 {2}\s*2 {2}\s*1 {2}\s*1/);
+  assert.match(text, /2026-10-13 {2}\s*3 {2}\s*2 {2}\s*1 {2}\s*0/);
   assert.match(text, /cost: \$0\.07 in total, \$0\.04 per day/);
-  assert.match(text, /messages: 2 sent \(1 at night\), 1\.0 per day; 1 held by the night cap/);
+  assert.match(text, /messages: 2 sent \(1 at night\), 1\.0 per day/);
   assert.match(text, /10-14 min {2}\s*1/);
   assert.match(text, /60-120 min\s*1/);
   assert.deepEqual(heartbeatReport([], DAY), ["No heartbeat looks in the last 7 day(s)."]);

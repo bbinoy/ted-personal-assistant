@@ -26,7 +26,7 @@ import { derivedTurn } from "./approvals/turnscope.ts";
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant
 // (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look):
 //   the owner  the HEARTBEAT RUN (heartbeat/look.ts): one Haiku run that looks at the chat, mail, calendar and tasks, acts through the normal floor, judge and phone,
-//              and answers with a message or [[silent]] and its next look (10..120 minutes). Code keeps pause, mayRun, the clamp, the night cap and the brief's schedule.
+//              and answers with a message or [[silent]] and its next look (10..120 minutes). Code keeps pause, mayRun, the clamp and the brief's schedule.
 //   a group    the gate (gate.ts: Haiku, no tools) is asked whether to do something unprompted; if it says act, the group run (src/agent.ts runConversation) does it with the
 //              gate's instructions: its own notes and web search, nothing of the owner's; the answer goes out through the shared pipeline (it may be [[silent]])
 //   a tenant   the same gate and run on the instance key, with HER notes, session and cost file, her approvals in her chat, an answer to her chat only.

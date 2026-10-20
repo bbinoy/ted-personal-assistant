@@ -11,16 +11,15 @@ import type { OwnerProfile } from "../profiles.ts";
 import { settings } from "../settings.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
-import { clampLook, mayPostNow, parseAnswer } from "./rules.ts";
-import { appendRow, HEARTBEAT_LOG, readRows, type HeartbeatRow } from "./rows.ts";
+import { clampLook, parseAnswer } from "./rules.ts";
+import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 
 // The owner's heartbeat run: her only proactive path. When a look is due (the next look the model chose, something she wrote, a note that changed) and mayRun allows it,
 // ONE run starts under the "heartbeat" profile (profiles.ts): a fresh session on HEARTBEAT_MODEL with the persona, the notes, the skills and ALL her tools, the local
 // time and the tail of the chat log up front. It reads what it needs (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge -> phone
 // path, with `standing` provenance (the fixed instruction below is what the judge reads as the reason for the run; no message of hers led there). It answers with a
 // message or [[silent]] and the minutes until its next look.
-// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, a cap of NIGHT_MESSAGES proactive messages per
-// night (the rest is held as a line in the log for the morning look), and one row per look in state/heartbeat.jsonl (counts, never words).
+// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in state/heartbeat.jsonl (counts, never words).
 
 export interface HeartbeatDeps {
   pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record">;
@@ -70,7 +69,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     // Written BEFORE acting: a crash in the run must not mean a retry on every tick.
     recordWake(pipeline, conv, settings.heartbeatDayMinutes, now, clampLook);
     const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour);
-    const rows = readRows(file);
     let toolCalls = 0;
     let archived = 0;
     const instruction = lookInstruction(now, st.wake?.looked);
@@ -90,20 +88,15 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : "failed";
     if (answer?.message) {
-      if (mayPostNow(rows, now)) {
-        const message = answer.message;
-        const res = await pipeline.enqueue(conv, async () =>
-          pipeline.runTurn(conv, { run: async () => ({ text: message, costUsd: reply?.costUsd }), background: true, announce: false, kind: "notice" }),
-        ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
-        outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
-      } else {
-        outcome = "held";
-        pipeline.record(conv, "action", Date.now(), `[heartbeat] held for the morning look (night cap of ${settings.nightMessages}): ${answer.message.replace(/\s+/g, " ").slice(0, 600)}`);
-      }
+      const message = answer.message;
+      const res = await pipeline.enqueue(conv, async () =>
+        pipeline.runTurn(conv, { run: async () => ({ text: message, costUsd: reply?.costUsd }), background: true, announce: false, kind: "notice" }),
+      ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
+      outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
-    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived, ${outcome === "posted" ? "message sent" : outcome === "held" ? "message held" : "no message"}`);
+    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived, ${outcome === "posted" ? "message sent" : "no message"}`);
     audit("wake", outcome, "background");
-    appendRow({ at: now.toISOString(), night, message: outcome === "posted", held: outcome === "held", nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations: 0, outcome }, file);
+    appendRow({ at: now.toISOString(), night, message: outcome === "posted", nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations: 0, outcome }, file);
     recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }
