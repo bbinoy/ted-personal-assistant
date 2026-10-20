@@ -22,7 +22,6 @@ let n = 0;
 function friend(name: string, config?: object) {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
-  T.recordConsent(T.tenantContext(rec), "Germany");
   if (config) writeFileSync(T.tenantContext(rec).configFile, JSON.stringify(config));
   return rec;
 }
@@ -65,10 +64,10 @@ test("the voice rule is a template with the kind of conversation as flags, and o
     const caps = capabilitiesOf({ kind: "group" });
     assert.match(groupSystem({ caps }), /sets your spoken voice for THIS group only \(a member asks you to talk as them, with their voice note or audio file, or one they reply to\); anyone can ask for the normal voice again\./);
     const f = friend("Cy");
-    const hers = tenantSystem({ name: "Cy", consented: true, caps: capabilitiesOf({ kind: "tenant", tenantId: f.id }) });
+    const hers = tenantSystem({ name: "Cy", caps: capabilitiesOf({ kind: "tenant", tenantId: f.id }) });
     assert.match(hers, /sets your spoken voice for THIS chat only \(she asks you to talk as someone, with their voice note or audio file, or one they reply to\); she can ask for the normal voice again\./);
     const mute = friend("Di", { voice: false });
-    assert.doesNotMatch(tenantSystem({ name: "Di", consented: true, caps: capabilitiesOf({ kind: "tenant", tenantId: mute.id }) }), /voice tool/);
+    assert.doesNotMatch(tenantSystem({ name: "Di", caps: capabilitiesOf({ kind: "tenant", tenantId: mute.id }) }), /voice tool/);
   } finally {
     tts.provider = was;
   }

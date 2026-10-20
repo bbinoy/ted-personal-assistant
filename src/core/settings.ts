@@ -230,7 +230,7 @@ export function loadSettings(env: Env) {
       linkMinutes: num(env, "INTAKE_LINK_MINUTES", 15, 1, 60), // how long a setup link works (once)
       dir: join(dataDir, "state/intake"), // the open links (hashed) and what was stored (lengths only)
     },
-    // Google for friends (src/modules/google/googlemcp.ts, src/intake/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend with the `google` capability connects her own Google
+    // Google for friends (src/modules/google/googlemcp.ts, src/intake/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend (every friend has the `google` capability once the OAuth client is set) connects her own Google
     // account on the intake page (OAuth, offline) and her mail and calendar tools are served by a pinned third-party MCP server that THIS process starts for her, with
     // her refresh token from her own OpenBao path. Off until the OAuth client is set. The client secret is a secret like TENANT_ANTHROPIC_API_KEY: in .env, dropped from
     // process.env below, handed only to her server process. The server's command and arguments are plain settings (pinned by version or commit, never auto-updated).
@@ -250,7 +250,7 @@ export function loadSettings(env: Env) {
       idleMinutes: num(env, "GOOGLE_MCP_IDLE_MINUTES", Math.max(20, num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240) + 5), 1, 240),
       callSeconds: num(env, "GOOGLE_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
     },
-    // Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend with the `notion` capability connects her own Notion on the
+    // Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend (every friend has the `notion` capability once INTAKE_BASE_URL is set) connects her own Notion on the
     // intake page (OAuth with PKCE against Notion's hosted MCP server) and her Notion tools are that hosted server, called by THIS process with her token through the
     // same credentialed proxy as Google. Nothing to set up but the tunnel: the instance registers itself once (RFC 7591) and remembers the client in state/notion-client.json.
     notion: {

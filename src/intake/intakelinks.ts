@@ -28,8 +28,9 @@ export const purposesFor = (capabilities: readonly Capability[]): string[] => Ob
 
 export const INTAKE_LINK_TOOL = "mcp__intake__get_setup_link";
 export const INTAKE_STATUS_TOOL = "mcp__intake__setup_status";
-// The tools of a tenant's run for the intake page: only with a usable INTAKE_BASE_URL, the `intake` capability and at least one purpose she holds the capability for.
-// `intake` is off by default (tenants.ts FRIEND_DEFAULTS); the admin grants it with the purpose's capability (npm run tenants -- grant <id> intake).
+// The tools of a tenant's run for the intake page: only with a usable INTAKE_BASE_URL, the `intake` capability and at least one purpose she has the capability for and that is
+// set up (a friend has them all but the owner's: tenants.ts OWNER_ONLY; without a sign-in page or an OAuth client there is no tool, so no connect-link offer).
+
 export const intakeToolsFor = (capabilities: readonly Capability[]): string[] =>
   capabilities.includes("intake") && purposesFor(capabilities).length && !baseUrlProblem() ? [INTAKE_LINK_TOOL, INTAKE_STATUS_TOOL] : [];
 

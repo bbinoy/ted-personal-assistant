@@ -27,18 +27,26 @@ const { GOOGLE_MAIL_TOOL } = await import("../src/modules/google/module.ts");
 const { groupTools } = await import("../src/policy/capabilities.ts");
 
 const on = settings as unknown as Record<string, unknown>;
+// Every friend has her own Google once the instance has the OAuth client; one "without Google" is a friend on an instance that has none.
+const googleCfg = settings.google as { clientId?: string };
+const withoutGoogle = <R,>(fn: () => R): R => {
+  const was = googleCfg.clientId;
+  googleCfg.clientId = undefined;
+  try {
+    return fn();
+  } finally {
+    googleCfg.clientId = was;
+  }
+};
 on.tenants = true;
 const KEY = "instance-key-not-real";
 const NOW = new Date(2026, 9, 14, 14, 0, 0);
 const signal = new AbortController().signal;
 
 let n = 0;
-const GOOGLE: (typeof T.CAPABILITIES)[number][] = ["wake", "google", "mail", "calendar"]; // (what `npm run tenants -- grant <id> google` grants)
-function friend(name: string, grants: (typeof T.CAPABILITIES)[number][] = ["wake"]): string {
+function friend(name: string): string {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
-  T.recordConsent(T.tenantContext(rec), "Germany");
-  for (const c of grants) T.grant(rec.id, c);
   return rec.id;
 }
 const payerOf = (id: string) => ({ kind: "instance" as const, id, apiKey: KEY, costFile: T.tenantContext(T.tenantById(id)!).costFile });
@@ -46,7 +54,7 @@ const note = (id: string, file: string, text: string) => writeFileSync(join(T.te
 const system = (o: { systemPrompt: string }) => o.systemPrompt;
 
 test("a friend with Google: an isolated, fresh run on her key and ledger, with her tools only, her notes as data, and the expert", () => {
-  const id = friend("Ana", GOOGLE);
+  const id = friend("Ana");
   note(id, "people-sister.md", "Her sister is called Eve.");
   mkdirSync(NOTES_DIR, { recursive: true });
   writeFileSync(join(NOTES_DIR, "context-ben-secret.md"), "The owner's private fact.");
@@ -89,7 +97,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
 });
 
 test("a friend's run passes the same permission path: her approver, outside her tools nothing, the never-allowed set stays denied", async () => {
-  const id = friend("Bea", GOOGLE);
+  const id = friend("Bea");
   const o = heartbeatOptions(tenant(id), payerOf(id), { provenance: { kind: "standing", task: "T" } }, NOW);
   const asked: string[] = [];
   const b = buildOptions(async (d) => (asked.push(d), { approved: false }), o, undefined);
@@ -111,13 +119,13 @@ test("a friend's run passes the same permission path: her approver, outside her 
   }
 });
 
-test("a friend without Google has no expert and no mail in her instruction; a group the same, in its own words", () => {
+test("a friend on an instance without Google has no expert and no mail in her instruction; a group the same, in its own words", () => {
   const id = friend("Cy");
-  const looker = lookerOf(tenant(id));
+  const looker = withoutGoogle(() => lookerOf(tenant(id)));
   assert.deepEqual([looker.reads, looker.mail, looker.experts, looker.brief, looker.own, looker.group], [false, false, false, false, false, false]);
-  const o = heartbeatOptions(tenant(id), payerOf(id), {}, NOW);
+  const o = withoutGoogle(() => heartbeatOptions(tenant(id), payerOf(id), {}, NOW));
   assert.equal(o.experts, undefined);
-  const b = buildOptions(async () => ({ approved: false }), o, undefined);
+  const b = withoutGoogle(() => buildOptions(async () => ({ approved: false }), o, undefined));
   assert.ok(!(b.tools as string[]).includes("Agent"));
   assert.equal(b.agents, undefined);
   assert.equal(b.hooks!.PreToolUse, undefined);
@@ -152,17 +160,17 @@ test("the owner's run is unchanged by all of it: the login, the background sourc
   assert.match(l.sources, /^the inbox mail you have not looked at yet \(see below\), the calendar for the next 36 hours, tasks, and your notes and their schedules$/);
 });
 
-test("something to look at: the capability to read mail, a calendar or tasks, or a note; nothing else opens a look", () => {
+test("something to look at: mail or a calendar (her own Google, once the instance has the OAuth client), or a note; nothing else opens a look", () => {
   const plain = friend("Di");
-  const google = friend("Ed", GOOGLE);
-  assert.equal(hasSomethingToLookAt(tenant(plain), NOW), false);
+  const google = friend("Ed");
+  assert.equal(withoutGoogle(() => hasSomethingToLookAt(tenant(plain), NOW)), false, "no Google set up on the instance: no mail, nothing to look at");
   assert.equal(hasSomethingToLookAt(tenant(google), NOW), true, "her own Google: there is mail and a calendar to look at");
   note(plain, "scheduling-fact.md", "Post a fun fact every morning.");
   assert.equal(hasSomethingToLookAt(tenant(plain), NOW), true, "a note");
   note(plain, "context-old.md", "---\nexpires: 2026-10-13\n---\nOld news.");
   const expired = friend("Flo");
   note(expired, "context-old.md", "---\nexpires: 2026-10-13\n---\nOld news.");
-  assert.equal(hasSomethingToLookAt(tenant(expired), NOW), false, "an expired note is no note");
+  assert.equal(withoutGoogle(() => hasSomethingToLookAt(tenant(expired), NOW)), false, "an expired note is no note");
   assert.equal(hasSomethingToLookAt(owner(), NOW), true);
   assert.equal(hasSomethingToLookAt(group("hb-conv-empty-0123456789abcdef"), NOW), false);
 });

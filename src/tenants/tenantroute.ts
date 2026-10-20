@@ -12,9 +12,6 @@ import { directTarget } from "@ted-assistant/messenger";
 // The assistant never writes first to a stranger: the one line answers a message she sent. Whatever is not a decision (a message with no account id, a flood, a
 // declined sender) is dropped, as it always was.
 
-// Said once, in the first thing she is ever told (tenantrun.ts): that it is an AI, that her notes are private from other users and from the admin
-// through the assistant, and the honest limit of that: whoever runs the computer could technically read the files on it (docs/SAFETY.md, host admin trust).
-export const DISCLOSURE = "You're talking to an AI, and its answers may be wrong. What you tell me and what I note down stays private from other users and from the admin: I won't show it to them. Whoever runs this computer could still technically read the files on it.";
 // The only thing a stranger is ever told before the owner has answered. Fixed, no model.
 export const holdingReply = (): string => `Hi, I'm ${ASSISTANT}, an AI assistant. I've asked my admin whether I may chat with you; if so, you'll hear back from me here.`;
 export const notSetUpReply = (): string => `I'm not set up for friends yet, so I can't reply for now. I've let ${OWNER} know.`;

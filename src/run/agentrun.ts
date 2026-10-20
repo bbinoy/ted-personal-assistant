@@ -1,7 +1,7 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "../core/audit.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
-import { createTenantServer, type TenantRun } from "../tenants/tenanttools.ts";
+import type { TenantRun } from "../tenants/tenanttools.ts";
 import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "../tenants/payer.ts";
 import { browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "../modules/browse/browseguard.ts";
@@ -107,7 +107,7 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
 export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
 
 // The built-in tools of a run (everything else is an MCP tool), from the rows of the builtin module (modules/builtin.ts), one list for every run: a group or a
-// tenant has the rows its capability set holds (its own notes, search, skills; before a tenant's age and region are confirmed none, and never opening a page);
+// tenant has the rows its capability set holds (its own notes, search, skills, and never opening a page);
 // any other run has the rows offered to its source: the owner's chat everything (skills, its notes, search, opening pages), a background run skills, search and
 // pages, the browse run search only, the brief, the heartbeat run and the other unattended runs only skills.
 function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): string[] {
@@ -177,11 +177,9 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
-    : tenant && !tenant.consented
-      ? { tenant: createTenantServer(tenant) }
-      : Object.keys(servers).length
-        ? servers
-        : undefined; // (every server a module built: a new one is never dropped here)
+    : Object.keys(servers).length
+      ? servers
+      : undefined; // (every server a module built: a new one is never dropped here)
   // A tenant's run is on the instance key or it does not run: the owner's login is never a fallback (tenanttools.ts tenantEnv).
   const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
   const env = envFor(payerOf(opts), baseEnv);

@@ -17,8 +17,8 @@ import { startFakeBao, type FakeBao } from "./fakebao.ts";
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
-const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantCapabilities = (ctx: { config: any; capabilities?: readonly import("../src/tenants/tenants.ts").Capability[] }) => resolveCapabilities(ctx.capabilities ?? T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a set chosen here, or the friend one: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities?: readonly import("../src/tenants/tenants.ts").Capability[] }) => toolsForCaps(tenantCapabilities(ctx));
 const L = await import("../src/intake/intakelinks.ts");
 const { IntakeServer } = await import("../src/intake/intakeserver.ts");
 const { createIntakeServer } = await import("../src/intake/intaketools.ts");
@@ -45,13 +45,17 @@ const FAKE_CVC = "737";
 
 let n = 0;
 const fresh = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
+// What each test person has: a friend's real set is derived (capabilities.ts capabilitiesOfRecord) and has no profile or card, so the page and the tool are handed these (their `capabilities` seam).
+const held = new Map<string, Set<import("../src/tenants/tenants.ts").Capability>>();
+const capsOf = (rec: { id: string }) => held.get(rec.id) ?? new Set<import("../src/tenants/tenants.ts").Capability>();
 function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.addTenant({ aci: fresh(), name })!;
   T.setStatus(rec.id, "active");
-  for (const c of capabilities) T.grant(rec.id, c);
+  held.set(rec.id, new Set(capabilities));
   return rec;
 }
 T.ensureOwner({ number: "+15555550114" });
+held.set("owner", new Set(["intake", "profile", "card"])); // (the owner has them all, by being the owner)
 const ann = person("Ann", ["intake", "profile", "card"]);
 const bea = person("Bea", ["intake", "profile"]);
 const cy = person("Cy", ["intake", "profile", "card"]);
@@ -69,7 +73,7 @@ after(async () => {
 });
 
 async function start(limits: Partial<typeof baseLimits> = {}, links = new L.LinkStore(mkdtempSync(join(tmpdir(), "intake-links-"))), writerBao = bao.bao({ token: bao.intakeToken })) {
-  const page = new IntakeServer({ links, writer: new IntakeWriter(writerBao), now: () => clock, limits: { ...baseLimits, ...limits } });
+  const page = new IntakeServer({ links, writer: new IntakeWriter(writerBao), capabilities: capsOf, now: () => clock, limits: { ...baseLimits, ...limits } });
   await new Promise<void>((r) => page.server.listen(0, "127.0.0.1", r));
   servers.push({ close: () => (page.server.closeAllConnections(), page.server.close()) });
   const base = `http://127.0.0.1:${(page.server.address() as { port: number }).port}`;
@@ -170,9 +174,9 @@ test("a link is bound to its purpose and its person: a form of another purpose, 
   assert.equal((await open(s.base, s.mint("nobody", "profile"))).r.status, 404);
   // Ann's open link dies with her capability and with her suspension
   const second = s.mint(ann.id, "profile");
-  T.revoke(ann.id, "profile");
+  held.get(ann.id)!.delete("profile");
   assert.equal((await open(s.base, second)).r.status, 404);
-  T.grant(ann.id, "profile");
+  held.get(ann.id)!.add("profile");
   assert.equal((await open(s.base, second)).r.status, 200);
   T.setStatus(ann.id, "suspended");
   assert.equal((await open(s.base, second)).r.status, 404);
@@ -399,7 +403,7 @@ test("the minted link: a tenant's tool, offered only with INTAKE_BASE_URL, the i
 
     // the tool itself, over an in-process MCP connection
     const links = new L.LinkStore(mkdtempSync(join(tmpdir(), "intake-tool-")));
-    const server = createIntakeServer({ id: cy.id }, links);
+    const server = createIntakeServer({ id: cy.id }, links, capsOf);
     const [a, b] = InMemoryTransport.createLinkedPair();
     await (server.instance as { connect(t: unknown): Promise<void> }).connect(b);
     const client = new Client({ name: "t", version: "1" });
@@ -426,9 +430,9 @@ test("the minted link: a tenant's tool, offered only with INTAKE_BASE_URL, the i
     assert.match((await call("setup_status", "card")).text, /card \(16 characters\)/);
     cfg.baseUrl = undefined;
     assert.match((await call("get_setup_link", "profile")).text, /not available yet/);
-    T.revoke(cy.id, "card");
+    held.get(cy.id)!.delete("card");
     assert.equal((await call("get_setup_link", "card")).error, true, "a revoked purpose is refused at once");
-    T.grant(cy.id, "card");
+    held.get(cy.id)!.add("card");
     await client.close();
   } finally {
     Object.assign(cfg, was);

@@ -163,7 +163,7 @@ test("a second preset's note categories reach every run: chat, group, friend, he
     writeFileSync(join(NOTES_DIR, "people-sam.md"), "---\\nname: sam\\n---\\n\\nSam is the training partner.\\n");
     writeFileSync(join(NOTES_DIR, "triage-x.md"), "---\\nname: x\\n---\\n\\nOLD TRIAGE NOTE.\\n");
     const rec = T.addTenant({ aci: "00000000-0000-4000-8000-000000000001", name: "Mia" });
-    T.provision(rec); T.recordConsent(T.tenantContext(rec), "Germany");
+    T.provision(rec);
     const prompt = (o) => typeof o.systemPrompt === "string" ? o.systemPrompt : "";
     const out = {
       chat: prompt(runOptionsFor(owner(), {})),

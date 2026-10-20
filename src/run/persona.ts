@@ -117,8 +117,10 @@ export function chatContext(parts: { missing?: readonly string[]; down?: readonl
   return out || undefined;
 }
 
-// A friend's very first turn (runoptions.ts turnContext, told once): she wrote to the assistant as a stranger, the owner has just let her in, and what she wrote is this turn's message. Code-written.
-export const FIRST_CONTACT = "This is the first time she talks to you: she wrote to you before she was a friend, the owner has just let her in, and her message below is what she wrote then. Greet her in a friendly, short, slightly playful way as yourself, then answer what she wrote.";
+// A friend's very first turn (runoptions.ts turnContext, told once): she wrote to the assistant as a stranger, the owner has just let her in, and what she wrote is this turn's
+// message. Code-written. The model says the plain facts itself, in its own voice: that it is an AI whose answers may be wrong, that what she tells it and what it notes stays private
+// from other users and from the admin through it, and the honest limit of that (whoever runs the computer could technically read the files: docs/SAFETY.md, host admin trust).
+export const FIRST_CONTACT = "This is the first time she talks to you: she wrote to you before she was a friend, the owner has just let her in, and her message below is what she wrote then. Greet her as yourself, in your own voice: friendly, short, a bit playful. In that greeting say plainly, in a sentence or two and not like a legal notice, that you are an AI and your answers may be wrong, and that what she tells you and what you note down stays private from other users and from the admin through you, with the honest limit that whoever runs this computer could technically still read the files on it. Then answer what she wrote.";
 
 // Shared by the private chat and groups (not the background presets). Text you write before a tool call stays internal; the send tool (send.ts) is how the person hears something while you work.
 // The voice tool exists only with the cloned voice (TTS_PROVIDER=qwen); the rule is only said then.
@@ -207,15 +209,14 @@ export const heartbeatInstruction = (vars: { now: string; timeZone: string; last
 
 // A friend who was invited to use the assistant on this instance (a tenant, tenants.ts): a private one-to-one chat with a run that has NONE of the
 // owner's data and none of any other conversation's, only her own notes and the web. Her API key pays for it, which the prompt says plainly.
-// `persona` and `language` are her own words from tenant.json (data, never rules). Until she has confirmed her age and region the run has one tool, record_consent.
-export function tenantSystem(parts: { name: string; consented: boolean; caps: ReadonlySet<Capability>; timed?: boolean; google?: boolean; language?: string; persona?: string; now?: Date }): string {
+// `persona` and `language` are her own words from tenant.json (data, never rules).
+export function tenantSystem(parts: { name: string; caps: ReadonlySet<Capability>; timed?: boolean; google?: boolean; language?: string; persona?: string; now?: Date }): string {
   const her = oneLineName(parts.name);
   return join(
     say("tenant", {
       browse: parts.caps.has("browse"), // her own capability set (her tenant.json can turn browsing off): the prompt promises what she has
       weather: parts.caps.has("weather"),
       draw: parts.caps.has("draw"),
-      consented: parts.consented,
       timed: !!parts.timed,
       google: !!parts.google,
       categories: categoriesFor("tenant").join(", "),

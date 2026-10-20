@@ -5,14 +5,13 @@ import { spentToday } from "../core/budget.ts";
 import { cooldownUntil } from "../core/cooldown.ts";
 import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
+import { capabilitiesOfRecord } from "./capabilityset.ts";
 import { invitePerson } from "./registration.ts";
-import { deleteTenant, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
+import { deleteTenant, OWNER_ID, people, setStatus, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 
-// Two small in-process MCP servers (like memory-tools.ts):
-//   tenant   in a tenant's run: record_consent, her one-time confirmation of age and region (the only tool she has until it is made)
-//   tenants  in the owner's chat, only with TENANTS=on: list tenants, suspend, resume, delete (the last two ask on the phone, toolmanifest.ts)
-// Scope is closed over, never a parameter: record_consent can only write the consent of the tenant whose run it is in.
+// The tenant administration: a small in-process MCP server (like memory-tools.ts) in the owner's chat, only with TENANTS=on: list tenants, suspend, resume, delete
+// (the last two ask on the phone, toolmanifest.ts).
 
 const reply = (text: string, isError = false) => ({ content: [{ type: "text" as const, text }], ...(isError ? { isError: true } : {}) });
 
@@ -24,35 +23,10 @@ export interface TenantRun {
   keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after it changed
   costFile: string;
   logFile: string; // her history: what search_logs reads
-  consentFile: string;
-  consented: boolean;
   overBudget: () => boolean; // her own ledger against her own ceiling (the browse run asks)
 }
 
 export { tenantEnv }; // (payer.ts: the environment of a call on the instance key)
-
-export function createTenantServer(t: Pick<TenantRun, "id" | "consentFile">) {
-  return createSdkMcpServer({
-    name: "tenant",
-    version: "1.0.0",
-    alwaysLoad: true,
-    tools: [
-      tool(
-        TENANT_CONSENT_TOOL.split("__")[2]!,
-        "Record that this person has confirmed she is 18 or older and where she lives. Call it once, only after she has told you both in her own words. If she said she is under 18, do not call it.",
-        { ageConfirmed: z.literal(true).describe("She said she is 18 or older"), region: z.string().min(2).max(100).describe("The country or region she said she lives in") },
-        async ({ region }) => {
-          const ctx = { id: t.id, consentFile: t.consentFile };
-          if (readConsent(ctx)) return reply("Already recorded.");
-          recordConsent(ctx, region);
-          audit("tenant_consent", "recorded", "group", { tenant: t.id });
-          return reply("Recorded. Carry on: you can help her now.");
-        },
-        { alwaysLoad: true },
-      ),
-    ],
-  });
-}
 
 // ---- the owner's side ----
 
@@ -66,19 +40,19 @@ export interface AdminDeps {
 
 const when = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 
-// One line per person: id, name, role, status, capabilities, which of her own accounts (Google, Notion) are connected (never a token), consent and today's spend.
+// One line per person: id, name, role, status, capabilities, which of her own accounts (Google, Notion) are connected (never a token) and today's spend.
 // Everybody, the owner first (it is also what `npm run tenants -- list` shows).
 export function describeTenants(): string[] {
   const lines: string[] = [];
   for (const rec of people()) {
     if (rec.id === OWNER_ID) {
-      lines.push(`${rec.id} (${rec.name}): ${rec.role}; capabilities ${rec.capabilities.join(", ") || "none"}`);
+      lines.push(`${rec.id} (${rec.name}): ${rec.role}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}`);
       continue;
     }
     const ctx = tenantContext(rec);
     const c = cooldownUntil(INSTANCE_KEY_COOLDOWN); // (the key is cooling down: for every friend alike)
     const connections = connectionSummary(rec);
-    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${rec.capabilities.join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}; consent ${readConsent(ctx) ? "given" : "not yet"}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
+    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
   }
   return lines;
 }
@@ -90,7 +64,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
     name: "tenants",
     version: "1.0.0",
     tools: [
-      tool("list_tenants", "List the tenants (friends who use this assistant): id, name, role, status, capabilities, whether her Google or Notion is connected, whether her consent is in place, what she spent today against her own limit, and any pause. Never shows a key or anything she said.", {}, async () => {
+      tool("list_tenants", "List the tenants (friends who use this assistant): id, name, role, status, capabilities, whether her Google or Notion is connected, what she spent today against her own limit, and any pause. Never shows a key or anything she said.", {}, async () => {
         const lines = describeTenants();
         return reply(lines.length ? lines.join("\n") : "No tenants yet.");
       }),
@@ -126,7 +100,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
       tool("resume_tenant", "Let a suspended tenant talk to the assistant again.", idArg, async ({ id }) => {
         const rec = found(id);
         if (!rec) return reply("No such tenant.", true);
-        setStatus(id, readConsent(tenantContext(rec)) ? "active" : "invited");
+        setStatus(id, "active");
         audit("tenant_status", "resumed", "chat", { tenant: id });
         return reply(`${id} can talk to me again.`);
       }),
