@@ -45,6 +45,7 @@ export class FakeSignalDaemon {
   answer: FakeAnswer;
   private sockets = new Set<net.Socket>();
   private server: net.Server;
+  private watchers = new Set<() => void>();
 
   private constructor(answer: FakeAnswer) {
     this.answer = answer;
@@ -61,6 +62,7 @@ export class FakeSignalDaemon {
 
   private onConnection(s: net.Socket) {
     this.sockets.add(s);
+    this.watchers.forEach((w) => w());
     s.setEncoding("utf8");
     let buf = "";
     s.on("data", (chunk: string) => {
@@ -77,7 +79,7 @@ export class FakeSignalDaemon {
       }
     });
     s.on("error", () => {});
-    s.on("close", () => this.sockets.delete(s));
+    s.on("close", () => (this.sockets.delete(s), this.watchers.forEach((w) => w())));
   }
 
   /**
@@ -86,6 +88,22 @@ export class FakeSignalDaemon {
    */
   get connections(): number {
     return this.sockets.size;
+  }
+
+  /**
+   * Resolves as soon as the number of connected clients satisfies the test, checked on every connect and disconnect (no polling, no timer):
+   * `await d.whenConnections((n) => n > 0)` before pushing, `(n) => n === 0` to know a client is gone.
+   */
+  whenConnections(test: (count: number) => boolean): Promise<void> {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (!test(this.sockets.size)) return false;
+        this.watchers.delete(check);
+        resolve();
+        return true;
+      };
+      if (!check()) this.watchers.add(check);
+    });
   }
 
   /** Answers a request (by id) with a result or a {@link FakeRpcError}. */

@@ -6,16 +6,9 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "workspace-source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./testing": {
-      "workspace-source": "./src/testing.ts",
-      "types": "./dist/testing.d.ts",
-      "default": "./dist/testing.js"
-    },
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts",
+    "./contract": "./src/contract.ts",
     "./package.json": "./package.json"
   },
   "license": "MIT",

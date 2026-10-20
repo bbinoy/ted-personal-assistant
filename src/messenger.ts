@@ -1,4 +1,5 @@
 import { loadMessenger, loadMessengerModule, type DoctorLine, type Messenger, type MessengerConfig } from "@ted-personal-assistant/messenger";
+import type { SignalOptions } from "@ted-personal-assistant/signal/messenger";
 import { settings } from "./settings.ts";
 import { openLog } from "./state.ts";
 
@@ -6,9 +7,9 @@ import { openLog } from "./state.ts";
 // Everything else asks the messenger (packages/messenger); the platform package (packages/signal) is loaded by name and nothing here
 // knows what a platform call looks like.
 
-// Settings of the chosen platform, read from the environment by settings.ts and handed over as options. Signal's: where its daemon listens
-// and where it saves attachments.
-const options = (): MessengerConfig["options"] => ({ host: settings.signalHost, port: settings.signalPort, attachmentsDir: settings.signalAttachmentsDir });
+// Settings of the chosen platform, read from the environment by settings.ts and handed over as options (the interface calls them `unknown`; the platform package checks
+// them when it makes the messenger). Signal's: where its daemon listens and where it saves attachments.
+const options = (): SignalOptions => ({ host: settings.signalHost, port: settings.signalPort, attachmentsDir: settings.signalAttachmentsDir });
 
 // The messenger of this run, made by main.ts. Modules that are built far from main (the voice tool reads attachments inside an MCP server)
 // find it here.

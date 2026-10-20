@@ -28,18 +28,25 @@ import { attachmentPath, readLongText } from "./envelope.ts";
 // Two modes, from the config: the account is the owner's own number (the assistant is her linked device and talks in Note to Self: no
 // typing, no receipts, nobody else can write to it), or its own account (a normal chat with her, groups, friends, voice messages).
 //
-// Options (MessengerConfig.options): host, port (where the signal-cli daemon listens), attachmentsDir (where signal-cli saves attachments).
+// Options (MessengerConfig.options, checked by parseSignalOptions): host, port (where the signal-cli daemon listens), attachmentsDir (where signal-cli saves attachments).
 
-const text = (options: MessengerConfig["options"], key: string): string => {
-  const v = options[key];
-  if (typeof v !== "string" || !v) throw new Error(`signal: option ${key} is missing`);
-  return v;
-};
-const port = (options: MessengerConfig["options"]): number => {
-  const v = options.port;
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 65_535) throw new Error("signal: option port must be a port number");
-  return v;
-};
+/** Signal's platform options: what the app hands over as `MessengerConfig.options`. */
+export interface SignalOptions {
+  /** Where the signal-cli daemon listens. */
+  host: string;
+  port: number;
+  /** Where signal-cli saves attachments. Not needed by the doctor. */
+  attachmentsDir?: string;
+}
+
+/** Checks what the app handed over. @throws a sentence naming the option that is missing or wrong */
+export function parseSignalOptions(options: unknown): SignalOptions {
+  const o = (options && typeof options === "object" ? options : {}) as Record<string, unknown>;
+  if (typeof o.host !== "string" || !o.host) throw new Error("signal: option host is missing");
+  if (typeof o.port !== "number" || !Number.isInteger(o.port) || o.port < 1 || o.port > 65_535) throw new Error("signal: option port must be a port number");
+  if (o.attachmentsDir !== undefined && (typeof o.attachmentsDir !== "string" || !o.attachmentsDir)) throw new Error("signal: option attachmentsDir must be a folder");
+  return { host: o.host, port: o.port, ...(o.attachmentsDir ? { attachmentsDir: o.attachmentsDir } : {}) };
+}
 
 /** signal-cli's text style strings ("start:length:STYLE") for styled ranges. */
 export const toSignalStyles = (styles: readonly TextStyle[]): string[] => styles.map((s) => `${s.start}:${s.length}:${s.style}`);
@@ -65,20 +72,21 @@ class SignalMessenger implements Messenger {
   #stopping = false;
 
   constructor(config: MessengerConfig) {
-    const host = text(config.options, "host");
+    const options = parseSignalOptions(config.options);
+    if (!options.attachmentsDir) throw new Error("signal: option attachmentsDir is missing");
     const separate = config.account !== config.owner.address;
     this.#config = config;
-    this.#attachmentsDir = text(config.options, "attachmentsDir");
+    this.#attachmentsDir = options.attachmentsDir;
     this.self = config.account;
     this.summary = separate ? "own account" : "Note to Self";
     this.#client = new SignalClient({
-      host,
-      port: port(config.options),
+      host: options.host,
+      port: options.port,
       account: config.account,
       peer: separate ? { number: config.owner.address, aci: config.owner.id } : undefined,
       logger: config.logger,
     });
-    this.#daemonOptions = { account: config.account, host, port: port(config.options), logger: config.logger };
+    this.#daemonOptions = { account: config.account, host: options.host, port: options.port, logger: config.logger };
     // Note to Self shows no typing, no receipts and has nobody else in it; a voice message of ours would come back as the owner's own.
     this.capabilities = { reactions: true, typing: separate, readReceipts: separate, groups: separate, people: separate, voice: separate, quotes: true, voiceFormat: "m4a" };
   }
@@ -160,9 +168,8 @@ const run = (cmd: string, args: string[]): string | undefined => {
 };
 
 /** What `npm run doctor` says about Signal: the mode, signal-cli installed and linked, the daemon reachable. */
-export async function doctor(config: { account?: string; options: MessengerConfig["options"] }): Promise<DoctorLine[]> {
-  const host = text(config.options, "host");
-  const p = port(config.options);
+export async function doctor(config: { account?: string; options: unknown }): Promise<DoctorLine[]> {
+  const { host, port: p } = parseSignalOptions(config.options);
   const lines: DoctorLine[] = [];
   lines.push({ ok: true, what: "Signal channel", detail: config.account ? "the assistant's own account (its own chat)" : "Note to Self (optional: docs/SIGNAL-ACCOUNT.md gives the assistant its own account and name)" });
   const version = run("signal-cli", ["--version"]);

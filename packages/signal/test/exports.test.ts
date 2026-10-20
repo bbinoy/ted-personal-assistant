@@ -47,7 +47,7 @@ test("exports: ./tts", () => {
 });
 
 test("exports: ./messenger", () => {
-  assert.deepEqual(names(messenger), ["createMessenger", "doctor", "toSignalStyles"]);
+  assert.deepEqual(names(messenger), ["createMessenger", "doctor", "parseSignalOptions", "toSignalStyles"]);
 });
 
 test("exports: ./testing", () => {
