@@ -5,6 +5,7 @@ import { calendarModule } from "./calendar.ts";
 import { docsModule, driveModule } from "./drive.ts";
 import { drawModule } from "./draw.ts";
 import { gmailModule } from "./gmail.ts";
+import { googleModule } from "./google.ts";
 import { intakeModule } from "./intake.ts";
 import { mailbirdModule } from "./mailbird.ts";
 import { memoryModule } from "./memory.ts";
@@ -22,7 +23,7 @@ import { weatherModule } from "./weather.ts";
 // when every module has been evaluated.
 let all: readonly ToolModule[] | undefined;
 export const registered = (): readonly ToolModule[] =>
-  (all ??= [sendModule, weatherModule, drawModule, voiceModule, memoryModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, calendarModule, notionModule, driveModule, docsModule, mailbirdModule, gmailModule]);
+  (all ??= [sendModule, weatherModule, drawModule, voiceModule, memoryModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, calendarModule, notionModule, driveModule, docsModule, googleModule, mailbirdModule, gmailModule]);
 
 // LOADED: every module without a slot, and in the `mail` slot the one MAIL_PROVIDER names (none: no mail module). A module that is not loaded has no rows,
 // no skills and no connection; only its floor data (registered() below) keeps restricting, because a floor rule can only take away.

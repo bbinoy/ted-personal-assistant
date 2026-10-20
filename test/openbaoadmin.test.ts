@@ -41,17 +41,18 @@ test("config: loopback only, TLS 1.3 with the pinned certificate, Raft storage, 
 test("policies: the owner's token reaches tenants/owner/ and nothing else; the operator's reaches no secret", () => {
   const p = policyHcl("ted", "owner");
   const paths = [...p.matchAll(/path "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(paths, ["ted/data/tenants/owner/*", "ted/metadata/tenants/owner/*"]);
+  assert.deepEqual(paths, ["ted/data/tenants/owner/*", "ted/metadata/tenants/owner/*", "ted/data/tenants/+/google/*"]); // (the last: read of a friend's Google grant, nothing else of hers)
+  assert.match(p, /google\/\*" \{\s*capabilities = \["read"\]/);
   assert.ok(!/sudo|"\*"|sys\//.test(p));
   const op = [...OPERATOR_POLICY.matchAll(/path "([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(op, ["sys/generate-root-token/*", "sys/storage/raft/snapshot"]);
   assert.ok(!op.some((x) => x!.startsWith("ted/")));
 });
 
-test("the intake page's policy is write-only: create and update of profile and card items of any tenant, nothing else", () => {
+test("the intake page's policy is write-only: create and update of profile, card and google items of any tenant, nothing else", () => {
   const p = intakePolicyHcl("ted");
   const blocks = [...p.matchAll(/path "([^"]+)" \{\s*capabilities = \[([^\]]*)\]/g)].map((m) => [m[1], m[2]!.replace(/[" ]/g, "")]);
-  assert.deepEqual(blocks, [["ted/data/tenants/+/profile/*", "create,update"], ["ted/data/tenants/+/card/*", "create,update"]]);
+  assert.deepEqual(blocks, [["ted/data/tenants/+/profile/*", "create,update"], ["ted/data/tenants/+/card/*", "create,update"], ["ted/data/tenants/+/google/*", "create,update"]]);
   assert.ok(!/read|list|delete|sudo|metadata|sys\//.test(p.replace(/^#.*$/m, "")));
 });
 

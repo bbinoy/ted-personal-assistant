@@ -157,7 +157,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     ? servers
     : tenant && !tenant.consented
       ? { tenant: createTenantServer(tenant) }
-      : opts.memory || servers.browse || servers.send
+      : opts.memory || servers.browse || servers.send || servers.google
         ? servers
         : undefined;
   // A tenant's run is on the instance key or it does not run: the owner's login is never a fallback (tenanttools.ts tenantEnv).

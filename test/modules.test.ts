@@ -17,7 +17,7 @@ import { CAPABILITIES } from "../src/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs"];
+const CORE = ["send", "weather", "draw", "voice", "memory", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "google"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -63,7 +63,7 @@ test("modules: every server a module names is built under that name in runtime.t
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "browse", "intake", "tenants"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "browse", "intake", "tenants", "google"]);
 });
 
 const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
@@ -92,13 +92,13 @@ test("modules: each module decides from the run whether it has a server (a conve
   assert.ok(module("intake").rows.some((e) => e.tool === INTAKE_LINK_TOOL));
 });
 
-test("modules: a connection can differ per conversation (prepared for a tenant's own server process; no module uses it yet)", () => {
+test("modules: a connection can differ per conversation (a friend's own Google server process; only the Google module uses it)", () => {
   const connector: Connection = { kind: "connector", key: "google", server: /google/i, prefix: "mcp__claude_ai_Google_" };
   const own: Connection = { kind: "external", name: "google-tenant", when: (c) => !!c.tenant };
   const fake: ToolModule = { name: "fake", connection: connector, connectionFor: (c) => (c.tenant ? own : undefined), rows: [] };
   assert.equal(connectionOf(fake, ctx()), connector, "the owner stays on her connector");
   assert.equal(connectionOf(fake, ctx({ source: "group", tenant: {} as never })), own, "a tenant gets a server of her own");
-  assert.ok(registered().every((m) => m.connectionFor === undefined), "nothing is built for Google or Notion here");
+  assert.deepEqual(registered().filter((m) => m.connectionFor).map((m) => m.name), ["google"], "only a friend's Google has a connection of its own");
 });
 
 test("modules: the mail slot answers for the provider, so central code never asks for its name", () => {

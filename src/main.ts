@@ -11,6 +11,8 @@ import { createDreamer } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
 import { createGroupDreamer } from "./groupdream.ts";
 import { createTenantDreamer } from "./tenantdream.ts";
+import { createTenantMailLoops } from "./mailloops.ts";
+import { googleHub } from "./googlemcp.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
@@ -35,7 +37,7 @@ import { Limiter } from "./limiter.ts";
 import { activeTenant, admitStranger } from "./tenantroute.ts";
 import { createTenantRunner } from "./tenantrun.ts";
 import { tenantHooks } from "./tenanttools.ts";
-import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByTarget, tenantById, tenantContext } from "./tenants.ts";
+import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantById, tenantContext } from "./tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
 
 ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
@@ -123,7 +125,7 @@ async function compact(conv: Conversation, mode: "quiet" | "urgent"): Promise<vo
   const apiKey = settings.tenantApiKey;
   if (rec && apiKey) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, { apiKey, costFile: tenantContext(rec).costFile });
 }
-tenantHooks.drop = dropTenantWarm;
+tenantHooks.drop = (id) => (dropTenantWarm(id), googleHub.drop(id)); // a suspended or removed tenant: her warm process and her Google server process stop
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,
@@ -240,6 +242,15 @@ const wakeups = createWakeups({
   compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compact(conv, "quiet") },
 });
 
+// The friends' mail (TENANTS=on, the `google` and `mail` capabilities, a connected account): the heartbeat's own mail check and handler, once per friend, in her folder and her chat.
+const tenantMail = createTenantMailLoops({
+  access: (id) => tenantRunner.access(id),
+  notify: async (id, text) => {
+    const to = targetOf(id);
+    if (to) await out.reply(text, { plain: true, kind: "notice", target: to });
+  },
+});
+
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the
 // dream runs inside the brief preset, before the brief).
 startHeartbeat({
@@ -250,6 +261,7 @@ startHeartbeat({
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
+      tenantMail: () => tenantMail.tick(), // each friend's own mail check, triage and handler (mailloops.ts): the same code as the owner's, with her Google
     });
   },
 });

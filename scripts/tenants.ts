@@ -29,7 +29,10 @@ if (cmd === "list") {
     say(`Not a capability: ${rest[0]}. ${CAPABILITIES.join(", ")}`);
     process.exit(1);
   }
-  const rec = (cmd === "grant" ? grant : revoke)(arg, rest[0]);
+  // Her Google tools are the `mail` and `calendar` capabilities through her `google` one (modules/google.ts): granting it grants the three, revoking it revokes only itself.
+  const caps = cmd === "grant" && rest[0] === "google" ? (["google", "mail", "calendar"] as const) : ([rest[0]] as const);
+  let rec = (cmd === "grant" ? grant : revoke)(arg, caps[0]);
+  for (const c of caps.slice(1)) rec = rec && grant(arg, c);
   if (!rec) {
     say("No such tenant.");
     process.exit(1);

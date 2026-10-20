@@ -166,6 +166,10 @@ path "${mount}/data/tenants/${tenant}/*" {
 path "${mount}/metadata/tenants/${tenant}/*" {
   capabilities = ["list", "read", "delete"]
 }
+# A friend's Google grant (the intake page writes it, the process that starts her Google server reads it): read only, nothing else of hers.
+path "${mount}/data/tenants/+/google/*" {
+  capabilities = ["read"]
+}
 `;
 
 // The setup tool's own token. It can only ask for a root token (which also needs the unseal shares) and take a snapshot; it reads no secret.
@@ -186,6 +190,9 @@ path "${mount}/data/tenants/+/profile/*" {
   capabilities = ["create", "update"]
 }
 path "${mount}/data/tenants/+/card/*" {
+  capabilities = ["create", "update"]
+}
+path "${mount}/data/tenants/+/google/*" {
   capabilities = ["create", "update"]
 }
 `;

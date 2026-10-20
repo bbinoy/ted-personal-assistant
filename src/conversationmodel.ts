@@ -113,7 +113,9 @@ export const tenant = (id: string): Conversation => {
 
 // Needs the instance's own Claude login, with its connectors and its card: effective only for a person whose credential is that login (the owner's),
 // whatever else a record lists. A tenant's own connectors are an extension point (a tool of the manifest with a capability of its own).
-const ON_LOGIN: readonly Capability[] = ["mail", "calendar", "notion", "google", "profile", "card", "admin"];
+const ON_LOGIN: readonly Capability[] = ["notion", "profile", "card", "admin"];
+// A person on the instance key has mail and calendar (tools, and the mail check) only through her own Google connection: with the `google` capability too.
+const THROUGH_GOOGLE: readonly Capability[] = ["mail", "calendar"];
 // A group has no record: it is looked in on, tidied and woken like any conversation, and has nothing of the owner's (capabilities.ts GROUP_CAPABILITIES).
 
 type Who = Pick<Conversation, "kind" | "tenantId">;
@@ -131,11 +133,15 @@ export function allows(conv: Who, capability: Capability): boolean {
   if (conv.kind === "group") return GROUP_CAPABILITIES.includes(capability);
   const rec = recordOf(conv);
   if (!rec) return conv.kind === "owner"; // the owner before her record is seeded: everything, as ever
-  return rec.status === "active" && rec.capabilities.includes(capability) && (!ON_LOGIN.includes(capability) || rec.credential === "login");
+  const login = rec.credential === "login";
+  return rec.status === "active" && rec.capabilities.includes(capability) && (!ON_LOGIN.includes(capability) || login) && (!THROUGH_GOOGLE.includes(capability) || login || (rec.capabilities.includes("google") && googleReady()));
 }
 
 // Can it run the daily brief and the radar (tasks.ts)? They read mail and calendar through the owner's connectors.
-export const hasPresets = (conv: Who): boolean => allows(conv, "mail") && allows(conv, "calendar");
+export const hasPresets = (conv: Who): boolean => onLogin(conv) && allows(conv, "mail") && allows(conv, "calendar");
+
+// Is the instance's Google OAuth client set (settings.google)? Without it nobody gets Google tools or a mail check of their own.
+export const googleReady = (): boolean => !!settings.google.clientId && !!settings.google.clientSecret;
 
 // Who the person in a private chat is called in the prompts built for it: the owner as always, a tenant by her name.
 export const speakerOf = (conv: Pick<Conversation, "tenantId">): string => (conv.tenantId ? (tenantById(conv.tenantId)?.name ?? "a friend") : OWNER);

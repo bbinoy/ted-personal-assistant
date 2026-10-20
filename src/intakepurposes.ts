@@ -23,11 +23,12 @@ export interface Field {
   options?: readonly string[]; // for a select: the only values accepted
 }
 // Writes one item of the tenant the link belongs to (intakestore.ts).
-export type Put = (kind: "profile" | "card", name: string, data: Data) => Promise<void>;
+export type Put = (kind: "profile" | "card" | "google", name: string, data: Data) => Promise<void>;
 
 export interface Purpose {
   title: string;
   intro: string;
+  oauth?: true; // no form: the page shows a link to a sign-in at another service and its callback stores the result (googleoauth.ts); `store` is never called
   fields(tenant: string): Field[];
   // Stores the checked values; what it stored, as names and lengths only. Throws Invalid for a problem the person can fix.
   store(tenant: string, values: Record<string, string>, put: Put): Promise<Done["stored"]>;
@@ -95,6 +96,18 @@ const card: Purpose = {
   },
 };
 
-// EXTENSION POINT: google, notion and cvc go here when they are built.
-export const PURPOSES: Readonly<Record<string, Purpose>> = { profile, card };
+// ---- her Google account (googleoauth.ts): not a form but a sign-in; the callback of the page stores the grant under tenants/<id>/google/oauth ----
+
+const google: Purpose = {
+  title: "Connect Google",
+  intro: "Connect your own Google account so your assistant can read and write your Gmail and your Calendar for you. You sign in on Google's own page, not here: nothing you type there reaches this page, and the assistant never sees a password or a key. It asks you in the chat before it sends a mail or invites anybody. You can take the access away any time at myaccount.google.com/permissions.",
+  oauth: true,
+  fields: () => [],
+  async store() {
+    throw new Invalid("This link connects Google; use the button on the page.");
+  },
+};
+
+// EXTENSION POINT: notion and cvc go here when they are built.
+export const PURPOSES: Readonly<Record<string, Purpose>> = { profile, card, google };
 export const purposeOf = (id: string): Purpose | undefined => (Object.hasOwn(PURPOSES, id) ? PURPOSES[id] : undefined);
