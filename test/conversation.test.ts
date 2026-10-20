@@ -16,7 +16,7 @@ import { readLongText } from "@ted-personal-assistant/signal";
 import { toSignalStyles } from "@ted-personal-assistant/signal/messenger";
 import type { IncomingMessage, IncomingReaction, OutgoingMessage, Target } from "@ted-personal-assistant/messenger";
 import { FULL_CAPABILITIES } from "@ted-personal-assistant/messenger/testing";
-import { MAX_SPOKEN_CHARS } from "@ted-personal-assistant/signal/tts";
+import { MAX_SPOKEN_CHARS } from "@ted-personal-assistant/speech/tts";
 
 // The shared conversation pipeline against a fake messenger. The first block pins the owner's private chat
 // exactly as it behaved when it lived in main.ts; the second shows groups get the same machinery.

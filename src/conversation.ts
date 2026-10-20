@@ -20,7 +20,7 @@ import { UNSURE } from "./lang.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { startTiming, type Timing } from "./timing.ts";
 import { MAX_LONG_TEXT_BYTES, type IncomingDeletion, type IncomingMessage, type IncomingReaction, type Quote } from "@ted-personal-assistant/messenger";
-import { MAX_SPOKEN_CHARS } from "@ted-personal-assistant/signal/tts";
+import { MAX_SPOKEN_CHARS } from "@ted-personal-assistant/speech/tts";
 
 // The conversation model lives in conversationmodel.ts; these are re-exported for the modules and tests that import them from here.
 export { cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Incoming };

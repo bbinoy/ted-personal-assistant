@@ -7,7 +7,7 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { loadMessengerInUse } from "../src/messenger.ts";
-import { synthesize } from "@ted-personal-assistant/signal/tts";
+import { synthesize } from "@ted-personal-assistant/speech/tts";
 import { PERSONALITY } from "../src/persona.ts";
 import { settings, signalIdentity } from "../src/settings.ts";
 import { SPOKEN_STYLE } from "../src/voicereply.ts";

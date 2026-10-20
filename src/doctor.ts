@@ -1,6 +1,6 @@
 import { LIMITS } from "./sanitize.ts";
-import { providerReady, qwenReady } from "@ted-personal-assistant/signal/tts";
-import { voiceReady } from "@ted-personal-assistant/signal/voice";
+import { providerReady, qwenReady } from "@ted-personal-assistant/speech/tts";
+import { voiceReady } from "@ted-personal-assistant/speech/voice";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
