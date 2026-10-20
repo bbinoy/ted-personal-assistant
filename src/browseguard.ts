@@ -11,6 +11,7 @@ import { approvalId, CARD_PLACEHOLDER, cartHash, cartLines, expirySplit, findPay
 import { localDay } from "./pause.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput, validPoint } from "./browsevision.ts";
 import { audit, wordless } from "./audit.ts";
+import { isPlainWebAddress } from "./webaddress.ts";
 import type { CarriedApproval } from "./autojudge.ts";
 import { clip } from "./format.ts";
 import { cleanText, LIMITS } from "./sanitize.ts";
@@ -35,6 +36,8 @@ export interface Decision {
   payment?: boolean; // ask: a card payment, approved only by the owner's typed yes (permissions.ts, approvals.ts)
   carried?: CarriedApproval; // ask + judge: the plan the owner approved earlier in this run, when the rules below allow offering it (see offer)
   approved?: (question: string) => void; // ask: the owner approved this question (as shown to them): kept for the later steps of this run
+  allowed?: (by: "judge" | "owner") => void; // defer: this very call was let through by the judge's auto or the owner's yes (a navigate: the site is accepted for this run)
+  skipped?: { reason: string; host: string }; // allow: the judge was skipped on purpose (permissions.ts records judge-skipped)
   resolve?: () => Promise<Record<string, unknown> | string>; // the call as it must run, built after it is allowed (a card typed by code); a string: refused with that reason
 }
 
@@ -71,6 +74,8 @@ const nolabel = (s: string) => s.replace(/\s*:\s*$/, ""); // "Customer name:" as
 const HIDDEN = "(hidden: payment or login detail)";
 // An approved plan carries forward to later steps of the same run for this long, on the same site only, never to a payment.
 export const CARRY_MS = 10 * 60_000;
+// How many navigates of one run may skip the judge for a site it was already cleared for; the rest are judged.
+export const FAST_NAVIGATIONS = 30;
 const PAYISH = /\b(pay(ment|ing)?|buy|purchase|check\s*out|checkout|place\s+(the\s+)?order|donate|kaufen|bezahlen|zahlungspflichtig|kostenpflichtig|acheter|payer|comprar|pagar)\b/i;
 const short = (tool: string) => tool.slice(BROWSER_PREFIX.length);
 
@@ -96,6 +101,9 @@ export class BrowseGuard {
   private pointClicks = 0;
   private approvedPlan?: CarriedApproval; // the owner's last approved browser question of this run (memory only; cleared when the site changes or the run ends)
   private approvedCount = 0;
+  private readonly accepted = new Set<string>(); // the sites (host names) this run was cleared for: a navigate to one was judged auto, or the owner said yes to it
+  private readonly autoCalls = new Set<string>(); // the navigates the judge already passed in this run, exactly (no second judge call for the same call)
+  private fastPath = 0; // navigates that skipped the judge so far
   private readonly runId = Math.random().toString(36).slice(2, 8);
   private pending?: string; // the commit call that was asked about: counted when that very call succeeds
   private readonly profile?: Profile;
@@ -597,7 +605,27 @@ export class BrowseGuard {
         if (!(await resolvesPublic(hostOf(input.url), this.resolver))) return this.deny(toolName, input, "Cannot open that address: the name points to a private address.");
         this.navNext = true;
         this.log(toolName, "nav", input);
-        return { kind: "defer", description: `🌐 Browser: open a page\nAddress: ${clip(String(input.url), 300)}` };
+        // The fast path (after the address floor and the DNS check above, which always run): the judge has already decided in THIS run that this site fits the task.
+        // Only a plain address (https, no port, no login, no fragment, a short query: webaddress.ts) to a site the run was cleared for, and only so many times;
+        // typing, forms and every new site are judged as ever. A redirect clears nothing: only the address asked for counts.
+        const url = String(input.url);
+        const host = hostOf(url).toLowerCase();
+        const key = JSON.stringify([name, input.url, input.action ?? null]);
+        if (settings.autoApprove !== "off") {
+          if (this.autoCalls.has(key)) return { kind: "allow", skipped: { reason: "same-call", host } };
+          if (this.accepted.has(host) && isPlainWebAddress(url) && this.fastPath < FAST_NAVIGATIONS) {
+            this.fastPath++;
+            return { kind: "allow", skipped: { reason: "same-host", host } };
+          }
+        }
+        return {
+          kind: "defer",
+          description: `🌐 Browser: open a page\nAddress: ${clip(url, 300)}`,
+          allowed: (by) => {
+            this.accepted.add(host);
+            if (by === "judge") this.autoCalls.add(key);
+          },
+        };
       }
       case "type": {
         const n = this.refNode(input.target);
