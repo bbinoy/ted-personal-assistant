@@ -24,7 +24,9 @@ let nextTs = 50_000;
 function ask(desc: string, call = cal, background = false, question?: string) {
   const ts = nextTs++;
   let decision: any;
-  const p = request(async () => ts, desc, call, undefined, { background, question }).then((d) => (decision = d));
+  // (one open question per action: the shared fixtures get an id of their own, so that two open asks are two actions)
+  const own = call === cal ? { tool: CAL, input: { ...cal.input, eventId: `e${ts}` } } : call === mail ? { tool: MAIL, input: { ...mail.input, subject: `Agenda ${ts}` } } : call;
+  const p = request(async () => ts, desc, own, undefined, { background, question }).then((d) => (decision = d));
   return { ts, p, get d() { return decision; } };
 }
 const judging = (j: AnswerJudgement | undefined, seen: { views: OpenView[][]; calls: number; quotes?: unknown[] } = { views: [], calls: 0 }): AnswerDeps => ({
@@ -41,7 +43,8 @@ test("parseAnswer: exact ids and enum values only", () => {
   const ids = ["A1", "A2"];
   assert.deepEqual(parseAnswer({ target: "A2", outcome: "approve" }, ids)?.target, "A2");
   assert.equal(parseAnswer({ target: "none", outcome: "unrelated" }, ids)?.outcome, "unrelated");
-  assert.equal(parseAnswer({ target: "unclear", outcome: "other", reply: "Which one?" }, ids)?.reply, "Which one?");
+  assert.equal(parseAnswer({ target: "unclear", outcome: "other", reply: "Which one?" }, ids)?.outcome, "other");
+  assert.equal("reply" in parseAnswer({ target: "unclear", outcome: "other", reply: "Which one?" }, ids)!, false, "the model writes no reply to the owner");
   for (const bad of [undefined, null, {}, { target: "A3", outcome: "approve" }, { target: "a1", outcome: "approve" }, { target: "A1", outcome: "Approve" }, { target: "A1", outcome: "yes" }, { target: "none", outcome: "approve" }, { target: "A1", outcome: "unrelated" }, { target: ["A1"], outcome: "approve" }, { target: "A1" }, "approve", { target: "A1", outcome: "APPROVE" }, { target: "A1", outcome: "approve " }, { target: "A1", outcome: ["approve"] }, { target: "A9", outcome: "approve" }]) {
     assert.equal(parseAnswer(bad, ids), undefined, JSON.stringify(bad));
   }
@@ -90,23 +93,18 @@ test("ambiguity between several open approvals asks which one, and approves noth
   const r = await answer("yes", () => {}, undefined, judging({ target: "unclear", outcome: "other" }));
   assert.equal(r.outcome, "clarify");
   assert.match(r.reply!, /Which one/);
-  const nice = await answer("ok", () => {}, undefined, judging({ target: "unclear", outcome: "other", reply: "Meinst du den Termin oder die Mail?" }));
-  assert.equal(nice.reply, "Meinst du den Termin oder die Mail?");
   assert.deepEqual([a.d, b.d], [undefined, undefined]);
   await end(a, b);
 });
 
-test("conditional, partial and delayed answers are not approval: the judge's reply goes to the owner, the approval stays open", async () => {
-  const a = ask("Send mail", mail);
-  await settle();
-  for (const [text, reply] of [["yes but not Bob", "Without Bob? Say so and I will redo it."], ["later", undefined], ["why?", "Because Alice asked."]] as const) {
-    const r = await answer(text, () => {}, undefined, judging({ target: "A1", outcome: "other", reply }));
-    assert.equal(r.outcome, "clarify", text);
-    assert.equal(r.reply, reply ?? `I'm not sure that was a yes, so "Send mail" is still open. Say yes or no (or react 👍 / 👎).`);
+test("conditional, partial and delayed answers are not approval: each closes its approval as superseded and the agent gets the owner's words", async () => {
+  for (const text of ["yes but not Bob", "later", "why?"]) {
+    const a = ask("Send mail", mail);
+    await settle();
+    const r = await answer(text, () => {}, undefined, judging({ target: "A1", outcome: "other" }));
+    assert.deepEqual(r, { outcome: "feedback" }, text); // consumed, no reply from the model
+    assert.deepEqual(await a.p, { approved: false, feedback: text }, text);
   }
-  assert.equal(a.d, undefined);
-  assert.equal(answerReaction("👍", a.ts), "approved"); // still open: a reaction answers it
-  await a.p;
 });
 
 test("an unrelated message flows on as chat; the approval stays open", async () => {
@@ -155,7 +153,7 @@ test("parseAnswer: multi needs two or more distinct valid ids with exact verdict
   assert.equal(parseAnswer({ target: "A1", outcome: "multi", answers: [{ target: "A1", outcome: "approve" }, { target: "A2", outcome: "approve" }] }, ids), undefined);
 });
 
-test("yes to both approves each of the two; a part that is unclear stays open and only it is asked about", async () => {
+test("yes to both approves each of the two; a part that is neither is superseded", async () => {
   const a = ask("Create event pottery");
   const b = ask("Send mail to Bob", mail);
   await settle();
@@ -166,13 +164,14 @@ test("yes to both approves each of the two; a part that is unclear stays open an
   const d = ask("two", mail);
   const e = ask("three");
   await settle();
-  const mixed = await answer("yes to the first, no to the second, the third later", () => {}, undefined, judging({ target: "multi", outcome: "multi", answers: [{ target: "A1", outcome: "approve" }, { target: "A2", outcome: "decline" }, { target: "A3", outcome: "other" }], reply: "Okay. Should I do the third one now?" }));
-  assert.deepEqual(mixed, { outcome: "approved", reply: "Okay. Should I do the third one now?" });
-  assert.deepEqual([c.d.approved, d.d.approved, e.d], [true, false, undefined]);
+  const mixed = await answer("yes to the first, no to the second, the third later", () => {}, undefined, judging({ target: "multi", outcome: "multi", answers: [{ target: "A1", outcome: "approve" }, { target: "A2", outcome: "decline" }, { target: "A3", outcome: "other" }] }));
+  assert.deepEqual(mixed, { outcome: "approved" });
+  assert.deepEqual([c.d.approved, d.d.approved, e.d.approved, e.d.feedback], [true, false, false, "yes to the first, no to the second, the third later"], "the third is superseded: the agent gets the words");
   // nothing plain in it: nothing resolved, a clarification about the open ones
+  ask("four");
+  await settle();
   const none = await answer("hmm both maybe", () => {}, undefined, judging({ target: "multi", outcome: "multi", answers: [{ target: "A1", outcome: "other" }, { target: "A1", outcome: "other" }] }));
-  assert.equal(none.outcome, "clarify"); // no part is a plain yes / no: nothing resolved, one question about the open ones
-  await end(e);
+  assert.equal(none.outcome, "feedback"); // no part is a plain yes / no: the named approval is superseded
 });
 
 test("multi fails closed: an ended approval is skipped and a part that is unclear stays open", async () => {
@@ -186,10 +185,8 @@ test("multi fails closed: an ended approval is skipped and a part that is unclea
   const d = ask("four", mail);
   await settle();
   const r2 = await answer("yes to both", () => {}, undefined, judging({ target: "multi", outcome: "multi", answers: [{ target: "A1", outcome: "approve" }, { target: "A2", outcome: "other" }] }));
-  assert.deepEqual(r2.outcome, "approved"); // A1 plainly yes; A2 asked about
-  assert.match(r2.reply!, /Which one|four/);
-  assert.deepEqual([c.d.approved, d.d], [true, undefined]);
-  await end(d);
+  assert.deepEqual(r2, { outcome: "approved" }); // A1 plainly yes; A2 superseded
+  assert.deepEqual([c.d.approved, d.d.approved, d.d.feedback], [true, false, "yes to both"]);
 });
 
 test("fail closed: no usable judgement is no approval; the agent gets the owner's words and the failure, never an approval", async () => {
@@ -248,10 +245,11 @@ test("a quoted free-text reply is judged with the quote named; the judge sees ev
   await settle();
   const seen = { views: [] as OpenView[][], calls: 0, quotes: [] as unknown[] };
   const r = await answer("yes but later", () => {}, { timestamp: b.ts }, judging({ target: "A2", outcome: "other" }, seen));
-  assert.equal(r.outcome, "clarify");
+  assert.equal(r.outcome, "feedback");
+  assert.equal(b.d.feedback, "yes but later");
   assert.equal(seen.views[0]!.length, 2);
   assert.deepEqual(seen.quotes[0], { id: "A2", ended: false, voice: undefined });
-  await end(a, b);
+  await end(a);
 });
 
 test("a background approval is judged too, and marked as such", async () => {
@@ -401,7 +399,7 @@ test("voice: the judge is told the text is an automatic transcript", async () =>
   const b = askIn("owner", "Send mail", mail);
   await settle();
   const seen = { views: [] as OpenView[][], calls: 0, quotes: [] as unknown[] };
-  await answer("yes send it", () => {}, undefined, judging({ target: "A2", outcome: "other", reply: "I heard \"yes send it\". Do you mean the mail?" }, seen), { by: "o", voice: true });
+  await answer("yes send it", () => {}, undefined, judging({ target: "A2", outcome: "other" }, seen), { by: "o", voice: true });
   assert.deepEqual(seen.quotes[0], { id: undefined, ended: false, voice: true });
   assert.match(answerPrompt("x", [], [], { voice: true }), /AUTOMATIC TRANSCRIPT/);
   assert.doesNotMatch(answerPrompt("x", [], []), /TRANSCRIPT/);

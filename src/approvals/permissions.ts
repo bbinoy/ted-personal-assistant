@@ -259,6 +259,10 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     }
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
     const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, g?.payment ? { typedYes: true } : undefined);
+    if (d.superseded) {
+      log(tool, "ask-superseded", source);
+      return { behavior: "deny", message: "That question was closed because a newer question about the same action was asked. Nothing was executed; wait for the answer to the newer one." };
+    }
     if (d.failure) {
       failed(memo);
       log(tool, "ask-failed", source, { reason: d.failure });
@@ -285,7 +289,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     return {
       behavior: "deny",
       message: d.feedback
-        ? `${OWNER} did NOT approve this call. Instead they replied: ${JSON.stringify(d.feedback)}. Act on that reply. If it changes the request, propose the adjusted call; do not repeat the original unchanged.`
+        ? `${OWNER} did NOT approve this call, and its question is closed. They replied: ${JSON.stringify(d.feedback)}. Nothing was executed. Make a new proposal now, in this turn, with the arguments changed as that reply asks (call the tool again; a fresh question is asked), if you still want to act; do not repeat the original unchanged, and do not ask ${OWNER} in chat what they just told you.`
         : `${OWNER} declined, or did not answer in time. Do not retry.`,
     };
   };

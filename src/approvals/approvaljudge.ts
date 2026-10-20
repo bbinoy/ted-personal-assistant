@@ -67,7 +67,6 @@ const JUDGE_SCHEMA: Options["outputFormat"] = {
             additionalProperties: false,
           },
         },
-        reply: { type: "string" }, // answer: the clarifying reply to the owner
         text: { type: "string" }, // write: the question
       },
       required: ["task"],

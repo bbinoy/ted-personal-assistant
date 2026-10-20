@@ -38,6 +38,9 @@ function same(a: Entry, b: Entry): boolean {
   return !!a.title && a.title === b.title && a.day === b.day;
 }
 
+// Are two calls of one tool the same action (equal, or near-equal as above)?
+export const sameCall = (tool: string, a: Record<string, unknown>, b: Record<string, unknown>): boolean => same(print(tool, a, 0), print(tool, b, 0));
+
 const live = (list: Entry[], now: number): Entry[] => list.filter((e) => now - e.at < TTL_MS);
 
 export function noteDeclined(conversation: string, tool: string, input: Record<string, unknown>, now = Date.now(), context?: string): void {
