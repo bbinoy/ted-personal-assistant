@@ -7,7 +7,7 @@ import { isJudgeable, mayFix, notifyNote } from "../src/approvals/autojudge.ts";
 import { namesNoGuests, namesPeople } from "../src/policy/guests.ts";
 import { describeCall } from "../src/approvals/format.ts";
 import { DELETE_CONFIRM, destinationIsTrashOrSpam, NEVER_ACTIONS, nameIsNever, namesLocalFile } from "../src/policy/neverallowed.ts";
-import { sweepStaleRuns } from "../src/browse.ts";
+import { sweepStaleRuns } from "../src/modules/browse/browse.ts";
 import { registered } from "../src/modules/index.ts";
 import { applyChanges, classify, hiddenTools, isNeverAllowed } from "../src/policy/policy.ts";
 import { SOURCES } from "../src/audit.ts";

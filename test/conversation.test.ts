@@ -875,7 +875,7 @@ test("long message: in a group the whole text reaches the admission and is no fi
 // ---- the card's kill switch ----
 
 test("owner chat: /card off is handled in code before any model, switches card use off, and /card on cannot switch it back on", async () => {
-  const { killSwitch } = await import("../src/card.ts");
+  const { killSwitch } = await import("../src/modules/browse/card.ts");
   killSwitch.turnOn();
   const { r, pipeline } = rig({ run: async () => assert.fail("no model run for a card command") });
   await pipeline.handleIncoming(owner(), msg({ text: "/card off" }));
@@ -889,7 +889,7 @@ test("owner chat: /card off is handled in code before any model, switches card u
 });
 
 test("a group message /card off from anyone, the owner included, goes to the group's pipeline and touches nothing", async () => {
-  const { killSwitch } = await import("../src/card.ts");
+  const { killSwitch } = await import("../src/modules/browse/card.ts");
   killSwitch.turnOn();
   const seen: string[] = [];
   const { r, pipeline } = rig({ admitGroup: async (_c: unknown, a: { text: string }) => void seen.push(a.text) });

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { readAudit } from "../src/audit.ts";
-import { ProfileStore } from "../src/profile.ts";
+import { ProfileStore } from "../src/modules/browse/profile.ts";
 import { IntakeWriter } from "../src/intakestore.ts";
 import { startFakeBao, type FakeBao } from "./fakebao.ts";
 

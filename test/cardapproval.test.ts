@@ -7,7 +7,7 @@ import { makeApprove } from "../src/approvals/approvalask.ts";
 import type { AnswerJudgement } from "../src/approvals/approvalprompt.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool, type CallGuard, type GuardDecision } from "../src/approvals/permissions.ts";
-import { TYPED_YES_NEEDED } from "../src/paymentrules.ts";
+import { TYPED_YES_NEEDED } from "../src/modules/browse/paymentrules.ts";
 import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 
 // The payment approval: the owner's typed yes, and nothing else, approves a card payment. Fake values only.

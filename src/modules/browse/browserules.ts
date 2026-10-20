@@ -1,5 +1,5 @@
 import { lookup } from "node:dns/promises";
-import { REBINDING_HOST } from "./policy/webaddress.ts";
+import { REBINDING_HOST } from "../../policy/webaddress.ts";
 
 // The pure rules of the browse sub-task (browse.ts holds the state around them). Everything here is code, never the model:
 // which addresses a page may be opened at, what a snapshot says about an element (its REAL role and name, read from the page

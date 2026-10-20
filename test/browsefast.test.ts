@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/audit.ts";
-import { BrowseGuard, FAST_NAVIGATIONS } from "../src/browseguard.ts";
+import { BrowseGuard, FAST_NAVIGATIONS } from "../src/modules/browse/browseguard.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/settings.ts";
 import { standing } from "./util.ts";

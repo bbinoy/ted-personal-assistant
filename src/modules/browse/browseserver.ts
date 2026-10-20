@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { BLOCKED_ORIGINS, type VisionMode } from "./browserules.ts";
-import { settings } from "./settings.ts";
+import { settings } from "../../settings.ts";
 
 // Is browsing set up, and how the browser server is started (the browse sub-task: browse.ts; its guard: browseguard.ts).
 

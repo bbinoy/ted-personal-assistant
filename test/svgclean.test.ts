@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { inflateSync } from "node:zlib";
 import { cleanSvg, MAX_ELEMENTS, MAX_PATH_CHARS, MAX_SVG_CHARS } from "../src/modules/draw/svgclean.ts";
 import { MAX_SIDE, renderSvg } from "../src/modules/draw/svgrender.ts";
-import { MAX_PICTURE_BYTES, isPng } from "../src/shots.ts";
+import { MAX_PICTURE_BYTES, isPng } from "../src/modules/send/shots.ts";
 
 // The sanitiser rebuilds the model's SVG from an allowlist (svgclean.ts); the renderer runs no script and loads nothing (svgrender.ts).
 

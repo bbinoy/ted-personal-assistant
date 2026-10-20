@@ -1,7 +1,7 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { triageEntryFor } from "../digest.ts";
-import { createBrowseServer } from "../browse.ts";
-import { browseStatus, browserServer } from "../browseserver.ts";
+import { createBrowseServer } from "./browse/browse.ts";
+import { browseStatus, browserServer } from "./browse/browseserver.ts";
 import { readConnectors } from "../connectors.ts";
 import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "../dreamscope.ts";
@@ -14,7 +14,7 @@ import { createMemoryServer } from "../memory-tools.ts";
 import { recordMemoryChange } from "../memorynotice.ts";
 import { createProposer } from "../propose.ts";
 import { LIMITS } from "../sanitize.ts";
-import { createSendServer } from "../send.ts";
+import { createSendServer } from "./send/send.ts";
 import { settings } from "../settings.ts";
 import { createTenantAdminServer } from "../tenanttools.ts";
 import { createVoiceServer } from "./voice/voicetool.ts";

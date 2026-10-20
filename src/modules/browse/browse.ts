@@ -2,21 +2,21 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit, wordless } from "./audit.ts";
-import { budgetSpent } from "./budget.ts";
+import { audit, wordless } from "../../audit.ts";
+import { budgetSpent } from "../../budget.ts";
 import { addressProblem, type Resolver, type VisionMode } from "./browserules.ts";
 import { BrowseGuard, type BrowseMode } from "./browseguard.ts";
 import { cdpFrames, cdpProbe, freePort, type FrameProbe, type Probe } from "./browsecdp.ts";
 import { maskCard, openCardAccess, type CardAccess, type CardInfo } from "./card.ts";
 import { browseStatus, type BrowseStatus } from "./browseserver.ts";
 import { MAX_SHOTS, VISION_PROMPT } from "./browsevision.ts";
-import { fence } from "./fence.ts";
-import { isPaused } from "./pause.ts";
+import { fence } from "../../fence.ts";
+import { isPaused } from "../../pause.ts";
 import { loadProfile, type Profile } from "./profile.ts";
-import { OWNER_KEY } from "./ownerkey.ts";
-import { clip, cleanText, LIMITS } from "./sanitize.ts";
-import { adoptShots, newShotsDir } from "./shots.ts";
-import { OWNER, settings } from "./settings.ts";
+import { OWNER_KEY } from "../../ownerkey.ts";
+import { clip, cleanText, LIMITS } from "../../sanitize.ts";
+import { adoptShots, newShotsDir } from "../send/shots.ts";
+import { OWNER, settings } from "../../settings.ts";
 
 // The browse sub-task. The owner's chat, a background job or a group asks `browse(task)`; a SEPARATE run (policy source "browse")
 // does the browsing with a headless browser (@playwright/mcp) and nothing else: no mail, calendar, notes or memory tools. It reads

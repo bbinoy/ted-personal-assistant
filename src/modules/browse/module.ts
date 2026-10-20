@@ -1,5 +1,5 @@
-import { settings } from "../settings.ts";
-import { rowsOf, type ToolModule } from "./types.ts";
+import { settings } from "../../settings.ts";
+import { rowsOf, type ToolModule } from "../types.ts";
 
 // browse (browse.ts): the entry tool starts a sandboxed run with the browser; it is judged like everything else. What it brings back is the web, so reading it
 // makes the run's arguments untrusted. The research-booking skill is its skill.

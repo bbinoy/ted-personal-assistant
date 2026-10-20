@@ -291,22 +291,11 @@ src/agent.ts         the entry points of Agent SDK runs: runConversation and pre
 src/runoptions.ts    the ONE builder of a conversation's run options (runOptionsFor), from its record: owner, group, tenant
 src/agentrun.ts      the core of a run: RunOptions and buildOptions, the stream consumer, the run ceiling, runAgent, the browse sub-run
 src/agentwarm.ts     the keyed pool of warm processes (WarmPool) for the next message, and the warm-or-cold run
-src/browse.ts        the browse sub-task: its prompt, schema, result and entry tool
-src/browseguard.ts   BrowseGuard: decides every call of a browse run
-src/browseserver.ts  is browsing set up, and the browser server's command line
-src/browserules.ts   its pure rules: addresses, snapshots, commit classifier, payment fields, the total on a page
-src/profile.ts       the owner's saved profile in OpenBao (ProfileStore), field/key matching, masks
 src/openbao.ts       the OpenBao HTTP client (KV v2, loopback, pinned certificate, fail closed)
 src/secrets.ts       tenants/<id>/<kind>/<name> paths, the card-for-owner-only rule, the app's connection
 src/keychain.ts      the macOS Keychain through `security` (app token, unseal shares)
 src/openbaoadmin.ts  install, config, init, unseal, policies, tokens, snapshots (npm run openbao)
 src/openbaoservice.ts the two launchd jobs of the secret store
-src/profilecli.ts    `npm run profile`: set / list / domains / delete at a hidden terminal prompt
-src/card.ts          the card item in OpenBao, the kill switch, `/card off`, the run's CardAccess handle
-src/cardcli.ts       `npm run card`: set / list / enable / disable / payments / clear / delete at a hidden terminal prompt
-src/paymentrules.ts  pure rules of a card payment: money and the strict total, the cart hash, payment hosts, frame verdict, typed yes
-src/payments.ts      the payment ledger (state/payments.jsonl), the caps, duplicates, recovery of a click with no result
-src/browsecard.ts    the state of one payment in a browse run (PayRun) and the text the owner is asked
 src/domains.ts       registered domain (eTLD+1) with a compact suffix list, for profile domain binding
 src/ceiling.ts       the wall-clock ceiling of one run (pausable while an approval waits)
 src/preset.ts        the assistant preset: loader, validation and templates (assistants/<name>/preset.json and persona/*.md)
@@ -383,8 +372,6 @@ src/pause.ts         the pause switch and local-day helper
 src/redact.ts        keeps phone numbers and credentials out of logs
 src/cli.ts           report / restore / triage-check
 src/doctor.ts        `npm run doctor`
-src/browsecdp.ts     what is under a point of the page, owned by code (the vision-click experiment, BROWSE_VISION=click)
-src/browsevision.ts  the pure rules of the vision experiment (BROWSE_VISION, off by default)
 src/document.ts      files people send that are not pictures, made ready for the model (the bytes decide what a file is)
 src/googlemail.ts    a friend's mailbox for the mail check, through her own Google server
 src/googlemcp.ts     a friend's Google tools: the pinned third-party MCP server, one process per friend
@@ -406,8 +393,6 @@ src/ownerkey.ts      the key of the owner's chat and sourceOfKey (policy source 
 src/persona.ts       system prompts: the words are the preset's, this fills in what only code knows
 src/profiletools.ts  what an unattended job can see of the connectors
 src/radar-nudge.ts   the calendar changed by the assistant: the radar looks again soon
-src/send.ts          the send tool: a message, voice note, picture or reaction in the conversation NOW while the run continues
-src/shots.ts         pictures of a turn (browse screenshots, drawings) kept so the `send` tool can deliver one
 src/skills.ts        which bundled skills a conversation may load
 src/tenantmail.ts    a friend's mail check state in her own folder (tenants/<id>/mail/)
 src/tenantroute.ts   who is this sender? The door for everybody who is not the owner
@@ -415,7 +400,6 @@ src/tenantrun.ts     a tenant's turn around the run: the gates that need no mode
 src/tenants.ts       tenants: the registry of people, capabilities, invites, her folder and limits
 src/tenanttools.ts   the in-process MCP servers of a tenant's run (record_consent) and the owner's tenant administration
 src/turncontext.ts   what a conversation's session is told at the start of a turn
-src/modules/browse.ts browse: the entry tool and the browser server
 src/modules/builtin.ts the assistant's own tools (web search, page fetch, skills, the notes' file tools)
 src/modules/calendar.ts Google Calendar through the owner's connector, with the guests floor
 src/modules/drive.ts Google Drive, Docs and Claude Docs connectors (hidden by default)
@@ -428,7 +412,6 @@ src/modules/mailtask.ts  the handler task text every mail module fills in (handl
 src/modules/memory.ts memory: forget a note, search the logs, undo the dream
 src/modules/notion.ts Notion through the owner's connector (default visible tools: NOTION_TOOLS)
 src/modules/notionhosted.ts Notion for friends (capability `notion`): the hosted Notion MCP server
-src/modules/send.ts  send
 src/modules/tenants.ts the owner's tenant administration tools (TENANTS=on)
 src/modules/index.ts the list of tool modules and which are loaded; checkHideSettings
 src/modules/runtime.ts the code the modules wrap (servers, mail clients, doctor checks), bound to them by name
@@ -506,6 +489,37 @@ src/modules/weather/weather.ts       the weather tools' bodies: data in, compact
 src/modules/weather/weathertools.ts  the read-only weather tools (forecast, marine, place search, distance, spot info)
 src/modules/weather/kitespots.ts     the seed list of kite spots (assets/kitespots.json)
 src/modules/weather/shore.ts         which wind directions are onshore, side-on or offshore at a launch point (OpenStreetMap water outlines)
+```
+
+### src/modules/browse/
+
+The browse feature: the `browse(task)` tool and the browser worker it starts, with the guard that decides every call of that run, the pure rules, the owner's saved profile and the payment card (both held in OpenBao, set at a local terminal) and the payment ledger. `module.ts` declares both the `browse` and the `browser` tool modules. Same dependency rule as every feature folder; `approvals/` and `intake/` may read it (a payment is worded from its rules, the intake page stores the card and profile items).
+
+```
+src/modules/browse/module.ts        browse: the entry tool and the browser server
+src/modules/browse/browse.ts        the browse sub-task: its prompt, schema, result and entry tool
+src/modules/browse/browseguard.ts   BrowseGuard: decides every call of a browse run
+src/modules/browse/browserules.ts   its pure rules: addresses, snapshots, commit classifier, payment fields, the total on a page
+src/modules/browse/browseserver.ts  is browsing set up, and the browser server's command line
+src/modules/browse/browsecdp.ts     what is under a point of the page, owned by code (the vision-click experiment, BROWSE_VISION=click)
+src/modules/browse/browsevision.ts  the pure rules of the vision experiment (BROWSE_VISION, off by default)
+src/modules/browse/browsecard.ts    the state of one payment in a browse run (PayRun) and the text the owner is asked
+src/modules/browse/paymentrules.ts  pure rules of a card payment: money and the strict total, the cart hash, payment hosts, frame verdict, typed yes
+src/modules/browse/payments.ts      the payment ledger (state/payments.jsonl), the caps, duplicates, recovery of a click with no result
+src/modules/browse/card.ts          the card item in OpenBao, the kill switch, `/card off`, the run's CardAccess handle
+src/modules/browse/cardcli.ts       `npm run card`: set / list / enable / disable / payments / clear / delete at a hidden terminal prompt
+src/modules/browse/profile.ts       the owner's saved profile in OpenBao (ProfileStore), field/key matching, masks
+src/modules/browse/profilecli.ts    `npm run profile`: set / list / domains / delete at a hidden terminal prompt
+```
+
+### src/modules/send/
+
+The send feature (the `send` tool: a message, file or picture to the owner or a group chat) and the screenshot helper shared with the draw tool. `module.ts` is the declaration. Same dependency rule as every feature folder.
+
+```
+src/modules/send/module.ts  send
+src/modules/send/send.ts    the send tool: a message, voice note, picture or reaction in the conversation NOW while the run continues
+src/modules/send/shots.ts   pictures of a turn (browse screenshots, drawings) kept so the `send` tool can deliver one
 ```
 
 ## Development

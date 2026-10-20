@@ -1,6 +1,6 @@
-import { normalizeDomain } from "./domains.ts";
-import { BaoError } from "./openbao.ts";
-import { ownerSecrets, SecretsError, type TenantSecrets } from "./secrets.ts";
+import { normalizeDomain } from "../../domains.ts";
+import { BaoError } from "../../openbao.ts";
+import { ownerSecrets, SecretsError, type TenantSecrets } from "../../secrets.ts";
 
 // The owner's saved details (name, address, passport number, loyalty numbers...) for the browse worker. NOT secrets in the card-and-password
 // sense (those are never stored, see browserules.ts), but private: they live in OpenBao (secrets.ts, openbao.ts) as one item per key at

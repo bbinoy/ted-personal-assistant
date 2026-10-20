@@ -30,8 +30,8 @@ const askTenant = (ctx: { id: string }, apiKey: string, prompt: string, _picture
 const { runOptionsFor } = await import("../src/runoptions.ts");
 const tenantRunOptions = (ctx: { id: string }, apiKey: string, now?: Date) => runOptionsFor(tenant(ctx.id), { apiKey, now });
 const { browseRunOptions, buildOptions } = await import("../src/agentrun.ts");
-const { BrowseGuard } = await import("../src/browseguard.ts");
-const { browse, startRefusal } = await import("../src/browse.ts");
+const { BrowseGuard } = await import("../src/modules/browse/browseguard.ts");
+const { browse, startRefusal } = await import("../src/modules/browse/browse.ts");
 const { tenantEnv, createTenantServer } = await import("../src/tenanttools.ts");
 const { coolingDown, resetCooldown } = await import("../src/cooldown.ts");
 const { InstanceKeyError } = await import("../src/errors.ts");

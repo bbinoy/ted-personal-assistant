@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit } from "../../audit.ts";
 import { sourceOfKey } from "../../ownerkey.ts";
-import { adoptDrawing } from "../../shots.ts";
+import { adoptDrawing } from "../send/shots.ts";
 import { MAX_SVG_CHARS } from "./svgclean.ts";
 import { renderSvg } from "./svgrender.ts";
 

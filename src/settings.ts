@@ -199,7 +199,7 @@ export function loadSettings(env: Env) {
     runMaxMinutesChat: num(env, "RUN_MAX_MINUTES_CHAT", 40, 1, 1440),
     runMaxMinutesBackground: num(env, "RUN_MAX_MINUTES_BACKGROUND", 180, 1, 2880),
 
-    // The browser sub-task (src/browse.ts): a separate run that opens pages, reads them and fills forms for the owner's chat, background
+    // The browser sub-task (src/modules/browse/browse.ts): a separate run that opens pages, reads them and fills forms for the owner's chat, background
     // jobs and groups. Pages are untrusted; the run holds no mail, calendar or notes. A commit step (book, buy, send...) asks the owner,
     // payment and login fields are never filled. A group asks in the group, with the same limits. BROWSE=off turns it all off.
     browse: oneOf(env, "BROWSE", "on", ["on", "off"] as const) === "on",
@@ -207,7 +207,7 @@ export function loadSettings(env: Env) {
     browseMaxUsd: num(env, "BROWSE_MAX_USD", 1.5, 0.05, 50),
     browseMaxMinutes: num(env, "BROWSE_MAX_MINUTES", 10, 1, 120),
     browseMaxCommits: num(env, "BROWSE_MAX_COMMITS", 8, 0, 20),
-    // Paying with the owner's dedicated debit card (src/card.ts, browseguard.ts): only the owner's chat run, only after a typed YES. These caps are
+    // Paying with the owner's dedicated debit card (src/modules/browse/card.ts, browseguard.ts): only the owner's chat run, only after a typed YES. These caps are
     // ours, in code and in the card's currency, independent of the card issuer's own limit. 0 turns card payments off.
     cardCapPurchase: num(env, "CARD_CAP_PURCHASE", 25, 0, 10_000), // the most one payment may be
     cardCapDay: num(env, "CARD_CAP_DAY", 50, 0, 100_000), // the most paid in one local day (clicked, confirmed and unconfirmed payments count)
@@ -263,7 +263,7 @@ export function loadSettings(env: Env) {
       idleMinutes: num(env, "NOTION_MCP_IDLE_MINUTES", 10, 1, 240), // a friend's connection to the hosted server is closed after this long unused
       callSeconds: num(env, "NOTION_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
     },
-    // Screenshot vision for the browse worker (src/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
+    // Screenshot vision for the browse worker (src/modules/browse/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
     // click: also clicks by coordinates, which the guard resolves to the element under the point itself (a debugging port on loopback, browsecdp.ts).
     browseVision: oneOf(env, "BROWSE_VISION", "off", ["off", "read", "click"] as const),
     browseLocale: env.BROWSE_LOCALE?.trim() || "en-GB", // the browser's language (Accept-Language, navigator.language): an ordinary one, not the headless default en-US

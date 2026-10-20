@@ -1,10 +1,10 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "./audit.ts";
-import { isOneEmoji } from "./reaction.ts";
+import { audit } from "../../audit.ts";
+import { isOneEmoji } from "../../reaction.ts";
 import { dropShots, loadShot } from "./shots.ts";
-import { setAsking, type Asking } from "./modules/voice/voicenote.ts";
-import { sourceOfKey } from "./ownerkey.ts";
+import { setAsking, type Asking } from "../voice/voicenote.ts";
+import { sourceOfKey } from "../../ownerkey.ts";
 
 // send: the model's way to put something in the conversation NOW while it keeps working: a message ("On it, researching now"), a voice note,
 // a picture (a screenshot of this run's browse, or a drawing from the draw tool), or an emoji reaction. Text the model writes before a tool call stays internal; only this tool

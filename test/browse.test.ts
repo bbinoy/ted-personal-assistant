@@ -6,10 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SOURCES } from "../src/audit.ts";
 import { judgeAction, type Verdict } from "../src/approvals/autojudge.ts";
-import { browse, browseSystem, resultMessage, sanitizeResult, startRefusal } from "../src/browse.ts";
-import { BrowseGuard, resultText, withText } from "../src/browseguard.ts";
-import { browserServer, desktopUserAgent, type BrowseStatus } from "../src/browseserver.ts";
-import { addressProblem, classifyClick, isAllowedBrowserTool, isRef, looksLikeCardNumber, luhnValid, parseSnapshot, resolvesPublic, sensitiveField, sensitiveKind } from "../src/browserules.ts";
+import { browse, browseSystem, resultMessage, sanitizeResult, startRefusal } from "../src/modules/browse/browse.ts";
+import { BrowseGuard, resultText, withText } from "../src/modules/browse/browseguard.ts";
+import { browserServer, desktopUserAgent, type BrowseStatus } from "../src/modules/browse/browseserver.ts";
+import { addressProblem, classifyClick, isAllowedBrowserTool, isRef, looksLikeCardNumber, luhnValid, parseSnapshot, resolvesPublic, sensitiveField, sensitiveKind } from "../src/modules/browse/browserules.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { classify } from "../src/policy/policy.ts";
 import { settings } from "../src/settings.ts";
@@ -509,7 +509,7 @@ test("the run's prompt says pages are data and what to do at a payment (one text
 
 test("options: chat, wake-up and group runs get the entry tool; the browse run gets the browser and web search and nothing of the owner's", async () => {
   const { buildOptions } = await import("../src/agentrun.ts");
-  const { browseStatus } = await import("../src/browseserver.ts");
+  const { browseStatus } = await import("../src/modules/browse/browseserver.ts");
   const deny = async () => ({ approved: false });
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const chat = buildOptions(deny, { ...base, source: "chat", memory: { dir: "/tmp/notes" } }, undefined);
@@ -530,7 +530,7 @@ test("options: chat, wake-up and group runs get the entry tool; the browse run g
 
 test("options: a browse run cannot be built without the browser, with a clear reason", async () => {
   const { buildOptions } = await import("../src/agentrun.ts");
-  const { browseStatus } = await import("../src/browseserver.ts");
+  const { browseStatus } = await import("../src/modules/browse/browseserver.ts");
   if (browseStatus().ok) return;
   assert.throws(() => buildOptions(async () => ({ approved: false }), { source: "browse", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, guard: guard() }, undefined), /browsing is not set up/);
 });

@@ -7,11 +7,11 @@ import { join } from "node:path";
 import { readAudit } from "../src/audit.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
-import { browse, browseSystem } from "../src/browse.ts";
-import { BrowseGuard } from "../src/browseguard.ts";
-import type { FrameProbe } from "../src/browsecdp.ts";
-import { KillSwitch, openCardAccess, type CardAccess, type CardRecord } from "../src/card.ts";
-import { Ledger } from "../src/payments.ts";
+import { browse, browseSystem } from "../src/modules/browse/browse.ts";
+import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
+import type { FrameProbe } from "../src/modules/browse/browsecdp.ts";
+import { KillSwitch, openCardAccess, type CardAccess, type CardRecord } from "../src/modules/browse/card.ts";
+import { Ledger } from "../src/modules/browse/payments.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
 import { OWNER_KEY } from "../src/ownerkey.ts";
@@ -460,7 +460,7 @@ test("never offered in a group or a background run: no card in the guard, no car
   assert.match(prompt, /Wise ••••4242/);
   assert.ok(![PAN, CVC, EXPIRY].some((v) => prompt.includes(v)));
   // the tool the chat model reads: payment is mentioned in the owner's chat only
-  const { browseToolText } = await import("../src/browse.ts");
+  const { browseToolText } = await import("../src/modules/browse/browse.ts");
   assert.match(browseToolText({ mode: "owner", key: OWNER_KEY }), /saved payment card.*typed YES/);
   for (const c of [{ mode: "owner" as const }, { mode: "group" as const, key: "g1" }]) {
     assert.ok(!/payment card|YES/.test(browseToolText(c)), "a wake-up and a group are not told they can pay");
@@ -496,7 +496,7 @@ test("nothing leaks: no result, question, approval call, audit row, ledger row o
   // the question, the approval call
   for (const asked of r.asked) assert.ok(![PAN, EXPIRY, CVC, "Fakename"].some((v) => JSON.stringify(asked).includes(v)), "question or approval call");
   // the final answer from the worker: a repeated number is cut, then the code's note comes first
-  const { sanitizeResult } = await import("../src/browse.ts");
+  const { sanitizeResult } = await import("../src/modules/browse/browse.ts");
   const said = sanitizeResult({ status: "done", answer: `Paid with ${PAN} exp ${EXPIRY} (${PAN_SPACED})`, sources: [] }, "", r.g);
   assert.ok(![PAN, PAN_SPACED, EXPIRY].some((v) => said.answer.includes(v)) && said.answer.includes("[card]"));
   assert.ok(!(r.g.finishPayment() ?? "").includes(PAN));

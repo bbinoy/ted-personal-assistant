@@ -7,7 +7,7 @@ import { openbaoCheck } from "../src/doctor.ts";
 import { macKeychain } from "../src/keychain.ts";
 import { Admin, installBinary, layoutOf, ensureCert, writeConfig, PIN } from "../src/openbaoadmin.ts";
 import { ensureNodePath, installJob, keeperPlist, removeJob, serverPlist, serviceNames } from "../src/openbaoservice.ts";
-import { readHiddenFromTerminal } from "../src/profilecli.ts";
+import { readHiddenFromTerminal } from "../src/modules/browse/profilecli.ts";
 import { settings } from "../src/settings.ts";
 
 const repo = ROOT;

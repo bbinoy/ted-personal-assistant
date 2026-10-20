@@ -6,12 +6,12 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CardStore } from "../src/card.ts";
+import { CardStore } from "../src/modules/browse/card.ts";
 import { intakeCheck, openbaoCheck } from "../src/doctor.ts";
 import type { Keychain } from "../src/keychain.ts";
 import { BaoError } from "../src/openbao.ts";
 import { Admin, configHcl, ensureCert, ensureDirs, installBinary, layoutOf, writeConfig } from "../src/openbaoadmin.ts";
-import { ProfileStore } from "../src/profile.ts";
+import { ProfileStore } from "../src/modules/browse/profile.ts";
 import { appBao, keychainNames, TenantSecrets } from "../src/secrets.ts";
 import { settings } from "../src/settings.ts";
 

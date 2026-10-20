@@ -6,7 +6,7 @@ import { isTenantKey } from "../ownerkey.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
 import { recentIn } from "./recentchat.ts";
-import { isTypedYes, TYPED_YES_NEEDED } from "../paymentrules.ts";
+import { isTypedYes, TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 
 // Human-in-the-loop approvals over Signal. Several questions may be open at once; each is
 // answered by its own reaction or quoted reply, or by a plain yes / no for the newest chat one.

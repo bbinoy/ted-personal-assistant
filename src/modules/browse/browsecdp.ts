@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import type { FrameInfo } from "./paymentrules.ts";
-import { LIMITS } from "./sanitize.ts";
+import { LIMITS } from "../../sanitize.ts";
 
 // What is under a point of the page: a lookup owned by CODE, never by the model (the vision-click experiment, BROWSE_VISION=click).
 // The browser is asked over its own debugging port (loopback, a random port, only while a click-mode run lives; browseserver.ts). The

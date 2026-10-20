@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { CardStore, type CardRecord } from "../src/card.ts";
+import { CardStore, type CardRecord } from "../src/modules/browse/card.ts";
 import { OpenBao } from "../src/openbao.ts";
 import { TenantSecrets } from "../src/secrets.ts";
 

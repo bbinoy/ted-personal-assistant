@@ -1,7 +1,7 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentReply, RunOptions } from "../agentrun.ts";
 import type { Source } from "../audit.ts";
-import type { BrowseGuard } from "../browseguard.ts";
+import type { BrowseGuard } from "./browse/browseguard.ts";
 import type { MailSource } from "../heartbeat.ts";
 import type { createProposer } from "../propose.ts";
 import type { DraftView } from "../proposals.ts";

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAudit } from "../src/audit.ts";
 import { judgePrompt, type Verdict } from "../src/approvals/autojudge.ts";
-import { BrowseGuard, CARRY_MS } from "../src/browseguard.ts";
+import { BrowseGuard, CARRY_MS } from "../src/modules/browse/browseguard.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/settings.ts";
 

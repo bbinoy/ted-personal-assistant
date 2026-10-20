@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { browseRunOptions } from "../src/agentrun.ts";
 import { judgePrompt, provenanceFor, type Verdict } from "../src/approvals/autojudge.ts";
-import type { BrowseGuard } from "../src/browseguard.ts";
+import type { BrowseGuard } from "../src/modules/browse/browseguard.ts";
 import * as permissions from "../src/approvals/permissions.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/settings.ts";

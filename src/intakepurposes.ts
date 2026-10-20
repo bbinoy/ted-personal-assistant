@@ -1,7 +1,7 @@
-import { looksLikeCardNumber, sensitiveKind } from "./browserules.ts";
-import { CARD_ITEM, cardProblem, parseExpiry } from "./card.ts";
+import { looksLikeCardNumber, sensitiveKind } from "./modules/browse/browserules.ts";
+import { CARD_ITEM, cardProblem, parseExpiry } from "./modules/browse/card.ts";
 import type { Data } from "./openbao.ts";
-import { checkNewValue, cleanDomains, isSensitive, KEY_NAME, KINDS, kindOfKey, type Kind } from "./profile.ts";
+import { checkNewValue, cleanDomains, isSensitive, KEY_NAME, KINDS, kindOfKey, type Kind } from "./modules/browse/profile.ts";
 import { LIMITS } from "./sanitize.ts";
 import { CARD_TENANTS, type ItemKind } from "./secrets.ts";
 import { settings } from "./settings.ts";

@@ -1,5 +1,5 @@
 import { settings } from "../settings.ts";
-import { browseModule, browserModule } from "./browse.ts";
+import { browseModule, browserModule } from "./browse/module.ts";
 import { builtinModule } from "./builtin.ts";
 import { calendarModule } from "./calendar.ts";
 import { claudeDocsModule, docsModule, driveModule } from "./drive.ts";
@@ -12,7 +12,7 @@ import { intakeModule } from "./intake.ts";
 import { mailbirdModule } from "./mailbird.ts";
 import { memoryModule } from "./memory.ts";
 import { notionModule } from "./notion.ts";
-import { sendModule } from "./send.ts";
+import { sendModule } from "./send/module.ts";
 import { tenantsModule } from "./tenants.ts";
 import type { MailSlot, ToolModule } from "./types.ts";
 import { voiceModule } from "./voice/module.ts";

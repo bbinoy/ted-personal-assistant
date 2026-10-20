@@ -2,11 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { cardCommand, CardStore, KillSwitch, openCardAccess, parseExpiry, type CardRecord } from "../src/card.ts";
-import { cardCli } from "../src/cardcli.ts";
-import { capProblem, Ledger } from "../src/payments.ts";
-import { approvalId, cartHash, cartLines, findPayableTotal, frameVerdict, isTypedYes, kindOfFieldName, expirySplit, parseAmount, parseMoney, paymentOutcome, riskyBoxes } from "../src/paymentrules.ts";
-import { ProfileStore, type Entries } from "../src/profile.ts";
+import { cardCommand, CardStore, KillSwitch, openCardAccess, parseExpiry, type CardRecord } from "../src/modules/browse/card.ts";
+import { cardCli } from "../src/modules/browse/cardcli.ts";
+import { capProblem, Ledger } from "../src/modules/browse/payments.ts";
+import { approvalId, cartHash, cartLines, findPayableTotal, frameVerdict, isTypedYes, kindOfFieldName, expirySplit, parseAmount, parseMoney, paymentOutcome, riskyBoxes } from "../src/modules/browse/paymentrules.ts";
+import { ProfileStore, type Entries } from "../src/modules/browse/profile.ts";
 import { TenantSecrets } from "../src/secrets.ts";
 import { fakeCardStore, startFakeBao } from "./fakebao.ts";
 
@@ -70,7 +70,7 @@ test("card entry: a bad number, an expired card, a bad security code and a bad e
 });
 
 test("card entry: it needs a terminal (a piped value is refused by the prompt) and a store it cannot open is an error", async () => {
-  const { readHiddenFromTerminal } = await import("../src/profilecli.ts");
+  const { readHiddenFromTerminal } = await import("../src/modules/browse/profilecli.ts");
   await assert.rejects(readHiddenFromTerminal("x"), /needs a terminal/);
   const store = await fakeCardStore(CARD);
   store.fake.mode.sealed = true;

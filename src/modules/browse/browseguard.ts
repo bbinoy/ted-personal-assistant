@@ -1,21 +1,21 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { addressProblem, BROWSER_PREFIX, classifyClick, dnsResolver, findTotal, hostOf, isAllowedBrowserTool, isRef, parseSnapshot, resolvesPublic, sensitiveKind, type Node, type Resolver, type VisionMode } from "./browserules.ts";
-import { hostMatches, registeredDomain } from "./domains.ts";
+import { hostMatches, registeredDomain } from "../../domains.ts";
 import { fieldFitsKey, isSensitive, maskValue, type Profile } from "./profile.ts";
 import { APPROVAL_MINUTES, payDetails, PayRun, secretVariants } from "./browsecard.ts";
 import type { FrameProbe, Probe } from "./browsecdp.ts";
 import { expiryText, type CardAccess, type CardInfo } from "./card.ts";
 import { capProblem } from "./payments.ts";
 import { approvalId, CARD_PLACEHOLDER, cartHash, cartLines, expirySplit, findPayableTotal, formatMoney, frameVerdict, HAS_CARD_PLACEHOLDER, isPsp, kindOfFieldName, parseMoney, paymentOutcome, PSP_HOSTS, riskyBoxes, sameMoney, WORDS, type FieldKind, type Money } from "./paymentrules.ts";
-import { localDay } from "./pause.ts";
+import { localDay } from "../../pause.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput, validPoint } from "./browsevision.ts";
-import { audit, wordless } from "./audit.ts";
-import { isPlainWebAddress } from "./policy/webaddress.ts";
-import type { CarriedApproval } from "./approvals/autojudge.ts";
-import { clip, cleanText, LIMITS } from "./sanitize.ts";
-import { isJpeg, MAX_PICTURE_BYTES } from "./shots.ts";
-import { settings } from "./settings.ts";
+import { audit, wordless } from "../../audit.ts";
+import { isPlainWebAddress } from "../../policy/webaddress.ts";
+import type { CarriedApproval } from "../../approvals/autojudge.ts";
+import { clip, cleanText, LIMITS } from "../../sanitize.ts";
+import { isJpeg, MAX_PICTURE_BYTES } from "../send/shots.ts";
+import { settings } from "../../settings.ts";
 
 // The guard of a browse run: it decides every call the browsing model makes (browserules.ts has the pure rules). One per run.
 
