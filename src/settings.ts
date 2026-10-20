@@ -211,7 +211,10 @@ export function loadSettings(env: Env) {
       authUrl: env.GOOGLE_OAUTH_AUTH_URL?.trim() || "https://accounts.google.com/o/oauth2/v2/auth",
       tokenUrl: env.GOOGLE_OAUTH_TOKEN_URL?.trim() || "https://oauth2.googleapis.com/token", // tests point this at a fake
       scopes: words(env, "GOOGLE_OAUTH_SCOPES", ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"]),
-      idleMinutes: num(env, "GOOGLE_MCP_IDLE_MINUTES", 10, 1, 240), // a friend's server process is closed after this long unused (it is started again on demand)
+      // A friend's server process is closed after this long unused (started again on demand: OpenBao read, temp folder, Python start, token refresh). The default is
+      // the heartbeat interval plus a margin (at least 20), so the 15-minute mail check finds her server running; the price is one resident Python process per friend
+      // with Google while the heartbeat ticks (it stops after the last tick, at night, and with the app).
+      idleMinutes: num(env, "GOOGLE_MCP_IDLE_MINUTES", Math.max(20, num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240) + 5), 1, 240),
       callSeconds: num(env, "GOOGLE_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
       archiveLive: oneOf(env, "GOOGLE_ARCHIVE_LIVE", "false", ["true", "false"] as const) === "true", // friends' mail: false = the check classifies and logs "would-archive" and archives nothing, until you trust it
       mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model

@@ -323,3 +323,13 @@ test("google: nothing of the owner's or of the Google tools exists for a person 
   assert.equal(classify("mcp__mailbird__send_message_now", {}, "group", full.notesDir, tenantTools(full)), "deny");
   assert.equal(classify(G + "delete_gmail_message", {}, "group", full.notesDir, tenantTools(full)), "deny");
 });
+
+test("google: her server stays up between mail ticks: the idle default is the heartbeat interval plus a margin, at least 20 minutes, and an explicit value wins", async () => {
+  const { loadSettings } = await import("../src/settings.ts");
+  const hb = loadSettings({}).heartbeatMinutes;
+  assert.equal(loadSettings({}).google.idleMinutes, Math.max(20, hb + 5));
+  assert.ok(loadSettings({}).google.idleMinutes > hb, "longer than the heartbeat: a tick finds the server running");
+  assert.equal(loadSettings({ HEARTBEAT_MINUTES: "30" }).google.idleMinutes, 35);
+  assert.equal(loadSettings({ HEARTBEAT_MINUTES: "5" }).google.idleMinutes, 20);
+  assert.equal(loadSettings({ GOOGLE_MCP_IDLE_MINUTES: "7" }).google.idleMinutes, 7);
+});
