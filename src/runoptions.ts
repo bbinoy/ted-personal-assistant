@@ -39,12 +39,12 @@ type Shape = Pick<RunOptions, "systemPrompt" | "maxTurns" | "maxBudgetUsd" | "me
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: chatSystem(i.now), // (only what is stable: what changes between two messages is turnContext below)
   memory: { dir: conv.notesDir, ...(i.notify ? { notify: i.notify } : {}) },
-  maxTurns: 40,
-  maxBudgetUsd: 2.0, // a cold prompt cache alone can cost most of a dollar
+  maxTurns: PROFILES.chat.maxTurns,
+  maxBudgetUsd: PROFILES.chat.maxBudgetUsd, // (the preset's: a cold prompt cache alone can cost most of a dollar)
 });
 
 const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
-  systemPrompt: groupSystem({ style: i.style }),
+  systemPrompt: groupSystem({ style: i.style, caps: capabilitiesOf(conv) }),
   memory: { dir: conv.notesDir, groupId: conv.groupId },
   skills: PROFILES.group.skills,
   tools: groupTools(),
@@ -63,7 +63,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const consented = !!readConsent(ctx);
   const caps = capabilitiesOf(conv);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
+    systemPrompt: tenantSystem({ name: ctx.name, consented, caps, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },
     skills: consented ? skillsFor(caps) : [],
     tools: consented ? toolsFor(caps) : new Set([TENANT_CONSENT_TOOL]),

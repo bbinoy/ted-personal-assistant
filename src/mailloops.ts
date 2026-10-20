@@ -1,14 +1,14 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { runTenantHandlerTurn } from "./agent.ts";
+import { runHandlerTurn } from "./agent.ts";
+import { mailHandlerOf } from "./mailhandler.ts";
 import { audit } from "./audit.ts";
 import { tenant as tenantConversation } from "./conversation.ts";
 import { allows } from "./capabilities.ts";
 import { GoogleMail } from "./googlemail.ts";
 import { googleHub } from "./googlemcp.ts";
-import { createHandler, type HandlerContext } from "./handler.ts";
+import { createHandler, handlerTask, type HandlerContext } from "./handler.ts";
 import { createMailCheck, type MailContext, type MailSource } from "./heartbeat.ts";
 import { readDone } from "./intakelinks.ts";
-import { googleHandlerTask } from "./modules/google.ts";
 import { isRefusal, mayRun } from "./payer.ts";
 import { approveIn, type Approve } from "./permissions.ts";
 import { tenantKey } from "./send.ts";
@@ -65,11 +65,11 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
     const hctx: HandlerContext = {
       queue: files.queue,
       who: ctx.name,
-      task: () => googleHandlerTask(ctx.name),
+      task: () => handlerTask(ctx.name, who(id)),
       run: deps.handlerRun?.(id) ?? ((prompt, ap, onToolSuccess, task) => {
         const p = payer(id, "mail handler");
         if (isRefusal(p) || p.kind !== "instance") throw new Error("not available now"); // (cooldown, budget or key changed since the batch was queued)
-        return runTenantHandlerTurn(tenantConversation(id), p, prompt, ap, onToolSuccess, task);
+        return runHandlerTurn(tenantConversation(id), p, prompt, ap, onToolSuccess, task);
       }),
       over: () => isRefusal(payer(id, "mail handler")), // the key in a cooldown, her day spent, no key: the queue waits
       tag: { tenant: id },
@@ -82,10 +82,10 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
         ((mails) => {
           const p = payer(id, "mail triage");
           if (isRefusal(p)) throw new Error("not available now");
-          return triageBatch(mails, query, { who: { name: ctx.name, pronoun: "them" }, notesDir: ctx.notesDir, payer: p });
+          return triageBatch(mails, query, { who: { name: ctx.name }, notesDir: ctx.notesDir, payer: p });
         }),
       record: (decision, row) => recordTriage(ctx, decision, row),
-      handler: () => true,
+      handler: () => !!mailHandlerOf(who(id)), // her mail module can draft
       blocked: (what) => isRefusal(payer(id, what)), // the key's cooldown, her day's budget, suspension or a missing key: no model call
       tidyOwnBriefs: false,
     };

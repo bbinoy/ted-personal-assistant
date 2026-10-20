@@ -1,9 +1,10 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
-import { isTriage, readAudit, type AuditEntry } from "../audit.ts";
+import { triageEntryFor } from "../digest.ts";
 import { createBrowseServer } from "../browse.ts";
 import { browseStatus, browserServer } from "../browseserver.ts";
 import { readConnectors } from "../connectors.ts";
 import { createDrawServer } from "../drawtool.ts";
+import { dreamScope } from "../dreamscope.ts";
 import { googleHub, googleProxy, sweepStaleCredentialDirs } from "../googlemcp.ts";
 import { notionHub, notionProxy } from "../notionmcp.ts";
 import { GmailMail, gmailReaders } from "../gmail.ts";
@@ -37,7 +38,7 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
   weather: () => createWeatherServer(),
   draw: (ctx) => createDrawServer(ctx.key!),
   voice: (ctx) => createVoiceServer(ctx.key!),
-  memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
+  memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
   browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.memory?.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: (ctx) => {
@@ -106,7 +107,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 async function restoreMailbird(id: string): Promise<number> {
   const client = new Mailbird();
   await client.connect();
-  const entry: AuditEntry | undefined = readAudit((e) => isTriage(e) && e.meta?.id === id).pop();
+  const entry = triageEntryFor(id);
   const candidates = [id, ...(String(entry?.meta?.result ?? "").match(UUID) ?? []).filter((u: string) => u !== id)];
   for (const c of candidates) {
     try {
@@ -157,7 +158,7 @@ export const MAIL: Readonly<Record<string, MailRuntime>> = {
     // Mailbird's connection for reply drafts: the handler's drafts are shown on the phone (propose.ts), and the approval of any send shows the draft read back from here.
     start: (io) => {
       const proposer = createProposer({ mail: new Mailbird(), send: (t) => io.reply(t) });
-      setDraftReader(proposer.read);
+      setDraftReader((id) => proposer.read(id));
       return { propose: proposer.show };
     },
     check: (line) =>
@@ -180,9 +181,11 @@ export const MAIL: Readonly<Record<string, MailRuntime>> = {
       return 0;
     },
     // The approval of a send reads the draft (or the message being replied to) back through the connector (gmail.ts).
-    start: () => {
-      setGmailReaders(gmailReaders());
-      return {};
+    start: (io) => {
+      const readers = gmailReaders();
+      setGmailReaders(readers);
+      // The handler's reply drafts are shown on the phone like Mailbird's, read back through the connector (the same read the approval of their send uses).
+      return { propose: createProposer({ read: (id) => readers.draft(String(id)), send: (t) => io.reply(t) }).show };
     },
     check: (line) => gmailChecks(line, { self: settings.mailSelfAddress, connector: readConnectors()?.gmail, archiveLive: settings.archiveLive, briefEmail: settings.briefEmail }),
   },

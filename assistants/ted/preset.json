@@ -5,18 +5,21 @@
     "heartbeat": { "everyMinutes": 15, "quietFromHour": 22, "quietToHour": 7 },
     "brief": { "skill": "daily-brief", "startHour": 7, "backstopHour": 9, "maxAttempts": 3 },
     "radar": { "skill": "radar", "enabled": true, "everyMinutes": 180 },
-    "dream": { "enabled": true }
+    "dream": { "enabled": true, "minNewLines": { "direct": 1, "group": 3 }, "maxGroupsPerNight": 5 }
   },
   "notes": {
     "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"],
     "dream": ["triage", "people", "scheduling", "context", "brief", "style"],
-    "group": ["people", "context", "scheduling", "style"]
+    "group": ["people", "context", "scheduling", "style"],
+    "tenant": ["people", "context", "scheduling", "style"]
   },
   "profiles": {
+    "chat": { "maxTurns": 40, "maxBudgetUsd": 2, "notes": [] },
     "brief": { "maxTurns": 120, "maxBudgetUsd": 5, "notes": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"] },
     "radar": { "maxTurns": 30, "maxBudgetUsd": 1, "notes": ["people", "scheduling", "context", "style", "brief", "setup", "voice"] },
     "background": { "maxTurns": 20, "maxBudgetUsd": 1, "notes": ["people", "scheduling", "context", "style", "brief", "setup", "voice"] },
-    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5, "notes": [] }
+    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5, "notes": [] },
+    "handler": { "maxTurns": 40, "maxBudgetUsd": 2, "notes": ["people", "scheduling", "context", "style", "setup", "voice"] }
   },
   "skills": {
     "core": [

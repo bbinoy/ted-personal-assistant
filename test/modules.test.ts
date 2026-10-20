@@ -107,8 +107,8 @@ test("modules: a friend's own connection exists for a tenant run whose capabilit
 });
 
 test("modules: the mail slot answers for the provider, so central code never asks for its name", () => {
-  assert.equal(mailSlot("mailbird")?.handler, true);
-  assert.equal(mailSlot("gmail")?.handler, false);
+  assert.equal(typeof mailSlot("mailbird")?.handlerTask, "function"); // a provider has a handler when it says what the handler's task is
+  assert.equal(typeof mailSlot("gmail")?.handlerTask, "function");
   assert.equal(mailSlot("mailbird")?.brief.delivery(), "email");
   assert.equal(mailSlot("mailbird")?.chat.skill, "ted-personal-assistant:mailbird");
   assert.equal(mailSlot("gmail")?.chat.skill, "ted-personal-assistant:gmail");

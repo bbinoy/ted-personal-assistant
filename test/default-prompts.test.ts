@@ -19,8 +19,9 @@ const NOW = new Date("2026-10-12T09:00:00");
 const portable = (s: string) => s.replaceAll(settings.dataDir, "<data>");
 
 export function snapshot(): Record<string, unknown> {
-  const signalAccount = process.env.SIGNAL_ACCOUNT;
-  delete process.env.SIGNAL_ACCOUNT; // the chat prompt names the channel from it
+  const own = settings as unknown as { signalOwnAccount: string | undefined };
+  const signalAccount = own.signalOwnAccount;
+  own.signalOwnAccount = undefined; // the chat prompt names the channel from it
   try {
     const missing = missingSetup([]);
     const down = ["notion", "calendar"] as const;
@@ -35,7 +36,7 @@ export function snapshot(): Record<string, unknown> {
       chatContextSetup: portable(chatContext({ missing, down }) ?? ""),
       brief: portable(briefSystem("MEMORY", missing, down)),
       radar: portable(radarSystem("MEMORY", missing, down)),
-      handler: portable(handlerSystem("MEMORY", missing, down)),
+      handler: portable(handlerSystem("MEMORY", { missing, down })),
       background: portable(backgroundSystem("MEMORY", missing, down)),
       group: portable(groupSystem()),
       gateOwner: GATE_DEFAULTS.owner,
@@ -43,7 +44,7 @@ export function snapshot(): Record<string, unknown> {
       ownerGate: ownerGateDefaults({ briefHour: 7, backstopHour: 9, radarMinutes: 180, radar: true, minGapMinutes: 60 }),
     };
   } finally {
-    if (signalAccount !== undefined) process.env.SIGNAL_ACCOUNT = signalAccount;
+    own.signalOwnAccount = signalAccount;
   }
 }
 

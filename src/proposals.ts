@@ -30,7 +30,7 @@ export function viewDraft(msg: unknown): DraftView | undefined {
 
 // Pure: the Signal text. Shows who it goes to and the whole reply (cut and announced if long).
 // The draft id is in it so the chat agent can find the draft when the owner replies to this message.
-export function proposalText(d: DraftView, id: number): string {
+export function proposalText(d: DraftView, id: number | string): string {
   return `✉️ Reply ready (draft #${id})\n${mailHeader(d)}\n\n${cutBody(d.body)}\n\nReply to this message with “send” to send it, or say what to change.`;
 }
 

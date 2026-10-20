@@ -146,12 +146,15 @@ export interface MailTools {
   // conversation whose tools these are ("tenant:<id>"), for a module whose client is per conversation.
   readBack: (kind: ViewKind | undefined, input: Record<string, unknown>, conversation?: string) => Promise<DraftView | undefined>;
   views: Partial<Record<ViewKind, (i: MailInput, draft?: Omit<MailView, "action">) => MailView | undefined>>; // how each row's `view` reads its call
+  // The background mail handler (handler.ts): present when a handler can run with these tools. `handlerTask` is its standing task for `who` in the names of these
+  // tools (mailtask.ts), `createdDraft` names the reply draft a successful call left behind (to be shown to the person), absent when drafts are not shown.
+  handlerTask?: (who: string) => string;
+  createdDraft?: (tool: string, response: unknown) => string | number | undefined;
 }
 
 // What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
 // MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 export interface MailSlot extends MailTools {
-  handler: boolean; // a background mail handler exists (it drafts replies with this provider's tools); without one the heartbeat keeps what it would hand over
   brief: {
     delivery: () => "email" | "signal"; // how today's brief reaches the owner
     instructions: () => string; // the brief preset's instructions for this provider

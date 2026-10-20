@@ -1,4 +1,5 @@
-import { isTriage, readAudit } from "./audit.ts";
+import { readAudit } from "./audit.ts";
+import { readTriageSince } from "./digest.ts";
 import { newMailSource, triageCheck } from "./heartbeat.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import { localTime } from "./pause.ts";
@@ -40,7 +41,7 @@ function approvalSummary(hours: number) {
 
 async function report(hours: number) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();
-  const rows = readAudit((e) => isTriage(e) && e.ts > since);
+  const rows = readTriageSince(since);
   if (rows.length === 0) {
     console.log(`Nothing triaged in the last ${hours}h.`);
     judgeSummary(hours);

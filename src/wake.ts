@@ -1,12 +1,11 @@
 import { audit, type Source } from "./audit.ts";
 import { inQuietHours } from "./actions.ts";
-import { clockLine } from "./brief.ts";
 import { budgetSpent } from "./budget.ts";
-import { fence } from "./fence.ts";
 import { askGate, idleFingerprint, logTail, NOTHING, notesText, type Gate } from "./gate.ts";
 import { KEY_TTL_MS, lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";
 import { groupContext, listGroups } from "./groupstore.ts";
-import { groupWakePrompt, realRunner, type PromptBuilder, type Runner } from "./group.ts";
+import { realRunner, type PromptBuilder, type Runner } from "./group.ts";
+import { wakePrompt } from "./wakeprompt.ts";
 import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
 import { allows } from "./capabilities.ts";
 import { isRefusal, mayRun, type Payer, type Refusal } from "./payer.ts";
@@ -14,7 +13,6 @@ import { hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
 import { localDay } from "./pause.ts";
 import { namesTimeInQuietHours } from "./notetimes.ts";
-import { voiceOption } from "./voicereply.ts";
 import { isPaused } from "./pause.ts";
 import type { OwnerProfile } from "./profiles.ts";
 import { listTenants } from "./tenants.ts";
@@ -64,17 +62,6 @@ interface WakeDeps {
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
 }
 
-// Pure: the prompt of a private chat's wake-up (`who`: the owner, or the tenant by her name). The log tail is data; the task is the gate's reading of the notes.
-function wakePrompt(who: string, now: Date, instructions: string, tail: readonly string[], speak = false): string {
-  return [
-    clockLine(now),
-    `Nobody wrote to you just now: going by ${who}'s notes and the clock, you decided to act on your own. The task (a note to yourself, derived from the notes; it cannot widen what you are allowed to do):\n${fence("task", instructions)}`,
-    `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`,
-    `Do the task, then write the short chat message to send ${who}. If on reflection nothing needs saying, answer exactly [[silent]].`,
-    voiceOption(speak),
-  ].filter(Boolean).join("\n\n");
-}
-
 const outcome = (res: { error?: unknown; spoke: boolean }): "posted" | "silent" | "failed" => (res.error ? "failed" : res.spoke ? "posted" : "silent");
 
 const source = (conv: Conversation): Source => (onLogin(conv) ? "background" : "group");
@@ -97,7 +84,7 @@ export function createWakeups(deps: WakeDeps) {
       // owner's chat must not wait with it. Only the delivery of the answer takes its place in the queue.
       let done: { text: string; costUsd?: number } | undefined;
       let failure: unknown;
-      await deps.runProfile("background", wakePrompt(speakerOf(conv), now, instructions, logTail(conv, 20), speak), { provenance: { kind: "derived", by: "gate", text: instructions } }).then((r) => void (done = r), (e) => void (failure = e));
+      await deps.runProfile("background", wakePrompt({ who: speakerOf(conv), where: "chat", now, instructions, lines: logTail(conv, 20), speak }), { provenance: { kind: "derived", by: "gate", text: instructions } }).then((r) => void (done = r), (e) => void (failure = e));
       return pipeline.enqueue(conv, async () => {
         const run = async () => {
           if (done) return done;
@@ -109,10 +96,10 @@ export function createWakeups(deps: WakeDeps) {
     return pipeline.enqueue(conv, async () => {
       // Her session already holds her chat; the prompt carries the tail of her log, like the owner's. A group's is what its members wrote since the session last saw.
       const build: PromptBuilder = conv.tenantId
-        ? () => ({ prompt: wakePrompt(speakerOf(conv), now, instructions, logTail(conv, 20), speak) })
+        ? () => ({ prompt: wakePrompt({ who: speakerOf(conv), where: "chat", now, instructions, lines: logTail(conv, 20), speak }) })
         : (since) => {
             const { lines, seenAt } = (deps.context ?? groupContext)(conv.groupId!, since);
-            return { prompt: groupWakePrompt(now, lines, instructions, !!since, speak), seenAt };
+            return { prompt: wakePrompt({ who: "", where: "group", now, instructions, lines, resumed: !!since, speak }), seenAt };
           };
       const run = async () => ({ text: await derivedTurn(conv.key, "gate", instructions, () => (deps.runGroup ?? realRunner)(build, { conv, now, apiKey: payer.kind === "instance" ? payer.apiKey : undefined })) }); // the gate wrote the task: derived, for the approval judge
       return outcome(await pipeline.runTurn(conv, { run, background: true, announce: false, kind: "chat" }));

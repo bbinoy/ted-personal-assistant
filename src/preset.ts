@@ -18,13 +18,16 @@ export interface Rhythm {
   // The wake-ups that follow a skill. The gate chooses when (by these defaults and the notes); code keeps the HOW and the backstop.
   readonly brief: { readonly skill: string; readonly startHour: number; readonly backstopHour: number; readonly maxAttempts: number };
   readonly radar: { readonly skill: string; readonly enabled: boolean; readonly everyMinutes: number };
-  readonly dream: { readonly enabled: boolean };
+  // The nightly dream (dream.ts): the same for every conversation. A direct chat (the owner's, a friend's) is dreamt once she wrote `minNewLines.direct` lines since the
+  // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
+  readonly dream: { readonly enabled: boolean; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
-export type ProfileKey = "brief" | "radar" | "background" | "group";
+export type ProfileKey = "chat" | "brief" | "radar" | "background" | "group" | "handler";
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
-  readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[] };
+  // categories: every note category; dream: the ones the owner's dream may write; group and tenant: the ones a group's and a friend's notes (and their dreams) have.
+  readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[]; readonly tenant: readonly string[] };
   readonly profiles: Readonly<Record<ProfileKey, ProfileData>>;
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
   readonly persona: Readonly<Record<PromptKey, Template>>;
@@ -101,21 +104,20 @@ export const PROMPTS = {
   noMail: [],
   reactions: ["who"],
   skills: ["mail", "mailSkill"],
-  chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed"],
-  group: ["weather", "browse", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
-  tenantHandler: ["her"],
+  chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed", "categories"],
+  voice: ["own", "group"],
+  triage: ["who"],
+  summary: [],
+  group: ["weather", "browse", "draw", "categories", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
   digest: ["digest"],
-  tenant: ["browse", "consented", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send"],
-  dreamOwner: [],
-  dreamTenant: ["her"],
-  dreamGroup: [],
+  tenant: ["browse", "weather", "draw", "consented", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send", "categories"],
+  dream: ["subject", "own", "group", "categories"],
   brief: ["mail", "skill"],
   radar: ["skill"],
-  handler: [],
+  handler: ["who", "own"],
   background: ["mail", "personality"],
   gateGroup: ["participation", "unprompted"],
-  gateOwner: ["mail", "unprompted"],
-  gateDirect: ["name", "unprompted"],
+  gateDirect: ["name", "presets", "mail", "unprompted"],
   gateScheduler: ["mail", "radar", "briefHour", "backstop", "hours", "minGap", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;
 export type PromptKey = keyof typeof PROMPTS;
@@ -183,12 +185,16 @@ export function loadPreset(dir: string): Preset {
   const name = typeof json.name === "string" && NAME.test(json.name) ? json.name : fail(where, `"name" must be a lower-case word (got ${JSON.stringify(json.name)})`);
 
   const r = sec("rhythm");
-  const hb = obj(at("rhythm.heartbeat"), r.heartbeat), br = obj(at("rhythm.brief"), r.brief), rd = obj(at("rhythm.radar"), r.radar), dr = obj(at("rhythm.dream"), r.dream);
+  const hb = obj(at("rhythm.heartbeat"), r.heartbeat), br = obj(at("rhythm.brief"), r.brief), rd = obj(at("rhythm.radar"), r.radar), dr = obj(at("rhythm.dream"), r.dream), mn = obj(at("rhythm.dream.minNewLines"), dr.minNewLines);
   const rhythm: Rhythm = {
     heartbeat: { everyMinutes: int(at("rhythm.heartbeat.everyMinutes"), hb.everyMinutes, 1, 240), quietFromHour: int(at("rhythm.heartbeat.quietFromHour"), hb.quietFromHour, 0, 23), quietToHour: int(at("rhythm.heartbeat.quietToHour"), hb.quietToHour, 0, 23) },
     brief: { skill: word(at("rhythm.brief.skill"), br.skill), startHour: int(at("rhythm.brief.startHour"), br.startHour, 0, 23), backstopHour: int(at("rhythm.brief.backstopHour"), br.backstopHour, 0, 24), maxAttempts: int(at("rhythm.brief.maxAttempts"), br.maxAttempts, 1, 10) },
     radar: { skill: word(at("rhythm.radar.skill"), rd.skill), enabled: bool(at("rhythm.radar.enabled"), rd.enabled), everyMinutes: int(at("rhythm.radar.everyMinutes"), rd.everyMinutes, 30, 720) },
-    dream: { enabled: bool(at("rhythm.dream.enabled"), dr.enabled) },
+    dream: {
+      enabled: bool(at("rhythm.dream.enabled"), dr.enabled),
+      minNewLines: { direct: int(at("rhythm.dream.minNewLines.direct"), mn.direct, 1, 1000), group: int(at("rhythm.dream.minNewLines.group"), mn.group, 1, 1000) },
+      maxGroupsPerNight: int(at("rhythm.dream.maxGroupsPerNight"), dr.maxGroupsPerNight, 1, 1000),
+    },
   };
 
   const n = sec("notes");
@@ -199,14 +205,14 @@ export function loadPreset(dir: string): Preset {
     const stray = list.find((c) => !categories.includes(c));
     return stray ? fail(at(path), `"${stray}" is not one of notes.categories (${categories.join(", ")})`) : list;
   };
-  const notes = { categories, dream: subset("notes.dream", n.dream), group: subset("notes.group", n.group) };
+  const notes = { categories, dream: subset("notes.dream", n.dream), group: subset("notes.group", n.group), tenant: subset("notes.tenant", n.tenant) };
 
   const p = sec("profiles");
   const profile = (key: ProfileKey): ProfileData => {
     const d = obj(at(`profiles.${key}`), p[key]);
     return { maxTurns: int(at(`profiles.${key}.maxTurns`), d.maxTurns, 1, 1000), maxBudgetUsd: num(at(`profiles.${key}.maxBudgetUsd`), d.maxBudgetUsd, 0.01, 1000), notes: subset(`profiles.${key}.notes`, d.notes) };
   };
-  const profiles = { brief: profile("brief"), radar: profile("radar"), background: profile("background"), group: profile("group") };
+  const profiles = { chat: profile("chat"), brief: profile("brief"), radar: profile("radar"), background: profile("background"), group: profile("group"), handler: profile("handler") };
 
   const s = sec("skills");
   const coreList = Array.isArray(s.core) ? s.core : fail(at("skills.core"), "must be a list");
@@ -240,3 +246,6 @@ export function presetFor(env: Readonly<Record<string, string | undefined>> = pr
   return p;
 }
 export const preset = (): Preset => presetFor(process.env);
+
+// The note categories a conversation has: the owner's chat all of them, a group the preset's notes.group, a friend notes.tenant. Nothing else in the code names a category.
+export const categoriesFor = (kind: "owner" | "group" | "tenant", p: Preset = preset()): readonly string[] => (kind === "owner" ? p.notes.categories : kind === "group" ? p.notes.group : p.notes.tenant);

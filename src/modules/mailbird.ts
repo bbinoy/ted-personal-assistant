@@ -1,10 +1,11 @@
 import { BRIEF_INSTRUCTIONS, BRIEF_TOOL } from "../brieftext.ts";
 import { nativeView } from "../mailview.ts";
-import type { DraftView } from "../proposals.ts";
+import { extractMessageId, type DraftView } from "../proposals.ts";
+import { handlerTaskText } from "./mailtask.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // Mailbird, the owner's desktop mail client, through its local MCP server (a user-scope entry of the owner's Claude settings): the default mail provider
-// (MAIL_PROVIDER=mailbird). The background handler drafts replies with its tools and shows them on the phone; the approval of a send is shown from the
+// (MAIL_PROVIDER=mailbird). The background handler drafts replies with its tools and they are shown on the phone; the approval of a send is shown from the
 // draft as Mailbird holds it. The client, `npm run restore` and the doctor check are runtime.ts.
 const MB = "mcp__mailbird__";
 
@@ -14,8 +15,19 @@ const mb = rowsOf(MB, "mailbird", "mail");
 let draftReader: ((messageId: number) => Promise<DraftView | undefined>) | undefined;
 export const setDraftReader = (fn: typeof draftReader) => void (draftReader = fn);
 
+const REPLY_TOOLS = new Set([`${MB}reply_to_conversation`, `${MB}reply_all_to_conversation`]);
+
 const mail: MailSlot = {
-  handler: true,
+  handlerTask: (who) =>
+    handlerTaskText(who, {
+      read: "get_message(messageId)",
+      calendar: "list_events",
+      draft: "create an in-thread DRAFT reply",
+      sendBy: `${who} gets the draft on their phone and sends it from there, so write it ready to send, in their voice.`,
+      event: "create the calendar event.",
+      followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled.",
+    }),
+  createdDraft: (tool, response) => (REPLY_TOOLS.has(tool) ? extractMessageId(response) : undefined), // the reply tools save the draft; its id is in their result
   brief: {
     delivery: () => "email",
     instructions: () => BRIEF_INSTRUCTIONS,

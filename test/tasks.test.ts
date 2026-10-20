@@ -81,7 +81,7 @@ const withSettings = async (over: Record<string, unknown>, f: () => Promise<void
 const lines = (r: Rig, kind = "action") => r.recorded.filter(([k]) => k === kind).map(([, t]) => t);
 
 test("profiles: named in code; brief, radar and background are owner runs with their own source, limits and schema", () => {
-  assert.deepEqual(Object.keys(PROFILES).sort(), ["background", "brief", "browse", "group", "radar"]);
+  assert.deepEqual(Object.keys(PROFILES).sort(), ["background", "brief", "browse", "chat", "group", "handler", "radar"]);
   assert.deepEqual([PROFILES.brief.source, PROFILES.brief.maxTurns, PROFILES.brief.maxBudgetUsd], ["brief", 120, 5]);
   assert.deepEqual([PROFILES.radar.source, PROFILES.radar.maxTurns, PROFILES.radar.maxBudgetUsd], ["radar", 30, 1]);
   assert.equal(PROFILES.radar.outputSchema, RADAR_SCHEMA);

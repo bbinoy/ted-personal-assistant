@@ -96,7 +96,7 @@ test("triage for a friend: her name and notes in the prompt, the instance key in
   writeFileSync(join(notes, "people-eve.md"), "Eve is Anna's sister; her mail is never urgent.\n");
   const costFile = join(process.env.HARNESS_DATA_DIR!, "anna-cost.json");
   const seen: { options?: Record<string, any> } = {};
-  const r = await triageBatch([mail], stream(seen), { who: { name: "Anna", pronoun: "them" }, notesDir: notes, payer: { kind: "instance", id: "anna", apiKey: "instance-key-not-real", costFile } });
+  const r = await triageBatch([mail], stream(seen), { who: { name: "Anna" }, notesDir: notes, payer: { kind: "instance", id: "anna", apiKey: "instance-key-not-real", costFile } });
   assert.equal(r[0]!.label, "read_later");
   const system = String(seen.options!.systemPrompt);
   assert.match(system, /You triage incoming emails for Anna/);

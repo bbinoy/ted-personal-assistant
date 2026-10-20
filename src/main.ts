@@ -7,16 +7,15 @@ import { scopeOf } from "./turnscope.ts";
 import * as approvals from "./approvals.ts";
 import { createApprovers } from "./approvers.ts";
 import { acceptOwner } from "./guards.ts";
-import { createDreamer } from "./dream.ts";
+import { createDreamer, dreamConversations } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
-import { createGroupDreamer } from "./groupdream.ts";
-import { createTenantDreamer } from "./tenantdream.ts";
 import { createTenantMailLoops } from "./mailloops.ts";
 import { keyNotices } from "./keynotice.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
 import { createHandler } from "./handler.ts";
+import { mailHandlerOf } from "./mailhandler.ts";
 import { startHeartbeat, startJobs } from "./heartbeat.ts";
 import { writeNotice } from "./notice.ts";
 import { ensureNotesDir } from "./notes.ts";
@@ -221,17 +220,16 @@ if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies &
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
 
-const handler = mail?.propose ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: mail.propose }) : undefined;
+const handler = mailHandlerOf(owner()) ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: mail?.propose }) : undefined; // (any provider that can draft: Mailbird, Gmail)
 handler?.resume();
 
-const dreamer = createDreamer();
-const groupDreamer = createGroupDreamer();
-const tenantDreamer = createTenantDreamer();
-// The dream tidies the notes the brief then reads; it runs at most once a day, only when you said something new, and a
-// failure just moves on. The tenants' dreams start with it but are not waited for: the brief never waits for them, and each is its own.
+// One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, which the brief waits for, and the friends', which it does not
+// (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
+const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]) });
+const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]) });
 const dream = () => {
-  void tenantDreamer.run().catch(() => {});
-  return dreamer.run().then(() => groupDreamer.run()).catch(() => {});
+  void friendsDreamer.run().catch(() => {});
+  return dreamer.run().catch(() => {});
 };
 // The clock half of the gate: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's
 // gate also decides when the brief and the radar run, with a deterministic backstop for the brief.

@@ -5,7 +5,7 @@
       "sessionFile": "state/session.json",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "12c88e1515e09a31"
+        "sha": "200ef3eaba87d680"
       },
       "memory": {
         "dir": "<data>/memory/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "12c88e1515e09a31"
+        "sha": "200ef3eaba87d680"
       },
       "snapshot": false
     },
@@ -165,7 +165,7 @@
       "sessionFile": "<data>/memory/groups/ff36ac23eadd/session.json",
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "48c3d0613a0ad2fc"
+        "sha": "435b6d4e31d40d6d"
       },
       "memory": {
         "dir": "<data>/memory/groups/ff36ac23eadd/notes",
@@ -204,7 +204,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "48c3d0613a0ad2fc"
+        "sha": "435b6d4e31d40d6d"
       },
       "snapshot": false
     },
@@ -257,7 +257,7 @@
       "sessionFile": "<data>/tenants/<ann>/session.json",
       "systemPrompt": {
         "key": "tenantAskingConsent.run.systemPrompt",
-        "sha": "17cdffecb0cd312a"
+        "sha": "dd92f8c1db131248"
       },
       "memory": {
         "dir": "<data>/tenants/<ann>/notes"
@@ -286,7 +286,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantAskingConsent.system.append",
-        "sha": "17cdffecb0cd312a"
+        "sha": "dd92f8c1db131248"
       },
       "snapshot": false
     },
@@ -320,7 +320,7 @@
       "sessionFile": "<data>/tenants/<bea>/session.json",
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "0d14b999971e449d"
+        "sha": "eeeea989353bc5f3"
       },
       "memory": {
         "dir": "<data>/tenants/<bea>/notes"
@@ -369,7 +369,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "0d14b999971e449d"
+        "sha": "eeeea989353bc5f3"
       },
       "snapshot": false
     },
