@@ -92,7 +92,7 @@ Never invite other people or change an existing event without asking; the "one y
 - May not: `update_event` or reschedule on its own, `delete_event`
   ever, create non-travel events, edit other people's events, send or
   respond to invites.
-- The agent's policy (`src/policy.ts`) also asks the owner on the phone
+- The agent's policy (`src/policy/policy.ts`) also asks the owner on the phone
   before any calendar write, whatever this skill says.
 
 ## In the briefing
