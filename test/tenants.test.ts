@@ -52,10 +52,12 @@ function join_(name = "Anna", aci = fresh()): import("../src/tenants/tenants.ts"
   return rec;
 }
 
-test("config: a tenant.json is checked, never trusted; the old timezone and connectors settings are unknown now", () => {
-  const ok = T.parseTenantConfig({ language: "German", persona: "short and dry", dailyBudgetUsd: 3, maxTurns: 6, browse: false });
+test("config: a tenant.json is checked, never trusted; the old lower-case timezone and connectors settings are unknown now", () => {
+  const ok = T.parseTenantConfig({ language: "German", persona: "short and dry", dailyBudgetUsd: 3, maxTurns: 6, browse: false, timeZone: "Europe/Lisbon" });
   assert.deepEqual(ok.problems, []);
   assert.equal(ok.config.dailyBudgetUsd, 3);
+  assert.equal(ok.config.timeZone, "Europe/Lisbon");
+  assert.deepEqual(T.parseTenantConfig({ timeZone: "Mars/Olympus" }), { config: {}, problems: ["timeZone must be a time zone like Europe/Lisbon"] });
   const bad = T.parseTenantConfig({ dailyBudgetUsd: -1, maxTurns: "many", browse: "yes", timezone: "Europe/Berlin", color: "red", connectors: ["gmail"] });
   assert.deepEqual(bad.config, {});
   assert.equal(bad.problems.length, 6); // three bad values, three unknown names (timezone and connectors were dead and are gone)

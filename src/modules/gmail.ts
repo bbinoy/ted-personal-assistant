@@ -2,14 +2,12 @@ import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } f
 import { addrs, nativeView } from "../policy/mailview.ts";
 import type { DraftView } from "../proposals.ts";
 import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
-import { handlerTaskText } from "./mailtask.ts";
 import { settings } from "../settings.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot
 // say (sensitive labels, attachment content, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
-// The background handler (handler.ts) drafts replies with create_draft and they are shown on the phone like Mailbird's; sending is only on the owner's word. The mail client (src/gmail.ts), `npm run restore`
-// and the doctor check are runtime.ts.
+// Sending is only on the owner's word. The mail relay (src/gmail.ts), `npm run restore` and the doctor check are runtime.ts.
 
 // The approval's read-backs: a draft by its id (the approval of send_message with a draftId), and the original message of a reply (its sender and recipients,
 // so a reply that names none is shown with the people who really receive it). Set by runtime.ts when the app starts.
@@ -24,7 +22,7 @@ const active = () => settings.mailProvider === "gmail";
 
 const gm = rowsOf(GMAIL_PREFIX, "gmail", "mail");
 
-const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you draft is a Gmail draft (create_draft with replyToMessageId, or update_draft); say it is ready and wait. The background handler also shows ${owner} the drafts it made as "✉️ Reply ready (draft #<id>)": when ${owner} answers such a message with "send" or similar, the id is the draftId. When ${owner} says to send a draft, call send_message with that draftId, or reply / forward with the exact text; ${owner} is then asked to approve (or it is checked) with the real recipients shown. Archiving is removing the INBOX label (unlabel_thread with labelIds ["INBOX"]); it may be switched to log-only, in which case a refused archive is not an error. Never use trash, spam or label tools for TRASH or SPAM, and never open attachment content.
+const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you (or a background look of yours) draft is a Gmail draft (create_draft with replyToMessageId, or update_draft); say it is ready and wait. When ${owner} answers with "send" or similar, find the draft they mean (its id is the draftId). When ${owner} says to send a draft, call send_message with that draftId, or reply / forward with the exact text; ${owner} is then asked to approve (or it is checked) with the real recipients shown. Archiving is removing the INBOX label (unlabel_thread with labelIds ["INBOX"]); it may be switched to log-only, in which case a refused archive is not an error. Never use trash, spam or label tools for TRASH or SPAM, and never open attachment content.
 
 `;
 
@@ -36,23 +34,7 @@ const briefHow = (): string =>
     ? `${BRIEF_GMAIL} Deliver the full brief with the Gmail send_message tool, exactly once, to ${JSON.stringify([settings.mailSelfAddress])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody).`
     : `${BRIEF_GMAIL} Do not deliver by email: your final answer is the whole brief itself, in the skill's format.`;
 
-// The id of a Gmail draft a successful create_draft left: its result is the Draft object (`id`, `threadId`, `viewUrl`), as text or as a content array.
-const draftIdOf = (response: unknown): string | undefined => {
-  const text = typeof response === "string" ? response : JSON.stringify(response ?? "");
-  return /\\?"id\\?"\s*:\s*\\?"([A-Za-z0-9_-]{1,64})\\?"/.exec(text)?.[1];
-};
-
 const mail: MailSlot = {
-  handlerTask: (who) =>
-    handlerTaskText(who, {
-      read: "get_message(messageId) (messageFormat PLAIN_TEXT)",
-      calendar: "list_events",
-      draft: "save an in-thread DRAFT reply with create_draft (replyToMessageId: the mail's messageId; to: the sender)",
-      sendBy: `${who} gets the draft on their phone and sends it from there, so write it ready to send, in their voice.`,
-      event: `create the calendar event with create_event, for ${who} alone (no guests).`,
-      followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled (unlabel_thread removing INBOX).",
-    }),
-  createdDraft: (tool, response) => (tool === `${GMAIL_PREFIX}create_draft` ? draftIdOf(response) : undefined),
   brief: { how: briefHow },
   chat: { skill: "ted-personal-assistant:gmail", note: GMAIL_DRAFTS },
   readBack: async (kind, input) => {

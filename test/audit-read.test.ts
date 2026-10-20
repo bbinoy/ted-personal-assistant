@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { audit, isTriage, readAudit } from "../src/audit.ts";
+import { audit, readAudit, type AuditEntry } from "../src/audit.ts";
+
+const isTriage = (e: AuditEntry) => e.source === "heartbeat" && e.tool === "heartbeat_triage"; // (any rows with a tool name: what the substring pre-filter is for)
 
 test("audit: the substring pre-filter gives the same rows as parsing every line", () => {
   audit("heartbeat_triage", "archived", "heartbeat", { id: "c-prefilter", subject: "A" });

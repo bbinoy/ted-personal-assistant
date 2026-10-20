@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { profileOptions } from "../src/agent.ts";
+import { heartbeatOptions } from "../src/agent.ts";
+import { owner } from "../src/conversationmodel.ts";
+import { LOGIN } from "../src/payer.ts";
 import { buildOptions } from "../src/agentrun.ts";
 import { readAudit } from "../src/audit.ts";
 import { judgePrompt, type JudgeInput, type Verdict } from "../src/approvals/autojudge.ts";
@@ -105,23 +107,17 @@ test("the Skill hook: a delegate: skill is denied to the run and goes through it
 });
 
 test("the heartbeat run has the Agent tool, the experts and the hook; no other run has", () => {
-  const o = buildOptions(refuse, profileOptions("heartbeat"), undefined);
+  const o = buildOptions(refuse, heartbeatOptions(owner(), LOGIN), undefined);
   assert.ok(o.tools && (o.tools as string[]).includes("Agent"));
   assert.ok(o.agents && Object.keys(o.agents).includes("expert"));
   assert.equal(o.agents!.expert!.model, "sonnet");
   assert.equal(o.hooks!.PreToolUse!.length, 1);
-  for (const name of ["background"] as const) {
-    const other = buildOptions(refuse, profileOptions(name), undefined);
-    assert.ok(!(other.tools as string[]).includes("Agent"), name);
-    assert.equal(other.agents, undefined, name);
-    assert.equal(other.hooks!.PreToolUse, undefined, name);
-  }
   assert.equal(buildOptions(refuse, { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).agents, undefined);
 });
 
 test("an accepted delegation reaches the run's caller (the look counts it)", async () => {
   const seen: string[] = [];
-  const o = buildOptions(refuse, profileOptions("heartbeat", { onDelegate: (a) => seen.push(a) }), undefined);
+  const o = buildOptions(refuse, heartbeatOptions(owner(), LOGIN, { onDelegate: (a) => seen.push(a) }), undefined);
   const hook = o.hooks!.PreToolUse![0]!.hooks[0]!;
   await hook({ hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { subagent_type: "expert", prompt: "p", description: "d" }, tool_use_id: "t" } as never, "t", { signal });
   assert.deepEqual(seen, ["expert"]);

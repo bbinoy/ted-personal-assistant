@@ -6,7 +6,7 @@ import { rowsOf, type ToolModule } from "./types.ts";
 const status = rowsOf("mcp__status__", "status", "chat");
 export const statusModule: ToolModule = {
   name: "status",
-  connection: { kind: "in-process", name: "status", when: (ctx) => ctx.source === "background" && !ctx.key && !ctx.tenant && !ctx.browsing },
+  connection: { kind: "in-process", name: "status", when: (ctx) => ctx.source === "background" && !ctx.tenant && !ctx.browsing },
   rows: status("status-note", "write_status_note", { only: ["background"] }),
   free: true, // the assistant's own record in its own folder: nothing for the owner to approve
 };

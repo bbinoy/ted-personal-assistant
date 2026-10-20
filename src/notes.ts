@@ -67,14 +67,15 @@ export function parseNote(file: string, raw: string): Note | undefined {
 
 const isActive = (n: Note, today: string) => !n.expires || today <= n.expires;
 
-export function readNotes(now = new Date(), dir: string = NOTES_DIR): Note[] {
+// `zone`: the conversation's own time zone (timezone.ts), the day an `expires:` is compared with; default the Mac's.
+export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: string): Note[] {
   let files: string[] = [];
   try {
     files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").sort();
   } catch {
     return [];
   }
-  const today = localDay(now);
+  const today = localDay(now, zone);
   const out: Note[] = [];
   for (const f of files) {
     try {
@@ -111,7 +112,7 @@ export const missingSetup = (notes: readonly Note[], down: readonly string[] = [
   setupItems().filter((i) => (mail || !i.mailOnly) && !notes.some((n) => n.file === i.file) && !(i.needs && down.includes(i.needs))).map((i) => i.label);
 
 // What a run sees: the notes of the given categories (every note of the folder when none are given), rendered.
-export const memoryFor = (categories?: readonly Category[], now = new Date(), dir: string = NOTES_DIR) => notesBlock(readNotes(now, dir), categories); // `dir`: another conversation's notes (a friend's mail check reads hers)
+export const memoryFor = (categories?: readonly Category[], now = new Date(), dir: string = NOTES_DIR, zone?: string) => notesBlock(readNotes(now, dir, zone), categories); // `dir`: another conversation's notes (a friend's mail check reads hers)
 
 // Deletes one note and its line in the index. Only a plain file name inside the notes folder.
 export function forgetNote(file: string, dir: string = NOTES_DIR): { ok: true; removed: Note | undefined } | { ok: false; error: string } {

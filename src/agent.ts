@@ -11,49 +11,73 @@ import type { Document } from "./document.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./approvals/permissions.ts";
-import { backgroundSystem, expertSystem, handlerSystem, heartbeatSystem } from "./persona.ts";
+import { expertSystem, heartbeatSystem } from "./persona.ts";
 import { expertSetup } from "./heartbeat/delegation.ts";
-import { handlerToolsOf } from "./mailhandler.ts";
 import type { Payer } from "./payer.ts";
 import { categoriesFor } from "./preset.ts";
 import { tenantById, tenantContext } from "./tenants/tenants.ts";
-import { PROFILES, type OwnerProfile } from "./profiles.ts";
+import { PROFILES } from "./profiles.ts";
+import type { SeenMail } from "./seenmail.ts";
+import { lookerOf, unattendedTools, type Looker } from "./heartbeat/scope.ts";
 import { settings } from "./settings.ts";
 import type { RunProvenance } from "./approvals/autojudge.ts";
 
 const down = () => disconnected(readConnectors());
 
-function profileSystem(name: OwnerProfile): string {
-  const notes = memoryFor(PROFILES[name].notes);
-  const off = down(); // (read once)
-  const missing = missingSetup(readNotes(), off);
-  return name === "heartbeat" ? heartbeatSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
-}
-
-// The expert's whole system text: its persona and the same notes as the heartbeat run (it reads no notes of its own).
-function expertPrompt(): string {
-  const off = down();
-  return expertSystem(memoryFor(PROFILES.heartbeat.notes), missingSetup(readNotes(), off), off);
-}
-
-// What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's
-// instructions, the heartbeat run's look), `derived` for a wake-up, whose task a gate model selected from the notes (the person's standing instruction, judged like their chat message).
+// What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the heartbeat run's look).
 export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
+  seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
-// The options of an owner profile's run (a fresh session).
-export function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
-  const p = PROFILES[name];
-  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, model: p.model, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance), ...(name === "heartbeat" ? { experts: { setup: expertSetup(p.skills, expertPrompt()), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}) };
+// The texts of a conversation's heartbeat run and of its expert, for the owner or for a friend or a group (persona.ts heartbeatSystem, expertSystem): the persona, the notes of the
+// categories that conversation has (in its own zone: the day an `expires:` is compared with) and, for the owner, what is connected and set up. One function, so the run and its
+// expert are told the same notes.
+function heartbeatTexts(conv: Conversation, looker: Looker, now: Date): { run: string; expert: string } {
+  if (looker.own) {
+    const off = down(); // (read once)
+    const o = { missing: missingSetup(readNotes(), off), down: off };
+    const notes = memoryFor(PROFILES.heartbeat.notes, now, conv.notesDir, looker.zone);
+    return { run: heartbeatSystem(notes, o), expert: expertSystem(notes, o) };
+  }
+  const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
+  const looked = { name: looker.who, group: looker.group, language: ctx?.language, persona: ctx?.persona };
+  const notes = memoryFor(categoriesFor(conv.kind), now, conv.notesDir, looker.zone);
+  return { run: heartbeatSystem(notes, { looked }), expert: expertSystem(notes, { looked }) };
 }
 
-// One run under a named owner profile: always a fresh session.
-export const runProfile = (name: OwnerProfile, prompt: string, approve: Approve, extra: ProfileExtra = {}): Promise<AgentReply> =>
-  runAgent(prompt, approve, profileOptions(name, extra));
+// The options of a conversation's heartbeat run (heartbeat/look.ts), ONE for the owner, every group and every friend: a fresh session, the conversation's own persona and notes
+// (as data: the run reads untrusted mail and has no note tools), its own tools and skills from its capability set, the heartbeat profile's limits (a friend's or a group's also
+// held to its own per-run ceiling), the model and output of the profile, the standing instruction as the approval judge's provenance (fixed text, no mail), and its own approver
+// state. The payer is the conversation's (payer.ts): the login, or the instance key on her ledger. What differs is data: the owner's run is the "background" policy source with her
+// connectors; a friend's or a group's is the isolated one, with the tools its capabilities hold (the notes' file tools left out) and no connectors.
+export function heartbeatOptions(conv: Conversation, payer: Payer, extra: ProfileExtra = {}, now = new Date()): RunOptions {
+  const p = PROFILES.heartbeat;
+  const looker = lookerOf(conv);
+  const texts = heartbeatTexts(conv, looker, now);
+  const base: RunOptions = looker.own
+    ? { source: p.source, systemPrompt: texts.run, skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd }
+    : (() => {
+        const mine = runOptionsFor(conv, { ...(payer.kind === "instance" ? { apiKey: payer.apiKey } : {}), now });
+        return { ...mine, sessionFile: undefined, memory: undefined, seenAt: undefined, groupId: conv.groupId, tools: unattendedTools(mine.tools ?? new Set()), systemPrompt: texts.run, maxTurns: p.maxTurns, maxBudgetUsd: Math.min(p.maxBudgetUsd, mine.maxBudgetUsd), conversation: conv.key };
+      })();
+  return {
+    ...base,
+    model: p.model,
+    outputFormat: p.outputSchema,
+    onToolSuccess: extra.onToolSuccess,
+    provenance: fixed(extra.provenance),
+    ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
+    ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
+  };
+}
+
+// One heartbeat run of a conversation: always a fresh session. `approve` is that conversation's own approver (main.ts).
+export const runHeartbeat = (conv: Conversation, payer: Payer, prompt: string, approve: Approve, extra: ProfileExtra = {}): Promise<AgentReply> =>
+  runAgent(prompt, approve, heartbeatOptions(conv, payer, extra));
 
 // ---- a conversation's chat: the owner's, a group's, a tenant's ----
 
@@ -84,36 +108,3 @@ export function prepare(conv: Conversation, inputs: RunInputs, opts: { refresh?:
 
 // A tenant who was suspended or removed: her process is closed.
 export const dropTenantWarm = (id: string): void => pool.drop(tenantKey(id));
-
-// The options of a conversation's background mail handler run (handler.ts), ONE for the owner and every friend: the conversation's own options (runoptions.ts), a
-// fresh session, its mail module's tools only (a friend's: from her capability set; the owner's: the connectors, as ever, under the handler's policy source), the
-// handler profile's limits (the preset), the notes of the profile's categories that conversation has, the standing task as the approval judge's provenance (fixed text,
-// no mail), and the conversation's own approver state. The payer is the conversation's (payer.ts): the login, or the instance key on her ledger.
-export function handlerOptions(conv: Conversation, payer: Payer, onToolSuccess: RunOptions["onToolSuccess"], task: string): RunOptions {
-  const own = conv.kind === "owner";
-  const p = PROFILES.handler;
-  const base = runOptionsFor(conv, payer.kind === "instance" ? { apiKey: payer.apiKey } : {});
-  const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
-  const categories = categoriesFor(conv.kind);
-  return {
-    ...base,
-    source: own ? p.source : base.source, // the owner's handler is its own policy source; a friend's is the isolated one
-    sessionFile: undefined, // a fresh session every run
-    memory: undefined,
-    seenAt: undefined,
-    skills: own ? undefined : [],
-    tools: own ? base.tools : handlerToolsOf(conv, base.tools ?? new Set()),
-    systemPrompt: handlerSystem(memoryFor(p.notes.filter((c) => categories.includes(c)), new Date(), conv.notesDir), own ? { missing: missingSetup(readNotes(), down()), down: down() } : { who: ctx!.name }),
-    maxTurns: p.maxTurns,
-    maxBudgetUsd: own ? p.maxBudgetUsd : Math.min(p.maxBudgetUsd, base.maxBudgetUsd), // a friend's run is also held to her own per-run ceiling
-    onToolSuccess,
-    provenance: fixed({ kind: "standing", task }), // (no chat message is this run's provenance: the fixed task is)
-    conversation: conv.key, // its anti-repeat state is its conversation's, as in its chat
-    untrusted: true, // it reads raw mail
-  };
-}
-
-export const runHandlerTurn = (conv: Conversation, payer: Payer, prompt: string, approve: Approve, onToolSuccess: RunOptions["onToolSuccess"], task: string): Promise<AgentReply> =>
-  runAgent(prompt, approve, handlerOptions(conv, payer, onToolSuccess, task));
-
-

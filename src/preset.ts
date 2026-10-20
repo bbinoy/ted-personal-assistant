@@ -21,7 +21,7 @@ export interface Rhythm {
   // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
   readonly dream: { readonly enabled: boolean; readonly hour: number; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
-export type ProfileKey = "chat" | "heartbeat" | "background" | "group" | "handler";
+export type ProfileKey = "chat" | "heartbeat" | "group";
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
@@ -103,19 +103,14 @@ export const PROMPTS = {
   skills: ["mail", "mailSkill"],
   chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed", "categories"],
   voice: ["own", "group"],
-  triage: ["who"],
   summary: [],
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
-  digest: ["digest"],
   tenant: ["browse", "weather", "draw", "consented", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send", "categories"],
   dream: ["subject", "own", "group", "categories"],
-  heartbeatSystem: ["personality"],
-  expert: ["personality"],
-  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefHow"],
-  handler: ["who", "own"],
-  background: ["mail", "personality"],
+  heartbeatSystem: ["personality", "own", "who", "group"],
+  expert: ["personality", "own", "who"],
+  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefHow", "who", "Who", "own", "reads", "mail", "experts", "brief", "sources"],
   gateGroup: ["participation", "unprompted"],
-  gateDirect: ["name", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;
 export type PromptKey = keyof typeof PROMPTS;
 const PROMPT_KEYS = Object.keys(PROMPTS) as PromptKey[];
@@ -209,7 +204,7 @@ export function loadPreset(dir: string): Preset {
     const d = obj(at(`profiles.${key}`), p[key]);
     return { maxTurns: int(at(`profiles.${key}.maxTurns`), d.maxTurns, 1, 1000), maxBudgetUsd: num(at(`profiles.${key}.maxBudgetUsd`), d.maxBudgetUsd, 0.01, 1000), notes: subset(`profiles.${key}.notes`, d.notes) };
   };
-  const profiles = { chat: profile("chat"), heartbeat: profile("heartbeat"), background: profile("background"), group: profile("group"), handler: profile("handler") };
+  const profiles = { chat: profile("chat"), heartbeat: profile("heartbeat"), group: profile("group") };
 
   const s = sec("skills");
   const coreList = Array.isArray(s.core) ? s.core : fail(at("skills.core"), "must be a list");

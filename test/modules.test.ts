@@ -17,7 +17,7 @@ import { CAPABILITIES } from "../src/tenants/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "status", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "voice", "memory", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -63,7 +63,7 @@ test("modules: every server a module names is built under that name in runtime.t
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "status", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
@@ -76,7 +76,10 @@ const module = (name: string) => registered().find((m) => m.name === name)!;
 test("modules: each module decides from the run whether it has a server (a conversation to send to, notes, a tenant, the browse run)", () => {
   const chat = ctx({ memory: { dir: "/n" } });
   assert.equal(when(module("send"), chat), true);
-  assert.equal(when(module("send"), ctx({ source: "background", key: undefined })), false, "no conversation, no send");
+  assert.equal(when(module("send"), ctx({ source: "background", key: undefined })), true, "the owner's heartbeat run has no key of its own and speaks in her chat");
+  assert.equal(when(module("send"), ctx({ source: "dream", key: undefined })), false, "no conversation, no send");
+  assert.equal(when(module("seenmail"), ctx({ source: "background" })), false, "no tracker, no seen_mail");
+  assert.equal(when(module("seenmail"), ctx({ source: "background", seenMail: {} as never })), true, "a heartbeat run of a conversation with mail");
   assert.equal(when(module("send"), ctx({ source: "group", key: "g", offers: (t) => t !== "mcp__send__send" })), false, "a group whose capability set lacks it");
   assert.equal(when(module("memory"), chat), true);
   assert.equal(when(module("memory"), ctx({ source: "background", key: undefined })), false);
@@ -107,8 +110,6 @@ test("modules: a friend's own connection exists for a tenant run whose capabilit
 });
 
 test("modules: the mail slot answers for the provider, so central code never asks for its name", () => {
-  assert.equal(typeof mailSlot("mailbird")?.handlerTask, "function"); // a provider has a handler when it says what the handler's task is
-  assert.equal(typeof mailSlot("gmail")?.handlerTask, "function");
   assert.match(mailSlot("mailbird")?.brief.how() ?? "", /send_self_briefing/);
   assert.equal(mailSlot("mailbird")?.chat.skill, "ted-personal-assistant:mailbird");
   assert.equal(mailSlot("gmail")?.chat.skill, "ted-personal-assistant:gmail");

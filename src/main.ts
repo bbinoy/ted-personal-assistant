@@ -1,6 +1,6 @@
 import "./log.ts"; // first: timestamps, redaction and owner-only files for everything below
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation.ts";
-import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
+import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./agent.ts";
 import { compactConversation, compactDue } from "./chatsession.ts";
 import { approveIn, setApprovers } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
@@ -9,7 +9,6 @@ import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./guards.ts";
 import { createDreamer, dreamConversations, dreamTrigger } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
-import { createTenantMailLoops } from "./mailloops.ts";
 import { keyNotices } from "./tenants/keynotice.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
@@ -23,7 +22,6 @@ import { preparePicture } from "./image.ts";
 import { prepareFile, type AudioTools } from "./document.ts";
 import { createOutbound } from "./outbound.ts";
 import { Ledger } from "./modules/browse/payments.ts";
-import { OWNER_KEY } from "./ownerkey.ts";
 import { applyCredentialMode, mask, settings, signalIdentity } from "./settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
 import { unsupportedForVoice } from "./lang.ts";
@@ -35,7 +33,7 @@ import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
 import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./tenants/tenantrun.ts";
 import { tenantHooks } from "./tenants/tenanttools.ts";
-import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
@@ -66,11 +64,9 @@ function record(target: string | undefined, kind: Kind, ts: number, text: string
 }
 const out = createOutbound(messenger, (kind, ts, text, target) => record(target, kind, ts, text));
 // Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her unattended
-// runs (wake-ups, the heartbeat run, the brief, a friend's mail handler: only an explicit yes / no or a reply to the question answers those, whatever else
-// she types meanwhile is a chat message), a group in the group (any member may answer), a tenant in her own chat. approvals.ts scopes every
-// question to its conversation, so an answer from another one (the admin's included) never applies.
+// runs (the heartbeat run: only an explicit yes / no or a reply to the question answers those, whatever else she types meanwhile is a chat message), a group in the group
+// (any member may answer), a tenant in her own chat. approvals.ts scopes every question to its conversation, so an answer from another one (the admin's included) never applies.
 setApprovers(createApprovers(out));
-const approveBackground = approveIn(OWNER_KEY, { background: true });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
@@ -180,7 +176,7 @@ messenger.onDeletion((d) => {
 
 // The mail provider's own start-up (its module, src/modules): Mailbird's connection (the approval of any send shows the draft read back from it), or the Gmail connector's read-backs for the same approval.
 // MAIL_PROVIDER=none: no mail client is made at all, so there is no proposer either.
-if (settings.mail) mailRuntime()?.start({ reply: (t) => out.replyPlain(t, "draft") });
+if (settings.mail) mailRuntime()?.start();
 
 // A 👍 / 👎 on the pending approval message answers it (the pipeline checks); any other reaction of the
 // owner is feedback. (Our own status icons come back as reactions; the messenger does not deliver those.)
@@ -219,22 +215,14 @@ const dream = () => {
   return dreamer.run().catch(() => {});
 };
 const dreamAtItsHour = dreamTrigger(dream);
-// The clock of every conversation's own initiative: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's look is the heartbeat
-// run (heartbeat/look.ts; the daily brief is a skill it delegates); a group's or a friend's look goes through the gate.
+// The clock of every conversation's own initiative: every tick, each conversation whose next look has come may be woken (wake.ts). The look is the heartbeat run
+// (heartbeat/look.ts; the daily brief is a skill it delegates), the same for the owner, every group and every friend, each with its own approver: a question goes to the chat that triggered it.
 const wakeups = createWakeups({
   pipeline,
   groupChats: messenger.capabilities.groups,
   vouch,
-  runProfile: (profile, prompt, extra) => runProfile(profile, prompt, approveBackground, extra),
+  run: (conv, payer, prompt, extra) => runHeartbeat(conv, payer, prompt, approveIn(conv.key, { background: true }), extra),
   compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactConversation(conv, "quiet") },
-});
-
-// The friends' mail (TENANTS=on, the `google` and `mail` capabilities, a connected account): the heartbeat's own mail check and handler, once per friend, in her folder and her chat.
-const tenantMail = createTenantMailLoops({
-  notify: async (id, text) => {
-    const to = targetOf(id);
-    if (to) await out.reply(text, { plain: true, kind: "notice", target: to });
-  },
 });
 
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the
@@ -244,7 +232,6 @@ startHeartbeat({
     startJobs({
       wake: () => wakeups.tick(),
       dream: () => dreamAtItsHour(), // the first tick at or after DREAM_HOUR; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
-      tenantMail: () => tenantMail.tick(), // each friend's own mail check, triage and handler (mailloops.ts): with her Google
     });
   },
 });

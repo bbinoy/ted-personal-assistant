@@ -1,5 +1,4 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
-import { triageEntryFor } from "../digest.ts";
 import { createBrowseServer } from "./browse/browse.ts";
 import { browseStatus, browserServer } from "./browse/browseserver.ts";
 import { readConnectors } from "../connectors.ts";
@@ -7,15 +6,17 @@ import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "../dreamscope.ts";
 import { googleHub, googleProxy, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
 import { notionHub, notionProxy } from "./notion/notionmcp.ts";
-import { GmailMail, gmailReaders } from "../gmail.ts";
+import { gmailReaders, putBackInInbox } from "../gmail.ts";
 import { createIntakeServer } from "../intake/intaketools.ts";
 import { Mailbird } from "../mailbird.ts";
 import { createMemoryServer } from "../memory-tools.ts";
 import { recordMemoryChange } from "../memorynotice.ts";
-import { createProposer } from "../propose.ts";
+import { viewDraft } from "../proposals.ts";
 import { LIMITS } from "../sanitize.ts";
 import { createSendServer } from "./send/send.ts";
+import { OWNER_KEY } from "../ownerkey.ts";
 import { createStatusServer } from "../statusnote.ts";
+import { createSeenMailServer } from "../seenmail.ts";
 import { settings } from "../settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
 import { createVoiceServer } from "./voice/voicetool.ts";
@@ -29,19 +30,20 @@ import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types
 
 // The code the tool modules wrap, bound to them by name. The declarations (this folder's other files) are read by nearly everything, so they import nothing
 // of the application; what they start, and the mail clients they talk to, is here, and only the places that start things import this file: agentrun.ts
-// (the run's servers), main.ts, heartbeat.ts and cli.ts (the mail client), doctor.ts (the checks).
+// (the run's servers), main.ts and cli.ts (the mail client), doctor.ts (the checks).
 
 // ---- the MCP servers ----
 
 // By the `name` of a module's in-process or external connection. The module says WHEN a run has the server (`when`); this builds it.
 export const SERVERS: Readonly<Record<string, ServerFactory>> = {
-  send: (ctx) => createSendServer(ctx.key!),
+  send: (ctx) => createSendServer(ctx.key ?? OWNER_KEY), // (no key: the owner's heartbeat run, policy source "background", the only unattended run with a conversation of its own on the login)
   weather: () => createWeatherServer(),
   draw: (ctx) => createDrawServer(ctx.key!),
   voice: (ctx) => createVoiceServer(ctx.key!),
   memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
   status: () => createStatusServer(),
-  browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.memory?.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
+  seenmail: (ctx) => createSeenMailServer(ctx.seenMail!),
+  browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: (ctx) => {
     const status = browseStatus();
@@ -102,42 +104,27 @@ export function serversFor(ctx: RunContext): Record<string, McpServerConfig> {
 
 // ---- the mail providers ----
 
-const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-
-// `npm run restore <id>` for Mailbird: an archived conversation back in the inbox. The audit id may be a different conversation id than the one Mailbird knows
-// now, so the ids the triage row recorded are tried, and last the archive is searched by subject. Returns the exit code.
+// `npm run restore <id>` for Mailbird: an archived conversation back in the inbox. The id is the one in the audit log (`npm run report` lists it), which is the id the archive
+// call named; Mailbird may have given the conversation another id since, in which case the archive has to be searched by subject by hand. Returns the exit code.
 async function restoreMailbird(id: string): Promise<number> {
   const client = new Mailbird();
-  await client.connect();
-  const entry = triageEntryFor(id);
-  const candidates = [id, ...(String(entry?.meta?.result ?? "").match(UUID) ?? []).filter((u: string) => u !== id)];
-  for (const c of candidates) {
-    try {
-      await client.call("move_conversation_to_inbox", { conversationId: c });
-      console.log(`Restored to the inbox (conversation ${c}).`);
-      return 0;
-    } catch {
-      /* try the next candidate */
-    }
+  try {
+    await client.connect();
+    await client.call("move_conversation_to_inbox", { conversationId: id });
+    console.log(`Restored to the inbox (conversation ${id}).`);
+    return 0;
+  } catch (e) {
+    console.error(`Could not restore it (${(e as Error).message.slice(0, LIMITS.reason)}). Find it in Mailbird's archive by subject.`);
+    return 1;
+  } finally {
+    await client.close().catch(() => {});
   }
-  // Last resort: find it in the archive by subject.
-  if (entry?.meta?.subject) {
-    const hits = await client.call<{ conversationId: string; subject: string }[]>("search_conversations", { query: `subject:"${entry.meta.subject.replace(/"/g, "")}"`, limit: 5 });
-    const hit = Array.isArray(hits) ? hits.find((h) => h.subject === entry.meta!.subject) : undefined;
-    if (hit) {
-      await client.call("move_conversation_to_inbox", { conversationId: hit.conversationId });
-      console.log(`Restored via subject search (conversation ${hit.conversationId}).`);
-      return 0;
-    }
-  }
-  console.error("Could not restore it automatically. Find it in Mailbird's archive by subject.");
-  return 1;
 }
 
-// The mail check. Reachable means the local server answers and lists its inboxes.
+// The doctor's Mailbird check. Reachable means the local server answers and lists its accounts.
 export async function mailbirdCheck(line: DoctorLine, connect: () => Promise<number>): Promise<void> {
   try {
-    line(true, "Mailbird MCP reachable", `${await connect()} inbox(es)`);
+    line(true, "Mailbird MCP reachable", `${await connect()} account(s)`);
   } catch (e) {
     line(false, "Mailbird MCP reachable", (e as Error).message.slice(0, LIMITS.reason));
   }
@@ -154,40 +141,32 @@ export function gmailChecks(line: DoctorLine, o: { self: string | undefined; con
 // By the name of the mail module (the value of MAIL_PROVIDER).
 export const MAIL: Readonly<Record<string, MailRuntime>> = {
   mailbird: {
-    source: () => new Mailbird(),
     restore: restoreMailbird,
-    // Mailbird's connection for reply drafts: the handler's drafts are shown on the phone (propose.ts), and the approval of any send shows the draft read back from here.
-    start: (io) => {
-      const proposer = createProposer({ mail: new Mailbird(), send: (t) => io.reply(t) });
-      setDraftReader((id) => proposer.read(id));
-      return { propose: proposer.show };
+    // The approval of any send shows the draft read back from Mailbird (get_message), over a connection of its own.
+    start: () => {
+      const client = new Mailbird();
+      setDraftReader(async (id) => viewDraft(await client.call("get_message", { messageId: id })));
     },
     check: (line) =>
       mailbirdCheck(line, async () => {
         const client = new Mailbird();
         try {
           await client.connect();
-          return (await client.inboxes()).length;
+          return (await client.call<unknown[]>("list_accounts")).length;
         } finally {
           await client.close().catch(() => {});
         }
       }),
   },
   gmail: {
-    source: () => new GmailMail(),
     // Gmail: an archive is only the INBOX label removed, so undoing it is adding INBOX back to the thread (the audit id is the thread id).
     restore: async (id) => {
-      await new GmailMail().call("move_conversation_to_inbox", { conversationId: id });
+      await putBackInInbox(id);
       console.log(`Put back in the inbox (thread ${id}).`);
       return 0;
     },
     // The approval of a send reads the draft (or the message being replied to) back through the connector (gmail.ts).
-    start: (io) => {
-      const readers = gmailReaders();
-      setGmailReaders(readers);
-      // The handler's reply drafts are shown on the phone like Mailbird's, read back through the connector (the same read the approval of their send uses).
-      return { propose: createProposer({ read: (id) => readers.draft(String(id)), send: (t) => io.reply(t) }).show };
-    },
+    start: () => setGmailReaders(gmailReaders()),
     check: (line) => gmailChecks(line, { self: settings.mailSelfAddress, connector: readConnectors()?.gmail, briefEmail: settings.briefEmail }),
   },
 };

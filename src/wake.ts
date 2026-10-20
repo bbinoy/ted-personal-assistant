@@ -1,88 +1,50 @@
-import { audit, type Source } from "./audit.ts";
-import { inQuietHours } from "./actions.ts";
 import { budgetSpent } from "./budget.ts";
-import { askGate, idleFingerprint, logTail, NOTHING, notesText, type Gate } from "./gate.ts";
-import { lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";
-import { createHeartbeatLook } from "./heartbeat/look.ts";
-import { groupContext, listGroups } from "./groupstore.ts";
-import { realRunner, type PromptBuilder, type Runner } from "./group.ts";
-import { wakePrompt } from "./wakeprompt.ts";
+import { lookState, notesChangedAt, type LookState } from "./ledger.ts";
+import { createHeartbeatLook, type HeartbeatDeps } from "./heartbeat/look.ts";
+import { listGroups } from "./groupstore.ts";
 import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
 import { allows } from "./policy/capabilities.ts";
 import { isRefusal, mayRun, type Payer, type Refusal } from "./payer.ts";
-import { onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
-import { namesTimeInQuietHours } from "./notetimes.ts";
 import { isPaused } from "./pause.ts";
-import type { OwnerProfile } from "./profiles.ts";
 import { listTenants } from "./tenants/tenants.ts";
 import { settings } from "./settings.ts";
-import { LIMITS } from "./sanitize.ts";
-import type { RunProvenance } from "./approvals/autojudge.ts";
-import { derivedTurn } from "./approvals/turnscope.ts";
 
-// The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant
-// (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look):
-//   the owner  the HEARTBEAT RUN (heartbeat/look.ts): one Haiku run that looks at the chat, mail, calendar and tasks, acts through the normal floor, judge and phone,
-//              and answers with a message or [[silent]] and its next look (10..120 minutes). Code keeps pause, mayRun and the clamp (the daily brief is a skill the run delegates, not a schedule).
-//   a group    the gate (gate.ts: Haiku, no tools) is asked whether to do something unprompted; if it says act, the group run (src/agent.ts runConversation) does it with the
-//              gate's instructions: its own notes and web search, nothing of the owner's; the answer goes out through the shared pipeline (it may be [[silent]])
-//   a tenant   the same gate and run on the instance key, with HER notes, session and cost file, her approvals in her chat, an answer to her chat only.
-//              She is looked in on only with the capabilities `heartbeat` and `wake` (a friend has the first, not the second), while she is active, the key is out of a
-//              cooldown and she is within her day's budget; the gate's own call is billed to her the same way
-// Every model call of a look, a preset, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her
-// own budget and the shared key) and runs on the Payer it returns: no per-conversation branches here.
-// The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the
-// owner's once-a-day notice; a tenant's own day is her access, tenantrun.ts), quiet hours of a friend's private chat, the gate's next look clamped to 15..60 minutes (the owner's run: 10..120),
-// and a failed run is logged and silent. A gate that fails or says something odd means do nothing.
+// The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
+// whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
+// (heartbeat/look.ts). It is one Haiku run with the conversation's own persona, notes, tools and approver; it looks at the chat log and whatever the conversation can read
+// (mail, calendar, tasks), acts through the normal floor, judge and phone, and answers with a message or [[silent]] and its next look (10..120 minutes). Which tools and
+// skills it has, whether it may call the expert and whether there is anything to look at at all is the conversation's capability set (capabilities.ts), not its kind.
+//   a tenant  is looked in on only with the capabilities `heartbeat` and `wake` (a friend has the first, not the second), while she is active, the key is out of a cooldown and
+//             she is within her day's budget; the run is on the instance key, billed to her, her approvals go to her chat and the answer to her chat only
+// Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her own budget and the shared
+// key) and runs on the Payer it returns: no per-conversation branches here.
+// The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the owner's once-a-day notice; a tenant's own day is her access,
+// tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours are the instruction's words, not a rule here.
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "canSpeak">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile">;
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
-  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance; onDelegate?: (agent: string) => void }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // the owner's runs by profile (agent.ts runProfile): the heartbeat run and the brief
+  run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runHeartbeat, with that conversation's approver)
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
-  runGroup?: Runner; // a group's or a tenant's run
-  gate?: Gate;
   groups?: () => string[]; // known group ids
   key?: () => string | undefined; // where the instance key comes from for a friend's unattended work (default settings.tenantApiKey; tests)
   tenantIds?: () => string[]; // active tenants (default: the registry)
-  context?: typeof groupContext;
   notesChangedAt?: (dir: string) => number;
   now?: () => Date;
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
 }
 
-const outcome = (res: { error?: unknown; spoke: boolean }): "posted" | "silent" | "failed" => (res.error ? "failed" : res.spoke ? "posted" : "silent");
-
-const source = (conv: Conversation): Source => (onLogin(conv) ? "background" : "group");
-
 export function createWakeups(deps: WakeDeps) {
   const { pipeline } = deps;
   const clock = deps.now ?? (() => new Date());
-  const gate = deps.gate ?? askGate;
   const paused = deps.guards?.paused ?? isPaused;
   const spent = deps.guards?.budgetSpent ?? budgetSpent;
   const changed = deps.notesChangedAt ?? notesChangedAt;
   // May this conversation's unattended work run now, and on whom? (payer.ts: the pause switch, the usage-limit cooldown, the day's budget, a friend's own budget and the key.)
   const may = (conv: Conversation, what: string): Payer | Refusal => mayRun(conv, what, { key: deps.key, paused: () => paused(clock()), spent });
   const why = (r: Refusal): string => (r.refused === "cooldown" ? "cooldown" : r.refused === "paused" ? "guarded" : "blocked");
-
-  // A group's or a friend's run, from the gate's instructions (the owner's initiative is the heartbeat run, heartbeat/look.ts).
-  async function act(conv: Conversation, instructions: string, now: Date, payer: Payer): Promise<"posted" | "silent" | "failed"> {
-    const speak = pipeline.canSpeak() && allows(conv, "voice");
-    return pipeline.enqueue(conv, async () => {
-      // Her session already holds her chat; the prompt carries the tail of her log, like the owner's. A group's is what its members wrote since the session last saw.
-      const build: PromptBuilder = conv.tenantId
-        ? () => ({ prompt: wakePrompt({ who: speakerOf(conv), where: "chat", now, instructions, lines: logTail(conv, 20), speak }) })
-        : (since) => {
-            const { lines, seenAt } = (deps.context ?? groupContext)(conv.groupId!, since);
-            return { prompt: wakePrompt({ who: "", where: "group", now, instructions, lines, resumed: !!since, speak }), seenAt };
-          };
-      const run = async () => ({ text: await derivedTurn(conv.key, "gate", instructions, () => (deps.runGroup ?? realRunner)(build, { conv, now, apiKey: payer.kind === "instance" ? payer.apiKey : undefined })) }); // the gate wrote the task: derived, for the approval judge
-      return outcome(await pipeline.runTurn(conv, { run, background: true, announce: false, kind: "chat" }));
-    });
-  }
 
   // Background jobs of the clock side (a conversation's quiet compaction): one per key at a time; `idle()` lets a test (or a shutdown) wait for them.
   const running = new Map<string, Promise<string>>();
@@ -116,64 +78,12 @@ export function createWakeups(deps: WakeDeps) {
     return st;
   }
 
-  // The last quiet decision per conversation (in memory: a restart asks the model once more): what the model was shown, as a
-  // fingerprint (gate.ts idleFingerprint), and the next look it chose. An unchanged fingerprint repeats that decision without a call.
-  const quietLooks = new Map<string, { print: string; nextCheckMinutes: number }>();
-  const heartbeat = createHeartbeatLook({ pipeline, runProfile: deps.runProfile, may, why, notesChangedAt: changed });
+  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed });
 
   // One conversation, one look. Returns what happened (for the log and tests).
   async function look(conv: Conversation, now: Date): Promise<string> {
-    const st = stateOf(conv);
-    if (!allows(conv, "heartbeat") || !allows(conv, "wake")) return "not-allowed"; // a tenant's record decides; nothing for her without both
-    if (onLogin(conv)) return heartbeat.look(conv, st, now); // the owner: the heartbeat run, which has its own guards and no quiet-hours rule in code
-    const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour);
-    if (conv.direct && night) return "quiet-hours"; // a friend's private chat
-    const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
-    if (!lookDue(st, now, { notesChangedMs: changed(conv.notesDir), messagesCount: !tagged })) return "not-due";
-
-    // A group has no quiet hours of its own, but its clock look is held back at night too unless its notes name a time inside
-    // the quiet window (a schedule at 06:30 still gets its look). The notes are read once for the whole look.
-    const notes = notesText(conv, now);
-    if (!conv.direct && night && !namesTimeInQuietHours(notes, settings.quietStartHour, settings.quietEndHour)) return "quiet-hours";
-
-    // A look is a model call on someone's account (a friend's: the instance key, billed to her): paused, in a cooldown, past the budget or no key set means no model call,
-    // nothing recorded, and the next tick looks again.
-    const access = may(conv, `${conv.kind} look`);
-    if (isRefusal(access)) return why(access);
-
-    // Nothing relevant changed since the model last found nothing to do: its answer would be the same, so keep that look time.
-    const tail = logTail(conv);
-    const print = idleFingerprint({ conv, now, tail }, "", notes);
-    const quiet = quietLooks.get(conv.key);
-    if (quiet && quiet.print === print) {
-      recordWake(pipeline, conv, quiet.nextCheckMinutes, now);
-      return "idle";
-    }
-    quietLooks.delete(conv.key);
-
-    let out = NOTHING;
-    let answered = false;
-    try {
-      out = await gate({ conv, trigger: "clock", now, tail, notes, payer: access });
-      answered = true;
-    } catch (e) {
-      console.error(`wake: gate failed (${conv.kind}):`, (e as Error).message); // fail closed; the default delay stops a retry on every tick
-    }
-    // Written BEFORE acting: a crash in the run must not mean a retry on every tick.
-    recordWake(pipeline, conv, out.nextCheckMinutes, now);
-    if (!out.act) {
-      if (answered) quietLooks.set(conv.key, { print, nextCheckMinutes: out.nextCheckMinutes }); // only a real answer counts as a quiet decision
-      return "no";
-    }
-    const instructions = out.instructions?.trim();
-    if (!instructions) return "no-instructions"; // a free-form look must say what to do
-    const again = may(conv, `${conv.kind} run`); // re-checked: the gate call itself took time and money (hers too)
-    if (isRefusal(again)) return "guarded";
-    const result = await act(conv, instructions, now, again).catch((e) => (console.error(`wake: ${conv.kind} run failed:`, (e as Error).message), "failed" as const));
-    pipeline.record(conv, "action", Date.now(), `wake-up: ${instructions.slice(0, LIMITS.preview)} → ${result === "posted" ? "posted" : result === "silent" ? "stayed silent" : "failed"}`);
-    audit("wake", result, source(conv));
-    recordWake(pipeline, conv, out.nextCheckMinutes, now); // after the act: notes it wrote are not news
-    return result;
+    if (!allows(conv, "heartbeat") || !allows(conv, "wake")) return "not-allowed"; // its capability set decides (a tenant's record); nothing for it without both
+    return heartbeat.look(conv, stateOf(conv), now);
   }
 
   // Every conversation looks on its own: a slow brief or a failing group never delays another conversation.

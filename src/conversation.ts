@@ -147,7 +147,7 @@ export function createPipeline(deps: PipelineDeps) {
   // Target and quote: a threaded quote under the conversation's rule, a reaction on the message being answered. The sanitiser runs in
   // out.reply / out.sendPicture; [[silent]] sends nothing; logging is out's. `more`: the turn goes on, so "typing…" resumes (a send clears it on the phone).
   function delivery(conv: Conversation, t: Pick<Turn, "target" | "threadUnder" | "hadQuote" | "reaction" | "kind"> & { started: number }) {
-    const state = { spoke: false, reacted: false };
+    const state = { spoke: false, reacted: false, pieces: 0 }; // pieces: what was really delivered, one per send
     const quote = () => (t.threadUnder && (conv.threadAlways || shouldThread(!!t.hadQuote, now() - t.started)) ? t.threadUnder : undefined);
     async function send(c: Content, more: boolean): Promise<string> {
       let told: string;
@@ -157,11 +157,13 @@ export function createPipeline(deps: PipelineDeps) {
         if (!caps.reactions) return "Reactions are not available here.";
         reactTo(conv, c.emoji, t.target);
         state.reacted = true;
+        state.pieces++;
         told = "Reacted.";
       } else if (c.kind === "picture") {
         const caption = c.caption.trim();
         await out.sendPicture(c.file, SILENT.test(caption) ? "" : caption, { kind: t.kind ?? "chat", quote: quote(), target: conv.target });
         state.spoke = true;
+        state.pieces++;
         console.log(`${conv.kind} picture sent (${c.id}, ${c.size} bytes)`);
         told = `Sent ${c.id} as a picture.`;
       } else {
@@ -175,12 +177,14 @@ export function createPipeline(deps: PipelineDeps) {
         if (speakable && !foreign) speechFailed = !(spoken = await speak(conv, words));
         if (spoken) {
           state.spoke = true;
+          state.pieces++;
           told = "Sent as a voice note.";
         } else if (!words) {
           return "Nothing to send.";
         } else {
           await out.reply(speechFailed ? `${words}\n\n${VOICE_FAILED_NOTE}` : words, { kind: t.kind ?? "chat", quote: quote(), target: conv.target }); // the model may have announced a voice message
           state.spoke = true;
+          state.pieces++;
           told = "Sent.";
         }
         console.log(`${conv.kind} ${spoken ? "voice note" : "text"} sent (${words.length} chars)`);
@@ -235,6 +239,18 @@ export function createPipeline(deps: PipelineDeps) {
     if (now() - (lastNotice.get(conv.key) ?? 0) < conv.noticeEveryMs) return false;
     lastNotice.set(conv.key, now());
     return out.reply(conv.notice(e), { quote: conv.groupId ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
+  }
+
+  // An unattended run that may speak while it works (the heartbeat run and its expert): the SAME send tool as a chat turn, delivered by the same function as the final reply, as a
+  // notice in the conversation the run belongs to. It takes no place in the queue (the run may wait on an approval); `onSend` counts each piece delivered.
+  async function sendWhile<T>(conv: Conversation, run: () => Promise<T>, onSend?: () => void): Promise<T> {
+    const d = delivery(conv, { kind: "notice", started: now() });
+    return withSend(conv.key, async (c) => {
+      const before = d.state.pieces;
+      const told = await d.send(c, false);
+      if (d.state.pieces > before) onSend?.();
+      return told;
+    }, run);
   }
 
   // One run for one conversation: typing, the model, the reply, or a notice if it failed. Call it inside
@@ -539,7 +555,7 @@ export function createPipeline(deps: PipelineDeps) {
   }
 
   // `react`: a quick reaction of our own, no run needed (the gate chose it).
-  return { handleIncoming, enqueue, burst, burstQueued, wait, holdTyping, runTurn, record, canSpeak, react: reactTo, warn, dropPending };
+  return { handleIncoming, enqueue, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
 }
 
 export type Pipeline = ReturnType<typeof createPipeline>;

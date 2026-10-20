@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Conversation } from "../src/conversation.ts";
-import { NOTHING } from "../src/gate.ts";
 import { createWakeups } from "../src/wake.ts";
 
 const T0 = new Date("2026-10-12T12:00:00Z");
@@ -11,11 +10,10 @@ test("wake: a grown, quiet conversation is compacted from the tick inside its qu
   const events: string[] = [];
   const mk = (guards: { paused: boolean; spent: boolean }, due: () => boolean) =>
     createWakeups({
-      pipeline: { canSpeak: () => false, enqueue: async (c: Conversation, job: () => Promise<unknown>) => (events.push(`queued:${c.kind}`), job()), record: () => {}, runTurn: async () => ({ spoke: false }) } as any,
+      pipeline: { canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (c: Conversation, job: () => Promise<unknown>) => (events.push(`queued:${c.kind}`), job()), record: () => {}, runTurn: async () => ({ spoke: false }) } as any,
       groupChats: true,
       vouch: async () => true,
-      runProfile: async () => ({ text: "" }),
-      gate: async () => NOTHING, // never the real model
+      run: async () => ({ text: "" }),
       groups: () => [G],
       compact: { due, run: async (c: Conversation) => void events.push(`compact:${c.kind}`) },
       notesChangedAt: () => 0,

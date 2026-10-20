@@ -31,7 +31,7 @@ import { dataPath, readJson, readText } from "./state.ts";
 
 type Line = DoctorLine;
 
-// The mail check. MAIL_PROVIDER=none is a valid setup, not a failure: nothing is connected and nothing is expected. Otherwise it is the mail provider's own
+// The mail provider check. MAIL_PROVIDER=none is a valid setup, not a failure: nothing is connected and nothing is expected. Otherwise it is the mail provider's own
 // checks (its module, src/modules: Mailbird reachable; for Gmail the own address, the connector, the archive mode).
 export async function mailCheck(line: Line, mail: boolean, check: MailRuntime["check"] | undefined = mailRuntime()?.check): Promise<void> {
   if (!mail) return line(true, "mail: off", "MAIL_PROVIDER=none, chat only");
@@ -295,7 +295,7 @@ export async function doctor() {
     "heartbeat is ticking",
     heartbeatDetail(beat, ageMin, readRows().at(-1)?.at, localTime),
   );
-  line(true, "heartbeat run", `the owner's look at chat, mail and calendar on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
+  line(true, "heartbeat run", `every conversation's look (owner, groups, friends with wake) at its chat and what it can read, on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
 
   const spent = spentToday();
   line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)`);

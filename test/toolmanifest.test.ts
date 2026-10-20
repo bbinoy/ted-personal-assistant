@@ -74,7 +74,7 @@ test("manifest: which tools run free and which are judged, tool by tool; the sam
   }
   // no per-source table: the web tools and the browse entry exist in every run, the ones that need a conversation or a notes folder only there
   for (const source of SOURCES) for (const t of ["WebSearch", "WebFetch", "mcp__browse__browse", `${MB}archive_conversation`, `${CAL}update_event`]) assert.ok(availableFor(t, source), `${t} (${source})`);
-  assert.deepEqual(SOURCES.filter((s) => availableFor("mcp__send__send", s)), ["chat", "group"]);
+  assert.deepEqual(SOURCES.filter((s) => availableFor("mcp__send__send", s)), ["chat", "group", "background"]);
   assert.deepEqual(SOURCES.filter((s) => availableFor("mcp__draw__draw", s)), ["chat", "group"]);
 });
 

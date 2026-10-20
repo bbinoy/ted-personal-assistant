@@ -15,7 +15,7 @@ follow those, don't restate them here. If the connection is broken
 ## Inbox sweep (the daily brief run)
 
 Run this across every account (`list_accounts` -> each Inbox). The agent's
-heartbeat already triages new mail all day, so this sweep covers what is
+heartbeat run already works through new mail all day, so this sweep covers what is
 still in the inbox, plus the owner-facing parts (waiting-on, commitments,
 radar).
 
@@ -103,7 +103,7 @@ This covers sales pitches, agency / recruiter / SEO / "quick call?"
 emails, partnership feelers, and investor or vendor cold intros from
 people the owner has no relationship with. A message from a real contact,
 or a genuine warm intro (someone they know put them in touch), is not cold
-outreach and is triaged normally.
+outreach and is handled normally.
 
 ### Newsletter radar (skim a few before archiving)
 
@@ -152,13 +152,11 @@ exists). Every deadline is a task; there is no separate list.
 
 This skill is run unattended by the agent, in two ways:
 
-- **Heartbeat, every 15 min (not at night):** a small model triages *new*
-  mail in one batch (act now / assistant can handle / read later / archive).
-  Clear noise is archived; mail that needs the owner goes to their phone as
-  one Signal message; routine mail the assistant can deal with goes to a
-  handler that drafts replies. The classifier archives by intent (only what leaves
-  nothing to do) and keeps anything open; the rules are in `src/triage.ts`.
-- **Daily brief, once per day** on the first heartbeat after the start hour:
+- **Heartbeat run, about every 30 min (in the day; the model chooses the next look):** one
+  run looks at the chat, the new mail and the calendar. It archives clear noise, drafts routine
+  replies, and tells the owner on their phone only what is worth interrupting for. Everything
+  that sends, shares or spends still asks the owner.
+- **Daily brief, once per day**, delegated by the heartbeat run at the usual time:
   the `ted-personal-assistant:daily-brief` skill sweeps what is left, then delivers one brief by
   email and Signal.
 

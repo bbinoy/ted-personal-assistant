@@ -1,11 +1,10 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/approvals/turnscope.ts";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// The loops over every conversation (wake.ts, dream.ts): a tenant with the capabilities is looked in on by the gate, woken and dreamt like the
+// The loops over every conversation (wake.ts, dream.ts): a tenant with the capabilities is looked in on by the heartbeat run and dreamt like the
 // owner and a group, on the instance key, with HER notes, log, session and cost file, her approvals and her chat only; one without them gets nothing;
 // a suspended, cooling-down, over-budget or key-less one gets no model call; one tenant's failure leaves the others and the owner alone.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenant-loops-"));
@@ -15,9 +14,8 @@ const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { createWakeups } = await import("../src/wake.ts");
 const { createDreamer } = await import("../src/dream.ts");
-const { createTenantRunner } = await import("../src/tenants/tenantrun.ts");
 const { keyNotices } = await import("../src/tenants/keynotice.ts");
-const { askGateWith, gateSystem, parseGate } = await import("../src/gate.ts");
+const { askGateWith } = await import("../src/gate.ts");
 const { owner, tenant } = await import("../src/conversation.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
 const { onLogin } = await import("../src/conversationmodel.ts");
@@ -55,18 +53,20 @@ function person(name: string, extra: (typeof T.CAPABILITIES)[number][] = ["wake"
 }
 const said = (rec: { id: string }, text: string, at = NOON, kind: Kind = "owner") => recordMessage(kind, at.getTime() + ++n, text, at, T.tenantContext(T.tenantById(rec.id)!).logFile);
 
-function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversation.ts").Conversation) => unknown; run?: (c: import("../src/conversation.ts").Conversation) => string; ids?: string[]; now?: Date } = {}) {
+const note = (rec: { id: string }, text = "Remind her about her sister's birthday on Friday.") => writeFileSync(join(T.tenantContext(T.tenantById(rec.id)!).notesDir, "scheduling-birthday.md"), text); // something for her look to look at
+
+type Conv = import("../src/conversation.ts").Conversation;
+function rig(o: { key?: string | undefined; answer?: (c: Conv) => { message?: string; nextCheckMinutes?: number } | "throw"; ids?: string[]; now?: Date } = {}) {
   const alerts: string[] = [];
-  const runner = createTenantRunner({ apiKey: () => ("key" in o ? o.key : KEY) });
   keyNotices.reset(); // (one notice for the owner about the shared key, whatever the run: keynotice.ts)
   keyNotices.sendTo((t) => void alerts.push(t));
-  const seen = { provenance: [] as unknown[], gates: [] as { conv: import("../src/conversation.ts").Conversation; tenant?: unknown; tail: readonly string[] }[], runs: [] as { conv: import("../src/conversation.ts").Conversation; apiKey?: string; prompt: string }[], sent: [] as { conv: import("../src/conversation.ts").Conversation; text: string }[], profiles: [] as string[] };
+  const seen = { provenance: [] as unknown[], runs: [] as { conv: Conv; payer: unknown; prompt: string }[], sent: [] as { conv: Conv; text: string }[] };
   const now = o.now ?? NOON;
   const pipeline = {
-    canSpeak: () => false,
+    canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(),
     enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(),
-    record: (conv: import("../src/conversation.ts").Conversation, kind: Kind, ts: number, text: string) => recordMessage(kind, ts, text, now, conv.logFile),
-    runTurn: async (conv: import("../src/conversation.ts").Conversation, turn: { run: (h: unknown) => Promise<{ text: string }> }) => {
+    record: (conv: Conv, kind: Kind, ts: number, text: string) => recordMessage(kind, ts, text, now, conv.logFile),
+    runTurn: async (conv: Conv, turn: { run: (h: unknown) => Promise<{ text: string }> }) => {
       try {
         const { text } = await turn.run({ firstOutput() {} });
         if (text.trim() !== "[[silent]]") seen.sent.push({ conv, text });
@@ -80,15 +80,12 @@ function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversati
     pipeline: pipeline as never,
     groupChats: true,
     vouch: async () => true,
-    runProfile: async (profile) => (seen.profiles.push(profile), { text: "owner ran" }),
-    runGroup: async (build, ctx) => {
-      seen.runs.push({ conv: ctx.conv, apiKey: ctx.apiKey, prompt: build().prompt });
-      seen.provenance.push(scopeOf(ctx.conv.key).read());
-      return (o.run ?? (() => "Good morning! A reminder from me."))(ctx.conv);
-    },
-    gate: async (input) => {
-      seen.gates.push({ conv: input.conv, tenant: input.payer, tail: input.tail });
-      return parseGate(input.conv.tenantId ? (o.gate ?? (() => ({ act: true, instructions: "Remind her about her sister's birthday", nextCheckMinutes: 30 })))(input.conv) : { act: false, nextCheckMinutes: 30 });
+    run: async (conv, payer, prompt, extra) => {
+      seen.runs.push({ conv, payer, prompt });
+      seen.provenance.push(extra.provenance);
+      const a = o.answer?.(conv) ?? { message: "Good morning! A reminder from me." };
+      if (a === "throw") throw new Error("run crashed");
+      return { text: "", costUsd: 0.01, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30 } };
     },
     groups: () => [],
     key: () => ("key" in o ? o.key : KEY),
@@ -97,33 +94,30 @@ function rig(o: { key?: string | undefined; gate?: (c: import("../src/conversati
     now: () => now,
     guards: { paused: () => false, budgetSpent: () => false },
   });
-  return { wakeups, seen, alerts, runner };
+  return { wakeups, seen, alerts };
 }
-const tenantGates = (r: ReturnType<typeof rig>) => r.seen.gates.filter((g) => g.conv.tenantId).map((g) => g.conv.tenantId);
+const tenantRuns = (r: ReturnType<typeof rig>) => r.seen.runs.filter((x) => x.conv.tenantId).map((x) => x.conv.tenantId);
 
-test("a tenant with heartbeat and wake gets the gate's look and a wake-up, on the instance key, with her log and her chat only", async () => {
+test("a tenant with heartbeat and wake gets the heartbeat run, on the instance key, with her log and her chat only", async () => {
   const anna = person("Anna");
   const other = person("Bo", []); // the friend defaults: no wake
+  note(anna);
+  note(other, "Bo is a secret");
   said(anna, "remind me about my sister's birthday on Friday");
   said(other, "I am a secret of Bo");
   const r = rig();
   await r.wakeups.tick(NOON);
-  assert.deepEqual(tenantGates(r), [anna.id], "the look: only hers; Bo has no wake");
-  const g = r.seen.gates.find((x) => x.conv.tenantId === anna.id)!;
-  assert.deepEqual(g.tenant, { kind: "instance", id: anna.id, apiKey: KEY, costFile: T.tenantContext(anna).costFile });
-  assert.ok(g.tail.some((l) => /Anna: remind me about my sister's birthday/.test(l)), "her words, under her name");
-  assert.ok(!g.tail.join("\n").includes("secret of Bo"));
-  assert.equal(r.seen.runs.length, 1);
-  assert.equal(r.seen.runs[0]!.conv.tenantId, anna.id, "the run is hers, in her conversation (her notes, session and approvals)");
-  assert.equal(r.seen.runs[0]!.apiKey, KEY);
-  assert.deepEqual(r.seen.provenance, [{ kind: "derived", by: "gate", of: "member", text: "Remind her about her sister's birthday" }], "the gate wrote the task: the judge is told it is derived, so it can decide (no question for every call)");
-  assert.match(r.seen.runs[0]!.prompt, /Remind her about her sister's birthday/);
-  assert.match(r.seen.runs[0]!.prompt, /Anna: remind me about my sister's birthday/);
-  assert.doesNotMatch(r.seen.runs[0]!.prompt, /secret of Bo/);
-  assert.deepEqual(r.seen.sent.map((s) => [s.conv.tenantId, s.conv.target]), [[anna.id, `to:${anna.acis[0]}`]], "delivered to her chat only");
-  assert.ok(!r.seen.profiles.includes("background") && !r.seen.profiles.includes("brief"), "the owner's background run never runs for her (the owner's own look is the heartbeat run)");
-  assert.match(readFileSync(T.tenantContext(anna).logFile, "utf8"), /wake-up: Remind her/);
-  assert.doesNotMatch(readFileSync(T.tenantContext(other).logFile, "utf8"), /wake-up/);
+  assert.deepEqual(tenantRuns(r), [anna.id], "the look: only hers; Bo has no wake");
+  const run = r.seen.runs.find((x) => x.conv.tenantId === anna.id)!;
+  assert.deepEqual(run.payer, { kind: "instance", id: anna.id, apiKey: KEY, costFile: T.tenantContext(anna).costFile }, "billed to her, on the instance key");
+  assert.match(run.prompt, /Anna: remind me about my sister's birthday/, "her words, under her name");
+  assert.doesNotMatch(run.prompt, /secret of Bo/);
+  assert.match(run.prompt, /Anna's local time/);
+  assert.deepEqual(r.seen.provenance.slice(-1)[0] && (r.seen.provenance.slice(-1)[0] as { kind: string }).kind, "standing", "the fixed instruction, not anybody's words");
+  assert.deepEqual(r.seen.sent.filter((s) => s.conv.tenantId).map((s) => [s.conv.tenantId, s.conv.target]), [[anna.id, `to:${anna.acis[0]}`]], "delivered to her chat only");
+  assert.ok(r.seen.runs.some((x) => x.conv.kind === "owner"), "the owner's own look ran as well, the same way");
+  assert.match(readFileSync(T.tenantContext(anna).logFile, "utf8"), /"kind":"wake"/);
+  assert.doesNotMatch(readFileSync(T.tenantContext(other).logFile, "utf8"), /"kind":"wake"/);
 });
 
 test("without the capability, with TENANTS off, or while not active: no look at all", async () => {
@@ -132,30 +126,32 @@ test("without the capability, with TENANTS off, or while not active: no look at 
   T.revoke(noBeat.id, "heartbeat");
   const susp = person("Ed");
   T.setStatus(susp.id, "suspended");
+  for (const p of [noWake, noBeat, susp]) note(p);
   const r = rig();
   await r.wakeups.tick(NOON);
-  assert.ok(![noWake.id, noBeat.id, susp.id].some((id) => tenantGates(r).includes(id)));
+  assert.ok(![noWake.id, noBeat.id, susp.id].some((id) => tenantRuns(r).includes(id)));
   for (const id of [noWake.id, noBeat.id]) assert.equal(await r.wakeups.look(tenant(id), NOON), "not-allowed");
   const live = person("Flo");
   on.tenants = false;
   const off = rig();
   await off.wakeups.tick(NOON);
-  assert.deepEqual(tenantGates(off), [], "TENANTS=off: nothing of hers is touched");
+  assert.deepEqual(tenantRuns(off), [], "TENANTS=off: nothing of hers is touched");
   assert.equal(allows({ kind: "tenant", tenantId: susp.id }, "heartbeat"), false);
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "wake"), true);
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "mail"), false, "not granted");
   T.grant(live.id, "mail");
-  assert.equal(allows({ kind: "tenant", tenantId: live.id }, "mail"), false, "a connector is the owner's login's: granting it to a tenant changes nothing yet");
+  assert.equal(allows({ kind: "tenant", tenantId: live.id }, "mail"), false, "her mail is her own Google: granting mail alone changes nothing");
   assert.equal(onLogin(tenant(live.id)), false);
   assert.equal(onLogin(owner()), true);
 });
 
 test("a tenant's suspension, cooldown, budget and a missing instance key each stop her look before any model call", async () => {
   const anna = person("Anna2");
+  note(anna);
   const sus = rig();
   T.setStatus(anna.id, "suspended");
   await sus.wakeups.tick(NOON);
-  assert.deepEqual(tenantGates(sus), []);
+  assert.deepEqual(tenantRuns(sus), []);
   T.setStatus(anna.id, "active");
   noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN); // the KEY is cooling down: for every friend
   const cool = rig();
@@ -164,40 +160,61 @@ test("a tenant's suspension, cooldown, budget and a missing instance key each st
   recordCost(100, T.tenantContext(anna).costFile);
   const rich = rig();
   assert.equal(await rich.wakeups.look(tenant(anna.id), NOON), "blocked");
-  assert.equal(rich.seen.gates.length, 0, "no gate call");
-  // no instance key: no run, no gate call, one notice for the admin however many tenants and ticks
+  assert.equal(rich.seen.runs.length, 0, "no run");
+  // no instance key: no run, one notice for the admin however many tenants and ticks
   const bea = person("Bea");
+  note(bea);
   const nokey = rig({ key: undefined });
   await nokey.wakeups.tick(NOON);
   await nokey.wakeups.tick(NOON);
-  assert.deepEqual([nokey.seen.gates.filter((g) => g.conv.tenantId).length, nokey.seen.runs.length], [0, 0]);
+  assert.deepEqual(tenantRuns(nokey), []);
   assert.equal(nokey.alerts.length, 1);
   assert.match(nokey.alerts[0]!, /TENANT_ANTHROPIC_API_KEY/);
   assert.equal(allows({ kind: "tenant", tenantId: bea.id }, "wake"), true);
 });
 
-test("quiet hours apply to a tenant's private chat like the owner's", async () => {
+test("nothing to look at, no run: a friend without Google and without notes costs nothing; her own note opens the look", async () => {
+  const anna = person("Moe");
+  const empty = rig();
+  assert.equal(await empty.wakeups.look(tenant(anna.id), NOON), "nothing-to-look-at");
+  assert.deepEqual(empty.seen.runs, []);
+  assert.ok(!existsSync(T.tenantContext(anna).logFile) || !/"kind":"wake"/.test(readFileSync(T.tenantContext(anna).logFile, "utf8")), "nothing recorded: the next tick asks again");
+  note(anna);
+  const withNote = rig();
+  assert.equal(await withNote.wakeups.look(tenant(anna.id), NOON), "posted");
+  assert.equal(withNote.seen.runs.length, 1);
+});
+
+test("a tenant's night is the instruction's, not a rule in code: her look runs at night too, with her time zone in it", async () => {
   const anna = person("Anna3");
+  note(anna);
+  T.setTimeZone(anna.id, "Pacific/Auckland");
   const night = new Date(2026, 9, 14, 3, 0, 0);
-  const r = rig({ now: night });
-  assert.equal(await r.wakeups.look(tenant(anna.id), night), "quiet-hours");
-  assert.equal(r.seen.gates.length, 0);
+  const r = rig({ now: night, answer: () => ({}) });
+  assert.equal(await r.wakeups.look(tenant(anna.id), night), "silent");
+  assert.equal(r.seen.runs.length, 1);
+  assert.match(r.seen.runs[0]!.prompt, /\(Pacific\/Auckland\)/, "the clock line is hers");
+  assert.match(r.seen.runs[0]!.prompt, /Quiet hours \(night\) are 22:00-07:00, Anna3's local time/);
+  assert.match(r.seen.runs[0]!.prompt, /do nothing unprompted/, "no mail or calendar: she acts only on a note or a promise");
 });
 
 test("one tenant's failing look or run does not stop the others or the owner", async () => {
   const bad = person("Gus");
   const good = person("Hal");
-  const later = new Date(NOON.getTime() + 3 * 3600_000); // the owner's last look (an earlier test) has come due
-  const r = rig({ now: later, gate: (c) => { if (c.tenantId === bad.id) throw new Error("model down"); return { act: true, instructions: "say hi", nextCheckMinutes: 20 }; } });
-  await r.wakeups.tick(later);
-  assert.deepEqual(r.seen.sent.map((s) => s.conv.tenantId), [good.id]);
-  assert.ok(r.seen.profiles.includes("heartbeat"), "the owner was looked at as well (by her heartbeat run, not the gate)");
-  assert.ok(!r.seen.gates.some((g) => !g.conv.tenantId), "the owner has no gate");
-  const evening = new Date(NOON.getTime() + 6 * 3600_000);
-  const crash = rig({ now: evening, run: (c) => { if (c.tenantId === bad.id) throw new Error("run crashed"); return "hi"; }, ids: [bad.id, good.id] });
-  await crash.wakeups.tick(evening);
-  assert.deepEqual(crash.seen.sent.map((s) => s.conv.tenantId), [good.id]);
-  assert.match(readFileSync(T.tenantContext(bad).logFile, "utf8"), /→ failed/);
+  note(bad);
+  note(good);
+  const later = new Date(NOON.getTime() + 3 * 3600_000);
+  const r = rig({ now: later, answer: (c) => (c.tenantId === bad.id ? "throw" : { message: "say hi" }) });
+  const err = console.error;
+  console.error = () => {};
+  try {
+    await r.wakeups.tick(later);
+  } finally {
+    console.error = err;
+  }
+  assert.deepEqual(r.seen.sent.filter((s) => s.conv.tenantId).map((s) => s.conv.tenantId), [good.id]);
+  assert.ok(r.seen.runs.some((x) => x.conv.kind === "owner"), "the owner was looked at as well");
+  assert.match(readFileSync(T.tenantContext(bad).logFile, "utf8"), /"kind":"wake"/, "a failed look still chose a next one");
 });
 
 test("quiet-time compaction of a tenant needs heartbeat and her access; it is hers to pay", async () => {
@@ -207,11 +224,10 @@ test("quiet-time compaction of a tenant needs heartbeat and her access; it is he
   const ran: string[] = [];
   const mk = (key: string | undefined) => {
     const w = createWakeups({
-      pipeline: { canSpeak: () => false, enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never,
+      pipeline: { canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never,
       groupChats: true,
       vouch: async () => true,
-      runProfile: async () => ({ text: "" }),
-      gate: async () => parseGate({ act: false }),
+      run: async () => ({ text: "" }),
       groups: () => [],
       key: () => key,
       tenantIds: () => [anna.id, nobeat.id],
@@ -225,7 +241,7 @@ test("quiet-time compaction of a tenant needs heartbeat and her access; it is he
   const w = mk(KEY);
   await w.tick(NOON);
   await w.idle();
-  assert.deepEqual(ran.sort(), [anna.id, "owner"].sort());
+  assert.deepEqual(ran.sort(), [anna.id, "owner"].sort(), "hers (heartbeat), not Jo's (revoked): the owner's too");
   ran.length = 0;
   const w2 = mk(undefined);
   await w2.tick(NOON);
@@ -257,16 +273,6 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
   const { coolingDown } = await import("../src/cooldown.ts");
   assert.equal(coolingDown(Date.now(), INSTANCE_KEY_COOLDOWN), true, "the key's refusal is the key's: one cooldown for every friend");
   assert.equal(coolingDown(Date.now(), ""), false, "the owner's login cooldown is untouched");
-});
-
-test("the gate's rules for a tenant's chat name her, have no brief and nothing of the owner's", () => {
-  const anna = person("Lea");
-  const sys = gateSystem(tenant(anna.id), "clock", "");
-  assert.match(sys, /Lea's private chat/);
-  assert.match(sys, /Acting on your own/);
-  assert.doesNotMatch(sys, /"brief"|"radar"/);
-  assert.doesNotMatch(sys, new RegExp(settings.owner));
-  assert.match(gateSystem(owner(), "clock", ""), new RegExp(`${settings.owner}'s private chat`));
 });
 
 // ---- the dream ----

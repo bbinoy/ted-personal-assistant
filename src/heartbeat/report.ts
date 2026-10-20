@@ -1,7 +1,7 @@
 import { localDay } from "../pause.ts";
 import type { HeartbeatRow } from "./rows.ts";
 
-// `npm run heartbeat-report [days]`: what the heartbeat run did, from its rows (state/heartbeat.jsonl): counts and dollars, never words.
+// `npm run heartbeat-report [days]`: what the heartbeat run did for every conversation, from its rows (state/heartbeat.jsonl): counts and dollars, never words or names.
 
 const BUCKETS: readonly (readonly [string, number, number])[] = [["10-14 min", 10, 14], ["15-29 min", 15, 29], ["30-59 min", 30, 59], ["60-120 min", 60, 120]];
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -26,6 +26,8 @@ export function heartbeatReport(rows: readonly HeartbeatRow[], now: Date, days =
   lines.push("", `cost: ${usd(cost)} in total, ${usd(cost / byDay.size)} per day with looks`);
   lines.push(`messages: ${mine.filter((r) => r.message).length} sent (${mine.filter((r) => r.message && r.night).length} at night), ${(mine.filter((r) => r.message).length / byDay.size).toFixed(1)} per day`);
   lines.push(`delegations: ${sum(mine, (r) => r.delegations)}; mail archived: ${sum(mine, (r) => r.archived)}; tool calls: ${sum(mine, (r) => r.toolCalls)}`);
+  const kinds = (["owner", "group", "tenant"] as const).map((k) => [k, mine.filter((r) => (r.kind ?? "owner") === k)] as const).filter(([, rs]) => rs.length > 0);
+  if (kinds.length > 1) lines.push(`by conversation: ${kinds.map(([k, rs]) => `${k === "tenant" ? "friends" : k === "group" ? "groups" : "owner"} ${rs.length} look(s), ${rs.filter((r) => r.message).length} message(s), ${usd(sum(rs, (r) => r.costUsd))}`).join("; ")}`);
   lines.push("", "the next look it chose:");
   for (const [label, lo, hi] of BUCKETS) lines.push(`  ${label.padEnd(10)} ${mine.filter((r) => r.nextCheckMinutes >= lo && r.nextCheckMinutes <= hi).length}`);
   return lines;

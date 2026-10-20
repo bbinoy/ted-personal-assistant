@@ -14,9 +14,7 @@
   "profiles": {
     "chat": { "maxTurns": 40, "maxBudgetUsd": 2, "notes": [] },
     "heartbeat": { "maxTurns": 120, "maxBudgetUsd": 2, "notes": ["people", "scheduling", "context", "style", "brief", "setup", "voice", "status"] },
-    "background": { "maxTurns": 20, "maxBudgetUsd": 1, "notes": ["people", "scheduling", "context", "style", "brief", "setup", "voice"] },
-    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5, "notes": [] },
-    "handler": { "maxTurns": 40, "maxBudgetUsd": 2, "notes": ["people", "scheduling", "context", "style", "setup", "voice"] }
+    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5, "notes": [] }
   },
   "expert": { "model": "sonnet", "maxTurns": 40 },
   "skills": {

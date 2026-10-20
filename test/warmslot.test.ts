@@ -306,20 +306,19 @@ test("gate spare: serves one group message look whatever the group, only for the
     const io = { start, query: (() => qs(cold, "cold")) as any };
     const a = group(gid());
     const b = group(gid());
-    await askGateWith({ conv: a, trigger: "message", now: T0, tail: ["x"] }, io);
+    await askGateWith({ conv: a, now: T0, tail: ["x"] }, io);
     assert.equal(used.length, 1);
     assert.match(used[0]!, /CURRENT TIME/); // the conversation is in the prompt
     await tick();
     assert.equal(started.length, 2); // the next spare is on its way
-    await askGateWith({ conv: b, trigger: "message", now: T0, tail: ["y"] }, io); // another group takes it
+    await askGateWith({ conv: b, now: T0, tail: ["y"] }, io); // another group takes it
     assert.equal(used.length, 2);
     assert.deepEqual(cold, []);
-    // different options (the clock look, the owner) never take it
+    // different options (the owner) never take it
     await tick();
-    await askGateWith({ conv: a, trigger: "clock", now: T0, tail: [] }, io);
-    await askGateWith({ conv: owner(), trigger: "message", now: T0, tail: [] }, io);
+    await askGateWith({ conv: owner(), now: T0, tail: [] }, io);
     assert.equal(used.length, 2);
-    assert.deepEqual(cold, ["cold", "cold"]);
+    assert.deepEqual(cold, ["cold"]);
   } finally {
     (settings as { warm: boolean }).warm = was;
   }

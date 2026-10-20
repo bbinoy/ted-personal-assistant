@@ -5,10 +5,9 @@ import { disconnected, readConnectors } from "./connectors.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { recentNotices } from "./messages.ts";
 import { missingSetup, readNotes } from "./notes.ts";
-import { chatContext, chatSystem, digestContext, groupSystem, tenantSystem } from "./persona.ts";
+import { chatContext, chatSystem, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, groupTools, toolsFor } from "./policy/capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "./modules/google/module.ts";
-import { mailDigest } from "./tenantmail.ts";
 import { PROFILES } from "./profiles.ts";
 import { skillsFor } from "./skills.ts";
 import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "./tenants/tenants.ts";
@@ -93,11 +92,7 @@ const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) 
     return chatContext({ missing: missingSetup(readNotes(), off), down: off, pings: recentNotices() });
   },
   group: () => undefined,
-  tenant: (conv, i) => {
-    const ctx = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-    if (!ctx || !readConsent(tenantContext(ctx)) || !toolsFor(capabilitiesOf(conv)).has(GOOGLE_MAIL_TOOL)) return undefined;
-    return digestContext(mailDigest(tenantContext(ctx), i.now ?? new Date()));
-  },
+  tenant: () => undefined, // (her mail is read by her heartbeat run and her tools when she asks: there is no digest to show)
 };
 export const turnContext = (conv: Conversation, inputs: RunInputs = {}): string | undefined => CONTEXTS[conv.kind](conv, inputs);
 

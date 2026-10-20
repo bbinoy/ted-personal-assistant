@@ -1,14 +1,16 @@
 import { appendLine, readText } from "../state.ts";
 
-// The heartbeat run's own record: one row per look in state/heartbeat.jsonl, counts and flags only. NEVER a message's words, a sender or a subject:
-// what was said is in the conversation's log, and `npm run heartbeat-report` needs only these numbers.
+// The heartbeat run's own record: one row per look of any conversation in state/heartbeat.jsonl, counts and flags only. NEVER a message's words, a sender, a subject or a
+// friend's name or id: what was said is in the conversation's log, and `npm run heartbeat-report` needs only these numbers.
 
 export const HEARTBEAT_LOG = "state/heartbeat.jsonl";
 
 export interface HeartbeatRow {
   at: string; // ISO: when the look began
+  kind?: "owner" | "group" | "tenant"; // whose look (absent in older rows: the owner's)
   night: boolean; // inside the quiet window (for the report; the model, not code, decides how quiet to be)
-  message: boolean; // a message was posted to the owner
+  message: boolean; // something was said in the conversation: the final answer or a piece sent while it worked
+  sent?: number; // pieces sent with the send tool while the run worked (the final answer is not counted); absent in older rows
   nextCheckMinutes: number; // the next look it chose, clamped
   costUsd: number;
   toolCalls: number; // tool calls that ran (the run's own and its subagents')

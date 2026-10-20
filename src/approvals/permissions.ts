@@ -6,7 +6,6 @@ import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
 import { mailSlot } from "../modules/index.ts";
-import { archiveAskNote, type ArchiveWatch } from "../policy/archivefloor.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { OWNER_KEY } from "../ownerkey.ts";
@@ -125,8 +124,6 @@ export interface JudgeSetup {
   conversation?: string;
   // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
   // subagent's), and the type of a subagent by its id (for the audit log).
-  // An unattended run's archiving floor (policy/archivefloor.ts): past the run's cap, or for a mail the run did not read, the owner is asked and the judge is not.
-  archives?: ArchiveWatch;
   expertBriefs?: () => readonly string[];
   agentTypeOf?: (agentID: string | undefined) => string | undefined;
 }
@@ -219,16 +216,10 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       description = describeCall(tool, input, view);
     }
     let judged: Verdict | undefined;
-    // The archive floor: this call needs the owner, not the judge (a cap per run; a mail the run never read).
-    const archiveAsk = setup.archives?.ask(tool, input);
-    if (archiveAsk) {
-      log(tool, "archive-ask", source, { why: archiveAsk, ...idsOf(input) });
-      description += archiveAskNote(archiveAsk);
-    }
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
-    if (!archiveAsk && settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
+    if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
       // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
@@ -248,7 +239,6 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
         if (readsUntrusted(tool)) markUntrusted();
-        setup.archives?.done(tool, input);
         g?.allowed?.("judge");
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
@@ -273,7 +263,6 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     );
     if (d.approved && onceOnly) remember(memo);
     if (d.approved && readsUntrusted(tool)) markUntrusted();
-    if (d.approved) setup.archives?.done(tool, input);
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && !d.updatedInput) g?.allowed?.("owner");
     if (d.approved && g?.payment && g.resolve) {
