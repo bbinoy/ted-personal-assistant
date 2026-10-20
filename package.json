@@ -24,7 +24,8 @@
     "openbao": "node --conditions=workspace-source --env-file-if-exists=.env scripts/openbao.ts",
     "intake": "node --conditions=workspace-source --env-file-if-exists=.env scripts/intake.ts",
     "tenants": "node --conditions=workspace-source --env-file-if-exists=.env scripts/tenants.ts",
-    "browse:smoke": "node --conditions=workspace-source --env-file-if-exists=.env scripts/browse-smoke.ts"
+    "browse:smoke": "node --conditions=workspace-source --env-file-if-exists=.env scripts/browse-smoke.ts",
+    "setup:hooks": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

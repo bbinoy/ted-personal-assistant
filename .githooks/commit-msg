@@ -1,0 +1,4 @@
+#!/bin/sh
+# Checks the commit message against the rules in CONTRIBUTING.md ("Git hygiene").
+# Enable once per clone: npm run setup:hooks
+exec node "$(git rev-parse --show-toplevel)/scripts/check-commit-msg.ts" "$1"
