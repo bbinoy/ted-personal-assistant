@@ -20,8 +20,9 @@ export interface AuditEntry {
 }
 
 // The audit log is the admin's (logs/, search_logs, npm run report). A tenant's rows in it say what happened and how big, never what she said or
-// asked for: these fields hold words (a question, her reply, the arguments of a call, a judge's reason) and become their length.
-const WORDS = ["args", "question", "details", "reply", "feedback", "executed", "reason", "facts"];
+// asked for: these fields hold words (a question, her reply, the arguments of a call, a judge's reason, the host of a page she opened, the name of a control on it, an
+// address, an error that quotes a page) and become their length.
+const WORDS = ["args", "question", "details", "reply", "feedback", "executed", "reason", "facts", "name", "host", "address", "why", "merchant", "error"];
 export function wordless(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!meta) return meta;
   return Object.fromEntries(Object.entries(meta).map(([k, v]) => (WORDS.includes(k) && v !== undefined ? [`${k}Chars`, (typeof v === "string" ? v : JSON.stringify(v) ?? "").length] : [k, v])));
