@@ -46,7 +46,7 @@ const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
 });
 
 const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
-  systemPrompt: groupSystem({ style: i.style }),
+  systemPrompt: groupSystem({ style: i.style, caps: capabilitiesOf(conv) }),
   memory: { dir: conv.notesDir, groupId: conv.groupId },
   skills: PROFILES.group.skills,
   tools: groupTools(),
@@ -65,7 +65,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const consented = !!readConsent(ctx);
   const caps = capabilitiesOf(conv);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), digest: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL) ? mailDigest(ctx, i.now ?? new Date()) : undefined, language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
+    systemPrompt: tenantSystem({ name: ctx.name, consented, caps, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), digest: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL) ? mailDigest(ctx, i.now ?? new Date()) : undefined, language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },
     skills: consented ? skillsFor(caps) : [],
     tools: consented ? toolsFor(caps) : new Set([TENANT_CONSENT_TOOL]),

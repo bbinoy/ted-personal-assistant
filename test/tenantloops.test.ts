@@ -362,8 +362,8 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
 test("her prompt says she can act later only when the loops will run for her", async () => {
   const { tenantSystem } = await import("../src/persona.ts");
   const { runOptionsFor } = await import("../src/runoptions.ts");
-  assert.match(tenantSystem({ name: "Vi", consented: true }), /You cannot act on your own later/);
-  assert.match(tenantSystem({ name: "Vi", consented: true, timed: true }), /You can act on your own at set times/);
+  assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set() }), /You cannot act on your own later/);
+  assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set(), timed: true }), /You can act on your own at set times/);
   const plain = person("Wes", []);
   const timed = person("Xan");
   assert.match(runOptionsFor(tenant(plain.id), { apiKey: KEY }).systemPrompt as string, /You cannot act on your own later/);
