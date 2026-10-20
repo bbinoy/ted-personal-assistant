@@ -6,8 +6,8 @@
 import { rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { SignalClient, attachmentPath } from "@ted-personal-assistant/signal";
-import { providerReady, synthesizeWith } from "@ted-personal-assistant/signal/tts";
-import { transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
+import { providerReady, synthesizeWith } from "@ted-personal-assistant/speech/tts";
+import { transcribe, voiceReady } from "@ted-personal-assistant/speech/voice";
 
 const { SIGNAL_ACCOUNT: account, SIGNAL_OWNER: owner, WHISPER_MODEL: model, KOKORO_DIR: kokoroDir } = process.env;
 if (!account || !owner || !model || !kokoroDir) throw new Error("set SIGNAL_ACCOUNT, SIGNAL_OWNER, WHISPER_MODEL and KOKORO_DIR");

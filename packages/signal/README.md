@@ -6,7 +6,7 @@ A small, dependency-free TypeScript client for [signal-cli](https://github.com/A
 - **The Signal features a bot needs.** Text with styles, mentions, quotes (threaded replies), reactions, read receipts, typing, attachments, and groups (including whether a message is addressed to the bot).
 - **A library that behaves.** It never calls `process.exit`, installs signal handlers or logs by default: you get a close event and a daemon handle and decide what happens.
 - **Testable.** `/testing` ships `FakeSignalDaemon`, a fake of signal-cli's socket, so a bot's tests need no Signal account.
-- **Optional voice.** Voice messages in (local whisper.cpp) and out (local Kokoro, or your own or a hosted speech server), as separate entry points that the core never imports.
+- **Voice messages as attachments.** An incoming voice note arrives as `IncomingMessage.audio` and an audio file you send is shown as a voice message. Turning speech into text and back is not part of this package: the assistant app keeps those libraries in `packages/speech`.
 - **A Messenger adapter.** The `/messenger` entry point implements the `Messenger` interface of `@ted-personal-assistant/messenger` (the assistant app loads it with `MESSENGER=signal`): the daemon, the client, targets, text styles, attachments and the doctor's checks behind one neutral interface.
 - **Typed and small.** No third-party dependencies (the only package it uses is the interface package it implements), compiled JavaScript with `.d.ts` files, Node 24+, MIT.
 
@@ -25,8 +25,7 @@ npm install @ted-personal-assistant/signal
 System requirements, none of which this package installs:
 
 - **signal-cli** with a registered or linked account, and the Java runtime it needs. See [docs/signal-account.md](docs/signal-account.md).
-- Optional, for voice: **ffmpeg** and **whisper.cpp** (`whisper-cli` and a ggml model) to understand voice messages; **ffmpeg**, Python 3.10+ and [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (`scripts/setup-tts.sh`) to speak them.
-- macOS and Linux. Windows is untested (the voice code looks for `ffmpeg` and `venv/bin/python` the Unix way). It also looks in `/opt/homebrew/bin` and `/usr/local/bin` besides `PATH`.
+- macOS and Linux. Windows is untested. The daemon start also looks in `/opt/homebrew/bin` and `/usr/local/bin` besides `PATH`.
 
 **Tested with** signal-cli 0.14.x on macOS. The field names this package reads (`sourceNumber`, `destinationNumber`, `targetSentTimestamp`, `groupInfo`, text style strings, `sendReceipt`'s single `recipient`) follow signal-cli's JSON-RPC output and have shifted between versions; if something stops working after a signal-cli upgrade, start with `interpretEnvelope` and its tests. The JSON-RPC connection is TCP only (no unix socket or stdio).
 
@@ -62,11 +61,11 @@ await signal.connect();
 
 You can also run `signal-cli daemon --tcp 127.0.0.1:7583 --no-receive-stdout` yourself (systemd, launchd, a container) and skip `ensureSignalDaemon`: the client only needs something listening.
 
-Runnable examples, compiled with the package: [`examples/echo.ts`](examples/echo.ts) (Note to Self), [`examples/peer-bot.ts`](examples/peer-bot.ts) (own account, groups, reactions), [`examples/voice-reply.ts`](examples/voice-reply.ts) (voice in, voice out), [`examples/remote-tts-server.ts`](examples/remote-tts-server.ts) (a sample speech server).
+Runnable examples, compiled with the package: [`examples/echo.ts`](examples/echo.ts) (Note to Self), [`examples/peer-bot.ts`](examples/peer-bot.ts) (own account, groups, reactions).
 
 ## API
 
-Entry points: `@ted-personal-assistant/signal` (the core), `/voice` (speech to text), `/tts` (text to speech), `/testing` (a fake daemon). The core never imports from the others. All public symbols carry JSDoc, so your editor shows the details.
+Entry points: `@ted-personal-assistant/signal` (the core), `/messenger` (the Messenger adapter), `/testing` (a fake daemon). All public symbols carry JSDoc, so your editor shows the details.
 
 **`SignalClient`** (`new SignalClient({ host, port, account, peer?, logger?, rpcTimeoutMs?, ownReactionMs? })`)
 - `onMessage(h)` receives `IncomingMessage { from, text, timestamp, direct, quote?, audio?, image?, file?, longText?, edited?, group?, addressedToMe?, fromUuid?, fromName? }`. `direct` means a private one-to-one conversation with the bot (Note to Self, or its own chat), never a group. Mentions arrive as `@name` in `text`. There is one handler slot: calling it again replaces the previous handler.
@@ -92,10 +91,6 @@ Entry points: `@ted-personal-assistant/signal` (the core), `/voice` (speech to t
 
 **Logging.** The package prints nothing by default. Pass `logger: console` (anything with `info`, `warn`, `error`) to see messages.
 
-**Voice** (separate entry points)
-- In, `@ted-personal-assistant/signal/voice`: `transcribe(file, whisperModelPath)` turns a recording into text locally with ffmpeg and [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (language detected automatically; no concurrency limit, so queue calls yourself); `voiceReady(model)` says what is missing. Use `attachmentPath(m.audio)` for the file.
-- Out, `@ted-personal-assistant/signal/tts`: `synthesize(text, { dir, voice, speed })` makes an AAC voice message locally with Kokoro (English only); `ttsReady(dir)` says what is missing; `synthesizeWith(text, config, logger?)` also supports optional remote engines (ElevenLabs, or your own HTTP server: [docs/remote-tts.md](docs/remote-tts.md)); `providerReady(config)`; `MAX_SPOKEN_CHARS`; `isSafeUrl`. They return the path of an `.m4a` inside a fresh temp folder (`speech-*`, mode 0700): **delete that folder (`dirname(file)`) after sending**. Send it with `send("", { attachments: [file] })`.
-
 **Testing your bot** with `@ted-personal-assistant/signal/testing`: `FakeSignalDaemon.start()` is a local fake of signal-cli's socket. It records the requests the client sends (`d.requests`), answers as you say, pushes incoming messages (`d.push(envelope)`) and can hang up (`d.dropConnections()`).
 
 **Also exported:** `interpretEnvelope(envelope, { account, peer?, peerAci? })` (the pure function behind the receiving side; start here to understand or test it), `withMentions`, `parseQuote`, `parseAudio`, `parseImage`.
@@ -106,7 +101,6 @@ Entry points: `@ted-personal-assistant/signal` (the core), `/voice` (speech to t
 - **The client trusts every notification from the socket and authenticates nobody.** `direct` and `from` are derived from signal-cli's envelope: in Note to Self mode a message counts as the owner's because it is a sync from their other device; in own-account mode `from` equals the peer only if the number (or account id) matches. **Deciding who may talk to your bot is your application's job.**
 - **Message text, quotes and names are untrusted input.** Do not put them into prompts, shell commands or file paths unfenced.
 - **Attachment ids** are validated against `^[\w.-]{1,100}$` and may not start with a dot; the id is still only a file name inside a folder you choose. Join it with `attachmentPath`, and do not follow symlinks out of that folder.
-- **Voice.** `transcribe` and `synthesize` run `ffmpeg`, `whisper-cli` and Python through `execFile` (no shell) with fixed arguments; the file path, model and text come from you, and the text goes to the Python script on stdin. A remote speech engine sends the spoken text to a third party; keys come from you, are sent only as a header and are redacted in error messages; redirects are refused; the answer is capped at 25 MiB and its format sniffed; `https` is required except for loopback.
 - Temporary folders under `os.tmpdir()` are created by `mkdtemp` (mode 0700). You delete the one a `synthesize*` call returns.
 
 ## Third-party software
@@ -116,10 +110,6 @@ This package does not include, link or bundle any of the following. It starts th
 | Program | Used for | Licence |
 |---|---|---|
 | [signal-cli](https://github.com/AsamK/signal-cli) | talking to Signal (required) | GPL-3.0 |
-| [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | speech to text (optional) | MIT |
-| [ffmpeg](https://ffmpeg.org) | audio conversion (optional) | LGPL or GPL, depending on the build |
-| [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) and the Kokoro model | text to speech (optional) | check the code and the model and voice files' terms, especially before commercial use |
-| [ElevenLabs](https://elevenlabs.io) | hosted text to speech (optional) | their service terms; a voice clone needs the rights to the voice |
 
 About the GPL: signal-cli is a separate program under GPL-3.0. This package only starts it as its own process and exchanges JSON over a local TCP socket, which is generally understood as using a program, not as making a combined work, so signal-cli's licence does not extend to this package's code (which is MIT). That is not legal advice. What it means in practice: do not vendor a signal-cli binary or its jars in a package or container image you distribute without complying with the GPL for those parts; tell your users to install signal-cli themselves.
 
@@ -127,7 +117,7 @@ Signal is a trademark of its owners; this is an unofficial integration.
 
 ## Files
 
-`src/client.ts` the client · `src/envelope.ts` `interpretEnvelope` and the other pure parsing · `src/daemon.ts` daemon start · `src/transcribe.ts` speech to text · `src/tts.ts` + `scripts/kokoro-say.py` local text to speech · `src/tts-provider.ts` (`synthesizeWith`) picks Kokoro or the optional remote `tts-elevenlabs.ts` / `tts-http.ts` · `src/testing.ts` the fake daemon · `test/` run with `npm test` in this folder · `npm run build` compiles to `dist/`.
+`src/client.ts` the client · `src/envelope.ts` `interpretEnvelope` and the other pure parsing · `src/daemon.ts` daemon start · `src/testing.ts` the fake daemon · `test/` run with `npm test` in this folder · `npm run build` compiles to `dist/`.
 
 ## Changes and contributing
 

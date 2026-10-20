@@ -5,11 +5,15 @@ import assert from "node:assert/strict";
 // every one must resolve from here, which is how a broken `exports` map would show up.
 test("the signal package entry points the app uses resolve", async () => {
   const core = await import("@ted-personal-assistant/signal");
-  const voice = await import("@ted-personal-assistant/signal/voice");
-  const tts = await import("@ted-personal-assistant/signal/tts");
   const testing = await import("@ted-personal-assistant/signal/testing");
   assert.equal(typeof core.SignalClient, "function");
+  assert.equal(typeof testing.FakeSignalDaemon, "function");
+});
+
+// The speech libraries are their own private package: the app imports them by its entry points, never by src paths.
+test("the speech package entry points the app uses resolve", async () => {
+  const voice = await import("@ted-personal-assistant/speech/voice");
+  const tts = await import("@ted-personal-assistant/speech/tts");
   assert.equal(typeof voice.transcribe, "function");
   assert.equal(typeof tts.synthesizeWith, "function");
-  assert.equal(typeof testing.FakeSignalDaemon, "function");
 });

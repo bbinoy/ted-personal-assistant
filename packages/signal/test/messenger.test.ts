@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { directTarget, type Messenger } from "@ted-personal-assistant/messenger";
 import { createMessenger, doctor, toSignalStyles } from "../src/messenger.ts";
-import { voiceEncoding } from "../src/voiceformat.ts";
 import { FakeSignalDaemon } from "../src/testing.ts";
 
 // The Signal adapter as the Messenger interface describes it, against a fake signal-cli daemon.
@@ -144,12 +143,6 @@ test("onClose: a lost connection is reported once; stopping on purpose is not a 
 
 test("styles are signal-cli's start:length:STYLE strings", () => {
   assert.deepEqual(toSignalStyles([{ start: 0, length: 3, style: "BOLD" }, { start: 4, length: 2, style: "MONOSPACE" }]), ["0:3:BOLD", "4:2:MONOSPACE"]);
-});
-
-test("the voice encoding follows the messenger's voice format", () => {
-  assert.deepEqual(voiceEncoding(), { file: "voice.m4a", args: ["-c:a", "aac", "-b:a", "64k"] });
-  assert.deepEqual(voiceEncoding("m4a"), voiceEncoding());
-  assert.deepEqual(voiceEncoding("ogg-opus"), { file: "voice.ogg", args: ["-c:a", "libopus", "-b:a", "32k"] });
 });
 
 test("doctor: the mode, signal-cli, the account link and whether the daemon is reachable", async () => {

@@ -26,7 +26,7 @@ A Qwen3-TTS VoiceDesign model (a voice made from a text description only) was co
 
 ```
 K=~/.cache/ted-personal-assistant/kokoro      # from scripts/setup-tts.sh
-$K/venv/bin/python packages/signal/scripts/kokoro-say.py $K/kokoro-v1.0.onnx $K/voices-v1.0.bin am_onyx 0.95 raw.wav < assets/voices/default.txt
+$K/venv/bin/python packages/speech/scripts/kokoro-say.py $K/kokoro-v1.0.onnx $K/voices-v1.0.bin am_onyx 0.95 raw.wav < assets/voices/default.txt
 ffmpeg -i raw.wav -ac 1 -ar 24000 -c:a pcm_s16le assets/voices/default.wav
 ```
 

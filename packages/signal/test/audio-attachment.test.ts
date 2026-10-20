@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseAudio } from "../src/envelope.ts";
-import { cleanTranscript } from "../src/transcribe.ts";
 
 test("voice: only a plain, reasonably sized audio attachment is accepted", () => {
   assert.deepEqual(parseAudio([{ contentType: "audio/aac", id: "abc-DEF_1.m4a", size: 40000 }]), { id: "abc-DEF_1.m4a", size: 40000 });
@@ -11,9 +10,4 @@ test("voice: only a plain, reasonably sized audio attachment is accepted", () =>
   assert.equal(parseAudio([{ contentType: "audio/aac", id: ".hidden", size: 10 }]), undefined);
   assert.equal(parseAudio([{ contentType: "audio/aac", id: "big", size: 99_000_000 }]), undefined);
   assert.equal(parseAudio(undefined), undefined);
-});
-
-test("voice: whisper's silence markers are dropped, the words kept", () => {
-  assert.equal(cleanTranscript(" [BLANK_AUDIO]\n"), "");
-  assert.equal(cleanTranscript("[Music] Move my 3pm to Thursday (laughs) please.\n"), "Move my 3pm to Thursday please.");
 });

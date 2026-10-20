@@ -19,14 +19,11 @@ try {
   writeFileSync(
     join(tmp, "smoke.mjs"),
     `import { SignalClient } from "@ted-personal-assistant/signal";
-import { voiceReady } from "@ted-personal-assistant/signal/voice";
-import { isSafeUrl } from "@ted-personal-assistant/signal/tts";
 import { FakeSignalDaemon } from "@ted-personal-assistant/signal/testing";
 const d = await FakeSignalDaemon.start();
 const c = new SignalClient({ host: d.host, port: d.port, account: "+10000000000" });
 await c.connect();
 if (typeof (await c.send("hello")) !== "number") throw new Error("send did not return a timestamp");
-if (typeof voiceReady !== "function" || !isSafeUrl("https://example.com")) throw new Error("voice or tts entry broken");
 c.close();
 await d.close();
 console.log("ok: the packed tarball installs and every entry point imports under plain Node");

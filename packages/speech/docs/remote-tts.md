@@ -1,11 +1,11 @@
 # Remote speech (optional)
 
-By default `synthesizeWith` speaks with Kokoro on your machine and nothing leaves it. With a remote provider the words to be spoken are sent to another service instead. Everything after that is unchanged: ffmpeg turns the audio into AAC and Signal shows a voice message.
+By default `synthesizeWith` speaks with Kokoro on your machine and nothing leaves it. With a remote provider the words to be spoken are sent to another service instead. Everything after that is unchanged: ffmpeg turns the audio into a voice message.
 
 **Read this first.** With a remote provider, the text of each spoken reply (and nothing else) is sent over HTTPS to a third party (`elevenlabs`) or to a server you run (`http`). Only use a cloned voice you have the rights and consent for: your own, or one whose owner agreed. This package contains no cloned voice and no recording. The reference recording of a clone stays on the remote side and is only named by an id.
 
 ```ts
-import { synthesizeWith, providerReady, type TtsProviderConfig } from "@ted-personal-assistant/signal/tts";
+import { synthesizeWith, providerReady, type TtsProviderConfig } from "@ted-personal-assistant/speech/tts";
 
 const cfg: TtsProviderConfig = {
   provider: "http", // or "elevenlabs", or "kokoro" (the default engine)

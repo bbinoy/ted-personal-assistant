@@ -1,0 +1,27 @@
+{
+  "name": "@ted-personal-assistant/speech",
+  "version": "0.1.0",
+  "description": "The speech libraries of the Ted personal assistant: text to speech (local Qwen3-TTS or Kokoro, optional ElevenLabs or your own HTTP server), speech to text (local whisper.cpp), voice libraries and reference clips. Messenger-agnostic.",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./tts": {
+      "workspace-source": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./voice": {
+      "workspace-source": "./src/voice.ts",
+      "default": "./src/voice.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "author": "Ben",
+  "dependencies": {
+    "@ted-personal-assistant/messenger": "*"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -17,7 +17,7 @@ jobs:
   # The signal package on its own: nothing of the app is installed or run. Proves it compiles, tests and packs
   # by itself, and that the tarball that would be published installs and contains no secrets.
   signal-package:
-    runs-on: ubuntu-latest # no ffmpeg on purpose: the encoding tests skip themselves
+    runs-on: ubuntu-latest # no ffmpeg or speech tools needed
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

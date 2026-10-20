@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { presetFor } from "./preset.ts";
-import { isSafeUrl, type TtsProviderConfig } from "@ted-personal-assistant/signal/tts";
+import { isSafeUrl, type TtsProviderConfig } from "@ted-personal-assistant/speech/tts";
 
 // Every tunable in one place, read from the environment (see .env.example) and validated
 // when the agent starts. A typo fails loudly instead of silently becoming NaN: an interval
