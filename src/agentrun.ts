@@ -29,6 +29,7 @@ import { cleanToolOutput } from "./toolclean.ts";
 import { readJson, writeJson } from "./state.ts";
 import { ownerSkills, skillsFor } from "./skills.ts";
 import { recordToolsSeen, toolsSeen } from "./policy/toolsseen.ts";
+import { createArchiveWatch } from "./policy/archivefloor.ts";
 import { delegationHook, type Delegation, type ExpertSetup } from "./heartbeat/delegation.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
@@ -114,7 +115,10 @@ function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): s
 export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined): Options {
   // After a successful tool call: announce a note change on the phone (chat), and report the
   // call to whoever asked (the brief captures what it sent).
+  // An unattended run's archiving floor (policy/archivefloor.ts), one per run; the owner's chat and a group archive what they are told to.
+  const archives = opts.source === "chat" || opts.source === "group" || opts.source === "browse" ? undefined : createArchiveWatch();
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
+    archives?.seen(tool, input, response);
     if (opts.memory?.notify) noteWritten(tool, input);
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
     opts.onToolSuccess?.(tool, input, response);
@@ -219,7 +223,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf, archives }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
