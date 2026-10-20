@@ -382,6 +382,15 @@ test("gate: a quick reaction must be exactly one emoji, otherwise it is dropped"
   for (const bad of ["haha", "😂😂", "", 5, null]) assert.equal(parseGate({ act: false, reaction: bad, nextCheckMinutes: 30 }).reaction, undefined, String(bad));
 });
 
+test("gate: a look is shown the notes the caller already read, not a second read of the folder; the owner's style notes are read only for a group", async () => {
+  const seen: { prompt: string; system: string }[] = [];
+  const io = { query: ((p: any) => (seen.push({ prompt: String(p.prompt), system: String(p.options.systemPrompt) }), Object.assign((async function* () { yield { type: "result", subtype: "success", is_error: false, total_cost_usd: 0, duration_api_ms: 0, structured_output: { act: false, nextCheckMinutes: 30 } }; })(), { close() {} }))) as never };
+  const base = { trigger: "clock" as const, now: new Date("2026-10-14T10:00:00Z"), tail: [] };
+  await askGateWith({ ...base, conv: owner(), notes: "- [scheduling] fun.md: given by the caller" }, io);
+  assert.match(seen[0]!.prompt, /given by the caller/);
+  assert.doesNotMatch(seen[0]!.system, /personality_notes/); // a private chat's gate is told no style
+});
+
 test("gate: a refused call (usage limit, expired login) is an error, not a quiet 'no'; any other empty answer is still 'no'", async () => {
   const fake = (assistantError: string | undefined, subtype: string) => ({
     query: (() => Object.assign((async function* () {

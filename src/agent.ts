@@ -22,8 +22,9 @@ const down = () => disconnected(readConnectors());
 
 function profileSystem(name: OwnerProfile): string {
   const notes = memoryFor(PROFILES[name].notes);
-  const missing = missingSetup(readNotes(), down());
-  return name === "brief" ? briefSystem(notes, missing, down()) : name === "radar" ? radarSystem(notes, missing, down()) : backgroundSystem(notes, missing, down());
+  const off = down(); // (read once)
+  const missing = missingSetup(readNotes(), off);
+  return name === "brief" ? briefSystem(notes, missing, off) : name === "radar" ? radarSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
 }
 
 // What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's and the radar's

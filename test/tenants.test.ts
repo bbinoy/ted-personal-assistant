@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -502,4 +502,26 @@ test("the per-tenant key plumbing is gone: no set-key, forget-key, KeyStore, int
   assert.equal(existsSync(new URL("../src/intake.ts", import.meta.url)), false);
   assert.equal((R as Record<string, unknown>).setupIncompleteReply, undefined);
   assert.ok(!/anthropic_api_key|keyRef/.test(readFileSync(new URL("../src/tenants.ts", import.meta.url), "utf8")));
+});
+
+test("registry cache: read again only when the file changed (stat), at once after this process's own write, and a change by another process is seen", () => {
+  const rec = join_("Cache");
+  const path = join(settings.dataDir, T.REGISTRY);
+  assert.equal(T.tenantById(rec.id)!.name, "Cache");
+  // unchanged file: the cached parse serves, whatever is asked
+  const reads = T.registryReads();
+  for (let i = 0; i < 5; i++) (T.tenantById(rec.id), T.tenantByAci(rec.acis[0]), T.listTenants());
+  assert.equal(T.registryReads(), reads, "no read of an unchanged file");
+  // this process's own write is seen at once
+  T.setStatus(rec.id, "suspended");
+  assert.equal(T.tenantById(rec.id)!.status, "suspended");
+  // another process (the CLI) replaces the file: a rename, a new inode
+  const other = JSON.parse(readFileSync(path, "utf8"));
+  other.tenants.find((t: any) => t.id === rec.id).status = "active";
+  writeFileSync(`${path}.other`, JSON.stringify(other));
+  renameSync(`${path}.other`, path);
+  assert.equal(T.tenantById(rec.id)!.status, "active");
+  // the records are new objects each time: a caller changing one does not change the next answer
+  T.tenantById(rec.id)!.capabilities.push("admin" as any);
+  assert.ok(!T.tenantById(rec.id)!.capabilities.includes("admin" as any));
 });

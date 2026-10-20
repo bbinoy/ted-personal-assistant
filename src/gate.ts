@@ -205,8 +205,7 @@ export const gateSpare = new SpareSlot<WarmQuery>({ maxAgeMs: settings.warmIdleM
 const spareSystem = (now: Date) => gateSystem({ kind: "group" }, "message", styleSummary(now));
 const usesSpare = (input: Pick<GateInput, "conv" | "trigger">) => input.trigger === "message" && input.conv.kind === "group";
 
-export function prepareGate(now: Date = new Date(), start: typeof startup = startup): void {
-  const system = spareSystem(now);
+export function prepareGate(now: Date = new Date(), start: typeof startup = startup, system: string = spareSystem(now)): void {
   if (!settings.warm) return;
   if (gateSpare.has(SPARE_ID, system)) return void gateSpare.touch(SPARE_ID); // a group is active: keep it
   const warm = start({ options: gateOptions(system) });
@@ -226,7 +225,7 @@ export interface GateIO {
 //   api        the model time the SDK itself reports
 export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<GateOutput> {
   const prompt = gatePrompt(input, input.notes ?? notesText(input.conv, input.now));
-  const system = gateSystem(input.conv, input.trigger, styleSummary(input.now));
+  const system = gateSystem(input.conv, input.trigger, input.conv.kind === "group" ? styleSummary(input.now) : ""); // (the style is only told to a group's gate: read only then)
   const t0 = Date.now();
   const at: Record<string, number> = {};
   const mark = (k: string) => void (k in at || (at[k] = Date.now() - t0));
@@ -250,7 +249,7 @@ export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<Ga
       spare: usesSpare(input)
         ? async (p, cold, track) => {
             const w = await gateSpare.take(SPARE_ID, system)?.catch((e: Error) => console.error("gate: warm process unavailable, starting normally:", e.message));
-            setImmediate(() => prepareGate(input.now, io.start)); // a spare serves one look: the next is already on its way
+            setImmediate(() => prepareGate(input.now, io.start, system)); // a spare serves one look: the next is already on its way (the same system prompt: this look was a group message look)
             if (!w) return cold();
             warm = true;
             return firstWarm(() => track(w.query(p)), cold, (e) => console.error("gate: warm process failed, starting normally:", e.message));
