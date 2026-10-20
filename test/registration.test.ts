@@ -62,7 +62,7 @@ test("a stranger gets one fixed line; the owner is asked with a sanitised name a
   assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "approved" });
   await tick();
   const rec = T.tenantByAci(aci(1))!;
-  assert.equal(rec.status, "invited", "the consent flow is as before");
+  assert.equal(rec.status, "active", "an approved friend is active at once: no age or region question");
   assert.deepEqual(rec.capabilities, [...T.FRIEND_DEFAULTS]);
   assert.equal(rec.role, "member");
   assert.deepEqual(joined, [{ id: rec.id, held: [`${CANARY} hello`] }], "what she wrote while she waited is her first turn");

@@ -74,7 +74,7 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
   noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN);
   for (const rec of [anna, bea]) assert.equal((mayRun(her(rec), "t", { key: () => KEY }) as { refused: string }).refused, "cooldown", "the key is cooling down for every friend");
   assert.ok(!coolingDown(Date.now() + 1000), "the owner's login is not cooling down");
-  // paused, suspended, invited
+  // paused, suspended
   resetCooldown();
   assert.deepEqual(mayRun(her(bea), "t", { key: () => KEY, paused: () => true }), { refused: "paused" });
   assert.equal((mayRun(her(bea), "t", { key: () => KEY, chat: true, paused: () => true }) as { kind: string }).kind, "instance", "her message is answered whatever the pause switch says");

@@ -92,7 +92,6 @@ test("the tool: reports the unseen ids, and the run and its expert share one pen
 test("the heartbeat run is given the tracker only where there is mail, and the expert shares the run's server", () => {
   const ana = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c3", name: "Cy" })!;
   T.provision(ana);
-  T.recordConsent(T.tenantContext(ana), "Germany");
   const tracker = createSeenMail(file("f"));
   const g = group("seen-group-1123456789abcd");
   const og = heartbeatOptions(g, LOGIN, { seenMail: tracker });

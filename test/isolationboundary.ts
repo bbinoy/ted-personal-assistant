@@ -59,7 +59,7 @@ export async function buildWorld(): Promise<World> {
   const { runOptionsFor } = await import("../src/run/runoptions.ts");
   const { group, tenant } = await import("../src/conversation/conversation.ts");
   const { buildOptions } = await import("../src/run/agentrun.ts");
-  const { addTenant, recordConsent, tenantContext } = await import("../src/tenants/tenants.ts");
+  const { addTenant, tenantContext } = await import("../src/tenants/tenants.ts");
 
   mkdirSync(settings.dataDir, { recursive: true });
   const dataDir = realpathSync(settings.dataDir);
@@ -86,7 +86,6 @@ export async function buildWorld(): Promise<World> {
   };
   const ann = join_("Ann");
   const bea = join_("Bea");
-  recordConsent(ann, "Testland");
   const beaNote = join(bea.notesDir, "context-bea-secret.md");
   writeFileSync(beaNote, `Bea's ${word} is ${canary}-BEA\n`);
   writeFileSync(join(bea.notesDir, "MEMORY.md"), `- [bea](context-bea-secret.md) ${word}\n`);

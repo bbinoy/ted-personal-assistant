@@ -11,7 +11,7 @@ import { allows, capabilitiesOf, groupTools, toolsFor } from "../policy/capabili
 import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
 import { PROFILES } from "./profiles.ts";
 import { skillsFor } from "../modules/skills.ts";
-import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, wasDisclosed, type TenantContext } from "../tenants/tenants.ts";
+import { tenantById, tenantContext, wasDisclosed, type TenantContext } from "../tenants/tenants.ts";
 
 // The ONE builder of the options of a conversation's run: the owner's chat, a group and a tenant. What a run is made of comes from the
 // conversation's record (conversationmodel.ts: kind, source, notes folder, session file, the group's id) and, for a person with a registry record,
@@ -20,7 +20,7 @@ import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, wasDisclos
 //
 //   owner   the preset prompt with the owner's persona and notes, the owner's connectors and tools (agentrun.ts buildOptions: no tenant, no group id)
 //   group   the group's persona, its own notes and session, the group profile's limits; isolated: no connectors, no user settings; its tools and skills are those of the group's capability set
-//   tenant  a group run with one person in it: her persona, notes, session and limits, her ledger and consent, and the instance key in this run's environment only
+//   tenant  a group run with one person in it: her persona, notes, session and limits, her ledger, and the instance key in this run's environment only
 //
 // Security stays where it was and is not decided here: the isolation (strictMcpConfig, no settings sources, no plugins) follows from `source` in
 // buildOptions; the tools and skills of a group or a tenant come from its capabilities (capabilities.ts, skills.ts) and policy.ts classify; the instance key goes only into the
@@ -51,21 +51,19 @@ const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
   maxBudgetUsd: PROFILES.group.maxBudgetUsd,
 });
 
-// A tenant's turn (tenants.ts): an isolated "group" run in a private chat, on the instance key, with her notes, her session, her ledger. Until she has
-// confirmed her age and region the run has one tool, record_consent, and no skill.
+// A tenant's turn (tenants.ts): an isolated "group" run in a private chat, on the instance key, with her notes, her session, her ledger.
 const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
   if (!rec) throw new Error("not a tenant");
   const ctx: TenantContext = tenantContext(rec);
   const apiKey = i.apiKey;
   if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
-  const consented = !!readConsent(ctx);
   const caps = capabilitiesOf(conv);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, consented, caps, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
+    systemPrompt: tenantSystem({ name: ctx.name, caps, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: toolsFor(caps).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },
-    skills: consented ? skillsFor(caps) : [],
-    tools: consented ? toolsFor(caps) : new Set([TENANT_CONSENT_TOOL]),
+    skills: skillsFor(caps),
+    tools: toolsFor(caps),
     maxTurns: ctx.maxTurns,
     maxBudgetUsd: ctx.maxBudgetUsdPerRun,
     tenant: {
@@ -75,8 +73,6 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
       keyTag: createHash("sha256").update(apiKey).digest("hex").slice(0, 8),
       costFile: ctx.costFile,
       logFile: ctx.logFile,
-      consentFile: ctx.consentFile,
-      consented,
       overBudget: () => tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd),
     },
   };
@@ -93,7 +89,7 @@ const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) 
     return chatContext({ missing: missingSetup(readNotes(), off), down: off, pings: recentNotices() });
   },
   group: () => undefined,
-  // Her first turn after the owner let her in (she is not disclosed to yet: tenantrun.ts marks it with the first reply): she is new here. (Her mail is read by her heartbeat run and her tools when she asks: there is no digest to show.)
+  // Her first turn after the owner let her in (tenantrun.ts marks it with the first reply): she is new here. (Her mail is read by her heartbeat run and her tools when she asks: there is no digest to show.)
   tenant: (conv) => {
     const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
     return rec && !wasDisclosed(tenantContext(rec)) ? FIRST_CONTACT : undefined;

@@ -17,7 +17,8 @@ process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
-const { runOptionsFor } = await import("../src/run/runoptions.ts");
+const { runOptionsFor, turnContext } = await import("../src/run/runoptions.ts");
+const { FIRST_CONTACT } = await import("../src/run/persona.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 
 const FIXTURE = new URL("./fixtures/run-options.json", import.meta.url);
@@ -29,9 +30,7 @@ const sha = (s: string) => createHash("sha256").update(s.replaceAll(settings.dat
 const pinned = (key: string, text: string | undefined) => (text === undefined ? undefined : { key, sha: sha(text) });
 
 const joinAs = (n: number, name: string) => T.tenantContext(T.addTenant({ aci: `00000000-0000-4000-8000-00000000000${n}`, name })!);
-const ann = joinAs(1, "Ann"); // has not confirmed her age and region yet
 const bea = joinAs(2, "Bea");
-T.recordConsent(bea, "Germany");
 
 type Run = Parameters<typeof buildOptions>[1];
 
@@ -49,7 +48,6 @@ const scrub = (v: unknown): unknown =>
       .replaceAll(INSTANCE_KEY, "<instance-key>")
       .replaceAll(settings.dataDir, "<data>")
       .replaceAll(process.cwd(), "<repo>")
-      .replaceAll(ann.id, "<ann>")
       .replaceAll(bea.id, "<bea>"),
   );
 
@@ -83,7 +81,7 @@ function describeRun(name: string, run: Run): Record<string, any> {
 function cases(): Record<string, Record<string, any>> {
   mock.timers.enable({ apis: ["Date"], now: NOW }); // the prompts carry the clock
   try {
-    return { owner: describeRun("owner", runs.owner()), group: describeRun("group", runs.group()), tenantAskingConsent: describeRun("tenantAskingConsent", runs.tenant(ann)), tenant: describeRun("tenant", runs.tenant(bea)) };
+    return { owner: describeRun("owner", runs.owner()), group: describeRun("group", runs.group()), tenant: describeRun("tenant", runs.tenant(bea)) };
   } finally {
     mock.timers.reset();
   }
@@ -112,7 +110,7 @@ test("run options: the owner's chat, a group and a tenant are built exactly as t
 
 test("run options: what differs between the owner, a group and a tenant, and only that", () => {
   const c = cases();
-  if (process.env.RUN_OPTIONS_PRINT) console.log(JSON.stringify({ ownerGroup: differing(c.owner, c.group), groupTenant: differing(c.group, c.tenant), tenantConsent: differing(c.tenantAskingConsent, c.tenant) }, null, 1));
+  if (process.env.RUN_OPTIONS_PRINT) console.log(JSON.stringify({ ownerGroup: differing(c.owner, c.group), groupTenant: differing(c.group, c.tenant) }, null, 1));
   // owner -> group: persona, limits, notes folder and session, the group's isolation (no user settings, no connectors, its capabilities' tools and shared skills (not the owner's), strict MCP)
   assert.deepEqual(differing(c.owner, c.group), [
     "disallowedTools", "maxBudgetUsd", "maxTurns", "run.maxBudgetUsd", "run.maxTurns", "run.memory",
@@ -122,8 +120,6 @@ test("run options: what differs between the owner, a group and a tenant, and onl
   assert.deepEqual(differing(c.group, c.tenant), [
     "envChanged.ANTHROPIC_API_KEY", "envRemoved", "maxTurns", "run.maxTurns", "run.memory", "run.sessionFile", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
   ]);
-  // before her consent: one MCP server, no built-in tool and no skill, her ledger and persona unchanged
-  assert.deepEqual(differing(c.tenantAskingConsent, c.tenant), ["mcpServers", "plugins.path", "plugins.skipMcpDiscovery", "plugins.type", "run.memory", "run.sessionFile", "run.skills", "run.systemPrompt", "run.tenant", "run.tools", "settings.autoMemoryDirectory", "skills", "system.append", "tools"]);
   // the invariants the table above must not hide
   assert.deepEqual([c.owner.envChanged, c.owner.envRemoved, c.group.envChanged, c.group.envRemoved], [{}, [], {}, []], "the owner's and a group's environment is the process's, untouched");
   assert.equal(c.tenant.envChanged.ANTHROPIC_API_KEY, "<instance-key>");
@@ -132,6 +128,13 @@ test("run options: what differs between the owner, a group and a tenant, and onl
   assert.deepEqual(c.group.mcpServers, c.tenant.mcpServers, "a group and a tenant have the same servers (no connectors)");
   const shared = ["research-booking", "surf-conditions", "draw"].map((s) => `ted-personal-assistant:${s}`); // (never a private skill: no brief, mail, calendar, notion, setup, radar)
   assert.deepEqual([c.group.skills, c.tenant.skills, c.group.settingSources, c.tenant.settingSources], [shared, shared, [], []]);
-  assert.equal(c.tenantAskingConsent.skills, undefined);
-  assert.deepEqual(c.tenantAskingConsent.mcpServers, ["tenant"]);
+});
+
+test("first contact: a friend's first turn carries the hint for Ted to greet her in his own voice (AI, may be wrong, private from users and admin, the honest limit); never again", () => {
+  const rec = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000a1", name: "Cal" })!;
+  assert.equal(rec.status, "active", "no age or region question: she is active at once");
+  assert.equal(turnContext(tenant(rec.id)), FIRST_CONTACT);
+  for (const part of [/\bAI\b/, /may be wrong/, /private from other users and from the admin/, /could technically still read the files/, /own voice/]) assert.match(FIRST_CONTACT, part);
+  T.markDisclosed(T.tenantContext(rec));
+  assert.equal(turnContext(tenant(rec.id)), undefined);
 });

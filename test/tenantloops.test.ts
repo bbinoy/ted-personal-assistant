@@ -42,11 +42,10 @@ beforeEach(() => {
 });
 
 let n = 0;
-// A tenant by the real path (invite, consent), with the given capabilities on top of the friend defaults.
+// A tenant by the real path (approval), with the given capabilities on top of the friend defaults.
 function person(name: string, extra: (typeof T.CAPABILITIES)[number][] = ["wake"]): import("../src/tenants/tenants.ts").TenantRecord {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
-  T.recordConsent(T.tenantContext(rec), "Germany");
   for (const c of extra) T.grant(rec.id, c);
   created.push(rec.id);
   return T.tenantById(rec.id)!;
@@ -370,8 +369,8 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
 test("her prompt says she can act later only when the loops will run for her", async () => {
   const { tenantSystem } = await import("../src/run/persona.ts");
   const { runOptionsFor } = await import("../src/run/runoptions.ts");
-  assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set() }), /You cannot act on your own later/);
-  assert.match(tenantSystem({ name: "Vi", consented: true, caps: new Set(), timed: true }), /You can act on your own at set times/);
+  assert.match(tenantSystem({ name: "Vi", caps: new Set() }), /You cannot act on your own later/);
+  assert.match(tenantSystem({ name: "Vi", caps: new Set(), timed: true }), /You can act on your own at set times/);
   const plain = person("Wes", []);
   T.revoke(plain.id, "wake");
   const timed = person("Xan");

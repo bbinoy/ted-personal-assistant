@@ -20,8 +20,7 @@ import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 //   tenants/<id>/messages.jsonl everything said in her chat, size-bounded (no summary model: that would run on the owner's login)
 //   tenants/<id>/session.json   her resumed SDK session
 //   tenants/<id>/cost.json      what she spent today on the instance key
-//   tenants/<id>/consent.json   the one-time age/region confirmation
-//   tenants/<id>/meta.json      small bookkeeping (disclosure shown, notice times)
+//   tenants/<id>/meta.json      small bookkeeping (first greeting done, notice times)
 // The folder is outside logs/, state/ and memory/, which are what the owner's chat may read (policy.ts): the owner does not read a friend's
 // notes or history through the assistant. The host's admin can, of course: the files are on the owner's Mac (docs/SAFETY.md).
 // The registry state/tenants.json holds ONE record per person, the owner included (role admin, every capability, the files above unchanged: pathsOf):
@@ -32,8 +31,8 @@ import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 export const OWNER_ID = "owner";
 export const REGISTRY = "state/tenants.json";
 
-export type TenantStatus = "invited" | "active" | "suspended";
-export const STATUSES: readonly TenantStatus[] = ["invited", "active", "suspended"];
+export type TenantStatus = "active" | "suspended";
+export const STATUSES: readonly TenantStatus[] = ["active", "suspended"];
 
 // admin: the instance's powers (invites, suspending, the doctor); member: everybody else. It changes only through the local CLI (setAdmin, scripts/tenants.ts).
 export type Role = "admin" | "member";
@@ -134,7 +133,6 @@ export interface TenantContext {
   logFile: string;
   costFile: string;
   configFile: string;
-  consentFile: string;
   metaFile: string;
   role: Role;
   capabilities: readonly Capability[];
@@ -189,7 +187,6 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     logFile: paths.logFile,
     costFile: paths.costFile,
     configFile,
-    consentFile: join(dir, "consent.json"),
     metaFile: join(dir, "meta.json"),
     role: rec.role,
     capabilities: [...rec.capabilities],
@@ -203,9 +200,6 @@ export function tenantContext(rec: TenantRecord): TenantContext {
   };
 }
 
-// The one tool of a tenant's run that is no feature: her one-time age and region confirmation (tenanttools.ts), the only tool before she has given it.
-export const TENANT_CONSENT_TOOL = "mcp__tenant__record_consent";
-
 // ---- the registry ----
 
 interface Registry {
@@ -214,11 +208,11 @@ interface Registry {
 
 const isRecord = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 
-// One stored record, checked and completed: a field a registry written before roles existed lacks gets the safe value (a member with the friend
-// defaults), so an old file keeps working and nobody becomes an admin by omission. Undefined: not a usable record.
+// One stored record, checked and completed: a field a registry written before roles existed lacks gets the safe value (a member), so an old file keeps working and nobody becomes an admin by omission. Undefined: not a usable record.
 function normalise(x: unknown): TenantRecord | undefined {
   if (!isRecord(x)) return undefined;
-  const { id, name, acis, status, created } = x;
+  const { id, name, acis, created } = x;
+  const status = x.status === "invited" ? "active" : x.status; // (a registry written when a friend was 'invited' until she confirmed her age: that gate is gone)
   if (typeof id !== "string" || !TENANT_ID.test(id) || typeof name !== "string" || typeof created !== "string") return undefined;
   if (!Array.isArray(acis) || !acis.every((a) => typeof a === "string" && ACI.test(a)) || !STATUSES.includes(status as TenantStatus)) return undefined;
   const isOwner = id === OWNER_ID;
@@ -343,13 +337,13 @@ export function provision(rec: TenantRecord): TenantContext {
 }
 
 // A person the owner approved (registration.ts: her yes in the owner's chat, `npm run tenants -- approve`, or a hello the owner sent her first) becomes a tenant,
-// 'invited' until she has confirmed age and region; provisioned at once. Undefined: not an account id, or she already is one.
+// active at once (no question); provisioned at once. Undefined: not an account id, or she already is one.
 export function addTenant(who: { aci: string; name?: string }, now = Date.now()): TenantRecord | undefined {
   if (!ACI.test(who.aci) || tenantByAci(who.aci)) return undefined;
   const all = people();
   const name = oneLine("tenant name", (who.name || "a friend").replace(/[<>"]/g, " "), LIMITS.name) || "a friend";
   const id = newTenantId(name, new Set(all.map((t) => t.id)));
-  const rec: TenantRecord = { id, name, acis: [who.aci.toLowerCase()], role: "member", status: "invited", capabilities: [...FRIEND_DEFAULTS], credential: "instance-key", created: new Date(now).toISOString() };
+  const rec: TenantRecord = { id, name, acis: [who.aci.toLowerCase()], role: "member", status: "active", capabilities: [...FRIEND_DEFAULTS], credential: "instance-key", created: new Date(now).toISOString() };
   save([...all, rec]);
   provision(rec);
   console.log(`tenants: ${id} joined`);
@@ -358,7 +352,7 @@ export function addTenant(who: { aci: string; name?: string }, now = Date.now())
 
 export const setStatus = (id: string, status: TenantStatus): TenantRecord | undefined => (id === OWNER_ID ? undefined : update(id, (r) => ({ ...r, status })));
 
-// Remove a tenant and her data: the registry entry and her folder (notes, history, session, cost, consent). True: she was a tenant.
+// Remove a tenant and her data: the registry entry and her folder (notes, history, session, cost). True: she was a tenant.
 // What the host already holds elsewhere (the SDK's own transcript of her sessions under ~/.claude, backups of the Mac) is not reached: docs/SAFETY.md.
 export function deleteTenant(id: string, o: { drop?: (id: string) => void } = {}): boolean {
   if (!tenantById(id)) return false;
@@ -390,28 +384,10 @@ export function setTimeZone(id: string, zone: string | undefined): TenantRecord 
   return rec;
 }
 
-// ---- consent, disclosure, notice times: small files in her folder ----
-
-export interface Consent {
-  at: string;
-  ageConfirmed: true; // she said she is 18 or older
-  region: string; // where she lives, as she said it
-  version: 1;
-}
-export const readConsent = (ctx: Pick<TenantContext, "consentFile">): Consent | undefined => {
-  const c = readJson<Partial<Consent> | undefined>(ctx.consentFile, undefined);
-  return c && c.ageConfirmed === true && typeof c.region === "string" ? (c as Consent) : undefined;
-};
-export function recordConsent(ctx: Pick<TenantContext, "consentFile" | "id">, region: string, now = new Date()): Consent {
-  const c: Consent = { at: now.toISOString(), ageConfirmed: true, region: oneLine("region", region, LIMITS.name), version: 1 };
-  writeJson(ctx.consentFile, c);
-  const rec = tenantById(ctx.id);
-  if (rec && rec.status === "invited") setStatus(ctx.id, "active");
-  return c;
-}
+// ---- first greeting, notice times: small files in her folder ----
 
 interface Meta {
-  disclosedAt?: string;
+  disclosedAt?: string; // when she had her first reply (the first-contact hint is given until then; the name is from when it was a fixed disclosure)
   noticeAt?: Record<string, string>;
   pausedUntil?: number; // her cooldown (cooldown.ts keeps it in memory; this is for `npm run doctor`, a separate process)
 }

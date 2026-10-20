@@ -37,7 +37,6 @@ const GOOGLE: (typeof T.CAPABILITIES)[number][] = ["wake", "google", "mail", "ca
 function friend(name: string, grants: (typeof T.CAPABILITIES)[number][] = ["wake"]): string {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
-  T.recordConsent(T.tenantContext(rec), "Germany");
   for (const c of grants) T.grant(rec.id, c);
   return rec.id;
 }

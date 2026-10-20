@@ -32,7 +32,7 @@ const tenantRunOptions = (ctx: { id: string }, apiKey: string, now?: Date) => ru
 const { browseRunOptions, buildOptions } = await import("../src/run/agentrun.ts");
 const { BrowseGuard } = await import("../src/modules/browse/browseguard.ts");
 const { browse, startRefusal } = await import("../src/modules/browse/browse.ts");
-const { tenantEnv, createTenantServer } = await import("../src/tenants/tenanttools.ts");
+const { tenantEnv } = await import("../src/tenants/tenanttools.ts");
 const { coolingDown, resetCooldown } = await import("../src/core/cooldown.ts");
 const { InstanceKeyError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
@@ -118,7 +118,7 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   assert.equal(isReadableData(join(settings.stateDir, "tenants.json")), true, "the registry: ids, account ids, status; no key, no words");
   assert.equal(isReadableData(join(bea.notesDir, "context-secret.md")), false);
   assert.equal(isReadableData(bea.logFile), false);
-  assert.equal(isReadableData(join(ann.dir, "consent.json")), false);
+  assert.equal(isReadableData(join(ann.dir, "meta.json")), false);
   assert.equal(isReadableData(join(settings.stateDir, "openbao", "tls", "key.pem")), false);
   assert.equal(isReadableData(join(settings.stateDir, "registrations.json")), false);
   symlinkSync(bea.notesDir, join(settings.memoryDir, "sneaky")); // a link from a readable folder into hers
@@ -182,7 +182,6 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.equal(env.ANTHROPIC_BASE_URL, undefined);
   assert.equal(env.PATH, "/bin");
   assert.throws(() => tenantEnv({}, ""), /instance API key/);
-  T.recordConsent(ann, "Germany"); // (her age and region are confirmed: the full tool set)
   const noop = async () => ({ approved: false });
   const o = buildOptions(noop, tenantRunOptions(ann, KEY), undefined);
   assert.equal(o.env!.ANTHROPIC_API_KEY, KEY);
@@ -207,22 +206,13 @@ test("tenant key: her run's environment carries HER key and none of the instance
   }
 });
 
-test("consent first: until her age and region are confirmed her run has one tool and no built-ins", async () => {
+test("no age or region gate: a friend's first run has her full tool set at once, with no consent tool and no tenant server", () => {
   const ctx = T.tenantContext(join_("Cleo"));
   const o = buildOptions(async () => ({ approved: false }), tenantRunOptions(ctx, KEY), undefined);
-  assert.deepEqual(o.tools, []);
-  assert.deepEqual(Object.keys(o.mcpServers as object), ["tenant"]);
-  const gate = async (tool: string, input: Record<string, unknown>) => (await o.canUseTool!(tool, input, { signal: new AbortController().signal } as never)) as { behavior: string };
-  assert.equal((await gate(T.TENANT_CONSENT_TOOL, { ageConfirmed: true, region: "Germany" })).behavior, "allow");
-  for (const [tool, input] of [["Read", { file_path: join(ctx.notesDir, "x.md") }], ["WebSearch", { query: "x" }], ["mcp__send__send", { text: "x" }], ["mcp__browse__browse", { task: "xxxxxx" }]] as const) assert.equal((await gate(tool, input)).behavior, "deny", tool);
-  const after = tenantRunOptions(ctx, KEY);
-  assert.equal(after.tenant!.consented, false);
-  T.recordConsent(ctx, "Germany");
-  const done = tenantRunOptions(ctx, KEY);
-  assert.equal(done.tenant!.consented, true);
-  assert.ok(!done.tools!.has(T.TENANT_CONSENT_TOOL));
-  assert.notEqual(done.systemPrompt, after.systemPrompt);
-  assert.ok(createTenantServer({ id: ctx.id, consentFile: ctx.consentFile }));
+  assert.ok((o.tools as string[]).includes("Read"));
+  assert.ok(!Object.keys(o.mcpServers as object).includes("tenant"));
+  assert.ok(!("consented" in tenantRunOptions(ctx, KEY).tenant!));
+  assert.doesNotMatch(tenantRunOptions(ctx, KEY).systemPrompt as string, /18|record_consent|country or region/);
 });
 
 // ---- a run against a fake SDK ----

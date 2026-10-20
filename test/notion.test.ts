@@ -78,7 +78,6 @@ let n = 0;
 function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]) {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
-  T.recordConsent(T.tenantContext(rec), "Germany");
   for (const c of capabilities) T.grant(rec.id, c);
   return T.tenantById(rec.id)!;
 }

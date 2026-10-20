@@ -103,16 +103,6 @@ test("routing: with TENANTS off nothing is answered, as today", () => {
   assert.deepEqual(R.routeSender({ aci: ACI_A, text: "hello" }).kind, "ignore", "not even a known tenant");
 });
 
-test("consent: a one-time record; recording it makes an invited tenant active", () => {
-  const rec = join_("Dora");
-  const ctx = T.tenantContext(rec);
-  assert.equal(T.readConsent(ctx), undefined);
-  T.recordConsent(ctx, "  Germany \n");
-  assert.equal(T.readConsent(ctx)?.region, "Germany");
-  assert.equal(T.readConsent(ctx)?.ageConfirmed, true);
-  assert.equal(T.tenantById(rec.id)!.status, "active");
-});
-
 // ---- a tenant's turn ----
 
 function runner(over: { key?: string | undefined; ask?: (key: string) => Promise<{ text: string; costUsd: number }>; now?: () => number } = {}) {
@@ -128,18 +118,11 @@ function runner(over: { key?: string | undefined; ask?: (key: string) => Promise
   return { r, asked, alerts };
 }
 
-test("disclosure: plainly an AI, her notes private from other users AND from the admin through it, and the host's own access said honestly; short", () => {
-  assert.match(R.DISCLOSURE, /\bAI\b/);
-  assert.match(R.DISCLOSURE, /private from other users and from the admin/);
-  assert.match(R.DISCLOSURE, /runs this computer could still technically read the files/);
-  assert.ok(R.DISCLOSURE.length < 320, "short");
-});
-
-test("turn: no instance key means a plain 'not set up for friends' with the AI line, a notice for the admin, no model call and never the owner's login", async () => {
+test("turn: no instance key means a plain 'not set up for friends', a notice for the admin, no model call and never the owner's login", async () => {
   const rec = join_("Eve");
   const { r, asked, alerts } = runner({ key: undefined });
   const first = await r.run(tenant(rec.id), "hello");
-  assert.ok(first.text.startsWith(R.DISCLOSURE) && first.text.includes(R.notSetUpReply()));
+  assert.equal(first.text, R.notSetUpReply());
   assert.deepEqual(asked, []);
   assert.equal(alerts.length, 1);
   assert.match(alerts[0]!, /TENANT_ANTHROPIC_API_KEY is not set/);
@@ -199,13 +182,14 @@ test("key notice: a failure on the key from an unattended run, a mail loop or th
   assert.equal(alerts.length, 1);
 });
 
-test("turn: the run gets the instance key, and the first reply carries the AI line exactly once", async () => {
+test("turn: the run gets the instance key, and her first reply is her model reply, unchanged (the greeting is the model's: persona.ts FIRST_CONTACT)", async () => {
   const rec = join_("Finn");
   const { r, asked } = runner({ key: KEY_A });
   const one = await r.run(tenant(rec.id), "hi");
   const two = await r.run(tenant(rec.id), "and again");
   assert.deepEqual(asked.map((a) => a.key), [KEY_A, KEY_A]);
-  assert.equal(one.text, `${R.DISCLOSURE}\n\nhello there`);
+  assert.equal(one.text, "hello there");
+  assert.ok(T.wasDisclosed(T.tenantContext(rec)), "marked once she has had her first reply");
   assert.equal(two.text, "hello there");
 });
 
@@ -284,7 +268,6 @@ test("doctor: shows the instance key (set or not, never its value) and each tena
   lines.length = 0;
   const rec = join_("Doc");
   const ctx = T.tenantContext(rec);
-  T.recordConsent(ctx, "Germany");
   recordCost(0.25, ctx.costFile);
   T.setPaused(ctx, Date.now() + 3600_000);
   assert.ok(looksLikeApiKey(KEY_A) && !looksLikeApiKey("sk-ant-short") && !looksLikeApiKey("hello"));
