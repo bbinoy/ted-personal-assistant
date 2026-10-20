@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { missingSetup, setupItems, type Note } from "../src/notes.ts";
-import { briefSystem, chatSystem, handlerSystem } from "../src/persona.ts";
+import { briefSystem, chatContext, chatSystem, handlerSystem } from "../src/persona.ts";
 import { settings } from "../src/settings.ts";
 
 const skillsDir = join(settings.pluginDir, "skills");
@@ -46,10 +46,10 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   assert.deepEqual(missingSetup(setupItems().map((i) => note(i.file))), []);
   assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
-  assert.match(chatSystem(undefined, new Date("2026-10-12T09:00:00"), missing), /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
+  assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
   assert.match(briefSystem("", missing), /You cannot ask anyone[\s\S]*message "set up"/);
   assert.match(handlerSystem("", missing), /Not set up yet/);
-  assert.ok(!chatSystem(undefined, new Date(), []).includes("Not set up yet"));
+  assert.ok(!chatSystem(new Date()).includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
 });
 
 test("setup: Notion tasks and meetings are found by the agent, saved, and only asked about when nothing or several are found; background runs never edit an unconfirmed page", () => {
@@ -75,10 +75,10 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   const base = missingSetup([]);
   assert.equal(missingSetup([], ["calendar"]).length, base.length - 1);
   assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 3);
-  const chat = chatSystem(undefined, new Date("2026-10-12T09:00:00"), [], ["notion"]);
+  const chat = chatContext({ down: ["notion"] })!;
   assert.match(chat, /Not connected right now[\s\S]*Notion[\s\S]*Do not ask them to type in/);
   assert.match(briefSystem("", [], ["notion", "calendar"]), /🔌 Notion and Google Calendar aren't connected/);
-  assert.ok(!chatSystem(undefined, new Date(), [], []).includes("Not connected"));
+  assert.ok(!chatSystem(new Date()).includes("Not connected") && chatContext({ down: [] }) === undefined);
   assert.equal(NAMES.calendar, "Google Calendar");
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
   assert.match(read("setup"), /do not\*\* ask them to type in what the connector/);

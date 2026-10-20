@@ -58,7 +58,7 @@ test("the prompts built from the preset are the stored ones (test/fixtures/defau
   const account = process.env.SIGNAL_ACCOUNT;
   delete process.env.SIGNAL_ACCOUNT;
   try {
-    assert.equal(portable(chatSystem("yesterday's brief", new Date("2026-10-12T09:00:00"), [], [], ["10:00 an alert"])), stored.chat);
+    assert.equal(portable(chatSystem(new Date("2026-10-12T09:00:00"))), stored.chat);
     assert.equal(portable(groupSystem()), stored.group);
   } finally {
     if (account !== undefined) process.env.SIGNAL_ACCOUNT = account;
@@ -119,7 +119,7 @@ test("a second preset changes the persona, the rhythm and the limits without tou
     const { PROFILES } = await import(${JSON.stringify(src + "profiles.ts")});
     const { CATEGORIES, categoryOf } = await import(${JSON.stringify(src + "notes.ts")});
     const { settings } = await import(${JSON.stringify(src + "settings.ts")});
-    console.log(JSON.stringify({ chat: chatSystem(undefined, new Date("2026-10-12T09:00:00")), radar: radarSystem(""), personality: PERSONALITY, categories: CATEGORIES,
+    console.log(JSON.stringify({ chat: chatSystem(new Date("2026-10-12T09:00:00")), radar: radarSystem(""), personality: PERSONALITY, categories: CATEGORIES,
       cat: [categoryOf("goals-run.md"), categoryOf("triage-x.md")], brief: PROFILES.brief, radarProfile: PROFILES.radar.notes,
       rhythm: [settings.briefStartHour, settings.briefBackstopHour, settings.proactive, settings.heartbeatMinutes, settings.radarMinutes] }));
   `);

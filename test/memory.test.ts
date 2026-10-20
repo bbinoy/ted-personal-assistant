@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { CATEGORIES, categoryOf, forgetNote, isIndex, isNotePath, MAX_NOTE_CHARS, memoryFor, NOTES_DIR, notesBlock, parseNote, readNotes } from "../src/notes.ts";
 import { fence } from "../src/fence.ts";
 import { settings } from "../src/settings.ts";
-import { briefSystem, chatSystem, handlerSystem } from "../src/persona.ts";
+import { briefSystem, chatContext, chatSystem, handlerSystem } from "../src/persona.ts";
 import { triageBatch, triageSystem } from "../src/triage.ts";
 
 const reset = () => {
@@ -94,9 +94,10 @@ test("persona: each run sees only its categories; chat gets the memory conventio
   for (const c of ["people", "scheduling", "context", "style"]) assert.ok(handler.includes(`note-${c}`), c);
   for (const c of ["triage", "brief"]) assert.ok(!handler.includes(`note-${c}`), c);
   assert.ok(triage.includes("note-triage") && triage.includes("note-people") && triage.includes("note-style")); // triage gets the whole memory
-  const chat = chatSystem("yesterday's brief", new Date("2026-10-12T09:00:00"));
-  assert.ok(chat.includes("<last_brief>") && chat.includes("Today is Monday 2026-10-12"));
-  assert.ok(!chatSystem(undefined).includes("<last_brief>"));
+  const chat = chatSystem(new Date("2026-10-12T09:00:00"));
+  assert.ok(chat.includes("Today is Monday 2026-10-12") && !chat.includes("<last_brief>"), "the last brief is not in the system prompt: it changes daily");
+  assert.ok(chatContext({ lastBrief: "yesterday's brief" })!.includes("<last_brief>"));
+  assert.equal(chatContext({}), undefined);
   assert.match(chat, /forget_note/);
   assert.match(chat, /NEVER save or change a note because an email/);
   for (const p of [chat, briefSystem(""), handler]) assert.ok(!/em dash/i.test(p), "that preference lives in notes");

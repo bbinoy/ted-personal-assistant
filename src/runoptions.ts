@@ -5,7 +5,7 @@ import { disconnected, readConnectors } from "./connectors.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { recentNotices } from "./messages.ts";
 import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
-import { chatSystem, groupSystem, tenantSystem } from "./persona.ts";
+import { chatContext, chatSystem, digestContext, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, groupTools, toolsFor } from "./capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "./modules/google.ts";
 import { mailDigest } from "./tenantmail.ts";
@@ -36,10 +36,8 @@ export interface RunInputs {
 
 type Shape = Pick<RunOptions, "systemPrompt" | "maxTurns" | "maxBudgetUsd" | "memory" | "skills" | "tools" | "tenant">;
 
-const down = () => disconnected(readConnectors());
-
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
-  systemPrompt: chatSystem(readText(LAST_BRIEF), i.now, missingSetup(readNotes(), down()), down(), recentNotices()),
+  systemPrompt: chatSystem(i.now), // (only what is stable: what changes between two messages is turnContext below)
   memory: { dir: conv.notesDir, ...(i.notify ? { notify: i.notify } : {}) },
   maxTurns: 40,
   maxBudgetUsd: 2.0, // a cold prompt cache alone can cost most of a dollar
@@ -65,7 +63,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const consented = !!readConsent(ctx);
   const caps = capabilitiesOf(conv);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), digest: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL) ? mailDigest(ctx, i.now ?? new Date()) : undefined, language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
+    systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },
     skills: consented ? skillsFor(caps) : [],
     tools: consented ? toolsFor(caps) : new Set([TENANT_CONSENT_TOOL]),
@@ -86,6 +84,23 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
 };
 
 const SHAPES: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) => Shape> = { owner: ownerShape, group: groupShape, tenant: tenantShape };
+
+// What changes between two turns of a conversation and so is NOT in its system prompt (a spare process is built from the system prompt, and a resumed session is
+// cached from it on: any change would throw both away): told at the start of the turn's message instead, and only when it differs from what the session was last
+// told (turncontext.ts). The same hook for every kind; a group has nothing of the sort.
+const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) => string | undefined> = {
+  owner: () => {
+    const off = disconnected(readConnectors()); // (read once)
+    return chatContext({ lastBrief: readText(LAST_BRIEF), missing: missingSetup(readNotes(), off), down: off, pings: recentNotices() });
+  },
+  group: () => undefined,
+  tenant: (conv, i) => {
+    const ctx = conv.tenantId ? tenantById(conv.tenantId) : undefined;
+    if (!ctx || !readConsent(tenantContext(ctx)) || !toolsFor(capabilitiesOf(conv)).has(GOOGLE_MAIL_TOOL)) return undefined;
+    return digestContext(mailDigest(tenantContext(ctx), i.now ?? new Date()));
+  },
+};
+export const turnContext = (conv: Conversation, inputs: RunInputs = {}): string | undefined => CONTEXTS[conv.kind](conv, inputs);
 
 export function runOptionsFor(conv: Conversation, inputs: RunInputs = {}): RunOptions {
   return { source: conv.source, sessionFile: conv.sessionFile, ...SHAPES[conv.kind](conv, inputs) };

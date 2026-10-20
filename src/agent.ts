@@ -1,7 +1,8 @@
 import { query, startup } from "@anthropic-ai/claude-agent-sdk";
 import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
 import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
-import { runOptionsFor, type RunInputs } from "./runoptions.ts";
+import { runOptionsFor, turnContext, type RunInputs } from "./runoptions.ts";
+import { markShown, unseen } from "./turncontext.ts";
 import { chatResume } from "./chatsession.ts";
 import { disconnected, readConnectors } from "./connectors.ts";
 import type { Conversation } from "./conversationmodel.ts";
@@ -54,8 +55,11 @@ export async function runConversation(conv: Conversation, inputs: RunInputs, bui
   const r = chatResume(conv.sessionFile);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const o = { ...runOptionsFor(conv, inputs), seenAt, onFirstOutput };
-  const input = userInput(prompt, pictures, documents);
-  return runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume), abortController } }));
+  const context = unseen(conv.sessionFile, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
+  const input = userInput(context ? `${context}\n\n${prompt}` : prompt, pictures, documents);
+  const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume), abortController } }));
+  if (context) markShown(conv.sessionFile, chatResume(conv.sessionFile).resume, context); // the turn went through: the session has it now
+  return reply;
 }
 
 // Keep a process warm for the conversation's next message. `refresh`: only renew one that is in use (a timer; it does not keep an idle one alive).
