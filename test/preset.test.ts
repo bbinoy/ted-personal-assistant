@@ -32,23 +32,22 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
   const p = loadPreset(TED);
   assert.equal(p.name, "ted");
   assert.deepEqual(p.rhythm, {
-    heartbeat: { everyMinutes: 15, quietFromHour: 22, quietToHour: 7 },
+    heartbeat: { everyMinutes: 5, dayMinutes: 30, quietFromHour: 22, quietToHour: 7 },
     brief: { skill: "daily-brief", startHour: 7, backstopHour: 9, maxAttempts: 3 },
-    radar: { skill: "radar", enabled: true, everyMinutes: 180 },
     dream: { enabled: true, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
   });
   assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice"]);
-  assert.deepEqual(Object.keys(p.profiles).sort(), ["background", "brief", "chat", "group", "handler", "radar"]);
+  assert.deepEqual(Object.keys(p.profiles).sort(), ["background", "brief", "chat", "group", "handler", "heartbeat"]);
   assert.deepEqual(Object.keys(p.persona).sort(), Object.keys(PROMPTS).sort());
-  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "setup", "radar"]);
+  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "setup"]);
   assert.strictEqual(presetFor({}), presetFor({ ASSISTANT_PRESET: "ted" }), "ted is the default, loaded once");
 });
 
 test("the code reads the preset: settings defaults, profiles, note categories", () => {
   const p = presetFor();
-  assert.deepEqual([settings.briefStartHour, settings.briefBackstopHour, settings.briefMaxAttempts, settings.radarMinutes, settings.heartbeatMinutes, settings.quietStartHour, settings.quietEndHour],
-    [p.rhythm.brief.startHour, p.rhythm.brief.backstopHour, p.rhythm.brief.maxAttempts, p.rhythm.radar.everyMinutes, p.rhythm.heartbeat.everyMinutes, p.rhythm.heartbeat.quietFromHour, p.rhythm.heartbeat.quietToHour]);
-  for (const k of ["brief", "radar", "background", "group"] as const) assert.deepEqual([PROFILES[k].maxTurns, PROFILES[k].maxBudgetUsd, PROFILES[k].notes], [p.profiles[k].maxTurns, p.profiles[k].maxBudgetUsd, p.profiles[k].notes]);
+  assert.deepEqual([settings.briefStartHour, settings.briefBackstopHour, settings.briefMaxAttempts, settings.heartbeatDayMinutes, settings.heartbeatMinutes, settings.quietStartHour, settings.quietEndHour],
+    [p.rhythm.brief.startHour, p.rhythm.brief.backstopHour, p.rhythm.brief.maxAttempts, p.rhythm.heartbeat.dayMinutes, p.rhythm.heartbeat.everyMinutes, p.rhythm.heartbeat.quietFromHour, p.rhythm.heartbeat.quietToHour]);
+  for (const k of ["brief", "heartbeat", "background", "group"] as const) assert.deepEqual([PROFILES[k].maxTurns, PROFILES[k].maxBudgetUsd, PROFILES[k].notes], [p.profiles[k].maxTurns, p.profiles[k].maxBudgetUsd, p.profiles[k].notes]);
   assert.deepEqual(CATEGORIES, p.notes.categories);
 });
 
@@ -78,9 +77,9 @@ test("a malformed preset fails with a message that names the file and the proble
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "closes {{/mail}}")), /chat\.md: \{\{\/mail\}\} closes nothing/);
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "a stray {{ brace")), /chat\.md: a stray/);
   assert.throws(broken((_d, j) => { j.rhythm.brief.startHour = 25; }), /rhythm\.brief\.startHour: must be a whole number from 0 to 23 \(got 25\)/);
-  assert.throws(broken((_d, j) => { j.rhythm.radar.everyMinutes = 5; }), /rhythm\.radar\.everyMinutes: must be a whole number from 30 to 720/);
+  assert.throws(broken((_d, j) => { j.rhythm.heartbeat.dayMinutes = 5; }), /rhythm\.heartbeat\.dayMinutes: must be a whole number from 10 to 120/);
   assert.throws(broken((_d, j) => { j.rhythm.dream.enabled = "yes"; }), /rhythm\.dream\.enabled: must be true or false/);
-  assert.throws(broken((_d, j) => { delete j.profiles.radar; }), /profiles\.radar: must be an object/);
+  assert.throws(broken((_d, j) => { delete j.profiles.heartbeat; }), /profiles\.heartbeat: must be an object/);
   assert.throws(broken((_d, j) => { j.profiles.brief.notes = ["gossip"]; }), /profiles\.brief\.notes: "gossip" is not one of notes\.categories/);
   assert.throws(broken((_d, j) => { j.rhythm.brief.skill = "weekly-review"; }), /the skill "weekly-review" is not in skills\.core/);
   assert.throws(broken((_d, j) => { j.skills.core = "daily-brief"; }), /skills\.core: must be a list/);
@@ -97,22 +96,22 @@ test("a second preset changes the persona, the rhythm and the limits without tou
   writeFileSync(join(dir, "preset.json"), JSON.stringify({
     extends: "ted",
     name: "coach",
-    rhythm: { brief: { startHour: 6, backstopHour: 8 }, radar: { enabled: false }, heartbeat: { everyMinutes: 30 } },
+    rhythm: { brief: { startHour: 6, backstopHour: 8 }, heartbeat: { everyMinutes: 30, dayMinutes: 45 } },
     notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], group: ["people"], tenant: ["people", "style"] },
-    profiles: { brief: { maxTurns: 40, notes: ["goals", "style"] }, radar: { notes: ["goals"] }, background: { notes: ["goals"] }, handler: { notes: ["people", "style"] } },
+    profiles: { brief: { maxTurns: 40, notes: ["goals", "style"] }, heartbeat: { notes: ["goals"] }, background: { notes: ["goals"] }, handler: { notes: ["people", "style"] } },
   }));
   writeFileSync(join(dir, "persona", "personality.md"), "You talk like a calm, no-nonsense running coach: short sentences, one clear next step.\n");
-  writeFileSync(join(dir, "persona", "radar.md"), "You are {{assistant}}, {{owner}}'s coach, checking in. Load the {{skill}} skill.\n");
+  writeFileSync(join(dir, "persona", "heartbeatSystem.md"), "You are {{assistant}}, {{owner}}'s coach, checking in.\n");
   const probe = join(scratch, "probe.ts");
   const src = new URL("../src/", import.meta.url).pathname;
   writeFileSync(probe, `
-    const { chatSystem, radarSystem, PERSONALITY } = await import(${JSON.stringify(src + "persona.ts")});
+    const { chatSystem, heartbeatSystem, PERSONALITY } = await import(${JSON.stringify(src + "persona.ts")});
     const { PROFILES } = await import(${JSON.stringify(src + "profiles.ts")});
     const { CATEGORIES, categoryOf } = await import(${JSON.stringify(src + "notes.ts")});
     const { settings } = await import(${JSON.stringify(src + "settings.ts")});
-    console.log(JSON.stringify({ chat: chatSystem(new Date("2026-10-12T09:00:00")), radar: radarSystem(""), personality: PERSONALITY, categories: CATEGORIES,
-      cat: [categoryOf("goals-run.md"), categoryOf("triage-x.md")], brief: PROFILES.brief, radarProfile: PROFILES.radar.notes,
-      rhythm: [settings.briefStartHour, settings.briefBackstopHour, settings.proactive, settings.heartbeatMinutes, settings.radarMinutes] }));
+    console.log(JSON.stringify({ chat: chatSystem(new Date("2026-10-12T09:00:00")), heartbeat: heartbeatSystem(""), personality: PERSONALITY, categories: CATEGORIES,
+      cat: [categoryOf("goals-run.md"), categoryOf("triage-x.md")], brief: PROFILES.brief, heartbeatProfile: PROFILES.heartbeat.notes,
+      rhythm: [settings.briefStartHour, settings.briefBackstopHour, settings.heartbeatMinutes, settings.heartbeatDayMinutes] }));
   `);
   const run = (env: Record<string, string>) => JSON.parse(execFileSync(process.execPath, ["--conditions=workspace-source", probe], {
     env: { ...process.env, HARNESS_DATA_DIR: join(scratch, "data"), OWNER_NAME: "Alex", ASSISTANT_NAME: "Coach", ...env }, encoding: "utf8",
@@ -120,29 +119,30 @@ test("a second preset changes the persona, the rhythm and the limits without tou
   const coach = run({ ASSISTANT_PRESET: dir });
   assert.match(coach.chat, /You are Coach, personal assistant to Alex\. You talk like a calm, no-nonsense running coach/);
   assert.ok(!coach.chat.includes("Ted Lasso"));
-  assert.equal(coach.radar.split("\n\n")[0], "You are Coach, Alex's coach, checking in. Load the ted-personal-assistant:radar skill.");
+  assert.ok(coach.heartbeat.startsWith("You are Coach, Alex's coach, checking in."));
+  assert.deepEqual(coach.heartbeatProfile, ["goals"]);
   assert.deepEqual(coach.categories, ["goals", "people", "style"]);
   assert.deepEqual(coach.cat, ["goals", null]); // "triage" is not this assistant's category
   assert.deepEqual([coach.brief.maxTurns, coach.brief.maxBudgetUsd, coach.brief.notes], [40, 5, ["goals", "style"]]);
-  assert.deepEqual(coach.rhythm, [6, 8, false, 30, 180]);
+  assert.deepEqual(coach.rhythm, [6, 8, 30, 45]);
   // An environment variable still beats the preset's default.
-  assert.equal(run({ ASSISTANT_PRESET: dir, BRIEF_START_HOUR: "5", PROACTIVE: "on" }).rhythm[0], 5);
+  assert.equal(run({ ASSISTANT_PRESET: dir, BRIEF_START_HOUR: "5" }).rhythm[0], 5);
   // Without the variable it is Ted again, and this process's own prompts are Ted's.
   const ted = run({});
   assert.ok(ted.chat.includes("Ted Lasso") && ted.personality === PERSONALITY);
-  assert.deepEqual(ted.rhythm, [7, 9, true, 15, 180]);
+  assert.deepEqual(ted.rhythm, [7, 9, 5, 30]);
 });
 
 // Every run's options built under a second preset whose categories are not Ted's: nothing in code may still name triage, scheduling, context or brief as a
 // category of a conversation. (The words of the persona files are the preset's, and the categories in them are filled in from it.)
-test("a second preset's note categories reach every run: chat, group, friend, brief, radar, handler, dream and the gates", () => {
+test("a second preset's note categories reach every run: chat, group, friend, brief, heartbeat, handler, dream and the gates", () => {
   const dir = join(scratch, "coach2");
   mkdirSync(join(dir, "persona"), { recursive: true });
   writeFileSync(join(dir, "preset.json"), JSON.stringify({
     extends: "ted",
     name: "coach2",
     notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], group: ["people"], tenant: ["goals", "style"] },
-    profiles: { brief: { notes: ["goals", "style"] }, radar: { notes: ["goals"] }, background: { notes: ["goals"] }, handler: { maxTurns: 12, maxBudgetUsd: 0.7, notes: ["goals", "people", "style"] } },
+    profiles: { brief: { notes: ["goals", "style"] }, heartbeat: { notes: ["goals"] }, background: { notes: ["goals"] }, handler: { maxTurns: 12, maxBudgetUsd: 0.7, notes: ["goals", "people", "style"] } },
   }));
   const probe = join(scratch, "probe2.ts");
   const src = new URL("../src/", import.meta.url).pathname;
@@ -154,7 +154,7 @@ test("a second preset's note categories reach every run: chat, group, friend, br
     const { LOGIN } = await import(${JSON.stringify(src + "payer.ts")});
     const { PROFILES } = await import(${JSON.stringify(src + "profiles.ts")});
     const { dreamScope } = await import(${JSON.stringify(src + "dreamscope.ts")});
-    const { dreamSystem, directGateDefaults, GATE_DEFAULTS, ownerGateDefaults } = await import(${JSON.stringify(src + "persona.ts")});
+    const { dreamSystem, directGateDefaults, GATE_DEFAULTS } = await import(${JSON.stringify(src + "persona.ts")});
     const { writeFileSync, mkdirSync } = await import("node:fs");
     const { join } = await import("node:path");
     const { NOTES_DIR } = await import(${JSON.stringify(src + "notes.ts")});
@@ -170,10 +170,10 @@ test("a second preset's note categories reach every run: chat, group, friend, br
       group: prompt(runOptionsFor(group("g1"), {})),
       friend: prompt(runOptionsFor(tenant(rec.id), { apiKey: "k" })),
       handler: handlerOptions(owner(), LOGIN, undefined, "TASK"),
-      profiles: Object.fromEntries(["chat", "brief", "radar", "background", "group", "handler"].map((k) => [k, [PROFILES[k].maxTurns, PROFILES[k].maxBudgetUsd, PROFILES[k].notes]])),
+      profiles: Object.fromEntries(["chat", "brief", "heartbeat", "background", "group", "handler"].map((k) => [k, [PROFILES[k].maxTurns, PROFILES[k].maxBudgetUsd, PROFILES[k].notes]])),
       scopes: Object.fromEntries(["owner", "group", "tenant"].map((k) => [k, dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories])),
       dream: ["owner", "group", "tenant"].map((k) => dreamSystem({ subject: "S", kind: k, categories: dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories })),
-      gates: [GATE_DEFAULTS.owner, GATE_DEFAULTS.group, directGateDefaults("Mia"), ownerGateDefaults({ briefHour: 7, backstopHour: 9, radarMinutes: 180, radar: true, minGapMinutes: 60 })],
+      gates: [GATE_DEFAULTS.group, directGateDefaults("Mia")],
     };
     out.handler = { systemPrompt: out.handler.systemPrompt, maxTurns: out.handler.maxTurns, maxBudgetUsd: out.handler.maxBudgetUsd };
     console.log(JSON.stringify(out));

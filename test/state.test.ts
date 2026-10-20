@@ -73,7 +73,10 @@ test("budget: costs accumulate and the over-budget notice fires once", () => {
 
 test("settings: defaults, and typos fail loudly instead of becoming NaN", () => {
   const d = loadSettings({});
-  assert.equal(d.heartbeatMinutes, 15);
+  assert.equal(d.heartbeatMinutes, 5);
+  assert.deepEqual([d.heartbeatModel, d.heartbeatDayMinutes, d.nightMessages], ["haiku", 30, 2]);
+  assert.equal(loadSettings({ HEARTBEAT_MODEL: "sonnet", NIGHT_MESSAGES: "1" }).heartbeatModel, "sonnet");
+  assert.throws(() => loadSettings({ NIGHT_MESSAGES: "-1" }), /NIGHT_MESSAGES/);
   assert.equal(d.archiveLive, true);
   assert.equal(d.signalHost, "127.0.0.1");
   assert.throws(() => loadSettings({ HEARTBEAT_MINUTES: "abc" }), /HEARTBEAT_MINUTES/);

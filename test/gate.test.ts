@@ -91,9 +91,9 @@ test("settings: GATE_MAX_DELAY_SECONDS defaults to 4 and is validated", () => {
 });
 
 test("gate: whatever the model returns, only a literal true acts, and the next look is clamped to 15..60", () => {
-  assert.deepEqual(parseGate({ act: true, instructions: "  Post   a fun fact ", delaySeconds: 2.4, nextCheckMinutes: 20 }), { act: true, task: "task", instructions: "Post a fun fact", delaySeconds: 2, nextCheckMinutes: 20 });
+  assert.deepEqual(parseGate({ act: true, instructions: "  Post   a fun fact ", delaySeconds: 2.4, nextCheckMinutes: 20 }), { act: true, instructions: "Post a fun fact", delaySeconds: 2, nextCheckMinutes: 20 });
   for (const bad of [undefined, null, "yes", 7, [], {}, { act: "true" }, { act: 1 }, { act: "yes", instructions: "x" }]) assert.equal(parseGate(bad).act, false, JSON.stringify(bad));
-  assert.deepEqual(parseGate({ act: true, delaySeconds: -5, nextCheckMinutes: 5 }), { act: true, task: "task", delaySeconds: 0, nextCheckMinutes: 15 });
+  assert.deepEqual(parseGate({ act: true, delaySeconds: -5, nextCheckMinutes: 5 }), { act: true, delaySeconds: 0, nextCheckMinutes: 15 });
   assert.equal(parseGate({ act: true, delaySeconds: 9999, nextCheckMinutes: 600 }).nextCheckMinutes, 60);
   assert.equal(parseGate({ act: false, nextCheckMinutes: "soon" }).nextCheckMinutes, 30); // unusable: a middling default, never a tight loop
   assert.equal(parseGate({ act: true, instructions: 42 }).instructions, undefined);
@@ -135,16 +135,14 @@ test("ledger: the last wake line is the state; due on time, on news, on a change
   assert.equal(lookState([entry("wake", 0, "garbage")], T0).wake, undefined); // unreadable state: look again
 });
 
-test("ledger: the presets' lines give attempts, done, last radar, keys and posts of TODAY; wakeText clamps the next look", () => {
+test("ledger: the brief's lines give attempts and done of TODAY; wakeText clamps the next look", () => {
   const st = lookState([
     entry("action", -24 * 60, "[brief] attempt 1 started"), entry("action", -24 * 60 + 1, "[brief] attempt 1 → delivered"), entry("notice", -24 * 60, "old"),
     entry("action", 1, "[brief] attempt 1 started"), entry("action", 2, "[brief] attempt 1 → incomplete"), entry("action", 3, "[brief] attempt 2 started"),
-    entry("action", 4, '[radar] ran: 1 message(s) sent, 5 event(s) read, next meeting at 14:30. keys: ["prep:abc"]'), entry("notice", 5, "Prep for 14:30"),
+    entry("notice", 5, "Prep for 14:30"),
   ], T0);
-  assert.deepEqual([st.briefAttempts, st.briefDone, st.radarPostsToday], [2, false, 1]);
+  assert.deepEqual([st.briefAttempts, st.briefDone], [2, false]);
   assert.equal(st.lastBriefAttemptAt, at(3));
-  assert.equal(st.lastRadarAt, at(4));
-  assert.ok(st.radarKeys["prep:abc"]);
   assert.equal(lookState([entry("action", 9, "[brief] attempt 2 → delivered")], T0).briefDone, true);
   assert.equal(lookState([entry("brief", 9, "Focus today: ...")], T0).briefDone, true); // a brief logged today is a brief
   const w = JSON.parse(wakeText(5, T0, T0.getTime()));
@@ -193,7 +191,7 @@ test("ledger kinds never reach anything that reads the log as conversation", asy
 // ---- wake-ups ----
 
 interface Calls { provenance: unknown[]; ownerRuns: string[]; groupRuns: string[]; sent: string[]; gates: string[]; profiles: string[]; recorded: [string, string][]; turns: any[] }
-function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; paused?: boolean; ownerAnswer?: string; groupAnswer?: string; vouch?: boolean; groups?: string[]; now?: Date; separate?: boolean } = {}) {
+function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; paused?: boolean; ownerAnswer?: string; groupAnswer?: string | (() => string); vouch?: boolean; groups?: string[]; now?: Date; separate?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "wake-"));
   mkdirSync(join(dir, "o-notes"));
   const ownerConv: Conversation = { ...owner(), logFile: `logs/gate-wake-owner-${Math.random().toString(36).slice(2)}.jsonl`, notesDir: join(dir, "o-notes") };
@@ -223,7 +221,7 @@ function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; pa
     groupChats: over.separate ?? true,
     vouch: async () => over.vouch ?? true,
     runProfile: async (profile, prompt, extra) => (c.profiles.push(profile), c.ownerRuns.push(prompt), c.provenance.push(extra?.provenance), { text: over.ownerAnswer ?? "Morning! Fun fact: biscuits." }),
-    runGroup: async (build, ctx) => (c.groupRuns.push(`${ctx.conv.source}:${build().prompt}`), c.provenance.push(scopeOf(ctx.conv.key).read()), over.groupAnswer ?? "Group fun fact!"),
+    runGroup: async (build, ctx) => (c.groupRuns.push(`${ctx.conv.source}:${build().prompt}`), c.provenance.push(scopeOf(ctx.conv.key).read()), (typeof over.groupAnswer === "function" ? over.groupAnswer() : over.groupAnswer) ?? "Group fun fact!"),
     gate: async ({ conv }) => (c.gates.push(conv.kind), parseGate((over.gate ?? (() => ({ act: true, instructions: "Post a fun fact", nextCheckMinutes: 30 })))(conv))),
     groups: () => over.groups ?? [],
     context: () => ({ lines: ["Eve (a member): hi"], seenAt: undefined }),
@@ -236,16 +234,23 @@ function rig(over: { gate?: (conv: Conversation) => unknown; spent?: boolean; pa
   return { c, wakeups, ownerConv, setNow: (d: Date) => (now = d), groupConvs };
 }
 const G = "wake-test-group-0123456789ab";
+// The owner's initiative is the heartbeat run (test/heartbeatrun.test.ts); the gate's look is a group's or a friend's. These tests look at a group.
+const groupOf = (id: string): Conversation => {
+  const g = group(id);
+  mkdirSync(g.notesDir!, { recursive: true });
+  return g;
+};
 
-test("wake: the gate says act, so the owner's chat runs the background run (not the chat), and the answer is a notice", async () => {
-  const { c, wakeups, ownerConv } = rig();
-  assert.equal(await wakeups.look(ownerConv, T0), "posted");
-  assert.equal(c.ownerRuns.length, 1);
-  assert.match(c.ownerRuns[0]!, /Post a fun fact/);
-  assert.match(c.ownerRuns[0]!, /<task>/);
-  assert.match(c.ownerRuns[0]!, /Voice: you may answer by voice/); // the voice option is offered to wake-ups too
+test("wake: the gate says act, so the group runs its own runner (never the owner's), and the answer is an ordinary chat turn from a derived task", async () => {
+  const { c, wakeups } = rig();
+  const g = groupOf("wake-act-group-0123456789ab");
+  assert.equal(await wakeups.look(g, T0), "posted");
+  assert.equal(c.ownerRuns.length, 0, "no owner profile runs for a group");
+  assert.equal(c.groupRuns.length, 1);
+  assert.match(c.groupRuns[0]!, /Post a fun fact/);
+  assert.match(c.groupRuns[0]!, /<task>/);
   assert.equal(c.turns[0].turn.background, true);
-  assert.equal(c.turns[0].turn.kind, "notice");
+  assert.equal(c.turns[0].turn.kind, "chat");
   assert.equal(c.turns[0].turn.announce, false);
   assert.deepEqual(c.recorded.map(([k]) => k), ["wake", "action", "wake"]); // chosen look before the run, the act, the schedule again after
   assert.match(c.recorded[1]![1], /→ posted/);
@@ -256,14 +261,15 @@ test("wake: a group's wake-up runs the GROUP runner and never the owner's run", 
   await wakeups.tick(T0);
   assert.ok(c.groupRuns.length === 1 && c.groupRuns[0]!.startsWith("group:"), "the group run, with group privileges");
   assert.match(c.groupRuns[0]!, /Post a fun fact/);
-  assert.equal(c.ownerRuns.length, 1); // the owner's own look is a separate conversation, with its own run
-  assert.deepEqual(c.sent.sort(), ["group: Group fun fact!", "owner: Morning! Fun fact: biscuits."]);
-  // the gate wrote both tasks from the notes: the judge is told they are derived (not anybody's words, never a standing task), for the owner's wake-up and a group's alike
-  assert.deepEqual(c.provenance, [{ kind: "derived", by: "gate", of: "owner", text: "Post a fun fact" }, { kind: "derived", by: "gate", of: "member", text: "Post a fun fact" }]);
+  assert.equal(c.ownerRuns.length, 1); // the owner's own look is a separate conversation, with its own run (the heartbeat run: it answered in no format, so it is silent)
+  assert.deepEqual(c.sent, ["group: Group fun fact!"]);
+  // the gate wrote the group's task from the notes: the judge is told it is derived (not anybody's words, never a standing task); the owner's heartbeat run is the owner's standing task
+  assert.deepEqual(c.provenance.map((p) => (p as { kind: string }).kind).sort(), ["derived", "standing"]);
+  assert.ok(c.provenance.some((p) => JSON.stringify(p) === JSON.stringify({ kind: "derived", by: "gate", of: "member", text: "Post a fun fact" })));
   assert.equal(scopeOf(G).read(), undefined, "and nothing of it is left once the run is over");
   // the only way a group conversation can run is as a group: its policy source is "group" whatever the gate said
   const kinds = c.turns.map((t) => [t.conv.kind, t.conv.source]);
-  assert.deepEqual(kinds.sort(), [["group", "group"], ["owner", "chat"]]);
+  assert.deepEqual(kinds, [["group", "group"]]);
   // and the unattended owner run has no web and no notes, only reads (everything else asks)
   assert.equal(classify("WebSearch", {}, "background"), "allow"); // the owner's background run may search; a page fetch asks
   assert.equal(classify("WebFetch", {}, "background"), "ask");
@@ -271,7 +277,7 @@ test("wake: a group's wake-up runs the GROUP runner and never the owner's run", 
   assert.equal(classify("mcp__memory__forget_note", {}, "background"), "deny");
   assert.equal(classify("mcp__mailbird__get_message", {}, "background"), "allow");
   assert.equal(classify("mcp__mailbird__archive_conversation", {}, "background"), "ask");
-  assert.equal(classify("mcp__claude_ai_Notion__notion-create-pages", {}, "background"), "ask"); // narrower than the radar
+  assert.equal(classify("mcp__claude_ai_Notion__notion-create-pages", {}, "background"), "ask"); // narrower than the owner's chat
   assert.equal(classify("mcp__mailbird__get_message", {}, "group"), "deny");
 });
 
@@ -279,13 +285,13 @@ test("wake: on Note to Self (no separate account) groups are never woken, whatev
   const { c, wakeups } = rig({ groups: [`${G}-nts`], separate: false });
   await wakeups.tick(T0);
   assert.deepEqual(c.groupRuns, []);
-  assert.deepEqual(c.gates, ["owner"]); // only the owner's own look
+  assert.deepEqual(c.gates, []); // only the owner's own look, and the owner has no gate
   const own = rig({ groups: [`${G}-own`], separate: true }); // another group: the shared one has a look recorded already
   await own.wakeups.tick(T0);
   assert.equal(own.c.groupRuns.length, 1);
 });
 
-test("wake: the owner's background run does not hold the chat queue; only its delivery is queued", async () => {
+test("wake: the owner's heartbeat run does not hold the chat queue; only its delivery is queued", async () => {
   let release!: () => void;
   const slow = new Promise<void>((r) => (release = r));
   const ownerConv: Conversation = { ...owner(), logFile: `logs/gate-wake-owner-${Math.random().toString(36).slice(2)}.jsonl` };
@@ -295,7 +301,7 @@ test("wake: the owner's background run does not hold the chat queue; only its de
     pipeline: { canSpeak: () => false, enqueue: async (_c: any, j: any) => (queued.push("queued"), j()), record: () => {}, runTurn: async (_c: any, t: any) => { const r = await t.run(); queued.push(`delivered ${r.text}`); return { spoke: true }; } } as any,
     groupChats: true,
     vouch: async () => true,
-    runProfile: async () => { running = true; await slow; return { text: "late" }; },
+    runProfile: async () => { running = true; await slow; return { text: "", structured: { message: "late", nextCheckMinutes: 20 } }; },
     gate: async () => parseGate({ act: true, instructions: "do it", nextCheckMinutes: 20 }),
     groups: () => [],
     notesChangedAt: () => 0,
@@ -312,26 +318,26 @@ test("wake: the owner's background run does not hold the chat queue; only its de
 });
 
 test("wake: [[silent]] posts nothing but is an action; a failing run is logged, silent and counted", async () => {
-  const quiet = rig({ ownerAnswer: "[[silent]]" });
-  assert.equal(await quiet.wakeups.look(quiet.ownerConv, T0), "silent");
+  const quiet = rig({ groupAnswer: "[[silent]]" });
+  assert.equal(await quiet.wakeups.look(groupOf("wake-silent-group-0123456789a"), T0), "silent");
   assert.deepEqual(quiet.c.sent, []);
   assert.match(quiet.c.recorded[1]![1], /stayed silent/);
-  const broken = rig();
-  const w = createWakeups({ pipeline: { ...({} as any), canSpeak: () => false, enqueue: (_c: any, j: any) => j(), record: (_c: any, k: string, _t: number, text: string) => broken.c.recorded.push([k, text]), runTurn: async (_c: any, t: any) => { try { await t.run(); return { spoke: false }; } catch (e) { return { spoke: false, error: e }; } } }, groupChats: true, vouch: async () => true, runProfile: async () => { throw new Error("boom"); }, gate: async () => parseGate({ act: true, instructions: "do it", nextCheckMinutes: 20 }), groups: () => [], notesChangedAt: () => 0, now: () => T0 });
-  assert.equal(await w.look(owner(), T0), "failed");
+  const broken = rig({ groupAnswer: () => { throw new Error("boom"); } });
+  assert.equal(await broken.wakeups.look(groupOf("wake-broken-group-0123456789a"), T0), "failed");
   assert.match(broken.c.recorded.find(([k]) => k === "action")![1], /failed/);
   assert.equal(broken.c.sent.length, 0);
 });
 
 test("wake: not due means no gate call; a recorded look is due again only at its time or on news", async () => {
   const r = rig();
-  assert.equal(await r.wakeups.look(r.ownerConv, T0), "posted");
+  const g = groupOf("wake-notdue-group-0123456789a");
+  assert.equal(await r.wakeups.look(g, T0), "posted");
   r.c.gates.length = 0;
-  assert.equal(await r.wakeups.look(r.ownerConv, new Date(T0.getTime() + 10 * 60_000)), "not-due");
+  assert.equal(await r.wakeups.look(g, new Date(T0.getTime() + 10 * 60_000)), "not-due");
   assert.equal(r.c.gates.length, 0);
-  recordMessage("owner", 99, "remind me about the pitch", new Date(T0.getTime() + 11 * 60_000), r.ownerConv.logFile); // the owner wrote
+  recordMessage("member", 99, "remind us about the pitch", new Date(T0.getTime() + 11 * 60_000), g.logFile); // a member wrote
   r.setNow(new Date(T0.getTime() + 12 * 60_000));
-  assert.notEqual(await r.wakeups.look(r.ownerConv, new Date(T0.getTime() + 12 * 60_000)), "not-due");
+  assert.notEqual(await r.wakeups.look(g, new Date(T0.getTime() + 12 * 60_000)), "not-due");
   assert.equal(r.c.gates.length, 1);
 });
 
@@ -342,13 +348,13 @@ test("wake: guards in code, whatever the gate says", async () => {
     await r.wakeups.tick(T0);
     assert.deepEqual([r.c.gates.length, r.c.ownerRuns.length, r.c.groupRuns.length], [0, 0, 0], JSON.stringify(g));
   }
-  // quiet hours: no look, no gate, no run for the owner; a group is held back too unless its notes name a time inside the quiet window
+  // quiet hours: a group is held back unless its notes name a time inside the quiet window (the owner's look has no such rule in code: the heartbeat run judges the night itself)
   const night = new Date(2026, 9, 14, 3, 0, 0);
   const NG = "wake-night-group-0123456789ab";
   const q = rig({ now: night, groups: [NG] });
   await q.wakeups.tick(night);
   assert.deepEqual(q.c.gates, []);
-  assert.equal(q.c.ownerRuns.length, 0);
+  assert.equal(q.c.ownerRuns.length, 1, "the owner's heartbeat run looks at night too");
   const named = group(NG);
   mkdirSync(named.notesDir!, { recursive: true });
   writeFileSync(join(named.notesDir!, "scheduling-early.md"), "Post the weather at 6:30.");
@@ -367,14 +373,14 @@ test("wake: guards in code, whatever the gate says", async () => {
 test("wake: bad gate output fails closed; a gate that throws or acts without instructions does nothing", async () => {
   for (const out of [undefined, "act", { act: "true", instructions: "x" }, { act: true }, { act: true, instructions: "   " }]) {
     const r = rig({ gate: () => out });
-    const res = await r.wakeups.look(r.ownerConv, T0);
+    const res = await r.wakeups.look(groupOf(`wake-bad-group-${Math.random().toString(36).slice(2, 12)}`), T0);
     assert.ok(res === "no" || res === "no-instructions", `${JSON.stringify(out)} -> ${res}`);
-    assert.deepEqual([r.c.ownerRuns.length, r.c.sent.length], [0, 0]);
+    assert.deepEqual([r.c.groupRuns.length, r.c.sent.length], [0, 0]);
     assert.ok(r.c.recorded.some(([k]) => k === "wake"), "a next look is still chosen, so a bad answer cannot loop on every tick");
   }
   const t = rig({ gate: () => { throw new Error("model down"); } });
-  assert.equal(await t.wakeups.look(t.ownerConv, T0), "no");
-  assert.equal(t.c.ownerRuns.length, 0);
+  assert.equal(await t.wakeups.look(groupOf("wake-down-group-0123456789ab"), T0), "no");
+  assert.equal(t.c.groupRuns.length, 0);
 });
 
 test("gate: a quick reaction must be exactly one emoji, otherwise it is dropped", () => {

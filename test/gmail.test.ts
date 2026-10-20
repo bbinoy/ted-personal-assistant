@@ -7,7 +7,8 @@ import { requiredSkills } from "../src/doctor.ts";
 import { buildDigest } from "../src/digest.ts";
 import { GmailMail, gmailReaders, parseDraft, parseMessage, parseOriginal, parseThreads, payload, relayAllowed, type Call, type Relay } from "../src/gmail.ts";
 import { isInboxArchive, isSelfSend } from "../src/gmailrules.ts";
-import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
+import { createMailCheck, type MailSource } from "../src/heartbeat.ts";
+import { recordTriage } from "../src/triagelog.ts";
 import { setGmailReaders } from "../src/modules/gmail.ts";
 import { gmailChecks } from "../src/modules/runtime.ts";
 import { makeCanUseTool } from "../src/permissions.ts";
@@ -313,11 +314,18 @@ async function heartbeatOnce(live: boolean, relayCalls: Call[]) {
     const log = console.log;
     console.log = () => {};
     try {
-      const hb = startHeartbeat(
-        { alert: async () => {}, handle: () => assert.fail("no Mailbird handler for Gmail"), briefDue: () => false, onTick: () => {} },
-        { mail, triage: async (m) => m.map(() => ({ label: "archive" as const, kind: "newsletter" as const, reason: "weekly newsletter", protected: false })), setTimeout: () => 0, setInterval: () => 0 },
+      const check = createMailCheck(
+        mail,
+        {
+          files: { seen: "state/seen.json", liveness: "state/heartbeat.json" },
+          triage: async (m) => m.map(() => ({ label: "archive" as const, kind: "newsletter" as const, reason: "weekly newsletter", protected: false })),
+          record: (decision, row) => recordTriage("state/triage.jsonl", decision, row),
+          handler: () => false,
+          blocked: () => false,
+        },
+        { alert: async () => {}, handle: () => assert.fail("no Mailbird handler for Gmail") },
       );
-      await hb.mailCheck();
+      await check();
     } finally {
       console.log = log;
       writeJson("state/seen.json", was ?? { keys: {} });

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BASE_BACKOFF_MS, coolingDown, noteRateLimit, noteSuccess, observeRateLimit, resetCooldown, skipForCooldown } from "../src/cooldown.ts";
 import { failure, RateLimitError } from "../src/errors.ts";
-import { owner, type Conversation } from "../src/conversation.ts";
+import { group, type Conversation } from "../src/conversation.ts";
 import { idleFingerprint, parseGate } from "../src/gate.ts";
 import { recordMessage, type Kind } from "../src/messages.ts";
 import { settings } from "../src/settings.ts";
@@ -75,7 +75,8 @@ function rig(gate: (n: number) => unknown) {
   const dir = mkdtempSync(join(tmpdir(), "idle-"));
   const notesDir = join(dir, "notes");
   mkdirSync(notesDir);
-  const conv: Conversation = { ...owner(), logFile: `logs/idle-owner-${Math.random().toString(36).slice(2)}.jsonl`, notesDir };
+  // (a group: the gate's look is a group's or a friend's; the owner's is the heartbeat run, test/heartbeatrun.test.ts)
+  const conv: Conversation = { ...group("idle-group-0123456789abcdef"), logFile: `logs/idle-group-${Math.random().toString(36).slice(2)}.jsonl`, notesDir };
   let now = T0;
   let calls = 0;
   const pipeline = {
@@ -89,7 +90,9 @@ function rig(gate: (n: number) => unknown) {
     pipeline: pipeline as any,
     groupChats: false,
     vouch: async () => true,
-    runProfile: async (_p, prompt) => (ran.push(prompt), { text: "done" }),
+    runProfile: async () => ({ text: "" }),
+    runGroup: async (build) => (ran.push(build().prompt), "done"),
+    context: () => ({ lines: [], seenAt: undefined }),
     gate: async () => {
       calls++;
       const g = gate(calls);
@@ -100,7 +103,7 @@ function rig(gate: (n: number) => unknown) {
     now: () => now,
     guards: { paused: () => false, budgetSpent: () => false },
   });
-  return { w, conv, notesDir, ran, calls: () => calls, at: (d: Date) => void (now = d), say: (text: string) => recordMessage("owner", now.getTime(), text, now, conv.logFile) };
+  return { w, conv, notesDir, ran, calls: () => calls, at: (d: Date) => void (now = d), say: (text: string) => recordMessage("member", now.getTime(), text, now, conv.logFile) };
 }
 const QUIET = { act: false, nextCheckMinutes: 15 };
 

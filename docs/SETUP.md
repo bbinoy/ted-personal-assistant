@@ -43,7 +43,7 @@ Signal is the messenger that works, and the default (`MESSENGER=signal`, or leav
 
 ### Chat only (no mail)
 
-Mail is optional. For the Signal chat, memory, wake-ups, the calendar radar and a daily brief without an inbox, you need only **Claude Code** (logged in) and **signal-cli**: skip the Mailbird step above and put this in `.env`:
+Mail is optional. For the Signal chat, memory, wake-ups, the heartbeat run and a daily brief without an inbox, you need only **Claude Code** (logged in) and **signal-cli**: skip the Mailbird step above and put this in `.env`:
 
 ```
 MAIL_PROVIDER=none
@@ -212,8 +212,8 @@ Off by default. A friend can connect her OWN Notion; her Notion tools are Notion
 - **Send a drafted reply**: when the assistant has drafted a reply for you (it shows "✉️ Reply ready" with the recipient and text), react 👍 to send it exactly as shown, or reply to the message to change something.
 - **Approve**: reply `yes` / `no`, a sentence, or react 👍 / 👎 on the question.
 - `npm run doctor`: health check (tooling, permissions, Signal, Mailbird, login, launchd, skills, heartbeat liveness, spend, recent errors).
-- `npm run report [hours]`: what the heartbeat archived, alerted and queued (local times).
-- `npm run triage-check [n]`: how the heartbeat would classify your newest `n` emails and what it would do, without acting or changing anything. A safe way to check the classifier on real mail.
+- `npm run report [hours]`: what was archived (with the ids `npm run restore` takes), which actions the approval judge let through, how approvals went (local times).
+- `npm run heartbeat-report [days]`: what the heartbeat run did: looks, messages by day and at night, dollars, the next looks it chose (counts only).
 - `npm run restore <conversationId>`: put an archived conversation back in the inbox.
 - `npm test` / `npm run typecheck` / `npm run check:secrets`.
 - Folders: `state/` (bookkeeping), `logs/` (`agent.log` in local time, redacted and rotated; `audit.jsonl`, the audit trail; raw crash output, if any, in `launchd-stderr.log`, cut to its last 1 MB at start when it is over 5 MB), `memory/` (what the assistant remembers). All owner-only, all git-ignored.
@@ -221,9 +221,9 @@ Off by default. A friend can connect her OWN Notion; her Notion tools are Notion
 - **Spoken replies** (optional): the assistant can answer by voice when it fits, in a voice you choose, made locally with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (nothing leaves your Mac). Run `scripts/setup-tts.sh` once (about 400 MB; needs Python 3.10+ and ffmpeg), and use the assistant's own Signal account ([SIGNAL-ACCOUNT.md](SIGNAL-ACCOUNT.md)). The model decides per reply whether to speak or write: short conversational answers are spoken, long, detailed or exact ones (times, figures, links) stay text. `VOICE_REPLIES=off` turns it off; `TTS_VOICE` picks the voice. A different voice from a hosted service or your own server is possible but sends the spoken words there: see [REMOTE-TTS.md](REMOTE-TTS.md).
 - **Nightly dream**: once a day, before the brief, a model with no tools reads what you told the assistant since the last time and proposes changes to its memory notes: new facts about you, people, preferences and projects, merges of duplicates, expired notes dropped. It works silently and logs what it did. See [ARCHITECTURE.md](ARCHITECTURE.md#the-dream). `DREAM=off` disables it; say "undo the dream" to put the notes back.
 - **Voice messages** (optional): send a voice note in Note to Self and it is transcribed on your Mac with whisper.cpp (nothing leaves it), handled like typed text (at most `TRANSCRIBE_CONCURRENCY`, default 2, are transcribed at once, in your chat and all groups together; more wait in line). The transcript is logged with your other messages in `logs/messages.jsonl`, and you can ask the assistant what a voice message said (it may read `logs/`, `state/` and `memory/` and search the logs, read-only).
-- **Proactive radar**: while you are awake it looks (about an hour before your next meeting, at most every `RADAR_MINUTES`, default 180, apart) at your calendar and messages you only when something deserves it (a meeting about to start, with its prep; a clash). Capped at `MAX_PROACTIVE_PER_DAY` messages of its own per day (mail alerts do not count); `PROACTIVE=off` disables it. It needs the calendar set up (say "set up").
+- **Heartbeat run**: every few minutes a free timer checks whose look has come; the owner's look is one run on `HEARTBEAT_MODEL` (default `haiku`): it reads the recent chat, your mail since its last look, the calendar, your tasks and notes, does what is routine within the usual rules (everything that sends, shares or spends still asks on your phone), and messages you only when something deserves it. It chooses its own next look (10 to 120 minutes; about 30 in the day). Quiet hours (22:00-07:00 by default) are its judgement, from the notes and the chat, with a code cap of `NIGHT_MESSAGES` (default 2) proactive messages per night; a message over the cap is held for the morning look. `npm run heartbeat-report` shows what it did. It needs the calendar and mail connectors for the parts it reads.
 - Tuning: every knob is an env var, listed in `.env.example` (heartbeat interval, quiet hours, brief start hour, archive cap, spend limit, model). They are validated at startup: a typo stops the agent with a clear message in the log.
 - Chat session: it keeps recent history across days (never reset just because time passed) and is compacted when the conversation has grown `CHAT_COMPACT_GROWTH_TOKENS` (default 100000) beyond its first turn: in the background once it has been quiet for `COMPACT_QUIET_MINUTES` (default 5), or right after a reply if it grew 1.5 times past that, the same for your chat and every group, so long conversations stay cheap. Both are optional settings in `.env`.
-- Pause: `touch state/paused` (or write a date into it to resume on that day). The heartbeat idles at night by itself (22:00 to 07:00 by default) and catches up in the morning.
+- Pause: `touch state/paused` (or write a date into it to resume on that day). The heartbeat run stops with it.
 
 Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Safety](SAFETY.md) · [Adapting](ADAPTING.md)

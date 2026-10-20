@@ -14,10 +14,7 @@ import { keyNotices } from "./keynotice.ts";
 import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
-import { createHandler } from "./handler.ts";
-import { mailHandlerOf } from "./mailhandler.ts";
 import { startHeartbeat, startJobs } from "./heartbeat.ts";
-import { writeNotice } from "./notice.ts";
 import { ensureNotesDir } from "./notes.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./messages.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
@@ -69,20 +66,14 @@ function record(target: string | undefined, kind: Kind, ts: number, text: string
 }
 const out = createOutbound(messenger, (kind, ts, text, target) => record(target, kind, ts, text));
 // Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her unattended
-// runs (wake-ups, the brief, the radar, the mail handler: only an explicit yes / no or a reply to the question answers those, whatever else
+// runs (wake-ups, the heartbeat run, the brief, a friend's mail handler: only an explicit yes / no or a reply to the question answers those, whatever else
 // she types meanwhile is a chat message), a group in the group (any member may answer), a tenant in her own chat. approvals.ts scopes every
 // question to its conversation, so an answer from another one (the admin's included) never applies.
 setApprovers(createApprovers(out));
 const approveBackground = approveIn(OWNER_KEY, { background: true });
-// `say` is a plain message to the owner. `notify` is what the assistant sends on its own (mail
-// alerts, handled mail, setup problems) and is also remembered, so the chat knows what a reply
-// like "yes, do that" refers to (messages.ts). Memory announcements and chat answers use `say`.
+// `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
-const notify = async (text: string) => {
-  await say(text);
-  prepare(owner(), { notify: say }, { refresh: true }); // the chat prompt carries recent pings, so the warm process is stale now (a renewal, not activity)
-};
 
 // Every voice message is transcribed (in a group it may be meant for the assistant), but only a few at a time: a flood waits in line
 // instead of starting that many whisper processes. One line for the owner's chat and every group.
@@ -187,10 +178,9 @@ messenger.onDeletion((d) => {
   else if (settings.tenants && d.other && activeTenant(d.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(d.fromUuid)!.id), { type: "deletion", d }).catch((e) => console.error("tenant deletion error:", e.message));
 });
 
-// The mail provider's own start-up (its module, src/modules): Mailbird's connection for reply drafts (the handler's drafts are shown on Signal, propose.ts,
-// and the approval of any send shows the draft read back from it), or the Gmail connector's read-backs for the same approval.
-// MAIL_PROVIDER=none: no mail client is made at all, so there is no proposer and no mail handler either.
-const mail = settings.mail ? mailRuntime()?.start({ reply: (t) => out.replyPlain(t, "draft") }) : undefined;
+// The mail provider's own start-up (its module, src/modules): Mailbird's connection (the approval of any send shows the draft read back from it), or the Gmail connector's read-backs for the same approval.
+// MAIL_PROVIDER=none: no mail client is made at all, so there is no proposer either.
+if (settings.mail) mailRuntime()?.start({ reply: (t) => out.replyPlain(t, "draft") });
 
 // A 👍 / 👎 on the pending approval message answers it (the pipeline checks); any other reaction of the
 // owner is feedback. (Our own status icons come back as reactions; the messenger does not deliver those.)
@@ -220,9 +210,6 @@ if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies &
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
 
-const handler = mailHandlerOf(owner()) ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: mail?.propose }) : undefined; // (any provider that can draft: Mailbird, Gmail)
-handler?.resume();
-
 // One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, which the brief waits for, and the friends', which it does not
 // (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
 const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]) });
@@ -231,8 +218,8 @@ const dream = () => {
   void friendsDreamer.run().catch(() => {});
   return dreamer.run().catch(() => {});
 };
-// The clock half of the gate: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's
-// gate also decides when the brief and the radar run, with a deterministic backstop for the brief.
+// The clock of every conversation's own initiative: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's look is the heartbeat
+// run (heartbeat/look.ts); the brief runs from a deterministic rule; a group's or a friend's look goes through the gate.
 const wakeups = createWakeups({
   pipeline,
   groupChats: messenger.capabilities.groups,
@@ -253,14 +240,10 @@ const tenantMail = createTenantMailLoops({
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the
 // dream runs inside the brief preset, before the brief).
 startHeartbeat({
-  alert: notify,
-  write: writeNotice,
-  handle: (items) => handler?.enqueue(items),
-  briefDue: () => wakeups.briefPending(),
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
-      tenantMail: () => tenantMail.tick(), // each friend's own mail check, triage and handler (mailloops.ts): the same code as the owner's, with her Google
+      tenantMail: () => tenantMail.tick(), // each friend's own mail check, triage and handler (mailloops.ts): with her Google
     });
   },
 });

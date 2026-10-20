@@ -27,9 +27,9 @@ test("one wake-up prompt for a private chat and a group", () => {
   assert.doesNotMatch(mine, /Voice:/);
 });
 
-test("one gate prompt for a direct chat: the owner's also names the brief and the radar, a friend's does not", () => {
-  assert.equal(PROMPTS.gateDirect.includes("presets"), true);
-  assert.match(GATE_DEFAULTS.owner, /mail brief and calendar radar are separate jobs/);
+test("one gate prompt for a direct chat, a friend's (the owner's chat has no gate: the heartbeat run looks at it)", () => {
+  assert.deepEqual(PROMPTS.gateDirect, ["name", "unprompted"]);
+  assert.deepEqual(Object.keys(GATE_DEFAULTS), ["group"]);
   const hers = directGateDefaults("Mia");
   assert.match(hers, /^Mia writes to you in this chat and you always answer/);
   assert.doesNotMatch(hers, /separate jobs/);

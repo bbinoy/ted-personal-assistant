@@ -1,15 +1,10 @@
 import { fence } from "./fence.ts";
-import { runHandlerTurn } from "./agent.ts";
 import type { Conversation } from "./conversationmodel.ts";
-import { owner } from "./conversationmodel.ts";
-import { handlerTaskFor, mailHandlerOf } from "./mailhandler.ts";
-import { LOGIN } from "./payer.ts";
+import { handlerTaskFor } from "./mailhandler.ts";
 import { oneLine, LIMITS } from "./sanitize.ts";
 import type { Approve } from "./permissions.ts";
 import { audit } from "./audit.ts";
 import { draftCollector, type DraftId } from "./propose.ts";
-import { overBudget } from "./budget.ts";
-import { handlerReportRequest, type NoticeWriter } from "./notice.ts";
 import { OWNER } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
 
@@ -18,11 +13,10 @@ import { readJson, writeJson } from "./state.ts";
 // disk, so a restart loses nothing. Queue updates are synchronous (see state.ts), so an
 // enqueue can never be overwritten by the worker taking a batch.
 //
-// One handler for every conversation that has mail (createHandler): the owner's and each friend's. A HandlerContext says what differs: whose queue file, whose
-// name the report and the task use, the run itself (the owner's: her profile and tools on the login; a friend's: a run of hers on the instance key with her tools
+// One handler for every friend that has mail (createHandler). A HandlerContext says what differs: whose queue file, whose
+// name the report and the task use, the run itself (a run of hers on the instance key with her tools
 // and her chat's approver), and her daily budget.
 
-const OWNER_QUEUE = "state/handle-queue.json";
 const BATCH = 8;
 
 export interface HandleItem {
@@ -71,18 +65,8 @@ export function formatReport(text: string, owner: string): string {
   return done.length ? `🤝 Handled ${done.length}:\n${done.join("\n")}`.slice(0, LIMITS.brief) : "";
 }
 
-// The owner's: her queue, her name, her profile's run and the shared daily budget.
-export const ownerHandlerContext = (): HandlerContext => ({
-  queue: OWNER_QUEUE,
-  who: OWNER,
-  task: () => handlerTask(OWNER),
-  run: (prompt, approve, onToolSuccess, task) => runHandlerTurn(owner(), LOGIN, prompt, approve, onToolSuccess, task),
-  over: () => overBudget().over,
-  drafts: mailHandlerOf(owner())?.tools.createdDraft,
-});
-
-export function createHandler(deps: { approve: Approve; notify: (text: string) => Promise<void>; write?: NoticeWriter; propose?: (draftIds: readonly DraftId[]) => Promise<number>; ctx?: HandlerContext }) {
-  const ctx = deps.ctx ?? ownerHandlerContext();
+export function createHandler(deps: { approve: Approve; notify: (text: string) => Promise<void>; propose?: (draftIds: readonly DraftId[]) => Promise<number>; ctx: HandlerContext }) {
+  const { ctx } = deps;
   const load = () => readJson<HandleItem[]>(ctx.queue, []);
   let working = false;
 
@@ -104,7 +88,7 @@ export function createHandler(deps: { approve: Approve; notify: (text: string) =
           const { text, costUsd } = await ctx.run(handlerPrompt(batch, task), deps.approve, drafts.onToolSuccess, task);
           audit("mail_handler", "done", "handler", { ...ctx.tag, count: batch.length, costUsd });
           const report = formatReport(text, ctx.who);
-          if (report) await deps.notify(deps.write ? await deps.write(handlerReportRequest(handledLines(text, ctx.who), report)).catch(() => report) : report);
+          if (report) await deps.notify(report);
           if (drafts.ids.length > 0) await deps.propose?.(drafts.ids); // show each draft on the phone
         } catch (e) {
           console.error("handler failed:", (e as Error).message);

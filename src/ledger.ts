@@ -2,7 +2,6 @@ import { readdirSync, statSync } from "node:fs";
 import type { Conversation } from "./conversation.ts";
 import type { Kind, Sent } from "./messages.ts";
 import { localDay } from "./pause.ts";
-import { LIMITS } from "./sanitize.ts";
 
 // The wake/action ledger: the conversation's own log (messages.ts) holds kind "wake" lines (the chosen next look, the last
 // one is the state) and kind "action" lines (something done without posting; the presets' progress, see below). Everything
@@ -38,13 +37,7 @@ export function parseWake(text: string): Wake | undefined {
 export const ledger = {
   briefStarted: (n: number) => `[brief] attempt ${n} started`,
   briefEnded: (n: number, outcome: string) => `[brief] attempt ${n} → ${outcome}`,
-  radarStarted: () => "[radar] started",
-  radarRan: (sent: number, events: number, nextMeeting: string | undefined, keys: readonly string[]) => `[radar] ran: ${sent} message(s) sent, ${events} event(s) read${nextMeeting ? `, next meeting at ${nextMeeting}` : ""}. keys: ${JSON.stringify(keys)}`,
-  radarFailed: (why: string) => `[radar] failed: ${why.slice(0, LIMITS.reason)}`,
-  nudge: () => "[nudge] I changed the calendar, so the radar should look again soon",
 };
-const RADAR_KEYS = /\. keys: (\[.*\])\s*$/s;
-export const KEY_TTL_MS = 3 * 24 * 3600_000;
 
 export interface LookState {
   wake?: Wake & { at: string }; // the last chosen next look (at: when it was written)
@@ -52,9 +45,6 @@ export interface LookState {
   briefAttempts: number; // brief attempts started today
   lastBriefAttemptAt?: string;
   briefDone: boolean; // a brief was delivered or posted today
-  lastRadarAt?: string; // the newest radar start
-  radarKeys: Record<string, number>; // dedupe keys of messages the radar sent in the last 3 days -> epoch ms
-  radarPostsToday: number; // the radar's own messages today, from its "ran" ledger lines: what maxProactivePerDay caps. Only what the gate itself posted is counted: not mail alerts, 🧠 memory notices or "done without asking" notices, and not a spoken wake-up
 }
 
 const INBOUND: ReadonlySet<Kind> = new Set<Kind>(["owner", "member", "reaction"]);
@@ -62,7 +52,7 @@ const INBOUND: ReadonlySet<Kind> = new Set<Kind>(["owner", "member", "reaction"]
 // Pure: what the ledger says about this conversation.
 export function lookState(entries: readonly Sent[], now: Date): LookState {
   const today = localDay(now);
-  const st: LookState = { briefAttempts: 0, briefDone: false, radarKeys: {}, radarPostsToday: 0 };
+  const st: LookState = { briefAttempts: 0, briefDone: false };
   for (const e of entries) {
     const isToday = localDay(new Date(e.at)) === today;
     if (e.kind === "wake") {
@@ -72,16 +62,6 @@ export function lookState(entries: readonly Sent[], now: Date): LookState {
     else if (e.kind === "action") {
       if (isToday && /^\[brief\] attempt \d+ started/.test(e.text)) (st.briefAttempts++, (st.lastBriefAttemptAt = e.at));
       else if (isToday && /^\[brief\] attempt \d+ → delivered/.test(e.text)) st.briefDone = true;
-      else if (e.text.startsWith("[radar] started") || e.text.startsWith("[radar] ran")) {
-        if (!st.lastRadarAt || e.at > st.lastRadarAt) st.lastRadarAt = e.at;
-        if (isToday) st.radarPostsToday += Number(/^\[radar\] ran: (\d+) message/.exec(e.text)?.[1] ?? 0);
-        const raw = RADAR_KEYS.exec(e.text)?.[1];
-        if (raw && now.getTime() - Date.parse(e.at) < KEY_TTL_MS) {
-          try {
-            for (const k of JSON.parse(raw) as unknown[]) if (typeof k === "string") st.radarKeys[k] = Date.parse(e.at);
-          } catch {}
-        }
-      }
     } else if (INBOUND.has(e.kind) && (!st.lastInboundAt || e.at > st.lastInboundAt)) st.lastInboundAt = e.at;
   }
   return st;
@@ -105,9 +85,10 @@ export function notesChangedAt(dir: string): number {
   }
 }
 
-export const wakeText = (nextCheckMinutes: number, looked: Date, now = Date.now()): string =>
-  JSON.stringify({ next: new Date(now + clampCheck(nextCheckMinutes) * 60_000).toISOString(), looked: looked.toISOString() } satisfies Wake);
+// `clamp`: the gate's 15..60 minutes by default; the owner's heartbeat run chooses 10..120 (heartbeat/rules.ts clampLook).
+export const wakeText = (nextCheckMinutes: number, looked: Date, now = Date.now(), clamp: (minutes: unknown) => number = clampCheck): string =>
+  JSON.stringify({ next: new Date(now + clamp(nextCheckMinutes) * 60_000).toISOString(), looked: looked.toISOString() } satisfies Wake);
 
 // The chosen next look goes into the conversation's log: the last "wake" line is the state.
-export const recordWake = (pipeline: { record: (conv: Conversation, kind: Kind, ts: number, text: string) => void }, conv: Conversation, nextCheckMinutes: number, looked: Date): void =>
-  pipeline.record(conv, "wake", Date.now(), wakeText(nextCheckMinutes, looked, looked.getTime())); // counted from the look, not from when the run ended
+export const recordWake = (pipeline: { record: (conv: Conversation, kind: Kind, ts: number, text: string) => void }, conv: Conversation, nextCheckMinutes: number, looked: Date, clamp?: (minutes: unknown) => number): void =>
+  pipeline.record(conv, "wake", Date.now(), wakeText(nextCheckMinutes, looked, looked.getTime(), clamp)); // counted from the look, not from when the run ended

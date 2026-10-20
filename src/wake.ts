@@ -2,7 +2,8 @@ import { audit, type Source } from "./audit.ts";
 import { inQuietHours } from "./actions.ts";
 import { budgetSpent } from "./budget.ts";
 import { askGate, idleFingerprint, logTail, NOTHING, notesText, type Gate } from "./gate.ts";
-import { KEY_TTL_MS, lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";
+import { lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";
+import { createHeartbeatLook } from "./heartbeat/look.ts";
 import { groupContext, listGroups } from "./groupstore.ts";
 import { realRunner, type PromptBuilder, type Runner } from "./group.ts";
 import { wakePrompt } from "./wakeprompt.ts";
@@ -16,40 +17,35 @@ import { namesTimeInQuietHours } from "./notetimes.ts";
 import { isPaused } from "./pause.ts";
 import type { OwnerProfile } from "./profiles.ts";
 import { listTenants } from "./tenants.ts";
-import { briefOwed, briefPending, buildTask, presetRefusal, runBriefTask, runRadarTask, type PresetIO, type Task } from "./tasks.ts";
+import { briefOwed, briefTask, buildTask, presetRefusal, runBriefTask, type PresetIO, type Task } from "./tasks.ts";
 import { settings } from "./settings.ts";
-import { MIN_GAP_MINUTES } from "./radar-rules.ts";
 import { LIMITS } from "./sanitize.ts";
 import type { RunProvenance } from "./autojudge.ts";
 import { derivedTurn } from "./turnscope.ts";
 
-// The clock half of the gate (gate.ts). On every heartbeat tick, for the owner's chat, every group the owner is in and
-// every tenant (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look),
-// the gate is asked whether to do something unprompted. If it says act, the conversation's NORMAL runner does it, with the
-// gate's instructions, and the answer goes out through the shared pipeline (it may be [[silent]]):
-//   a group    the group run (src/agent.ts runConversation): its own notes and web search, nothing of the owner's
-//   a tenant   the same run on the instance key, with HER notes, session and cost file, her approvals in her chat, an answer to her chat only.
-//              She is looked in on only with the capabilities `heartbeat` and `wake` (a friend has the first, not the second), while she is
-//              active, the key is out of a cooldown and she is within her day's budget; the gate's own call is billed to her the same way
+// The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant
+// (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look):
+//   the owner  the HEARTBEAT RUN (heartbeat/look.ts): one Haiku run that looks at the chat, mail, calendar and tasks, acts through the normal floor, judge and phone,
+//              and answers with a message or [[silent]] and its next look (10..120 minutes). Code keeps pause, mayRun, the clamp, the night cap and the brief's schedule.
+//   a group    the gate (gate.ts: Haiku, no tools) is asked whether to do something unprompted; if it says act, the group run (src/agent.ts runConversation) does it with the
+//              gate's instructions: its own notes and web search, nothing of the owner's; the answer goes out through the shared pipeline (it may be [[silent]])
+//   a tenant   the same gate and run on the instance key, with HER notes, session and cost file, her approvals in her chat, an answer to her chat only.
+//              She is looked in on only with the capabilities `heartbeat` and `wake` (a friend has the first, not the second), while she is active, the key is out of a
+//              cooldown and she is within her day's budget; the gate's own call is billed to her the same way
 // Every model call of a look, a preset, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her
 // own budget and the shared key) and runs on the Payer it returns: no per-conversation branches here.
-//   the owner  a background run with the radar's rights (policy source "background"): reads, anything else asks on
-//              the phone; web search allowed, page fetches ask
-// For a conversation with the mail and calendar capabilities (the owner's) the gate also chooses the presets "brief" and "radar" (tasks.ts: WHEN is the
-// gate's, HOW is code) when SCHEDULER=gate. A group's or a tenant's gate output is always a plain task. Besides, one deterministic rule
-// that needs no model: if no brief is logged for today by BRIEF_BACKSTOP_HOUR, or an attempt came out incomplete, the brief
-// runs anyway (the dream first). Presets are not queued behind the chat (a brief takes minutes) and not awaited by the look either: they run as detached jobs, one per task at a time; free-form tasks are queued.
+// The owner's daily brief is a preset (tasks.ts) started here by a deterministic rule, not by a model: from BRIEF_START_HOUR on, when no brief is logged today (or an attempt came
+// out incomplete), the brief runs (the dream first). Presets are not queued behind the chat (a brief takes minutes) and not awaited by the look either: they run as detached jobs, one per task at a time.
 // The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the
-// owner's once-a-day notice; a tenant's own day is her access, tenantrun.ts), quiet hours of every private chat, the next look clamped to 15..60 minutes, per preset its own rules
-// (tasks.ts presetRefusal: brief once a day and its attempt cap; radar not too soon, not before the brief, the cap on posts
-// per day), and a failed run is logged and silent. A gate that fails or says something odd means do nothing.
+// owner's once-a-day notice; a tenant's own day is her access, tenantrun.ts), quiet hours of a friend's private chat, the gate's next look clamped to 15..60 minutes (the owner's run: 10..120),
+// the brief once a day and its attempt cap (tasks.ts presetRefusal), and a failed run is logged and silent. A gate that fails or says something odd means do nothing.
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
   pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "canSpeak">;
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
-  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // the owner's runs by profile (agent.ts runProfile)
-  presets?: { sendBrief: (markdown: string) => Promise<void>; notify: (text: string) => Promise<void>; beforeBrief?: () => Promise<void> }; // what the brief and radar presets need
+  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // the owner's runs by profile (agent.ts runProfile): the heartbeat run and the brief
+  presets?: { sendBrief: (markdown: string) => Promise<void>; notify: (text: string) => Promise<void>; beforeBrief?: () => Promise<void> }; // what the brief preset needs
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
   runGroup?: Runner; // a group's or a tenant's run
   gate?: Gate;
@@ -77,22 +73,9 @@ export function createWakeups(deps: WakeDeps) {
   const may = (conv: Conversation, what: string): Payer | Refusal => mayRun(conv, what, { key: deps.key, paused: () => paused(clock()), spent });
   const why = (r: Refusal): string => (r.refused === "cooldown" ? "cooldown" : r.refused === "paused" ? "guarded" : "blocked");
 
+  // A group's or a friend's run, from the gate's instructions (the owner's initiative is the heartbeat run, heartbeat/look.ts).
   async function act(conv: Conversation, instructions: string, now: Date, payer: Payer): Promise<"posted" | "silent" | "failed"> {
     const speak = pipeline.canSpeak() && allows(conv, "voice");
-    if (onLogin(conv)) {
-      // The owner's run happens OUTSIDE the chat queue: it may ask for an approval and wait up to `BACKGROUND_APPROVAL_TIMEOUT_MINUTES` (2 h by default) for it, and the
-      // owner's chat must not wait with it. Only the delivery of the answer takes its place in the queue.
-      let done: { text: string; costUsd?: number } | undefined;
-      let failure: unknown;
-      await deps.runProfile("background", wakePrompt({ who: speakerOf(conv), where: "chat", now, instructions, lines: logTail(conv, 20), speak }), { provenance: { kind: "derived", by: "gate", of: "owner", text: instructions } }).then((r) => void (done = r), (e) => void (failure = e));
-      return pipeline.enqueue(conv, async () => {
-        const run = async () => {
-          if (done) return done;
-          throw failure;
-        };
-        return outcome(await pipeline.runTurn(conv, { run, background: true, announce: false, kind: "notice" }));
-      });
-    }
     return pipeline.enqueue(conv, async () => {
       // Her session already holds her chat; the prompt carries the tail of her log, like the owner's. A group's is what its members wrote since the session last saw.
       const build: PromptBuilder = conv.tenantId
@@ -115,12 +98,12 @@ export function createWakeups(deps: WakeDeps) {
   });
 
   // A preset runs outside the conversation's queue AND outside the look: it is started as a detached job (I/O-bound, so no
-  // worker thread) and the look returns at once, so a brief or radar that takes minutes never delays the next look at the
+  // worker thread) and the look returns at once, so a brief that takes minutes never delays the next look at the
   // owner's chat. One job per task at a time (the running guard); its ledger lines are written when the run ends, a failure
   // is logged and audited, and `idle()` lets a test (or a shutdown) wait for the jobs.
   const running = new Map<string, Promise<string>>();
   function runPreset(conv: Conversation, task: Task, st: LookState, now: Date, after?: () => void): string {
-    const refused = presetRefusal(task, st, now);
+    const refused = presetRefusal(task, st);
     if (refused) {
       audit("wake", `refused-${refused}`, source(conv));
       return `refused:${refused}`;
@@ -129,7 +112,7 @@ export function createWakeups(deps: WakeDeps) {
     const io = presetIO(conv);
     const job = (async () => {
       try {
-        const result = task.name === "brief" ? `brief-${await runBriefTask(io, task, st, now)}` : `radar-${await runRadarTask(io, task, st, now)}`;
+        const result = `brief-${await runBriefTask(io, task, st, now)}`;
         audit("wake", result, source(conv));
         return result;
       } catch (e) {
@@ -162,9 +145,7 @@ export function createWakeups(deps: WakeDeps) {
     void job.finally(() => running.delete(key));
   }
 
-  const briefTask = (): Task => buildTask(true, { task: "brief" })!;
-
-  // The deterministic brief (no model decides): the backstop hour has passed with no brief logged today, or an attempt came
+  // The deterministic brief (no model decides): the start hour has passed with no brief logged today, or an attempt came
   // out incomplete. Not held back by quiet hours: a Mac that wakes late still gets that day's brief.
   async function backstop(conv: Conversation, st: LookState, now: Date): Promise<string | undefined> {
     if (!hasPresets(conv) || !briefOwed(st, now)) return undefined;
@@ -173,14 +154,13 @@ export function createWakeups(deps: WakeDeps) {
     return runPreset(conv, briefTask(), st, now);
   }
 
-  // The ledger's reading, remembered while the log file is unchanged (same stat), the day is the same and no radar key
-  // has aged out: an idle tick then costs one stat per conversation, not a read and parse of its whole log.
+  // The ledger's reading, remembered while the log file is unchanged (same stat) and the day is the same: an idle tick then costs one stat per conversation, not a read and parse of its whole log.
   const states = new Map<string, { sig: string; day: string; st: LookState }>();
   function stateOf(conv: Conversation, now: Date): LookState {
     const sig = logSignature(conv.logFile);
     const day = localDay(now);
     const hit = states.get(conv.key);
-    if (hit && sig && hit.sig === sig && hit.day === day && Object.values(hit.st.radarKeys).every((at) => now.getTime() - at < KEY_TTL_MS)) return hit.st;
+    if (hit && sig && hit.sig === sig && hit.day === day) return hit.st;
     const st = lookState(ledgerEntries(conv.logFile), now);
     if (sig) states.set(conv.key, { sig, day, st });
     else states.delete(conv.key);
@@ -190,11 +170,7 @@ export function createWakeups(deps: WakeDeps) {
   // The last quiet decision per conversation (in memory: a restart asks the model once more): what the model was shown, as a
   // fingerprint (gate.ts idleFingerprint), and the next look it chose. An unchanged fingerprint repeats that decision without a call.
   const quietLooks = new Map<string, { print: string; nextCheckMinutes: number }>();
-  // What code knows about the owner's jobs that the prompt does not spell out: when the radar may run again, and the brief's state.
-  const idleFacts = (st: LookState, now: Date): string => {
-    const age = st.lastRadarAt ? now.getTime() - Date.parse(st.lastRadarAt) : Infinity;
-    return JSON.stringify([age >= MIN_GAP_MINUTES * 60_000, age >= settings.radarMinutes * 60_000, briefPending(st, now), briefOwed(st, now) ?? null, st.radarPostsToday >= settings.maxProactivePerDay]);
-  };
+  const heartbeat = createHeartbeatLook({ pipeline, runProfile: deps.runProfile, may, why, notesChangedAt: changed });
 
   // One conversation, one look. Returns what happened (for the log and tests).
   async function look(conv: Conversation, now: Date): Promise<string> {
@@ -202,8 +178,9 @@ export function createWakeups(deps: WakeDeps) {
     const owed = await backstop(conv, st, now);
     if (owed) return owed;
     if (!allows(conv, "heartbeat") || !allows(conv, "wake")) return "not-allowed"; // a tenant's record decides; nothing for her without both
+    if (onLogin(conv)) return heartbeat.look(conv, st, now); // the owner: the heartbeat run, which has its own guards and no quiet-hours rule in code
     const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour);
-    if (conv.direct && night) return "quiet-hours"; // a private chat: the owner's and each tenant's
+    if (conv.direct && night) return "quiet-hours"; // a friend's private chat
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: changed(conv.notesDir), messagesCount: !tagged })) return "not-due";
 
@@ -219,7 +196,7 @@ export function createWakeups(deps: WakeDeps) {
 
     // Nothing relevant changed since the model last found nothing to do: its answer would be the same, so keep that look time.
     const tail = logTail(conv);
-    const print = idleFingerprint({ conv, now, tail }, hasPresets(conv) ? idleFacts(st, now) : "", notes);
+    const print = idleFingerprint({ conv, now, tail }, "", notes);
     const quiet = quietLooks.get(conv.key);
     if (quiet && quiet.print === print) {
       recordWake(pipeline, conv, quiet.nextCheckMinutes, now);
@@ -241,25 +218,16 @@ export function createWakeups(deps: WakeDeps) {
       if (answered) quietLooks.set(conv.key, { print, nextCheckMinutes: out.nextCheckMinutes }); // only a real answer counts as a quiet decision
       return "no";
     }
-    const task = buildTask(hasPresets(conv), out); // presets only where they exist (the owner's); anything else is the plain task, or nothing
+    const task = buildTask(out);
     if (!task) return "no-instructions"; // a free-form look must say what to do
     const again = may(conv, `${conv.kind} run`); // re-checked: the gate call itself took time and money (hers too)
     if (isRefusal(again)) return "guarded";
-
-    if (task.name !== "task") {
-      if (!hasPresets(conv)) return "no"; // defence in depth: buildTask never returns this
-      // The wake line is written again when the run ends: the ledger lines it wrote are not news.
-      return runPreset(conv, task, st, now, () => recordWake(pipeline, conv, out.nextCheckMinutes, now));
-    }
     const result = await act(conv, task.instructions, now, again).catch((e) => (console.error(`wake: ${conv.kind} run failed:`, (e as Error).message), "failed" as const));
     pipeline.record(conv, "action", Date.now(), `wake-up: ${task.instructions.slice(0, LIMITS.preview)} → ${result === "posted" ? "posted" : result === "silent" ? "stayed silent" : "failed"}`);
     audit("wake", result, source(conv));
     recordWake(pipeline, conv, out.nextCheckMinutes, now); // after the act: notes it wrote are not news
     return result;
   }
-
-  // Is today's brief still due? (The heartbeat's mail alerts and the radar wait for it.)
-  const briefIsPending = (now = clock()): boolean => !paused(now) && briefPending(stateOf(owner(), now), now);
 
   // Every conversation looks on its own: a slow brief or a failing group never delays another conversation.
   const busy = new Set<string>();
@@ -299,5 +267,5 @@ export function createWakeups(deps: WakeDeps) {
     );
   }
 
-  return { tick, look, idle, briefPending: briefIsPending };
+  return { tick, look, idle };
 }
