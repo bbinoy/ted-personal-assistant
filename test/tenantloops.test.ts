@@ -116,7 +116,7 @@ test("a tenant with heartbeat and wake gets the gate's look and a wake-up, on th
   assert.equal(r.seen.runs.length, 1);
   assert.equal(r.seen.runs[0]!.conv.tenantId, anna.id, "the run is hers, in her conversation (her notes, session and approvals)");
   assert.equal(r.seen.runs[0]!.apiKey, KEY);
-  assert.deepEqual(r.seen.provenance, [{ kind: "derived", by: "gate", text: "Remind her about her sister's birthday" }], "the gate wrote the task: the judge is told it is derived, so it can decide (no question for every call)");
+  assert.deepEqual(r.seen.provenance, [{ kind: "derived", by: "gate", of: "member", text: "Remind her about her sister's birthday" }], "the gate wrote the task: the judge is told it is derived, so it can decide (no question for every call)");
   assert.match(r.seen.runs[0]!.prompt, /Remind her about her sister's birthday/);
   assert.match(r.seen.runs[0]!.prompt, /Anna: remind me about my sister's birthday/);
   assert.doesNotMatch(r.seen.runs[0]!.prompt, /secret of Bo/);

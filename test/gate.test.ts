@@ -259,7 +259,7 @@ test("wake: a group's wake-up runs the GROUP runner and never the owner's run", 
   assert.equal(c.ownerRuns.length, 1); // the owner's own look is a separate conversation, with its own run
   assert.deepEqual(c.sent.sort(), ["group: Group fun fact!", "owner: Morning! Fun fact: biscuits."]);
   // the gate wrote both tasks from the notes: the judge is told they are derived (not anybody's words, never a standing task), for the owner's wake-up and a group's alike
-  assert.deepEqual(c.provenance, [{ kind: "derived", by: "gate", text: "Post a fun fact" }, { kind: "derived", by: "gate", text: "Post a fun fact" }]);
+  assert.deepEqual(c.provenance, [{ kind: "derived", by: "gate", of: "owner", text: "Post a fun fact" }, { kind: "derived", by: "gate", of: "member", text: "Post a fun fact" }]);
   assert.equal(scopeOf(G).read(), undefined, "and nothing of it is left once the run is over");
   // the only way a group conversation can run is as a group: its policy source is "group" whatever the gate said
   const kinds = c.turns.map((t) => [t.conv.kind, t.conv.source]);

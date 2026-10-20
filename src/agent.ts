@@ -30,7 +30,7 @@ function profileSystem(name: OwnerProfile): string {
 }
 
 // What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's and the radar's
-// instructions), `derived` for a wake-up, whose task a gate model wrote.
+// instructions), `derived` for a wake-up, whose task a gate model selected from the notes (the person's standing instruction, judged like their chat message).
 export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
