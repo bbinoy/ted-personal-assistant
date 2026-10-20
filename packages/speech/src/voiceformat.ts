@@ -1,4 +1,4 @@
-import type { VoiceFormat } from "@ted-personal-assistant/messenger";
+import type { VoiceFormat } from "@ted-assistant/messenger";
 
 // The last step of every speech engine is ffmpeg turning the engine's audio into the voice message format the messenger sends
 // (Messenger.capabilities.voiceFormat). The default is what Signal shows as a voice message: AAC in an .m4a.

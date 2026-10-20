@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { messengerContract, type ContractRig } from "@ted-personal-assistant/messenger/contract";
-import { FakeMessenger } from "@ted-personal-assistant/messenger/testing";
+import { messengerContract, type ContractRig } from "@ted-assistant/messenger/contract";
+import { FakeMessenger } from "@ted-assistant/messenger/testing";
 
 // The fake messenger passes the same contract as a real platform: what the app's tests run on behaves like what it will run against.
 

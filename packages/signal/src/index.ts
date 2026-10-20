@@ -1,4 +1,4 @@
-// The core of @ted-personal-assistant/signal: the signal-cli client and daemon. See README.md.
+// The core of @ted-assistant/signal: the signal-cli client and daemon. See README.md.
 // Optional parts are separate entry points: "./messenger" (the Messenger adapter), "./testing" (a fake daemon). Speech lives in packages/speech.
 export { SignalClient, toPerson, personOf } from "./client.ts";
 export type { SignalGroup, SignalClientOptions, SendOptions, CloseInfo } from "./client.ts";

@@ -295,7 +295,7 @@ export interface MessengerConfig {
   openLog?: OpenLog;
 }
 
-/** What a platform package exports as `@ted-personal-assistant/<name>/messenger`. */
+/** What a platform package exports as `@ted-assistant/<name>/messenger`. */
 export interface MessengerModule {
   createMessenger(config: MessengerConfig): Promise<Messenger>;
   /** The platform's lines for the doctor: what must be installed and reachable. Needs no running app; `account` is unset when the owner's own account is used. */
@@ -305,13 +305,13 @@ export interface MessengerModule {
 const NAME = /^[a-z][a-z0-9-]{0,30}$/;
 
 /**
- * Loads the platform package of that name (`@ted-personal-assistant/<name>/messenger`) with a dynamic import, so only the chosen
+ * Loads the platform package of that name (`@ted-assistant/<name>/messenger`) with a dynamic import, so only the chosen
  * platform is ever loaded.
  * @throws a sentence the owner can act on if the name is not a valid one or the package is not installed
  */
 export async function loadMessengerModule(name: string): Promise<MessengerModule> {
   if (!NAME.test(name)) throw new Error(`MESSENGER must be a platform name such as signal (got "${name.slice(0, 40)}")`);
-  const specifier = `@ted-personal-assistant/${name}/messenger`;
+  const specifier = `@ted-assistant/${name}/messenger`;
   let mod: Partial<MessengerModule>;
   try {
     mod = (await import(specifier)) as Partial<MessengerModule>;

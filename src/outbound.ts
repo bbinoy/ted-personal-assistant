@@ -3,7 +3,7 @@ import { settings } from "./settings.ts";
 import { clean } from "./sanitize.ts";
 import { briefDelivery } from "./brief.ts";
 import { BRIEF_FOOTER, BRIEF_FOOTER_NO_MAIL, renderMarkdown, signalSummary, splitSections } from "./markdown.ts";
-import type { Messenger, Quote, Target, TextStyle } from "@ted-personal-assistant/messenger";
+import type { Messenger, Quote, Target, TextStyle } from "@ted-assistant/messenger";
 
 const LONG_BODY_MIN = 500; // an echo this long that starts a remembered reply is that reply's cut body
 const ECHO_WINDOW_MS = settings.echoWindowMinutes * 60_000;

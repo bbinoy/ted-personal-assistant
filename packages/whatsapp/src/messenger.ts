@@ -1,4 +1,4 @@
-import type { DoctorLine, Messenger, MessengerConfig } from "@ted-personal-assistant/messenger";
+import type { DoctorLine, Messenger, MessengerConfig } from "@ted-assistant/messenger";
 
 // Entry point "./messenger": a placeholder for WhatsApp (Business Cloud API) as a Messenger (MESSENGER=whatsapp). Nothing is built yet; the design is in SETUP.md.
 

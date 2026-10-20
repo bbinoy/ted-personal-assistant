@@ -1,12 +1,12 @@
 import { lstatSync } from "node:fs";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
-import { MAX_AUDIO_BYTES } from "@ted-personal-assistant/messenger";
+import { MAX_AUDIO_BYTES } from "@ted-assistant/messenger";
 import { messenger } from "./messenger.ts";
-import { MAX_AUDIO_FILE_BYTES } from "@ted-personal-assistant/speech/voice";
+import { MAX_AUDIO_FILE_BYTES } from "@ted-assistant/speech/voice";
 import {
   buildReference, ClipRefused, DEFAULT_VOICE, deleteVoice, activeVoice, getMeta, listVoices, maxVoices, qwenReady, realClipTools, sanitizeVoiceName, saveVoice, scopeRoot, setActiveVoice,
   type ClipTools,
-} from "@ted-personal-assistant/speech/tts";
+} from "@ted-assistant/speech/tts";
 import { z } from "zod";
 import { audit } from "./audit.ts";
 import { askingIn, quotedVoiceNote, voiceNote, voiceNotes, type VoiceNote } from "./voicenote.ts";

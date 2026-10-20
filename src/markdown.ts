@@ -1,4 +1,4 @@
-import type { TextStyle } from "@ted-personal-assistant/messenger";
+import type { TextStyle } from "@ted-assistant/messenger";
 
 // Markdown subset -> text + style ranges (the messenger's TextStyle).
 //

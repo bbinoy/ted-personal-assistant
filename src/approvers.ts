@@ -1,4 +1,4 @@
-import type { Target } from "@ted-personal-assistant/messenger";
+import type { Target } from "@ted-assistant/messenger";
 import { makeApprove } from "./approvalask.ts";
 import { DENY_ALL, type Approve, type ApproverOptions } from "./permissions.ts";
 import { isTenantKey, OWNER_KEY } from "./send.ts";

@@ -13,7 +13,7 @@ import { tenantKey } from "./send.ts";
 import { OWNER, settings } from "./settings.ts";
 import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";
-import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-personal-assistant/messenger";
+import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-assistant/messenger";
 
 // What a conversation is (the owner's chat or a group: data, never built by hand) and the types the pipeline (conversation.ts) works with.
 

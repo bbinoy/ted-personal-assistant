@@ -30,16 +30,16 @@ import { OWNER_KEY } from "./send.ts";
 import { applyCredentialMode, mask, settings, signalIdentity } from "./settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
 import { unsupportedForVoice } from "./lang.ts";
-import { directOf, type IncomingMessage } from "@ted-personal-assistant/messenger";
+import { directOf, type IncomingMessage } from "@ted-assistant/messenger";
 import { loadMessengerInUse } from "./messenger.ts";
-import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-personal-assistant/speech/tts";
+import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-assistant/speech/tts";
 import { Limiter } from "./limiter.ts";
 import { activeTenant, admitStranger } from "./tenantroute.ts";
 import { sweepStaleRuns } from "./browse.ts";
 import { createTenantRunner } from "./tenantrun.ts";
 import { tenantHooks } from "./tenanttools.ts";
 import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantContext } from "./tenants.ts";
-import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/speech/voice";
+import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting

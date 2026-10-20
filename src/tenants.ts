@@ -10,7 +10,7 @@ import { TENANT_ID } from "./secrets.ts";
 import { OWNER_SESSION_FILE } from "./session.ts";
 import { settings } from "./settings.ts";
 import { dataPath, readJson, writeJson } from "./state.ts";
-import { directOf, directTarget, type Target } from "@ted-personal-assistant/messenger";
+import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
 // Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (the folders and files the
 // instance has always had, unchanged); a friend is a tenant with a folder of her own:

@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createOutbound, fitParts } from "../src/outbound.ts";
-import { toSignalStyles } from "@ted-personal-assistant/signal/messenger";
-import { FakeMessenger } from "@ted-personal-assistant/messenger/testing";
-import type { OutgoingMessage } from "@ted-personal-assistant/messenger";
+import { toSignalStyles } from "@ted-assistant/signal/messenger";
+import { FakeMessenger } from "@ted-assistant/messenger/testing";
+import type { OutgoingMessage } from "@ted-assistant/messenger";
 
 // A fake messenger that records what is sent and can deliver the echo BEFORE the send returns.
 function fake(caps: ConstructorParameters<typeof FakeMessenger>[0] = {}) {

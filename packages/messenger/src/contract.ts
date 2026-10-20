@@ -6,7 +6,7 @@ import { directTarget, type GroupInfo, type IncomingDeletion, type IncomingMessa
 // own fake server: a behaviour the app relies on is written down here once, and an adapter that breaks it fails the same test. A platform supplies a RIG: a started messenger plus
 // the few levers the suite needs on the platform's side (deliver something, make it refuse, hang up). Nothing here knows a platform's protocol.
 //
-//   import { messengerContract } from "@ted-personal-assistant/messenger/contract";
+//   import { messengerContract } from "@ted-assistant/messenger/contract";
 //   messengerContract("signal", async () => ({ messenger, deliverMessage, ... }));
 
 /** The platform's side of a test: what the suite pushes into the messenger and what it breaks. */

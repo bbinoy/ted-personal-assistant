@@ -1,19 +1,63 @@
 {
-  "name": "@ted-personal-assistant/messenger",
+  "name": "@ted-assistant/messenger",
   "version": "0.1.0",
   "description": "The Messenger interface of the Ted personal assistant: what the assistant needs from a chat platform (types, a neutral addressing convention, loadMessenger and a fake for tests). Platform packages implement it.",
-  "private": true,
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts",
-    "./testing": "./src/testing.ts",
-    "./contract": "./src/contract.ts",
+    ".": {
+      "workspace-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "workspace-source": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./contract": {
+      "workspace-source": "./src/contract.ts",
+      "types": "./dist/contract.d.ts",
+      "default": "./dist/contract.js"
+    },
     "./package.json": "./package.json"
   },
   "license": "MIT",
   "author": "Ben",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bbinoy/ted-personal-assistant.git",
+    "directory": "packages/messenger"
+  },
+  "homepage": "https://github.com/bbinoy/ted-personal-assistant/tree/main/packages/messenger#readme",
+  "bugs": {
+    "url": "https://github.com/bbinoy/ted-personal-assistant/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=24"
+  },
+  "keywords": [
+    "messenger",
+    "chat",
+    "assistant"
+  ],
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node build/fix-dts.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "test": "node --conditions=workspace-source --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
   }
 }

@@ -1,7 +1,7 @@
 // A bot with its OWN Signal account that talks to one person and takes part in groups when addressed.
 //   SIGNAL_ACCOUNT=+10000000001 SIGNAL_OWNER=+10000000000 node examples/peer-bot.ts
 // SIGNAL_ACCOUNT is the bot's number (or account id); SIGNAL_OWNER is the one person it answers.
-import { SignalClient, ensureSignalDaemon } from "@ted-personal-assistant/signal";
+import { SignalClient, ensureSignalDaemon } from "@ted-assistant/signal";
 
 const account = process.env.SIGNAL_ACCOUNT;
 const owner = process.env.SIGNAL_OWNER;

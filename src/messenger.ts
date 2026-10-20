@@ -1,5 +1,5 @@
-import { loadMessenger, loadMessengerModule, type DoctorLine, type Messenger, type MessengerConfig } from "@ted-personal-assistant/messenger";
-import type { SignalOptions } from "@ted-personal-assistant/signal/messenger";
+import { loadMessenger, loadMessengerModule, type DoctorLine, type Messenger, type MessengerConfig } from "@ted-assistant/messenger";
+import type { SignalOptions } from "@ted-assistant/signal/messenger";
 import { settings } from "./settings.ts";
 import { openLog } from "./state.ts";
 
