@@ -18,11 +18,11 @@ const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { heartbeatOptions } = await import("../src/agent.ts");
 const { buildOptions } = await import("../src/agentrun.ts");
-const { group, owner, tenant } = await import("../src/conversation.ts");
+const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { LOGIN } = await import("../src/payer.ts");
 const { lookerOf, hasSomethingToLookAt, unattendedTools } = await import("../src/heartbeat/scope.ts");
 const { lookInstruction } = await import("../src/heartbeat/look.ts");
-const { NOTES_DIR } = await import("../src/notes.ts");
+const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const { GOOGLE_MAIL_TOOL } = await import("../src/modules/google/module.ts");
 const { groupTools } = await import("../src/policy/capabilities.ts");
 

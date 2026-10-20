@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyPlan, undoLatest } from "../src/dreamapply.ts";
-import { dreamTrigger, readNoteFiles } from "../src/dream.ts";
+import { applyPlan, undoLatest } from "../src/memory/dreamapply.ts";
+import { dreamTrigger, readNoteFiles } from "../src/conversation/dream.ts";
 import { loadSettings } from "../src/settings.ts";
 import { presetFor } from "../src/preset.ts";
 

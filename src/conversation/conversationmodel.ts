@@ -1,18 +1,18 @@
 import { join } from "node:path";
-import { noticeFor } from "./errors.ts";
-import { tenantById, tenantContext } from "./tenants/tenants.ts";
+import { noticeFor } from "../errors.ts";
+import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
-import { FILE as OWNER_LOG, type Extra, type Kind } from "./messages.ts";
-import { NOTES_DIR } from "./notes.ts";
-import { type Picture } from "./image.ts";
+import { FILE as OWNER_LOG, type Extra, type Kind } from "../messages.ts";
+import { NOTES_DIR } from "../memory/notes.ts";
+import { type Picture } from "../image.ts";
 import { type Document } from "./document.ts";
-import { OWNER_SESSION_FILE } from "./session.ts";
-import { tenantKey } from "./ownerkey.ts";
-import { OWNER, settings } from "./settings.ts";
-import { systemZone } from "./timezone.ts";
-import { clean, LIMITS, oneLine } from "./sanitize.ts";
-import { type Timing } from "./timing.ts";
+import { OWNER_SESSION_FILE } from "../session.ts";
+import { tenantKey } from "../ownerkey.ts";
+import { OWNER, settings } from "../settings.ts";
+import { systemZone } from "../timezone.ts";
+import { clean, LIMITS, oneLine } from "../sanitize.ts";
+import { type Timing } from "../timing.ts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-assistant/messenger";
 
 // What a conversation is (the owner's chat or a group: data, never built by hand) and the types the pipeline (conversation.ts) works with.
@@ -161,7 +161,7 @@ export interface PipelineDeps {
   run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], reactedTo?: string) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)
   picture: (m: IncomingMessage) => Promise<Picture>; // throws a sentence the sender can be told
   longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; // the full text of a long message (the messenger's attachment, by id only); undefined when it cannot be read
-  document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported
+  document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/conversation/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
   speech: { ready: () => boolean; synth: (words: string, conversation: string) => Promise<string>; foreign: (words: string) => Promise<string | undefined> }; // spoken replies: local TTS, a file
   approvals: { answer: (text: string, working: () => void, quote: { timestamp: number } | undefined, deps: undefined, ctx: { scope: string; by?: string; voice?: boolean }) => Promise<{ outcome: "none" | "approved" | "modified" | "declined" | "feedback" | "clarify"; changes?: { field: string; value: unknown }[]; reply?: string }>; answerReaction: (emoji: string, ts: number, scope: string, by?: string) => string };

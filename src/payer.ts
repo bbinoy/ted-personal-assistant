@@ -1,6 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { budgetSpent, recordCost, tenantOverBudget } from "./budget.ts";
-import type { Conversation } from "./conversationmodel.ts";
+import type { Conversation } from "./conversation/conversationmodel.ts";
 import { cooldownUntil, coolingDown, noteSuccess, observeRateLimit, skipForCooldown } from "./cooldown.ts";
 import { reportKeyProblem } from "./tenants/keynotice.ts";
 import { isPaused } from "./pause.ts";

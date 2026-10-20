@@ -1,7 +1,7 @@
 import { basename } from "node:path";
-import { audit } from "./audit.ts";
+import { audit } from "../audit.ts";
 import { isIndex, isNotePath, parseNote, STATUS_PREFIX } from "./notes.ts";
-import { splitReaction } from "./reaction.ts";
+import { splitReaction } from "../reaction.ts";
 
 // Note changes made during the current chat turn. They are announced ONCE, as one short
 // message when the turn ends (announceMemoryChanges), not one per tool call. Chat is serial, so a

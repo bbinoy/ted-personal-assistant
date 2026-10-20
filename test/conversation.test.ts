@@ -6,12 +6,12 @@ import { settings } from "../src/settings.ts";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPipeline, group, owner, type Incoming } from "../src/conversation.ts";
-import { createOutbound } from "../src/outbound.ts";
+import { createPipeline, group, owner, type Incoming } from "../src/conversation/conversation.ts";
+import { createOutbound } from "../src/conversation/outbound.ts";
 import { AuthError, RateLimitError } from "../src/errors.ts";
-import { SLOW_REPLY_MS } from "../src/quote.ts";
+import { SLOW_REPLY_MS } from "../src/conversation/quote.ts";
 import type { Picture } from "../src/image.ts";
-import type { Document } from "../src/document.ts";
+import type { Document } from "../src/conversation/document.ts";
 import { readLongText } from "@ted-assistant/signal";
 import { toSignalStyles } from "@ted-assistant/signal/messenger";
 import type { IncomingMessage, IncomingReaction, OutgoingMessage, Target } from "@ted-assistant/messenger";
@@ -680,7 +680,7 @@ test("groups: an edit never answers an approval, a picture caption neither, and 
   void r;
 });
 
-// ---- documents (src/document.ts): the same steps as pictures, in the owner's chat and in groups ----
+// ---- documents (src/conversation/document.ts): the same steps as pictures, in the owner's chat and in groups ----
 
 const PDF: Document = { kind: "pdf", data: "QUJD", name: "contract.pdf" };
 const TXT: Document = { kind: "text", text: "milk\neggs", name: "list.txt", cut: false };
@@ -807,7 +807,7 @@ test("groups: a document is handled like a picture: opened when it will be used,
 });
 
 test("groups: the prompt names the documents members sent, their file names as plain labels, as data", async () => {
-  const { groupPrompt } = await import("../src/group.ts");
+  const { groupPrompt } = await import("../src/conversation/group.ts");
   const p = groupPrompt(new Date("2026-01-01T10:00:00Z"), ["Eve: 📄 look"], { line: "Eve: 📄 look" }, false, undefined, false, 0, [PDF, TXT]);
   assert.match(p, /Files members sent are here/);
   assert.match(p, /\[PDF attached, file name "contract.pdf"/);

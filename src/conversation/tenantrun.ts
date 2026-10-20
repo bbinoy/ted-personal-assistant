@@ -1,12 +1,12 @@
 import { prepare as prepareWarm, runConversation } from "../agent.ts";
-import { tenant } from "../conversationmodel.ts";
-import type { Conversation, RunHooks } from "../conversationmodel.ts";
+import { tenant } from "./conversationmodel.ts";
+import type { Conversation, RunHooks } from "./conversationmodel.ts";
 import type { Picture } from "../image.ts";
-import type { Document } from "../document.ts";
+import type { Document } from "./document.ts";
 import { InstanceKeyError } from "../errors.ts";
 import { cooldownOf, isRefusal, mayRun } from "../payer.ts";
-import { mayNotice, markDisclosed, setPaused, tenantById, tenantContext, wasDisclosed, type TenantContext } from "./tenants.ts";
-import { DISCLOSURE, notSetUpReply } from "./tenantroute.ts";
+import { mayNotice, markDisclosed, setPaused, tenantById, tenantContext, wasDisclosed, type TenantContext } from "../tenants/tenants.ts";
+import { DISCLOSURE, notSetUpReply } from "../tenants/tenantroute.ts";
 
 // A tenant's turn, around the run itself (agent.ts runConversation): the gates that need no model, in code (payer.ts mayRun, the same for every unattended job too):
 //   suspended or deleted since the message arrived -> nothing

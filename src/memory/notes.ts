@@ -1,12 +1,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { isInside } from "./contain.ts";
-import { fence } from "./fence.ts";
-import { loaded } from "./modules/index.ts";
-import { preset } from "./preset.ts";
-import type { SetupNeed } from "./modules/types.ts";
-import { localDay } from "./pause.ts";
-import { settings } from "./settings.ts";
+import { isInside } from "../contain.ts";
+import { fence } from "../fence.ts";
+import { preset } from "../preset.ts";
+import { localDay } from "../pause.ts";
+import { settings } from "../settings.ts";
 
 // Owner notes: the SDK's own auto-memory, in memory/notes/. The chat agent keeps them as small
 // markdown files (one fact each) plus an index, MEMORY.md, that the SDK loads into every chat
@@ -99,17 +97,6 @@ export function notesBlock(notes: readonly Note[], categories?: readonly Categor
   }
   return lines.length ? `${NOTE}\n${fence("owner_memory", lines.join("\n"))}` : "";
 }
-
-// The setup the bundled skills need before they can do their job, as the file name each one
-// is saved under (plugin/skills/setup tells the chat agent to use exactly these).
-// They are the loaded tool modules' (src/modules: calendar, Notion, the mail provider's), in module order.
-export const setupItems = (): SetupNeed[] => loaded().flatMap((m) => m.setup ?? []);
-
-// Pure: the labels of setup items with no note yet (an expired or empty note counts as missing).
-// An item whose connector is down is left out: the missing connection is the problem to report,
-// not the missing note. Without mail (MAIL_PROVIDER=none) an item that only exists for mail is never asked for.
-export const missingSetup = (notes: readonly Note[], down: readonly string[] = [], mail: boolean = settings.mail): string[] =>
-  setupItems().filter((i) => (mail || !i.mailOnly) && !notes.some((n) => n.file === i.file) && !(i.needs && down.includes(i.needs))).map((i) => i.label);
 
 // What a run sees: the notes of the given categories (every note of the folder when none are given), rendered.
 export const memoryFor = (categories?: readonly Category[], now = new Date(), dir: string = NOTES_DIR, zone?: string) => notesBlock(readNotes(now, dir, zone), categories); // `dir`: another conversation's notes (a friend's mail check reads hers)

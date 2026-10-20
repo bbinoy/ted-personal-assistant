@@ -9,7 +9,7 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "turncontext-"));
 
 const { runConversation } = await import("../src/agent.ts");
-const { owner } = await import("../src/conversation.ts");
+const { owner } = await import("../src/conversation/conversation.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recordConnectors } = await import("../src/connectors.ts");

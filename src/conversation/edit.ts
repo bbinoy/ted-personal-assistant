@@ -1,4 +1,4 @@
-import { fence } from "./fence.ts";
+import { fence } from "../fence.ts";
 
 // Edited and deleted messages, the parts that need no state: when an edit changes nothing, how an edit reads in a prompt, and who
 // may make one. Where they are applied is conversation.ts (the owner's chat and every group alike).

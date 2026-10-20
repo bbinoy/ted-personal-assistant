@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { heartbeatOptions } from "../src/agent.ts";
-import { owner } from "../src/conversationmodel.ts";
+import { owner } from "../src/conversation/conversationmodel.ts";
 import { LOGIN } from "../src/payer.ts";
 import { buildOptions } from "../src/agentrun.ts";
 import { readAudit } from "../src/audit.ts";

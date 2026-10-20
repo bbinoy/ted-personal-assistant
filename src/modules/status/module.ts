@@ -1,4 +1,4 @@
-import { rowsOf, type ToolModule } from "./types.ts";
+import { rowsOf, type ToolModule } from "../types.ts";
 
 // status (statusnote.ts): the heartbeat run's and its experts' one note write, for status-<name> notes (the daily brief's record of whether it went out). Only an unattended
 // owner run has it (policy source "background": the heartbeat run; its expert makes the same calls through the same canUseTool); chat has the SDK's file tools for notes, a group or

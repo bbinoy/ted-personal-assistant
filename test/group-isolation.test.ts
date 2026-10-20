@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { memberCacheSize, ownerInGroup } from "../src/group.ts";
-import { GROUPS_DIR, groupDir, groupKey, groupNotesDir } from "../src/groupstore.ts";
+import { memberCacheSize, ownerInGroup } from "../src/conversation/group.ts";
+import { GROUPS_DIR, groupDir, groupKey, groupNotesDir } from "../src/conversation/groupstore.ts";
 
 test("groups: each group id has its own folder, and a different id that hashes to the same folder is refused, not merged", () => {
   const a = "group-a-isolation-test";

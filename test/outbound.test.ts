@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createOutbound, fitParts } from "../src/outbound.ts";
+import { createOutbound, fitParts } from "../src/conversation/outbound.ts";
 import { toSignalStyles } from "@ted-assistant/signal/messenger";
 import { FakeMessenger } from "@ted-assistant/messenger/testing";
 import type { OutgoingMessage } from "@ted-assistant/messenger";

@@ -12,10 +12,10 @@ const Z = await import("../src/timezone.ts");
 const { clockLine } = await import("../src/brief.ts");
 const { lastLookText, lookInstruction, lookPrompt } = await import("../src/heartbeat/look.ts");
 const { lookerOf } = await import("../src/heartbeat/scope.ts");
-const { readNotes } = await import("../src/notes.ts");
+const { readNotes } = await import("../src/memory/notes.ts");
 const { localDay } = await import("../src/pause.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { group, owner, tenant, zoneOf } = await import("../src/conversationmodel.ts");
+const { group, owner, tenant, zoneOf } = await import("../src/conversation/conversationmodel.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
 
 // 23:30 UTC on 20 October 2026: still Tuesday in New York (19:30), already Wednesday in Lisbon (00:30, summer time until the 25th) and Auckland (12:30).

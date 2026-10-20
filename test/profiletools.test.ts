@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { heartbeatOptions } from "../src/agent.ts";
-import { owner } from "../src/conversationmodel.ts";
+import { owner } from "../src/conversation/conversationmodel.ts";
 import { LOGIN } from "../src/payer.ts";
 import { buildOptions } from "../src/agentrun.ts";
 import { hiddenOutside, toolsFor } from "../src/profiletools.ts";

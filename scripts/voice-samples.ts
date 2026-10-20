@@ -6,11 +6,11 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { loadMessengerInUse } from "../src/messenger.ts";
+import { loadMessengerInUse } from "../src/conversation/messenger.ts";
 import { synthesize } from "@ted-assistant/speech/tts";
 import { PERSONALITY } from "../src/persona.ts";
 import { settings, signalIdentity } from "../src/settings.ts";
-import { SPOKEN_STYLE } from "../src/voicereply.ts";
+import { SPOKEN_STYLE } from "../src/conversation/voicereply.ts";
 
 const [source, outDir] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const send = process.argv.includes("--send");

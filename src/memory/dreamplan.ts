@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_NOTE_CHARS, NOTES_DIR, parseNote, type Category } from "./notes.ts";
-import { preset } from "./preset.ts";
-import { settings } from "./settings.ts";
-import { LIMITS } from "./sanitize.ts";
+import { preset } from "../preset.ts";
+import { settings } from "../settings.ts";
+import { LIMITS } from "../sanitize.ts";
 
 // The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts
 // shape or content; a scope says where a dream works and what it may touch.

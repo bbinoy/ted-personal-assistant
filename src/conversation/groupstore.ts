@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Scope } from "./dreamplan.ts";
-import { compactIfNeeded, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "./messages.ts";
-import { matchLines } from "./logsearch.ts";
-import { MAX_NOTE_CHARS, type Note } from "./notes.ts";
-import { preset } from "./preset.ts";
-import { settings } from "./settings.ts";
-import { readText } from "./state.ts";
+import type { Scope } from "../memory/dreamplan.ts";
+import { compactIfNeeded, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "../messages.ts";
+import { matchLines } from "../logsearch.ts";
+import { MAX_NOTE_CHARS, type Note } from "../memory/notes.ts";
+import { preset } from "../preset.ts";
+import { settings } from "../settings.ts";
+import { readText } from "../state.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
-import { LIMITS } from "./sanitize.ts";
+import { LIMITS } from "../sanitize.ts";
 
 // Everything a group has: its own notes (what members asked the assistant to remember there) and its own
 // message history, in the same formats as the owner's, but in separate places that nothing private reads

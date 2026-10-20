@@ -10,7 +10,7 @@ import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "./connectors.ts";
 import { failure } from "./errors.ts";
-import { announceMemoryChanges, noteWritten } from "./memorynotice.ts";
+import { announceMemoryChanges, noteWritten } from "./memory/memorynotice.ts";
 import { builtinModule } from "./modules/builtin.ts";
 import { createsOf, isOwnerOnly } from "./policy/toolmanifest.ts";
 import { idsInResult, noteCreated } from "./approvals/created.ts";
@@ -29,7 +29,7 @@ import { cleanToolOutput } from "./toolclean.ts";
 import { readJson, writeJson } from "./state.ts";
 import { ownerSkills, skillsFor } from "./skills.ts";
 import { recordToolsSeen, toolsSeen } from "./policy/toolsseen.ts";
-import type { SeenMail } from "./seenmail.ts";
+import type { SeenMail } from "./modules/seenmail/seenmail.ts";
 import { delegationHook, type Delegation, type ExpertSetup } from "./heartbeat/delegation.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the

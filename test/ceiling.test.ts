@@ -4,7 +4,7 @@ import { sleep } from "./util.ts";
 import { pausing, RunTimeout, withCeiling } from "../src/ceiling.ts";
 import { prepare, runConversation } from "../src/agent.ts";
 import { runAgent } from "../src/agentrun.ts";
-import { group } from "../src/conversation.ts";
+import { group } from "../src/conversation/conversation.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { readAudit } from "../src/audit.ts";
 

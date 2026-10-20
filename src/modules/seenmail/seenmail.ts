@@ -1,10 +1,10 @@
 import { dirname, join } from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "./audit.ts";
-import type { Conversation } from "./conversationmodel.ts";
-import { readJson, writeJson } from "./state.ts";
-import { tenantById, tenantContext } from "./tenants/tenants.ts";
+import { audit } from "../../audit.ts";
+import type { Conversation } from "../../conversation/conversationmodel.ts";
+import { readJson, writeJson } from "../../state.ts";
+import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 // "Mail since your last look" is not a time window but a memory of ids: the mail the conversation's heartbeat run has already worked through. The run lists the inbox with
 // its own mail tool (whatever the provider: Mailbird, Gmail, a friend's Google) and asks the `seen_mail` tool which of those ids it has not looked at yet. Code knows no

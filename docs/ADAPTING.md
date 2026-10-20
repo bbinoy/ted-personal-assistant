@@ -85,9 +85,9 @@ A phone is the right place to talk to something that watches your inbox: it is a
 
 Signal via `signal-cli`, linked as a **secondary device**, reading the owner's **Note to Self**. That has three consequences baked into the code, and you should decide which still apply to your messenger:
 
-- Messages the agent sends to Note to Self come back to it as incoming messages. `src/outbound.ts` contains an **echo guard** for that (remembered texts and timestamps). A **bot** account (Telegram, Slack, Discord) does not echo, so this can be dropped.
-- The linked device receives *all* the owner's traffic, so `src/guards.ts` accepts only the one thread. With a bot you instead allowlist a user id / chat id.
-- Text formatting is sent as separate style ranges (`src/markdown.ts`), a Signal specificity.
+- Messages the agent sends to Note to Self come back to it as incoming messages. `src/conversation/outbound.ts` contains an **echo guard** for that (remembered texts and timestamps). A **bot** account (Telegram, Slack, Discord) does not echo, so this can be dropped.
+- The linked device receives *all* the owner's traffic, so `src/conversation/guards.ts` accepts only the one thread. With a bot you instead allowlist a user id / chat id.
+- Text formatting is sent as separate style ranges (`src/conversation/markdown.ts`), a Signal specificity.
 
 ### What each piece must provide
 
@@ -102,9 +102,9 @@ Then adjust the app-side pieces that carry platform conventions:
 
 | File | Change |
 |---|---|
-| `src/markdown.ts` | emit the target's markup instead of Signal style ranges (Telegram MarkdownV2/HTML entities, Slack mrkdwn, WhatsApp `*bold*`). `splitSections` and the section-per-message brief delivery carry over unchanged. |
-| `src/outbound.ts` | keep or drop the echo guard, as above. The platform's message limit is `capabilities.maxMessageBytes`. |
-| `src/guards.ts` | allowlist by your platform's user/chat id. Keep it pure and keep the tests. |
+| `src/conversation/markdown.ts` | emit the target's markup instead of Signal style ranges (Telegram MarkdownV2/HTML entities, Slack mrkdwn, WhatsApp `*bold*`). `splitSections` and the section-per-message brief delivery carry over unchanged. |
+| `src/conversation/outbound.ts` | keep or drop the echo guard, as above. The platform's message limit is `capabilities.maxMessageBytes`. |
+| `src/conversation/guards.ts` | allowlist by your platform's user/chat id. Keep it pure and keep the tests. |
 | `src/approvals/approvals.ts` | unchanged. It matches reactions to the approval message by id; any platform with message ids and reactions works. Without reactions, the approval is a text reply. |
 | `src/settings.ts`, `.env.example` | the platform's settings (a bot token, say), kept in `.env`. |
 

@@ -1,4 +1,4 @@
-import { rowsOf, type ToolModule } from "./types.ts";
+import { rowsOf, type ToolModule } from "../types.ts";
 
 // memory (memory-tools.ts): forget a note, search the logs, undo the dream. Scoped to the conversation by its server (where there are notes); undoing a dream
 // goes with the dream.

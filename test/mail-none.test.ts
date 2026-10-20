@@ -9,7 +9,7 @@ import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { startHeartbeat } from "../src/heartbeat.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
-import { missingSetup, setupItems } from "../src/notes.ts";
+import { missingSetup, setupItems } from "../src/modules/index.ts";
 import { chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";

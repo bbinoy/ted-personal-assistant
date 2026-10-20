@@ -5,14 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { delegationHook, expertSetup } from "../src/heartbeat/delegation.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
-import { announceMemoryChanges, noteWritten } from "../src/memorynotice.ts";
+import { announceMemoryChanges, noteWritten } from "../src/memory/memorynotice.ts";
 import { registered } from "../src/modules/index.ts";
-import { categoryOf, MAX_NOTE_CHARS, readNotes } from "../src/notes.ts";
+import { categoryOf, MAX_NOTE_CHARS, readNotes } from "../src/memory/notes.ts";
 import { classify } from "../src/policy/policy.ts";
 import { preset } from "../src/preset.ts";
-import { dreamScope } from "../src/dreamscope.ts";
+import { dreamScope } from "../src/modules/memory/dreamscope.ts";
 import { ownerSkills, skillHint } from "../src/skills.ts";
-import { writeStatusNote } from "../src/statusnote.ts";
+import { writeStatusNote } from "../src/modules/status/statusnote.ts";
 
 // The daily brief is a skill the heartbeat run delegates to its expert; its state is the status-brief note (no code schedules or tracks the brief).
 

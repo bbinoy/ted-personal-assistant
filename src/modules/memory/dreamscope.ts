@@ -1,10 +1,10 @@
 import { join } from "node:path";
-import type { Conversation } from "./conversationmodel.ts";
-import { OWNER_SCOPE, type Scope } from "./dreamplan.ts";
-import { groupDir, groupScope } from "./groupstore.ts";
-import { preset } from "./preset.ts";
-import { settings } from "./settings.ts";
-import { tenantById, tenantContext } from "./tenants/tenants.ts";
+import type { Conversation } from "../../conversation/conversationmodel.ts";
+import { OWNER_SCOPE, type Scope } from "../../memory/dreamplan.ts";
+import { groupDir, groupScope } from "../../conversation/groupstore.ts";
+import { preset } from "../../preset.ts";
+import { settings } from "../../settings.ts";
+import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 // WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it, the note categories it has (the preset's notes.dream for the owner,
 // notes.group, notes.tenant) and the state file of its last run, all inside the conversation's own folder. The dream and "undo the dream" (memory-tools.ts) both

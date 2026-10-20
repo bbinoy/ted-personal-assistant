@@ -5,7 +5,7 @@ import { fence } from "../src/fence.ts";
 import { htmlToText, looksLikeHtml } from "../src/html.ts";
 import { mailBody } from "../src/mailtext.ts";
 import { cleanToolOutput } from "../src/toolclean.ts";
-import { cleanIncoming } from "../src/conversation.ts";
+import { cleanIncoming } from "../src/conversation/conversation.ts";
 
 const tags = (s: string) => [...s].map((c) => String.fromCodePoint(0xe0000 + c.charCodeAt(0))).join("");
 const quiet = <T>(f: () => T): T => {

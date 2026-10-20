@@ -1,5 +1,5 @@
-import { onLogin, speakerOf, zoneOf, type Conversation } from "../conversationmodel.ts";
-import { readNotes } from "../notes.ts";
+import { onLogin, speakerOf, zoneOf, type Conversation } from "../conversation/conversationmodel.ts";
+import { readNotes } from "../memory/notes.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import { PROFILES } from "../profiles.ts";

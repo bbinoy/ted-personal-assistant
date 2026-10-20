@@ -25,14 +25,17 @@ export const ALLOWED: Record<string, readonly string[]> = {
   ".": ["*"],
   // modules/index.ts, types.ts, runtime.ts and the single-file declarations (policy leaves + the binding point).
   modules: [".", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  // a feature folder: its declaration (light) and its server, guard, rules and store files.
-  "modules/*": [".", "modules", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // a feature folder: its declaration (light) and its server, guard, rules and store files. -> conversation is accepted: the voice tool sends through the messenger and lists the
+  // groups, the memory module scopes a group's notes (dreamscope.ts). The pipeline wires features in the other direction (conversation -> modules/*), so this is the one mutual pair.
+  "modules/*": [".", "modules", "conversation", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   // folders that exist (R3, R4): policy decides from data only, approvals sit above it; tenants and intake are one box, above the secrets.
   approvals: [".", "modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
-  policy: [".", "modules", "tenants", "intake", "secrets", "core"], // reads modules/index lazily; never imports approvals; capabilities.ts reads the intake links (tenants and intake are one box in the diagram)
+  policy: [".", "modules", "tenants", "intake", "memory", "secrets", "core"], // reads modules/index lazily; never imports approvals; capabilities.ts reads the intake links, policy.ts knows what a note path is (tenants, intake and memory are one box in the diagram)
   tenants: [".", "intake", "memory", "secrets", "core"],
   intake: [".", "modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
   secrets: [".", "core"],
+  // R5: the conversation pipeline sits above the run machinery; memory is the note store (notes, their notices, the dream's plan and apply steps), one box with tenants and intake.
+  // The dream job itself (dream.ts) and the friend's turn (tenantrun.ts) sit in conversation/: they read every conversation and call the run.
   // the folders of the target layout that do not exist yet (rows stay until their chunk lands):
   heartbeat: [".", "conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   conversation: [".", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],

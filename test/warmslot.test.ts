@@ -2,12 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick } from "./util.ts";
 import { firstWarm, SpareSlot } from "../src/warmslot.ts";
-import { askGateWith, prepareGate } from "../src/gate.ts";
+import { askGateWith, prepareGate } from "../src/conversation/gate.ts";
 import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/skills.ts";
 import { prepare, runConversation } from "../src/agent.ts";
-import { group, owner } from "../src/conversation.ts";
-import { createGroupBrain } from "../src/group.ts";
+import { group, owner } from "../src/conversation/conversation.ts";
+import { createGroupBrain } from "../src/conversation/group.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { writeJson } from "../src/state.ts";
 

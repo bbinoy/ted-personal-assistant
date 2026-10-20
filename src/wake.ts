@@ -1,8 +1,8 @@
 import { budgetSpent } from "./budget.ts";
-import { lookState, notesChangedAt, type LookState } from "./ledger.ts";
+import { lookState, notesChangedAt, type LookState } from "./conversation/ledger.ts";
 import { createHeartbeatLook, type HeartbeatDeps } from "./heartbeat/look.ts";
-import { listGroups } from "./groupstore.ts";
-import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
+import { listGroups } from "./conversation/groupstore.ts";
+import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation/conversation.ts";
 import { allows } from "./policy/capabilities.ts";
 import { isRefusal, mayRun, type Payer, type Refusal } from "./payer.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { voiceOption, SPOKEN_STYLE } from "../src/voicereply.ts";
+import { voiceOption, SPOKEN_STYLE } from "../src/conversation/voicereply.ts";
 
 test("the voice option tells the model to write for the ear, and only when speech is set up", () => {
   assert.ok(voiceOption(true).includes(SPOKEN_STYLE));

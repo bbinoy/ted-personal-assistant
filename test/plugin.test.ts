@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { missingSetup, setupItems, type Note } from "../src/notes.ts";
+import { type Note } from "../src/memory/notes.ts";
+import { missingSetup, setupItems } from "../src/modules/index.ts";
 import { chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
 import { settings } from "../src/settings.ts";
 

@@ -55,9 +55,9 @@ const SYSTEM = "You are a test assistant. Do exactly what the user asks, with th
 
 export async function buildWorld(): Promise<World> {
   const { settings } = await import("../src/settings.ts");
-  const { NOTES_DIR } = await import("../src/notes.ts");
+  const { NOTES_DIR } = await import("../src/memory/notes.ts");
   const { runOptionsFor } = await import("../src/runoptions.ts");
-  const { group, tenant } = await import("../src/conversation.ts");
+  const { group, tenant } = await import("../src/conversation/conversation.ts");
   const { buildOptions } = await import("../src/agentrun.ts");
   const { mintInvite, recordConsent, redeemInvite, tenantContext } = await import("../src/tenants/tenants.ts");
 
@@ -93,7 +93,7 @@ export async function buildWorld(): Promise<World> {
   writeFileSync(bea.logFile, `{"ts":1,"at":"2026-10-17T10:00:00.000Z","kind":"owner","text":"${word} ${canary}-BEA"}\n`);
   writeFileSync(ann.logFile, `{"ts":2,"at":"2026-10-17T10:00:00.000Z","kind":"owner","text":"Ann likes tea"}\n`);
 
-  const { groupLogFile } = await import("../src/groupstore.ts");
+  const { groupLogFile } = await import("../src/conversation/groupstore.ts");
   const gconv = group("g1");
   mkdirSync(gconv.notesDir, { recursive: true });
   writeFileSync(join(settings.dataDir, groupLogFile("g1")), `{"ts":3,"at":"2026-10-17T10:00:00.000Z","kind":"user","text":"the group likes tea"}\n`);
@@ -175,7 +175,7 @@ const gateOf = (o: Options, s: Scenario, hooks: Hooks): ((tool: string, input: R
 const textOf = (r: unknown): string => JSON.stringify((r as { content?: unknown }).content ?? r);
 
 export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check[]> {
-  const { NOTES_DIR } = await import("../src/notes.ts");
+  const { NOTES_DIR } = await import("../src/memory/notes.ts");
   const { settings } = await import("../src/settings.ts");
   const checks: Check[] = [];
   const check = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, ...(ok || !detail ? {} : { detail }) });

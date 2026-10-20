@@ -291,7 +291,7 @@ export function loadSettings(env: Env) {
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
     dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
-    // Wake-ups (src/gate.ts, src/wake.ts): on every heartbeat tick a small model looks at each conversation whose
+    // Wake-ups (src/conversation/gate.ts, src/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").
     wakeups: oneOf(env, "WAKEUPS", "on", ["on", "off"] as const) === "on",
 
@@ -315,7 +315,7 @@ export function loadSettings(env: Env) {
 
     // Which chat platform the assistant talks on: the package @ted-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.
     messenger: env.MESSENGER?.trim() || "signal",
-    // Signal's own settings, handed to its package as options (src/messenger.ts). The owner's number is required by whoever starts the chat (signalIdentity below), not by every
+    // Signal's own settings, handed to its package as options (src/conversation/messenger.ts). The owner's number is required by whoever starts the chat (signalIdentity below), not by every
     // command that reads the settings.
     signalOwnerNumber: env.SIGNAL_OWNER_NUMBER?.trim() || undefined,
     signalOwnAccount: env.SIGNAL_ACCOUNT?.trim() || undefined, // the assistant's OWN account (a number, or an account key from Signal Login); unset: a linked device of the owner's, talking in Note to Self
@@ -326,19 +326,19 @@ export function loadSettings(env: Env) {
     // Voice notes are transcribed on this Mac with whisper.cpp (src/transcribe.ts); nothing leaves it.
     whisperModel: env.WHISPER_MODEL || `${env.HOME ?? ""}/.cache/ted-personal-assistant/ggml-small.bin`,
     transcribeConcurrency: num(env, "TRANSCRIBE_CONCURRENCY", 2, 1, 8), // voice notes transcribed at the same time; the rest wait their turn (main.ts, limiter.ts)
-    // Spoken replies to voice messages (src/voicereply.ts): local text to speech with Kokoro (scripts/setup-tts.sh).
+    // Spoken replies to voice messages (src/conversation/voicereply.ts): local text to speech with Kokoro (scripts/setup-tts.sh).
     voiceReplies: oneOf(env, "VOICE_REPLIES", "on", ["on", "off"] as const) === "on",
-    ttsLanguages: parseLanguages(env.TTS_LANGUAGES), // languages the voice speaks (default en); a reply in another one goes out as text (src/lang.ts)
+    ttsLanguages: parseLanguages(env.TTS_LANGUAGES), // languages the voice speaks (default en); a reply in another one goes out as text (src/conversation/lang.ts)
     // Optional remote speech (docs/REMOTE-TTS.md): sends the spoken words to a third party or to your own server.
     tts: ttsProvider(env, kokoro, dataDir),
-    // Group chats (own-account mode, src/group.ts): it takes part in any group the owner is in, speaking only
+    // Group chats (own-account mode, src/conversation/group.ts): it takes part in any group the owner is in, speaking only
     // when it fits (see PARTICIPATION in persona.ts).
     groupParticipation: oneOf(env, "GROUP_PARTICIPATION", "auto", ["auto", "tagged"] as const), // auto: the assistant judges every message; tagged: only when @mentioned or replied to
     // Every conversation, the owner's chat and each group: wait this long after a message for a burst to end, then answer all of
     // it as one turn.
     settleSeconds: num(env, "SETTLE_SECONDS", 2, 0, 60),
     settleMaxSeconds: num(env, "SETTLE_MAX_SECONDS", 10, 1, 120), // the longest a burst waits since its first message, so continuous chatter cannot postpone the answer forever
-    // Warm model processes (src/agent.ts, src/gate.ts): a process started ahead of the next message skips the ~3 s start-up. At most
+    // Warm model processes (src/agent.ts, src/conversation/gate.ts): a process started ahead of the next message skips the ~3 s start-up. At most
     // three exist: the owner's chat, the group that spoke last, and one small Haiku process for the participation gate. Each costs
     // about 150 to 200 MB resident and no tokens, and is dropped after WARM_IDLE_MINUTES without use. WARM=off: every turn starts cold.
     warm: oneOf(env, "WARM", "on", ["on", "off"] as const) === "on",

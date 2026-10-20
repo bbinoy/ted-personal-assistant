@@ -1,11 +1,11 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "./audit.ts";
-import { undoLatest } from "./dreamapply.ts";
-import type { Scope } from "./dreamplan.ts";
-import { searchLogs } from "./logsearch.ts";
-import { forgetNote } from "./notes.ts";
-import { settings } from "./settings.ts";
+import { audit } from "../../audit.ts";
+import { undoLatest } from "../../memory/dreamapply.ts";
+import type { Scope } from "../../memory/dreamplan.ts";
+import { searchLogs } from "../../logsearch.ts";
+import { forgetNote } from "../../memory/notes.ts";
+import { settings } from "../../settings.ts";
 
 // The SDK's auto-memory lets an agent create and edit notes with ordinary file tools (limited to ONE notes
 // folder by policy.ts), but it has no way to delete one, to search older history or to undo the nightly dream.
@@ -60,7 +60,7 @@ export function createMemoryServer(scope: MemoryScope) {
         async (args: { group?: string }) => {
           let target = own; // a group's or a friend's: its own scope, closed over; the owner's: hers, or a group's by name
           if (!own && args.group) {
-            const { groupScope, listGroups } = await import("./groupstore.ts");
+            const { groupScope, listGroups } = await import("../../conversation/groupstore.ts");
             const found = listGroups().find((g) => g.name.toLowerCase() === args.group!.trim().toLowerCase());
             if (!found) return reply(`no group named ${args.group}. Known: ${listGroups().map((g) => g.name).join(", ") || "none"}`, true);
             target = groupScope(found.id);
@@ -81,7 +81,7 @@ export function createMemoryServer(scope: MemoryScope) {
               limit: z.number().int().positive().max(60).optional(),
             },
             async (a) => {
-              const { searchHistoryFile } = await import("./groupstore.ts");
+              const { searchHistoryFile } = await import("../../conversation/groupstore.ts");
               return reply(searchHistoryFile(tenantLog, a));
             },
           )
@@ -95,7 +95,7 @@ export function createMemoryServer(scope: MemoryScope) {
               limit: z.number().int().positive().max(60).optional(),
             },
             async (a) => {
-              const { searchGroupHistory } = await import("./groupstore.ts");
+              const { searchGroupHistory } = await import("../../conversation/groupstore.ts");
               return reply(searchGroupHistory(groupId, a));
             },
           )

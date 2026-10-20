@@ -2,7 +2,7 @@ import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "./audit.ts";
 import { withCeiling } from "./ceiling.ts";
 import { failure, isApiRefusal } from "./errors.ts";
-import type { Conversation } from "./conversationmodel.ts";
+import type { Conversation } from "./conversation/conversationmodel.ts";
 import { charge, envFor, isRefusal, LOGIN, mayRun, observe, succeeded, type MayRunOptions, type Payer } from "./payer.ts";
 import { OWNER_SESSION_FILE, planSession, type ChatSession, type CompactMode } from "./session.ts";
 import { settings } from "./settings.ts";

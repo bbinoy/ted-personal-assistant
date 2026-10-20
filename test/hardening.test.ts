@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { acceptOwner } from "../src/guards.ts";
+import { acceptOwner } from "../src/conversation/guards.ts";
 import { redact } from "../src/redact.ts";
 
 const OWNER = "+15555550114";

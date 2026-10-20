@@ -1,7 +1,7 @@
-import { fence } from "./fence.ts";
-import { settings } from "./settings.ts";
+import { fence } from "../fence.ts";
+import { settings } from "../settings.ts";
 import type { Quote } from "@ted-assistant/messenger";
-import { LIMITS } from "./sanitize.ts";
+import { LIMITS } from "../sanitize.ts";
 
 // Replies in Signal point at an earlier message. Two directions:
 //   in:  when the owner replies to one of our messages (an alert, a brief section, a prep

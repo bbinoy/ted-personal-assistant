@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { ASSISTANTS_DIR, loadPreset, parseTemplate, presetFor, PROMPTS, render } from "../src/preset.ts";
 import { dreamSystem, PERSONALITY } from "../src/persona.ts";
 import { PROFILES } from "../src/profiles.ts";
-import { CATEGORIES } from "../src/notes.ts";
+import { CATEGORIES } from "../src/memory/notes.ts";
 import { settings } from "../src/settings.ts";
 
 // The assistant preset (assistants/<name>/, src/preset.ts): what makes the harness "Ted" is data. It loads and is checked, a broken one says what is
@@ -108,7 +108,7 @@ test("a second preset changes the persona, the rhythm and the limits without tou
   writeFileSync(probe, `
     const { chatSystem, heartbeatSystem, PERSONALITY } = await import(${JSON.stringify(src + "persona.ts")});
     const { PROFILES } = await import(${JSON.stringify(src + "profiles.ts")});
-    const { CATEGORIES, categoryOf } = await import(${JSON.stringify(src + "notes.ts")});
+    const { CATEGORIES, categoryOf } = await import(${JSON.stringify(src + "memory/notes.ts")});
     const { settings } = await import(${JSON.stringify(src + "settings.ts")});
     console.log(JSON.stringify({ chat: chatSystem(new Date("2026-10-12T09:00:00")), heartbeat: heartbeatSystem(""), personality: PERSONALITY, categories: CATEGORIES,
       cat: [categoryOf("goals-run.md"), categoryOf("triage-x.md")], heartbeatTurns: PROFILES.heartbeat.maxTurns, heartbeatProfile: PROFILES.heartbeat.notes,
@@ -149,16 +149,16 @@ test("a second preset's note categories reach every run: chat, group, friend, he
   const src = new URL("../src/", import.meta.url).pathname;
   writeFileSync(probe, `
     const T = await import(${JSON.stringify(src + "tenants/tenants.ts")});
-    const { owner, group, tenant } = await import(${JSON.stringify(src + "conversation.ts")});
+    const { owner, group, tenant } = await import(${JSON.stringify(src + "conversation/conversation.ts")});
     const { runOptionsFor } = await import(${JSON.stringify(src + "runoptions.ts")});
     const { heartbeatOptions } = await import(${JSON.stringify(src + "agent.ts")});
     const { LOGIN } = await import(${JSON.stringify(src + "payer.ts")});
     const { PROFILES } = await import(${JSON.stringify(src + "profiles.ts")});
-    const { dreamScope } = await import(${JSON.stringify(src + "dreamscope.ts")});
+    const { dreamScope } = await import(${JSON.stringify(src + "modules/memory/dreamscope.ts")});
     const { dreamSystem, GATE_DEFAULTS } = await import(${JSON.stringify(src + "persona.ts")});
     const { writeFileSync, mkdirSync } = await import("node:fs");
     const { join } = await import("node:path");
-    const { NOTES_DIR } = await import(${JSON.stringify(src + "notes.ts")});
+    const { NOTES_DIR } = await import(${JSON.stringify(src + "memory/notes.ts")});
     mkdirSync(NOTES_DIR, { recursive: true });
     writeFileSync(join(NOTES_DIR, "goals-run.md"), "---\\nname: run\\n---\\n\\nRun a half marathon in spring.\\n");
     writeFileSync(join(NOTES_DIR, "people-sam.md"), "---\\nname: sam\\n---\\n\\nSam is the training partner.\\n");

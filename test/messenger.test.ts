@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createPipeline, owner } from "../src/conversation.ts";
-import { createOutbound } from "../src/outbound.ts";
+import { createPipeline, owner } from "../src/conversation/conversation.ts";
+import { createOutbound } from "../src/conversation/outbound.ts";
 import { sendNow } from "../src/modules/send/send.ts";
 import { OWNER_KEY } from "../src/ownerkey.ts";
 import { FakeMessenger } from "@ted-assistant/messenger/testing";
@@ -75,7 +75,7 @@ test("MESSENGER=signal (the default) is found by name, and the doctor reports th
   const mod = await loadMessengerModule("signal");
   const m = await mod.createMessenger({ owner: { address: OWNER }, account: OWNER, options: { host: "127.0.0.1", port: 7583, attachmentsDir: "/x" }, logger: console });
   assert.equal(m.name, "signal");
-  const { messengerDoctor } = await import("../src/messenger.ts");
+  const { messengerDoctor } = await import("../src/conversation/messenger.ts");
   const lines = await messengerDoctor(undefined);
   assert.deepEqual([lines[0]!.what, lines[0]!.detail, lines[1]!.what], ["messenger", "signal", "Signal channel"]);
 });

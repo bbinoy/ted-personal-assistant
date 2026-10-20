@@ -17,7 +17,7 @@ const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/pol
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const { classify, isReadableData } = await import("../src/policy/policy.ts");
-const { NOTES_DIR } = await import("../src/notes.ts");
+const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
 const { searchLogs } = await import("../src/logsearch.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");

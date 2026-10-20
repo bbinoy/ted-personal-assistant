@@ -18,7 +18,7 @@ const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { buildOptions } = await import("../src/agentrun.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
-const { group, owner, tenant } = await import("../src/conversation.ts");
+const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 
 const FIXTURE = new URL("./fixtures/run-options.json", import.meta.url);
 const NOW = new Date("2026-10-19T09:00:00.000Z");

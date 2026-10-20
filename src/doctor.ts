@@ -23,10 +23,11 @@ import { BaoError, type OpenBao } from "./secrets/openbao.ts";
 import { appBao, ITEM_KINDS, keychainNames, looksLikeApiKey, OWNER } from "./secrets/secrets.ts";
 import { invites, listTenants, OWNER_ID, pausedUntil, people, readConsent, tenantContext } from "./tenants/tenants.ts";
 import { Ledger } from "./modules/browse/payments.ts";
-import { messengerDoctor } from "./messenger.ts";
+import { messengerDoctor } from "./conversation/messenger.ts";
 import { settings } from "./settings.ts";
 import { disconnected, NAMES, readConnectors } from "./connectors.ts";
-import { missingSetup, readNotes } from "./notes.ts";
+import { readNotes } from "./memory/notes.ts";
+import { missingSetup } from "./modules/index.ts";
 import { dataPath, readJson, readText } from "./state.ts";
 
 type Line = DoctorLine;

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BASE_BACKOFF_MS, coolingDown, noteRateLimit, noteSuccess, observeRateLimit, resetCooldown, skipForCooldown } from "../src/cooldown.ts";
 import { failure, RateLimitError } from "../src/errors.ts";
-import { group, type Conversation } from "../src/conversation.ts";
+import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { recordMessage, type Kind } from "../src/messages.ts";
 import { settings } from "../src/settings.ts";
 import { createWakeups } from "../src/wake.ts";

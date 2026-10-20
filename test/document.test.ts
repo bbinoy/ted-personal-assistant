@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { documentNote, MAX_DOCUMENTS, MAX_PDF_PAGES, MAX_TEXT_BYTES, pdfPages, prepareDocument, prepareFile, type AudioTools, safeName, takeDocuments, UNSUPPORTED, type Document } from "../src/document.ts";
+import { documentNote, MAX_DOCUMENTS, MAX_PDF_PAGES, MAX_TEXT_BYTES, pdfPages, prepareDocument, prepareFile, type AudioTools, safeName, takeDocuments, UNSUPPORTED, type Document } from "../src/conversation/document.ts";
 import { userInput } from "../src/image.ts";
 
 // A small valid PDF built by hand: `pages` pages, each showing a line of text.

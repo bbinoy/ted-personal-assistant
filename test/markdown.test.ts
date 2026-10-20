@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderMarkdown } from "../src/markdown.ts";
+import { renderMarkdown } from "../src/conversation/markdown.ts";
 import { toSignalStyles } from "@ted-assistant/signal/messenger";
 
 // Helper: the text each style range covers, to assert offsets land on the right characters.

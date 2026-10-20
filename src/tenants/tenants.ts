@@ -4,7 +4,7 @@ import { audit } from "../audit.ts";
 import { isInside } from "../contain.ts";
 import { OneTimeCodes } from "../secrets/onetime.ts";
 import { FILE as OWNER_LOG, type Summarize } from "../messages.ts";
-import { NOTES_DIR } from "../notes.ts";
+import { NOTES_DIR } from "../memory/notes.ts";
 import { clean, LIMITS, oneLine } from "../sanitize.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 import { OWNER_SESSION_FILE } from "../session.ts";

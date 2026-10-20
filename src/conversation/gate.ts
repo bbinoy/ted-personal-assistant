@@ -1,19 +1,19 @@
 import { query, startup, type Options, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
-import { clockLine } from "./brief.ts";
-import { haikuOptions, oneShot } from "./haiku.ts";
-import { LOGIN, type Payer } from "./payer.ts";
-import { fence } from "./fence.ts";
+import { clockLine } from "../brief.ts";
+import { haikuOptions, oneShot } from "../haiku.ts";
+import { LOGIN, type Payer } from "../payer.ts";
+import { fence } from "../fence.ts";
 import { groupNotesBlock } from "./groupstore.ts";
 import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES, parseWake } from "./ledger.ts";
-import { ledgerEntries, withoutDeleted, type Sent } from "./messages.ts";
+import { ledgerEntries, withoutDeleted, type Sent } from "../messages.ts";
 import { speakerOf, zoneOf, type Conversation } from "./conversationmodel.ts";
-import { readNotes } from "./notes.ts";
-import { localDay } from "./pause.ts";
-import { isOneEmoji } from "./reaction.ts";
-import { GATE_DEFAULTS } from "./persona.ts";
-import { OWNER, settings } from "./settings.ts";
-import { firstWarm, SpareSlot } from "./warmslot.ts";
-import { LIMITS } from "./sanitize.ts";
+import { readNotes } from "../memory/notes.ts";
+import { localDay } from "../pause.ts";
+import { isOneEmoji } from "../reaction.ts";
+import { GATE_DEFAULTS } from "../persona.ts";
+import { OWNER, settings } from "../settings.ts";
+import { firstWarm, SpareSlot } from "../warmslot.ts";
+import { LIMITS } from "../sanitize.ts";
 
 // The participation gate. "Should I say something in this group now?" is asked when a group message nobody addressed to us arrives (group.ts), by a small model (Haiku,
 // no tools) with the group's clock, its notes, the tail of its log and its default rules (persona.ts GATE_DEFAULTS; notes tweak them: "don't reply so fast"). Never for the

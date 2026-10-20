@@ -1,22 +1,22 @@
-import { clockLine } from "./brief.ts";
-import { budgetSpent } from "./budget.ts";
+import { clockLine } from "../brief.ts";
+import { budgetSpent } from "../budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
-import { fence } from "./fence.ts";
-import { prepare, runConversation } from "./agent.ts";
-import { scopeOf } from "./approvals/turnscope.ts";
-import { AuthError, RateLimitError } from "./errors.ts";
+import { fence } from "../fence.ts";
+import { prepare, runConversation } from "../agent.ts";
+import { scopeOf } from "../approvals/turnscope.ts";
+import { AuthError, RateLimitError } from "../errors.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
 import { groupContext } from "./groupstore.ts";
-import { isPaused } from "./pause.ts";
-import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "./image.ts";
+import { isPaused } from "../pause.ts";
+import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "../image.ts";
 import { documentNote, takeDocuments, type Document } from "./document.ts";
 import { group, type Batch, type Conversation, type Pipeline } from "./conversation.ts";
 import { quoteNote } from "./quote.ts";
 import { voiceOption } from "./voicereply.ts";
 import type { Quote } from "@ted-assistant/messenger";
-import { clean, defuseSpeakers, LIMITS, oneLine } from "./sanitize.ts";
-import { OWNER, settings } from "./settings.ts";
+import { clean, defuseSpeakers, LIMITS, oneLine } from "../sanitize.ts";
+import { OWNER, settings } from "../settings.ts";
 
 // Group chats. In its own Signal account the assistant can be added to a group. There it is a friendly
 // participant: every message is judged (cheaply, see gate below) and it speaks when it makes sense, always
@@ -98,7 +98,7 @@ export interface GroupMessage {
   quote?: Quote; // it is a reply to an earlier message
   voice?: boolean; // the text is a transcript of a voice message
   picture?: Picture; // a picture it carries (the text is its caption); shown to the model for this turn only, never stored
-  document?: Document; // a PDF or text file it carries (src/document.ts): the same
+  document?: Document; // a PDF or text file it carries (src/conversation/document.ts): the same
   arrivedAt?: number; // when it came in (for the timing line)
   reaction?: { emoji: string; on: string }; // not a message but a reaction to one (on = that message's text)
   // The message is an EDIT of an earlier one (`timestamp` is the edit's own). `stamps`: every timestamp that message has had; `prior`: its

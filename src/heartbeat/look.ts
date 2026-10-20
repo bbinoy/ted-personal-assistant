@@ -1,10 +1,10 @@
 import { audit } from "../audit.ts";
 import { clockLine } from "../brief.ts";
-import type { Conversation, Pipeline } from "../conversation.ts";
-import { onLogin, owner } from "../conversationmodel.ts";
+import type { Conversation, Pipeline } from "../conversation/conversation.ts";
+import { onLogin, owner } from "../conversation/conversationmodel.ts";
 import { fence } from "../fence.ts";
-import { logTail } from "../gate.ts";
-import { lookDue, recordWake, type LookState } from "../ledger.ts";
+import { logTail } from "../conversation/gate.ts";
+import { lookDue, recordWake, type LookState } from "../conversation/ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../payer.ts";
 import { heartbeatInstruction } from "../persona.ts";
 import { delegatedText, expertSetup } from "./delegation.ts";
@@ -15,7 +15,7 @@ import { dayAt, inQuietHours, systemZone, timeIn } from "../timezone.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseAnswer } from "./rules.ts";
-import { createSeenMail, seenFileOf, type SeenMail } from "../seenmail.ts";
+import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "./scope.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 

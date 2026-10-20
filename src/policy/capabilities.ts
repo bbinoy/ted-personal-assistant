@@ -1,4 +1,4 @@
-import type { Conversation } from "../conversationmodel.ts";
+import type { Conversation } from "../conversation/conversationmodel.ts";
 import { baseUrlProblem, intakeToolsFor } from "../intake/intakelinks.ts";
 import { googleReady, settings } from "../settings.ts";
 import { skillsFor } from "../skills.ts";

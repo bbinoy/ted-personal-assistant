@@ -13,7 +13,7 @@ const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { capabilitiesOf } = await import("../src/policy/capabilities.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
-const { group, tenant } = await import("../src/conversation.ts");
+const { group, tenant } = await import("../src/conversation/conversation.ts");
 const { groupSystem, tenantSystem } = await import("../src/persona.ts");
 
 const on = settings as unknown as Record<string, unknown>;

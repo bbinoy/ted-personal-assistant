@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { delegatedText, expertSetup } from "../src/heartbeat/delegation.ts";
 import { mailSlot } from "../src/modules/index.ts";
-import { missingSetup, setupItems } from "../src/notes.ts";
+import { missingSetup, setupItems } from "../src/modules/index.ts";
 import { chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, heartbeatInstruction, heartbeatSystem } from "../src/persona.ts";
 import { PROFILES } from "../src/profiles.ts";
 import { ownerSkills } from "../src/skills.ts";
