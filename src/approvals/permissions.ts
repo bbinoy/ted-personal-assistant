@@ -3,6 +3,7 @@ import { audit, wordless, type Source } from "../core/audit.ts";
 import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
+import { objectLines } from "./describe.ts";
 import { clearDeclined, declinedAgo, declinedLine, declinedMinutes, noteDeclined } from "./declined.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
@@ -216,6 +217,8 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       }
       description = describeCall(tool, input, view);
     }
+    // A call on an object by its id names the object (describe.ts), not only the id; a payment and a guard-built step have their own text.
+    if (!g?.payment && !g?.description) description += await objectLines(conversation, tool, input);
     // A decline is final until the person asks again in a new message (declined.ts): the question and the judge are told, and the judge cannot loosen it.
     const declinedMs = g?.payment ? undefined : declinedAgo(conversation, tool, input, Date.now(), g?.description);
     if (declinedMs !== undefined) description += `\n${declinedLine(declinedMs)}`;

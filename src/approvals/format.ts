@@ -38,6 +38,12 @@ function when(start: unknown, end: unknown, zone: unknown): string | undefined {
   return `${s.day} ${s.time} → ${e.day} ${e.time}${tz}`;
 }
 
+// When an event is, from a call's own arguments (strings or {dateTime}), as in an approval text; undefined when the call names no start.
+const dateTimeOf = (v: unknown): unknown => (v && typeof v === "object" ? ((v as { dateTime?: unknown; date?: unknown }).dateTime ?? (v as { date?: unknown }).date) : v);
+export function whenOf(input: Record<string, unknown>): string | undefined {
+  return when(dateTimeOf(input.startTime ?? input.start ?? input.start_time), dateTimeOf(input.endTime ?? input.end ?? input.end_time), input.timeZone ?? input.timezone);
+}
+
 // Free text the owner is being asked to approve (an email body, event notes) gets more room.
 const LONG_TEXT = new Set(["body", "description", "message", "text", "content", "markdownBody"]);
 

@@ -192,6 +192,10 @@ export interface ToolModule {
   hide?: ModuleHide; // what the model sees of a connector: tools beyond the visible ones are hidden (policy.ts hiddenTools)
   known?: readonly string[]; // the connector's full tool names as of writing (toolsseen.ts seeds the hiding with them, so even the very first run is trimmed)
   mail?: MailSlot; // slot "mail" only
+  // approvals/describe.ts: what one of this module's tools that acts on an object by its id (a delete, an update) is about, found by CODE before the question is written, with a read-only
+  // lookup the module itself has (a draft's subject, an event's title): a short label like "Coffee, Wed 21 Oct 09:00", or nothing. It is asked only when the assistant made no record of
+  // creating the object (created.ts), and it fails quietly (an error or no answer is no label). Reads are free, so it needs no approval; it may only read.
+  describe?: (tool: string, input: Record<string, unknown>) => Promise<string | undefined>;
   mailTools?: MailTools; // a module that is no mail provider but has tools that send mail (a friend's Google): how its sends are shown and read back
 }
 
