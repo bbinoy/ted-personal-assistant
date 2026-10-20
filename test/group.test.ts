@@ -144,7 +144,7 @@ const rig = (over: object = {}) => {
     pipeline,
     recent: () => [] as string[],
     run: async () => "Howdy!",
-    gate: async () => ({ act: true, task: "task" as const, delaySeconds: 0, nextCheckMinutes: 30 }),
+    gate: async () => ({ act: true, delaySeconds: 0, nextCheckMinutes: 30 }),
     ...over,
   });
   // Feed it as Signal would (conversation.ts checks the group, then the brain decides).
@@ -255,7 +255,7 @@ test("groups: a sticky address answered from a later message reacts to the ADDRE
   const settle2 = new Promise<void>((x) => (release2 = x));
   const gated: string[] = [];
   const prompts: string[] = [];
-  const old = rig({ wait: () => settle2, gate: async () => (gated.push("gate"), { act: true, task: "task" as const, delaySeconds: 0, nextCheckMinutes: 30 }), run: async (build: (s?: string) => { prompt: string }) => (prompts.push(build().prompt), "ok") });
+  const old = rig({ wait: () => settle2, gate: async () => (gated.push("gate"), { act: true, delaySeconds: 0, nextCheckMinutes: 30 }), run: async (build: (s?: string) => { prompt: string }) => (prompts.push(build().prompt), "ok") });
   const t0 = new Date();
   const both = [old.brain(mk({ groupId: g2, timestamp: 1, text: "@Ted ok?" }), t0), old.brain(mk({ groupId: g2, timestamp: 2, addressedToMe: false, text: "hm" }), new Date(t0.getTime() + 31 * 60_000))];
   await new Promise((res) => setTimeout(res, 5));
@@ -327,7 +327,7 @@ test("groups: unvouched groups get no logging and no answers; the verdict parser
   const r = rig({ vouch: async () => false });
   await r.on(mk({ groupId: gid() }));
   assert.deepEqual([r.sent.length, r.recorded.length], [0, 0]);
-  assert.deepEqual(parseGate({ act: true, delaySeconds: 500, nextCheckMinutes: 5 }), { act: true, task: "task", delaySeconds: settings.gateMaxDelaySeconds, nextCheckMinutes: 15 });
+  assert.deepEqual(parseGate({ act: true, delaySeconds: 500, nextCheckMinutes: 5 }), { act: true, delaySeconds: settings.gateMaxDelaySeconds, nextCheckMinutes: 15 });
   assert.equal(settings.gateMaxDelaySeconds, 4); // the default: a pause is for being natural, not slow
   assert.equal(parseGate({ act: "yes" }).act, false);
   assert.equal(parseGate(undefined).act, false);
@@ -463,7 +463,7 @@ test("prompts: Ted is told he can act later and on a schedule, in a private chat
 });
 
 test("groups: the gate can react right away to a message, with no run and no words", async () => {
-  const r = rig({ gate: async () => ({ act: false, task: "task", reaction: "😂", delaySeconds: 0, nextCheckMinutes: 30 }), run: async () => assert.fail("a quick reaction needs no run") });
+  const r = rig({ gate: async () => ({ act: false, reaction: "😂", delaySeconds: 0, nextCheckMinutes: 30 }), run: async () => assert.fail("a quick reaction needs no run") });
   await r.on(mk({ groupId: gid(), addressedToMe: false, timestamp: 77, text: "I fell off my chair 😅" }));
   assert.deepEqual(r.reacted, ["😂"]);
   assert.deepEqual(r.reactTargets.map((t) => t.timestamp), [77]);
@@ -494,7 +494,7 @@ test("groups: in tagged-only mode an unaddressed picture is not even opened", as
   }
 });
 
-const verdict = (act: boolean, over: object = {}) => ({ act, task: "task" as const, delaySeconds: 0, nextCheckMinutes: 30, ...over });
+const verdict = (act: boolean, over: object = {}) => ({ act, delaySeconds: 0, nextCheckMinutes: 30, ...over });
 
 test("groups: the gate is asked when an untagged message arrives, while the settling pause is still running", async () => {
   const order: string[] = [];
@@ -658,7 +658,7 @@ test("groups: the approval judge is told the message that ADDRESSED us (not the 
   assert.equal(scopeOf(g).read(), undefined, "forgotten when the turn ends");
   // nobody addressed us: the gate chose to act, and its hint is not anybody's words
   const g2 = gid();
-  const gated = rig({ run, gate: async () => ({ act: true, task: "task" as const, instructions: "answer the question about the ball", delaySeconds: 0, nextCheckMinutes: 30 }) });
+  const gated = rig({ run, gate: async () => ({ act: true, instructions: "answer the question about the ball", delaySeconds: 0, nextCheckMinutes: 30 }) });
   await gated.on(mk({ groupId: g2, text: "so who is bringing the ball?", addressedToMe: false }));
   assert.deepEqual(seen[1], { kind: "derived", by: "gate", of: "member", text: "answer the question about the ball" });
   assert.equal(scopeOf(g2).read(), undefined);
