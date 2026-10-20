@@ -1,4 +1,4 @@
-import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
+import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
 import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "./chatsession.ts";
@@ -122,6 +122,9 @@ export interface JudgeSetup {
   conversation?: string;
 }
 
+// Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
+const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not retry it; tell the owner in your own words what you could not do.";
+
 export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
   let untrusted = !!setup.untrusted;
   const isUntrusted = () => untrusted || !!setup.taint?.read();
@@ -133,7 +136,21 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
   const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
-  return async (tool, input, { signal }) => {
+  // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
+  return async (tool, input, o) => {
+    try {
+      return await decide(tool, input, o);
+    } catch (e) {
+      console.error(`permissions: ${tool}: the check failed (${(e as Error)?.name ?? "error"}), denied`);
+      try {
+        log(tool, "deny-error", source, { error: (e as Error)?.name ?? "error" });
+      } catch {
+        /* the log may be what failed */
+      }
+      return { behavior: "deny", message: FAILED_CLOSED };
+    }
+  };
+  async function decide(tool: string, input: Record<string, unknown>, { signal }: { signal: AbortSignal }): Promise<PermissionResult> {
     const g = guard ? await guard.decide(tool, input) : undefined;
     if (g?.kind === "deny") {
       log(tool, "deny-guard", source);
