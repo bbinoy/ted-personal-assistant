@@ -57,7 +57,7 @@ export function googleProvider(cfg: () => GoogleOAuthConfig = settingsConfig): O
       if (granted.has("email")) granted.add("https://www.googleapis.com/auth/userinfo.email"); // (Google may name it either way)
       // The consent screen lets her untick single permissions: a grant missing one is no use for the tools, so it is not stored.
       if (c.scopes.some((s) => !granted.has(s))) throw new OAuthProblem("Not every permission was ticked on Google's page, and the assistant needs them all to read and write your mail and calendar. Nothing was saved; open the same link again and allow everything.");
-      return { data: { refresh_token: body.refresh_token, email, scope }, chars: email.length };
+      return { data: { refresh_token: body.refresh_token, email, scope }, chars: email.length, account: email };
     },
   };
 }

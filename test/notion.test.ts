@@ -97,10 +97,11 @@ let codeN = 0;
 // The whole sign-in without the page: link -> consent address -> (the browser leg) -> state -> code exchange -> her item, like the callback does it.
 async function connect(tenant: string, base = "http://127.0.0.1:9") {
   const f = flows(base);
-  const url = new URL(await f.begin("notion", `LINK${++codeN}`, tenant));
+  const started = await f.begin("notion", `LINK${++codeN}`, tenant);
+  const url = new URL(started.url);
   const code = `fake-notion-code-${codeN}`;
   fake.expect(code, url.searchParams.get("code_challenge")!);
-  const flow = f.take("notion", url.searchParams.get("state")!)!;
+  const flow = f.take("notion", url.searchParams.get("state")!, started.binding)!;
   const grant = await f.exchange("notion", code, flow.verifier);
   bao.store.set(grantPath(tenant), { ...grant.data, at: new Date().toISOString() });
   return { url, grant };
@@ -184,11 +185,29 @@ test("notion: the page shows Connect Notion; the callback exchanges the code, st
   assert.equal(r.status, 200);
   assert.match(html, /Connect Notion/);
   const href = new URL(/href="([^"]+)"/.exec(html)![1]!.replaceAll("&amp;", "&"));
+  const cookie = r.headers.get("set-cookie")!.split(";")[0]!;
+  assert.match(r.headers.get("set-cookie")!, /; Path=\/oauth\/notion\/callback; HttpOnly; SameSite=Lax; Max-Age=600$/);
   assert.equal(href.searchParams.get("redirect_uri"), `${s.base}/oauth/notion/callback`);
   const auth = "fake-notion-code-page";
   fake.expect(auth, href.searchParams.get("code_challenge")!);
   bao.store.delete(grantPath(anna.id));
-  const done = await fetch(`${s.base}/oauth/notion/callback?${new URLSearchParams({ code: auth, state: href.searchParams.get("state")! })}`);
+  const at = (state: string, c?: string) => fetch(`${s.base}/oauth/notion/callback?${new URLSearchParams({ code: auth, state })}`, c ? { headers: { cookie: c } } : {});
+  // the consent address passed on to another browser (no cookie, or its own) finishes nothing and uses the state up
+  const stolen = await at(href.searchParams.get("state")!);
+  assert.equal(stolen.status, 404, "no cookie");
+  assert.equal(await stolen.text(), "Not found\n");
+  const r2 = await fetch(`${s.base}/i/${code}`); // the page again: a new state and a new binding
+  const href2 = new URL(/href="([^"]+)"/.exec(await r2.text())![1]!.replaceAll("&amp;", "&"));
+  const cookie2 = r2.headers.get("set-cookie")!.split(";")[0]!;
+  assert.notEqual(cookie2, cookie);
+  fake.expect(auth, href2.searchParams.get("code_challenge")!);
+  assert.equal((await at(href2.searchParams.get("state")!, cookie)).status, 404, "another flow's cookie");
+  assert.equal(grantOf(anna.id), undefined, "nothing stored");
+  const r3 = await fetch(`${s.base}/i/${code}`);
+  const href3 = new URL(/href="([^"]+)"/.exec(await r3.text())![1]!.replaceAll("&amp;", "&"));
+  const cookie3 = r3.headers.get("set-cookie")!.split(";")[0]!;
+  fake.expect(auth, href3.searchParams.get("code_challenge")!);
+  const done = await at(href3.searchParams.get("state")!, cookie3);
   const text = await done.text();
   assert.equal(done.status, 200);
   assert.match(text, /Notion is connected/);
@@ -199,10 +218,10 @@ test("notion: the page shows Connect Notion; the callback exchanges the code, st
   assert.ok(bao.requests.filter((x) => x.method === "POST" && x.path.includes("/notion/")).every((x) => x.token === bao.intakeToken), "written only with the write-only token");
   assert.equal((await fetch(`${s.base}/i/${code}`)).status, 404, "the link is burnt");
   assert.equal(L.connectionState(anna.id, "notion").state, "connected");
-  assert.equal((await fetch(`${s.base}/oauth/notion/callback?${new URLSearchParams({ code: auth, state: href.searchParams.get("state")! })}`)).status, 404, "a replayed state finds nothing");
+  assert.equal((await at(href3.searchParams.get("state")!, cookie3)).status, 404, "a replayed state finds nothing");
   const everything = [text, printed.join("\n"), JSON.stringify(readAudit(() => true)), JSON.stringify(L.readDone(anna.id, "notion"))].join("\n");
   for (const secret of [grant.access_token, grant.refresh_token, auth, code]) assert.ok(!html.includes(secret), "the sign-in page holds none of them (only the state, in the address of the link to Notion)");
-  for (const secret of [grant.access_token, grant.refresh_token, auth, code, href.searchParams.get("state")!]) assert.ok(!everything.includes(secret), `leaked ${secret.slice(0, 14)}`);
+  for (const secret of [grant.access_token, grant.refresh_token, auth, code, href.searchParams.get("state")!, href3.searchParams.get("state")!, cookie3.split("=")[1]!, cookie.split("=")[1]!]) assert.ok(!everything.includes(secret), `leaked ${secret.slice(0, 14)}`);
   assert.equal(readAudit((e) => e.tool === "intake_store" && e.meta?.tenant === anna.id).at(-1)!.meta!.purpose, "notion");
 });
 
@@ -210,10 +229,12 @@ test("notion: a person without the capability cannot open a notion link, a Googl
   const s = await start();
   assert.equal((await fetch(`${s.base}/i/${s.mint(plain.id)}`)).status, 404, "no notion capability");
   const code = s.mint(bea.id);
-  const href = new URL(/href="([^"]+)"/.exec(await (await fetch(`${s.base}/i/${code}`)).text())![1]!.replaceAll("&amp;", "&"));
+  const page = await fetch(`${s.base}/i/${code}`);
+  const cookie = page.headers.get("set-cookie")!.split(";")[0]!;
+  const href = new URL(/href="([^"]+)"/.exec(await page.text())![1]!.replaceAll("&amp;", "&"));
   const calls = fake.tokenCalls.length;
-  assert.equal((await fetch(`${s.base}/oauth/google/callback?${new URLSearchParams({ code: "x", state: href.searchParams.get("state")! })}`)).status, 404, "a notion state at the google callback");
-  const no = await fetch(`${s.base}/oauth/notion/callback?${new URLSearchParams({ error: "access_denied", state: href.searchParams.get("state")! })}`);
+  assert.equal((await fetch(`${s.base}/oauth/google/callback?${new URLSearchParams({ code: "x", state: href.searchParams.get("state")! })}`, { headers: { cookie } })).status, 404, "a notion state at the google callback");
+  const no = await fetch(`${s.base}/oauth/notion/callback?${new URLSearchParams({ error: "access_denied", state: href.searchParams.get("state")! })}`, { headers: { cookie } });
   assert.equal(no.status, 400);
   assert.match(await no.text(), /Notion was not connected/);
   assert.equal(fake.tokenCalls.length, calls, "nothing exchanged");

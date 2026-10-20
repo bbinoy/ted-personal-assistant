@@ -4,7 +4,7 @@ import { audit } from "./audit.ts";
 import { LINK_CODE, LinkStore, PURPOSE_CAPABILITY, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
 import type { Put } from "./intakepurposes.ts";
-import { CALLBACK, OAuthProblem, type OAuthFlows } from "./oauth.ts";
+import { CALLBACK, OAuthProblem, bindingCookie, bindingFrom, type OAuthFlows } from "./oauth.ts";
 import { people } from "./tenants.ts";
 
 // The intake page: a separate process (scripts/intake.ts), on 127.0.0.1 only, that is the one place a tenant types a secret. A tunnel the owner sets up
@@ -19,7 +19,7 @@ import { people } from "./tenants.ts";
 //
 // Hardening: the code is 128 random bits, compared in constant time and only by its hash; a link works once (a second submit at the same moment loses
 // the race); per-address and global rate limits, and a stricter one for wrong codes; a method allow-list; headers, body, content type and time are
-// bounded; a per-form CSRF token; no cookies; a strict CSP, no caching, no referrer. A submitted value is never echoed, logged or audited: only names
+// bounded; a per-form CSRF token; no cookies except the sign-in's binding cookie (oauth.ts); a strict CSP, no caching, no referrer. A submitted value is never echoed, logged or audited: only names
 // and lengths are.
 
 const MAX_BODY = 16 * 1024;
@@ -77,10 +77,10 @@ function sendText(res: ServerResponse, status: number, body: string, extra: Reco
 }
 const NOT_FOUND = "Not found\n"; // the one answer for every path, code and method that is not a thing here
 
-function sendPage(res: ServerResponse, status: number, title: string, body: string): void {
+function sendPage(res: ServerResponse, status: number, title: string, body: string, extra: Record<string, string> = {}): void {
   const nonce = randomBytes(16).toString("base64");
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title><style nonce="${nonce}">${STYLE}</style></head><body><main>${body}</main></body></html>`;
-  res.writeHead(status, { ...BASE_HEADERS, "Content-Security-Policy": cspFor(nonce), "Content-Type": "text/html; charset=utf-8" }).end(html);
+  res.writeHead(status, { ...BASE_HEADERS, "Content-Security-Policy": cspFor(nonce), "Content-Type": "text/html; charset=utf-8", ...extra }).end(html);
 }
 
 const input = (f: Field): string => {
@@ -176,13 +176,14 @@ export class IntakeServer {
     const flows = this.deps.oauth;
     const name = flows?.provider(id)?.name ?? purpose.title;
     if (!flows?.ready(id)) return sendPage(res, 503, "Not available", `<h1>Not available yet</h1><p>This assistant is not set up for ${esc(name)} yet. Ask the person who runs it.</p>`);
-    let url: string;
+    let started: { url: string; binding: string };
     try {
-      url = await flows.begin(id, code, tenant);
+      started = await flows.begin(id, code, tenant);
     } catch (e) {
       return sendPage(res, 503, "Try again later", `<h1>Try again later</h1><p>${esc(e instanceof OAuthProblem ? e.message : "Something went wrong.")}</p>`);
     }
-    sendPage(res, 200, purpose.title, `<h1>${esc(purpose.title)}</h1><p>${esc(purpose.intro)}</p><p><a class="button" href="${esc(url)}" rel="noreferrer">${esc(purpose.title)}</a></p><p class="note">This page is private to you and the link works once.</p>`);
+    // The binding cookie ties the flow to THIS browser: the callback is refused from any other (a consent address passed on to someone else finishes nothing).
+    sendPage(res, 200, purpose.title, `<h1>${esc(purpose.title)}</h1><p>${esc(purpose.intro)}</p><p><a class="button" href="${esc(started.url)}" rel="noreferrer">${esc(purpose.title)}</a></p><p class="note">This page is private to you and the link works once. Press the button in this same browser.</p>`, { "Set-Cookie": bindingCookie(id, started.binding, flows.secure(), flows.ttlSeconds) });
   }
 
   // The service sends her browser here with ?code=...&state=... (or ?error=... when she said no). The state is used up by this call and must belong to a link that is
@@ -191,7 +192,7 @@ export class IntakeServer {
     const flows = this.deps.oauth;
     const provider = flows?.provider(id);
     const q = new URL(req.url ?? "", "http://localhost").searchParams;
-    const flow = flows?.ready(id) ? flows.take(id, q.get("state") ?? "") : undefined;
+    const flow = flows?.ready(id) ? flows.take(id, q.get("state") ?? "", bindingFrom(req.headers.cookie, id)) : undefined;
     const peek = flow && this.deps.links.peek(flow.code, now);
     const purpose = peek && peek.tenant === flow.tenant && peek.purpose === id ? this.allowed(peek.tenant, peek.purpose) : undefined;
     if (!flows || !provider || !flow || !peek || !purpose) {
@@ -214,7 +215,7 @@ export class IntakeServer {
       const stored = [{ name: `${provider.name.toLowerCase()} connection`, chars: grant.chars }];
       recordDone(flow.tenant, id, stored);
       audit("intake_store", "stored", "background", { tenant: flow.tenant, purpose: id, items: stored });
-      sendPage(res, 200, "Connected", `<h1>${esc(provider.name)} is connected</h1><p>You can close this page and go back to the chat.</p>`);
+      sendPage(res, 200, "Connected", `<h1>${esc(provider.name)} is connected${grant.account ? ` as ${esc(grant.account)}` : ""}</h1><p>${grant.account ? "If that is not your account, tell the person who runs the assistant. " : ""}You can close this page and go back to the chat.</p>`);
     } catch (e) {
       claim.release(); // the same link works again until it expires
       if (e instanceof OAuthProblem) return sendPage(res, 400, "Not connected", `<h1>Not connected</h1><p>${esc(e.message)}</p>`);
