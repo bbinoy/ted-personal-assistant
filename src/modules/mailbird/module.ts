@@ -36,6 +36,12 @@ const mail: MailSlot = {
 export const mailbirdModule: ToolModule = {
   name: "mailbird",
   slot: "mail",
+  // A draft that is about to be thrown away is shown by its subject, read back from Mailbird like a draft that is about to be sent.
+  describe: async (tool, input) => {
+    const id = Number(input.messageId);
+    const d = tool === `${MB}discard_draft` && draftReader && Number.isFinite(id) ? await draftReader(id).catch(() => undefined) : undefined;
+    return d?.subject ? `Draft “${d.subject}”${d.to.length ? ` to ${d.to.join(", ")}` : ""}` : undefined;
+  },
   connection: { kind: "connector", key: "mail", server: /^mailbird$/i, prefix: MB },
   rows: [
     ...mb("read", "summarize_all_inboxes list_accounts list_folders list_conversations search_conversations get_message get_conversation list_attachments get_attachment_content get_send_status get_help get_ui_state"),

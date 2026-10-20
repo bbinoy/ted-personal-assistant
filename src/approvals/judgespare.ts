@@ -2,7 +2,7 @@ import { query, startup, type Options, type SDKMessage, type WarmQuery } from "@
 import { settings } from "../core/settings.ts";
 import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 
-// The warm Haiku process of the approval judge (approvaljudge.ts: one prompt and schema for the answer and write tasks of approvalmodel.ts and the
+// The warm process of the approval judge (JUDGE_MODEL) (approvaljudge.ts: one prompt and schema for the answer and write tasks of approvalmodel.ts and the
 // action task of autojudge.ts, so one spare serves both). Its options are fixed when a process starts, so the slot is keyed by them.
 // Same mechanism and settings as every warm process: WARM=off starts cold every time, WARM_IDLE_MINUTES drops an idle one.
 export interface JudgeIO {

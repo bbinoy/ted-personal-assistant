@@ -24,7 +24,7 @@ import { settings } from "../core/settings.ts";
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy">;
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
   run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runHeartbeat, with that conversation's approver)
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue

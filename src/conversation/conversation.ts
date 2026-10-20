@@ -14,6 +14,7 @@ import { TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 import { withSend, type Content, type SendSink } from "../modules/send/send.ts";
 import { reactionMessage, reactionPrompt, splitReaction } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
+import { forgetDeclined } from "../approvals/declined.ts";
 import { splitVoice, VOICE_FAILED_NOTE, voiceOption } from "./voicereply.ts";
 import { settings } from "../core/settings.ts";
 import { UNSURE } from "./lang.ts";
@@ -53,6 +54,10 @@ export function createPipeline(deps: PipelineDeps) {
     void tail.then(() => tails.get(conv.key) === tail && tails.delete(conv.key));
     return run;
   }
+
+  // Is a turn of this conversation settling, queued or running (a chat turn, a reaction, a compaction, a post)? An unattended run (the heartbeat look) does not start then: it
+  // would work from a log the turn is still changing and could contradict what the turn says. It is only delayed: the free tick looks again.
+  const busy = (conv: Conversation): boolean => tails.has(conv.key) || !!bursts.get(conv.key)?.pending.length;
 
   // Burst handling, the same for every conversation: after each message wait a short settling pause; a newer message
   // restarts it and takes over, so a burst is ONE turn. Messages that arrive while that turn is queued join it; ones that
@@ -415,6 +420,7 @@ export function createPipeline(deps: PipelineDeps) {
       // A question asked in this group is answered here by ANY member (their message, a quoted reply or a reaction); the model reads it
       // like the owner's. Only this group's approvals can be answered; an edit and a caption never answer.
       if (await approvalAnswer(conv, m, author)) return;
+      forgetDeclined(conv.key);
       return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: line, picture: m.picture, document: m.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, voice: m.voice });
     }
     return ownerTurn(conv, m, line, arrived);
@@ -476,7 +482,9 @@ export function createPipeline(deps: PipelineDeps) {
       if (said !== undefined) return void (await out.reply(said, { plain: true }));
     }
     // While an approval is pending, a message may be its answer. That must skip the queue.
+    scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
     if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
+    forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
     await burst(conv, m, async (b) => {
       const typing = holdTyping(conv, b.timing); // the owner is always answered: show it now, even while an earlier turn still runs
       try {
@@ -515,7 +523,7 @@ export function createPipeline(deps: PipelineDeps) {
       record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
       const prompt = reactionPrompt(r.emoji, on);
       // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
-      await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
+      await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text, on ? Date.parse(on.at) || 0 : 0), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
     });
   }
 
@@ -555,7 +563,7 @@ export function createPipeline(deps: PipelineDeps) {
   }
 
   // `react`: a quick reaction of our own, no run needed (the gate chose it).
-  return { handleIncoming, enqueue, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
+  return { handleIncoming, enqueue, busy, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
 }
 
 export type Pipeline = ReturnType<typeof createPipeline>;

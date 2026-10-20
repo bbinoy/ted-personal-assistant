@@ -6,6 +6,7 @@ import { isTenantKey } from "../core/ownerkey.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
 import { recentIn } from "./recentchat.ts";
+import { sameCall } from "./declined.ts";
 import { isTypedYes, TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 
 // Human-in-the-loop approvals over Signal. Several questions may be open at once; each is
@@ -39,13 +40,14 @@ export interface Decision {
   updatedInput?: Record<string, unknown>; // set when approved with an accepted edit
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
+  superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
 
 export interface Answer {
   outcome: "none" | "approved" | "declined" | "feedback" | "modified" | "clarify";
   changes?: Change[]; // for "modified": what was applied
-  reply?: string; // for "clarify": what to tell the owner (the message was consumed; the approval stays open)
+  reply?: string; // for "clarify" (which one do you mean; a payment needs a typed yes): what to tell the owner. The message was consumed and the approval stays open
 }
 
 // One open question. Kept in `open` keyed by its conversation and the timestamp of its "Approve?" message (known once the send resolved): two conversations can
@@ -119,7 +121,7 @@ export async function answer(text: string, onJudging: () => void, quote: { times
   return read(text, onJudging, quote, deps, ctx, mine);
 }
 
-const CLARIFY = (label: string) => `I'm not sure that was a yes, so "${label}" is still open. Say yes or no (or react 👍 / 👎).`;
+const ENDED = "That question has already ended. Reply to one that is still open, or react to it.";
 const WHICH = "Which one do you mean? Reply to the question itself, or react to it.";
 
 // Code decides only two things: an exact plain yes / no that unambiguously targets the one
@@ -158,23 +160,34 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? ((reply) => recentIn(ctx.scope, reply)))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(slot(ctx.scope, quote.timestamp)), voice: ctx.voice } : undefined);
   const stillOpen = () => live.filter((o) => !o.done);
   const record = (what: string, o?: Open) => audit(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", rows(ctx.scope, { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started }));
-  // "Yes to both": each part is applied to its own approval; only the parts that are not a plain yes / no stay open, and the
-  // reply asks about those alone. An unknown or ended approval is skipped, never guessed.
-  const multi = (parts: readonly { target: string; outcome: "approve" | "decline" | "other" }[], reply?: string): Answer => {
+  // A reply that is neither yes nor no (a change, a condition, a question, "later") ends that approval: it is superseded by the owner's new instruction. The pending call
+  // fails back to the agent with the owner's words, and the agent makes a fresh proposal in the same turn if it still wants to act, so no old approval stays open next to a new
+  // question. A card payment is the exception (it stays open until a typed yes or a no: the caller handles it).
+  const supersede = (o: Open) => {
+    record("superseded", o);
+    o.resolve({ approved: false, feedback: text });
+  };
+  // "Yes to both": each part is applied to its own approval; a part that is not a plain yes / no is superseded like any other reply. An unknown or ended approval is skipped, never guessed.
+  const multi = (parts: readonly { target: string; outcome: "approve" | "decline" | "other" }[]): Answer => {
     let approved = 0;
     let declined = 0;
+    let replaced = 0;
     for (const p of parts) {
       const o = ids.get(p.target);
-      if (!o || o.done || p.outcome === "other" || (p.outcome === "approve" && o.typedYes)) continue; // "yes to both" is no typed yes to a payment
+      if (!o || o.done || o.typedYes && p.outcome !== "decline") continue; // "yes to both" is no typed yes to a payment, and no reply replaces one
+      if (p.outcome === "other") {
+        supersede(o);
+        replaced++;
+        continue;
+      }
       record(p.outcome === "approve" ? "approved" : "declined", o);
       o.resolve({ approved: p.outcome === "approve" });
       if (p.outcome === "approve") approved++;
       else declined++;
     }
-    const left = stillOpen();
-    const ask = left.length ? (reply ?? WHICH) : undefined;
-    if (approved + declined === 0) return { outcome: "clarify", reply: ask };
-    return { outcome: approved ? "approved" : "declined", ...(ask ? { reply: ask } : {}) };
+    const ask = stillOpen().length ? WHICH : undefined;
+    if (approved + declined + replaced === 0) return { outcome: "clarify", reply: ask };
+    return { outcome: approved ? "approved" : declined ? "declined" : "feedback", ...(ask ? { reply: ask } : {}) };
   };
   if (!j) {
     // Not approved, and not silent for the agent: every open chat approval returns the owner's words as feedback, so the agent
@@ -185,10 +198,10 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
     return chat.length ? { outcome: "feedback" } : { outcome: "none" };
   }
   if (j.outcome === "unrelated") return record("unrelated"), { outcome: "none" };
-  if (j.outcome === "multi") return multi(j.answers ?? [], j.reply);
+  if (j.outcome === "multi") return multi(j.answers ?? []);
   if (j.target === "unclear") {
     record("unclear");
-    return { outcome: "clarify", reply: j.reply ?? WHICH };
+    return { outcome: "clarify", reply: WHICH };
   }
   const current = ids.get(j.target);
   if (!current || current.done) return { outcome: "none" }; // resolved or expired while the judge thought
@@ -224,12 +237,20 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
       current.resolve({ approved: true, updatedInput: patched });
       return { outcome: "modified", changes: j.changes };
     }
-    record("feedback", current); // a change code does not allow (a recipient): not approved, the agent gets the words and re-proposes
-    current.resolve({ approved: false, feedback: text });
+    supersede(current); // a change code does not allow (a recipient): not approved, the agent gets the words and re-proposes
     return { outcome: "feedback" };
   }
-  record("clarify", current); // other: a condition, a delay, a question...; the approval stays open
-  return { outcome: "clarify", reply: j.reply ?? CLARIFY(current.label) };
+  // other: a condition, a change, a delay, a question...
+  if (quote && !quoted && closed.has(slot(ctx.scope, quote.timestamp))) {
+    record("clarify", current); // it quotes a question that has ended: that says nothing about this open one
+    return { outcome: "clarify", reply: ENDED };
+  }
+  if (current.typedYes) {
+    record("clarify", current);
+    return { outcome: "clarify", reply: TYPED_YES_NEEDED }; // a payment stays open until a typed yes or a no
+  }
+  supersede(current);
+  return { outcome: "feedback" };
 }
 
 // Ask in `opts.scope`, the conversation that triggered the action, and nowhere else. Resolves "not approved" on no, timeout, or an aborted turn.
@@ -272,6 +293,8 @@ export function request(
     );
     signal?.addEventListener("abort", onAbort);
     console.log(`approval requested${background ? " (background)" : ""}: ${named}`);
+    // At most one open question per conversation for one action: a newer question about the same call closes the older one (declined.ts sameCall).
+    for (const o of open.values()) if (o.scope === opts.scope && !o.done && !o.typedYes && !opts.typedYes && o.call.tool === call.tool && sameCall(call.tool, o.call.input, call.input)) o.resolve({ approved: false, superseded: true });
     openChat++;
     prepareJudge(); // warm the judge while the owner reads the question
     // The message is the model's question, as written: no header, no footer. A 👍 / 👎 or a reply on it answers it (open is keyed by its timestamp).

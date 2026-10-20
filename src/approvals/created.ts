@@ -3,9 +3,12 @@
 // Conversation.key like the other per-conversation state: one conversation's ids tell nothing about another's), kept 24 hours and pruned as new ones come in.
 // Code writes it from the results of the tools a module lists as creating something (modules/types.ts ModuleFloor.creates); a model, a mail or a page never does.
 
+import { clip } from "../core/sanitize.ts";
+import { whenOf } from "./format.ts";
+
 const TTL_MS = 24 * 60 * 60_000;
 const MAX_PER_CONVERSATION = 500;
-const seen = new Map<string, Map<string, number>>();
+const seen = new Map<string, Map<string, { at: number; label?: string }>>();
 
 // An id as comparable text: a Notion page id with or without dashes or in its URL, a number or a string otherwise.
 const norm = (v: string | number): string => {
@@ -39,14 +42,31 @@ export function idsInCall(input: Record<string, unknown>): string[] {
   return [...out];
 }
 
-export function noteCreated(conversation: string, ids: readonly string[], now = Date.now()): void {
+// Pure. What the creating call said the thing is: its title (summary, title, subject or name, wherever the call has one) and when it is, as in an approval text.
+const NAME_KEY = /^(summary|title|subject|name)$/i;
+export function callLabel(input: Record<string, unknown>): string | undefined {
+  let title: string | undefined;
+  const walk = (v: unknown, depth: number): void => {
+    if (title !== undefined || depth > 4 || !v || typeof v !== "object") return;
+    for (const [k, x] of Object.entries(v)) {
+      if (NAME_KEY.test(k) && typeof x === "string" && x.trim()) return void (title ??= x.trim());
+      walk(x, depth + 1);
+    }
+  };
+  walk(input, 0);
+  if (title === undefined) return undefined;
+  const when = whenOf(input);
+  return `“${clip(title, 120)}”${when ? `, ${when}` : ""}`;
+}
+
+export function noteCreated(conversation: string, ids: readonly string[], now = Date.now(), label?: string): void {
   if (!ids.length) return;
   for (const [c, m] of seen) {
-    for (const [id, at] of m) if (now - at >= TTL_MS) m.delete(id);
+    for (const [id, e] of m) if (now - e.at >= TTL_MS) m.delete(id);
     if (!m.size) seen.delete(c);
   }
   const m = seen.get(conversation) ?? seen.set(conversation, new Map()).get(conversation)!;
-  for (const id of ids) m.set(id, now);
+  for (const id of ids) m.set(id, { at: now, ...(label ? { label } : {}) });
   while (m.size > MAX_PER_CONVERSATION) m.delete(m.keys().next().value!);
 }
 
@@ -55,7 +75,17 @@ export function createdFact(conversation: string, input: Record<string, unknown>
   const ids = idsInCall(input);
   if (!ids.length) return "unknown";
   const m = seen.get(conversation);
-  return ids.some((id) => m && now - (m.get(id) ?? -Infinity) < TTL_MS) ? "yes" : "no";
+  return ids.some((id) => m && now - (m.get(id)?.at ?? -Infinity) < TTL_MS) ? "yes" : "no";
+}
+
+// The title (and time) the creating call gave the thing this call names, if the assistant made it here within 24 hours.
+export function createdLabel(conversation: string, input: Record<string, unknown>, now = Date.now()): string | undefined {
+  const m = seen.get(conversation);
+  for (const id of idsInCall(input)) {
+    const e = m?.get(id);
+    if (e?.label && now - e.at < TTL_MS) return e.label;
+  }
+  return undefined;
 }
 
 export const forgetCreated = (): void => seen.clear(); // tests

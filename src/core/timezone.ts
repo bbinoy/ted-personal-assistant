@@ -60,3 +60,6 @@ export function inQuietHours(now: Date, startHour: number, endHour: number, zone
   const h = clockIn(now, zone).hour;
   return startHour <= endHour ? h >= startHour && h < endHour : h >= startHour || h < endHour;
 }
+
+// "20 s ago", "14 min ago", "1.5 h ago": how long ago, for the approval judges.
+export const agoText = (ms: number): string => (ms < 90_000 ? `${Math.max(1, Math.round(ms / 1000))} s ago` : ms < 5_400_000 ? `${Math.round(ms / 60_000)} min ago` : `${(ms / 3_600_000).toFixed(1)} h ago`);

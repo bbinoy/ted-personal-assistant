@@ -3,6 +3,8 @@ import { audit, wordless, type Source } from "../core/audit.ts";
 import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
+import { objectLines } from "./describe.ts";
+import { clearDeclined, declinedAgo, declinedLine, declinedMinutes, noteDeclined } from "./declined.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
 import { mailSlot } from "../modules/index.ts";
@@ -215,12 +217,22 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       }
       description = describeCall(tool, input, view);
     }
+    // A call on an object by its id names the object (describe.ts), not only the id; a payment and a guard-built step have their own text.
+    if (!g?.payment && !g?.description) description += await objectLines(conversation, tool, input);
+    // A decline is final until the person asks again in a new message (declined.ts): the question and the judge are told, and the judge cannot loosen it.
+    const declinedMs = g?.payment ? undefined : declinedAgo(conversation, tool, input, Date.now(), g?.description);
+    if (declinedMs !== undefined) description += `\n${declinedLine(declinedMs)}`;
+    let judgeSaid: Verdict["decision"] | undefined;
     let judged: Verdict | undefined;
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
+      if (declinedMs !== undefined && judged.decision !== "ask") {
+        judgeSaid = judged.decision;
+        judged = { decision: "ask", reason: judged.reason };
+      }
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
       // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
       const fx = fixes.get(tool) ?? { n: 0, keys: new Set<string>() };
@@ -243,12 +255,17 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
     }
+    if (declinedMs !== undefined) log(tool, "redeclined", source, { minutes: declinedMinutes(declinedMs), ...(judgeSaid ? { judge: judgeSaid } : {}) });
     if ((failures.get(memo)?.n ?? 0) >= MAX_FAILED_ASKS) {
       log(tool, "deny-reask-cap", source);
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
     const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, g?.payment ? { typedYes: true } : undefined);
+    if (d.superseded) {
+      log(tool, "ask-superseded", source);
+      return { behavior: "deny", message: "That question was closed because a newer question about the same action was asked. Nothing was executed; wait for the answer to the newer one." };
+    }
     if (d.failure) {
       failed(memo);
       log(tool, "ask-failed", source, { reason: d.failure });
@@ -261,6 +278,8 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       d.approved ? (d.updatedInput ? "ask-approved-modified" : "ask-approved") : d.feedback ? "ask-feedback" : "ask-declined",
       source,
     );
+    if (d.approved) clearDeclined(conversation, tool, input, Date.now(), g?.description);
+    else if (!d.feedback && !d.expired && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a plain no (not a reply, not silence, not an aborted turn)
     if (d.approved && onceOnly) remember(memo);
     if (d.approved && readsUntrusted(tool)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
@@ -273,7 +292,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     return {
       behavior: "deny",
       message: d.feedback
-        ? `${OWNER} did NOT approve this call. Instead they replied: ${JSON.stringify(d.feedback)}. Act on that reply. If it changes the request, propose the adjusted call; do not repeat the original unchanged.`
+        ? `${OWNER} did NOT approve this call, and its question is closed. They replied: ${JSON.stringify(d.feedback)}. Nothing was executed. Make a new proposal now, in this turn, with the arguments changed as that reply asks (call the tool again; a fresh question is asked), if you still want to act; do not repeat the original unchanged, and do not ask ${OWNER} in chat what they just told you.`
         : `${OWNER} declined, or did not answer in time. Do not retry.`,
     };
   };

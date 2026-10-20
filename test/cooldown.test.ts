@@ -80,7 +80,7 @@ function rig() {
   let now = T0;
   let runs = 0;
   const pipeline = {
-    sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(),
+    busy: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(),
     enqueue: <T>(_c: Conversation, job: () => Promise<T>) => job(),
     record: (c: Conversation, kind: Kind, ts: number, text: string) => recordMessage(kind, ts, text, now, c.logFile),
     runTurn: async (_c: Conversation, turn: any) => ((await turn.run()), { spoke: true }),

@@ -13,7 +13,7 @@ import { failure } from "../tenants/errors.ts";
 import { announceMemoryChanges, noteWritten } from "../memory/memorynotice.ts";
 import { builtinModule } from "../modules/builtin.ts";
 import { createsOf, isOwnerOnly } from "../policy/toolmanifest.ts";
-import { idsInResult, noteCreated } from "../approvals/created.ts";
+import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
 import { serversFor } from "../modules/runtime.ts";
 import type { RunContext } from "../modules/types.ts";
 import { approveIn, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
@@ -119,7 +119,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // call to whoever asked (the brief captures what it sent).
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
     if (opts.memory?.notify) noteWritten(tool, input);
-    if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
+    if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
   const delegation = opts.experts ? delegationHook(opts.experts.setup, opts.source, { onDelegate: opts.experts.onDelegate }) : undefined;
