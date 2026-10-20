@@ -32,7 +32,7 @@ export function snapshot(): Record<string, unknown> {
       chatSetup: portable(chatSystem(undefined, NOW, missing, down)),
       brief: portable(briefSystem("MEMORY", missing, down)),
       radar: portable(radarSystem("MEMORY", missing, down)),
-      handler: portable(handlerSystem("MEMORY", missing, down)),
+      handler: portable(handlerSystem("MEMORY", { missing, down })),
       background: portable(backgroundSystem("MEMORY", missing, down)),
       group: portable(groupSystem()),
       gateOwner: GATE_DEFAULTS.owner,

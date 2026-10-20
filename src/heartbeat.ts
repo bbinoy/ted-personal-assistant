@@ -331,7 +331,7 @@ export function ownerMailContext(triage: MailContext["triage"] = (mails) => tria
     triage,
     record: (decision, row) => audit("heartbeat_triage", decision, "heartbeat", row),
     archiveLogOnly,
-    handler: () => mailSlot()?.handler !== false,
+    handler: () => !!mailSlot()?.handlerTask, // the provider can draft (its module says what the handler's task is)
     blocked: (what) => isRefusal(mayRun({ kind: "owner" }, what)),
     tidyOwnBriefs: true,
   };

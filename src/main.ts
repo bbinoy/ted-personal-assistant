@@ -16,6 +16,7 @@ import { groupDir, recordGroup } from "./groupstore.ts";
 import { logTail } from "./gate.ts";
 import { createWakeups } from "./wake.ts";
 import { createHandler } from "./handler.ts";
+import { mailHandlerOf } from "./mailhandler.ts";
 import { startHeartbeat, startJobs } from "./heartbeat.ts";
 import { writeNotice } from "./notice.ts";
 import { ensureNotesDir } from "./notes.ts";
@@ -216,7 +217,7 @@ if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies &
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
 
-const handler = mail?.propose ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: mail.propose }) : undefined;
+const handler = mailHandlerOf(owner()) ? createHandler({ approve: approveBackground, notify, write: writeNotice, propose: mail?.propose }) : undefined; // (any provider that can draft: Mailbird, Gmail)
 handler?.resume();
 
 // One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, which the brief waits for, and the friends', which it does not

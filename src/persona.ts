@@ -205,21 +205,12 @@ export function radarSystem(memory: string, missing: readonly string[] = [], dow
   );
 }
 
-// Background handling of routine email the heartbeat flagged as "the assistant can deal with this".
-// (Only runs when there is mail: the heartbeat never hands anything over without it.)
-export function handlerSystem(memory: string, missing: readonly string[] = [], down: readonly Connector[] = []): string {
-  return join(
-    say("handler"),
-    rules(true),
-    connectorLine(down, false),
-    setupLine(missing, false),
-    memory,
-  );
-}
-
-// A friend's background handling of routine email (mailloops.ts): the same job as the owner's handler, with her name, her notes and her Google tools.
-export function tenantHandlerSystem(name: string, memory: string): string {
-  return join(say("tenantHandler", { her: oneLineName(name) }), memory);
+// Background handling of routine email the heartbeat flagged as "the assistant can deal with this", ONE prompt for every conversation that has mail (only runs when
+// there is mail: the heartbeat never hands anything over without it). `who` is a friend's name; without it the mail is the owner's, and the run also gets the owner's
+// capabilities and rules (the approvals go to their phone) and what is connected and set up. A friend's has her name, her notes and nothing of the owner's.
+export function handlerSystem(memory: string, o: { who?: string; missing?: readonly string[]; down?: readonly Connector[] } = {}): string {
+  const own = o.who === undefined;
+  return join(say("handler", { who: own ? OWNER : oneLineName(o.who!), own }), own ? rules(true) : undefined, own ? connectorLine(o.down ?? [], false) : undefined, own ? setupLine(o.missing ?? [], false) : undefined, memory);
 }
 
 // An unprompted run in the owner's chat (a wake-up, wake.ts): least privilege like the radar, web search but no page fetches without asking, nothing written without asking.

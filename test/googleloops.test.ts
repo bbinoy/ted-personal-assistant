@@ -22,7 +22,7 @@ const { createTenantMailLoops } = await import("../src/mailloops.ts");
 const { mailFiles, mailDigest } = await import("../src/tenantmail.ts");
 const { readAudit } = await import("../src/audit.ts");
 const { readTriageSince } = await import("../src/digest.ts");
-const { tenantHandlerOptions } = await import("../src/agent.ts");
+const { handlerOptions } = await import("../src/agent.ts");
 const { buildOptions } = await import("../src/agentrun.ts");
 const { tenant } = await import("../src/conversation.ts");
 const { resetCooldown } = await import("../src/cooldown.ts");
@@ -257,7 +257,7 @@ test("the handler's run is hers: only her Google tools, her notes, the instance 
   const id = friend("Hana");
   const conv = tenant(id);
   const asked: string[] = [];
-  const opts = tenantHandlerOptions(conv, { apiKey: "instance-key-not-real" }, undefined, "TASK");
+  const opts = handlerOptions(conv, { kind: "instance", id, apiKey: "instance-key-not-real", costFile: T.tenantContext(T.tenantById(id)!).costFile }, undefined, "TASK");
   const o = buildOptions(async (d) => (asked.push(d), { approved: false }), opts, undefined);
   const tools = [...(opts.tools ?? [])];
   assert.ok(tools.length > 0 && tools.every((t) => t.startsWith("mcp__google__")), "her Google tools and nothing else");

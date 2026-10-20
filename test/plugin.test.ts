@@ -48,7 +48,7 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   const missing = missingSetup([]);
   assert.match(chatSystem(undefined, new Date("2026-10-12T09:00:00"), missing), /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
   assert.match(briefSystem("", missing), /You cannot ask anyone[\s\S]*message "set up"/);
-  assert.match(handlerSystem("", missing), /Not set up yet/);
+  assert.match(handlerSystem("", { missing }), /Not set up yet/);
   assert.ok(!chatSystem(undefined, new Date(), []).includes("Not set up yet"));
 });
 

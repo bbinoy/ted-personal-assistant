@@ -106,12 +106,11 @@ export const PROMPTS = {
   skills: ["mail", "mailSkill"],
   chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed"],
   group: ["weather", "browse", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
-  tenantHandler: ["her"],
   tenant: ["browse", "consented", "timed", "google", "digest", "her", "personality", "selfTimed", "sources", "reactions", "send"],
   dream: ["subject", "own", "group", "categories"],
   brief: ["mail", "skill"],
   radar: ["skill"],
-  handler: [],
+  handler: ["who", "own"],
   background: ["mail", "personality"],
   gateGroup: ["participation", "unprompted"],
   gateOwner: ["mail", "unprompted"],
@@ -244,3 +243,6 @@ export function presetFor(env: Readonly<Record<string, string | undefined>> = pr
   return p;
 }
 export const preset = (): Preset => presetFor(process.env);
+
+// The note categories a conversation has: the owner's chat all of them, a group the preset's notes.group, a friend notes.tenant. Nothing else in the code names a category.
+export const categoriesFor = (kind: "owner" | "group" | "tenant", p: Preset = preset()): readonly string[] => (kind === "owner" ? p.notes.categories : kind === "group" ? p.notes.group : p.notes.tenant);

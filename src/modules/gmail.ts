@@ -2,12 +2,13 @@ import { BRIEF_SKILL, DONE_MARKER } from "../brieftext.ts";
 import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "../gmailrules.ts";
 import { addrs, nativeView } from "../mailview.ts";
 import type { DraftView } from "../proposals.ts";
+import { handlerTaskText } from "./mailtask.ts";
 import { settings } from "../settings.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot
 // say (sensitive labels, attachment content, archiving in log-only mode, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
-// There is no background handler: drafts are made in chat or the brief and sent only on the owner's word. The mail client (src/gmail.ts), `npm run restore`
+// The background handler (handler.ts) drafts replies with create_draft and they are shown on the phone like Mailbird's; sending is only on the owner's word. The mail client (src/gmail.ts), `npm run restore`
 // and the doctor check are runtime.ts.
 
 // The approval's read-backs: a draft by its id (the approval of send_message with a draftId), and the original message of a reply (its sender and recipients,
@@ -34,8 +35,23 @@ const briefSignal = () => `${BRIEF_COMMON} Do not deliver by email (step 6): you
 const briefEmail = (self: string): string =>
   `${BRIEF_COMMON} Deliver the brief (step 6) with the Gmail send_message tool, exactly once, to ${JSON.stringify([self])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody). After send_message succeeds, print the exact line ${DONE_MARKER}. If the mail tools are unreachable, send the brief anyway saying so, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
 
+// The id of a Gmail draft a successful create_draft left: its result is the Draft object (`id`, `threadId`, `viewUrl`), as text or as a content array.
+const draftIdOf = (response: unknown): string | undefined => {
+  const text = typeof response === "string" ? response : JSON.stringify(response ?? "");
+  return /\\?"id\\?"\s*:\s*\\?"([A-Za-z0-9_-]{1,64})\\?"/.exec(text)?.[1];
+};
+
 const mail: MailSlot = {
-  handler: false, // the background handler drafts replies with Mailbird's tools and shows them as Mailbird drafts: not built for Gmail. The mail stays in the inbox and the brief lists it
+  handlerTask: (who) =>
+    handlerTaskText(who, {
+      read: "get_message(messageId) (messageFormat PLAIN_TEXT)",
+      calendar: "list_events",
+      draft: "save an in-thread DRAFT reply with create_draft (replyToMessageId: the mail's messageId; to: the sender)",
+      sendBy: `${who} gets the draft on their phone and sends it from there, so write it ready to send, in their voice.`,
+      event: `create the calendar event with create_event, for ${who} alone (no guests).`,
+      followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled (unlabel_thread removing INBOX).",
+    }),
+  createdDraft: (tool, response) => (tool === `${GMAIL_PREFIX}create_draft` ? draftIdOf(response) : undefined),
   archiveLogOnly: () => !settings.gmailArchiveLive, // Gmail's first week: the heartbeat classifies and logs "would-archive" but archives nothing (GMAIL_ARCHIVE_LIVE=true ends it)
   reportNote: () => (settings.gmailArchiveLive ? undefined : "Gmail archiving is in LOG-ONLY mode (GMAIL_ARCHIVE_LIVE=false): \"would-archive\" below was classified but NOT archived."),
   brief: {
