@@ -95,7 +95,7 @@ test("a redeemed invite provisions the tenant: owner-only folders, notes, a tena
   for (const d of [ctx.dir, ctx.notesDir, ctx.backupDir]) assert.equal(statSync(d).mode & 0o077, 0, d);
   assert.ok(existsSync(ctx.configFile));
   assert.equal(rec.role, "member");
-  assert.deepEqual(rec.capabilities, ["chat", "browse", "voice", "heartbeat", "dream", "weather", "draw"], "the free ones are on and every other capability is off for a new tenant");
+  assert.deepEqual(rec.capabilities, ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw"], "the free ones are on and every other capability is off for a new tenant");
   assert.equal(rec.credential, "instance-key");
   assert.ok(!readFileSync(join(settings.dataDir, T.REGISTRY), "utf8").match(/sk-ant|"key"/));
   assert.equal(T.tenantByAci(rec.acis[0]!.toUpperCase())?.id, rec.id, "the account id is matched without regard to case");
@@ -494,7 +494,7 @@ test("grant and revoke: one capability at a time, on a real record, no duplicate
   assert.ok(!tenantTools(ctx()).has("mcp__voice__voice"), "without the capability the tool is not there");
   assert.deepEqual(ctx().capabilities, T.tenantById(rec.id)!.capabilities);
   const lines = describeTenants().filter((l) => l.startsWith(rec.id));
-  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, weather, draw/);
+  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, wake, weather, draw/);
   assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities chat, browse, voice, heartbeat, dream, wake, mail, calendar, notion, profile, card, notes, intake, weather, draw, google, drive, admin/);
 });
 

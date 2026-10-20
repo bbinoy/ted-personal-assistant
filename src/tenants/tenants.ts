@@ -46,7 +46,7 @@ export const ROLES: readonly Role[] = ["admin", "member"];
 // weather and draw are free (public data, a sanitised render), so they are on by default; every other capability a friend gets is granted.
 export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "google", "drive", "admin"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
-export const FRIEND_DEFAULTS: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "weather", "draw"];
+export const FRIEND_DEFAULTS: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw"];
 export const isCapability = (x: unknown): x is Capability => (CAPABILITIES as readonly unknown[]).includes(x);
 
 // Whose model credential her runs use: the instance's Claude login (the owner), or the instance key TENANT_ANTHROPIC_API_KEY (tenants).

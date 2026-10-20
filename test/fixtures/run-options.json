@@ -317,7 +317,7 @@
       "sessionFile": "<data>/tenants/<bea>/session.json",
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "eeeea989353bc5f3"
+        "sha": "63775c6495add89f"
       },
       "memory": {
         "dir": "<data>/tenants/<bea>/notes"
@@ -366,7 +366,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "eeeea989353bc5f3"
+        "sha": "63775c6495add89f"
       },
       "snapshot": false
     },
