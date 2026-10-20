@@ -387,7 +387,7 @@ src/contain.ts       `isInside`: the one path-containment check (symlinks and `.
 src/logtrim.ts       cuts launchd-stderr.log down in place at start (pure part tested)
 src/session.ts       when a conversation's session resumes, starts fresh or gets compacted (pure, tested)
 src/fence.ts         fences untrusted or stored text as data inside a prompt (cleaned and defused first)
-src/sanitize.ts      the one shared text sanitiser: hidden characters, caps, run collapse, fence and header defusing
+src/sanitize.ts      the one shared text sanitiser: hidden characters, caps, run collapse, fence and header defusing, and `clip` (a visible, announced cut for text shown in an approval)
 src/html.ts          HTML to visible text (parse5; drops hidden content)
 src/mailtext.ts      a mail body: html.ts, then sanitize.ts
 src/toolclean.ts     cleans tool results (used by the PostToolUse hook in agentrun.ts)

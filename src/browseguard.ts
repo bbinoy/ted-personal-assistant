@@ -13,8 +13,7 @@ import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput
 import { audit, wordless } from "./audit.ts";
 import { isPlainWebAddress } from "./webaddress.ts";
 import type { CarriedApproval } from "./autojudge.ts";
-import { clip } from "./format.ts";
-import { cleanText, LIMITS } from "./sanitize.ts";
+import { clip, cleanText, LIMITS } from "./sanitize.ts";
 import { isJpeg, MAX_PICTURE_BYTES } from "./shots.ts";
 import { settings } from "./settings.ts";
 
