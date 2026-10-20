@@ -15,7 +15,7 @@ interface Cost {
   notifiedDay?: string;
 }
 
-// `file`: another ledger of the same shape. A tenant has her own (tenants.ts), so what she spends on her own API key never counts against the
+// `file`: another ledger of the same shape. A tenant has her own (tenants.ts), so what she spends on the instance key never counts against the
 // instance's guard, and the instance's never against hers.
 function today(file: string = FILE): Cost {
   const day = localDay(new Date());
