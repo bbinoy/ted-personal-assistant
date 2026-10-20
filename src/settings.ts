@@ -207,7 +207,9 @@ export function loadSettings(env: Env) {
       clientId: env.GOOGLE_OAUTH_CLIENT_ID?.trim() || undefined,
       clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() || undefined,
       command: env.GOOGLE_MCP_COMMAND?.trim() || "uvx",
-      args: words(env, "GOOGLE_MCP_ARGS", ["workspace-mcp==2.1.0", "--single-user", "--tools", "gmail", "calendar"]),
+      // `--exclude-newer <the pin date>`: uv resolves the transitive dependencies to what existed on that day, so the pin of the top package is not undone by a newer
+      // dependency release. It reduces the supply-chain risk and does not remove it (docs/SAFETY.md).
+      args: words(env, "GOOGLE_MCP_ARGS", ["--exclude-newer", "2026-10-20T00:00:00Z", "workspace-mcp==2.1.0", "--single-user", "--tools", "gmail", "calendar"]),
       authUrl: env.GOOGLE_OAUTH_AUTH_URL?.trim() || "https://accounts.google.com/o/oauth2/v2/auth",
       tokenUrl: env.GOOGLE_OAUTH_TOKEN_URL?.trim() || "https://oauth2.googleapis.com/token", // tests point this at a fake
       scopes: words(env, "GOOGLE_OAUTH_SCOPES", ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"]),

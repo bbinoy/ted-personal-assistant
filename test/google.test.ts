@@ -324,6 +324,14 @@ test("google: nothing of the owner's or of the Google tools exists for a person 
   assert.equal(classify(G + "delete_gmail_message", {}, "group", full.notesDir, tenantTools(full)), "deny");
 });
 
+test("google: the default server command pins the package and the day its dependencies resolve to", async () => {
+  const { loadSettings } = await import("../src/settings.ts");
+  const a = loadSettings({}).google.args;
+  assert.equal(a[a.indexOf("--exclude-newer") + 1], "2026-10-20T00:00:00Z");
+  assert.ok(a.indexOf("--exclude-newer") < a.indexOf("workspace-mcp==2.1.0"), "an option of uvx comes before the package");
+  assert.deepEqual(loadSettings({ GOOGLE_MCP_ARGS: "workspace-mcp==2.1.0 --single-user" }).google.args, ["workspace-mcp==2.1.0", "--single-user"], "an explicit value replaces the default whole");
+});
+
 test("google: her server stays up between mail ticks: the idle default is the heartbeat interval plus a margin, at least 20 minutes, and an explicit value wins", async () => {
   const { loadSettings } = await import("../src/settings.ts");
   const hb = loadSettings({}).heartbeatMinutes;
