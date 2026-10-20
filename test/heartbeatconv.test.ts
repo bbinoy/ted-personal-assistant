@@ -35,7 +35,7 @@ const signal = new AbortController().signal;
 let n = 0;
 const GOOGLE: (typeof T.CAPABILITIES)[number][] = ["wake", "google", "mail", "calendar"]; // (what `npm run tenants -- grant <id> google` grants)
 function friend(name: string, grants: (typeof T.CAPABILITIES)[number][] = ["wake"]): string {
-  const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
+  const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
   T.recordConsent(T.tenantContext(rec), "Germany");
   for (const c of grants) T.grant(rec.id, c);

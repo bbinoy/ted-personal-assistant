@@ -28,7 +28,7 @@ const sha = (s: string) => createHash("sha256").update(s.replaceAll(settings.dat
 // A prompt in the fixture: its place (case.field) next to its hash, so that a drift says WHICH prompt changed, not just that a hash did.
 const pinned = (key: string, text: string | undefined) => (text === undefined ? undefined : { key, sha: sha(text) });
 
-const joinAs = (n: number, name: string) => T.tenantContext(T.redeemInvite(T.mintInvite()!.code, { aci: `00000000-0000-4000-8000-00000000000${n}`, name })!);
+const joinAs = (n: number, name: string) => T.tenantContext(T.addTenant({ aci: `00000000-0000-4000-8000-00000000000${n}`, name })!);
 const ann = joinAs(1, "Ann"); // has not confirmed her age and region yet
 const bea = joinAs(2, "Bea");
 T.recordConsent(bea, "Germany");

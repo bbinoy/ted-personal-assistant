@@ -20,7 +20,7 @@ const on = settings as unknown as Record<string, unknown>;
 on.tenants = true;
 let n = 0;
 function friend(name: string, config?: object) {
-  const rec = T.redeemInvite(T.mintInvite("t")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
+  const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
   T.recordConsent(T.tenantContext(rec), "Germany");
   if (config) writeFileSync(T.tenantContext(rec).configFile, JSON.stringify(config));

@@ -46,7 +46,7 @@ const FAKE_CVC = "737";
 let n = 0;
 const fresh = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
 function person(name: string, capabilities: import("../src/tenants/tenants.ts").Capability[]): import("../src/tenants/tenants.ts").TenantRecord {
-  const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: fresh(), name })!;
+  const rec = T.addTenant({ aci: fresh(), name })!;
   T.setStatus(rec.id, "active");
   for (const c of capabilities) T.grant(rec.id, c);
   return rec;

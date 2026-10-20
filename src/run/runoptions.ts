@@ -6,12 +6,12 @@ import type { Conversation } from "../conversation/conversationmodel.ts";
 import { recentNotices } from "../core/messages.ts";
 import { readNotes } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
-import { chatContext, chatSystem, groupSystem, tenantSystem } from "./persona.ts";
+import { chatContext, chatSystem, FIRST_CONTACT, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, groupTools, toolsFor } from "../policy/capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
 import { PROFILES } from "./profiles.ts";
 import { skillsFor } from "../modules/skills.ts";
-import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "../tenants/tenants.ts";
+import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, wasDisclosed, type TenantContext } from "../tenants/tenants.ts";
 
 // The ONE builder of the options of a conversation's run: the owner's chat, a group and a tenant. What a run is made of comes from the
 // conversation's record (conversationmodel.ts: kind, source, notes folder, session file, the group's id) and, for a person with a registry record,
@@ -93,7 +93,11 @@ const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) 
     return chatContext({ missing: missingSetup(readNotes(), off), down: off, pings: recentNotices() });
   },
   group: () => undefined,
-  tenant: () => undefined, // (her mail is read by her heartbeat run and her tools when she asks: there is no digest to show)
+  // Her first turn after the owner let her in (she is not disclosed to yet: tenantrun.ts marks it with the first reply): she is new here. (Her mail is read by her heartbeat run and her tools when she asks: there is no digest to show.)
+  tenant: (conv) => {
+    const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
+    return rec && !wasDisclosed(tenantContext(rec)) ? FIRST_CONTACT : undefined;
+  },
 };
 export const turnContext = (conv: Conversation, inputs: RunInputs = {}): string | undefined => CONTEXTS[conv.kind](conv, inputs);
 

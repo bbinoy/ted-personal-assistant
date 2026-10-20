@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from "node:path";
 import { audit } from "../core/audit.ts";
 import { isInside } from "../core/contain.ts";
-import { OneTimeCodes } from "../secrets/onetime.ts";
 import { FILE as OWNER_LOG, type Summarize } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
@@ -32,7 +31,6 @@ import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
 export const OWNER_ID = "owner";
 export const REGISTRY = "state/tenants.json";
-export const INVITES = "state/invites.json";
 
 export type TenantStatus = "invited" | "active" | "suspended";
 export const STATUSES: readonly TenantStatus[] = ["invited", "active", "suspended"];
@@ -344,32 +342,17 @@ export function provision(rec: TenantRecord): TenantContext {
   return tenantContext(rec);
 }
 
-export interface Invite {
-  note?: string; // what the owner called it ("for Anna")
-}
-export const invites = (): OneTimeCodes<Invite> => new OneTimeCodes<Invite>(INVITES);
-
-// The owner's: a single-use code, valid for INVITE_TTL_HOURS. Undefined: too many are open.
-export function mintInvite(note?: string, now = Date.now()): { code: string; expiresAt: number } | undefined {
-  const ttl = settings.inviteTtlHours * 3600_000;
-  const code = invites().mint({ note: note ? oneLine("invite note", note, LIMITS.name) : undefined }, ttl, now);
-  return code ? { code, expiresAt: now + ttl } : undefined;
-}
-
-// A new sender with a valid code becomes a tenant, 'invited' until she has confirmed age and region; provisioned at once.
-// Undefined: the code is not valid (unknown, used, expired).
-export function redeemInvite(code: string, who: { aci: string; name?: string }, now = Date.now()): TenantRecord | undefined {
-  if (!ACI.test(who.aci)) return undefined;
-  if (tenantByAci(who.aci)) return undefined; // she already is one
-  const invite = invites().redeem(code, now);
-  if (!invite) return undefined;
+// A person the owner approved (registration.ts: her yes in the owner's chat, `npm run tenants -- approve`, or a hello the owner sent her first) becomes a tenant,
+// 'invited' until she has confirmed age and region; provisioned at once. Undefined: not an account id, or she already is one.
+export function addTenant(who: { aci: string; name?: string }, now = Date.now()): TenantRecord | undefined {
+  if (!ACI.test(who.aci) || tenantByAci(who.aci)) return undefined;
   const all = people();
-  const name = oneLine("tenant name", (who.name || invite.note || "a friend").replace(/[<>"]/g, " "), LIMITS.name) || "a friend";
+  const name = oneLine("tenant name", (who.name || "a friend").replace(/[<>"]/g, " "), LIMITS.name) || "a friend";
   const id = newTenantId(name, new Set(all.map((t) => t.id)));
-  const rec: TenantRecord = { id, name, acis: [who.aci], role: "member", status: "invited", capabilities: [...FRIEND_DEFAULTS], credential: "instance-key", created: new Date(now).toISOString() };
+  const rec: TenantRecord = { id, name, acis: [who.aci.toLowerCase()], role: "member", status: "invited", capabilities: [...FRIEND_DEFAULTS], credential: "instance-key", created: new Date(now).toISOString() };
   save([...all, rec]);
   provision(rec);
-  console.log(`tenants: ${id} joined with an invitation`);
+  console.log(`tenants: ${id} joined`);
   return rec;
 }
 

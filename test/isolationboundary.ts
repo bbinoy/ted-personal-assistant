@@ -59,7 +59,7 @@ export async function buildWorld(): Promise<World> {
   const { runOptionsFor } = await import("../src/run/runoptions.ts");
   const { group, tenant } = await import("../src/conversation/conversation.ts");
   const { buildOptions } = await import("../src/run/agentrun.ts");
-  const { mintInvite, recordConsent, redeemInvite, tenantContext } = await import("../src/tenants/tenants.ts");
+  const { addTenant, recordConsent, tenantContext } = await import("../src/tenants/tenants.ts");
 
   mkdirSync(settings.dataDir, { recursive: true });
   const dataDir = realpathSync(settings.dataDir);
@@ -80,7 +80,7 @@ export async function buildWorld(): Promise<World> {
 
   let n = 0;
   const join_ = (name: string) => {
-    const rec = redeemInvite(mintInvite()!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name });
+    const rec = addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name });
     if (!rec) throw new Error("could not make a tenant");
     return tenantContext(rec);
   };

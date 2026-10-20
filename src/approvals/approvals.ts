@@ -38,6 +38,7 @@ export interface Decision {
   feedback?: string;
   updatedInput?: Record<string, unknown>; // set when approved with an accepted edit
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
+  expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
 
@@ -239,11 +240,11 @@ export function request(
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal | undefined,
-  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean },
+  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
-  const minutes = background ? settings.backgroundApprovalTimeoutMinutes : settings.approvalTimeoutMinutes;
+  const minutes = opts.minutes ?? (background ? settings.backgroundApprovalTimeoutMinutes : settings.approvalTimeoutMinutes);
   return new Promise<Decision>((resolve) => {
     const label = description.split("\n")[0] ?? "";
     const named = isTenantKey(opts.scope) ? `(${opts.scope})` : label;
@@ -266,7 +267,7 @@ export function request(
     const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, typedYes: !!opts.typedYes };
     const onAbort = () => finish({ approved: false });
     const timer = setTimeout(
-      () => finish({ approved: false }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`),
+      () => finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`),
       minutes * 60_000,
     );
     signal?.addEventListener("abort", onAbort);

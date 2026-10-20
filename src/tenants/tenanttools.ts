@@ -5,13 +5,12 @@ import { spentToday } from "../core/budget.ts";
 import { cooldownUntil } from "../core/cooldown.ts";
 import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
-import { deleteTenant, mintInvite, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
+import { deleteTenant, OWNER_ID, people, readConsent, recordConsent, setStatus, tenantById, tenantContext, TENANT_CONSENT_TOOL, type TenantContext } from "./tenants.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
-import { settings } from "../core/settings.ts";
 
 // Two small in-process MCP servers (like memory-tools.ts):
 //   tenant   in a tenant's run: record_consent, her one-time confirmation of age and region (the only tool she has until it is made)
-//   tenants  in the owner's chat, only with TENANTS=on: mint an invite code, list tenants, suspend, resume, delete (the last two ask on the phone, toolmanifest.ts)
+//   tenants  in the owner's chat, only with TENANTS=on: list tenants, suspend, resume, delete (the last two ask on the phone, toolmanifest.ts)
 // Scope is closed over, never a parameter: record_consent can only write the consent of the tenant whose run it is in.
 
 const reply = (text: string, isError = false) => ({ content: [{ type: "text" as const, text }], ...(isError ? { isError: true } : {}) });
@@ -89,16 +88,6 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
     name: "tenants",
     version: "1.0.0",
     tools: [
-      tool(
-        "create_invite",
-        `Mint a single-use invite code for a friend of ${settings.owner}. It is valid for ${settings.inviteTtlHours} hours and works once. Tell ${settings.owner} the code in your reply, and that the friend sends it to ${settings.assistant} in a private Signal message (${settings.assistant} never writes first to anybody). `,
-        { note: z.string().max(100).optional().describe("Who it is for, for the owner's own reference (like: for Anna)") },
-        async ({ note }) => {
-          const made = mintInvite(note);
-          audit("tenant_invite", made ? "minted" : "refused", "chat");
-          return made ? reply(`Invite code: ${made.code} (single use, valid until ${new Date(made.expiresAt).toLocaleString()}).`) : reply("Too many invite codes are open already; wait for some to expire or be used.", true);
-        },
-      ),
       tool("list_tenants", "List the tenants (friends who use this assistant): id, name, role, status, capabilities, whether her Google or Notion is connected, whether her consent is in place, what she spent today against her own limit, and any pause. Never shows a key or anything she said.", {}, async () => {
         const lines = describeTenants();
         return reply(lines.length ? lines.join("\n") : "No tenants yet.");

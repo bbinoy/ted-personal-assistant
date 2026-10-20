@@ -7,7 +7,7 @@ import { readJson, writeJson } from "../core/state.ts";
 import type { Capability } from "../tenants/tenants.ts";
 
 // The setup links of the intake page (intakeserver.ts): a single-use code in a URL, minted by the chat tool or the local CLI, redeemed by the page.
-// Like the invites (onetime.ts) a code is shown once and only its hash is kept, with an expiry and a payload (WHO it is for and WHICH purpose).
+// A code is shown once and only its hash is kept, with an expiry and a payload (WHO it is for and WHICH purpose).
 // But two processes use these, the agent that mints and the page that redeems, so the state cannot be one file that both read and write back: a
 // code is a file of its own, named by its hash, and using it is a rename, which only one caller can win.
 //   <hash>.json     an open link

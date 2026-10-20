@@ -76,8 +76,7 @@ test("a note's expiry day is the conversation's own day: the status note of 'tod
 });
 
 test("a friend's time zone lives in her tenant.json; a group and the owner have the Mac's", () => {
-  const made = T.mintInvite("zone")!;
-  const rec = T.redeemInvite(made.code, { aci: "00000000-0000-4000-8000-0000000000aa", name: "Ana" })!;
+  const rec = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000aa", name: "Ana" })!;
   const ctx = T.tenantContext(rec);
   assert.equal(zoneOf(tenant(rec.id)), Z.systemZone(), "migration-free: nothing set means the owner's zone");
   assert.equal(zoneOf(owner()), Z.systemZone());

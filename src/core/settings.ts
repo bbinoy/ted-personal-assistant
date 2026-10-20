@@ -298,7 +298,7 @@ export function loadSettings(env: Env) {
     dailyBudgetUsd: num(env, "DAILY_BUDGET_USD", 20, 0, 10_000),
 
     // Several people on one instance (src/tenants/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Off: nothing changes, an unknown sender is ignored as always.
-    // On: an unknown sender gets a fixed invitation reply (no model call), the owner can mint invite codes, and each friend is a tenant with
+    // On: an unknown sender gets one fixed line (no model call) and the owner is asked in her chat whether to let her in, and each friend is a tenant with
     // her own folder, her own limits, and runs on the instance key below. The bot never writes first to anybody.
     tenants: oneOf(env, "TENANTS", "off", ["on", "off"] as const) === "on",
     weather: oneOf(env, "WEATHER", "on", ["on", "off"] as const) === "on", // forecast and spot tools with the surf-conditions skill (weathertools.ts)
@@ -307,8 +307,7 @@ export function loadSettings(env: Env) {
     // run only, as ANTHROPIC_API_KEY in that run's environment (tenanttools.ts tenantEnv), and dropped from process.env below. Unset: tenants get a plain "not set up".
     tenantApiKey: env.TENANT_ANTHROPIC_API_KEY?.trim() || undefined,
     tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on the instance key (tenant.json may lower or raise it)
-    inviteTtlHours: num(env, "INVITE_TTL_HOURS", 72, 1, 24 * 90), // how long a minted invite code works
-    tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often
+    tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or cooldown notice to one person at most this often
     tenantReplyNoticeMinutes: num(env, "TENANT_REPLY_NOTICE_MINUTES", 5, 0, 1440), // a failure notice in HER chat (she is waiting for an answer): told promptly, but not once per message of a flood
     tenantKeyNoticeMinutes: num(env, "TENANT_KEY_NOTICE_MINUTES", 180, 0, 10_080), // the owner hears of a refused or missing instance key at most this often (keynotice.ts)
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none

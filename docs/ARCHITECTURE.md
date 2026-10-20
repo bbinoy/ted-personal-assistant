@@ -324,6 +324,7 @@ src/approvals/approvalmodel.ts   the model calls (answer, write), all fail close
 src/approvals/approvaljudge.ts   the one Haiku behind the approval judges: prompt, schema, spare, timeout, cost, task check
 src/approvals/approvalprompt.ts  their prompts and strict parsers
 src/approvals/approvalreport.ts  `npm run report`: each approval ask with its exact arguments next to the question that was sent and what became of it
+src/approvals/registerask.ts     asks the owner in her own chat whether a stranger may join; yes lets her in, no is remembered
 src/approvals/approvers.ts       the approver of each conversation: where a question is asked (the one that triggered the action)
 src/approvals/autojudge.ts       the "action" task: the floor in code and the input of the approval judge, one path for every tool in every place
 src/approvals/judgespare.ts      the warm Haiku spare of the approval judge, and the cold fallback
@@ -419,8 +420,9 @@ src/modules/send/shots.ts   pictures of a turn (browse screenshots, drawings) ke
 People other than the owner: the tenant records and their capability set, how an incoming message is routed to a tenant, the tools that administer tenants, the connections each one has, the notice that her keys are missing, and who pays for a call: the payer (login or instance key), the failures a refused call raises and the one-shot Haiku call that pays its payer. Dependency rule: may use `intake/`, `memory/`, `secrets/` and the core; policy, approvals and the feature folders sit above it (`test/boundaries.test.ts`).
 
 ```
-src/tenants/tenants.ts      tenants: the registry of people, capabilities, invites, her folder and limits
+src/tenants/tenants.ts      tenants: the registry of people, capabilities, her folder and limits
 src/tenants/tenantroute.ts  who is this sender? The door for everybody who is not the owner
+src/tenants/registration.ts open registration: requests from strangers (held, bounded, expiring), declined senders, people the owner wrote to first
 src/tenants/tenanttools.ts  the in-process MCP servers of a tenant's run (record_consent) and the owner's tenant administration
 src/tenants/connections.ts  which of her own accounts (Google, Notion) a person has connected: the admin's list and the doctor
 src/tenants/keynotice.ts    the one notice for the owner about the shared instance key, called wherever a friend's run fails on it
@@ -455,7 +457,6 @@ src/secrets/openbaoadmin.ts    install, config, init, unseal, policies, tokens, 
 src/secrets/openbaoservice.ts  the two launchd jobs of the secret store
 src/secrets/secrets.ts         tenants/<id>/<kind>/<name> paths, the card-for-owner-only rule, the app's connection
 src/secrets/keychain.ts        the macOS Keychain through `security` (app token, unseal shares)
-src/secrets/onetime.ts         one-time codes (invitations): shown once, only the hash kept
 ```
 
 ### src/modules/google/
