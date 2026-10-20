@@ -2,26 +2,26 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defer, tick } from "./util.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
-import { createPipeline, group, type Pipeline } from "../src/conversation.ts";
-import { createOutbound } from "../src/outbound.ts";
-import { groupName, createGroupBrain, groupPrompt, ownerInGroup, speaker } from "../src/group.ts";
+import { createPipeline, group, type Pipeline } from "../src/conversation/conversation.ts";
+import { createOutbound } from "../src/conversation/outbound.ts";
+import { groupName, createGroupBrain, groupPrompt, ownerInGroup, speaker } from "../src/conversation/group.ts";
 import { readLongText } from "@ted-assistant/signal";
 import { groupCapabilities } from "../src/policy/capabilities.ts";
-import { skillsFor } from "../src/skills.ts";
+import { skillsFor } from "../src/modules/skills.ts";
 import { classify } from "../src/policy/policy.ts";
-import { parseGate } from "../src/gate.ts";
-import { settings } from "../src/settings.ts";
-import { RateLimitError } from "../src/errors.ts";
+import { parseGate } from "../src/conversation/gate.ts";
+import { settings } from "../src/core/settings.ts";
+import { RateLimitError } from "../src/tenants/errors.ts";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runOptionsFor } from "../src/runoptions.ts";
-import { buildOptions } from "../src/agentrun.ts";
-import { compactOptions } from "../src/chatsession.ts";
-import { owner } from "../src/conversation.ts";
-import { NOTES_DIR } from "../src/notes.ts";
-import { LIMITS } from "../src/sanitize.ts";
-import { GROUPS_DIR, groupKey } from "../src/groupstore.ts";
+import { runOptionsFor } from "../src/run/runoptions.ts";
+import { buildOptions } from "../src/run/agentrun.ts";
+import { compactOptions } from "../src/run/chatsession.ts";
+import { owner } from "../src/conversation/conversation.ts";
+import { NOTES_DIR } from "../src/memory/notes.ts";
+import { LIMITS } from "../src/core/sanitize.ts";
+import { GROUPS_DIR, groupKey } from "../src/conversation/groupstore.ts";
 
 const OWNER = "+10000000000";
 const GID = "Zm9vYmFyZm9vYmFyZm9vYmFy";
@@ -343,16 +343,16 @@ test("groups: membership comes from the member list, is remembered, and fails cl
 
 // ---- the group's own notes and history (groupstore.ts) ----
 import { readFileSync as readFile, rmSync } from "node:fs";
-import { applyPlan, undoLatest } from "../src/dreamapply.ts";
-import { conversationLines, createDreamer, dreamConversations } from "../src/dream.ts";
-import { planOps } from "../src/dreamplan.ts";
-import { forgetNote } from "../src/notes.ts";
-import { groupContext, groupDir, groupLogFile, groupNotesBlock, groupScope, listGroups, searchGroupHistory } from "../src/groupstore.ts";
-import { readNotes } from "../src/notes.ts";
+import { applyPlan, undoLatest } from "../src/memory/dreamapply.ts";
+import { conversationLines, createDreamer, dreamConversations } from "../src/conversation/dream.ts";
+import { planOps } from "../src/memory/dreamplan.ts";
+import { forgetNote } from "../src/memory/notes.ts";
+import { groupContext, groupDir, groupLogFile, groupNotesBlock, groupScope, listGroups, searchGroupHistory } from "../src/conversation/groupstore.ts";
+import { readNotes } from "../src/memory/notes.ts";
 const groupNotes = (groupId: string, now = new Date()) => readNotes(now, join(groupDir(groupId), "notes"));
 const recentGroupLines = (groupId: string, n = 25) => groupContext(groupId, undefined, n).lines;
-import { recordMessage } from "../src/messages.ts";
-import { dataPath } from "../src/state.ts";
+import { recordMessage } from "../src/core/messages.ts";
+import { dataPath } from "../src/core/state.ts";
 
 const G1 = "R3JvdXAxR3JvdXAxR3JvdXAx";
 const G2 = "R3JvdXAyR3JvdXAyR3JvdXAy";
@@ -448,7 +448,7 @@ test("group dream: nightly, only groups with enough new talk, silently", async (
   assert.equal(calls, 1); // once a day
 });
 
-import { chatSystem, groupSystem, SELF_TIMED } from "../src/persona.ts";
+import { chatSystem, groupSystem, SELF_TIMED } from "../src/run/persona.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 test("prompts: Ted is told he can act later and on a schedule, in a private chat and in a group alike", () => {
   assert.ok(groupSystem({}).includes(SELF_TIMED));

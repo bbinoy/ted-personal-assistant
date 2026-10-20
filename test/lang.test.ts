@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseLanguages } from "../src/settings.ts";
-import { scriptLanguage, unsupportedForVoice, UNSURE, type LanguageModel } from "../src/lang.ts";
-import { voiceOption } from "../src/voicereply.ts";
+import { parseLanguages } from "../src/core/settings.ts";
+import { scriptLanguage, unsupportedForVoice, UNSURE, type LanguageModel } from "../src/conversation/lang.ts";
+import { voiceOption } from "../src/conversation/voicereply.ts";
 
 const DE = "Du hast heute zwei Termine, und der erste ist um halb elf. Viel Erfolg dabei!";
 const EN = "You have two meetings today, and the first one is at ten thirty. Good luck!";

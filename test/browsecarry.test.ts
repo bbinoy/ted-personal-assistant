@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { standing } from "./util.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readAudit } from "../src/audit.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { judgePrompt, type Verdict } from "../src/approvals/autojudge.ts";
 import { BrowseGuard, CARRY_MS } from "../src/modules/browse/browseguard.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 
 // An approved plan carries forward within one browse run (browseguard.ts offer, autojudge.ts approvedPlan): the owner is asked once for
 // "fill the form, then click the form's Register button", not again for the final click.

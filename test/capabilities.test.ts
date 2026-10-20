@@ -6,18 +6,18 @@ import { join } from "node:path";
 // Capabilities decide the tools and the skills of every isolated conversation (capabilities.ts, skills.ts): a group has a fixed set, a tenant her
 // record's. The tables below are pinned; adding a capability to a record must change exactly its tools and skills and nothing else.
 process.env.INTAKE_BASE_URL = "";
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const { CAPABILITIES } = await import("../src/tenants/tenants.ts");
 type Capability = (typeof CAPABILITIES)[number];
 const { groupCapabilities, groupTools, resolveCapabilities, toolsFor } = await import("../src/policy/capabilities.ts");
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsFor(resolveCapabilities(ctx.capabilities, { own: ctx.config }));
-const { privateSkills, sharedSkills, skillsFor } = await import("../src/skills.ts");
+const { privateSkills, sharedSkills, skillsFor } = await import("../src/modules/skills.ts");
 const PRIVATE_SKILLS = privateSkills();
 const SHARED_SKILLS = sharedSkills();
 const { classify } = await import("../src/policy/policy.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
-const { buildOptions } = await import("../src/agentrun.ts");
-const { ownerSkills } = await import("../src/skills.ts");
+const { buildOptions } = await import("../src/run/agentrun.ts");
+const { ownerSkills } = await import("../src/modules/skills.ts");
 
 // A safety net written out by hand, apart from the modules' own `ownerOnly`: whatever the rows say, none of these is ever a tool of an isolated conversation.
 const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i];

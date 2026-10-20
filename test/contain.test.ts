@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isInside } from "../src/contain.ts";
+import { isInside } from "../src/core/contain.ts";
 
 test("isInside: contained paths, traversal, siblings, symlinks", () => {
   const root = mkdtempSync(join(tmpdir(), "contain-"));

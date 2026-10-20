@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildOptions } from "../src/agentrun.ts";
+import { buildOptions } from "../src/run/agentrun.ts";
 import { createdFact, forgetCreated } from "../src/approvals/created.ts";
 
 const MB = "mcp__mailbird__";

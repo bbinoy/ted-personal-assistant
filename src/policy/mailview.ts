@@ -1,5 +1,5 @@
 // One view of an outgoing mail call, whatever the provider: the shape the approval, the judge floor and the audit read. The reading of each provider's
-// own arguments is the mail module's (src/modules/mailbird.ts, gmail.ts); this file holds only the shape and the helpers they share. Pure, no imports.
+// own arguments is the mail module's (src/modules/mailbird/module.ts, gmail.ts); this file holds only the shape and the helpers they share. Pure, no imports.
 
 export type MailAction = "send" | "reply" | "forward" | "draft";
 export interface MailView {

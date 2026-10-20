@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { splitReaction } from "../src/reaction.ts";
+import { splitReaction } from "../src/core/reaction.ts";
 
 test("reaction: one emoji at the very start is a reaction; the rest is still said", () => {
   assert.deepEqual(splitReaction("[[react: 👍]]"), { reaction: "👍", text: "" });
@@ -14,7 +14,7 @@ test("reaction: anything else is plain text, never a reaction", () => {
 });
 
 test("memory notice: a deterministic notice is only needed when the reply has no words", async () => {
-  const { needsMemoryNotice } = await import("../src/memorynotice.ts");
+  const { needsMemoryNotice } = await import("../src/memory/memorynotice.ts");
   assert.equal(needsMemoryNotice(""), true);
   assert.equal(needsMemoryNotice("[[react: 👍]]"), true);
   assert.equal(needsMemoryNotice("  "), true);

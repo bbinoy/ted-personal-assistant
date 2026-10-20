@@ -1,9 +1,9 @@
-import type { Source } from "../audit.ts";
+import type { Source } from "../core/audit.ts";
 import type { MailView } from "./mailview.ts";
 import { loaded, registered } from "../modules/index.ts";
 import type { CallTitle, MailTools, ToolEntry, ToolModule, ViewKind } from "../modules/types.ts";
 import { confirmedArguments, DELETE_CONFIRM, NEVER_ACTIONS, nameIsNever } from "./neverallowed.ts";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 
 // THE tool manifest: every tool the model might get declares here what it is, so one rule applies the same way across mail providers and other tools.
 // policy.ts, autojudge.ts, permissions.ts, capabilities.ts and format.ts read this table; none keeps a tool list of its own. The table is the union of the

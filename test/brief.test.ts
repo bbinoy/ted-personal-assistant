@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clockLine } from "../src/brief.ts";
-import { localDay } from "../src/pause.ts";
+import { clockLine } from "../src/core/brief.ts";
+import { localDay } from "../src/core/pause.ts";
 const at = (iso: string) => new Date(iso); // local time, no zone suffix
 
 test("clock line: exact weekday and date pairs", () => {

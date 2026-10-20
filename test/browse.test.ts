@@ -4,7 +4,7 @@ import { standing } from "./util.ts";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SOURCES } from "../src/audit.ts";
+import { SOURCES } from "../src/core/audit.ts";
 import { judgeAction, type Verdict } from "../src/approvals/autojudge.ts";
 import { browse, browseSystem, resultMessage, sanitizeResult, startRefusal } from "../src/modules/browse/browse.ts";
 import { BrowseGuard, resultText, withText } from "../src/modules/browse/browseguard.ts";
@@ -12,7 +12,7 @@ import { browserServer, desktopUserAgent, type BrowseStatus } from "../src/modul
 import { addressProblem, classifyClick, isAllowedBrowserTool, isRef, looksLikeCardNumber, luhnValid, parseSnapshot, resolvesPublic, sensitiveField, sensitiveKind } from "../src/modules/browse/browserules.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { classify } from "../src/policy/policy.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { access } from "./util.ts";
 
 const B = "mcp__browser__browser_";
@@ -508,7 +508,7 @@ test("the run's prompt says pages are data and what to do at a payment (one text
 // ---- the options of the runs ----
 
 test("options: chat, wake-up and group runs get the entry tool; the browse run gets the browser and web search and nothing of the owner's", async () => {
-  const { buildOptions } = await import("../src/agentrun.ts");
+  const { buildOptions } = await import("../src/run/agentrun.ts");
   const { browseStatus } = await import("../src/modules/browse/browseserver.ts");
   const deny = async () => ({ approved: false });
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
@@ -529,7 +529,7 @@ test("options: chat, wake-up and group runs get the entry tool; the browse run g
 });
 
 test("options: a browse run cannot be built without the browser, with a clear reason", async () => {
-  const { buildOptions } = await import("../src/agentrun.ts");
+  const { buildOptions } = await import("../src/run/agentrun.ts");
   const { browseStatus } = await import("../src/modules/browse/browseserver.ts");
   if (browseStatus().ok) return;
   assert.throws(() => buildOptions(async () => ({ approved: false }), { source: "browse", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, guard: guard() }, undefined), /browsing is not set up/);
@@ -564,7 +564,7 @@ const TRAINS = `### Page
 \`\`\``;
 
 test("a search form: Enter after typing and the form button go to the judge, which auto-approves; every judged step has a judge-* row with its reason and no typed value", async () => {
-  const { readAudit } = await import("../src/audit.ts");
+  const { readAudit } = await import("../src/core/audit.ts");
   const g = onPage(guard("owner", { task: "find the next train Zurich to Bern" }), TRAINS);
   g.remember(`${B}type`, { target: "e4", text: "00" }, "", undefined);
   const seen: string[] = [];

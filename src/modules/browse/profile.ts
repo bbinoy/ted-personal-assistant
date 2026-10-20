@@ -1,4 +1,4 @@
-import { normalizeDomain } from "../../domains.ts";
+import { normalizeDomain } from "../../core/domains.ts";
 import { BaoError } from "../../secrets/openbao.ts";
 import { ownerSecrets, SecretsError, type TenantSecrets } from "../../secrets/secrets.ts";
 

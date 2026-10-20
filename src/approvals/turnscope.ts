@@ -1,6 +1,6 @@
 import type { RunProvenance } from "./autojudge.ts";
-import { LIMITS } from "../sanitize.ts";
-import { OWNER_KEY } from "../ownerkey.ts";
+import { LIMITS } from "../core/sanitize.ts";
+import { OWNER_KEY } from "../core/ownerkey.ts";
 
 // What a conversation's turn is known to have been asked, for the approval judge's provenance (autojudge.ts RunProvenance): the person's message that started the
 // turn and the two before it (a send is judged against what was said about it, which may have been a message ago: "reply to Armon that Tuesday works" ... "send it"),

@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, statSync } from "node:fs";
-import { overBudget, recordCost, spentToday } from "../src/budget.ts";
-import { loadSettings, settings, signalIdentity } from "../src/settings.ts";
+import { overBudget, recordCost, spentToday } from "../src/core/budget.ts";
+import { loadSettings, settings, signalIdentity } from "../src/core/settings.ts";
 import { checkHideSettings, registered } from "../src/modules/index.ts";
-import { appendLine, dataPath, readJson, readText, secureDataDirs, writeJson, writeText } from "../src/state.ts";
+import { appendLine, dataPath, readJson, readText, secureDataDirs, writeJson, writeText } from "../src/core/state.ts";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 

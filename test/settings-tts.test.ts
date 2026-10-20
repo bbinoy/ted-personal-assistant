@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSettings } from "../src/settings.ts";
+import { loadSettings } from "../src/core/settings.ts";
 import { qwenReference } from "../src/doctor.ts";
 
 test("settings: Qwen is the default speech provider, with Kokoro standing in; Kokoro alone has no fallback", () => {
@@ -17,7 +17,7 @@ test("settings: Qwen is the default speech provider, with Kokoro standing in; Ko
 test("settings: remote speech needs its keys and a safe address, or the agent does not start", () => {
   assert.throws(() => loadSettings({ TTS_PROVIDER: "elevenlabs" }), /ELEVENLABS_API_KEY/);
   // read once into settings, then gone from the environment every child process (Claude Code, MCP servers, ffmpeg) inherits
-  const probe = "import('./src/settings.ts').then(({ settings }) => console.log(JSON.stringify([process.env.ELEVENLABS_API_KEY ?? null, process.env.TTS_HTTP_TOKEN ?? null, settings.tts.provider === 'elevenlabs' && settings.tts.elevenlabs.apiKey])))";
+  const probe = "import('./src/core/settings.ts').then(({ settings }) => console.log(JSON.stringify([process.env.ELEVENLABS_API_KEY ?? null, process.env.TTS_HTTP_TOKEN ?? null, settings.tts.provider === 'elevenlabs' && settings.tts.elevenlabs.apiKey])))";
   const out = execFileSync(process.execPath, ["--conditions=workspace-source", "-e", probe], { encoding: "utf8", env: { PATH: process.env.PATH, TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "key-123456", ELEVENLABS_VOICE_ID: "v", TTS_HTTP_TOKEN: "tok-123456", HARNESS_DATA_DIR: process.env.HARNESS_DATA_DIR } });
   assert.equal(out.trim(), JSON.stringify([null, null, "key-123456"]));
   assert.throws(() => loadSettings({ TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "k" }), /ELEVENLABS_VOICE_ID/);

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { announceMemoryChanges, noteWritten, recordMemoryChange } from "../src/memorynotice.ts";
-import { NOTES_DIR } from "../src/notes.ts";
+import { announceMemoryChanges, noteWritten, recordMemoryChange } from "../src/memory/memorynotice.ts";
+import { NOTES_DIR } from "../src/memory/notes.ts";
 
 const sent: string[] = [];
 const notify = async (t: string) => void sent.push(t);

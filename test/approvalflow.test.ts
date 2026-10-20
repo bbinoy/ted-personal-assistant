@@ -9,7 +9,7 @@ import { composeQuestion } from "../src/approvals/approvalmodel.ts";
 import { answerPrompt, parseAnswer, parseWrite, writePrompt, type OpenView } from "../src/approvals/approvalprompt.ts";
 import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 import { runJudge } from "../src/approvals/approvaljudge.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import type { AnswerJudgement } from "../src/approvals/approvalprompt.ts";
 
 // No model process is started here: the judge is injected, and warm spares are off.

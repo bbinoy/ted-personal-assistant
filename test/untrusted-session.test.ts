@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { carriedTaint, forgetUnresumable, sessionTaint } from "../src/chatsession.ts";
-import { consume } from "../src/agentrun.ts";
+import { carriedTaint, forgetUnresumable, sessionTaint } from "../src/run/chatsession.ts";
+import { consume } from "../src/run/agentrun.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { readJson } from "../src/state.ts";
-import { settings } from "../src/settings.ts";
+import { readJson } from "../src/core/state.ts";
+import { settings } from "../src/core/settings.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
-import type { ChatSession } from "../src/session.ts";
+import type { ChatSession } from "../src/run/session.ts";
 
 // The untrusted-input flag of a chat session: kept in the session file, so a resumed session that holds a hostile mail is still told to the judge.
 

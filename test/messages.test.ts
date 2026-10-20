@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
-import { compactIfNeeded, findMessage, limitWords, noticeLines, planCompaction, recordMessage, recentNotices, type Sent } from "../src/messages.ts";
-import { readText } from "../src/state.ts";
-import { dataPath } from "../src/state.ts";
-import { reactionPrompt } from "../src/reaction.ts";
+import { compactIfNeeded, findMessage, limitWords, noticeLines, planCompaction, recordMessage, recentNotices, type Sent } from "../src/core/messages.ts";
+import { readText } from "../src/core/state.ts";
+import { dataPath } from "../src/core/state.ts";
+import { reactionPrompt } from "../src/core/reaction.ts";
 
 const reset = () => rmSync(dataPath("logs/messages.jsonl"), { force: true });
 const sent = (at: string, kind: Sent["kind"], text: string, ts = Date.parse(at)): Sent => ({ at, kind, text, ts });
@@ -91,8 +91,8 @@ test("reactions: the prompt carries the emoji and the message, fenced, and no in
 });
 
 test("messages: the parsed-log cache follows the file (append, rewrite, delete) and a group log is separate", async () => {
-  const { ledgerEntries, logSignature, messagesSince } = await import("../src/messages.ts");
-  const { writeText } = await import("../src/state.ts");
+  const { ledgerEntries, logSignature, messagesSince } = await import("../src/core/messages.ts");
+  const { writeText } = await import("../src/core/state.ts");
   reset();
   assert.equal(logSignature(), "");
   assert.deepEqual(ledgerEntries(), []);

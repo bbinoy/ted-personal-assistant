@@ -7,14 +7,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
-import { startHeartbeat } from "../src/heartbeat.ts";
+import { startHeartbeat } from "../src/heartbeat/heartbeat.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
-import { missingSetup, setupItems } from "../src/notes.ts";
-import { chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
+import { missingSetup, setupItems } from "../src/modules/index.ts";
+import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
-import { ownerSkills } from "../src/skills.ts";
-import { loadSettings, settings } from "../src/settings.ts";
-import { readJson } from "../src/state.ts";
+import { ownerSkills } from "../src/modules/skills.ts";
+import { loadSettings, settings } from "../src/core/settings.ts";
+import { readJson } from "../src/core/state.ts";
 
 // MAIL_PROVIDER: mailbird is the default and behaves exactly as before (test/default-prompts.test.ts pins its prompts); none is chat only.
 

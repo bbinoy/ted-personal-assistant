@@ -4,7 +4,7 @@ import { openbaoCheck } from "../src/doctor.ts";
 import type { Keychain } from "../src/secrets/keychain.ts";
 import { BaoError, OpenBao, checkPath } from "../src/secrets/openbao.ts";
 import { appBao, ITEM_NAME, keychainNames, SecretsError, TenantSecrets, TENANT_ID } from "../src/secrets/secrets.ts";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { startFakeBao } from "./fakebao.ts";
 
 // The client and the tenant layer against an in-process fake of OpenBao's HTTP API. Obviously fake values only.

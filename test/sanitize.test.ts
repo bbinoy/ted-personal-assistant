@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clean, cleanText, defuseLines, defuseSpeakers, defuseTags, marker, oneLine } from "../src/sanitize.ts";
-import { fence } from "../src/fence.ts";
-import { htmlToText, looksLikeHtml } from "../src/html.ts";
-import { mailBody } from "../src/mailtext.ts";
-import { cleanToolOutput } from "../src/toolclean.ts";
-import { cleanIncoming } from "../src/conversation.ts";
+import { clean, cleanText, defuseLines, defuseSpeakers, defuseTags, marker, oneLine } from "../src/core/sanitize.ts";
+import { fence } from "../src/core/fence.ts";
+import { htmlToText, looksLikeHtml } from "../src/core/html.ts";
+import { mailBody } from "../src/core/mailtext.ts";
+import { cleanToolOutput } from "../src/core/toolclean.ts";
+import { cleanIncoming } from "../src/conversation/conversation.ts";
 
 const tags = (s: string) => [...s].map((c) => String.fromCodePoint(0xe0000 + c.charCodeAt(0))).join("");
 const quiet = <T>(f: () => T): T => {

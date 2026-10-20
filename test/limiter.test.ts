@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sleep } from "./util.ts";
-import { Limiter } from "../src/limiter.ts";
-import { loadSettings } from "../src/settings.ts";
+import { Limiter } from "../src/core/limiter.ts";
+import { loadSettings } from "../src/core/settings.ts";
 
 
 test("limiter: never more than the limit at once, every job runs, in arrival order", async () => {

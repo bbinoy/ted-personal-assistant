@@ -1,4 +1,4 @@
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 
 // ONE place that tells the owner about a problem with the shared instance key (TENANT_ANTHROPIC_API_KEY) that every friend's run depends on. It is called from where
 // a friend's run FAILS because of the key: errors.ts `failure`, which every model call on the key goes through, whatever started it (her chat turn, the heartbeat, a

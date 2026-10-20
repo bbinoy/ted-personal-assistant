@@ -1,17 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick } from "./util.ts";
-import { recordMessage } from "../src/messages.ts";
-import { settings } from "../src/settings.ts";
+import { recordMessage } from "../src/core/messages.ts";
+import { settings } from "../src/core/settings.ts";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPipeline, group, owner, type Incoming } from "../src/conversation.ts";
-import { createOutbound } from "../src/outbound.ts";
-import { AuthError, RateLimitError } from "../src/errors.ts";
-import { SLOW_REPLY_MS } from "../src/quote.ts";
-import type { Picture } from "../src/image.ts";
-import type { Document } from "../src/document.ts";
+import { createPipeline, group, owner, type Incoming } from "../src/conversation/conversation.ts";
+import { createOutbound } from "../src/conversation/outbound.ts";
+import { AuthError, RateLimitError } from "../src/tenants/errors.ts";
+import { SLOW_REPLY_MS } from "../src/conversation/quote.ts";
+import type { Picture } from "../src/run/image.ts";
+import type { Document } from "../src/conversation/document.ts";
 import { readLongText } from "@ted-assistant/signal";
 import { toSignalStyles } from "@ted-assistant/signal/messenger";
 import type { IncomingMessage, IncomingReaction, OutgoingMessage, Target } from "@ted-assistant/messenger";
@@ -577,7 +577,7 @@ test("groups: an unusable voice message or picture is explained only to someone 
 
 // Characterization of the intake differences between the owner's chat and a group (pinned before they were unified).
 test("groups: a picture is opened only when it will be used; an unopenable one is dropped but the caption stays", async () => {
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   const mutable = settings as { groupParticipation: string };
   const was = mutable.groupParticipation;
   try {
@@ -680,7 +680,7 @@ test("groups: an edit never answers an approval, a picture caption neither, and 
   void r;
 });
 
-// ---- documents (src/document.ts): the same steps as pictures, in the owner's chat and in groups ----
+// ---- documents (src/conversation/document.ts): the same steps as pictures, in the owner's chat and in groups ----
 
 const PDF: Document = { kind: "pdf", data: "QUJD", name: "contract.pdf" };
 const TXT: Document = { kind: "text", text: "milk\neggs", name: "list.txt", cut: false };
@@ -709,7 +709,7 @@ const TS = Date.now() - 10_000; // recent: voice sources older than a week are n
 const MP3_DOC: Document = { kind: "audio", text: "Hello everyone this is me talking", name: "talk.mp3", seconds: 95, cut: false, speech: true };
 
 async function withQwen<T>(run: () => Promise<T>): Promise<T> {
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   const tts = settings.tts as { provider: string };
   const was = tts.provider;
   tts.provider = "qwen";
@@ -754,7 +754,7 @@ test("audio file: a fake mp3 gets one sentence and no run, and is no source", as
 
 test("audio file: in a group it is opened even when nobody addressed us (like a voice message), becomes a source of THAT group, and reaches the admission", async () => {
   const { resetVoiceNotes, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   const mutable = settings as { groupParticipation: string };
   const was = mutable.groupParticipation;
   mutable.groupParticipation = "tagged";
@@ -781,7 +781,7 @@ test("audio file: in a group it is opened even when nobody addressed us (like a 
 });
 
 test("groups: a document is handled like a picture: opened when it will be used, handed to the admission, a refusal told to someone who spoke to us", async () => {
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   const mutable = settings as { groupParticipation: string };
   const was = mutable.groupParticipation;
   try {
@@ -807,7 +807,7 @@ test("groups: a document is handled like a picture: opened when it will be used,
 });
 
 test("groups: the prompt names the documents members sent, their file names as plain labels, as data", async () => {
-  const { groupPrompt } = await import("../src/group.ts");
+  const { groupPrompt } = await import("../src/conversation/group.ts");
   const p = groupPrompt(new Date("2026-01-01T10:00:00Z"), ["Eve: 📄 look"], { line: "Eve: 📄 look" }, false, undefined, false, 0, [PDF, TXT]);
   assert.match(p, /Files members sent are here/);
   assert.match(p, /\[PDF attached, file name "contract.pdf"/);

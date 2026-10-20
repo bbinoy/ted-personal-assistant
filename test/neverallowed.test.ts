@@ -10,7 +10,7 @@ import { DELETE_CONFIRM, destinationIsTrashOrSpam, NEVER_ACTIONS, nameIsNever, n
 import { sweepStaleRuns } from "../src/modules/browse/browse.ts";
 import { registered } from "../src/modules/index.ts";
 import { applyChanges, classify, hiddenTools, isNeverAllowed } from "../src/policy/policy.ts";
-import { SOURCES } from "../src/audit.ts";
+import { SOURCES } from "../src/core/audit.ts";
 import { allRows, confirmsDelete, entryFor, isFree, neverAllowedTool } from "../src/policy/toolmanifest.ts";
 import { groupTools } from "../src/policy/capabilities.ts";
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
@@ -273,7 +273,7 @@ test("the judge prompt says what to do with an unsubscribe", () => {
 });
 
 test("state/browse is not readable data, and stale browse run folders are swept at start-up", async () => {
-  const { settings } = await import("../src/settings.ts");
+  const { settings } = await import("../src/core/settings.ts");
   const { isReadableData } = await import("../src/policy/policy.ts");
   const root = join(settings.stateDir, "browse");
   mkdirSync(join(root, "run-fresh"), { recursive: true });
@@ -290,7 +290,7 @@ test("state/browse is not readable data, and stale browse run folders are swept 
 });
 
 test("the built-in tools of a run come from the builtin module's rows: the same offering as ever, one list", async () => {
-  const { buildOptions } = await import("../src/agentrun.ts");
+  const { buildOptions } = await import("../src/run/agentrun.ts");
   const tools = (source: (typeof SOURCES)[number], extra: Record<string, unknown> = {}) => buildOptions(async () => ({ approved: false }), { source, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, ...extra } as never, undefined).tools;
   assert.deepEqual(tools("chat", { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"]);
   assert.deepEqual(tools("background"), ["Skill", "WebSearch", "WebFetch"]);

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { macKeychain, type Keychain } from "./keychain.ts";
 import { BaoError, OpenBao, type Data } from "./openbao.ts";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 
 // The tenant layer over the OpenBao client. Every secret item of the app lives at <mount>/tenants/<tenant>/<kind>/<name>, and a TenantSecrets
 // can reach only its own tenant's folder (and the tenant's token policy says the same in OpenBao: defence in depth). Code uses this, never the

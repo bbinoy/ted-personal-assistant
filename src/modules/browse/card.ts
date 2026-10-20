@@ -3,9 +3,9 @@ import { luhnValid } from "./browserules.ts";
 import { Ledger } from "./payments.ts";
 import { inTenant, ProfileError } from "./profile.ts";
 import { CARD_TENANTS, SecretsError, type TenantSecrets } from "../../secrets/secrets.ts";
-import { dataPath, readText, writeText } from "../../state.ts";
-import { LIMITS } from "../../sanitize.ts";
-import { settings } from "../../settings.ts";
+import { dataPath, readText, writeText } from "../../core/state.ts";
+import { LIMITS } from "../../core/sanitize.ts";
+import { settings } from "../../core/settings.ts";
 
 // The owner's dedicated debit card for the browse worker: the card number, expiry and security code as one item in OpenBao
 // (tenants/owner/card/primary, secrets.ts), apart from the profile items. They are entered ONLY

@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildOptions } from "../src/agentrun.ts";
+import { buildOptions } from "../src/run/agentrun.ts";
 import { drawNow } from "../src/modules/draw/drawtool.ts";
 import { classify } from "../src/policy/policy.ts";
-import { ownerSkills } from "../src/skills.ts";
+import { ownerSkills } from "../src/modules/skills.ts";
 import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
-import { OWNER_KEY } from "../src/ownerkey.ts";
-import { settings } from "../src/settings.ts";
+import { OWNER_KEY } from "../src/core/ownerkey.ts";
+import { settings } from "../src/core/settings.ts";
 import { adoptDrawing, adoptShots, loadShot, MAX_DRAWINGS, MAX_PICTURE_BYTES } from "../src/modules/send/shots.ts";
 import { access } from "./util.ts";
 

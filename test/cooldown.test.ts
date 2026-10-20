@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BASE_BACKOFF_MS, coolingDown, noteRateLimit, noteSuccess, observeRateLimit, resetCooldown, skipForCooldown } from "../src/cooldown.ts";
-import { failure, RateLimitError } from "../src/errors.ts";
-import { group, type Conversation } from "../src/conversation.ts";
-import { recordMessage, type Kind } from "../src/messages.ts";
-import { settings } from "../src/settings.ts";
-import { createWakeups } from "../src/wake.ts";
+import { BASE_BACKOFF_MS, coolingDown, noteRateLimit, noteSuccess, observeRateLimit, resetCooldown, skipForCooldown } from "../src/core/cooldown.ts";
+import { failure, RateLimitError } from "../src/tenants/errors.ts";
+import { group, type Conversation } from "../src/conversation/conversation.ts";
+import { recordMessage, type Kind } from "../src/core/messages.ts";
+import { settings } from "../src/core/settings.ts";
+import { createWakeups } from "../src/heartbeat/wake.ts";
 
 (settings as unknown as Record<string, unknown>).briefBackstopHour = 24;
 const T0 = new Date(2026, 9, 14, 9, 0, 0);

@@ -2,15 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { group, owner } from "../src/conversation.ts";
-import { askGateWith, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/gate.ts";
-import { clampCheck, lookDue, lookState, wakeText } from "../src/ledger.ts";
-import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/messages.ts";
-import { conversationLines } from "../src/dream.ts";
-import { groupContext, groupLogFile } from "../src/groupstore.ts";
-import { AuthError, RateLimitError } from "../src/errors.ts";
-import { loadSettings, settings } from "../src/settings.ts";
-import { dataPath } from "../src/state.ts";
+import { group, owner } from "../src/conversation/conversation.ts";
+import { askGateWith, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/conversation/gate.ts";
+import { clampCheck, lookDue, lookState, wakeText } from "../src/conversation/ledger.ts";
+import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/core/messages.ts";
+import { conversationLines } from "../src/conversation/dream.ts";
+import { groupContext, groupLogFile } from "../src/conversation/groupstore.ts";
+import { AuthError, RateLimitError } from "../src/tenants/errors.ts";
+import { loadSettings, settings } from "../src/core/settings.ts";
+import { dataPath } from "../src/core/state.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.briefBackstopHour = 24; // the backstop has its own tests below

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { AMOUNT_NUM, CURRENCY, MONEY } from "./browserules.ts";
-import { registeredDomain } from "../../domains.ts";
+import { registeredDomain } from "../../core/domains.ts";
 
 // The pure rules of a card payment in the browse run (browsecard.ts and browseguard.ts hold the state around them). Everything here is
 // code that reads the page or the owner's words, never the model: what a field is, what the page's total is, which payment hosts

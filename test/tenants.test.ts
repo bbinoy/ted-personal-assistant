@@ -8,27 +8,27 @@ import { join } from "node:path";
 // Its own data folder (before anything reads the settings), because the registry is a file.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenants-test-"));
 
-const { settings } = await import("../src/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const R = await import("../src/tenants/tenantroute.ts");
-const { createTenantRunner } = await import("../src/tenants/tenantrun.ts");
+const { createTenantRunner } = await import("../src/conversation/tenantrun.ts");
 const { keyNotices, createKeyNotices } = await import("../src/tenants/keynotice.ts");
-const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
-const { failure, InstanceKeyError, RateLimitError } = await import("../src/errors.ts");
-const { INSTANCE_KEY_COOLDOWN } = await import("../src/payer.ts");
+const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/core/cooldown.ts");
+const { failure, InstanceKeyError, RateLimitError } = await import("../src/tenants/errors.ts");
+const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
 const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", costFile: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
-const { recordCost, spentToday, tenantOverBudget } = await import("../src/budget.ts");
-const { tenant } = await import("../src/conversationmodel.ts");
+const { recordCost, spentToday, tenantOverBudget } = await import("../src/core/budget.ts");
+const { tenant } = await import("../src/conversation/conversationmodel.ts");
 const { OneTimeCodes, CODE_PATTERN } = await import("../src/secrets/onetime.ts");
 const { looksLikeApiKey } = await import("../src/secrets/secrets.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
-const { NOTES_DIR } = await import("../src/notes.ts");
-const { FILE: OWNER_LOG } = await import("../src/messages.ts");
-const { OWNER_SESSION_FILE } = await import("../src/session.ts");
-const { acceptOwner } = await import("../src/guards.ts");
+const { NOTES_DIR } = await import("../src/memory/notes.ts");
+const { FILE: OWNER_LOG } = await import("../src/core/messages.ts");
+const { OWNER_SESSION_FILE } = await import("../src/core/ownerkey.ts");
+const { acceptOwner } = await import("../src/conversation/guards.ts");
 
 const on = settings as unknown as { tenants: boolean; tenantNoticeMinutes: number };
 const ACI_A = "11111111-1111-4111-8111-111111111111";

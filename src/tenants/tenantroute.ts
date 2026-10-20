@@ -1,6 +1,6 @@
 import { CODE_PATTERN } from "../secrets/onetime.ts";
 import { ACI, redeemInvite, tenantByAci, type TenantRecord } from "./tenants.ts";
-import { ASSISTANT, OWNER, settings } from "../settings.ts";
+import { ASSISTANT, OWNER, settings } from "../core/settings.ts";
 import { directTarget } from "@ted-assistant/messenger";
 
 // Who is this sender? The door for everybody who is not the owner (main.ts), with TENANTS=on. Pure of Signal: a sender and her text in, a decision out.

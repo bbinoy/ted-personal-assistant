@@ -2,8 +2,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PURPOSES, purposeAvailable } from "./intakepurposes.ts";
-import { settings } from "../settings.ts";
-import { readJson, writeJson } from "../state.ts";
+import { settings } from "../core/settings.ts";
+import { readJson, writeJson } from "../core/state.ts";
 import type { Capability } from "../tenants/tenants.ts";
 
 // The setup links of the intake page (intakeserver.ts): a single-use code in a URL, minted by the chat tool or the local CLI, redeemed by the page.

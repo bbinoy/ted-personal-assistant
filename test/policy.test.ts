@@ -1,13 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { settings } from "../src/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { idsOf } from "../src/approvals/permissions.ts";
-import { NOTES_DIR } from "../src/notes.ts";
+import { NOTES_DIR } from "../src/memory/notes.ts";
 import { applyChanges, classify, hiddenTools, isReadTool } from "../src/policy/policy.ts";
-import { loadSettings } from "../src/settings.ts";
+import { loadSettings } from "../src/core/settings.ts";
 import { neverAllowedTool } from "../src/policy/toolmanifest.ts";
-import { SOURCES } from "../src/audit.ts";
+import { SOURCES } from "../src/core/audit.ts";
 
 test("policy: every source audit.ts names is classified", () => { // (the per-source rights table is gone: flags in the manifest say who may do what)
   assert.equal(new Set(SOURCES).size, SOURCES.length);

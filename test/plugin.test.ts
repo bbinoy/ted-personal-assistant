@@ -2,9 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { missingSetup, setupItems, type Note } from "../src/notes.ts";
-import { chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
-import { settings } from "../src/settings.ts";
+import { type Note } from "../src/memory/notes.ts";
+import { missingSetup, setupItems } from "../src/modules/index.ts";
+import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
+import { settings } from "../src/core/settings.ts";
 
 const skillsDir = join(settings.pluginDir, "skills");
 const skills = readdirSync(skillsDir);
@@ -64,7 +65,7 @@ test("setup: Notion tasks and meetings are found by the agent, saved, and only a
 });
 
 test("connectors: detected from the tools a run saw; a missing one is reported as not connected, not as not set up", async () => {
-  const { detect, disconnected, NAMES } = await import("../src/connectors.ts");
+  const { detect, disconnected, NAMES } = await import("../src/modules/connectors.ts");
   const all = ["mcp__claude_ai_Notion__notion-fetch", "mcp__claude_ai_Google_Calendar__list_events", "mcp__mailbird__get_message"];
   assert.deepEqual(disconnected(detect(all)), []);
   assert.deepEqual(disconnected(detect(["mcp__mailbird__get_message"])), ["notion", "calendar"]);
@@ -85,7 +86,7 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
 });
 
 test("connectors: judged by the server status in the start-up message, so a slow connector is not reported as missing", async () => {
-  const { detect, disconnected } = await import("../src/connectors.ts");
+  const { detect, disconnected } = await import("../src/modules/connectors.ts");
   const server = (name: string, status: string) => ({ name, status });
   const all = [server("mailbird", "connected"), server("claude.ai Notion", "connected"), server("claude.ai Google Calendar", "connected")];
   assert.deepEqual(disconnected(detect([], all)), []); // hidden or not yet listed tools do not matter
@@ -95,7 +96,7 @@ test("connectors: judged by the server status in the start-up message, so a slow
 });
 
 test("plugin: follow-through is a private skill the calendar and task skills point to", async () => {
-  const { privateSkills } = await import("../src/skills.ts");
+  const { privateSkills } = await import("../src/modules/skills.ts");
   assert.ok(privateSkills().includes("follow-through"));
   for (const s of ["calendar", "notion-tasks"]) assert.match(readFileSync(join(skillsDir, s, "SKILL.md"), "utf8"), /ted-personal-assistant:follow-through/, s);
 });

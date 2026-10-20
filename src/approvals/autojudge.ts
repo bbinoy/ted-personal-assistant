@@ -1,12 +1,12 @@
 import { runJudge, withTimeout } from "./approvaljudge.ts";
-import { fence } from "../fence.ts";
+import { fence } from "../core/fence.ts";
 import { createdFact } from "./created.ts";
 import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
-import { OWNER } from "../settings.ts";
+import { OWNER } from "../core/settings.ts";
 import type { MailView } from "../policy/mailview.ts";
 import { actionOf, confirmsDelete, entryFor, moduleOf, neverAllowedTool } from "../policy/toolmanifest.ts";
-import type { Source } from "../audit.ts";
-import { LIMITS } from "../sanitize.ts";
+import type { Source } from "../core/audit.ts";
+import { LIMITS } from "../core/sanitize.ts";
 
 // The approval judge: a small second opinion on every action that is not a plain read. The same path in every place (chat, group, tenant, mail
 // handler, brief, radar, wake-up, browse): the code floor first (policy.ts classify, isJudgeable below), then this judge, then the question on the owner's phone.

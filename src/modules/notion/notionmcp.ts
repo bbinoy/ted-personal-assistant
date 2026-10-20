@@ -3,7 +3,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { credentialedProxy, SessionHub, UpstreamError, UpstreamSession, type Opened, type SessionLimits } from "../../intake/mcpproxy.ts";
 import { NotionReconnect, notionTokens, type NotionTokens } from "../../intake/notionoauth.ts";
-import { settings } from "../../settings.ts";
+import { settings } from "../../core/settings.ts";
 
 // A friend's Notion tools (the `notion` capability): Notion's HOSTED MCP server (settings.notion.mcpUrl) called over https with HER access token. The token is held by
 // this process and added to every request to the hosted server HERE (a fetch of the transport, below); the model's run gets only the in-process proxy of mcpproxy.ts

@@ -1,9 +1,9 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../audit.ts";
+import { audit } from "../core/audit.ts";
 import { baseUrlProblem, connectionState, INTAKE_LINK_TOOL, INTAKE_STATUS_TOOL, LinkStore, linkUrl, purposesFor, readDone } from "./intakelinks.ts";
 import { purposeOf } from "./intakepurposes.ts";
-import { settings } from "../settings.ts";
+import { settings } from "../core/settings.ts";
 import { tenantById } from "../tenants/tenants.ts";
 
 // A tenant's two tools for the intake page (intakeserver.ts), in her run only (agentrun.ts) and only when her tool set has them (capabilities.ts):

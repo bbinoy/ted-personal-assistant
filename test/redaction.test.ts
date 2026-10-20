@@ -4,9 +4,9 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { audit } from "../src/audit.ts";
-import { redact, redactSecrets } from "../src/redact.ts";
-import { readText } from "../src/state.ts";
+import { audit } from "../src/core/audit.ts";
+import { redact, redactSecrets } from "../src/core/redact.ts";
+import { readText } from "../src/core/state.ts";
 
 // Fake credentials are assembled here so that no real-looking token sits in the source (npm run check:secrets).
 const body = (n: number) => "a1B2c3D4e5".repeat(Math.ceil(n / 10)).slice(0, n);
@@ -51,7 +51,7 @@ test("log.ts: warnings and info are redacted and written to the log file too, an
   const dir = mkdtempSync(join(tmpdir(), "log-test-"));
   try {
     const script = `
-      await import("./src/log.ts");
+      await import("./src/core/log.ts");
       const loop = {}; loop.self = loop;
       console.warn("read receipt failed: Bearer " + ${JSON.stringify(body(24))} + " for +15555550105");
       console.info("info line key=ok");

@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 
 // Folder boundaries of src/ (docs/ARCHITECTURE.md "Project layout"): each folder may value-import only the folders below it. Type-only imports are exempt
 // (verbatimModuleSyntax erases them), as are dynamic import() calls (the lazy edges, like policy reading modules/index through registered()).
-// The table below is the dependency diagram of the target layout. It starts PERMISSIVE: today's src/ is flat, so only the folders that exist are checked,
-// and every folder may still import the flat root (".", TRANSITIONAL). Each restructure chunk that moves files into a folder removes what no longer applies.
+// The table below is the dependency diagram of the layout (docs/ARCHITECTURE.md "Project layout"), top to bottom: heartbeat, conversation, run, modules, approvals, policy,
+// tenants / intake / memory, secrets, core. A folder may import the ones below it; nothing imports the entry points. The accepted exceptions are named in the rows.
 
 const SRC = resolve(fileURLToPath(new URL("../src", import.meta.url)));
 
@@ -21,24 +21,29 @@ export const folderOf = (rel: string): string => {
 
 // folder -> folders it may value-import (itself is always fine). Absent folder = not in the layout yet = no file may sit there (add a row when a chunk creates it).
 export const ALLOWED: Record<string, readonly string[]> = {
-  // TRANSITIONAL: the flat src/ root is every file that has not moved yet. It may import anything; it shrinks to main.ts, cli.ts and doctor.ts.
+  // The entry points (main.ts, cli.ts, doctor.ts) are the only files in the src/ root; they wire everything, so they may import anything.
   ".": ["*"],
-  // modules/index.ts, types.ts, runtime.ts and the single-file declarations (policy leaves + the binding point).
-  modules: [".", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  // a feature folder: its declaration (light) and its server, guard, rules and store files.
-  "modules/*": [".", "modules", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  // folders that exist (R3, R4): policy decides from data only, approvals sit above it; tenants and intake are one box, above the secrets.
-  approvals: [".", "modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
-  policy: [".", "modules", "tenants", "intake", "secrets", "core"], // reads modules/index lazily; never imports approvals; capabilities.ts reads the intake links (tenants and intake are one box in the diagram)
-  tenants: [".", "intake", "memory", "secrets", "core"],
-  intake: [".", "modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
-  secrets: [".", "core"],
-  // the folders of the target layout that do not exist yet (rows stay until their chunk lands):
-  heartbeat: [".", "conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  conversation: [".", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  run: [".", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  memory: [".", "tenants", "intake", "secrets", "core"],
-  core: ["."],
+  // The tick and the look of every conversation: starts the jobs, so it sits on top of everything below.
+  heartbeat: ["conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // The pipeline of every conversation (and the dream and the friend's turn, which read all of them), above the run machinery.
+  conversation: ["run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // What a model run is made of (agent, agentrun, options, profiles, persona, the session, the heartbeat run's scope and delegation); it binds the module servers through modules/runtime.ts.
+  run: ["modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // modules/index.ts, types.ts, runtime.ts, skills.ts, connectors.ts and the single-file declarations (policy leaves + the binding point).
+  modules: ["modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // a feature folder: its declaration (light) and its server, guard, rules and store files. -> conversation is accepted: the voice tool sends through the messenger and lists the
+  // groups, the memory module scopes a group's notes (dreamscope.ts). The pipeline wires features in the other direction (conversation -> modules/*), so this is the one mutual pair.
+  "modules/*": ["modules", "conversation", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // policy decides from data only, approvals sit above it.
+  approvals: ["modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
+  policy: ["modules", "tenants", "intake", "memory", "secrets", "core"], // reads modules/index lazily; never imports approvals; capabilities.ts reads the intake links, policy.ts knows what a note path is
+  // tenants, intake and memory are one box, above the secrets. tenants also holds the payer (who pays for a call), the failures a refused call raises and the one-shot Haiku call.
+  tenants: ["intake", "memory", "secrets", "core"],
+  intake: ["modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
+  memory: ["tenants", "intake", "secrets", "core"],
+  secrets: ["core"],
+  // the bottom: settings, state, audit, the message log and the other leaves; imports nothing of the app.
+  core: [],
 };
 
 // Files nothing under src/ may import: the entry points.
@@ -99,6 +104,11 @@ test("boundaries: every feature folder under src/modules/ holds its declaration 
   assert.deepEqual(without, [], "module.ts is the light declaration; the server, guard, rules and store files sit next to it");
 });
 
+test("boundaries: the src/ root holds only the entry points", () => {
+  const root = readdirSync(SRC, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name).sort();
+  assert.deepEqual(root, ["cli.ts", "doctor.ts", "main.ts"], "everything else belongs in a folder (docs/ARCHITECTURE.md \"Project layout\")");
+});
+
 test("boundaries: the checker rejects a deliberately wrong import", () => {
   // a made-up graph in the target layout: core reaching up into approvals, a policy file importing a feature, a module importing the entry point
   const wrong: Graph = {
@@ -108,10 +118,11 @@ test("boundaries: the checker rejects a deliberately wrong import", () => {
     "secrets/store.ts": ["core/settings.ts"],
   };
   const found = violations(wrong);
-  assert.equal(found.length, 3, found.join("\n"));
+  assert.equal(found.length, 4, found.join("\n"));
   assert.match(found[0]!, /core\/settings\.ts \(core\) imports approvals\/ask\.ts \(approvals\)/);
   assert.match(found[1]!, /policy\/classify\.ts/);
   assert.match(found[2]!, /entry point main\.ts/);
+  assert.match(found[3]!, /modules\/index\.ts \(modules\) imports main\.ts/);
   assert.deepEqual(violations({ "secrets/store.ts": ["core/settings.ts"], "core/settings.ts": [] }), [], "a downward import is fine");
   assert.match(violations({ "unlisted/x.ts": [] })[0]!, /no row in ALLOWED/);
 });

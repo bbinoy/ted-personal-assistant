@@ -5,8 +5,8 @@ import { UpstreamError } from "./mcpproxy.ts";
 import { OAuthProblem, postForm, type OAuthProvider } from "./oauth.ts";
 import type { Data } from "../secrets/openbao.ts";
 import { appBao, NOTION_ITEM, TenantSecrets } from "../secrets/secrets.ts";
-import { settings } from "../settings.ts";
-import { dataPath, readJson, writeJson } from "../state.ts";
+import { settings } from "../core/settings.ts";
+import { dataPath, readJson, writeJson } from "../core/state.ts";
 
 // Notion for friends, the sign-in half (the calls to the hosted server are notionmcp.ts). Notion runs a hosted MCP server (settings.notion.mcpUrl, by default
 // https://mcp.notion.com/mcp) that gives a person access by HER OWN workspace permissions after a one-click OAuth consent. As a client of it, this instance:

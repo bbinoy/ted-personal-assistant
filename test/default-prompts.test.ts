@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { delegatedText, expertSetup } from "../src/heartbeat/delegation.ts";
+import { delegatedText, expertSetup } from "../src/run/delegation.ts";
 import { mailSlot } from "../src/modules/index.ts";
-import { missingSetup, setupItems } from "../src/notes.ts";
-import { chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, heartbeatInstruction, heartbeatSystem } from "../src/persona.ts";
-import { PROFILES } from "../src/profiles.ts";
-import { ownerSkills } from "../src/skills.ts";
-import { settings } from "../src/settings.ts";
+import { missingSetup, setupItems } from "../src/modules/index.ts";
+import { chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, heartbeatInstruction, heartbeatSystem } from "../src/run/persona.ts";
+import { PROFILES } from "../src/run/profiles.ts";
+import { ownerSkills } from "../src/modules/skills.ts";
+import { settings } from "../src/core/settings.ts";
 
 // The default (MAIL_PROVIDER=mailbird) must not drift: every prompt and the offered skills are compared with a stored copy.
 // A deliberate change to a prompt means regenerating the fixture on purpose: SNAPSHOT_WRITE=1 npm test (the same switch as the run options' fixture). A missing fixture is a

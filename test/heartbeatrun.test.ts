@@ -3,16 +3,16 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { group, owner, type Conversation } from "../src/conversation.ts";
-import { clampLook, parseAnswer, HEARTBEAT_SCHEMA } from "../src/heartbeat/rules.ts";
+import { group, owner, type Conversation } from "../src/conversation/conversation.ts";
+import { clampLook, parseAnswer, HEARTBEAT_SCHEMA } from "../src/run/rules.ts";
 import { lastLookText, lookInstruction, lookPrompt } from "../src/heartbeat/look.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { HEARTBEAT_LOG, readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
-import { ledgerEntries, recordMessage, type Kind } from "../src/messages.ts";
-import { lookState, parseWake } from "../src/ledger.ts";
-import { settings } from "../src/settings.ts";
-import { dataPath, readText } from "../src/state.ts";
-import { createWakeups } from "../src/wake.ts";
+import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
+import { lookState, parseWake } from "../src/conversation/ledger.ts";
+import { settings } from "../src/core/settings.ts";
+import { dataPath, readText } from "../src/core/state.ts";
+import { createWakeups } from "../src/heartbeat/wake.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -186,8 +186,8 @@ test("owner's look: pause and mayRun stop it before any model call, nothing is r
   assert.equal(await paused.w.look(paused.conv, DAY), "guarded");
   const spent = rig(() => ({}), { spent: true });
   assert.equal(await spent.w.look(spent.conv, DAY), "blocked");
-  const { coolingDown, resetCooldown } = await import("../src/cooldown.ts");
-  const { failure } = await import("../src/errors.ts");
+  const { coolingDown, resetCooldown } = await import("../src/core/cooldown.ts");
+  const { failure } = await import("../src/tenants/errors.ts");
   failure("rate_limit", "success"); // a usage limit starts the cooldown
   assert.ok(coolingDown());
   const cooling = rig(() => ({}));

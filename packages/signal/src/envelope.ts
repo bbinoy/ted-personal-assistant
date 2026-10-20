@@ -19,7 +19,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "imag
 export const LONG_TEXT_TYPE = "text/x-signal-plain";
 const isLongTextType = (a: any) => String(a?.contentType ?? "").split(";")[0]!.trim().toLowerCase() === LONG_TEXT_TYPE;
 
-const MAX_FILE_NAME = 200; // a file name is a label; pairs with LIMITS.preview in src/sanitize.ts
+const MAX_FILE_NAME = 200; // a file name is a label; pairs with LIMITS.preview in src/core/sanitize.ts
 
 // An attachment id becomes a file name, so only plain names pass (no path separators, nothing hidden).
 const safeId = (id: string) => /^[\w.-]{1,100}$/.test(id) && !id.startsWith(".");

@@ -64,9 +64,9 @@ export interface LongTextRef {
 export const MAX_AUDIO_BYTES = 25_000_000;
 /** Pictures larger than this (bytes) are not surfaced. */
 export const MAX_IMAGE_BYTES = 20_000_000;
-/** Other files larger than this (bytes) are not read; the sender is told. Pairs with LIMITS.textFile in src/sanitize.ts. */
+/** Other files larger than this (bytes) are not read; the sender is told. Pairs with LIMITS.textFile in src/core/sanitize.ts. */
 export const MAX_FILE_BYTES = 20_000_000;
-/** The most of a long message that is read (bytes); the rest is cut. Pairs with LIMITS.message in src/sanitize.ts, which must stay above it. */
+/** The most of a long message that is read (bytes); the rest is cut. Pairs with LIMITS.message in src/core/sanitize.ts, which must stay above it. */
 export const MAX_LONG_TEXT_BYTES = 64 * 1024;
 
 /**

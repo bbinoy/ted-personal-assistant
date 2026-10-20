@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseQuote } from "@ted-assistant/signal";
-import { createOutbound } from "../src/outbound.ts";
-import { shouldThread, SLOW_REPLY_MS, withQuoteContext } from "../src/quote.ts";
+import { createOutbound } from "../src/conversation/outbound.ts";
+import { shouldThread, SLOW_REPLY_MS, withQuoteContext } from "../src/conversation/quote.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 test("quote: signal-cli's quote object is parsed; an empty or attachment-only quote is nothing", () => {
@@ -45,7 +45,7 @@ test("a long reply is one message with the quote, and its cut body coming back i
 });
 
 test("voice replies: only a leading [[voice]] marks a spoken reply", async () => {
-  const { splitVoice } = await import("../src/voicereply.ts");
+  const { splitVoice } = await import("../src/conversation/voicereply.ts");
   assert.deepEqual(splitVoice("[[voice]] Hey Ben, all set."), { voice: "Hey Ben, all set.", text: "Hey Ben, all set." });
   assert.deepEqual(splitVoice("  [[VOICE]]\nYes."), { voice: "Yes.", text: "Yes." });
   assert.deepEqual(splitVoice("Sure. [[voice]] not at the start"), { text: "Sure. [[voice]] not at the start" });

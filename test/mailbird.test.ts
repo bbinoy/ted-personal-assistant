@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { connectionFrom } from "../src/mailbird.ts";
+import { connectionFrom } from "../src/modules/mailbird/mailbird.ts";
 
 const args = (url: string) => ["-y", "mcp-remote", url, "--header", "Authorization: Bearer abc", "--transport", "http-only"];
 

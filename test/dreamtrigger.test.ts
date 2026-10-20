@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyPlan, undoLatest } from "../src/dreamapply.ts";
-import { dreamTrigger, readNoteFiles } from "../src/dream.ts";
-import { loadSettings } from "../src/settings.ts";
-import { presetFor } from "../src/preset.ts";
+import { applyPlan, undoLatest } from "../src/memory/dreamapply.ts";
+import { dreamTrigger, readNoteFiles } from "../src/conversation/dream.ts";
+import { loadSettings } from "../src/core/settings.ts";
+import { presetFor } from "../src/core/preset.ts";
 
 // The dream has its own daily trigger (a tick job at DREAM_HOUR); nothing else starts it. It stays plain code, never sees a status note, and never undoes one.
 

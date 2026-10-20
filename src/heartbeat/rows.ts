@@ -1,4 +1,4 @@
-import { appendLine, readText } from "../state.ts";
+import { appendLine, readText } from "../core/state.ts";
 
 // The heartbeat run's own record: one row per look of any conversation in state/heartbeat.jsonl, counts and flags only. NEVER a message's words, a sender, a subject or a
 // friend's name or id: what was said is in the conversation's log, and `npm run heartbeat-report` needs only these numbers.

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Conversation } from "../src/conversation.ts";
-import { createWakeups } from "../src/wake.ts";
+import type { Conversation } from "../src/conversation/conversation.ts";
+import { createWakeups } from "../src/heartbeat/wake.ts";
 
 const T0 = new Date("2026-10-12T12:00:00Z");
 const G = "wake-compact-group-0123456789ab";

@@ -1,4 +1,4 @@
-import type { Source } from "../audit.ts";
+import type { Source } from "../core/audit.ts";
 import { isPlainWebAddress } from "../policy/webaddress.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 

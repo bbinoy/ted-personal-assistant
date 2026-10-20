@@ -20,11 +20,11 @@ If you do not use Proton, none of that is needed.
 
 ### Gmail: MAIL_PROVIDER=gmail
 
-Gmail is built in. Set `MAIL_PROVIDER=gmail` (and `MAIL_SELF_ADDRESS` if the brief may be emailed to you, `BRIEF_EMAIL=on`) and the Gmail module `src/modules/gmail.ts` is loaded instead of the Mailbird one: the mail check and the agent's turns use claude.ai's own Gmail connector (`mcp__claude_ai_Gmail__*`, inherited from your Claude login), the rows say what each tool is (reads and drafts run, `unlabel_thread` is the archive, `send_message`, `reply` and `forward` are judged and asked about with the real recipients, the rest asks), `src/gmailrules.ts` adds the rules a row cannot say (TRASH and SPAM labels, attachment content, the brief to oneself), and the `gmail` skill replaces the `mailbird` one. [SETUP.md](SETUP.md) walks through it; Nothing in `src/` needs replacing.
+Gmail is built in. Set `MAIL_PROVIDER=gmail` (and `MAIL_SELF_ADDRESS` if the brief may be emailed to you, `BRIEF_EMAIL=on`) and the Gmail module `src/modules/gmail/module.ts` is loaded instead of the Mailbird one: the mail check and the agent's turns use claude.ai's own Gmail connector (`mcp__claude_ai_Gmail__*`, inherited from your Claude login), the rows say what each tool is (reads and drafts run, `unlabel_thread` is the archive, `send_message`, `reply` and `forward` are judged and asked about with the real recipients, the rest asks), `src/modules/gmail/gmailrules.ts` adds the rules a row cannot say (TRASH and SPAM labels, attachment content, the brief to oneself), and the `gmail` skill replaces the `mailbird` one. [SETUP.md](SETUP.md) walks through it; Nothing in `src/` needs replacing.
 
 ### A different mail client or IMAP: a module in the `mail` slot
 
-A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird.ts` and `gmail.ts` are the two examples). What it must provide:
+A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird/module.ts` and `gmail.ts` are the two examples). What it must provide:
 
 1. **Rows** for its tools (see "Add a tool" below), with the actions the policy knows (`read`, `draft`, `reply-draft`, `send`, `reply`, `forward`, `archive`, `restore`, `label`, `select`, `send-self`...) and a `view` on the tools that send, so that an approval can show the real recipients.
 2. **The `mail` slot** (`MailSlot` in `src/modules/types.ts`): how the brief is delivered and which tool call is the brief, the brief's instructions, the chat prompt's note about drafts, and how a send is read back (`readBack`, `views`).
@@ -41,7 +41,7 @@ A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird.ts
 | `search_conversations(query, limit)` | restore fallback by subject | `[{ conversationId, subject }]` |
 
 4. **Hide what the model does not need**: `hide: { prefix, visible, valid, hint }` names the connector's tools the model is shown (every tool schema is sent on every model call); `<MODULE>_TOOLS` in `.env` replaces the list.
-5. **A skill** for the provider in `plugin/skills/<name>/` (`skills: [{ name, required: true }]`), and the provider name added to `MAIL_PROVIDER`'s accepted values in `src/settings.ts`.
+5. **A skill** for the provider in `plugin/skills/<name>/` (`skills: [{ name, required: true }]`), and the provider name added to `MAIL_PROVIDER`'s accepted values in `src/core/settings.ts`.
 
 IMAP maps cleanly onto the table: list = `SEARCH`/`FETCH` on INBOX by UID, archive = `MOVE` to the archive mailbox, conversation id = Message-ID or UID (and note that moving a message changes its UID, which is why `restore` tries several ids). `test/modules.test.ts` and `test/manifestrows.test.ts` check the shape of a new module and pin its rows.
 
@@ -67,7 +67,7 @@ What a module may not do: decide policy. Whether a call is allowed, asked or den
 What makes the harness "Ted" is data in a folder, `assistants/<name>/` (`ASSISTANT_PRESET=<name or folder path>` picks it; default `ted`). To make a different assistant, copy the folder or start a new one that extends it:
 
 1. `assistants/<name>/preset.json` with `"extends": "ted"` and only the keys you change: the **rhythm** (heartbeat interval and quiet hours, the brief's skill and hours, the heartbeat run's day interval, the dream), the **note categories**, the **profile table** (turns, budget and notes of each unattended run) and the assistant's own **skills** (`core`, with the ones the doctor requires, and the `order` of the owner's list). The environment variables of the rhythm still override their defaults.
-2. `assistants/<name>/persona/<prompt>.md` for any prompt whose words you change (the personality, the chat, a group, the brief, the gates' default rules...). A text is a template: `{{name}}`, `{{#flag}}...{{/flag}}`, `{{^flag}}...{{/flag}}`; the names each text may use are listed in `PROMPTS` in `src/preset.ts`. A text that uses another name, a missing file or an out-of-range number stops the start with a message naming the file.
+2. `assistants/<name>/persona/<prompt>.md` for any prompt whose words you change (the personality, the chat, a group, the brief, the gates' default rules...). A text is a template: `{{name}}`, `{{#flag}}...{{/flag}}`, `{{^flag}}...{{/flag}}`; the names each text may use are listed in `PROMPTS` in `src/core/preset.ts`. A text that uses another name, a missing file or an out-of-range number stops the start with a message naming the file.
 3. Skills it brings are folders in `plugin/skills/`; a preset lists them as core skills and, for a skill that belongs to a tool, the module brings it instead.
 4. `ASSISTANT_NAME`, `OWNER_NAME` in `.env` set the names.
 
@@ -85,9 +85,9 @@ A phone is the right place to talk to something that watches your inbox: it is a
 
 Signal via `signal-cli`, linked as a **secondary device**, reading the owner's **Note to Self**. That has three consequences baked into the code, and you should decide which still apply to your messenger:
 
-- Messages the agent sends to Note to Self come back to it as incoming messages. `src/outbound.ts` contains an **echo guard** for that (remembered texts and timestamps). A **bot** account (Telegram, Slack, Discord) does not echo, so this can be dropped.
-- The linked device receives *all* the owner's traffic, so `src/guards.ts` accepts only the one thread. With a bot you instead allowlist a user id / chat id.
-- Text formatting is sent as separate style ranges (`src/markdown.ts`), a Signal specificity.
+- Messages the agent sends to Note to Self come back to it as incoming messages. `src/conversation/outbound.ts` contains an **echo guard** for that (remembered texts and timestamps). A **bot** account (Telegram, Slack, Discord) does not echo, so this can be dropped.
+- The linked device receives *all* the owner's traffic, so `src/conversation/guards.ts` accepts only the one thread. With a bot you instead allowlist a user id / chat id.
+- Text formatting is sent as separate style ranges (`src/conversation/markdown.ts`), a Signal specificity.
 
 ### What each piece must provide
 
@@ -102,11 +102,11 @@ Then adjust the app-side pieces that carry platform conventions:
 
 | File | Change |
 |---|---|
-| `src/markdown.ts` | emit the target's markup instead of Signal style ranges (Telegram MarkdownV2/HTML entities, Slack mrkdwn, WhatsApp `*bold*`). `splitSections` and the section-per-message brief delivery carry over unchanged. |
-| `src/outbound.ts` | keep or drop the echo guard, as above. The platform's message limit is `capabilities.maxMessageBytes`. |
-| `src/guards.ts` | allowlist by your platform's user/chat id. Keep it pure and keep the tests. |
+| `src/conversation/markdown.ts` | emit the target's markup instead of Signal style ranges (Telegram MarkdownV2/HTML entities, Slack mrkdwn, WhatsApp `*bold*`). `splitSections` and the section-per-message brief delivery carry over unchanged. |
+| `src/conversation/outbound.ts` | keep or drop the echo guard, as above. The platform's message limit is `capabilities.maxMessageBytes`. |
+| `src/conversation/guards.ts` | allowlist by your platform's user/chat id. Keep it pure and keep the tests. |
 | `src/approvals/approvals.ts` | unchanged. It matches reactions to the approval message by id; any platform with message ids and reactions works. Without reactions, the approval is a text reply. |
-| `src/settings.ts`, `.env.example` | the platform's settings (a bot token, say), kept in `.env`. |
+| `src/core/settings.ts`, `.env.example` | the platform's settings (a bot token, say), kept in `.env`. |
 
 ### Notes per platform
 
@@ -128,7 +128,7 @@ These are starting points, not tested here; check each platform's current docs.
 - **What may run unattended**: the rows of the tool modules in `src/modules` (the manifest, `src/policy/toolmanifest.ts`, is their union). Start by reading them (a read or the assistant's own plumbing is free, everything else is judged by the approval judge, whose prompt is in `src/approvals/approvaljudge.ts`); unknown tools ask. The default policy denies one financial connector (Interactive Brokers) by name as an example; add any other sensitive connector you have.
 - **What gets archived**: the heartbeat run decides from the sender, subject and headers, by the judgement and examples in `assistants/<name>/persona/heartbeat.md` (the "New mail" paragraph): archive what is clearly routine or handled, open a mail only when unsure, leave anything that may need you. Adjust the wording, or tell the assistant a preference in chat ("remember that mail from X is never urgent", a `triage-` note). There is no keyword blocklist; the safety net is that archiving is judged, audited with the mail's id and reversible (`npm run restore`).
 - **What may be auto-archived**: `ARCHIVE_KINDS` and the per-tick cap in `src/actions.ts`.
-- **Schedule and limits**: every tunable is an env var, validated at startup in `src/settings.ts`.
+- **Schedule and limits**: every tunable is an env var, validated at startup in `src/core/settings.ts`.
 - **The brief's shape**: it is whatever `plugin/skills/daily-brief/SKILL.md` says. Headings (`## `) become separate Signal messages.
 
 Back to the [README](../README.md) · [Setup](SETUP.md) · [Architecture](ARCHITECTURE.md) · [Safety](SAFETY.md)

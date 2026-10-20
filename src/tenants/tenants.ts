@@ -1,16 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { audit } from "../audit.ts";
-import { isInside } from "../contain.ts";
+import { audit } from "../core/audit.ts";
+import { isInside } from "../core/contain.ts";
 import { OneTimeCodes } from "../secrets/onetime.ts";
-import { FILE as OWNER_LOG, type Summarize } from "../messages.ts";
-import { NOTES_DIR } from "../notes.ts";
-import { clean, LIMITS, oneLine } from "../sanitize.ts";
+import { FILE as OWNER_LOG, type Summarize } from "../core/messages.ts";
+import { NOTES_DIR } from "../memory/notes.ts";
+import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
-import { OWNER_SESSION_FILE } from "../session.ts";
-import { settings } from "../settings.ts";
-import { dataPath, readJson, writeJson } from "../state.ts";
-import { isZone } from "../timezone.ts";
+import { OWNER_SESSION_FILE } from "../core/ownerkey.ts";
+import { OWNER, settings } from "../core/settings.ts";
+import { dataPath, readJson, writeJson } from "../core/state.ts";
+import { isZone, systemZone } from "../core/timezone.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
 // Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (the folders and files the
@@ -454,3 +454,12 @@ export function mayNotice(ctx: Pick<TenantContext, "metaFile">, kind: string, no
 
 // Her history is bounded like every log, but never summarised by a model: that call would run on the owner's login, over her words.
 export const plainSummary: Summarize = async (_previous, old) => `${old.length} earlier messages (older history is not kept in full)`;
+
+// Who the person in a private chat is called in the prompts built for it: the owner as always, a tenant by her name. (Takes any conversation's tenantId.)
+export const speakerOf = (conv: { readonly tenantId?: string }): string => (conv.tenantId ? (tenantById(conv.tenantId)?.name ?? "a friend") : OWNER);
+
+// The time zone a conversation's clock runs in (core/timezone.ts): a friend's own if her tenant.json names one, else the owner's, the Mac's (a group's included).
+export function zoneOf(conv: { readonly tenantId?: string }): string {
+  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
+  return (rec && tenantContext(rec).config.timeZone) || systemZone();
+}

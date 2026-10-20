@@ -1,37 +1,37 @@
-import "./log.ts"; // first: timestamps, redaction and owner-only files for everything below
-import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation.ts";
-import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./agent.ts";
-import { compactConversation, compactDue } from "./chatsession.ts";
+import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
+import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
+import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
+import { compactConversation, compactDue } from "./run/chatsession.ts";
 import { approveIn, setApprovers } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
-import { acceptOwner } from "./guards.ts";
-import { createDreamer, dreamConversations, dreamTrigger } from "./dream.ts";
-import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
+import { acceptOwner } from "./conversation/guards.ts";
+import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
+import { createGroupBrain, groupName, ownerInGroup } from "./conversation/group.ts";
 import { keyNotices } from "./tenants/keynotice.ts";
-import { groupDir, recordGroup } from "./groupstore.ts";
-import { logTail } from "./gate.ts";
-import { createWakeups } from "./wake.ts";
-import { startHeartbeat, startJobs } from "./heartbeat.ts";
-import { ensureNotesDir } from "./notes.ts";
-import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./messages.ts";
-import { summarizeWithHaiku } from "./summarize.ts";
+import { groupDir, recordGroup } from "./conversation/groupstore.ts";
+import { logTail } from "./conversation/gate.ts";
+import { createWakeups } from "./heartbeat/wake.ts";
+import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
+import { ensureNotesDir } from "./memory/notes.ts";
+import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
+import { summarizeWithHaiku } from "./conversation/summarize.ts";
 import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
-import { preparePicture } from "./image.ts";
-import { prepareFile, type AudioTools } from "./document.ts";
-import { createOutbound } from "./outbound.ts";
+import { preparePicture } from "./run/image.ts";
+import { prepareFile, type AudioTools } from "./conversation/document.ts";
+import { createOutbound } from "./conversation/outbound.ts";
 import { Ledger } from "./modules/browse/payments.ts";
-import { applyCredentialMode, mask, settings, signalIdentity } from "./settings.ts";
+import { applyCredentialMode, mask, settings, signalIdentity } from "./core/settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
-import { unsupportedForVoice } from "./lang.ts";
+import { unsupportedForVoice } from "./conversation/lang.ts";
 import { directOf, type IncomingMessage } from "@ted-assistant/messenger";
-import { loadMessengerInUse } from "./messenger.ts";
+import { loadMessengerInUse } from "./conversation/messenger.ts";
 import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-assistant/speech/tts";
-import { Limiter } from "./limiter.ts";
+import { Limiter } from "./core/limiter.ts";
 import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
 import { sweepStaleRuns } from "./modules/browse/browse.ts";
-import { createTenantRunner } from "./tenants/tenantrun.ts";
+import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { tenantHooks } from "./tenants/tenanttools.ts";
 import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
@@ -97,13 +97,13 @@ const audioTools: AudioTools = {
   transcribe: (file, maxSeconds) => transcribing.run(() => transcribe(file, settings.whisperModel, maxSeconds)),
 };
 
-// Group chats (src/group.ts): in any group the owner is a member of. Everything said or reacted there goes
+// Group chats (src/conversation/group.ts): in any group the owner is a member of. Everything said or reacted there goes
 // into that group's own history; the brain decides when the assistant speaks. No access to anything private.
 const isOwnerAccount = (who: { number?: string; uuid?: string }) => resolveSender({ number: who.number, aci: who.uuid })?.role === "admin";
 const fromOwner = (w: { from: string; fromUuid?: string }) => isOwnerAccount({ number: w.from || undefined, uuid: w.fromUuid });
 const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(), isOwnerAccount); // is the owner in this group?
 
-// Both kinds of conversation run through one pipeline (src/conversation.ts). Spoken replies need the
+// Both kinds of conversation run through one pipeline (src/conversation/conversation.ts). Spoken replies need the
 // assistant's own chat (in Note to Self our own voice message would echo back as if the owner had sent
 // it) and the local speech setup.
 // Several people on one instance (TENANTS=on, src/tenants/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.

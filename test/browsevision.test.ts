@@ -13,8 +13,8 @@ import { browserServer } from "../src/modules/browse/browseserver.ts";
 import { hiddenBrowserTools, HIDDEN_BROWSER_TOOLS, isAllowedBrowserTool, type VisionMode } from "../src/modules/browse/browserules.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, screenshotInput, validPoint } from "../src/modules/browse/browsevision.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { loadSettings } from "../src/settings.ts";
-import { cleanToolOutput } from "../src/toolclean.ts";
+import { loadSettings } from "../src/core/settings.ts";
+import { cleanToolOutput } from "../src/core/toolclean.ts";
 
 // The vision experiment (BROWSE_VISION): off changes nothing; read lets a screenshot reach the model; click resolves a point itself.
 

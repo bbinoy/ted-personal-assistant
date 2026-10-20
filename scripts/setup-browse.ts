@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { ROOT } from "../src/paths.ts";
+import { ROOT } from "../src/core/paths.ts";
 
 const quiet = process.argv.includes("--quiet");
 const say = (m: string) => (quiet ? undefined : console.log(m));

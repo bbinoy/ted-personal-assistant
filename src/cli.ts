@@ -1,9 +1,9 @@
-import { readAudit } from "./audit.ts";
+import { readAudit } from "./core/audit.ts";
 import { entryFor } from "./policy/toolmanifest.ts";
 import { mailRuntime } from "./modules/runtime.ts";
-import { localTime } from "./pause.ts";
+import { localTime } from "./core/pause.ts";
 import { doctor } from "./doctor.ts";
-import { settings } from "./settings.ts";
+import { settings } from "./core/settings.ts";
 import { agreement } from "./approvals/autojudge.ts";
 import { APPROVAL_DECISIONS, approvalLines } from "./approvals/approvalreport.ts";
 
