@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { tick } from "./util.ts";
 import { firstWarm, SpareSlot } from "../src/warmslot.ts";
 import { askGateWith, prepareGate } from "../src/gate.ts";
-import { groupCapabilities } from "../src/capabilities.ts";
+import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/skills.ts";
 import { prepare, runConversation } from "../src/agent.ts";
 import { group, owner } from "../src/conversation.ts";

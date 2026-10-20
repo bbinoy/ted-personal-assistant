@@ -1,6 +1,6 @@
 import { query, startup, type Options, type SDKMessage, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
-import { settings } from "./settings.ts";
-import { firstWarm, SpareSlot } from "./warmslot.ts";
+import { settings } from "../settings.ts";
+import { firstWarm, SpareSlot } from "../warmslot.ts";
 
 // The warm Haiku process of the approval judge (approvaljudge.ts: one prompt and schema for the answer and write tasks of approvalmodel.ts and the
 // action task of autojudge.ts, so one spare serves both). Its options are fixed when a process starts, so the slot is keyed by them.

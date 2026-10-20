@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tick as settle } from "./util.ts";
-import * as approvals from "../src/approvals.ts";
-import { makeApprove } from "../src/approvalask.ts";
-import { createApprovers } from "../src/approvers.ts";
-import type { OpenView } from "../src/approvalprompt.ts";
+import * as approvals from "../src/approvals/approvals.ts";
+import { makeApprove } from "../src/approvals/approvalask.ts";
+import { createApprovers } from "../src/approvals/approvers.ts";
+import type { OpenView } from "../src/approvals/approvalprompt.ts";
 import { TYPED_YES_NEEDED } from "../src/paymentrules.ts";
 
 // Approvals are asked in the conversation that triggered the action, one approver per conversation: the owner's chat (her own turns and her

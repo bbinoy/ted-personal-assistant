@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,7 @@ const { createTenantRunner } = await import("../src/tenantrun.ts");
 const { keyNotices } = await import("../src/keynotice.ts");
 const { askGateWith, gateSystem, parseGate } = await import("../src/gate.ts");
 const { owner, tenant } = await import("../src/conversation.ts");
-const { allows } = await import("../src/capabilities.ts");
+const { allows } = await import("../src/policy/capabilities.ts");
 const { hasPresets, onLogin } = await import("../src/conversationmodel.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recordCost, spentToday } = await import("../src/budget.ts");

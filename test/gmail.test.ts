@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Verdict } from "../src/autojudge.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/audit.ts";
 import { briefInstructions, briefDelivery, runBriefAttempt } from "../src/brief.ts";
 import { requiredSkills } from "../src/doctor.ts";
@@ -10,13 +10,13 @@ import { isInboxArchive, isSelfSend } from "../src/gmailrules.ts";
 import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
 import { setGmailReaders } from "../src/modules/gmail.ts";
 import { gmailChecks } from "../src/modules/runtime.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
-import { classify, hiddenTools } from "../src/policy.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
+import { classify, hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { readJson, writeJson } from "../src/state.ts";
 import { cleanToolOutput } from "../src/toolclean.ts";
-import { addrs, mailView } from "../src/toolmanifest.ts";
+import { addrs, mailView } from "../src/policy/toolmanifest.ts";
 
 // MAIL_PROVIDER=gmail. Everything here runs on fake connector output (the shapes follow the connector's published tool descriptions);
 // none of it has met the live connector.

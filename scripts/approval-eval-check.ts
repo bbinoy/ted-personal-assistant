@@ -2,9 +2,9 @@
 // on real-looking calls, with REAL Haiku calls (one call per question).
 //   HARNESS_DATA_DIR=$(mktemp -d) node --conditions=workspace-source scripts/approval-eval-check.ts [out.json]
 import { writeFileSync } from "node:fs";
-import { describeCall } from "../src/format.ts";
-import { composeQuestion } from "../src/approvalmodel.ts";
-import { factsOf, validateQuestion } from "../src/questionfacts.ts";
+import { describeCall } from "../src/approvals/format.ts";
+import { composeQuestion } from "../src/approvals/approvalmodel.ts";
+import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 
 const MAIL = "mcp__claude_ai_Gmail__send_message";
 const FWD = "mcp__claude_ai_Gmail__forward";

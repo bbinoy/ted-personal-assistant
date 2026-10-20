@@ -27,12 +27,13 @@ export const ALLOWED: Record<string, readonly string[]> = {
   modules: [".", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   // a feature folder: its declaration (light) and its server, guard, rules and store files.
   "modules/*": [".", "modules", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  // folders that exist (R3): policy decides from data only, approvals sit above it.
+  approvals: [".", "modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
+  policy: [".", "modules", "tenants", "secrets", "core"], // reads modules/index lazily; never imports approvals
   // the folders of the target layout that do not exist yet (rows stay until their chunk lands):
   heartbeat: [".", "conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   conversation: [".", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   run: [".", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
-  approvals: [".", "modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
-  policy: [".", "modules", "tenants", "secrets", "core"], // reads modules/index lazily
   tenants: [".", "intake", "memory", "secrets", "core"],
   intake: [".", "modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
   memory: [".", "tenants", "intake", "secrets", "core"],

@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { audit } from "./audit.ts";
-import { allows } from "./capabilities.ts";
+import { allows } from "./policy/capabilities.ts";
 import { cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Held, type Incoming, type PipelineDeps, type Turn, type TurnResult } from "./conversationmodel.ts";
 import { findMessage, revisionsOf, type Extra, type Kind } from "./messages.ts";
 import { DELETED_LINE, editNote, isAuthor, sameText } from "./edit.ts";
@@ -13,7 +13,7 @@ import { cardCommand } from "./card.ts";
 import { TYPED_YES_NEEDED } from "./paymentrules.ts";
 import { withSend, type Content, type SendSink } from "./send.ts";
 import { reactionMessage, reactionPrompt, splitReaction } from "./reaction.ts";
-import { scopeOf } from "./turnscope.ts";
+import { scopeOf } from "./approvals/turnscope.ts";
 import { splitVoice, VOICE_FAILED_NOTE, voiceOption } from "./voicereply.ts";
 import { settings } from "./settings.ts";
 import { UNSURE } from "./lang.ts";

@@ -8,7 +8,7 @@ import { BrowseGuard } from "../src/browseguard.ts";
 import { sanitizeResult, shotCaptions } from "../src/browse.ts";
 import { createPipeline, group, owner } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
-import { classify } from "../src/policy.ts";
+import { classify } from "../src/policy/policy.ts";
 import { adoptShots, newShotsDir, SHOT_TTL_MS, sweepShots } from "../src/shots.ts";
 import { sendNow, withSend, type Content } from "../src/send.ts";
 import { OWNER_KEY } from "../src/ownerkey.ts";

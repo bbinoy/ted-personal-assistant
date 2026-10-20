@@ -269,7 +269,7 @@ export function loadSettings(env: Env) {
     browseLocale: env.BROWSE_LOCALE?.trim() || "en-GB", // the browser's language (Accept-Language, navigator.language): an ordinary one, not the headless default en-US
     browseBrowserPath: env.BROWSE_BROWSER_PATH?.trim() || undefined, // advanced: a Chromium or Chrome executable instead of the one npm run setup:browse installs
 
-    // The one switch for the approval judge (src/autojudge.ts): auto (default) lets it skip the question for what follows from your request
+    // The one switch for the approval judge (src/approvals/autojudge.ts): auto (default) lets it skip the question for what follows from your request
     // or your standing tasks, inside the floor that code sets; off asks you about everything that is not a plain read.
     autoApprove: autoApprove(env),
 

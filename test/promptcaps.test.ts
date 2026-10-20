@@ -11,7 +11,7 @@ process.env.TENANT_ANTHROPIC_API_KEY = "instance-key-for-prompt-tests";
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { capabilitiesOf } = await import("../src/capabilities.ts");
+const { capabilitiesOf } = await import("../src/policy/capabilities.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
 const { group, tenant } = await import("../src/conversation.ts");
 const { groupSystem, tenantSystem } = await import("../src/persona.ts");

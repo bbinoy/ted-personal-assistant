@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { draftCollector as collector, createProposer, type Mail } from "../src/propose.ts";
 import { mailSlot } from "../src/modules/index.ts";
 const draftCollector = () => collector(mailSlot("mailbird")!.createdDraft);
-import { extractMessageId } from "../src/mailview.ts";
+import { extractMessageId } from "../src/policy/mailview.ts";
 import { authoredPart, proposalText, sendApprovalText, viewDraft } from "../src/proposals.ts";
 
 const msg = (body: string, to = ["armon@example.com"], cc: string[] = []) => ({ to: to.map((email) => ({ email })), cc: cc.map((email) => ({ email })), subject: "Re: Coffee", body });

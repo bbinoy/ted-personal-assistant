@@ -1,6 +1,6 @@
-import type { AuditEntry } from "./audit.ts";
-import { localTime } from "./pause.ts";
-import { LIMITS } from "./sanitize.ts";
+import type { AuditEntry } from "../audit.ts";
+import { localTime } from "../pause.ts";
+import { LIMITS } from "../sanitize.ts";
 
 // `npm run report`: each approval ask with the exact arguments next to the question that was
 // sent and what became of it, for review. Newest last. A line "ARGUMENTS DIFFER" means the call that ran was not the one asked about

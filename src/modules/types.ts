@@ -7,8 +7,8 @@ import type { createProposer } from "../propose.ts";
 import type { DraftView } from "../proposals.ts";
 import type { Capability } from "../tenants.ts";
 import type { TenantRun } from "../tenanttools.ts";
-import type { ConfirmDelete } from "../neverallowed.ts";
-import type { MailInput, MailView } from "../mailview.ts";
+import type { ConfirmDelete } from "../policy/neverallowed.ts";
+import type { MailInput, MailView } from "../policy/mailview.ts";
 
 // A TOOL MODULE: one file in src/modules/ that says everything the harness needs to know about one tool (or one family of tools): how it connects, which
 // tools it has and what they are (the manifest rows), the floor rules only it can state, the skills it brings, the setup it needs. Nothing else in the code

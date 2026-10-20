@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,12 +21,12 @@ const T = await import("../src/tenants.ts");
 const { SessionHub } = await import("../src/mcpproxy.ts");
 const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/googlemcp.ts");
 const { serversFor, LIFECYCLE, stopAll, dropAll } = await import("../src/modules/runtime.ts");
-const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
-const { makeCanUseTool } = await import("../src/permissions.ts");
-const { classify } = await import("../src/policy.ts");
-const { allows } = await import("../src/capabilities.ts");
+const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
+const { classify } = await import("../src/policy/policy.ts");
+const { allows } = await import("../src/policy/capabilities.ts");
 const { GOOGLE_PREFIX } = await import("../src/modules/google.ts");
 
 const FAKE = new URL("./fakegoogle.ts", import.meta.url).pathname;

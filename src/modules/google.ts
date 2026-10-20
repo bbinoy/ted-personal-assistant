@@ -1,6 +1,6 @@
-import { namesNoGuests } from "../guests.ts";
-import { DELETE_CONFIRM } from "../neverallowed.ts";
-import { nativeView } from "../mailview.ts";
+import { namesNoGuests } from "../policy/guests.ts";
+import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
+import { nativeView } from "../policy/mailview.ts";
 import { notifyLine } from "./calendar.ts";
 import { named } from "./gmail.ts";
 import { handlerTaskText } from "./mailtask.ts";

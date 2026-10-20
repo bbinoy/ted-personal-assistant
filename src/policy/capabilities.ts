@@ -1,8 +1,8 @@
-import type { Conversation } from "./conversationmodel.ts";
-import { baseUrlProblem, intakeToolsFor } from "./intakelinks.ts";
-import { googleReady, settings } from "./settings.ts";
-import { skillsFor } from "./skills.ts";
-import { CAPABILITIES, OWNER_ID, people, tenantById, tenantContext, type Capability } from "./tenants.ts";
+import type { Conversation } from "../conversationmodel.ts";
+import { baseUrlProblem, intakeToolsFor } from "../intakelinks.ts";
+import { googleReady, settings } from "../settings.ts";
+import { skillsFor } from "../skills.ts";
+import { CAPABILITIES, OWNER_ID, people, tenantById, tenantContext, type Capability } from "../tenants.ts";
 import { isOwnerOnly, manifest } from "./toolmanifest.ts";
 
 // ONE answer to "what may this conversation use now": capabilitiesOf(conv), a set of capabilities. Its tools and skills (toolsFor, skillsFor) and the loops that look in on

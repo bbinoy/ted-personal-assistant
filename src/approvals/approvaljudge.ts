@@ -1,8 +1,8 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { haikuOptions, oneShot, withTimeout } from "./haiku.ts";
+import { haikuOptions, oneShot, withTimeout } from "../haiku.ts";
 import { JudgeSpare, type JudgeIO } from "./judgespare.ts";
-import { LOGIN } from "./payer.ts";
-import { OWNER, settings } from "./settings.ts";
+import { LOGIN } from "../payer.ts";
+import { OWNER, settings } from "../settings.ts";
 import { APPROVAL_SYSTEM } from "./approvalprompt.ts";
 
 // The one small Haiku behind the approval judges: what the owner's reply to the open approval questions means (approvals.ts, task

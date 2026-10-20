@@ -5,7 +5,7 @@ import { profileOptions } from "../src/agent.ts";
 import { buildOptions } from "../src/agentrun.ts";
 import { hiddenOutside } from "../src/profiletools.ts";
 import { PROFILES, RADAR_SKILLS } from "../src/profiles.ts";
-import { allRows } from "../src/toolmanifest.ts";
+import { allRows } from "../src/policy/toolmanifest.ts";
 
 const SKILL = readFileSync(new URL("../plugin/skills/radar/SKILL.md", import.meta.url), "utf8");
 const CAL = "mcp__claude_ai_Google_Calendar__";

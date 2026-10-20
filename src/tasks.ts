@@ -9,7 +9,7 @@ import { radarInstructions, radarPrompt } from "./radar.ts";
 import { acceptMessages, MIN_GAP_MINUTES, WINDOW_MINUTES } from "./radar-rules.ts";
 import { settings } from "./settings.ts";
 import { LIMITS } from "./sanitize.ts";
-import type { RunProvenance } from "./autojudge.ts";
+import type { RunProvenance } from "./approvals/autojudge.ts";
 
 // The one Task type: everything the gate can start. `profile` is HOW the run may work (agent.ts PROFILES: policy source,
 // system prompt, skills, turns, budget, output schema), fixed in code. `after` is what happens with the result.

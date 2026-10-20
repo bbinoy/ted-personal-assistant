@@ -1,15 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defer, tick } from "./util.ts";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { createPipeline, group, type Pipeline } from "../src/conversation.ts";
 import { createOutbound } from "../src/outbound.ts";
 import { groupName, createGroupBrain, groupPrompt, ownerInGroup, speaker } from "../src/group.ts";
 import { wakePrompt } from "../src/wakeprompt.ts";
 import { readLongText } from "@ted-assistant/signal";
-import { groupCapabilities } from "../src/capabilities.ts";
+import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/skills.ts";
-import { classify } from "../src/policy.ts";
+import { classify } from "../src/policy/policy.ts";
 import { parseGate } from "../src/gate.ts";
 import { settings } from "../src/settings.ts";
 import { RateLimitError } from "../src/errors.ts";

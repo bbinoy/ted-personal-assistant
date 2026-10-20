@@ -2,10 +2,10 @@ import "./log.ts"; // first: timestamps, redaction and owner-only files for ever
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation.ts";
 import { dropTenantWarm, prepare, runConversation, runProfile } from "./agent.ts";
 import { compactConversation, compactDue } from "./chatsession.ts";
-import { approveIn, setApprovers } from "./permissions.ts";
-import { scopeOf } from "./turnscope.ts";
-import * as approvals from "./approvals.ts";
-import { createApprovers } from "./approvers.ts";
+import { approveIn, setApprovers } from "./approvals/permissions.ts";
+import { scopeOf } from "./approvals/turnscope.ts";
+import * as approvals from "./approvals/approvals.ts";
+import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./guards.ts";
 import { createDreamer, dreamConversations } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";

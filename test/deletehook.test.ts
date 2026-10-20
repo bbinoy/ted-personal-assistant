@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildOptions } from "../src/agentrun.ts";
-import { createdFact, forgetCreated } from "../src/created.ts";
+import { createdFact, forgetCreated } from "../src/approvals/created.ts";
 
 const MB = "mcp__mailbird__";
 const signal = new AbortController().signal;

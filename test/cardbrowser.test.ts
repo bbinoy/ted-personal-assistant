@@ -9,13 +9,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import type { Verdict } from "../src/autojudge.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
 import { BrowseGuard, resultText } from "../src/browseguard.ts";
 import { cdpFrames, freePort } from "../src/browsecdp.ts";
 import { browserServer } from "../src/browseserver.ts";
 import { KillSwitch, openCardAccess } from "../src/card.ts";
 import { Ledger } from "../src/payments.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
 
 // The card flow against a REAL headless Chromium and the real @playwright/mcp server, on local fake checkouts (test/fixtures/checkout): a shop, a hosted

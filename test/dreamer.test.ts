@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { allows } from "../src/capabilities.ts";
+import { allows } from "../src/policy/capabilities.ts";
 import { group as groupConversation, owner } from "../src/conversationmodel.ts";
 import { createDreamer, dreamConversations, dreamPrompt, type Runner } from "../src/dream.ts";
 import { dreamScope, dreamStateFile } from "../src/dreamscope.ts";

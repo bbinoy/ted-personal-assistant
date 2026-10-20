@@ -5,13 +5,13 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SOURCES } from "../src/audit.ts";
-import { judgeAction, type Verdict } from "../src/autojudge.ts";
+import { judgeAction, type Verdict } from "../src/approvals/autojudge.ts";
 import { browse, browseSystem, resultMessage, sanitizeResult, startRefusal } from "../src/browse.ts";
 import { BrowseGuard, resultText, withText } from "../src/browseguard.ts";
 import { browserServer, desktopUserAgent, type BrowseStatus } from "../src/browseserver.ts";
 import { addressProblem, classifyClick, isAllowedBrowserTool, isRef, looksLikeCardNumber, luhnValid, parseSnapshot, resolvesPublic, sensitiveField, sensitiveKind } from "../src/browserules.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
-import { classify } from "../src/policy.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
+import { classify } from "../src/policy/policy.ts";
 import { settings } from "../src/settings.ts";
 import { access } from "./util.ts";
 
@@ -382,9 +382,9 @@ test("canUseTool: an approved commit runs once; the same click is not repeated",
 });
 
 test("a group browse run: a commit click the judge sends on asks in that group, a member's yes lets it continue, another chat's answer does not", async () => {
-  const approvals = await import("../src/approvals.ts");
-  const { makeApprove } = await import("../src/approvalask.ts");
-  const { setApprovers, approveIn, DENY_ALL } = await import("../src/permissions.ts");
+  const approvals = await import("../src/approvals/approvals.ts");
+  const { makeApprove } = await import("../src/approvals/approvalask.ts");
+  const { setApprovers, approveIn, DENY_ALL } = await import("../src/approvals/permissions.ts");
   const posted: { groupId: string; text: string }[] = [];
   let ts = 1000;
   setApprovers((groupId) => makeApprove(async (t) => (posted.push({ groupId, text: t }), ++ts), { compose: async (q) => ({ text: q.details, ms: 0 }), scope: groupId, source: "group" }));

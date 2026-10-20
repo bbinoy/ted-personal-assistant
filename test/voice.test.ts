@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildOptions } from "../src/agentrun.ts";
-import { classify } from "../src/policy.ts";
+import { classify } from "../src/policy/policy.ts";
 import { access } from "./util.ts";
 import { holdQuote, holdVoiceNote, resetVoiceNotes } from "../src/voicenote.ts";
 import { withSend } from "../src/send.ts";

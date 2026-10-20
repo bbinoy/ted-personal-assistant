@@ -1,5 +1,5 @@
-import { authoredPart, cutBody, mailHeader, mailText } from "./format.ts";
-import { addrs, attachmentsNamed as attachmentsOf, type MailView } from "./mailview.ts";
+import { authoredPart, cutBody, mailHeader, mailText } from "./approvals/format.ts";
+import { addrs, attachmentsNamed as attachmentsOf, type MailView } from "./policy/mailview.ts";
 
 export { authoredPart };
 

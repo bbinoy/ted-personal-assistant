@@ -4,9 +4,9 @@ import { standing } from "./util.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAudit } from "../src/audit.ts";
-import { judgePrompt, type Verdict } from "../src/autojudge.ts";
+import { judgePrompt, type Verdict } from "../src/approvals/autojudge.ts";
 import { BrowseGuard, CARRY_MS } from "../src/browseguard.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/settings.ts";
 
 // An approved plan carries forward within one browse run (browseguard.ts offer, autojudge.ts approvedPlan): the owner is asked once for
@@ -125,8 +125,8 @@ test("Luma sequence: the first Register click is asked, the form fill is automat
   const mode = mutable.autoApprove;
   mutable.autoApprove = "auto";
   t.after(() => void (mutable.autoApprove = mode));
-  const approvals = await import("../src/approvals.ts");
-  const { makeApprove } = await import("../src/approvalask.ts");
+  const approvals = await import("../src/approvals/approvals.ts");
+  const { makeApprove } = await import("../src/approvals/approvalask.ts");
   const posted: string[] = [];
   let ts = 5000;
   const approve = makeApprove(async (text) => (posted.push(text), ++ts), { compose: async () => ({ text: QUESTION, ms: 0 }), scope: "g-luma", source: "group" });

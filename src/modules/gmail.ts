@@ -1,8 +1,8 @@
 import { BRIEF_SKILL, DONE_MARKER } from "../brieftext.ts";
 import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "../gmailrules.ts";
-import { addrs, nativeView } from "../mailview.ts";
+import { addrs, nativeView } from "../policy/mailview.ts";
 import type { DraftView } from "../proposals.ts";
-import { DELETE_CONFIRM } from "../neverallowed.ts";
+import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { handlerTaskText } from "./mailtask.ts";
 import { settings } from "../settings.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";

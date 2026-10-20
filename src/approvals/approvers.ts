@@ -1,8 +1,8 @@
 import type { Target } from "@ted-assistant/messenger";
 import { makeApprove } from "./approvalask.ts";
 import { DENY_ALL, type Approve, type ApproverOptions } from "./permissions.ts";
-import { isTenantKey, OWNER_KEY } from "./ownerkey.ts";
-import { targetOf } from "./tenants.ts";
+import { isTenantKey, OWNER_KEY } from "../ownerkey.ts";
+import { targetOf } from "../tenants.ts";
 
 // The one place that decides where a question is asked: IN THE CONVERSATION THAT TRIGGERED THE ACTION, never anywhere else.
 //   the owner's chat   the owner's turns and her unattended runs (wake-ups, brief, radar, mail handler): her chat; a background question

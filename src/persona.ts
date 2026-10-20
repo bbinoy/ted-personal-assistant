@@ -1,4 +1,4 @@
-import { allows, capabilitiesOf, groupCapabilities } from "./capabilities.ts";
+import { allows, capabilitiesOf, groupCapabilities } from "./policy/capabilities.ts";
 import { fence } from "./fence.ts";
 import type { Capability } from "./tenants.ts";
 import { mailSlot } from "./modules/index.ts";

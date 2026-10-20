@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SOURCES } from "../src/audit.ts";
-import { classify } from "../src/policy.ts";
-import { NEVER_ACTIONS } from "../src/neverallowed.ts";
+import { classify } from "../src/policy/policy.ts";
+import { NEVER_ACTIONS } from "../src/policy/neverallowed.ts";
 import { settings } from "../src/settings.ts";
 import { mailProviders, registered } from "../src/modules/index.ts";
-import { actionOf, allRows, availableFor, entryFor, isFree, mailView, readsUntrusted } from "../src/toolmanifest.ts";
-import { isJudgeable } from "../src/autojudge.ts";
+import { actionOf, allRows, availableFor, entryFor, isFree, mailView, readsUntrusted } from "../src/policy/toolmanifest.ts";
+import { isJudgeable } from "../src/approvals/autojudge.ts";
 import { access } from "./util.ts";
 
 const MANIFEST = allRows();

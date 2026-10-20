@@ -5,7 +5,7 @@ import { owner } from "./conversationmodel.ts";
 import { handlerTaskFor, mailHandlerOf } from "./mailhandler.ts";
 import { LOGIN } from "./payer.ts";
 import { oneLine, LIMITS } from "./sanitize.ts";
-import type { Approve } from "./permissions.ts";
+import type { Approve } from "./approvals/permissions.ts";
 import { audit } from "./audit.ts";
 import { draftCollector, type DraftId } from "./propose.ts";
 import { overBudget } from "./budget.ts";

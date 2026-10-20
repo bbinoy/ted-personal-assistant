@@ -1,8 +1,8 @@
 import { BRIEF_INSTRUCTIONS, BRIEF_TOOL } from "../brieftext.ts";
-import { extractMessageId, nativeView } from "../mailview.ts";
+import { extractMessageId, nativeView } from "../policy/mailview.ts";
 import type { DraftView } from "../proposals.ts";
 import { handlerTaskText } from "./mailtask.ts";
-import { DELETE_CONFIRM } from "../neverallowed.ts";
+import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // Mailbird, the owner's desktop mail client, through its local MCP server (a user-scope entry of the owner's Claude settings): the default mail provider

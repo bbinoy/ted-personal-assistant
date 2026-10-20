@@ -19,7 +19,7 @@ const { recordCost, spentToday } = await import("../src/budget.ts");
 const { keyNotices } = await import("../src/keynotice.ts");
 const { compactConversation } = await import("../src/chatsession.ts");
 const { recordMessage } = await import("../src/messages.ts");
-const { recentIn } = await import("../src/recentchat.ts");
+const { recentIn } = await import("../src/approvals/recentchat.ts");
 const { tenantKey } = await import("../src/ownerkey.ts");
 
 const on = settings as unknown as Record<string, unknown>;

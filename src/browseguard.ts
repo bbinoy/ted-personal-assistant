@@ -11,8 +11,8 @@ import { approvalId, CARD_PLACEHOLDER, cartHash, cartLines, expirySplit, findPay
 import { localDay } from "./pause.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput, validPoint } from "./browsevision.ts";
 import { audit, wordless } from "./audit.ts";
-import { isPlainWebAddress } from "./webaddress.ts";
-import type { CarriedApproval } from "./autojudge.ts";
+import { isPlainWebAddress } from "./policy/webaddress.ts";
+import type { CarriedApproval } from "./approvals/autojudge.ts";
 import { clip, cleanText, LIMITS } from "./sanitize.ts";
 import { isJpeg, MAX_PICTURE_BYTES } from "./shots.ts";
 import { settings } from "./settings.ts";

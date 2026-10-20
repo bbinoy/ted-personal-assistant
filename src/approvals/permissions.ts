@@ -1,15 +1,15 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { audit, wordless, type Source } from "./audit.ts";
+import { audit, wordless, type Source } from "../audit.ts";
 import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
-import type { Taint } from "./chatsession.ts";
+import type { Taint } from "../chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
-import type { MailView } from "./mailview.ts";
-import { mailSlot } from "./modules/index.ts";
-import { classify, denial, isReadTool } from "./policy.ts";
-import { entryFor, mailToolsOf, mailView, readsUntrusted } from "./toolmanifest.ts";
-import { OWNER_KEY } from "./ownerkey.ts";
-import { OWNER, settings } from "./settings.ts";
+import type { MailView } from "../policy/mailview.ts";
+import { mailSlot } from "../modules/index.ts";
+import { classify, denial, isReadTool } from "../policy/policy.ts";
+import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
+import { OWNER_KEY } from "../ownerkey.ts";
+import { OWNER, settings } from "../settings.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 

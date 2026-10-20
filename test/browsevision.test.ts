@@ -5,14 +5,14 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Verdict } from "../src/autojudge.ts";
+import type { Verdict } from "../src/approvals/autojudge.ts";
 import { browseSystem } from "../src/browse.ts";
 import { BrowseGuard, resultText, withText } from "../src/browseguard.ts";
 import { describePoint, freePort, openSession, pickPage, type Cdp, type PointInfo } from "../src/browsecdp.ts";
 import { browserServer } from "../src/browseserver.ts";
 import { hiddenBrowserTools, HIDDEN_BROWSER_TOOLS, isAllowedBrowserTool, type VisionMode } from "../src/browserules.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, screenshotInput, validPoint } from "../src/browsevision.ts";
-import { makeCanUseTool } from "../src/permissions.ts";
+import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { loadSettings } from "../src/settings.ts";
 import { cleanToolOutput } from "../src/toolclean.ts";
 

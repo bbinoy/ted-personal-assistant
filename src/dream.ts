@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
-import { allows } from "./capabilities.ts";
+import { allows } from "./policy/capabilities.ts";
 import { owner as ownerConversation, group as groupConversation, speakerOf, tenant as tenantConversation, type Conversation } from "./conversationmodel.ts";
 import { oneShot } from "./haiku.ts";
 import { isRefusal, LOGIN, mayRun, type Payer, type Refusal } from "./payer.ts";

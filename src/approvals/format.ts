@@ -2,9 +2,9 @@
 // arguments. Deliberately not model-written: an approval prompt that a model
 // paraphrases can misrepresent the call it is meant to guard.
 
-import type { MailView } from "./mailview.ts";
-import { clip } from "./sanitize.ts";
-import { mailView, titleOf } from "./toolmanifest.ts";
+import type { MailView } from "../policy/mailview.ts";
+import { clip } from "../sanitize.ts";
+import { mailView, titleOf } from "../policy/toolmanifest.ts";
 
 // The titles of tools shown generically are the tool modules' (`titles`, src/modules). (Mail tools are shown from mailView() below, whatever the provider; the
 // titles are only for a call mailView cannot read.)

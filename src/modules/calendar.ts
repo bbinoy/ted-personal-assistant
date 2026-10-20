@@ -1,5 +1,5 @@
-import { namesNoGuests, namesPeople } from "../guests.ts";
-import { DELETE_CONFIRM } from "../neverallowed.ts";
+import { namesNoGuests, namesPeople } from "../policy/guests.ts";
+import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // Google Calendar, through the owner's claude.ai connector.

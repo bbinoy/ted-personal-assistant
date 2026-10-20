@@ -1,6 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { scopeOf } from "../src/turnscope.ts";
+import { scopeOf } from "../src/approvals/turnscope.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -42,11 +42,11 @@ const { createIntakeServer } = await import("../src/intaketools.ts");
 const { TenantSecrets } = await import("../src/secrets.ts");
 const { serversFor } = await import("../src/modules/runtime.ts");
 const { NOTION_FRIEND_PREFIX: P, NOTION_FRIEND_TOOLS } = await import("../src/modules/notionhosted.ts");
-const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
-const { makeCanUseTool } = await import("../src/permissions.ts");
-const { classify } = await import("../src/policy.ts");
+const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
+const { classify } = await import("../src/policy/policy.ts");
 const { describeTenants } = await import("../src/tenanttools.ts");
 const { connectionSummary } = await import("../src/connections.ts");
 const { servicesCheck, intakeCheck } = await import("../src/doctor.ts");

@@ -1,5 +1,5 @@
-import { addrs } from "./mailview.ts";
-import { destinationIsTrashOrSpam } from "./neverallowed.ts";
+import { addrs } from "./policy/mailview.ts";
+import { destinationIsTrashOrSpam } from "./policy/neverallowed.ts";
 
 // The Gmail connector's rules that a manifest flag cannot say (all pure; policy.ts and permissions.ts call them). The connector's tools
 // are named mcp__claude_ai_Gmail__*; their arguments are camelCase (labelIds, messageFormat, ...).

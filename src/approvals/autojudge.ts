@@ -1,12 +1,12 @@
 import { runJudge, withTimeout } from "./approvaljudge.ts";
-import { fence } from "./fence.ts";
+import { fence } from "../fence.ts";
 import { createdFact } from "./created.ts";
-import { DELETE_CONFIRM } from "./neverallowed.ts";
-import { OWNER } from "./settings.ts";
-import type { MailView } from "./mailview.ts";
-import { actionOf, confirmsDelete, entryFor, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
-import type { Source } from "./audit.ts";
-import { LIMITS } from "./sanitize.ts";
+import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
+import { OWNER } from "../settings.ts";
+import type { MailView } from "../policy/mailview.ts";
+import { actionOf, confirmsDelete, entryFor, moduleOf, neverAllowedTool } from "../policy/toolmanifest.ts";
+import type { Source } from "../audit.ts";
+import { LIMITS } from "../sanitize.ts";
 
 // The approval judge: a small second opinion on every action that is not a plain read. The same path in every place (chat, group, tenant, mail
 // handler, brief, radar, wake-up, browse): the code floor first (policy.ts classify, isJudgeable below), then this judge, then the question on the owner's phone.
@@ -32,7 +32,7 @@ export interface Verdict {
 // calendar events for the owner alone, a mail nobody can be named for, the plain-address check for a page, sharing, stopping a tenant); this file reads them.
 
 // Opening a web page: only a plain public https address may be judged (webaddress.ts). Re-exported, the tests and the browse rules read it from here.
-export { isPlainWebAddress, REBINDING_HOST } from "./webaddress.ts";
+export { isPlainWebAddress, REBINDING_HOST } from "../policy/webaddress.ts";
 
 // Pure: is there anything the floor forbids judging? The tool's module says which of its actions are never judged (handing a file to other people, stopping or
 // deleting a tenant) and which need a check on the call itself. `view` is the call as mailView() reads it (permissions.ts reads the draft back for a send).

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { noticeFor } from "./errors.ts";
-import { allows } from "./capabilities.ts";
+import { allows } from "./policy/capabilities.ts";
 import { tenantById, tenantContext } from "./tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
@@ -24,7 +24,7 @@ export interface Conversation {
   readonly tenantId?: string; // a tenant's chat (tenants.ts): her id
   readonly target?: Target; // where this conversation's messages go (the messenger's opaque target): the group id, directTarget(account id) for a tenant; unset: the owner's chat
   readonly direct: boolean; // a private one-to-one chat (the owner's or a tenant's): one person, always answered, her messages are her own
-  readonly source: "chat" | "group"; // policy source (src/policy.ts); a tenant's is "group" (isolated: none of the owner's data), with her own folder
+  readonly source: "chat" | "group"; // policy source (src/policy/policy.ts); a tenant's is "group" (isolated: none of the owner's data), with her own folder
   readonly logFile: string; // this conversation's message log
   readonly notesDir: string; // this conversation's notes (the SDK auto-memory folder; the only place its file tools may write)
   readonly sessionFile: string; // the resumed SDK session (session.ts): idle reset and compaction work on it

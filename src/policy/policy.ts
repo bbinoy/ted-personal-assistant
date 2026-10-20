@@ -1,12 +1,12 @@
-import type { Source } from "./audit.ts";
+import type { Source } from "../audit.ts";
 import { realpathSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { isInside, realish } from "./contain.ts";
-import { isNotePath } from "./notes.ts";
-import { settings } from "./settings.ts";
+import { isInside, realish } from "../contain.ts";
+import { isNotePath } from "../notes.ts";
+import { settings } from "../settings.ts";
 import { groupTools } from "./capabilities.ts";
-import { loaded, registered } from "./modules/index.ts";
-import type { Denial, HideConfig, ToolModule } from "./modules/types.ts";
+import { loaded, registered } from "../modules/index.ts";
+import type { Denial, HideConfig, ToolModule } from "../modules/types.ts";
 import { confirmedArguments, destinationIsTrashOrSpam, namesLocalFile, neverActionValue } from "./neverallowed.ts";
 import { isPeopleKey } from "./guests.ts";
 import { availableFor, confirmDeleteOf, confirmsDelete, entryFor, isFree, isReadTool, moduleOf, neverAllowedTool } from "./toolmanifest.ts";

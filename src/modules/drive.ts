@@ -1,4 +1,4 @@
-import { DELETE_CONFIRM } from "../neverallowed.ts";
+import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // Google Drive and Google Docs (capability `drive`, the owner's claude.ai connectors; a friend's own Google is a separate capability, modules/google.ts), and the

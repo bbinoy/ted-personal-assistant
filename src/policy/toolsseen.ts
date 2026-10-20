@@ -1,5 +1,5 @@
-import { registered } from "./modules/index.ts";
-import { readJson, writeJson } from "./state.ts";
+import { registered } from "../modules/index.ts";
+import { readJson, writeJson } from "../state.ts";
 
 // Tool names runs have seen, so policy.hiddenTools() can hide the unused ones by name.
 // Seeded with the connectors' current tools (each tool module's `known`: Notion, Mailbird, Gmail), so even the very first run is trimmed.

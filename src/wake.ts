@@ -7,7 +7,7 @@ import { groupContext, listGroups } from "./groupstore.ts";
 import { realRunner, type PromptBuilder, type Runner } from "./group.ts";
 import { wakePrompt } from "./wakeprompt.ts";
 import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
-import { allows } from "./capabilities.ts";
+import { allows } from "./policy/capabilities.ts";
 import { isRefusal, mayRun, type Payer, type Refusal } from "./payer.ts";
 import { hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
@@ -20,8 +20,8 @@ import { briefOwed, briefPending, buildTask, presetRefusal, runBriefTask, runRad
 import { settings } from "./settings.ts";
 import { MIN_GAP_MINUTES } from "./radar-rules.ts";
 import { LIMITS } from "./sanitize.ts";
-import type { RunProvenance } from "./autojudge.ts";
-import { derivedTurn } from "./turnscope.ts";
+import type { RunProvenance } from "./approvals/autojudge.ts";
+import { derivedTurn } from "./approvals/turnscope.ts";
 
 // The clock half of the gate (gate.ts). On every heartbeat tick, for the owner's chat, every group the owner is in and
 // every tenant (TENANTS=on) whose next look has come (or where something was said or a note changed since the last look),

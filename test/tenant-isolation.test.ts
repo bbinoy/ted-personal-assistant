@@ -16,13 +16,13 @@ process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i]; // (written out by hand, apart from the modules' `ownerOnly`)
-const { classify, isReadableData, hiddenTools } = await import("../src/policy.ts");
+const { classify, isReadableData, hiddenTools } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/notes.ts");
-const MANIFEST = (await import("../src/toolmanifest.ts")).allRows();
+const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
 const { searchLogs } = await import("../src/logsearch.ts");
 const { searchHistoryFile, groupDir, groupNotesDir, GROUPS_DIR } = await import("../src/groupstore.ts");
 const { runConversation } = await import("../src/agent.ts");

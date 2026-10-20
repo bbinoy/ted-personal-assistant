@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { publicArgs } from "../src/permissions.ts";
+import { publicArgs } from "../src/approvals/permissions.ts";
 
 test("audit: public lookups log their inputs, nothing else does", () => {
   assert.deepEqual(publicArgs("mcp__weather__get_forecast", { lat: 36.1, lon: -5.6, days: 3, models: ["x"] }), { args: { lat: 36.1, lon: -5.6, days: 3 } });

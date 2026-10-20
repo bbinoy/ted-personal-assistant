@@ -6,7 +6,7 @@ import type { Conversation } from "./conversationmodel.ts";
 import { recentNotices } from "./messages.ts";
 import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
 import { chatContext, chatSystem, digestContext, groupSystem, tenantSystem } from "./persona.ts";
-import { allows, capabilitiesOf, groupTools, toolsFor } from "./capabilities.ts";
+import { allows, capabilitiesOf, groupTools, toolsFor } from "./policy/capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "./modules/google.ts";
 import { mailDigest } from "./tenantmail.ts";
 import { PROFILES } from "./profiles.ts";

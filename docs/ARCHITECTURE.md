@@ -314,29 +314,15 @@ src/profiles.ts      the run profiles (brief, radar, background, group; limits a
 src/errors.ts        the failures with their own message (expired login, usage limit, refused instance key), one notice table by error and audience, and `failure`: how the SDK reports a refused call
 src/payer.ts         Payer (login or instance key), mayRun (who pays and may it run now), and the bookkeeping of a call: environment, cost, rate limit, success
 src/haiku.ts         the shared base options of every small one-shot Haiku call (no tools, no connectors, no memory) and `oneShot`, the one call that pays its Payer
-src/permissions.ts   the permission callback (policy, judge, approval) and its hooks to main
 src/chatsession.ts   when a conversation's session resumes, and compacting it in place
 src/memorynotice.ts  the note changes of a chat turn and the one notice about them
-src/toolsseen.ts    tool names runs have seen (so unused ones are hidden)
-src/toolmanifest.ts  the tool manifest (the rows of the loaded tool modules: provider, action, capability, availability per tool), isFree, readsUntrusted and mailView (pure, tested)
 src/modules/         the tool modules, one file per tool (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
-src/mailview.ts      the one view of an outgoing mail, whatever the provider (the shape and shared helpers, and the draft id from a Mailbird result)
 src/oauth.ts         the sign-in every service shares: PKCE, the single-use state bound to the intake link, the flows in progress (googleoauth.ts and notionoauth.ts are its providers)
 src/mcpproxy.ts      the credentialed MCP proxy every service shares: a friend's session upstream and the in-process "sdk" server her run gets (googlemcp.ts, notionmcp.ts)
 src/notionoauth.ts   Notion: discovery, the one registered client, the grant, rotating refresh under a lock; src/notionmcp.ts the hosted server as a session and its proxy
 src/connections.ts   which of her own accounts (Google, Notion) a person has connected: the admin's list and the doctor
 src/keynotice.ts     the one notice for the owner about the shared instance key, called wherever a friend's run fails on it
-src/webaddress.ts    the plain-address check for opening a page (used by the builtin module's floor and the browse rules)
 src/brieftext.ts     the words of the daily brief's preset that the mail modules and brief.ts share
-src/policy.ts        allow / ask / deny from the manifest + hard rules + edit-and-approve (pure, tested)
-src/approvals.ts     open approvals: fast yes / no, judge, reactions, scope
-src/approvalask.ts   asking: the model-written question, and the audit of every ask
-src/approvers.ts     the approver of each conversation: where a question is asked (the one that triggered the action)
-src/approvalmodel.ts the model calls (answer, write), all fail closed
-src/questionfacts.ts the verbatim check of a question (model-written)
-src/approvalprompt.ts their prompts and strict parsers
-src/approvaljudge.ts the one Haiku behind the approval judges: prompt, schema, spare, timeout, cost, task check
-src/judgespare.ts    the warm Haiku spare of the approval judge, and the cold fallback
 src/heartbeat.ts     the tick: check mail, triage, act, hand off
 src/triage.ts        batched classifier + injection isolation (its prompt is the preset's triage.md)
 src/actions.ts       what to do with a classification (pure, tested)
@@ -351,7 +337,6 @@ src/settings.ts      every tunable, validated at startup (pure loader, tested)
 src/paths.ts         the repo root and the folders under it (plugin, assets, assistants), and the default data dir: the only file that locates itself (tested)
 src/state.ts         atomic, synchronous access to state/, logs/ and memory/ (tested)
 src/audit.ts         append-only audit log and its reader
-src/autojudge.ts     the "action" task: the floor in code and the input of the approval judge, one path for every tool in every place
 src/propose.ts       shows the handler's reply drafts on Signal and reads a draft back from the mail client (Mailbird's or Gmail's)
 src/mailhandler.ts   which mail-tools module a conversation's handler works with, and its tools
 src/triagelog.ts     the triage record: a file per conversation with the words, a wordless audit row
@@ -393,22 +378,18 @@ src/mailtext.ts      a mail body: html.ts, then sanitize.ts
 src/toolclean.ts     cleans tool results (used by the PostToolUse hook in agentrun.ts)
 src/reaction.ts      the model's emoji reactions: "[[react: 👍]]" at the start of a reply (pure, tested)
 src/quote.ts         Signal reply threading: quoted text in, threaded answers out (pure, tested)
-src/format.ts        readable approval text for each tool call (pure, tested)
 src/log.ts           redacting, rotating agent.log; owner-only permissions
 src/pause.ts         the pause switch and local-day helper
 src/redact.ts        keeps phone numbers and credentials out of logs
 src/cli.ts           report / restore / triage-check
 src/doctor.ts        `npm run doctor`
-src/approvalreport.ts `npm run report`: each approval ask with its exact arguments next to the question that was sent and what became of it
 src/browsecdp.ts     what is under a point of the page, owned by code (the vision-click experiment, BROWSE_VISION=click)
 src/browsevision.ts  the pure rules of the vision experiment (BROWSE_VISION, off by default)
-src/capabilities.ts  ONE answer to what a conversation may use now: its capability set, and the tools and skills derived from it
 src/document.ts      files people send that are not pictures, made ready for the model (the bytes decide what a file is)
 src/drawtool.ts      the draw tool: SVG written by the model, sanitised (svgclean.ts), rendered to a PNG (svgrender.ts), kept for the turn (shots.ts)
 src/googlemail.ts    a friend's mailbox for the mail check, through her own Google server
 src/googlemcp.ts     a friend's Google tools: the pinned third-party MCP server, one process per friend
 src/googleoauth.ts   Google as an OAuthProvider (offline access, the scopes the tools need)
-src/guests.ts        does a call name people (guests, recipients, addresses)? One reader of a call's arguments for the judge's veto
 src/image.ts         pictures people send, checked by their bytes, shrunk, wrapped as image content
 src/intakelinks.ts   the single-use setup links of the intake page: minting, claiming, what was stored
 src/intakepurposes.ts the purposes of a link (PURPOSES): capability, item kind, what it needs, its fields and where it stores
@@ -419,8 +400,6 @@ src/kitespots.ts     the seed list of kite spots (assets/kitespots.json)
 src/logsearch.ts     the `search_logs` tool's plain-text search over the logs folder
 src/mailloops.ts     the mail check, triage and handler for every friend who has mail through her own Google, on the heartbeat's tick
 src/messenger.ts     the app's one meeting point with its chat platform (MESSENGER): load it by name, its options, the instance in use
-src/neverallowed.ts  THE never-allowed set as pure predicates (trading, trash, delete, spam, blocking), and the destructive-but-allowed class (DELETE_CONFIRM)
-src/created.ts       what the assistant itself made in a conversation (draft, event, page ids; 24 hours; per conversation), for the judge's care with a delete
 src/notetimes.ts     the times of day a conversation's notes name, for the idle fingerprint and the wake-ups
 src/notice.ts        informational messages written by a small tool-less model from facts code collected
 src/notionmcp.ts     a friend's Notion tools: the hosted Notion MCP server called with her token
@@ -429,7 +408,6 @@ src/ownerkey.ts      the key of the owner's chat and sourceOfKey (policy source 
 src/persona.ts       system prompts: the words are the preset's, this fills in what only code knows
 src/profiletools.ts  what an unattended job can see of the connectors
 src/radar-nudge.ts   the calendar changed by the assistant: the radar looks again soon
-src/recentchat.ts    the last few lines of a private chat, for the approval judge and the question writer
 src/send.ts          the send tool: a message, voice note, picture or reaction in the conversation NOW while the run continues
 src/shore.ts         which wind directions are onshore, side-on or offshore at a launch point (OpenStreetMap water outlines)
 src/shots.ts         pictures of a turn (browse screenshots, drawings) kept so the `send` tool can deliver one
@@ -442,7 +420,6 @@ src/tenantrun.ts     a tenant's turn around the run: the gates that need no mode
 src/tenants.ts       tenants: the registry of people, capabilities, invites, her folder and limits
 src/tenanttools.ts   the in-process MCP servers of a tenant's run (record_consent) and the owner's tenant administration
 src/turncontext.ts   what a conversation's session is told at the start of a turn
-src/turnscope.ts     what a conversation's turn is known to have been asked, for the approval judge's provenance
 src/voicenote.ts     the voice notes received in each conversation, for the voice tool
 src/voicetool.ts     the voice tool: the cloned voice of a conversation (Qwen only)
 src/weather.ts       the weather tools' bodies: data in, compact text out
@@ -471,6 +448,43 @@ src/modules/weather.ts weather
 plugin/skills/       the skills the agent works with (daily-brief, mailbird, calendar, notion-tasks, follow-through, meeting-prep, setup...), loaded straight from here
 test/                unit tests (node:test)
 scripts/             launchd install, secrets scanner, voice-samples.ts (renders one text in several voice variants, sent to the owner's private chat only)
+```
+
+### src/approvals/
+
+How a tool call becomes an answer: the judge, the question the owner sees, the open approvals and who may answer them, and the permission callback that ties them to the policy. Dependency rule: may use `policy/`, `tenants/`, `intake/`, `memory/`, `secrets/` and the core, and the feature folders under `modules/` (a payment is worded from the browse rules); nothing below it imports it (`test/boundaries.test.ts`).
+
+```
+src/approvals/approvals.ts       open approvals: fast yes / no, judge, reactions, scope
+src/approvals/approvalask.ts     asking: the model-written question, and the audit of every ask
+src/approvals/approvalmodel.ts   the model calls (answer, write), all fail closed
+src/approvals/approvaljudge.ts   the one Haiku behind the approval judges: prompt, schema, spare, timeout, cost, task check
+src/approvals/approvalprompt.ts  their prompts and strict parsers
+src/approvals/approvalreport.ts  `npm run report`: each approval ask with its exact arguments next to the question that was sent and what became of it
+src/approvals/approvers.ts       the approver of each conversation: where a question is asked (the one that triggered the action)
+src/approvals/autojudge.ts       the "action" task: the floor in code and the input of the approval judge, one path for every tool in every place
+src/approvals/judgespare.ts      the warm Haiku spare of the approval judge, and the cold fallback
+src/approvals/questionfacts.ts   the verbatim check of a question (model-written)
+src/approvals/format.ts          readable approval text for each tool call (pure, tested)
+src/approvals/created.ts         what the assistant itself made in a conversation (draft, event, page ids; 24 hours; per conversation), for the judge's care with a delete
+src/approvals/turnscope.ts       what a conversation's turn is known to have been asked, for the approval judge's provenance
+src/approvals/recentchat.ts      the last few lines of a private chat, for the approval judge and the question writer
+src/approvals/permissions.ts     the permission callback (policy, judge, approval) and its hooks to main
+```
+
+### src/policy/
+
+What a call is allowed to do, decided from data and no judgement: the tool manifest, the hard never-allowed rules, who may use which tool (capabilities), and the pure classifiers. Dependency rule: depends only on `tenants/`, `secrets/` and the core; it reads the module list lazily (`registered()`), never the approvals, which sit above it (`test/boundaries.test.ts`).
+
+```
+src/policy/policy.ts        allow / ask / deny from the manifest + hard rules + edit-and-approve (pure, tested)
+src/policy/neverallowed.ts  THE never-allowed set as pure predicates (trading, trash, delete, spam, blocking), and the destructive-but-allowed class (DELETE_CONFIRM)
+src/policy/toolmanifest.ts  the tool manifest (the rows of the loaded tool modules: provider, action, capability, availability per tool), isFree, readsUntrusted and mailView (pure, tested)
+src/policy/capabilities.ts  ONE answer to what a conversation may use now: its capability set, and the tools and skills derived from it
+src/policy/guests.ts        does a call name people (guests, recipients, addresses)? One reader of a call's arguments for the judge's veto
+src/policy/toolsseen.ts     tool names runs have seen (so unused ones are hidden)
+src/policy/webaddress.ts    the plain-address check for opening a page (used by the builtin module's floor and the browse rules)
+src/policy/mailview.ts      the one view of an outgoing mail, whatever the provider (the shape and shared helpers, and the draft id from a Mailbird result)
 ```
 
 ## Development
