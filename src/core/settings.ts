@@ -180,6 +180,9 @@ export function loadSettings(env: Env) {
     // The owner's heartbeat run (src/heartbeat/look.ts): on every look a model (HEARTBEAT_MODEL: haiku, sonnet, or a full model id) reads the chat, mail, calendar and
     // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). How quiet it is at night is its instruction's business, not code's.
     heartbeatModel: env.HEARTBEAT_MODEL?.trim() || "haiku",
+    // The approval judge and the reply classifier (src/approvals/approvaljudge.ts: whether an action may skip the question, what a free-text reply to a question means, the question's wording)
+    // run on JUDGE_MODEL: sonnet, opus, haiku or a full model id. It is the safety net and it writes to the owner, so it does not run on the smallest model by default.
+    judgeModel: env.JUDGE_MODEL?.trim() || "sonnet",
     heartbeatDayMinutes: rhythm.heartbeat.dayMinutes,
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
@@ -341,7 +344,7 @@ export function loadSettings(env: Env) {
     // three exist: the owner's chat, the group that spoke last, and one small Haiku process for the participation gate. Each costs
     // about 150 to 200 MB resident and no tokens, and is dropped after WARM_IDLE_MINUTES without use. WARM=off: every turn starts cold.
     warm: oneOf(env, "WARM", "on", ["on", "off"] as const) === "on",
-    judgeIdleMinutes: num(env, "JUDGE_WARM_IDLE_MINUTES", 10, 1, 1440), // the approval judge's spare (a Haiku process) is dropped this long after its last use: approvals come in bursts
+    judgeIdleMinutes: num(env, "JUDGE_WARM_IDLE_MINUTES", 10, 1, 1440), // the approval judge's spare (a small model process, JUDGE_MODEL) is dropped this long after its last use: approvals come in bursts
     warmIdleMinutes: num(env, "WARM_IDLE_MINUTES", 60, 1, 1440),
     // The participation gate may ask for a pause before answering an untagged message, to seem natural. "typing…" shows meanwhile,
     // so a long pause only makes the answer late: whatever the gate asks for is cut to this many seconds (0: never wait).
