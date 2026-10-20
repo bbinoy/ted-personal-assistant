@@ -26,7 +26,7 @@ import { preparePicture } from "./image.ts";
 import { prepareFile, type AudioTools } from "./document.ts";
 import { createOutbound } from "./outbound.ts";
 import { Ledger } from "./payments.ts";
-import { OWNER_KEY } from "./send.ts";
+import { OWNER_KEY } from "./ownerkey.ts";
 import { applyCredentialMode, mask, settings, signalIdentity } from "./settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
 import { unsupportedForVoice } from "./lang.ts";

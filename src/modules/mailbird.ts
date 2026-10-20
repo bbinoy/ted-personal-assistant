@@ -1,6 +1,6 @@
 import { BRIEF_INSTRUCTIONS, BRIEF_TOOL } from "../brieftext.ts";
-import { nativeView } from "../mailview.ts";
-import { extractMessageId, type DraftView } from "../proposals.ts";
+import { extractMessageId, nativeView } from "../mailview.ts";
+import type { DraftView } from "../proposals.ts";
 import { handlerTaskText } from "./mailtask.ts";
 import { DELETE_CONFIRM } from "../neverallowed.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";

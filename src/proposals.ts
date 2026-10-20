@@ -14,13 +14,6 @@ export { authoredPart };
 
 export type DraftView = Omit<MailView, "action">;
 
-// Pure: the draft's messageId from a Mailbird tool result (JSON text, or an MCP content array).
-export function extractMessageId(response: unknown): number | undefined {
-  const text = typeof response === "string" ? response : JSON.stringify(response ?? "");
-  const m = /messageId\\?"?\s*[:=]\s*\\?"?(\d{1,12})/.exec(text); // also inside a JSON string, where the quotes are escaped
-  return m ? Number(m[1]) : undefined;
-}
-
 // Pure: Mailbird's get_message result as what we show and check. Recipients are lower-cased.
 export function viewDraft(msg: unknown): DraftView | undefined {
   const m = msg as { to?: unknown; cc?: unknown; bcc?: unknown; subject?: unknown; body?: unknown; attachments?: unknown } | null;

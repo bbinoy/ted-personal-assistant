@@ -4,7 +4,7 @@ import { voiceReady } from "@ted-assistant/speech/voice";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { ROOT } from "./paths.ts";
 import { spentToday } from "./budget.ts";
 import { inQuietHours } from "./actions.ts";
 import { mailRuntime } from "./modules/runtime.ts";
@@ -216,7 +216,7 @@ export const heartbeatDetail = (beat: { lastTickAt?: string; lastNewMailAt?: str
 
 // `npm run doctor`: is everything this agent depends on in place? Prints no secrets.
 export async function doctor() {
-  const root = fileURLToPath(new URL("../", import.meta.url));
+  const root = `${ROOT}/`;
   let bad = 0;
   const line = (ok: boolean | "warn", what: string, detail = "") => {
     if (ok === false) bad++;

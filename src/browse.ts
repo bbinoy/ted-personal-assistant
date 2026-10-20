@@ -11,11 +11,10 @@ import { maskCard, openCardAccess, type CardAccess, type CardInfo } from "./card
 import { browseStatus, type BrowseStatus } from "./browseserver.ts";
 import { MAX_SHOTS, VISION_PROMPT } from "./browsevision.ts";
 import { fence } from "./fence.ts";
-import { clip } from "./format.ts";
 import { isPaused } from "./pause.ts";
 import { loadProfile, type Profile } from "./profile.ts";
-import { OWNER_KEY } from "./send.ts";
-import { cleanText, LIMITS } from "./sanitize.ts";
+import { OWNER_KEY } from "./ownerkey.ts";
+import { clip, cleanText, LIMITS } from "./sanitize.ts";
 import { adoptShots, newShotsDir } from "./shots.ts";
 import { OWNER, settings } from "./settings.ts";
 

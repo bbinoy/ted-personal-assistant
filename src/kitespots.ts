@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { ASSETS_DIR } from "./paths.ts";
 
 // A seed list of kite spots (assets/kitespots.json): launch point, the wind directions that are rideable there, water and notes.
 // It is only a starting point: the owner's own spot notes win, and a spot that is not in the list falls back to the shore from the map (shore.ts).
@@ -17,7 +18,7 @@ export interface KiteSpot {
 }
 
 let spots: KiteSpot[] | undefined;
-const all = (): KiteSpot[] => (spots ??= JSON.parse(readFileSync(fileURLToPath(new URL("../assets/kitespots.json", import.meta.url)), "utf8")) as KiteSpot[]);
+const all = (): KiteSpot[] => (spots ??= JSON.parse(readFileSync(join(ASSETS_DIR, "kitespots.json"), "utf8")) as KiteSpot[]);
 
 export const distanceM = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const rad = (d: number) => (d * Math.PI) / 180;

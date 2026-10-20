@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dataDirOf, PLUGIN_DIR, VOICES_DIR } from "./paths.ts";
 import { presetFor } from "./preset.ts";
 import { isSafeUrl, type TtsProviderConfig } from "@ted-assistant/speech/tts";
 
@@ -117,7 +117,7 @@ function ttsProvider(env: Env, kokoro: { dir: string; voice: string; speed: numb
     // With neither set, the synthetic sample that ships in the repo (assets/voices/, no real person behind it) is the reference.
     // It is resolved from the repo, not the data dir. Setting either one means your own recording: no mixing with the sample.
     const builtIn = !env.TTS_REF_AUDIO?.trim() && !textRaw;
-    const sampleDir = fileURLToPath(new URL("../assets/voices/", import.meta.url));
+    const sampleDir = VOICES_DIR;
     return {
       provider, fallback, kokoro,
       qwen: {
@@ -157,7 +157,7 @@ export function loadSettings(env: Env) {
   if (mailSelf && !/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(mailSelf)) throw new Error("MAIL_SELF_ADDRESS must be a plain email address (no name, no angle brackets)");
   // The data root holds three folders: state/ (bookkeeping), logs/ and memory/ (what the
   // model reads). Overridable so tests never touch the real data.
-  const dataDir = env.HARNESS_DATA_DIR ? resolve(env.HARNESS_DATA_DIR) : resolve(fileURLToPath(new URL("../", import.meta.url)));
+  const dataDir = dataDirOf(env);
   return {
     // Who the agent works for and what it is called. Neutral defaults keep the repo impersonal.
     owner: env.OWNER_NAME || "the owner",
@@ -381,7 +381,7 @@ export function loadSettings(env: Env) {
     chatCompactTokens: num(env, "CHAT_COMPACT_TOKENS", 150_000, 10_000, 500_000), // fallback for a session saved before the baseline was recorded: a turn this big: compact afterwards (tools and skills alone are ~50k)
 
     // The bundled skills (plugin/skills) are loaded straight from the repo: nothing to install.
-    pluginDir: resolve(fileURLToPath(new URL("../plugin", import.meta.url))),
+    pluginDir: PLUGIN_DIR,
 
     dataDir,
     stateDir: join(dataDir, "state"), // bookkeeping the model never reads

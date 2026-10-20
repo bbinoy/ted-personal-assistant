@@ -1,6 +1,6 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { audit, type Source } from "./audit.ts";
-import { OWNER_KEY } from "./send.ts";
+import { OWNER_KEY } from "./ownerkey.ts";
 import { createTenantServer, type TenantRun } from "./tenanttools.ts";
 import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "./payer.ts";
 import { browseSystem } from "./browse.ts";

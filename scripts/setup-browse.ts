@@ -5,11 +5,11 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { ROOT } from "../src/paths.ts";
 
 const quiet = process.argv.includes("--quiet");
 const say = (m: string) => (quiet ? undefined : console.log(m));
-const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
+const root = ROOT;
 const dataDir = process.env.HARNESS_DATA_DIR ? resolve(process.env.HARNESS_DATA_DIR) : root;
 const browsers = join(dataDir, "state", "browse", "browsers");
 

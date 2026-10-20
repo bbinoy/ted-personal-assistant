@@ -176,3 +176,24 @@ export function defuseTags(body: string, tag?: string): string {
 
 // Group members write "(the owner)" / "(a member)" next to a name in our log lines; text of theirs must not fake it.
 export const defuseSpeakers = (text: string): string => text.replace(/\((the owner|a member)\)/gi, "[$1]");
+
+// Bidirectional-text controls can make text display in a different order than it reads
+// (an approval that looks harmless on the phone but says something else). Never shown.
+const BIDI = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
+// Characters that take no room on a screen (zero-width space, word joiner, BOM, soft hyphen, fillers) would make two different
+// addresses or titles look identical. They are shown as their code point instead of staying invisible. (Not U+200C/U+200D: emoji
+// sequences and some scripts need them.) Other control characters are dropped.
+const INVISIBLE = /[­͏ᅟᅠ᠎​⁠-⁤ㅤ﻿]/g;
+const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+
+// An approval must never hide content silently: whatever is cut is announced.
+export function clip(text: string, max: number): string {
+  const flat = text
+    .replace(BIDI, "")
+    .replace(CONTROL, "")
+    .replace(INVISIBLE, (c) => `⟨U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}⟩`)
+    .replace(/\s+/g, " ")
+    .trim();
+  return flat.length > max ? `${flat.slice(0, max)}… (+${flat.length - max} more characters not shown)` : flat;
+}
