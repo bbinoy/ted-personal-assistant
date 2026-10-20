@@ -24,7 +24,7 @@ const active = () => settings.mailProvider === "gmail";
 
 const gm = rowsOf(GMAIL_PREFIX, "gmail", "mail");
 
-const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you draft is a Gmail draft (create_draft with replyToMessageId, or update_draft); say it is ready and wait. When ${owner} says to send it, call send_message with that draftId, or reply / forward with the exact text; ${owner} is then asked to approve (or it is checked) with the real recipients shown. Archiving is removing the INBOX label (unlabel_thread with labelIds ["INBOX"]); it may be switched to log-only, in which case a refused archive is not an error. Never use trash, spam or label tools for TRASH or SPAM, and never open attachment content.
+const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you draft is a Gmail draft (create_draft with replyToMessageId, or update_draft); say it is ready and wait. The background handler also shows ${owner} the drafts it made as "✉️ Reply ready (draft #<id>)": when ${owner} answers such a message with "send" or similar, the id is the draftId. When ${owner} says to send a draft, call send_message with that draftId, or reply / forward with the exact text; ${owner} is then asked to approve (or it is checked) with the real recipients shown. Archiving is removing the INBOX label (unlabel_thread with labelIds ["INBOX"]); it may be switched to log-only, in which case a refused archive is not an error. Never use trash, spam or label tools for TRASH or SPAM, and never open attachment content.
 
 `;
 
