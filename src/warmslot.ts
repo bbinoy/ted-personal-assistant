@@ -39,10 +39,11 @@ export class SpareSlot<W extends Closeable> {
     return this.#cur?.id;
   }
 
-  // Is there a fresh spare for this conversation already (and, when a key is given, one built for exactly that)?
-  has(id: string, key?: string): boolean {
+  // Is there a fresh spare for this conversation already (and, when a key is given, one built for exactly that)? `lastsMs`: and one that stays fresh
+  // for at least that much longer (a refresh asks with the time until its next turn).
+  has(id: string, key?: string, lastsMs = 0): boolean {
     const c = this.#cur;
-    return !!c && c.id === id && (key === undefined || c.key === key) && this.#now() - c.at < this.#o.maxAgeMs;
+    return !!c && c.id === id && (key === undefined || c.key === key) && this.#now() - c.at < this.#o.maxAgeMs - lastsMs;
   }
 
   // Keep this warm process as the spare, closing the one it replaces. A process that fails to start empties the slot.

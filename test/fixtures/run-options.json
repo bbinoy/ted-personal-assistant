@@ -3,7 +3,7 @@
     "run": {
       "source": "chat",
       "sessionFile": "state/session.json",
-      "systemPrompt": "sha:a80562053cc0464c",
+      "systemPrompt": "sha:200ef3eaba87d680",
       "memory": {
         "dir": "<data>/memory/notes",
         "notify": "[fn]"
@@ -15,7 +15,7 @@
     "system": {
       "type": "preset",
       "preset": "claude_code",
-      "append": "sha:a80562053cc0464c",
+      "append": "sha:200ef3eaba87d680",
       "snapshot": false
     },
     "settings": {

@@ -16,9 +16,11 @@ export class JudgeSpare {
   readonly #options: Options;
   readonly #label: string;
   readonly #key: string;
-  readonly #slot = new SpareSlot<WarmQuery>({ maxAgeMs: settings.warmIdleMinutes * 60_000, idleMs: () => settings.warmIdleMinutes * 60_000 });
+  readonly #slot: SpareSlot<WarmQuery>;
 
-  constructor(label: string, options: Options) {
+  // `idleMinutes`: how long an unused spare stays up (default: WARM_IDLE_MINUTES; the judge asks for its own, shorter one).
+  constructor(label: string, options: Options, idleMinutes: () => number = () => settings.warmIdleMinutes) {
+    this.#slot = new SpareSlot<WarmQuery>({ maxAgeMs: idleMinutes() * 60_000, idleMs: () => idleMinutes() * 60_000 });
     this.#label = label;
     this.#options = options;
     this.#key = JSON.stringify(options);

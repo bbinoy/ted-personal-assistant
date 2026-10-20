@@ -1,7 +1,7 @@
 import { audit, type Source } from "./audit.ts";
 import { inQuietHours } from "./actions.ts";
 import { budgetSpent } from "./budget.ts";
-import { askGate, idleFingerprint, logTail, NOTHING, type Gate } from "./gate.ts";
+import { askGate, idleFingerprint, logTail, NOTHING, notesText, type Gate } from "./gate.ts";
 import { KEY_TTL_MS, lookDue, lookState, notesChangedAt, recordWake, type LookState } from "./ledger.ts";
 import { groupContext, listGroups } from "./groupstore.ts";
 import { realRunner, type PromptBuilder, type Runner } from "./group.ts";
@@ -12,6 +12,7 @@ import { isRefusal, mayRun, type Payer, type Refusal } from "./payer.ts";
 import { hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
 import { localDay } from "./pause.ts";
+import { namesTimeInQuietHours } from "./notetimes.ts";
 import { isPaused } from "./pause.ts";
 import type { OwnerProfile } from "./profiles.ts";
 import { listTenants } from "./tenants.ts";
@@ -201,9 +202,15 @@ export function createWakeups(deps: WakeDeps) {
     const owed = await backstop(conv, st, now);
     if (owed) return owed;
     if (!allows(conv, "heartbeat") || !allows(conv, "wake")) return "not-allowed"; // a tenant's record decides; nothing for her without both
-    if (conv.direct && inQuietHours(now, settings.quietStartHour, settings.quietEndHour)) return "quiet-hours"; // a private chat: the owner's and each tenant's
+    const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour);
+    if (conv.direct && night) return "quiet-hours"; // a private chat: the owner's and each tenant's
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: changed(conv.notesDir), messagesCount: !tagged })) return "not-due";
+
+    // A group has no quiet hours of its own, but its clock look is held back at night too unless its notes name a time inside
+    // the quiet window (a schedule at 06:30 still gets its look). The notes are read once for the whole look.
+    const notes = notesText(conv, now);
+    if (!conv.direct && night && !namesTimeInQuietHours(notes, settings.quietStartHour, settings.quietEndHour)) return "quiet-hours";
 
     // A look is a model call on someone's account (a friend's: the instance key, billed to her): paused, in a cooldown, past the budget or no key set means no model call,
     // nothing recorded, and the next tick looks again.
@@ -212,7 +219,7 @@ export function createWakeups(deps: WakeDeps) {
 
     // Nothing relevant changed since the model last found nothing to do: its answer would be the same, so keep that look time.
     const tail = logTail(conv);
-    const print = idleFingerprint({ conv, now, tail }, hasPresets(conv) ? idleFacts(st, now) : "");
+    const print = idleFingerprint({ conv, now, tail }, hasPresets(conv) ? idleFacts(st, now) : "", notes);
     const quiet = quietLooks.get(conv.key);
     if (quiet && quiet.print === print) {
       recordWake(pipeline, conv, quiet.nextCheckMinutes, now);
@@ -223,7 +230,7 @@ export function createWakeups(deps: WakeDeps) {
     let out = NOTHING;
     let answered = false;
     try {
-      out = await gate({ conv, trigger: "clock", now, tail, payer: access });
+      out = await gate({ conv, trigger: "clock", now, tail, notes, payer: access });
       answered = true;
     } catch (e) {
       console.error(`wake: gate failed (${conv.kind}):`, (e as Error).message); // fail closed; the default delay stops a retry on every tick

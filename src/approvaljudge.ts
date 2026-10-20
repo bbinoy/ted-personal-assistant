@@ -2,7 +2,7 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { haikuOptions, oneShot, withTimeout } from "./haiku.ts";
 import { JudgeSpare, type JudgeIO } from "./judgespare.ts";
 import { LOGIN } from "./payer.ts";
-import { OWNER } from "./settings.ts";
+import { OWNER, settings } from "./settings.ts";
 import { APPROVAL_SYSTEM } from "./approvalprompt.ts";
 
 // The one small Haiku behind the approval judges: what the owner's reply to the open approval questions means (approvals.ts, task
@@ -75,7 +75,7 @@ const OPTIONS: Options = haikuOptions(JUDGE_SYSTEM, { ...JUDGE_LIMITS, outputFor
 
 // A spawned Claude Code process takes ~5s to start, so one is started ahead (an approval question going out, or a use just
 // made) and only the model call is left. A spare serves one query; WARM=off starts cold; WARM_IDLE_MINUTES drops an idle one.
-const spare = new JudgeSpare("judge", OPTIONS);
+const spare = new JudgeSpare("judge", OPTIONS, () => settings.judgeIdleMinutes); // (approvals come in bursts: its own, shorter idle than the 60 minutes of the chat's spare)
 export const prepareJudge = (io?: JudgeIO): void => spare.prepare(io);
 export const discardJudge = (): void => spare.discard();
 
@@ -86,11 +86,21 @@ export function forTask(task: Task, out: unknown): unknown {
 
 export { withTimeout }; // (haiku.ts: the judges wait on a model with the same fail-closed timeout)
 
+// One console line per judge call (sizes in chars, durations in ms, dollars; never the content), like the gate's `timing gate` line, so that the latency and
+// the dollars per day of the approval path can be added up from the log: warm|cold, init (call -> first message), result (call -> result), api (the model's
+// time as the SDK reports it), cost.
+export function judgeTiming(task: Task, warm: boolean, promptChars: number, at: Record<string, number>, r: { apiMs?: number; costUsd?: number; subtype: string } | undefined, total: number): string {
+  const phases = Object.entries(at).map(([k, v]) => `${k}=${v}`).join(" ");
+  return `timing judge ${task} ${warm ? "warm" : "cold"} prompt=${promptChars} ${phases}${r?.apiMs === undefined ? "" : ` api=${r.apiMs}`}${r?.costUsd === undefined ? "" : ` cost=$${r.costUsd.toFixed(4)}`}${r ? "" : " failed"} total=${total}`;
+}
+
 // The one runner: the structured answer of this task on the spare (cold if there is none or it is dead), its cost recorded.
 // Undefined for an error result, no result, or an answer for the wrong task. The action task rebuilds the spare after use
 // (it is judged in runs of several actions); the others do not (approvals.ts prepares one per question and drops it).
 export async function runJudge(task: Task, prompt: string, io: JudgeIO = {}): Promise<{ out: unknown; warm: boolean; subtype: string } | undefined> {
   let warm = false;
+  const t0 = Date.now();
+  const at: Record<string, number> = {};
   const r = await oneShot({
     system: JUDGE_SYSTEM,
     prompt: `task: ${task}\n${prompt}`,
@@ -98,6 +108,7 @@ export async function runJudge(task: Task, prompt: string, io: JudgeIO = {}): Pr
     schema: JUDGE_SCHEMA,
     options: JUDGE_LIMITS,
     run: io.query,
+    onMessage: (m) => void ("init" in at || (at.init = Date.now() - t0), m.type === "result" && (at.result = Date.now() - t0)),
     spare: async (p) => {
       const s = await spare.run(p, io);
       warm = s.warm;
@@ -105,6 +116,7 @@ export async function runJudge(task: Task, prompt: string, io: JudgeIO = {}): Pr
       return s.messages;
     },
   }).catch(() => undefined); // a refusal of the API (usage limit, expired login) is no answer: the callers fail closed
+  console.log(judgeTiming(task, warm, prompt.length, at, r, Date.now() - t0));
   if (!r || r.subtype === "no_result") return undefined;
   return { out: r.ok ? forTask(task, r.output) : undefined, warm, subtype: r.subtype };
 }

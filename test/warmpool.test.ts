@@ -168,3 +168,38 @@ test("warm pool: a renewal wants a process in use, not an idle one", async () =>
     assert.equal(pool.wants(owner()), false);
   });
 });
+
+const refreshing = (conv: any, start: any) => warmUp(conv, runOptionsFor(conv, inputsOf(conv)), chatResume(conv.sessionFile), start, true);
+
+test("warm pool: a renewal of an unchanged spare that stays fresh starts nothing; a changed one is rebuilt", async () => {
+  await withSettings({ warm: true }, async () => {
+    const r = rig();
+    pool.drop(owner().key);
+    prepare(owner(), r.start);
+    await tick();
+    refreshing(owner(), r.start);
+    refreshing(owner(), r.start);
+    await tick();
+    assert.equal(r.started.length, 1, "nothing changed: the spare it has is kept");
+    assert.deepEqual(r.closed, []);
+    writeJson(owner().sessionFile, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
+    refreshing(owner(), r.start);
+    await tick();
+    assert.equal(r.started.length, 2, "the session moved on: rebuilt");
+    assert.deepEqual(r.closed, ["warm1"]);
+    pool.drop(owner().key);
+  });
+});
+
+test("warm pool: a spare that would go stale before the next renewal is renewed (has, with the time it must last)", async () => {
+  const { SpareSlot } = await import("../src/warmslot.ts");
+  let t = 0;
+  const slot = new SpareSlot<{ close(): void }>({ maxAgeMs: 60 * 60_000, now: () => t });
+  slot.put("a", "k", Promise.resolve({ close() {} }));
+  const next = 25 * 60_000;
+  t = 20 * 60_000;
+  assert.equal(slot.has("a", "k", next), true, "20 min old: still fresh at the next renewal");
+  t = 40 * 60_000;
+  assert.equal(slot.has("a", "k", next), false, "40 min old: would be stale at the next renewal: build a new one");
+  assert.equal(slot.has("a", "k"), true, "still usable now");
+});
