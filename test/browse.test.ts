@@ -182,7 +182,7 @@ test("manifest rows: browser tools exist only for the browse run; reads run free
   for (const t of ["mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-create-pages", "mcp__claude_ai_Google_Calendar__create_event", "mcp__memory__forget_note", "Read", "Write", "WebFetch"]) assert.notEqual(classify(t, {}, "browse"), "allow", t);
   assert.equal(classify("mcp__memory__forget_note", {}, "browse"), "deny");
   // other sources get no browser tools
-  for (const source of ["chat", "background", "group", "brief"] as const) assert.equal(classify(B + "navigate", { url: "https://example.com" }, source), "deny", source);
+  for (const source of ["chat", "background", "group"] as const) assert.equal(classify(B + "navigate", { url: "https://example.com" }, source), "deny", source);
   assert.equal(classify("mcp__browse__browse", { task: "x" }, "group"), settings.browse ? "ask" : "deny"); // judged in a group too, with the member's words as provenance
   assert.equal(classify("mcp__browse__browse", { task: "x" }, "chat"), "ask"); // judged like every other tool: the sub-run it starts is sandboxed and guarded step by step
 });
@@ -516,8 +516,8 @@ test("options: chat, wake-up and group runs get the entry tool; the browse run g
   const bg = buildOptions(deny, { ...base, source: "background" }, undefined);
   const group = buildOptions(deny, { ...base, source: "group", memory: { dir: "/tmp/notes", groupId: "g" } }, undefined);
   for (const o of [chat, bg, group]) assert.ok(Object.keys(o.mcpServers ?? {}).includes("browse") === settings.browse);
-  const brief = buildOptions(deny, { ...base, source: "brief" }, undefined);
-  assert.ok(!Object.keys(brief.mcpServers ?? {}).includes("browse"), "unattended mail runs never browse");
+  const handler = buildOptions(deny, { ...base, source: "handler" }, undefined);
+  assert.ok(!Object.keys(handler.mcpServers ?? {}).includes("browse"), "unattended mail runs never browse");
   if (!browseStatus().ok) return; // the browser is not downloaded here: the run refuses to build (below)
   const run = buildOptions(deny, { ...base, source: "browse", guard: guard() }, undefined);
   assert.deepEqual(Object.keys(run.mcpServers ?? {}), ["browser"]);

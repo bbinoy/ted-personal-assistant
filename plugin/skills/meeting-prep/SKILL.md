@@ -1,6 +1,7 @@
 ---
 name: meeting-prep
 description: Use when deciding which upcoming meetings need preparation, creating and drafting a prep page in the owner's Notion "Meetings" database, and running the post-meeting follow-up pass. Part of the daily brief. Gets the event list from `ted-personal-assistant:calendar`; pairs with `ted-personal-assistant:mailbird`, `ted-personal-assistant:notion-tasks`, `ted-personal-assistant:daily-brief`.
+delegate: sonnet
 ---
 
 # Meeting prep

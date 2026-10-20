@@ -2,13 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/audit.ts";
-import { briefInstructions, briefDelivery, runBriefAttempt } from "../src/brief.ts";
 import { requiredSkills } from "../src/doctor.ts";
 import { GmailMail, gmailReaders, parseDraft, parseMessage, parseOriginal, parseThreads, payload, relayAllowed, type Call, type Relay } from "../src/gmail.ts";
 import { isInboxArchive, isSelfSend } from "../src/gmailrules.ts";
 import { createMailCheck, type MailSource } from "../src/heartbeat.ts";
 import { recordTriage } from "../src/triagelog.ts";
 import { setGmailReaders } from "../src/modules/gmail.ts";
+import { mailSlot } from "../src/modules/index.ts";
 import { gmailChecks } from "../src/modules/runtime.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { classify, hiddenTools } from "../src/policy/policy.ts";
@@ -76,8 +76,8 @@ test("policy: trash, spam, deletion and attachment content are denied however th
     assert.equal(classify(`${GM}label_message`, { messageId: "m", labelIds: [" Trash "] }, "chat"), "deny");
     assert.equal(classify(`${GM}update_message_labels`, { messageId: "m", addLabelIds: ["SPAM"] }, "chat"), "deny");
     assert.equal(classify(`${GM}update_message_labels`, { messageId: "m", removeLabelIds: ["TRASH"] }, "chat"), "deny");
-    assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["TRASH"] }, "brief"), "deny");
-    assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX", "SPAM"] }, "brief"), "deny");
+    assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["TRASH"] }, "background"), "deny");
+    assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX", "SPAM"] }, "background"), "deny");
     // raw MIME carries attachment content
     assert.equal(classify(`${GM}get_thread`, { threadId: "t", messageFormat: "RAW" }, "chat"), "deny");
     assert.equal(classify(`${GM}get_message`, { messageId: "m", messageFormat: "PLAIN_TEXT" }, "chat"), "allow");
@@ -96,7 +96,7 @@ test("policy: archiving is exactly 'remove INBOX from a thread', and it is sent 
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["INBOX", "UNREAD"] }));
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { labelIds: ["INBOX"] }));
   await withGmail({}, () => {
-    for (const source of ["chat", "brief", "handler"] as const) assert.equal(classify(`${GM}unlabel_thread`, call, source), "ask", source); // judged, the same everywhere
+    for (const source of ["chat", "handler"] as const) assert.equal(classify(`${GM}unlabel_thread`, call, source), "ask", source); // judged, the same everywhere
     assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["UNREAD"] }, "chat"), "ask");
   });
 });
@@ -111,14 +111,14 @@ test("the brief may email only the owner's own address; anything else about that
   assert.ok(!isSelfSend(`${GM}send_message`, send({}), undefined), "no configured address: never");
   assert.ok(!isSelfSend(`${GM}reply`, send({}), SELF));
   await withGmail({ briefEmail: true }, () => {
-    assert.equal(classify(`${GM}send_message`, send({}), "brief"), "allow");
-    assert.equal(classify(`${GM}send_message`, send({ to: ["other@example.com"] }), "brief"), "ask");
-    assert.equal(classify(`${GM}send_message`, send({ bcc: ["other@example.com"] }), "brief"), "ask");
+    assert.equal(classify(`${GM}send_message`, send({}), "background"), "allow");
+    assert.equal(classify(`${GM}send_message`, send({ to: ["other@example.com"] }), "background"), "ask");
+    assert.equal(classify(`${GM}send_message`, send({ bcc: ["other@example.com"] }), "background"), "ask");
     assert.equal(classify(`${GM}send_message`, send({}), "radar"), "ask", "only the brief run");
     assert.equal(classify(`${GM}send_message`, send({}), "chat"), "ask", "chat still goes through approval");
-    assert.equal(classify(`${GM}reply`, { messageId: "m", body: "x" }, "brief"), "ask");
+    assert.equal(classify(`${GM}reply`, { messageId: "m", body: "x" }, "background"), "ask");
   });
-  await withGmail({ briefEmail: false }, () => assert.equal(classify(`${GM}send_message`, send({}), "brief"), "ask", "BRIEF_EMAIL=off: no free send at all"));
+  await withGmail({ briefEmail: false }, () => assert.equal(classify(`${GM}send_message`, send({}), "background"), "ask", "BRIEF_EMAIL=off: no free send at all"));
 });
 
 // ---- approvals: the real recipients ----
@@ -185,7 +185,7 @@ test("an unattended Gmail send always asks; chat sends are judged; forward and n
 
 test("drafts go to the judge in every place (the draft step), reads are free, nothing is sent by it", async () => {
   await withGmail({}, () => {
-    for (const source of ["chat", "brief", "handler"] as const) {
+    for (const source of ["chat", "handler"] as const) {
       assert.equal(classify(`${GM}create_draft`, { to: ["a@example.com"], body: "x" }, source), "ask");
       assert.equal(classify(`${GM}update_draft`, { draftId: "d", body: "x" }, source), "ask");
     }
@@ -325,41 +325,16 @@ test("heartbeat on Gmail: the thread loses INBOX (the audit id is the thread id,
 
 // ---- the brief ----
 
-test("brief: Gmail's instructions use the gmail skill; email only with BRIEF_EMAIL=on and an address; the Signal brief stays the default", async () => {
+test("brief: Gmail's delivery sentence uses the gmail skill; email only with BRIEF_EMAIL=on and an address; chat alone is the default", async () => {
+  const how = () => mailSlot("gmail")!.brief.how();
   await withGmail({ briefEmail: false }, () => {
-    assert.equal(briefDelivery(), "signal");
-    const i = briefInstructions();
-    assert.match(i, /ted-personal-assistant:gmail/);
-    assert.match(i, /Do not deliver by email/);
-    assert.doesNotMatch(i, /send_message/);
+    assert.match(how(), /ted-personal-assistant:gmail/);
+    assert.match(how(), /Do not deliver by email/);
+    assert.doesNotMatch(how(), /send_message/);
   });
-  await withGmail({ briefEmail: true }, () => {
-    assert.equal(briefDelivery(), "email");
-    assert.match(briefInstructions(), new RegExp(`send_message[\\s\\S]*\\["${SELF.replace(".", "\\.")}"\\]`));
-  });
-  await withGmail({ briefEmail: true, mailSelfAddress: undefined }, () => assert.equal(briefDelivery(), "signal", "no address: no email"));
+  await withGmail({ briefEmail: true }, () => assert.match(how(), new RegExp(`send_message[\\s\\S]*\\["${SELF.replace(".", "\\.")}"\\]`)));
+  await withGmail({ briefEmail: true, mailSelfAddress: undefined }, () => assert.match(how(), /Do not deliver by email/, "no address: no email"));
 });
-
-test("brief: the sent body is captured only from a send to the owner's own address", async () => {
-  await withGmail({ briefEmail: true }, async () => {
-    const deps = (send: Record<string, unknown>) => ({
-      run: async (_p: string, onTool: (t: string, i: unknown) => void) => (onTool(`${GM}send_message`, send), { text: "ROUTINE_COMPLETE", costUsd: 0 }),
-      sendBrief: async () => {},
-      notify: async () => {},
-      delivery: "email" as const,
-    });
-    const log = console.log;
-    console.log = () => {};
-    try {
-      assert.equal(await runBriefAttempt(deps({ to: [SELF], subject: "☀️", body: "the brief" }), "p", 1, () => {}), "delivered");
-      assert.equal(await runBriefAttempt(deps({ to: ["other@example.com"], subject: "☀️", body: "the brief" }), "p", 1, () => {}), "incomplete");
-    } finally {
-      console.log = log;
-    }
-  });
-});
-
-// ---- skills, doctor ----
 
 test("skills and doctor: the gmail skill is offered instead of the Mailbird ones; doctor checks the address and the connector", () => {
   assert.ok(ownerSkills(true, "gmail").includes("ted-personal-assistant:gmail"));

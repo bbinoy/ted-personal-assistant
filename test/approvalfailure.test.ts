@@ -36,7 +36,7 @@ test("the owner's words come back with a failed reading, so the agent can act on
 
 test("opening a web page: in every place the judge may skip the question for a plain address, and the floor still asks for any other", async () => {
   const auto = async (): Promise<Verdict> => ({ decision: "auto", reason: "the owner asked for it" });
-  for (const source of ["chat", "background", "brief", "radar", "handler"] as const) {
+  for (const source of ["chat", "background", "radar", "handler"] as const) {
     let asked = 0;
     const canUse = makeCanUseTool(async () => (asked++, { approved: true }), source, undefined, auto, undefined, undefined, false, { ...source === "chat" ? CHAT : {}, provenance: standing("look up the opening hours") });
     scopeOf("owner").say("what are the opening hours of the post office?");

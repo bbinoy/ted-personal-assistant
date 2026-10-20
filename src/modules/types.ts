@@ -163,11 +163,8 @@ export interface MailTools {
 // What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
 // MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 export interface MailSlot extends MailTools {
-  brief: {
-    delivery: () => "email" | "signal"; // how today's brief reaches the owner
-    instructions: () => string; // the brief preset's instructions for this provider
-    captured: (tool: string, input: Record<string, unknown>) => { text: string | undefined } | undefined; // the brief the run sent with this provider's mail tool: undefined when the call is not the brief's send
-  };
+  // How the daily brief reaches the owner with this provider's tools, as a sentence for the heartbeat instruction (the daily-brief skill's delivery step).
+  brief: { how: () => string };
   chat: { skill: string; note: (owner: string) => string }; // the chat prompt: the mail skill it names, and what it says about drafts and sending
 }
 

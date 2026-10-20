@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// What changes between two messages (what is connected, the messages sent on its own, the last brief) is not in the chat's system prompt but at the start of the
+// What changes between two messages (what is connected, the messages sent on its own) is not in the chat's system prompt but at the start of the
 // turn's message, and only when the session has not been told it yet. The system prompt, and with it the warm process and the cached session, stays put.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "turncontext-"));
 
@@ -13,8 +13,6 @@ const { owner } = await import("../src/conversation.ts");
 const { runOptionsFor } = await import("../src/runoptions.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recordConnectors } = await import("../src/connectors.ts");
-const { writeText } = await import("../src/state.ts");
-const { LAST_BRIEF } = await import("../src/notes.ts");
 const { forgetShown, markShown, unseen } = await import("../src/turncontext.ts");
 const { settings } = await import("../src/settings.ts");
 
@@ -29,14 +27,13 @@ function rig(sessionId = "s1") {
 }
 const warm = settings.warm;
 
-test("turn context: the system prompt does not move with notices, the brief or the connectors", () => {
+test("turn context: the system prompt does not move with notices or the connectors", () => {
   (settings as { warm: boolean }).warm = false;
   const before = runOptionsFor(conv, inputs).systemPrompt;
   recordMessage("notice", Date.now(), "Meeting prep: call at 11:00", new Date());
-  writeText(LAST_BRIEF, "Brief of today");
   recordConnectors([], [{ name: "claude.ai Notion", status: "failed" }]);
   assert.equal(runOptionsFor(conv, inputs).systemPrompt, before);
-  assert.ok(!before.includes("Meeting prep: call at 11:00") && !before.includes("Brief of today") && !before.includes("Not connected right now"));
+  assert.ok(!before.includes("Meeting prep: call at 11:00") && !before.includes("Not connected right now"));
   (settings as { warm: boolean }).warm = warm;
 });
 
@@ -44,18 +41,18 @@ test("turn context: told at the start of the message once, again when it changes
   forgetShown(conv.sessionFile);
   const r = rig();
   await r.ask("hello");
-  assert.match(r.prompts[0]!, /Not connected right now[\s\S]*Meeting prep: call at 11:00[\s\S]*Brief of today[\s\S]*\n\nhello$/);
+  assert.match(r.prompts[0]!, /Not connected right now[\s\S]*Meeting prep: call at 11:00[\s\S]*\n\nhello$/);
   await r.ask("second");
   assert.equal(r.prompts[1], "second", "the session has it: not told again");
-  writeText(LAST_BRIEF, "Brief of tomorrow");
+  recordMessage("notice", Date.now() + 1, "Meeting prep: call at 15:00", new Date());
   await r.ask("third");
-  assert.match(r.prompts[2]!, /Brief of tomorrow[\s\S]*third$/);
+  assert.match(r.prompts[2]!, /call at 15:00[\s\S]*third$/);
   assert.match(r.prompts[2]!, /Meeting prep: call at 11:00/, "the whole block again, not only the change");
   await r.ask("fourth");
   assert.equal(r.prompts[3], "fourth");
   forgetShown(conv.sessionFile); // a compaction
   await r.ask("fifth");
-  assert.match(r.prompts[4]!, /Brief of tomorrow[\s\S]*fifth$/);
+  assert.match(r.prompts[4]!, /call at 15:00[\s\S]*fifth$/);
 });
 
 test("turn context: a friend's mail digest is turn context in its own words, fenced as data; no digest, nothing", async () => {

@@ -79,7 +79,7 @@ test("no run of the instance has Glob, Grep or Bash (they could list and read an
   const ownerOpts = { systemPrompt: "x", sessionFile: "state/session.json", maxTurns: 3, maxBudgetUsd: 1 };
   const runs = [
     buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source: "chat", memory: { dir: NOTES_DIR } }, undefined),
-    ...(["background", "brief", "handler", "radar", "dream", "heartbeat"] as const).map((source) => buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source }, undefined)),
+    ...(["background", "handler", "radar", "dream", "heartbeat"] as const).map((source) => buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source }, undefined)),
     buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source: "group", memory: { dir: ann.notesDir }, tenant: undefined }, undefined),
   ];
   for (const o of runs) assert.ok((o.tools as string[]).every((t) => ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"].includes(t)), String(o.tools));

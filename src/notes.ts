@@ -20,7 +20,6 @@ import { settings } from "./settings.ts";
 // front matter; after that day it is no longer shown.
 
 export const NOTES_DIR = join(settings.memoryDir, "notes");
-export const LAST_BRIEF = "memory/last-brief.md"; // summary memory: the latest daily brief
 
 // The categories are the assistant preset's (assistants/<name>/preset.json "notes"): which kinds of note this assistant keeps.
 export const CATEGORIES: readonly string[] = preset().notes.categories;

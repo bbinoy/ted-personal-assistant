@@ -330,7 +330,7 @@ test("google: nothing of the owner's or of the Google tools exists for a person 
   const tools = tenantTools(plain);
   assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, "group", plain.notesDir, tools), "deny");
   assert.equal(classify(G + "search_gmail_messages", { query: "x" }, "group", plain.notesDir, tools), "deny");
-  for (const source of ["chat", "background", "handler", "brief", "radar"] as const) assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, source, undefined), "deny", source);
+  for (const source of ["chat", "background", "handler", "radar"] as const) assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, source, undefined), "deny", source);
   const full = friend(["google", "mail", "calendar"]);
   assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, "group", full.notesDir, tenantTools(full)), "ask");
   assert.equal(classify(G + "search_gmail_messages", { query: "x" }, "group", full.notesDir, tenantTools(full)), "allow");

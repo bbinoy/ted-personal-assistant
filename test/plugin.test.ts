@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { missingSetup, setupItems, type Note } from "../src/notes.ts";
-import { briefSystem, chatContext, chatSystem, handlerSystem } from "../src/persona.ts";
+import { chatContext, chatSystem, handlerSystem, heartbeatSystem } from "../src/persona.ts";
 import { settings } from "../src/settings.ts";
 
 const skillsDir = join(settings.pluginDir, "skills");
@@ -14,7 +14,7 @@ test("plugin: manifest is valid and every skill has a name and description match
   assert.equal(manifest.name, "ted-personal-assistant");
   for (const s of skills) {
     const text = readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
-    const front = /^---\nname: (.+)\ndescription: (.+)\n---\n/.exec(text);
+    const front = /^---\nname: (.+)\ndescription: (.+)\n(?:[a-z-]+: .*\n)*---\n/.exec(text);
     assert.ok(front, `${s}: front matter`);
     assert.equal(front![1], s, `${s}: name matches folder`);
   }
@@ -47,7 +47,7 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
   assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
-  assert.match(briefSystem("", missing), /You cannot ask anyone[\s\S]*message "set up"/);
+  assert.match(heartbeatSystem("", missing), /You cannot ask anyone[\s\S]*message "set up"/);
   assert.match(handlerSystem("", { missing }), /Not set up yet/);
   assert.ok(!chatSystem(new Date()).includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
 });
@@ -77,7 +77,7 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 3);
   const chat = chatContext({ down: ["notion"] })!;
   assert.match(chat, /Not connected right now[\s\S]*Notion[\s\S]*Do not ask them to type in/);
-  assert.match(briefSystem("", [], ["notion", "calendar"]), /🔌 Notion and Google Calendar aren't connected/);
+  assert.match(heartbeatSystem("", [], ["notion", "calendar"]), /🔌 Notion and Google Calendar aren't connected/);
   assert.ok(!chatSystem(new Date()).includes("Not connected") && chatContext({ down: [] }) === undefined);
   assert.equal(NAMES.calendar, "Google Calendar");
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");

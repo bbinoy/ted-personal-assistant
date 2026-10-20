@@ -91,7 +91,7 @@ test("the answer: a message or [[silent]]; anything that does not follow the for
   assert.equal(parseAnswer(undefined, "").nextCheckMinutes, 30);
 });
 
-test("the instruction: the clock, the zone, the last look and the quiet window as text; no brief status, no gate vocabulary", () => {
+test("the instruction: the clock, the zone, the last look, the quiet window and the brief rules as text; no gate vocabulary", () => {
   const text = lookInstruction(DAY, new Date(2026, 9, 14, 13, 30).toISOString());
   assert.match(text, /Wednesday 2026-10-14 14:00/);
   assert.ok(text.includes(Intl.DateTimeFormat().resolvedOptions().timeZone));
@@ -102,7 +102,7 @@ test("the instruction: the clock, the zone, the last look and the quiet window a
   assert.match(text, /memory note/);
   assert.match(text, /at most 5 mails per look/);
   assert.match(text, /\[\[silent\]\]/);
-  assert.doesNotMatch(text, /brief status|daily brief today|OVERDUE/i);
+  assert.doesNotMatch(text, /idle fingerprint|nextCheckMinutes|"act"/i);
   assert.match(lastLookText(undefined, DAY), /first look/);
   assert.match(lastLookText(new Date(2026, 9, 13, 9, 0).toISOString(), DAY), /an earlier day/);
   const prompt = lookPrompt(DAY, text, ["[10-14 13:00] Ben: call Eve"]);
@@ -170,7 +170,7 @@ test("owner's look: due only when the chosen time has come, the owner wrote or a
   assert.equal(seen.profiles.length, 2);
   at(min(DAY, 50));
   assert.equal(await w.look(conv, min(DAY, 50)), "silent", "the chosen time came");
-  assert.equal(lookState(ledgerEntries(conv.logFile), min(DAY, 50)).wake !== undefined, true);
+  assert.equal(lookState(ledgerEntries(conv.logFile)).wake !== undefined, true);
 });
 
 test("owner's look: pause and mayRun stop it before any model call, nothing is recorded", async () => {
@@ -188,7 +188,7 @@ test("owner's look: pause and mayRun stop it before any model call, nothing is r
   for (const r of [paused, spent, cooling]) {
     assert.deepEqual(r.seen.profiles, [], "no run started");
     assert.deepEqual(readRows(), []);
-    assert.equal(lookState(ledgerEntries(r.conv.logFile), DAY).wake, undefined, "nothing recorded: the next tick looks again");
+    assert.equal(lookState(ledgerEntries(r.conv.logFile)).wake, undefined, "nothing recorded: the next tick looks again");
   }
   // the tick itself stops while paused
   const t = rig(() => ({}), { paused: true });

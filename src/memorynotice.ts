@@ -16,6 +16,7 @@ export const needsMemoryNotice = (reply: string) => splitReaction(reply).text.tr
 export function noteWritten(tool: string, input: Record<string, unknown>): void {
   if (!((tool === "Write" || tool === "Edit") && isNotePath(input.file_path) && !isIndex(input.file_path))) return;
   const file = basename(input.file_path);
+  if (file.startsWith("status-")) return; // the assistant's own records (a brief's state): not the owner's memory, no notice
   const written = String((tool === "Write" ? input.content : input.new_string) ?? "");
   const body = parseNote(file, written)?.text ?? written.trim();
   audit("memory_note", tool === "Write" ? "written" : "edited", "chat");

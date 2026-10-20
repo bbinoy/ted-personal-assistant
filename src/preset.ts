@@ -14,14 +14,14 @@ import { ASSISTANTS_DIR } from "./paths.ts";
 export interface CoreSkill { readonly name: string; readonly required?: boolean }
 export interface ProfileData { readonly maxTurns: number; readonly maxBudgetUsd: number; readonly notes: readonly string[] }
 export interface Rhythm {
-  readonly heartbeat: { readonly everyMinutes: number; readonly dayMinutes: number; readonly quietFromHour: number; readonly quietToHour: number }; // everyMinutes: the free tick (no model); dayMinutes: the heartbeat run's default gap between two looks in the day
-  // The daily brief follows a skill; code keeps the HOW and the backstop.
-  readonly brief: { readonly skill: string; readonly startHour: number; readonly backstopHour: number; readonly maxAttempts: number };
+  // everyMinutes: the free tick (no model); dayMinutes: the heartbeat run's default gap between two looks in the day; briefTime and briefOverdueHour: the usual time of the
+  // daily brief and the hour after which it is overdue (words in the heartbeat instruction, which the notes may change; no code schedules the brief).
+  readonly heartbeat: { readonly everyMinutes: number; readonly dayMinutes: number; readonly quietFromHour: number; readonly quietToHour: number; readonly briefTime: string; readonly briefOverdueHour: number };
   // The nightly dream (dream.ts): the same for every conversation. A direct chat (the owner's, a friend's) is dreamt once she wrote `minNewLines.direct` lines since the
   // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
   readonly dream: { readonly enabled: boolean; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
-export type ProfileKey = "chat" | "brief" | "heartbeat" | "background" | "group" | "handler";
+export type ProfileKey = "chat" | "heartbeat" | "background" | "group" | "handler";
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
@@ -35,9 +35,6 @@ export interface Preset {
 
 // The Claude plugin that bundles the skills (plugin/skills/<name>/SKILL.md); a skill is named to the model as "<plugin>:<skill>".
 export const PLUGIN = "ted-personal-assistant";
-
-// The skill a wake-up follows, as the model names it (the plugin and the skill of the preset's rhythm).
-export const wakeSkill = (wake: "brief", p: Preset = preset()): string => `${PLUGIN}:${p.rhythm[wake].skill}`;
 
 // ---- the words: templates with {{name}} (text), {{#name}}..{{/name}} (only when the flag is on) and {{^name}}..{{/name}} (only when off) ----
 
@@ -112,10 +109,9 @@ export const PROMPTS = {
   digest: ["digest"],
   tenant: ["browse", "weather", "draw", "consented", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send", "categories"],
   dream: ["subject", "own", "group", "categories"],
-  brief: ["mail", "skill"],
   heartbeatSystem: ["personality"],
   expert: ["personality"],
-  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated"],
+  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefHow"],
   handler: ["who", "own"],
   background: ["mail", "personality"],
   gateGroup: ["participation", "unprompted"],
@@ -186,10 +182,10 @@ export function loadPreset(dir: string): Preset {
   const name = typeof json.name === "string" && NAME.test(json.name) ? json.name : fail(where, `"name" must be a lower-case word (got ${JSON.stringify(json.name)})`);
 
   const r = sec("rhythm");
-  const hb = obj(at("rhythm.heartbeat"), r.heartbeat), br = obj(at("rhythm.brief"), r.brief), dr = obj(at("rhythm.dream"), r.dream), mn = obj(at("rhythm.dream.minNewLines"), dr.minNewLines);
+  const hb = obj(at("rhythm.heartbeat"), r.heartbeat), dr = obj(at("rhythm.dream"), r.dream), mn = obj(at("rhythm.dream.minNewLines"), dr.minNewLines);
   const rhythm: Rhythm = {
-    heartbeat: { everyMinutes: int(at("rhythm.heartbeat.everyMinutes"), hb.everyMinutes, 1, 240), dayMinutes: int(at("rhythm.heartbeat.dayMinutes"), hb.dayMinutes, 10, 120), quietFromHour: int(at("rhythm.heartbeat.quietFromHour"), hb.quietFromHour, 0, 23), quietToHour: int(at("rhythm.heartbeat.quietToHour"), hb.quietToHour, 0, 23) },
-    brief: { skill: word(at("rhythm.brief.skill"), br.skill), startHour: int(at("rhythm.brief.startHour"), br.startHour, 0, 23), backstopHour: int(at("rhythm.brief.backstopHour"), br.backstopHour, 0, 24), maxAttempts: int(at("rhythm.brief.maxAttempts"), br.maxAttempts, 1, 10) },
+    heartbeat: { everyMinutes: int(at("rhythm.heartbeat.everyMinutes"), hb.everyMinutes, 1, 240), dayMinutes: int(at("rhythm.heartbeat.dayMinutes"), hb.dayMinutes, 10, 120), quietFromHour: int(at("rhythm.heartbeat.quietFromHour"), hb.quietFromHour, 0, 23), quietToHour: int(at("rhythm.heartbeat.quietToHour"), hb.quietToHour, 0, 23),
+      briefTime: typeof hb.briefTime === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(hb.briefTime) ? hb.briefTime : fail(at("rhythm.heartbeat.briefTime"), `must be a time like "07:30" (got ${JSON.stringify(hb.briefTime)})`), briefOverdueHour: int(at("rhythm.heartbeat.briefOverdueHour"), hb.briefOverdueHour, 0, 23) },
     dream: {
       enabled: bool(at("rhythm.dream.enabled"), dr.enabled),
       minNewLines: { direct: int(at("rhythm.dream.minNewLines.direct"), mn.direct, 1, 1000), group: int(at("rhythm.dream.minNewLines.group"), mn.group, 1, 1000) },
@@ -212,7 +208,7 @@ export function loadPreset(dir: string): Preset {
     const d = obj(at(`profiles.${key}`), p[key]);
     return { maxTurns: int(at(`profiles.${key}.maxTurns`), d.maxTurns, 1, 1000), maxBudgetUsd: num(at(`profiles.${key}.maxBudgetUsd`), d.maxBudgetUsd, 0.01, 1000), notes: subset(`profiles.${key}.notes`, d.notes) };
   };
-  const profiles = { chat: profile("chat"), brief: profile("brief"), heartbeat: profile("heartbeat"), background: profile("background"), group: profile("group"), handler: profile("handler") };
+  const profiles = { chat: profile("chat"), heartbeat: profile("heartbeat"), background: profile("background"), group: profile("group"), handler: profile("handler") };
 
   const s = sec("skills");
   const coreList = Array.isArray(s.core) ? s.core : fail(at("skills.core"), "must be a list");
@@ -221,7 +217,6 @@ export function loadPreset(dir: string): Preset {
     return { name: word(at(`skills.core[${i}].name`), d.name), ...(d.required === undefined ? {} : { required: bool(at(`skills.core[${i}].required`), d.required) }) };
   });
   const order = words(at("skills.order"), s.order);
-  for (const w of [rhythm.brief.skill]) if (!core.some((c) => c.name === w)) fail(at("rhythm"), `the skill "${w}" is not in skills.core, so no run could follow it`);
 
   const ex = sec("expert");
   const expert = { model: typeof ex.model === "string" && /^[a-z][a-z0-9.-]*$/.test(ex.model) ? ex.model : fail(at("expert.model"), `must be a model alias or id like "sonnet" (got ${JSON.stringify(ex.model)})`), maxTurns: int(at("expert.maxTurns"), ex.maxTurns, 1, 200) };

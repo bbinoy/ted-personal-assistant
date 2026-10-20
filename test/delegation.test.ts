@@ -110,7 +110,7 @@ test("the heartbeat run has the Agent tool, the experts and the hook; no other r
   assert.ok(o.agents && Object.keys(o.agents).includes("expert"));
   assert.equal(o.agents!.expert!.model, "sonnet");
   assert.equal(o.hooks!.PreToolUse!.length, 1);
-  for (const name of ["brief", "background"] as const) {
+  for (const name of ["background"] as const) {
     const other = buildOptions(refuse, profileOptions(name), undefined);
     assert.ok(!(other.tools as string[]).includes("Agent"), name);
     assert.equal(other.agents, undefined, name);
@@ -157,9 +157,9 @@ test("an expert's tool call goes through the same canUseTool: the floor holds, i
   assert.equal(asked.length, 2, "an ask the judge does not wave through goes to the phone, for the expert too");
 });
 
-test("the heartbeat instruction names the heavy skills only when there are some", () => {
+test("the heartbeat instruction states the principle and names the heavy skills (the instruction of a plugin with none would not)", () => {
   const text = lookInstruction(new Date(2026, 9, 14, 14, 0), undefined);
   assert.match(text, /subagent_type "expert"/);
   assert.match(text, /at most 2 times per look/);
-  assert.doesNotMatch(text, /These skills are heavy/, "none of the bundled skills is marked yet");
+  assert.match(text, /These skills are heavy: never load them yourself/);
 });

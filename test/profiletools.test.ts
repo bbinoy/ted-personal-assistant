@@ -14,7 +14,7 @@ test("a job's own list of connector tools hides everything else (the mechanism a
   const tools = toolsFor(["calendar:read", "notion:read"]);
   assert.ok(tools.has(CAL + "list_events") && tools.has(NOTION + "notion-fetch"));
   assert.ok(!tools.has(CAL + "create_event") && !tools.has(NOTION + "notion-create-pages"));
-  const o = buildOptions(refuse, { ...profileOptions("brief"), mcpTools: tools }, undefined);
+  const o = buildOptions(refuse, { ...profileOptions("background"), mcpTools: tools }, undefined);
   const off = o.disallowedTools ?? [];
   assert.ok(off.includes("mcp__mailbird"), "the mail client is out of view whole");
   assert.ok(off.includes(CAL + "create_event") && off.includes(CAL + "delete_event"));
@@ -36,8 +36,8 @@ test("heartbeat run: it is offered the owner's whole set of tools and skills, on
   assert.equal(classify(CAL + "create_event", {}, "background"), "ask");
   assert.equal(classify(NOTION + "notion-create-pages", {}, "background"), "ask");
   // the other unattended runs keep the owner's whole set too
-  const brief = buildOptions(refuse, profileOptions("brief"), undefined);
-  assert.ok(!(brief.disallowedTools ?? []).includes(CAL + "create_event"));
+  const background = buildOptions(refuse, profileOptions("background"), undefined);
+  assert.ok(!(background.disallowedTools ?? []).includes(CAL + "create_event"));
 });
 
 test("hiddenOutside: a connector without an allowed tool is hidden whole; a tool seen later is hidden by name", () => {

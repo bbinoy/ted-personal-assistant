@@ -15,6 +15,7 @@ import { recordMemoryChange } from "../memorynotice.ts";
 import { createProposer } from "../propose.ts";
 import { LIMITS } from "../sanitize.ts";
 import { createSendServer } from "./send/send.ts";
+import { createStatusServer } from "../statusnote.ts";
 import { settings } from "../settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
 import { createVoiceServer } from "./voice/voicetool.ts";
@@ -39,6 +40,7 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
   draw: (ctx) => createDrawServer(ctx.key!),
   voice: (ctx) => createVoiceServer(ctx.key!),
   memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
+  status: () => createStatusServer(),
   browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.memory?.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: (ctx) => {
@@ -146,7 +148,7 @@ export async function mailbirdCheck(line: DoctorLine, connect: () => Promise<num
 export function gmailChecks(line: DoctorLine, o: { self: string | undefined; connector: boolean | undefined; briefEmail: boolean }): void {
   line(!!o.self, "MAIL_SELF_ADDRESS set", o.self ? "" : "your own Gmail address, the only address the brief may be emailed to (.env.example)");
   line(o.connector === undefined ? "warn" : o.connector, "Gmail connector available", o.connector === undefined ? "no run yet: start the agent, then run doctor again" : o.connector ? "" : "not available in the last run: connect Gmail in your Claude account (Settings, Connectors)");
-  line(o.briefEmail && !o.self ? false : true, "brief by email", o.briefEmail ? "on: emailed to MAIL_SELF_ADDRESS only, plus the Signal summary" : "off (BRIEF_EMAIL=off): the brief goes to Signal only");
+  line(o.briefEmail && !o.self ? false : true, "brief by email", o.briefEmail ? "on: emailed to MAIL_SELF_ADDRESS only, plus the chat summary" : "off (BRIEF_EMAIL=off): the brief goes to the chat only");
 }
 
 // By the name of the mail module (the value of MAIL_PROVIDER).

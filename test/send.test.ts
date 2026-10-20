@@ -39,7 +39,7 @@ test("send: manifest and policy: chat and group only, never background or unatte
   assert.equal(access(TOOL, "chat"), "free");
   assert.equal(classify(TOOL, { text: "On it." }, "chat"), "allow");
   assert.equal(classify(TOOL, { text: "On it." }, "group"), "allow");
-  for (const source of ["brief", "radar", "handler", "heartbeat", "dream", "browse", "background"] as const) {
+  for (const source of ["radar", "handler", "heartbeat", "dream", "browse", "background"] as const) {
     assert.equal(access(TOOL, source), undefined, source);
     assert.equal(classify(TOOL, { text: "x" }, source), "deny", source);
   }
@@ -50,7 +50,7 @@ test("send: only chat and group runs are given the tool server (and the old tool
   const servers = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {});
   assert.equal(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes("send"), true);
   assert.equal(servers({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g1" } }).includes("send"), true);
-  for (const source of ["brief", "radar", "handler", "background", "dream"] as const) assert.equal(servers({ ...base, source }).includes("send"), false, source);
+  for (const source of ["radar", "handler", "background", "dream"] as const) assert.equal(servers({ ...base, source }).includes("send"), false, source);
   for (const old of ["tell", "picture"]) assert.equal(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes(old), false, old);
   assert.equal(classify("mcp__tell__tell_user", { message: "x" }, "group"), "deny");
   assert.equal(classify("mcp__picture__send_picture", { id: "shot1" }, "group"), "deny");

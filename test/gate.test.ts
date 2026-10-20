@@ -119,32 +119,23 @@ const entry = (kind: Kind, min: number, text: string): Sent => ({ ts: min, at: a
 const wake = (min: number, nextInMin: number, lookedMin = min) => entry("wake", min, JSON.stringify({ next: at(min + nextInMin), looked: at(lookedMin) }));
 
 test("ledger: the last wake line is the state; due on time, on news, on a changed note, or never looked", () => {
-  const none = lookState([], T0);
+  const none = lookState([]);
   assert.equal(lookDue(none, T0), true); // never looked
-  const st = lookState([entry("member", -5, "Eve: hi"), wake(0, 30), entry("chat", 1, "Ted: hello")], T0);
+  const st = lookState([entry("member", -5, "Eve: hi"), wake(0, 30), entry("chat", 1, "Ted: hello")]);
   assert.equal(st.wake?.next, at(30));
   assert.equal(lookDue(st, new Date(T0.getTime() + 10 * 60_000)), false); // not yet, and Ted's own post is not news
   assert.equal(lookDue(st, new Date(T0.getTime() + 30 * 60_000)), true); // the chosen time
-  const news = lookState([wake(0, 30), entry("member", 5, "Eve: new")], T0);
+  const news = lookState([wake(0, 30), entry("member", 5, "Eve: new")]);
   assert.equal(lookDue(news, new Date(T0.getTime() + 6 * 60_000)), true); // a new message marks a look on the next tick
   assert.equal(lookDue(news, new Date(T0.getTime() + 6 * 60_000), { messagesCount: false }), false); // a "tagged" group: only a tag counts
   assert.equal(lookDue(st, new Date(T0.getTime() + 10 * 60_000), { notesChangedMs: T0.getTime() + 60_000 }), true); // a note changed since the look
   assert.equal(lookDue(st, new Date(T0.getTime() + 10 * 60_000), { notesChangedMs: T0.getTime() - 60_000 }), false);
-  const later = lookState([wake(0, 30), wake(40, 20)], T0);
+  const later = lookState([wake(0, 30), wake(40, 20)]);
   assert.equal(later.wake?.next, at(60)); // the newest wins
-  assert.equal(lookState([entry("wake", 0, "garbage")], T0).wake, undefined); // unreadable state: look again
+  assert.equal(lookState([entry("wake", 0, "garbage")]).wake, undefined); // unreadable state: look again
 });
 
-test("ledger: the brief's lines give attempts and done of TODAY; wakeText clamps the next look", () => {
-  const st = lookState([
-    entry("action", -24 * 60, "[brief] attempt 1 started"), entry("action", -24 * 60 + 1, "[brief] attempt 1 → delivered"), entry("notice", -24 * 60, "old"),
-    entry("action", 1, "[brief] attempt 1 started"), entry("action", 2, "[brief] attempt 1 → incomplete"), entry("action", 3, "[brief] attempt 2 started"),
-    entry("notice", 5, "Prep for 14:30"),
-  ], T0);
-  assert.deepEqual([st.briefAttempts, st.briefDone], [2, false]);
-  assert.equal(st.lastBriefAttemptAt, at(3));
-  assert.equal(lookState([entry("action", 9, "[brief] attempt 2 → delivered")], T0).briefDone, true);
-  assert.equal(lookState([entry("brief", 9, "Focus today: ...")], T0).briefDone, true); // a brief logged today is a brief
+test("ledger: wakeText clamps the next look", () => {
   const w = JSON.parse(wakeText(5, T0, T0.getTime()));
   assert.equal(w.next, at(15));
   assert.equal(JSON.parse(wakeText(999, T0, T0.getTime())).next, at(60));

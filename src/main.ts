@@ -219,13 +219,12 @@ const dream = () => {
   return dreamer.run().catch(() => {});
 };
 // The clock of every conversation's own initiative: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's look is the heartbeat
-// run (heartbeat/look.ts); the brief runs from a deterministic rule; a group's or a friend's look goes through the gate.
+// run (heartbeat/look.ts; the daily brief is a skill it delegates); a group's or a friend's look goes through the gate.
 const wakeups = createWakeups({
   pipeline,
   groupChats: messenger.capabilities.groups,
   vouch,
   runProfile: (profile, prompt, extra) => runProfile(profile, prompt, approveBackground, extra),
-  presets: { sendBrief: out.sendBriefSummary, notify: say, beforeBrief: dream },
   compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactConversation(conv, "quiet") },
 });
 
@@ -238,11 +237,12 @@ const tenantMail = createTenantMailLoops({
 });
 
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the
-// dream runs inside the brief preset, before the brief).
+// dream is started by its own job, below).
 startHeartbeat({
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
+      dream: () => dream(), // each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
       tenantMail: () => tenantMail.tick(), // each friend's own mail check, triage and handler (mailloops.ts): with her Google
     });
   },

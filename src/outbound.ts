@@ -1,8 +1,7 @@
 import type { Kind as MessageKind } from "./messages.ts";
 import { settings } from "./settings.ts";
 import { clean } from "./sanitize.ts";
-import { briefDelivery } from "./brief.ts";
-import { BRIEF_FOOTER, BRIEF_FOOTER_NO_MAIL, renderMarkdown, signalSummary, splitSections } from "./markdown.ts";
+import { renderMarkdown } from "./markdown.ts";
 import type { Messenger, Quote, Target, TextStyle } from "@ted-assistant/messenger";
 
 const LONG_BODY_MIN = 500; // an echo this long that starts a remembered reply is that reply's cut body
@@ -106,19 +105,5 @@ export function createOutbound(messenger: Pick<Messenger, "send" | "capabilities
 
   const replyPlain = (text: string, kind?: MessageKind) => reply(text, { plain: true, kind });
 
-  // The whole brief, one message per section (not used for the daily brief any more: the chat gets
-  // the short summary above, the full text goes out by email).
-  // The brief itself goes out by email. The chat gets the short version (pep talk, focus, a pointer).
-  async function sendBriefSummary(markdown: string) {
-    await reply(signalSummary(markdown, briefDelivery() === "email" ? BRIEF_FOOTER : BRIEF_FOOTER_NO_MAIL), { kind: "brief" });
-  }
-
-  async function sendBrief(markdown: string) {
-    for (const section of splitSections(markdown)) {
-      await reply(section, { kind: "brief" });
-      await new Promise((r) => setTimeout(r, 400)); // keep delivery order stable
-    }
-  }
-
-  return { reply, replyPlain, sendVoice, sendPicture, sendBrief, sendBriefSummary, isOwnEcho };
+  return { reply, replyPlain, sendVoice, sendPicture, isOwnEcho };
 }

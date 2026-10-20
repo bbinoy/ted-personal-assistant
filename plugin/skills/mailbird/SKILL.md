@@ -25,12 +25,11 @@ radar).
    `list_conversations` on a specific Inbox folder if you need more rows
    than it returned, and then cap it: `limit: 30`, and ignore anything
    older than the previous brief's timestamp / already covered by it
-   (the harness gives you the brief's send time and a digest of what the
-   heartbeat already handled).
+   (the status-brief note and the chat log in your brief say when it went
+   out and what the assistant already handled).
    **Never touch a briefing email** - a self-sent message from the owner
    with a `☀️` / `🌙` subject is skipped entirely (no archive, no label,
-   no reply, not counted). Old briefs are archived by the heartbeat, never
-   by a run of this skill.
+   no reply, not counted). Old briefs are never archived by a run of this skill.
 
 **Do NOT open every email.** `get_message` (full body + the entire
 quote chain) is the most expensive thing this routine does. Classify

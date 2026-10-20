@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { audit, readAudit } from "../src/audit.ts";
-import { buildDigest, readTriageSince, triageEntryFor } from "../src/digest.ts";
+import { readTriageSince, triageEntryFor } from "../src/digest.ts";
 import { dataPath } from "../src/state.ts";
 import { OWNER_TRIAGE, readTriage, recordTriage } from "../src/triagelog.ts";
 
@@ -21,10 +21,9 @@ test("the owner's decisions go to state/triage.jsonl; the audit log gets a row w
   assert.equal(rows[0]!.decision, "alerted");
   assert.deepEqual(rows[0]!.meta, { id: "c-owner-1", messageId: 7, label: "act_now", kind: "personal_or_work", protected: false });
   assert.doesNotMatch(JSON.stringify(rows), /Carl|Contract|example\.org|waiting/);
-  // the digest of the brief and the report read the file
+  // the report and restore read the file
   const read = readTriageSince(before);
   assert.deepEqual(read.map((r) => [r.decision, r.meta.from, r.meta.subject]), [["alerted", "Carl <carl@example.org>", "Contract for Anna"]]);
-  assert.match(buildDigest(read, before), /Carl <carl@example\.org>: Contract for Anna/);
   assert.equal(triageEntryFor("c-owner-1")?.meta.messageId, 7);
 });
 

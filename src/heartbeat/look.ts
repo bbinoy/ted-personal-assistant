@@ -8,6 +8,8 @@ import { lookDue, recordWake, type LookState } from "../ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../payer.ts";
 import { heartbeatInstruction } from "../persona.ts";
 import { delegatedText, expertSetup } from "./delegation.ts";
+import { mailSlot } from "../modules/index.ts";
+import { preset } from "../preset.ts";
 import { PROFILES, type OwnerProfile } from "../profiles.ts";
 import { settings } from "../settings.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
@@ -41,6 +43,9 @@ export function lastLookText(looked: string | undefined, now: Date): string {
   return `Your last look was at ${hhmm(at)}${sameDay ? "" : " (an earlier day)"}.`;
 }
 
+// How the daily brief reaches the owner, for the instruction: the mail provider's own words, or the chat alone when there is no mail.
+const briefHow = (): string => (settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format.");
+
 // The fixed text of one look, as the judge's standing provenance and the start of the prompt. Written by code from the preset; no mail, no chat in it.
 export function lookInstruction(now: Date, looked: string | undefined): string {
   return heartbeatInstruction({
@@ -51,6 +56,9 @@ export function lookInstruction(now: Date, looked: string | undefined): string {
     quietTo: `${String(settings.quietEndHour).padStart(2, "0")}:00`,
     dayMinutes: String(settings.heartbeatDayMinutes),
     delegated: delegatedText(expertSetup(PROFILES.heartbeat.skills, "")),
+    briefTime: preset().rhythm.heartbeat.briefTime,
+    briefOverdueHour: `${String(preset().rhythm.heartbeat.briefOverdueHour).padStart(2, "0")}:00`,
+    briefHow: briefHow(),
   });
 }
 

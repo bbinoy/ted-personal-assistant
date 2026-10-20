@@ -10,7 +10,7 @@ import { readJson, writeJson } from "./state.ts";
 import { RateLimitError } from "./errors.ts";
 import type { MailInput, Triage } from "./triage.ts";
 
-// The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (wake-ups, dream, brief, the friends' mail checks).
+// The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (wake-ups, dream, the friends' mail checks).
 // The owner's own proactive work is the heartbeat run (src/heartbeat/look.ts, started from wake.ts), not a mail check.
 //
 // The mail check below is ONE function for each FRIEND who has mail through her own Google (mailloops.ts): the heartbeat lists her inbox with NO model call, and only when
@@ -52,7 +52,7 @@ export interface MailHooks {
 }
 
 interface HeartbeatHooks {
-  onTick: () => void; // tick-driven jobs (wake-ups, dream, brief, the friends' mail checks): independent of each other, never awaited
+  onTick: () => void; // tick-driven jobs (wake-ups, dream, the friends' mail checks): independent of each other, never awaited
 }
 
 // What differs between the conversations that have a mail check.

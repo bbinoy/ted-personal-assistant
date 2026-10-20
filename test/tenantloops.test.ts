@@ -20,7 +20,7 @@ const { keyNotices } = await import("../src/tenants/keynotice.ts");
 const { askGateWith, gateSystem, parseGate } = await import("../src/gate.ts");
 const { owner, tenant } = await import("../src/conversation.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
-const { hasPresets, onLogin } = await import("../src/conversationmodel.ts");
+const { onLogin } = await import("../src/conversationmodel.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recordCost, spentToday } = await import("../src/budget.ts");
 const { noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
@@ -146,8 +146,8 @@ test("without the capability, with TENANTS off, or while not active: no look at 
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "mail"), false, "not granted");
   T.grant(live.id, "mail");
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "mail"), false, "a connector is the owner's login's: granting it to a tenant changes nothing yet");
-  assert.equal(hasPresets(tenant(live.id)) || onLogin(tenant(live.id)), false);
-  assert.equal(hasPresets(owner()) && onLogin(owner()), true);
+  assert.equal(onLogin(tenant(live.id)), false);
+  assert.equal(onLogin(owner()), true);
 });
 
 test("a tenant's suspension, cooldown, budget and a missing instance key each stop her look before any model call", async () => {

@@ -21,7 +21,6 @@ export const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voi
 const LOGIN_ONLY: readonly Capability[] = ["profile", "card", "admin", "drive"];
 
 // What the instance switches off in .env for everybody (the owner included): a feature that is off has no tools, no skill and no loop.
-// (PROACTIVE is not here: it switches the radar preset, which is not a capability of its own; tasks.ts reads it.)
 const SWITCHES: ReadonlyArray<readonly [Capability, () => boolean]> = [
   ["browse", () => settings.browse],
   ["weather", () => settings.weather],

@@ -268,10 +268,6 @@ export function loadSettings(env: Env) {
     // or your standing tasks, inside the floor that code sets; off asks you about everything that is not a plain read.
     autoApprove: autoApprove(env),
 
-    briefStartHour: num(env, "BRIEF_START_HOUR", rhythm.brief.startHour, 0, 23), // the hour the brief is due (tasks.ts briefOwed)
-    briefMaxAttempts: num(env, "BRIEF_MAX_ATTEMPTS", rhythm.brief.maxAttempts, 1, 10),
-    // The daily brief starts from the deterministic schedule in src/wake.ts: the first look at or after BRIEF_START_HOUR with no brief logged today (BRIEF_BACKSTOP_HOUR=24: never).
-    briefBackstopHour: num(env, "BRIEF_BACKSTOP_HOUR", rhythm.brief.backstopHour, 0, 24), // 24 turns the brief off; any other hour: the brief is due from BRIEF_START_HOUR (kept as a setting so an old .env still loads)
 
     // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every model call, so hide what your skills never use. A skill that needs a
     // hidden tool will fail, so list it here. HIDDEN_CONNECTORS: tool-name prefixes of whole connectors (the Gmail one is shown while MAIL_PROVIDER=gmail, and the mail
@@ -359,7 +355,6 @@ export function loadSettings(env: Env) {
     slowReplySeconds: num(env, "SLOW_REPLY_SECONDS", 20, 0, 600), // an answer later than this is threaded under the message (quote.ts)
     echoWindowMinutes: num(env, "ECHO_WINDOW_MINUTES", 5, 1, 60), // our own sent text coming back within this long is an echo, not the owner (outbound.ts)
     warmRefreshMinutes: num(env, "WARM_REFRESH_MINUTES", 25, 1, 1440), // the owner's warm process is renewed this often, so it is still fresh after a quiet hour (main.ts)
-    briefRetryGapMinutes: num(env, "BRIEF_RETRY_GAP_MINUTES", 10, 1, 240), // an incomplete brief is retried after this long (tasks.ts)
     seenMailDays: num(env, "SEEN_MAIL_DAYS", 14, 1, 365), // how long the heartbeat remembers it has seen a mail (heartbeat.ts)
     noticeAgeHours: num(env, "NOTICE_AGE_HOURS", 24, 1, 168), // what the assistant sent on its own stays "recent" for the chat this long (messages.ts)
     compactBackoffMinutes: num(env, "COMPACT_BACKOFF_MINUTES", 60, 1, 1440), // after a failed compaction, no new try for this long (session.ts)
@@ -379,7 +374,7 @@ export function loadSettings(env: Env) {
     dataDir,
     stateDir: join(dataDir, "state"), // bookkeeping the model never reads
     logsDir: join(dataDir, "logs"), // agent.log, audit.jsonl, daemon and launchd output
-    memoryDir: join(dataDir, "memory"), // what the model reads: notes/ (the SDK auto-memory) and last-brief.md
+    memoryDir: join(dataDir, "memory"), // what the model reads: notes/ (the SDK auto-memory) 
     tenantsDir: join(dataDir, "tenants"), // one folder per tenant (notes, history, session, cost, tenant.json): outside logs/, state/ and memory/, so the owner's chat does not read it (policy.ts)
   } as const;
 }

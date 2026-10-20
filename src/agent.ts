@@ -11,7 +11,7 @@ import type { Document } from "./document.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./approvals/permissions.ts";
-import { backgroundSystem, briefSystem, expertSystem, handlerSystem, heartbeatSystem } from "./persona.ts";
+import { backgroundSystem, expertSystem, handlerSystem, heartbeatSystem } from "./persona.ts";
 import { expertSetup } from "./heartbeat/delegation.ts";
 import { handlerToolsOf } from "./mailhandler.ts";
 import type { Payer } from "./payer.ts";
@@ -27,7 +27,7 @@ function profileSystem(name: OwnerProfile): string {
   const notes = memoryFor(PROFILES[name].notes);
   const off = down(); // (read once)
   const missing = missingSetup(readNotes(), off);
-  return name === "brief" ? briefSystem(notes, missing, off) : name === "heartbeat" ? heartbeatSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
+  return name === "heartbeat" ? heartbeatSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
 }
 
 // The expert's whole system text: its persona and the same notes as the heartbeat run (it reads no notes of its own).

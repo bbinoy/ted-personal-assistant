@@ -59,7 +59,7 @@ test("provenance per source: the owner's chat gives the owner's messages, a job 
   assert.equal(x.seen[0]!.provenance.message, "archive the pottery confirmation");
   assert.equal(x.seen[0]!.untrustedInput, false);
   // every job: its own task, whichever source it is
-  for (const source of ["handler", "brief", "radar", "background"] as const) {
+  for (const source of ["handler", "radar", "background"] as const) {
     x = await run(source, "the standing task text", source === "handler" ? HANDLER : {});
     assert.equal(x.r.behavior, "allow", source);
     assert.deepEqual([x.seen[0]!.provenance.kind, x.seen[0]!.provenance.task, x.seen[0]!.untrustedInput], ["standing", "the standing task text", source === "handler"], source);
@@ -116,7 +116,7 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
   };
   // never allowed, whatever anyone says: classify itself says deny (so this does not pass because an approver declined), and an approver who would say yes is never asked
   for (const tool of ["mcp__claude_ai_Interactive_Brokers__create_order_instruction", `${MB}delete_conversation_permanently`, `${MB}trash_conversation`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`]) {
-    for (const source of ["chat", "brief", "handler", "background", "group"] as const) assert.equal(classify(tool, {}, source), "deny", `${tool} (${source})`);
+    for (const source of ["chat", "handler", "background", "group"] as const) assert.equal(classify(tool, {}, source), "deny", `${tool} (${source})`);
     let asking = 0;
     const yes = makeCanUseTool(async () => (asking++, { approved: true }), "chat", undefined, fake("auto").fn, undefined, undefined, false, CHAT);
     assert.equal(((await yes(tool, {}, opts)) as Out).behavior, "deny", tool);

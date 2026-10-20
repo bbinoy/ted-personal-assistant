@@ -44,7 +44,7 @@ test("provenance is code: the run's own, with the source and a browse task added
   const owner = { kind: "owner", message: "send it", earlier: ["hello", "reply to Armon"], assistantSaid: "Draft shown" } as const;
   assert.deepEqual(provenanceFor(owner, "chat"), { ...owner, source: "chat" });
   // a job with fixed text, whatever the source
-  for (const source of ["handler", "brief", "radar", "background"] as const) assert.deepEqual(provenanceFor({ kind: "standing", task: "handle the mail" }, source), { kind: "standing", task: "handle the mail", source });
+  for (const source of ["handler", "radar", "background"] as const) assert.deepEqual(provenanceFor({ kind: "standing", task: "handle the mail" }, source), { kind: "standing", task: "handle the mail", source });
   // the browse worker of a chat, a group or a wake-up inherits the words that started the run it works for; its task is added as written by the assistant
   assert.deepEqual(provenanceFor({ kind: "member", message: "book me a table" }, "browse", "find a table"), { kind: "member", message: "book me a table", source: "browse", browseTask: "find a table" });
   assert.equal(provenanceFor(owner, "browse", "find trains")?.kind, "owner");
