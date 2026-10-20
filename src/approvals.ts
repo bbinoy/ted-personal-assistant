@@ -47,7 +47,8 @@ export interface Answer {
   reply?: string; // for "clarify": what to tell the owner (the message was consumed; the approval stays open)
 }
 
-// One open question. Kept in `open` keyed by the timestamp of its "Approve?" message (known once the send resolved).
+// One open question. Kept in `open` keyed by its conversation and the timestamp of its "Approve?" message (known once the send resolved): two conversations can
+// hold a message with the same timestamp, and a reply or a reaction in one never reaches the other's question.
 interface Open {
   resolve: (d: Decision) => void;
   label: string;
@@ -61,9 +62,10 @@ interface Open {
   scope: string; // the conversation it was asked in (Conversation.key): an answer from another conversation never applies, whoever gives it (the admin included)
   typedYes: boolean; // a card payment: only a typed yes approves it (isTypedYes); never a reaction, an emoji, a voice message or the judge's own reading
 }
-const open = new Map<number, Open>();
+const slot = (scope: string, ts: number) => `${scope}:${ts}`;
+const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
-const closed = new Map<number, string>(); // recently ended approvals (timestamp -> label): a quoted reply to one must not land on another
+const closed = new Map<string, string>(); // recently ended approvals (scope and timestamp -> label): a quoted reply to one must not land on another
 
 // "15 min", "2 h", "1 h 30 min".
 export function formatWait(minutes: number): string {
@@ -81,7 +83,7 @@ const REACT_NO = new Set(["👎", "❌"]);
 // A reaction counts only if it is on an open "Approve?" message itself; it answers that one. A card payment is the exception: a 👍 never
 // approves it ("needs_text": the question stays open and the owner is told to type yes); a 👎 declines it like any other.
 export function answerReaction(emoji: string, targetTimestamp: number, scope: string, by?: string): "approved" | "declined" | "ignored" | "needs_text" {
-  const current = open.get(targetTimestamp);
+  const current = open.get(slot(scope, targetTimestamp));
   if (!current || current.done || current.scope !== scope) return "ignored";
   const e = emoji.replace(/[︎️]/g, ""); // drop variation selectors
   if (current.typedYes && REACT_YES.has(e)) {
@@ -128,7 +130,7 @@ const WHICH = "Which one do you mean? Reply to the question itself, or react to 
 async function read(text: string, onJudging: () => void, quote: { timestamp: number } | undefined, deps: AnswerDeps, ctx: Ctx, mine: readonly Open[]): Promise<Answer> {
   const live = [...mine].sort((a, b) => a.ts - b.ts);
   const t = normalise(text);
-  const found = quote && quote.timestamp !== 0 ? open.get(quote.timestamp) : undefined;
+  const found = quote && quote.timestamp !== 0 ? open.get(slot(ctx.scope, quote.timestamp)) : undefined;
   const quoted = found?.scope === ctx.scope ? found : undefined;
   const direct = quoted && !quoted.done ? quoted : live.length === 1 && !quote ? live[0] : undefined;
   // A card payment: the fast path approves only a typed yes (not 👍, ok, sure, and not a transcript of a voice message); any other yes is asked for again.
@@ -152,7 +154,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const quotedId = quoted && [...ids].find(([, o]) => o === quoted)?.[0];
   onJudging();
   const started = Date.now();
-  const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? ((reply) => recentIn(ctx.scope, reply)))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(quote.timestamp), voice: ctx.voice } : undefined);
+  const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? ((reply) => recentIn(ctx.scope, reply)))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(slot(ctx.scope, quote.timestamp)), voice: ctx.voice } : undefined);
   const stillOpen = () => live.filter((o) => !o.done);
   const record = (what: string, o?: Open) => audit(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", rows(ctx.scope, { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started }));
   // "Yes to both": each part is applied to its own approval; only the parts that are not a plain yes / no stay open, and the
@@ -189,6 +191,12 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   }
   const current = ids.get(j.target);
   if (!current || current.done) return { outcome: "none" }; // resolved or expired while the judge thought
+  // A payment resolves only through the direct paths (the sole open approval, or a reply that quotes it), never because the answer model chose it as the target of a message
+  // that quotes nothing: "YES" meant for the calendar question must not pay when the model picks the payment. Ask which one is meant.
+  if (current.typedYes && current !== direct) {
+    record("refused", current);
+    return { outcome: "clarify", reply: `${WHICH} A payment is approved only by typing yes as a reply to its own question.` };
+  }
   const call = current.call;
   if (j.outcome === "decline") {
     record("declined", current);
@@ -244,12 +252,12 @@ export function request(
       if (entry.done) return;
       entry.done = true;
       if (entry.ts) {
-        closed.set(entry.ts, label);
+        closed.set(slot(opts.scope, entry.ts), label);
         if (closed.size > 50) closed.delete(closed.keys().next().value!);
       }
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
-      if (entry.ts && open.get(entry.ts) === entry) open.delete(entry.ts);
+      if (entry.ts && open.get(slot(opts.scope, entry.ts)) === entry) open.delete(slot(opts.scope, entry.ts));
       // The warm judge is shared and single-use: drop it only when no other chat approval is left to use it.
       if (--openChat === 0) discardJudge();
       if (why) console.log(`approval ${why}: ${named}`);
@@ -270,7 +278,7 @@ export function request(
       .then((ts) => {
         if (entry.done) return;
         entry.ts = ts;
-        open.set(ts, entry);
+        open.set(slot(opts.scope, ts), entry);
       })
       .catch(() => finish({ approved: false }));
   });
