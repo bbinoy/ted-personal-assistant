@@ -44,7 +44,7 @@ const NEVER = /attachment|download|apply_sensitive|batch_|update_label/i;
 
 export type GmailVerdict = "ask" | "deny";
 
-// A restriction for a Gmail tool call, or undefined to let the manifest decide. `archiveLive`: GMAIL_ARCHIVE_LIVE. It never grants: the brief to oneself
+// A restriction for a Gmail tool call, or undefined to let the manifest decide. `archiveLive`: ARCHIVE=live. It never grants: the brief to oneself
 // is a `freeWhen` of the module's send action (modules/gmail.ts), not a verdict.
 export function gmailVerdict(tool: string, input: Record<string, unknown>, o: { archiveLive: boolean }): GmailVerdict | undefined {
   if (!isGmailTool(tool)) return undefined;

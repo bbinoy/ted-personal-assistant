@@ -146,7 +146,7 @@ export async function mailbirdCheck(line: DoctorLine, connect: () => Promise<num
 export function gmailChecks(line: DoctorLine, o: { self: string | undefined; connector: boolean | undefined; archiveLive: boolean; briefEmail: boolean }): void {
   line(!!o.self, "MAIL_SELF_ADDRESS set", o.self ? "" : "your own Gmail address, the only address the brief may be emailed to (.env.example)");
   line(o.connector === undefined ? "warn" : o.connector, "Gmail connector available", o.connector === undefined ? "no run yet: start the agent, then run doctor again" : o.connector ? "" : "not available in the last run: connect Gmail in your Claude account (Settings, Connectors)");
-  line(true, "Gmail archiving", o.archiveLive ? "live (GMAIL_ARCHIVE_LIVE=true)" : "LOG-ONLY (GMAIL_ARCHIVE_LIVE=false): it records would-archive and archives nothing; set true after the trial week");
+  line(true, "Gmail archiving", o.archiveLive ? "live (ARCHIVE=live)" : "LOG-ONLY (ARCHIVE=log): it records would-archive and archives nothing; remove ARCHIVE=log (or set live) after the trial week");
   line(o.briefEmail && !o.self ? false : true, "brief by email", o.briefEmail ? "on: emailed to MAIL_SELF_ADDRESS only, plus the Signal summary" : "off (BRIEF_EMAIL=off): the brief goes to Signal only");
 }
 
@@ -187,7 +187,7 @@ export const MAIL: Readonly<Record<string, MailRuntime>> = {
       // The handler's reply drafts are shown on the phone like Mailbird's, read back through the connector (the same read the approval of their send uses).
       return { propose: createProposer({ read: (id) => readers.draft(String(id)), send: (t) => io.reply(t) }).show };
     },
-    check: (line) => gmailChecks(line, { self: settings.mailSelfAddress, connector: readConnectors()?.gmail, archiveLive: settings.gmailArchiveLive, briefEmail: settings.briefEmail }),
+    check: (line) => gmailChecks(line, { self: settings.mailSelfAddress, connector: readConnectors()?.gmail, archiveLive: settings.archiveLive, briefEmail: settings.briefEmail }),
   },
 };
 

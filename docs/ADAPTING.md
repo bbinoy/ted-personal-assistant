@@ -1,14 +1,16 @@
 # Adapting the agent
 
-The agent has two external edges: **the mail source** (Mailbird here) and **the messenger** (Signal here). Everything else (policy, triage, approvals, the brief) is independent of both. This guide lists what each edge must provide, so you can swap either.
+The agent has two external edges: **the mail source** (Mailbird or the Gmail connector here) and **the messenger** (Signal here). Everything else (policy, triage, approvals, the brief) is independent of both. This guide lists what each edge must provide, so you can swap either, and how to add a tool (a **module**) or a different assistant (a **preset**).
 
-- [Mail: Gmail directly, or another provider](#mail-gmail-directly-or-another-provider)
+- [Mail: Gmail, or another provider](#mail-gmail-or-another-provider)
+- [Add a tool: a module](#add-a-tool-a-module)
+- [Add an assistant: a preset](#add-an-assistant-a-preset)
 - [Messenger: Telegram, Slack, iMessage, WhatsApp](#messenger-telegram-slack-imessage-whatsapp)
 - [Other things you will want to change](#other-things-you-will-want-to-change)
 
 ---
 
-## Mail: Gmail directly, or another provider
+## Mail: Gmail, or another provider
 
 ### Why the default is a local client
 
@@ -16,11 +18,17 @@ Proton Mail is end-to-end encrypted: there is no server-side API or IMAP for thi
 
 If you do not use Proton, none of that is needed.
 
-### What the code needs from a mail source
+### Gmail: MAIL_PROVIDER=gmail
 
-Mail is used in two places, and they are separate:
+Gmail is built in. Set `MAIL_PROVIDER=gmail` (and `MAIL_SELF_ADDRESS` if the brief may be emailed to you, `BRIEF_EMAIL=on`) and the Gmail module `src/modules/gmail.ts` is loaded instead of the Mailbird one: the mail check and the agent's turns use claude.ai's own Gmail connector (`mcp__claude_ai_Gmail__*`, inherited from your Claude login), the rows say what each tool is (reads and drafts run, `unlabel_thread` is the archive, `send_message`, `reply` and `forward` are judged and asked about with the real recipients, the rest asks), `src/gmailrules.ts` adds the rules a row cannot say (TRASH and SPAM labels, attachment content, the brief to oneself), and the `gmail` skill replaces the `mailbird` one. [SETUP.md](SETUP.md) walks through it; archiving can be switched to log-only for a trial week with `ARCHIVE=log`. Nothing in `src/` needs replacing.
 
-1. **The heartbeat** (no model involved) uses a direct client, `src/mailbird.ts` (its `inboxes()` wraps the first two calls below), from `src/heartbeat.ts` and `src/cli.ts`:
+### A different mail client or IMAP: a module in the `mail` slot
+
+A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird.ts` and `gmail.ts` are the two examples). What it must provide:
+
+1. **Rows** for its tools (see "Add a tool" below), with the actions the policy knows (`read`, `draft`, `reply-draft`, `send`, `reply`, `forward`, `archive`, `restore`, `label`, `select`, `send-self`...) and a `view` on the tools that send, so that an approval can show the real recipients.
+2. **The `mail` slot** (`MailSlot` in `src/modules/types.ts`): whether a background handler exists, how the brief is delivered and which tool call is the brief, the brief's instructions, the chat prompt's note about drafts, and how a send is read back (`readBack`, `views`).
+3. **The code behind it**, in `src/modules/runtime.ts` bound by the module's name (`MailRuntime`): the client the heartbeat uses (`source()`), `restore`, what to start with the app, and the doctor's check. The heartbeat's client needs these operations (here the Mailbird names):
 
 | Operation (Mailbird tool) | Used for | Expected result |
 |---|---|---|
@@ -32,35 +40,38 @@ Mail is used in two places, and they are separate:
 | `move_conversation_to_inbox(conversationId)` | `npm run restore` | – |
 | `search_conversations(query, limit)` | restore fallback by subject | `[{ conversationId, subject }]` |
 
-2. **The agent's own turns** (chat, brief, handler) use whatever MCP servers Claude Code has configured. They reach mail through tool names such as `mcp__mailbird__get_message`. Those names appear in the mail provider's module, `src/modules/mailbird.ts` (its rows: which tools are reads and which are judged, how a send is viewed, the approval titles, `BRIEF_TOOL` from `src/brieftext.ts`, the tool that emails the brief to yourself), plus your skills. A different mail client is a new module in the `mail` slot: its rows, its mail view, its brief words, and its client and checks in `src/modules/runtime.ts`.
+4. **Hide what the model does not need**: `hide: { prefix, visible, valid, hint }` names the connector's tools the model is shown (every tool schema is sent on every model call); `<MODULE>_TOOLS` in `.env` replaces the list.
+5. **A skill** for the provider in `plugin/skills/<name>/` (`skills: [{ name, required: true }]`), and the provider name added to `MAIL_PROVIDER`'s accepted values in `src/settings.ts`.
 
-### Gmail directly
-
-1. **Replace `src/mailbird.ts`** with a small class exposing the same `call(name, args)` surface, or better, change the few call sites to a typed interface. Map the operations to the Gmail API:
-
-   | Operation | Gmail API |
-   |---|---|
-   | new mail since last tick | `users.history.list(startHistoryId)` (cheaper than listing) or `users.messages.list(q: "in:inbox", maxResults)` |
-   | body + sender | `users.messages.get(format: "full")` |
-   | archive | `users.threads.modify(removeLabelIds: ["INBOX"])` |
-   | restore | `users.threads.modify(addLabelIds: ["INBOX"])` (Gmail keeps the same id, so restore is simpler than with Mailbird) |
-   | conversation id | the Gmail `threadId` |
-
-   Auth: a Google OAuth *desktop* client with the narrowest scope that works (`gmail.modify`; you do not need full access), refresh token stored in the macOS Keychain, not in `.env`.
-
-2. **For the agent's turns**, either run a Gmail MCP server of your own, or use the **Gmail connector** that claude.ai provides (it already shows up as `mcp__claude_ai_Gmail__*`; `format.ts` already knows how to describe several of its send tools, and `src/modules/gmail.ts` already has its rows, loaded only when `MAIL_PROVIDER=gmail`: reads run, drafts and `unlabel_thread` (archive) run, `send_message`, `reply` and `forward` are judged in chat and ask elsewhere, the rest asks; `mailView` already reads their inputs). Adjust the rows to the tools you actually expose.
-
-3. **The brief email**: `send_self_briefing` is a Mailbird convenience (render Markdown, send to yourself). With Gmail, send a message to your own address (`users.messages.send`) and change `BRIEF_TOOL` in `src/brieftext.ts` (and the Gmail module's brief words).
-
-4. **Drop what you no longer need**: the "Mailbird must be running" assumption in the docs, and the Mailbird checks in `doctor` (`src/cli.ts`).
-
-5. **Skills**: the bundled `mailbird` skill (`plugin/skills/mailbird`) becomes a `gmail` skill: rename the folder, and the names in `BUNDLED_SKILLS` (`src/agent.ts`), `persona.ts` and the brief skill.
+IMAP maps cleanly onto the table: list = `SEARCH`/`FETCH` on INBOX by UID, archive = `MOVE` to the archive mailbox, conversation id = Message-ID or UID (and note that moving a message changes its UID, which is why `restore` tries several ids). `test/modules.test.ts` and `test/manifestrows.test.ts` check the shape of a new module and pin its rows.
 
 Because Gmail is reachable from anywhere, you could also run the heartbeat on an always-on machine and keep only the Mac-bound parts (Proton via Bridge) local. A natural design is two instances with a lease, so only one answers a given message, and the always-on one covers while the Mac sleeps. That is not built here.
 
-### Another mail client or IMAP
+---
 
-Same recipe: implement the table above against its API or MCP server. IMAP maps cleanly: list = `SEARCH`/`FETCH` on INBOX by UID, archive = `MOVE` to the archive mailbox, conversation id = Message-ID or UID (and note that moving a message changes its UID, which is why `restore` tries several ids).
+## Add a tool: a module
+
+Everything the harness knows about a tool lives in one file, `src/modules/<name>.ts`: a plain `ToolModule` object (`src/modules/types.ts` explains each field). Nothing else in the code names the tool's name. To add one:
+
+1. **Write the module.** Rows say what each tool IS, not whether it may run: `rowsOf(prefix, provider, capability)(action, "tool_a tool_b")` gives one row per tool with an action (`read`, `draft`, `send`, ...) and the capability a conversation needs to be offered it (`cap`; a new capability goes in `CAPABILITIES` in `src/tenants.ts`, in the defaults of the people who should have it and, if a switch can turn it off, in `SWITCHES` in `src/capabilities.ts`). `free: true` (or a list of actions) marks what runs without the approval judge, such as a plain read; everything else is judged, then asked. `untrusted` / `trusted` say whether reading the tool shows text a third party wrote. `connection` says how it is served: `connector` (the owner's claude.ai connector), `in-process` (an MCP server this process builds) or `external` (a separate process or URL), with a `when(ctx)` that decides per run whether the server exists. `floor` can only restrict (a `verdict`, a `judgeNever` list); it can never grant. `titles`, `skills` and `setup` carry the approval titles, the skill the tool brings (`plugin/skills/<skill>/SKILL.md`, `shared` capabilities for a skill friends and groups may load) and the setup questions.
+2. **List it** in `src/modules/index.ts` (one line in `registered()`; the order is the order of the run's MCP servers).
+3. **Build its server** if it starts one: add the factory under the module's `connection.name` in `SERVERS` in `src/modules/runtime.ts`. A tool no module lists is unknown: it asks and is never judged.
+4. **Test it.** `test/modules.test.ts` checks the shape (unique names, every row's capability exists, every server is built under the name the module gives it), and `test/manifestrows.test.ts` pins every row, so adding a tool means updating the pinned rows on purpose (`SNAPSHOT_WRITE=1 npm test` regenerates the fixtures, then read the diff).
+
+What a module may not do: decide policy. Whether a call is allowed, asked or denied, the never-allowed set, the capability sets, the approval judge, payments, the address checks and tenant isolation stay central.
+
+---
+
+## Add an assistant: a preset
+
+What makes the harness "Ted" is data in a folder, `assistants/<name>/` (`ASSISTANT_PRESET=<name or folder path>` picks it; default `ted`). To make a different assistant, copy the folder or start a new one that extends it:
+
+1. `assistants/<name>/preset.json` with `"extends": "ted"` and only the keys you change: the **rhythm** (heartbeat interval and quiet hours, the brief's skill and hours, the radar, the dream), the **note categories**, the **profile table** (turns, budget and notes of each unattended run) and the assistant's own **skills** (`core`, with the ones the doctor requires, and the `order` of the owner's list). The environment variables of the rhythm still override their defaults.
+2. `assistants/<name>/persona/<prompt>.md` for any prompt whose words you change (the personality, the chat, a group, the brief, the gates' default rules...). A text is a template: `{{name}}`, `{{#flag}}...{{/flag}}`, `{{^flag}}...{{/flag}}`; the names each text may use are listed in `PROMPTS` in `src/preset.ts`. A text that uses another name, a missing file or an out-of-range number stops the start with a message naming the file.
+3. Skills it brings are folders in `plugin/skills/`; a preset lists them as core skills and, for a skill that belongs to a tool, the module brings it instead.
+4. `ASSISTANT_NAME`, `OWNER_NAME` in `.env` set the names.
+
+What a preset cannot change: policy, the approval path, isolation, payments, the capability table and the rules block every run gets. It changes how the assistant talks and when it wakes up, never what it may do (`test/preset.test.ts` loads, checks and breaks a preset on purpose).
 
 ---
 
@@ -80,30 +91,22 @@ Signal via `signal-cli`, linked as a **secondary device**, reading the owner's *
 
 ### What each piece must provide
 
-`packages/signal` (`SignalClient`) is the contract. Replace it with a class offering:
+The contract is the `Messenger` interface in `packages/messenger/src/index.ts`; Signal is the first implementation (`packages/signal/src/messenger.ts`) and `FakeMessenger` (`@ted-personal-assistant/messenger/testing`) is the one the app's tests run on. A new platform is a package `@ted-personal-assistant/<name>` with an entry point `/messenger` exporting `createMessenger(config)` and `doctor(config)`; `MESSENGER=<name>` loads it by name. `packages/telegram`, `packages/whatsapp` and `packages/slack` are skeletons with a README and a SETUP.md for exactly that. It must:
 
-```ts
-interface Messenger {
-  connect(): Promise<void>;
-  onClose(h: () => void): void; // the app exits when this fires (src/main.ts); launchd restarts it
-  onMessage(h: (m: { from: string; text: string; timestamp: number; noteToSelf: boolean }) => void): void;
-  onReaction(h: (r: { from: string; emoji: string; targetTimestamp: number; isRemove: boolean }) => void): void;
-  sendNoteToSelf(text: string, textStyle?: string[]): Promise<number>; // returns the sent message's id/timestamp
-  react(emoji: string, target: { author: string; timestamp: number }): Promise<void>;
-}
-```
+- report what comes in neutrally (`onMessage`, `onReaction`, `onDeletion`, `onClose`) and send (`send`, `react`, `typing`, `markRead`, `groups`, `attachmentFile`, `readLongText`), with a target that is opaque to the app (undefined: the owner's chat; a group id; `directTarget(accountId)` for one other person);
+- declare what the platform cannot do (`capabilities`) instead of faking it: no reactions means no status icons, no typing means working / done icons, and so on;
+- take its settings as `options` (`unknown` to the interface): export their type, as Signal exports `SignalOptions`, and check them in `createMessenger` with a sentence that names the option;
+- **pass the contract suite**: `messengerContract(name, make)` from `@ted-personal-assistant/messenger/contract` is one test suite for every adapter (send and refusal, the best-effort calls that never throw, neutral incoming messages, one handler per kind, groups, attachments, `onClose` once). Give it a rig over your platform's fake server, as `packages/signal/test/contract.test.ts` does over the fake signal-cli daemon.
 
-Then adjust:
+Then adjust the app-side pieces that carry platform conventions:
 
 | File | Change |
 |---|---|
-| `packages/signal/src/client.ts` | the client above. `timestamp` is just a message id: Telegram `message_id`, Slack `ts`. |
-| `packages/signal/src/daemon.ts` | delete if the messenger needs no local daemon. |
 | `src/markdown.ts` | emit the target's markup instead of Signal style ranges (Telegram MarkdownV2/HTML entities, Slack mrkdwn, WhatsApp `*bold*`). `splitSections` and the section-per-message brief delivery carry over unchanged. |
-| `src/outbound.ts` | keep or drop the echo guard, as above. Chunk size (`CHUNK_LIMIT`) should respect the platform's message limit. |
+| `src/outbound.ts` | keep or drop the echo guard, as above. The platform's message limit is `capabilities.maxMessageBytes`. |
 | `src/guards.ts` | allowlist by your platform's user/chat id. Keep it pure and keep the tests. |
-| `src/approvals.ts` | unchanged. It matches reactions to the approval message by id; any platform with message ids and reactions works. Without reactions, delete `answerReaction` and rely on text replies. |
-| `src/config.ts`, `.env.example` | credentials for the platform (a bot token, say), kept in `.env`. |
+| `src/approvals.ts` | unchanged. It matches reactions to the approval message by id; any platform with message ids and reactions works. Without reactions, the approval is a text reply. |
+| `src/settings.ts`, `.env.example` | the platform's settings (a bot token, say), kept in `.env`. |
 
 ### Notes per platform
 

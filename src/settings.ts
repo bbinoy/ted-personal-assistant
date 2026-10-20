@@ -36,6 +36,40 @@ export function autoApprove(env: Env): "off" | "auto" {
   throw new Error(`AUTO_APPROVE must be "auto" or "off" (got "${raw}"). Write AUTO_APPROVE=auto (or remove the line) for the approval judge, or AUTO_APPROVE=off to be asked about everything.`);
 }
 
+// ARCHIVE: `live` (the default: the mail check archives what it classifies as archive) or `log` (it classifies and records "would-archive" and archives nothing, and a model run's
+// archive call is refused the same way). ONE switch for every mail check (the owner's and each friend's) and every provider. It replaces HEARTBEAT_ACTIONS,
+// GMAIL_ARCHIVE_LIVE and GOOGLE_ARCHIVE_LIVE, which stop the agent at start-up with a message naming this one.
+const OLD_ARCHIVE_SWITCHES = ["HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"] as const;
+export function archiveLive(env: Env): boolean {
+  for (const old of OLD_ARCHIVE_SWITCHES) {
+    if (env[old]?.trim()) throw new Error(`${old} is gone: one setting, ARCHIVE=live or ARCHIVE=log, now decides whether the mail checks archive (Gmail, Mailbird and friends alike). Remove ${old} from .env; write ARCHIVE=log to keep archiving off (the old false/log), or nothing for live.`);
+  }
+  return oneOf(env, "ARCHIVE", "live", ["live", "log"] as const) === "live";
+}
+
+// <MODULE>_TOOLS: the tools of one module's connector that stay visible to the model, one setting per module, named after it (NOTION_TOOLS for the module "notion"). Only the
+// ones that are set are returned (by module name); the module's own default applies to the rest (hiddenTools). Each name is checked against the module's pattern at start-up
+// (modules/index.ts checkHideSettings).
+export function visibleTools(env: Env): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const name of Object.keys(env)) {
+    const m = /^([A-Z][A-Z0-9]*)_TOOLS$/.exec(name);
+    if (m && env[name]?.trim()) out[m[1]!.toLowerCase()] = list(env, name, [], /^[a-z][\w-]*$/, "a tool name like get_message");
+  }
+  return out;
+}
+
+// Which credential the SDK uses, chosen explicitly via HARNESS_AUTH:
+//   login (default) - your stored `claude auth login`. The only mode that can see claude.ai connectors (Notion, Calendar, Gmail...).
+//   token           - CLAUDE_CODE_OAUTH_TOKEN. Long-lived, but inference-only: no connectors.
+//   api-key         - ANTHROPIC_API_KEY. Metered billing, also no connectors.
+export function credentialMode(env: Env): "login" | "token" | "api-key" {
+  const mode = oneOf(env, "HARNESS_AUTH", "login", ["login", "token", "api-key"] as const);
+  if (mode === "token" && !env.CLAUDE_CODE_OAUTH_TOKEN) throw new Error("Missing required env var CLAUDE_CODE_OAUTH_TOKEN (HARNESS_AUTH=token)");
+  if (mode === "api-key" && !env.ANTHROPIC_API_KEY) throw new Error("Missing required env var ANTHROPIC_API_KEY (HARNESS_AUTH=api-key)");
+  return mode;
+}
+
 // A setting that is a list of words separated by spaces (a command's arguments, OAuth scopes).
 function words(env: Env, name: string, fallback: readonly string[]): string[] {
   const raw = env[name];
@@ -132,18 +166,18 @@ export function loadSettings(env: Env) {
     // "sonnet" is an alias the SDK resolves to the current Sonnet, so new releases are
     // picked up automatically. Pin a full model id if you prefer stability.
     model: env.HARNESS_MODEL || "sonnet",
+    credential: credentialMode(env),
 
     mailProvider,
     mailSelfAddress: mailSelf || undefined,
-    // Gmail only. The first week the heartbeat only LOGS what it would archive (GMAIL_ARCHIVE_LIVE=true turns archiving on): the same switch
-    // governs a model run's archive calls (policy.ts). Mailbird is not affected.
-    gmailArchiveLive: oneOf(env, "GMAIL_ARCHIVE_LIVE", "false", ["true", "false"] as const) === "true",
+    // Do the mail checks archive for real (ARCHIVE=live, the default) or only log "would-archive" (ARCHIVE=log, e.g. for the first week with Gmail or a friend's Google)?
+    // The same switch governs a model run's archive calls (policy.ts).
+    archiveLive: archiveLive(env),
     // Gmail only: email the brief to MAIL_SELF_ADDRESS as well as the Signal summary. Off: the brief is the Signal message alone.
     briefEmail: oneOf(env, "BRIEF_EMAIL", "off", ["on", "off"] as const) === "on",
     mail: mailProvider !== "none", // is there any mail to look at? Every mail-only path asks this, never the provider's name
 
     heartbeatMinutes: num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240),
-    heartbeatLive: oneOf(env, "HEARTBEAT_ACTIONS", "live", ["live", "log"] as const) === "live",
     maxArchivesPerTick: num(env, "HEARTBEAT_MAX_ARCHIVES", 25, 0, 500),
     quietStartHour: num(env, "QUIET_START_HOUR", rhythm.heartbeat.quietFromHour, 0, 23),
     quietEndHour: num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23),
@@ -218,7 +252,6 @@ export function loadSettings(env: Env) {
       // with Google while the heartbeat ticks (it stops after the last tick, at night, and with the app).
       idleMinutes: num(env, "GOOGLE_MCP_IDLE_MINUTES", Math.max(20, num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240) + 5), 1, 240),
       callSeconds: num(env, "GOOGLE_MCP_CALL_SECONDS", 60, 5, 600), // one tool call
-      archiveLive: oneOf(env, "GOOGLE_ARCHIVE_LIVE", "false", ["true", "false"] as const) === "true", // friends' mail: false = the check classifies and logs "would-archive" and archives nothing, until you trust it
       mailQuery: env.GOOGLE_MAIL_QUERY?.trim() || "in:inbox newer_than:2d", // the cheap look of a friend's mail check: a search, no model call; only new mail it finds is ever sent to the small model
     },
     // Notion for friends (src/notionoauth.ts, src/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend with the `notion` capability connects her own Notion on the
@@ -246,40 +279,18 @@ export function loadSettings(env: Env) {
     // keeps the HOW and a deterministic backstop for the brief.
     briefBackstopHour: num(env, "BRIEF_BACKSTOP_HOUR", rhythm.brief.backstopHour, 0, 24), // no brief logged today by this hour (local): run it anyway. 24: never
 
-    // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every
-    // model call, so hide what your skills never use. A skill that needs a hidden tool will
-    // fail, so list it here. Connectors: tool-name prefixes. Notion and Mailbird: the tools to keep.
-    // Without mail the Mailbird server is hidden whole (none of its tools is sent to the model), whatever HIDDEN_CONNECTORS says.
-    hiddenConnectors: [
-      ...list(
-        env,
-        "HIDDEN_CONNECTORS",
-        ["mcp__claude_ai_Interactive_Brokers_IBKR", ...(mailProvider === "gmail" ? [] : ["mcp__claude_ai_Gmail"]), "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"],
-        /^mcp__[\w-]+$/,
-        "a tool-name prefix like mcp__claude_ai_Gmail",
-      ),
-      ...(mailProvider !== "mailbird" ? ["mcp__mailbird"] : []),
-    ],
-    // The Gmail connector tools kept visible (the rest of the connector is hidden, policy.ts hiddenTools). Only used with MAIL_PROVIDER=gmail.
-    gmailTools: list(
+    // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every model call, so hide what your skills never use. A skill that needs a
+    // hidden tool will fail, so list it here. HIDDEN_CONNECTORS: tool-name prefixes of whole connectors (the Gmail one is shown while MAIL_PROVIDER=gmail, and the mail
+    // connector that is not in use is hidden whatever this says). <MODULE>_TOOLS (NOTION_TOOLS, MAILBIRD_TOOLS, GMAIL_TOOLS: the module's name in capitals): the tools
+    // of that module's connector to keep, replacing the default list the module declares (src/modules/*.ts `hide`); checked against the module by checkHideSettings.
+    hiddenConnectors: list(
       env,
-      "GMAIL_TOOLS",
-      ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"],
-      /^[a-z_]+$/,
-      "a Gmail tool name like get_thread",
+      "HIDDEN_CONNECTORS",
+      ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"],
+      /^mcp__[\w-]+$/,
+      "a tool-name prefix like mcp__claude_ai_Gmail",
     ),
-    mailbirdTools: list(
-      env,
-      "MAILBIRD_TOOLS",
-      [
-        "summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation",
-        "list_attachments", "get_attachment_content", "archive_conversation", "select_conversation", "reply_to_conversation",
-        "reply_all_to_conversation", "create_draft", "update_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing",
-      ],
-      /^[a-z_]+$/,
-      "a Mailbird tool name like get_message",
-    ),
-    notionTools: list(env, "NOTION_TOOLS", ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"], /^notion-[\w-]+$/, "a Notion tool name like notion-fetch"),
+    visibleTools: visibleTools(env),
 
     // The log of messages the assistant sent (messages.ts) is bounded by size; older messages become one summary.
     messageLogMb: num(env, "MESSAGE_LOG_MB", 1, 0.01, 100),
@@ -309,12 +320,17 @@ export function loadSettings(env: Env) {
     tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on the instance key (tenant.json may lower or raise it)
     inviteTtlHours: num(env, "INVITE_TTL_HOURS", 72, 1, 24 * 90), // how long a minted invite code works
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or invitation reply to one person at most this often
+    tenantReplyNoticeMinutes: num(env, "TENANT_REPLY_NOTICE_MINUTES", 5, 0, 1440), // a failure notice in HER chat (she is waiting for an answer): told promptly, but not once per message of a flood
     tenantKeyNoticeMinutes: num(env, "TENANT_KEY_NOTICE_MINUTES", 180, 0, 10_080), // the owner hears of a refused or missing instance key at most this often (keynotice.ts)
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none
 
     // Which chat platform the assistant talks on: the package @ted-personal-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.
     messenger: env.MESSENGER?.trim() || "signal",
-    // Signal's own settings, handed to its package as options (src/messenger.ts).
+    // Signal's own settings, handed to its package as options (src/messenger.ts). The owner's number is required by whoever starts the chat (signalIdentity below), not by every
+    // command that reads the settings.
+    signalOwnerNumber: env.SIGNAL_OWNER_NUMBER?.trim() || undefined,
+    signalOwnAccount: env.SIGNAL_ACCOUNT?.trim() || undefined, // the assistant's OWN account (a number, or an account key from Signal Login); unset: a linked device of the owner's, talking in Note to Self
+    signalOwnerAci: env.SIGNAL_OWNER_ACI?.trim() || undefined, // only if Signal hides the owner's number from the assistant
     signalHost: "127.0.0.1", // never anything else: signal-cli's socket is unauthenticated
     signalPort: num(env, "SIGNAL_PORT", 7583, 1024, 65_535),
 
@@ -381,5 +397,21 @@ export const settings = loadSettings(process.env);
 for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN", "TENANT_ANTHROPIC_API_KEY", "GOOGLE_OAUTH_CLIENT_SECRET"]) delete process.env[name];
 // Is the instance's Google OAuth client set up? The one answer: without it nobody gets Google tools, a mail check of their own or a sign-in page for it.
 export const googleReady = (cfg: { clientId?: string; clientSecret?: string } = settings.google): boolean => !!cfg.clientId && !!cfg.clientSecret;
+// The agent calls this once when it starts: the SDK picks whatever credential is in the environment, so the ones HARNESS_AUTH did not choose are removed from this process
+// (a command that only reads the settings keeps its environment as it is).
+export function applyCredentialMode(): void {
+  if (settings.credential !== "token") delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  if (settings.credential !== "api-key") delete process.env.ANTHROPIC_API_KEY;
+}
+
+// Who the chat is with and on which account (Signal): the owner's number is required to start it.
+export function signalIdentity(s: Pick<typeof settings, "signalOwnerNumber" | "signalOwnAccount" | "signalOwnerAci"> = settings): { ownerNumber: string; account: string; ownerAci: string | undefined } {
+  if (!s.signalOwnerNumber) throw new Error("Missing required env var SIGNAL_OWNER_NUMBER");
+  return { ownerNumber: s.signalOwnerNumber, account: s.signalOwnAccount || s.signalOwnerNumber, ownerAci: s.signalOwnerAci };
+}
+// Numbers never go to logs in full.
+export function mask(number: string | undefined): string {
+  return number ? `+***${number.slice(-2)}` : "(none)";
+}
 export const OWNER = settings.owner;
 export const ASSISTANT = settings.assistant;

@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { audit } from "./audit.ts";
-import { LINK_CODE, LinkStore, PURPOSE_CAPABILITY, recordDone } from "./intakelinks.ts";
+import { LINK_CODE, LinkStore, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
 import type { Put } from "./intakepurposes.ts";
 import { CALLBACK, OAuthProblem, bindingCookie, bindingFrom, type OAuthFlows } from "./oauth.ts";
@@ -167,8 +167,8 @@ export class IntakeServer {
   // The purpose, when this person may still use it: she exists, is active, and holds the capability (a suspended or revoked person's open link is dead).
   private allowed(tenant: string, purposeId: string): Purpose | undefined {
     const rec = people().find((r) => r.id === tenant);
-    const cap = Object.hasOwn(PURPOSE_CAPABILITY, purposeId) ? PURPOSE_CAPABILITY[purposeId] : undefined;
-    return rec && rec.status === "active" && cap && rec.capabilities.includes(cap) ? purposeOf(purposeId) : undefined;
+    const purpose = purposeOf(purposeId);
+    return rec && rec.status === "active" && purpose && rec.capabilities.includes(purpose.capability) ? purpose : undefined;
   }
 
   // A sign-in purpose: the page is a link to the other service's consent screen, made now with a state bound to this link.

@@ -6,7 +6,7 @@ import type { Capability } from "./tenants.ts";
 
 // Which bundled skills (plugin/skills/) a conversation may load. A skill comes from a tool module (the calendar module brings `calendar`, a mail module its
 // mail skill, weather `surf-conditions`, draw `draw`, browse `research-booking`) or is the assistant's own (CORE_SKILLS: the brief, the radar, setup...).
-// The owner loads the whole plugin (offeredSkills, profiles.ts); a group or a tenant loads only the shared skills whose capabilities its set holds (skillsFor),
+// The owner loads the whole plugin (ownerSkills); a group or a tenant loads only the shared skills whose capabilities its set holds (skillsFor),
 // through the same plugin, with the SDK's skills allowlist as the gate. A skill that is neither shared nor private is a mistake: the test names every folder
 // of plugin/skills.
 export { PLUGIN };

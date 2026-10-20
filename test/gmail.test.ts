@@ -12,7 +12,7 @@ import { setGmailReaders } from "../src/modules/gmail.ts";
 import { gmailChecks } from "../src/modules/runtime.ts";
 import { makeCanUseTool } from "../src/permissions.ts";
 import { classify, hiddenTools } from "../src/policy.ts";
-import { offeredSkills } from "../src/profiles.ts";
+import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { readJson, writeJson } from "../src/state.ts";
 import { cleanToolOutput } from "../src/toolclean.ts";
@@ -28,9 +28,9 @@ const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test"
 
 async function withGmail<T>(over: Record<string, unknown>, f: () => Promise<T> | T): Promise<T> {
   const s = settings as unknown as Record<string, unknown>;
-  const keys = ["mail", "mailProvider", "mailSelfAddress", "gmailArchiveLive", "briefEmail", "quietStartHour", "quietEndHour", "heartbeatLive"];
+  const keys = ["mail", "mailProvider", "mailSelfAddress", "archiveLive", "briefEmail", "quietStartHour", "quietEndHour"];
   const was = Object.fromEntries(keys.map((k) => [k, s[k]]));
-  Object.assign(s, { mail: true, mailProvider: "gmail", mailSelfAddress: SELF, gmailArchiveLive: false, briefEmail: false, quietStartHour: 0, quietEndHour: 0, heartbeatLive: true }, over);
+  Object.assign(s, { mail: true, mailProvider: "gmail", mailSelfAddress: SELF, archiveLive: false, briefEmail: false, quietStartHour: 0, quietEndHour: 0 }, over);
   try {
     return await f();
   } finally {
@@ -40,27 +40,26 @@ async function withGmail<T>(over: Record<string, unknown>, f: () => Promise<T> |
 
 // ---- settings ----
 
-test("settings: gmail is accepted; archiving is log-only and the email brief off by default; the Gmail connector stays visible, Mailbird hidden", () => {
+test("settings: gmail is accepted; archiving follows the one ARCHIVE switch and the email brief is off by default; the Gmail connector stays visible, Mailbird hidden", () => {
   const g = loadSettings({ MAIL_PROVIDER: "gmail", MAIL_SELF_ADDRESS: " Owner@Example.com " });
   assert.equal(g.mailProvider, "gmail");
   assert.equal(g.mail, true);
   assert.equal(g.mailSelfAddress, SELF);
-  assert.equal(g.gmailArchiveLive, false);
+  assert.equal(g.archiveLive, true);
   assert.equal(g.briefEmail, false);
-  assert.ok(!g.hiddenConnectors.includes("mcp__claude_ai_Gmail"));
-  assert.ok(g.hiddenConnectors.includes("mcp__mailbird"));
-  assert.equal(loadSettings({ MAIL_PROVIDER: "gmail", GMAIL_ARCHIVE_LIVE: "true", BRIEF_EMAIL: "on" }).gmailArchiveLive, true);
-  assert.throws(() => loadSettings({ GMAIL_ARCHIVE_LIVE: "maybe" }), /GMAIL_ARCHIVE_LIVE must be one of/);
+  assert.ok(!hiddenTools([], g).includes("mcp__claude_ai_Gmail"));
+  assert.ok(hiddenTools([], g).includes("mcp__mailbird"));
+  assert.equal(loadSettings({ MAIL_PROVIDER: "gmail", ARCHIVE: "log", BRIEF_EMAIL: "on" }).archiveLive, false);
   assert.throws(() => loadSettings({ MAIL_SELF_ADDRESS: "Owner <o@example.com>" }), /MAIL_SELF_ADDRESS must be a plain email address/);
   // Mailbird is untouched
   const mb = loadSettings({});
-  assert.ok(mb.hiddenConnectors.includes("mcp__claude_ai_Gmail"));
-  assert.ok(!mb.hiddenConnectors.includes("mcp__mailbird"));
+  assert.ok(hiddenTools([], mb).includes("mcp__claude_ai_Gmail"));
+  assert.ok(!hiddenTools([], mb).includes("mcp__mailbird"));
 });
 
 test("the model sees only the Gmail tools the skills need: the rest of the connector is hidden by name", () => {
   const seen = [`${GM}search_threads`, `${GM}trash_thread`, `${GM}delete_label`, `${GM}reply`, `${GM}get_attachment`];
-  const hidden = hiddenTools(seen, { ...settings, gmailTools: settings.gmailTools });
+  const hidden = hiddenTools(seen, settings);
   assert.ok(hidden.includes(`${GM}trash_thread`) && hidden.includes(`${GM}delete_label`) && hidden.includes(`${GM}get_attachment`));
   assert.ok(!hidden.includes(`${GM}search_threads`) && !hidden.includes(`${GM}reply`));
 });
@@ -68,7 +67,7 @@ test("the model sees only the Gmail tools the skills need: the rest of the conne
 // ---- the rules code adds to the manifest ----
 
 test("policy: trash, spam, deletion and attachment content are denied however they are asked; label values TRASH and SPAM too", async () => {
-  await withGmail({ gmailArchiveLive: true }, () => {
+  await withGmail({ archiveLive: true }, () => {
     for (const t of ["trash_thread", "trash_message", "untrash_thread", "mark_thread_spam", "mark_message_spam", "unmark_message_spam", "delete_label", "update_label", "apply_sensitive_message_label", "apply_sensitive_thread_label", "get_attachment", "download_attachment"]) {
       assert.equal(classify(GM + t, { threadId: "t1", messageId: "m1" }, "chat"), "deny", t);
     }
@@ -97,15 +96,15 @@ test("policy: archiving is exactly 'remove INBOX from a thread'; log-only denies
   assert.ok(isInboxArchive(`${GM}unlabel_thread`, call));
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["INBOX", "UNREAD"] }));
   assert.ok(!isInboxArchive(`${GM}unlabel_thread`, { labelIds: ["INBOX"] }));
-  await withGmail({ gmailArchiveLive: false }, () => assert.equal(classify(`${GM}unlabel_thread`, call, "chat"), "deny"));
-  await withGmail({ gmailArchiveLive: true }, () => {
+  await withGmail({ archiveLive: false }, () => assert.equal(classify(`${GM}unlabel_thread`, call, "chat"), "deny"));
+  await withGmail({ archiveLive: true }, () => {
     for (const source of ["chat", "brief", "handler"] as const) assert.equal(classify(`${GM}unlabel_thread`, call, source), "ask", source); // judged, the same everywhere
     assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t1", labelIds: ["UNREAD"] }, "chat"), "ask");
   });
 });
 
 test("log-only archive: a model's archive call is refused politely and recorded as would-archive", async () => {
-  await withGmail({ gmailArchiveLive: false }, async () => {
+  await withGmail({ archiveLive: false }, async () => {
     const canUse = makeCanUseTool(async () => assert.fail("never asks"), "chat", undefined, noJudge);
     const r = await canUse(`${GM}unlabel_thread`, { threadId: "thread-log-only", labelIds: ["INBOX"] }, opts);
     assert.equal(r!.behavior, "deny");
@@ -269,7 +268,7 @@ function fakeRelay(responses: Record<string, unknown>): { relay: Relay; calls: C
   return { calls, relay: async (cs) => cs.map((c) => (calls.push(c), responses[c.tool.slice(GM.length)])) };
 }
 
-test("GmailMail: Mailbird-shaped calls over the connector; archive follows GMAIL_ARCHIVE_LIVE; restore adds INBOX back", async () => {
+test("GmailMail: Mailbird-shaped calls over the connector; archive follows ARCHIVE; restore adds INBOX back", async () => {
   await withGmail({}, async () => {
     const { relay, calls } = fakeRelay({ search_threads: THREADS, get_message: mcp({ sender: "Dana <dana@example.com>", plaintext_body: "body text" }), unlabel_thread: mcp({}), label_thread: mcp({}) });
     let live = false;
@@ -306,11 +305,11 @@ test("approval read-backs go through the relay with read-only calls", async () =
 // ---- the heartbeat on Gmail ----
 
 async function heartbeatOnce(live: boolean, relayCalls: Call[]) {
-  return withGmail({ gmailArchiveLive: live }, async () => {
+  return withGmail({ archiveLive: live }, async () => {
     const was = readJson("state/seen.json", undefined);
     writeJson("state/seen.json", { seededAt: "2026-01-01T00:00:00.000Z", keys: {} });
     const { relay } = fakeRelay({ search_threads: THREADS, get_message: mcp({ sender: "Newsletter <news@example.com>", plaintext_body: "weekly digest" }), unlabel_thread: mcp({}) });
-    const mail: MailSource = new GmailMail(async (cs) => (relayCalls.push(...cs), relay(cs)), () => settings.gmailArchiveLive);
+    const mail: MailSource = new GmailMail(async (cs) => (relayCalls.push(...cs), relay(cs)), () => settings.archiveLive);
     const log = console.log;
     console.log = () => {};
     try {
@@ -334,7 +333,7 @@ test("heartbeat on Gmail, log-only week: threads are triaged and recorded as wou
   assert.ok(rows.length >= 1);
   assert.equal(rows.at(-1)!.meta?.messageId, "m-b");
   const digest = buildDigest(rows.map((e) => ({ ts: e.ts, decision: e.decision, meta: e.meta as never })).concat([{ ts: "x", decision: "kept", meta: { label: "act_now", from: "Dana", subject: "Q" } } as never]), undefined);
-  assert.match(digest, /LOG-ONLY mode \(GMAIL_ARCHIVE_LIVE=false\)/);
+  assert.match(digest, /LOG-ONLY mode \(ARCHIVE=log\)/);
   assert.match(digest, /STILL IN THE INBOX/);
 });
 
@@ -386,10 +385,10 @@ test("brief: the sent body is captured only from a send to the owner's own addre
 // ---- skills, doctor ----
 
 test("skills and doctor: the gmail skill is offered instead of the Mailbird ones; doctor checks the address and the connector", () => {
-  assert.ok(offeredSkills(true, "gmail").includes("ted-personal-assistant:gmail"));
-  assert.ok(!offeredSkills(true, "gmail").some((s) => /mailbird/.test(s)));
-  assert.ok(!offeredSkills(true, "mailbird").some((s) => /gmail/.test(s)));
-  assert.ok(!offeredSkills(false, "gmail").some((s) => /gmail|mailbird/.test(s)));
+  assert.ok(ownerSkills(true, "gmail").includes("ted-personal-assistant:gmail"));
+  assert.ok(!ownerSkills(true, "gmail").some((s) => /mailbird/.test(s)));
+  assert.ok(!ownerSkills(true, "mailbird").some((s) => /gmail/.test(s)));
+  assert.ok(!ownerSkills(false, "gmail").some((s) => /gmail|mailbird/.test(s)));
   assert.ok(requiredSkills(true, "gmail").includes("gmail") && !requiredSkills(true, "gmail").includes("mailbird"));
   const out: [boolean | "warn", string][] = [];
   const line = (ok: boolean | "warn", what: string) => void out.push([ok, what]);

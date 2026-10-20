@@ -31,7 +31,7 @@ test("digest: empty", () => {
   assert.match(buildDigest([], undefined), /Nothing new arrived/);
 });
 
-test("digest: says plainly when the heartbeat only logged", () => {
+test("digest: says plainly when archiving was only logged", () => {
   const d = buildDigest([entry("archive", "Climate Weekly", "5 funding rounds", "newsletter")], "2026-10-11T08:00:00Z");
   assert.match(d, /LOG-ONLY/);
   assert.match(d, /Climate Weekly: 5 funding rounds \[newsletter\] \{msg 7\}/);
@@ -90,7 +90,7 @@ test("digest: a row with no sender, subject, kind or id is still listed, and a w
   const bare = (decision: string, label: string): TriageEntry => ({ ts: "2026-10-12T05:00:00Z", decision, meta: { label } });
   const d = buildDigest([bare("archived", "archive"), bare("would-archive", "archive"), bare("kept", "act_now")], undefined);
   assert.match(d, /Archived by the heartbeat[^\n]*\(1\):\n- : /); // blanks, not a crash
-  assert.match(d, /Gmail archiving is in LOG-ONLY mode[^\n]*1 thread\(s\)/);
+  assert.match(d, /Archiving is in LOG-ONLY mode[^\n]*1 thread\(s\)/);
   assert.match(d, /Looked archivable but were left in the inbox \(1\)/);
   assert.match(d, /Needs the owner[^\n]*\(1\)/);
 });

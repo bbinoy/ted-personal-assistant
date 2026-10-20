@@ -5,7 +5,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ASSISTANTS_DIR, loadPreset, parseTemplate, presetFor, PROMPTS, render } from "../src/preset.ts";
-import { chatSystem, dreamSystem, groupSystem, PERSONALITY } from "../src/persona.ts";
+import { dreamSystem, PERSONALITY } from "../src/persona.ts";
 import { PROFILES } from "../src/profiles.ts";
 import { CATEGORIES } from "../src/notes.ts";
 import { settings } from "../src/settings.ts";
@@ -52,17 +52,8 @@ test("the code reads the preset: settings defaults, profiles, note categories", 
   assert.deepEqual(CATEGORIES, p.notes.categories);
 });
 
-test("the prompts built from the preset are the stored ones (test/fixtures/default-prompts.json)", () => {
-  const stored = JSON.parse(readFileSync(new URL("./fixtures/default-prompts.json", import.meta.url), "utf8")) as Record<string, string>;
-  const portable = (s: string) => s.replaceAll(settings.dataDir, "<data>");
-  const account = process.env.SIGNAL_ACCOUNT;
-  delete process.env.SIGNAL_ACCOUNT;
-  try {
-    assert.equal(portable(chatSystem(new Date("2026-10-12T09:00:00"))), stored.chat);
-    assert.equal(portable(groupSystem()), stored.group);
-  } finally {
-    if (account !== undefined) process.env.SIGNAL_ACCOUNT = account;
-  }
+// (The prompts built from the preset being the stored ones is test/default-prompts.test.ts, the one place that reads test/fixtures/default-prompts.json.)
+test("the dream prompt names the owner whose memory it keeps", () => {
   assert.ok(dreamSystem({ subject: settings.owner, kind: "owner", categories: presetFor().notes.dream }).startsWith(`You keep the memory notes about ${settings.owner} for their personal assistant.`));
 });
 

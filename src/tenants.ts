@@ -75,13 +75,13 @@ export interface TenantConfig {
   dailyBudgetUsd?: number; // her own daily ceiling on the instance key
   maxTurns?: number; // per run
   maxBudgetUsdPerRun?: number; // per run
+  // DEPRECATED, still honoured (capabilities.ts resolveCapabilities, and it only ever takes away): the general way to switch a tool off for her is her capability set
+  // (`npm run tenants -- revoke <id> browse`). These two stay because a tenant.json that says false must not quietly start offering the tool.
   browse?: boolean; // false switches the browse tool off for her (it can never be switched on beyond BROWSE)
   voice?: boolean; // false switches the voice tool off for her
-  timezone?: string; // an IANA name, for her clock line
-  connectors?: string[]; // EXTENSION POINT, off: her own connectors (mail, calendar...) are phase 2; anything listed here is ignored and reported (they will be tools of the manifest with a capability of theirs)
 }
 
-const KNOWN: readonly string[] = ["language", "persona", "dailyBudgetUsd", "maxTurns", "maxBudgetUsdPerRun", "browse", "voice", "timezone", "connectors"];
+const KNOWN: readonly string[] = ["language", "persona", "dailyBudgetUsd", "maxTurns", "maxBudgetUsdPerRun", "browse", "voice"];
 
 // Pure. Whatever is in the file, the result is a valid config and `problems` says what was left out. Never throws.
 export function parseTenantConfig(raw: unknown): { config: TenantConfig; problems: string[] } {
@@ -91,23 +91,14 @@ export function parseTenantConfig(raw: unknown): { config: TenantConfig; problem
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { config, problems: ["tenant.json is not an object"] };
   const r = raw as Record<string, unknown>;
   for (const k of Object.keys(r)) if (!KNOWN.includes(k)) problems.push(`unknown setting ${oneLine("setting", k, 40)}`);
-  const text = (k: "language" | "timezone" | "persona", max: number, line: boolean) => {
+  const text = (k: "language" | "persona", max: number, line: boolean) => {
     if (r[k] === undefined) return;
     if (typeof r[k] !== "string") return void problems.push(`${k} must be text`);
     const v = line ? oneLine(k, r[k] as string, max) : clean(k, r[k] as string, { max });
     if (v) config[k] = v;
   };
   text("language", LIMITS.name, true);
-  text("timezone", LIMITS.name, true);
   text("persona", LIMITS.brief, false);
-  if (config.timezone) {
-    try {
-      new Intl.DateTimeFormat("en", { timeZone: config.timezone });
-    } catch {
-      problems.push("timezone is not a time zone name");
-      delete config.timezone;
-    }
-  }
   const num = (k: "dailyBudgetUsd" | "maxTurns" | "maxBudgetUsdPerRun", min: number, max: number) => {
     if (r[k] === undefined) return;
     if (typeof r[k] !== "number" || !Number.isFinite(r[k]) || (r[k] as number) < min || (r[k] as number) > max) return void problems.push(`${k} must be a number from ${min} to ${max}`);
@@ -120,10 +111,6 @@ export function parseTenantConfig(raw: unknown): { config: TenantConfig; problem
     if (r[k] === undefined) continue;
     if (typeof r[k] !== "boolean") problems.push(`${k} must be true or false`);
     else config[k] = r[k] as boolean;
-  }
-  if (r.connectors !== undefined) {
-    if (!Array.isArray(r.connectors) || !r.connectors.every((x) => typeof x === "string")) problems.push("connectors must be a list of names");
-    else if (r.connectors.length) problems.push("connectors are not supported yet: ignored");
   }
   return { config, problems };
 }

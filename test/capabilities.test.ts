@@ -17,7 +17,7 @@ const SHARED_SKILLS = sharedSkills();
 const { classify } = await import("../src/policy.ts");
 const MANIFEST = (await import("../src/toolmanifest.ts")).allRows();
 const { buildOptions } = await import("../src/agentrun.ts");
-const { offeredSkills } = await import("../src/profiles.ts");
+const { ownerSkills } = await import("../src/skills.ts");
 
 // A safety net written out by hand, apart from the modules' own `ownerOnly`: whatever the rows say, none of these is ever a tool of an isolated conversation.
 const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i];
@@ -176,7 +176,7 @@ test("capabilities: no private skill and no tool of the owner's login is ever of
   const folders = readdirSync(join(settings.pluginDir, "skills")).sort();
   assert.deepEqual([...Object.keys(SHARED_SKILLS), ...PRIVATE_SKILLS].sort(), folders);
   // the owner's list is the whole plugin; the private skills are only there
-  assert.deepEqual(offeredSkills(true).filter((s) => !skillsFor(everything).includes(s)).map((s) => s.slice(s.indexOf(":") + 1)).sort(), PRIVATE_SKILLS.filter((s) => offeredSkills(true).includes(P(s))).sort());
+  assert.deepEqual(ownerSkills(true).filter((s) => !skillsFor(everything).includes(s)).map((s) => s.slice(s.indexOf(":") + 1)).sort(), PRIVATE_SKILLS.filter((s) => ownerSkills(true).includes(P(s))).sort());
   // the run's own options carry exactly the shared list, whatever a caller passes in the skills of a run it did not build
   const run = buildOptions(async () => ({ approved: false }), { source: "group", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: "/nonexistent-notes" } }, undefined);
   assert.deepEqual(run.skills, skillsFor(groupCapabilities()));

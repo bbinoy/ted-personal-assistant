@@ -1,8 +1,7 @@
 // npm run tenants -- list | invite [note] | grant <id> <capability> | revoke <id> <capability> | set-admin <id>: the administrator's terminal side of tenants
 // (docs/SETUP.md "More than one person"). Local terminal only. This is the ONLY place the admin role and the capabilities change: no tool, no chat path,
 // no model can reach them (test/tenants.test.ts walks every tool).
-import { config } from "../src/config.ts";
-import { settings } from "../src/settings.ts";
+import { settings, signalIdentity } from "../src/settings.ts";
 import { describeTenants } from "../src/tenanttools.ts";
 import { CAPABILITIES, ensureOwner, grant, isCapability, mintInvite, revoke, setAdmin } from "../src/tenants.ts";
 
@@ -15,7 +14,7 @@ if (cmd !== "set-admin" && !settings.tenants) {
   say("TENANTS is off. Set TENANTS=on in .env (and give the assistant its own Signal account) first; see docs/SETUP.md.");
   process.exit(1);
 }
-ensureOwner({ number: config.ownerNumber, aci: config.ownerAci });
+ensureOwner({ number: signalIdentity().ownerNumber, aci: signalIdentity().ownerAci });
 
 if (cmd === "list") {
   const lines = describeTenants();

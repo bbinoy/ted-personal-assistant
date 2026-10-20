@@ -286,8 +286,11 @@ export interface MessengerConfig {
   owner: { address: string; id?: string };
   /** The account the assistant runs as. Equal to the owner's address: the assistant is a linked device in her own chat; otherwise its own account. */
   account: string;
-  /** Platform settings read from the environment by the app (host, port, folders). */
-  options: Record<string, string | number | boolean | undefined>;
+  /**
+   * Platform settings read from the environment by the app (host, port, folders). The interface does not know their shape: each platform package exports the type of its own
+   * (Signal: `SignalOptions`) and checks what it is given when the messenger is made, throwing a sentence that names the option.
+   */
+  options: unknown;
   logger: { info(...a: unknown[]): void; warn(...a: unknown[]): void; error(...a: unknown[]): void };
   openLog?: OpenLog;
 }
@@ -296,7 +299,7 @@ export interface MessengerConfig {
 export interface MessengerModule {
   createMessenger(config: MessengerConfig): Promise<Messenger>;
   /** The platform's lines for the doctor: what must be installed and reachable. Needs no running app; `account` is unset when the owner's own account is used. */
-  doctor(config: { account?: string; options: MessengerConfig["options"] }): Promise<DoctorLine[]>;
+  doctor(config: { account?: string; options: unknown }): Promise<DoctorLine[]>;
 }
 
 const NAME = /^[a-z][a-z0-9-]{0,30}$/;

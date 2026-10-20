@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { NotionHub } from "../src/notionmcp.ts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { startFakeNotion } from "./fakenotion.ts";
 import type { FakeBao } from "./fakebao.ts";
@@ -34,7 +35,8 @@ const { IntakeServer } = await import("../src/intakeserver.ts");
 const { OAuthFlows } = await import("../src/oauth.ts");
 const { googleProvider } = await import("../src/googleoauth.ts");
 const N = await import("../src/notionoauth.ts");
-const { NotionHub, NotionSession, notionProxy, RECONNECT_TEXT } = await import("../src/notionmcp.ts");
+const { SessionHub } = await import("../src/mcpproxy.ts");
+const { NotionSession, notionProxy, RECONNECT_TEXT } = await import("../src/notionmcp.ts");
 const { UpstreamError } = await import("../src/mcpproxy.ts");
 const { createIntakeServer } = await import("../src/intaketools.ts");
 const { TenantSecrets } = await import("../src/secrets.ts");
@@ -47,7 +49,7 @@ const { makeCanUseTool } = await import("../src/permissions.ts");
 const { classify } = await import("../src/policy.ts");
 const { describeTenants } = await import("../src/tenanttools.ts");
 const { connectionSummary } = await import("../src/connections.ts");
-const { notionCheck, intakeCheck } = await import("../src/doctor.ts");
+const { servicesCheck, intakeCheck } = await import("../src/doctor.ts");
 
 const printed: string[] = [];
 const realLog = console.log;
@@ -357,8 +359,8 @@ test("notion: a refresh token that Notion refuses (expired, revoked) is a reconn
 
 // ---- the hosted server, through the credentialed proxy ----
 
-const hub = (tokens = tokensFor()) => new NotionHub((id) => new NotionSession(id, tokens, () => ({ url: fake.mcpUrl, idleMs: 60_000, callMs: 10_000 })));
-async function runClient(h: InstanceType<typeof NotionHub>, id: string, allowed: (n: string) => boolean = (name) => `${P}${name}` !== "" && NOTION_FRIEND_TOOLS.includes(P + name)) {
+const hub = (tokens = tokensFor()) => new SessionHub((id) => new NotionSession(id, tokens, () => ({ url: fake.mcpUrl, idleMs: 60_000, callMs: 10_000 })));
+async function runClient(h: NotionHub, id: string, allowed: (n: string) => boolean = (name) => `${P}${name}` !== "" && NOTION_FRIEND_TOOLS.includes(P + name)) {
   const cfg = notionProxy(id, allowed, NOTION_FRIEND_TOOLS.map((t) => t.slice(P.length)), h);
   const [a, b] = InMemoryTransport.createLinkedPair();
   await cfg.instance.connect(a as never);
@@ -609,14 +611,14 @@ test("admin: the tenants list shows each friend's capabilities and whether her G
 test("doctor: a notion line appears only when a friend has the capability; it names what is missing, never a value, and each friend's connection", async () => {
   const out: { ok: unknown; what: string; detail: string }[] = [];
   const line = (ok: boolean | "warn", what: string, detail = "") => void out.push({ ok, what, detail });
-  notionCheck(line, { friends: T.people().filter((r) => !r.capabilities.includes("notion")) });
+  servicesCheck(line, { friends: T.people().filter((r) => !r.capabilities.includes("notion") && !r.capabilities.includes("google")) });
   assert.equal(out.length, 0, "nobody has it: no line");
-  const friends = T.people().filter((r) => r.id !== "owner" && r.capabilities.includes("notion"));
-  notionCheck(line, { friends, baseUrl: undefined });
+  const friends = T.people().filter((r) => r.id !== "owner" && r.capabilities.includes("notion") && !r.capabilities.includes("google"));
+  servicesCheck(line, { friends, baseUrl: undefined });
   assert.equal(out[0]!.ok, false);
   assert.match(out[0]!.detail, /INTAKE_BASE_URL is not set/);
   out.length = 0;
-  notionCheck(line, { friends, baseUrl: "https://ted.example.test", registered: false, state: (t) => (t === anna.id ? { state: "connected", at: "2026-10-20T10:00:00Z" } : t === bea.id ? { state: "reconnect", at: "2026-10-21T10:00:00Z" } : { state: "none" }) });
+  servicesCheck(line, { friends, baseUrl: "https://ted.example.test", registered: false, state: (t) => (t === anna.id ? { state: "connected", at: "2026-10-20T10:00:00Z" } : t === bea.id ? { state: "reconnect", at: "2026-10-21T10:00:00Z" } : { state: "none" }) });
   assert.equal(out[0]!.what, "notion for friends: client");
   assert.match(out[0]!.detail, /not registered yet/);
   assert.match(out.find((o) => o.what.endsWith(anna.id))!.detail, /connected since 2026-10-20/);
@@ -624,7 +626,7 @@ test("doctor: a notion line appears only when a friend has the capability; it na
   assert.match(out.find((o) => o.what.endsWith(bea.id))!.detail, /no longer accepts her connection/);
   assert.equal(out.find((o) => o.what.endsWith(bea.id))!.ok, "warn");
   out.length = 0;
-  notionCheck(line, { friends, baseUrl: "https://ted.example.test", registered: true, state: () => ({ state: "none" }) });
+  servicesCheck(line, { friends, baseUrl: "https://ted.example.test", registered: true, state: () => ({ state: "none" }) });
   assert.match(out[0]!.detail, /registered with Notion for https:\/\/ted\.example\.test/);
   assert.ok(!JSON.stringify(out).includes("fake-notion"));
   // the intake token's check knows the notion items too

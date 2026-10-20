@@ -17,8 +17,22 @@ export const ITEM_NAME = /^[a-z][a-z0-9._-]{0,39}$/;
 // read only by the process that starts her Google server (googlemcp.ts). Her own folder like any other kind.
 // `notion`: the same for her Notion grant (tenants/<id>/notion/oauth: access token, ROTATING refresh token, the client id they were issued to), written by the
 // callback and by the refresh (notionoauth.ts), read only by the process that calls the hosted Notion server (notionmcp.ts).
-export type ItemKind = "profile" | "card" | "google" | "notion";
-export const ITEM_KINDS: readonly ItemKind[] = ["profile", "card", "google", "notion"];
+//
+// THE one list of kinds (a new kind is one entry here and its Purpose in intakepurposes.ts): the intake page's writer (intakestore.ts), the doctor's probe of the intake token
+// and BOTH OpenBao policies (openbaoadmin.ts policyHcl, intakePolicyHcl) are derived from it. `app`: what the app's own token may do with this kind in ANY tenant's folder
+// (beyond its own tenant's folder, which it has in full): the process that serves a friend reads her grant, never her profile or card.
+export interface ItemKindRule {
+  app?: { capabilities: readonly string[]; comment: string };
+}
+const RULES = {
+  profile: {},
+  card: {},
+  google: { app: { capabilities: ["read"], comment: "A friend's Google grant (the intake page writes it, the process that starts her Google server reads it): read only, nothing else of hers." } },
+  notion: { app: { capabilities: ["read", "create", "update"], comment: "A friend's Notion grant: read, and create and update, because Notion's refresh tokens rotate and the new one is written back before it is used (notionoauth.ts). No delete, no list." } },
+} as const satisfies Record<string, ItemKindRule>;
+export type ItemKind = keyof typeof RULES;
+export const ITEM_KINDS: readonly ItemKind[] = Object.keys(RULES) as ItemKind[];
+export const itemKindRule = (kind: ItemKind): ItemKindRule => RULES[kind];
 export const GOOGLE_ITEM = "oauth";
 export const NOTION_ITEM = "oauth";
 export const CARD_TENANTS: ReadonlySet<string> = new Set([OWNER]);

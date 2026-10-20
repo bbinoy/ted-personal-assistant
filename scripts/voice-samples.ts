@@ -8,9 +8,8 @@ import { dirname, join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { loadMessengerInUse } from "../src/messenger.ts";
 import { synthesize } from "@ted-personal-assistant/signal/tts";
-import { config } from "../src/config.ts";
 import { PERSONALITY } from "../src/persona.ts";
-import { settings } from "../src/settings.ts";
+import { settings, signalIdentity } from "../src/settings.ts";
 import { SPOKEN_STYLE } from "../src/voicereply.ts";
 
 const [source, outDir] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -52,11 +51,12 @@ for (const v of variants) {
 await writeFile(join(outDir, "texts.txt"), variants.map((v) => `== ${v.name}\n${v.text}\n`).join("\n"), { mode: 0o600 });
 
 if (send) {
-  if (config.signalAccount === config.ownerNumber) {
+  const identity = signalIdentity();
+  if (identity.account === identity.ownerNumber) {
     console.error("SIGNAL_ACCOUNT is not set (Note to Self): not sending. The files are in", outDir);
     process.exit(0);
   }
-  const messenger = await loadMessengerInUse({ owner: { address: config.ownerNumber, id: config.ownerAci }, account: config.signalAccount });
+  const messenger = await loadMessengerInUse({ owner: { address: identity.ownerNumber, id: identity.ownerAci }, account: identity.account });
   await messenger.start();
   for (const f of files) {
     await messenger.send(undefined, { text: f.name, attachments: [{ file: f.file, kind: "file" }] }); // no target: the owner's private chat

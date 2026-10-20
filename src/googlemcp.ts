@@ -152,13 +152,8 @@ export class GoogleSession extends UpstreamSession {
 }
 
 // All friends' sessions: one process each, never shared.
-export class GoogleHub extends SessionHub<GoogleSession> {
-  constructor(make: (tenantId: string) => GoogleSession = (id) => new GoogleSession(id)) {
-    super(make);
-  }
-}
-
-export const googleHub = new GoogleHub();
+export type GoogleHub = SessionHub<GoogleSession>;
+export const googleHub: GoogleHub = new SessionHub((id) => new GoogleSession(id));
 
 // ---- what the model's run gets: a proxy to her server, no command line, no environment (mcpproxy.ts) ----
 

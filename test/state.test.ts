@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, statSync } from "node:fs";
 import { overBudget, recordCost, spentToday } from "../src/budget.ts";
-import { loadSettings, settings } from "../src/settings.ts";
+import { loadSettings, settings, signalIdentity } from "../src/settings.ts";
+import { checkHideSettings, registered } from "../src/modules/index.ts";
 import { appendLine, dataPath, readJson, readText, secureDataDirs, writeJson, writeText } from "../src/state.ts";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -73,22 +74,41 @@ test("budget: costs accumulate and the over-budget notice fires once", () => {
 test("settings: defaults, and typos fail loudly instead of becoming NaN", () => {
   const d = loadSettings({});
   assert.equal(d.heartbeatMinutes, 15);
-  assert.equal(d.heartbeatLive, true);
+  assert.equal(d.archiveLive, true);
   assert.equal(d.signalHost, "127.0.0.1");
   assert.throws(() => loadSettings({ HEARTBEAT_MINUTES: "abc" }), /HEARTBEAT_MINUTES/);
   assert.throws(() => loadSettings({ HEARTBEAT_MINUTES: "0" }), /HEARTBEAT_MINUTES/);
   assert.throws(() => loadSettings({ QUIET_START_HOUR: "24" }), /QUIET_START_HOUR/);
-  assert.throws(() => loadSettings({ HEARTBEAT_ACTIONS: "yes" }), /HEARTBEAT_ACTIONS/);
-  assert.equal(loadSettings({ HEARTBEAT_ACTIONS: "log" }).heartbeatLive, false);
+  assert.throws(() => loadSettings({ ARCHIVE: "yes" }), /ARCHIVE must be one of live, log/);
+  assert.equal(loadSettings({ ARCHIVE: "log" }).archiveLive, false);
+  // the three old archive switches are gone: they stop the agent and name the new one
+  for (const old of ["HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"]) assert.throws(() => loadSettings({ [old]: "log" }), new RegExp(`${old} is gone.*ARCHIVE=live or ARCHIVE=log`));
 });
 
 test("settings: the tool-hiding lists have safe defaults and reject typos", () => {
   const d = loadSettings({});
   assert.ok(d.hiddenConnectors.includes("mcp__claude_ai_Interactive_Brokers_IBKR"));
-  assert.deepEqual(d.notionTools, ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"]);
-  assert.deepEqual(loadSettings({ NOTION_TOOLS: "notion-fetch, notion-search" }).notionTools, ["notion-fetch", "notion-search"]);
-  assert.ok(d.mailbirdTools.includes("get_message") && !d.mailbirdTools.includes("snooze_conversation"));
+  assert.deepEqual(d.visibleTools, {}, "the defaults are the modules' own (their `hide.visible`)");
+  assert.deepEqual(registered().find((m) => m.name === "notion")!.hide!.visible, ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"]);
+  assert.deepEqual(loadSettings({ NOTION_TOOLS: "notion-fetch, notion-search" }).visibleTools, { notion: ["notion-fetch", "notion-search"] });
+  const mb = registered().find((m) => m.name === "mailbird")!.hide!.visible;
+  assert.ok(mb.includes("get_message") && !mb.includes("snooze_conversation"));
+  // one <MODULE>_TOOLS setting per module, named after it, checked against the module's own pattern
   assert.throws(() => loadSettings({ MAILBIRD_TOOLS: "Get-Message" }), /MAILBIRD_TOOLS/);
-  assert.throws(() => loadSettings({ NOTION_TOOLS: "fetch" }), /NOTION_TOOLS/);
+  assert.throws(() => checkHideSettings(loadSettings({ NOTION_TOOLS: "fetch" }).visibleTools), /NOTION_TOOLS: "fetch" is not a Notion tool name/);
+  assert.throws(() => checkHideSettings(loadSettings({ GMAIL_TOOLS: "Get_Thread" }).visibleTools), /GMAIL_TOOLS/);
+  assert.doesNotThrow(() => checkHideSettings(loadSettings({ GMAIL_TOOLS: "get_thread", SOME_OTHER_TOOLS: "x" }).visibleTools));
   assert.throws(() => loadSettings({ HIDDEN_CONNECTORS: "Gmail" }), /HIDDEN_CONNECTORS/);
+});
+
+test("settings: the credential mode and the Signal identity are settings too (the old config module is gone)", () => {
+  assert.equal(loadSettings({}).credential, "login");
+  assert.equal(loadSettings({ HARNESS_AUTH: "token", CLAUDE_CODE_OAUTH_TOKEN: "t" }).credential, "token");
+  assert.throws(() => loadSettings({ HARNESS_AUTH: "token" }), /CLAUDE_CODE_OAUTH_TOKEN/);
+  assert.throws(() => loadSettings({ HARNESS_AUTH: "api-key" }), /ANTHROPIC_API_KEY/);
+  assert.throws(() => loadSettings({ HARNESS_AUTH: "magic" }), /HARNESS_AUTH must be one of login, token, api-key/);
+  assert.throws(() => signalIdentity(loadSettings({})), /SIGNAL_OWNER_NUMBER/);
+  assert.deepEqual(signalIdentity(loadSettings({ SIGNAL_OWNER_NUMBER: "+10000000001" })), { ownerNumber: "+10000000001", account: "+10000000001", ownerAci: undefined });
+  const own = signalIdentity(loadSettings({ SIGNAL_OWNER_NUMBER: "+10000000001", SIGNAL_ACCOUNT: " +10000000002 ", SIGNAL_OWNER_ACI: "x" }));
+  assert.deepEqual([own.account, own.ownerAci], ["+10000000002", "x"]);
 });

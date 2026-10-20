@@ -28,8 +28,6 @@ const mail: MailSlot = {
       followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled.",
     }),
   createdDraft: (tool, response) => (REPLY_TOOLS.has(tool) ? extractMessageId(response) : undefined), // the reply tools save the draft; its id is in their result
-  archiveLogOnly: () => false,
-  reportNote: () => undefined,
   brief: {
     delivery: () => "email",
     instructions: () => BRIEF_INSTRUCTIONS,
@@ -88,7 +86,16 @@ export const mailbirdModule: ToolModule = {
   },
   skills: [{ name: "mailbird", required: true }, { name: "mailbird-troubleshooting" }],
   setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
-  hide: { prefix: MB, keep: (cfg) => cfg.mailbirdTools },
+  hide: {
+    prefix: MB,
+    visible: [
+      "summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation",
+      "list_attachments", "get_attachment_content", "archive_conversation", "select_conversation", "reply_to_conversation",
+      "reply_all_to_conversation", "create_draft", "update_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing",
+    ],
+    valid: /^[a-z_]+$/,
+    hint: "a Mailbird tool name like get_message",
+  },
   known: "archive_conversation copy_conversation create_draft delete_conversation_permanently discard_draft forward_conversation get_attachment_content get_conversation get_help get_message get_send_status get_ui_state list_accounts list_attachments list_conversations list_folders mark_all_as_read move_conversation move_conversation_to_inbox reply_all_to_conversation reply_to_conversation search_conversations select_conversation send_message_now send_self_briefing set_conversation_important set_conversation_read set_conversation_spam set_conversation_starred set_sender_blocked show_notification snooze_conversation summarize_all_inboxes trash_conversation unsubscribe_from_newsletter update_draft"
     .split(" ")
     .map((t) => `${MB}${t}`),

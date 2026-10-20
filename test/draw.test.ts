@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { buildOptions } from "../src/agentrun.ts";
 import { drawNow } from "../src/drawtool.ts";
 import { classify } from "../src/policy.ts";
-import { offeredSkills } from "../src/profiles.ts";
+import { ownerSkills } from "../src/skills.ts";
 import { OWNER_KEY, sendNow, withSend, type Content } from "../src/send.ts";
 import { settings } from "../src/settings.ts";
 import { adoptDrawing, adoptShots, loadShot, MAX_DRAWINGS, MAX_PICTURE_BYTES } from "../src/shots.ts";
@@ -115,7 +115,7 @@ test("draw: the server exists for chat and group runs only, and the skill is off
   assert.ok(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes("draw"));
   assert.ok(servers({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g" } }).includes("draw"));
   for (const source of ["brief", "radar", "handler", "background"] as const) assert.ok(!servers({ ...base, source }).includes("draw"), source);
-  assert.equal(offeredSkills(true).includes("ted-personal-assistant:draw"), settings.draw);
+  assert.equal(ownerSkills(true).includes("ted-personal-assistant:draw"), settings.draw);
 });
 
 test("policy: the weather tools are allowed in a group run, other weather names are not", async () => {

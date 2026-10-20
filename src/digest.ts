@@ -23,14 +23,10 @@ export function buildDigest(entries: TriageEntry[], sinceIso: string | undefined
   const head = `HEARTBEAT DIGEST (since ${sinceIso ?? "the beginning"}, ${entries.length} new conversation(s) triaged)`;
   if (entries.length === 0) return `${head}\nNothing new arrived.`;
 
-  const logOnly = entries.every((e) => e.decision.startsWith("would-"));
   const lines = [head];
-  if (logOnly) {
-    lines.push("Heartbeat was in LOG-ONLY mode: it archived nothing. Labels below are its classifications, not actions taken.");
-  }
   const wouldArchive = entries.filter((e) => e.decision === "would-archive");
-  if (wouldArchive.length > 0 && !logOnly) {
-    lines.push(`Gmail archiving is in LOG-ONLY mode (GMAIL_ARCHIVE_LIVE=false): ${wouldArchive.length} thread(s) were classified archive but are STILL IN THE INBOX. Do not archive them yourself or say they were archived; list them under "Looked archivable" and tell the owner this is the trial week, with how to turn archiving on.`);
+  if (wouldArchive.length > 0) {
+    lines.push(`Archiving is in LOG-ONLY mode (ARCHIVE=log): ${wouldArchive.length} thread(s) were classified archive but are STILL IN THE INBOX. Do not archive them yourself or say they were archived; list them under "Looked archivable" and tell the owner archiving is switched to log-only, with how to turn it on (ARCHIVE=live in .env).`);
   }
   const by = (label: string) => entries.filter((e) => e.meta.label === label);
   const archived = entries.filter((e) => e.decision === "archived");

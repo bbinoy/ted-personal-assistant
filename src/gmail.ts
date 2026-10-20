@@ -62,7 +62,7 @@ export const sdkRelay: Relay = async (calls) => {
     settings: { autoMemoryEnabled: false },
     env: { ...process.env, MCP_CONNECTION_NONBLOCKING: "false" },
     // Only the needed Gmail tools are visible: the other connectors by prefix, the rest of Gmail by name (a smaller context per tick).
-    disallowedTools: [...new Set([...settings.hiddenConnectors, "mcp__claude_ai_Notion", "mcp__claude_ai_Google_Calendar", ...hiddenTools(toolsSeen(), { ...settings, gmailTools: names })])],
+    disallowedTools: [...new Set([...hiddenTools(toolsSeen(), { ...settings, visibleTools: { ...settings.visibleTools, gmail: names } }), "mcp__claude_ai_Notion", "mcp__claude_ai_Google_Calendar"])],
     permissionMode: "default", // see agentrun.ts
     canUseTool: async (tool, input) =>
       planned.has(callKey(tool, input)) && relayAllowed({ tool, input })
@@ -242,7 +242,7 @@ const WINDOW = "in:inbox newer_than:7d"; // shorter than the seen-mail memory (S
 export class GmailMail {
   private relay: Relay;
   private archiveLive: () => boolean;
-  constructor(relay: Relay = sdkRelay, archiveLive: () => boolean = () => settings.gmailArchiveLive) {
+  constructor(relay: Relay = sdkRelay, archiveLive: () => boolean = () => settings.archiveLive) {
     this.relay = relay;
     this.archiveLive = archiveLive;
   }
@@ -264,7 +264,7 @@ export class GmailMail {
         return parseMessage(r) as T;
       }
       case "archive_conversation": {
-        if (!this.archiveLive()) return "log-only (GMAIL_ARCHIVE_LIVE=false): not archived" as T;
+        if (!this.archiveLive()) return "log-only (ARCHIVE=log): not archived" as T;
         const [r] = await this.relay([g("unlabel_thread", { threadId: String(args.conversationId), labelIds: ["INBOX"] })]);
         return (typeof r === "string" ? r : JSON.stringify(r ?? "")) as T;
       }

@@ -89,8 +89,8 @@ for (const [name, write, expected] of [
 ] as const) {
   test(`heartbeat: ${name}`, async () => {
     const s = settings as unknown as Record<string, unknown>;
-    const was = { quietStartHour: s.quietStartHour, quietEndHour: s.quietEndHour, heartbeatLive: s.heartbeatLive, mail: s.mail };
-    Object.assign(s, { quietStartHour: 0, quietEndHour: 0, heartbeatLive: true, mail: true });
+    const was = { quietStartHour: s.quietStartHour, quietEndHour: s.quietEndHour, mail: s.mail };
+    Object.assign(s, { quietStartHour: 0, quietEndHour: 0, mail: true });
     const { writeJson, readJson } = await import("../src/state.ts");
     const seenBefore = readJson("state/seen.json", undefined);
     writeJson("state/seen.json", { seededAt: "2026-01-01T00:00:00.000Z", keys: {} });
@@ -123,8 +123,8 @@ test("heartbeat: a usage limit leaves the mail unseen, so the next tick classifi
   const { failure } = await import("../src/errors.ts"); // (the cooldown is noted where the call fails)
   const { writeJson, readJson } = await import("../src/state.ts");
   const s = settings as unknown as Record<string, unknown>;
-  const was = { quietStartHour: s.quietStartHour, quietEndHour: s.quietEndHour, heartbeatLive: s.heartbeatLive, mail: s.mail };
-  Object.assign(s, { quietStartHour: 0, quietEndHour: 0, heartbeatLive: true, mail: true });
+  const was = { quietStartHour: s.quietStartHour, quietEndHour: s.quietEndHour, mail: s.mail };
+  Object.assign(s, { quietStartHour: 0, quietEndHour: 0, mail: true });
   const seenBefore = readJson("state/seen.json", undefined);
   writeJson("state/seen.json", { seededAt: "2026-01-01T00:00:00.000Z", keys: {} });
   const row = { conversationId: "c1", subject: "Contract", lastSender: "Dana", receivedAtUtc: "2026-10-14T09:00:00", lastMessageId: 7 };

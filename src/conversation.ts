@@ -26,7 +26,7 @@ import { MAX_SPOKEN_CHARS } from "@ted-personal-assistant/signal/tts";
 export { cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Incoming };
 
 // The one pipeline every conversation goes through: the owner's private chat and each group. What differs
-// between them is DATA on a Conversation, and a Conversation is made only by owner() and group(id), so trust
+// between them is DATA on a Conversation, and a Conversation is made only by owner(), group(id) and tenant(id), so trust
 // cannot be mixed up by building one by hand. What is the same is the code: read receipt, voice message in,
 // record, run, [[voice]] / [[react]] / [[silent]], quote threading, typing, error notice, one turn at a time.
 // A burst of messages is one turn in both (burst below): a short settling pause, then everything that arrived is answered together.

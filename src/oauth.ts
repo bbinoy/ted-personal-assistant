@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { settings } from "./settings.ts";
+import type { ItemKind } from "./secrets.ts";
 
 // "Connect <service>" on the intake page (intakeserver.ts) for EVERY service a friend signs in to (Google: googleoauth.ts, Notion: notionoauth.ts): the OAuth
 // authorisation-code flow with PKCE (S256) and a `state` that is random, single-use, short-lived and BOUND TO THE ONE-TIME LINK it was started from. The page shows
@@ -66,7 +67,7 @@ export interface OAuthProvider {
   id: string; // the purpose of the setup link and the callback's path segment
   name: string; // for the person at the page ("Google")
   // Where the grant is stored: her folder <kind>, item <name> (intakestore.ts).
-  store: { kind: "google" | "notion"; name: string };
+  store: { kind: ItemKind; name: string };
   ready(): boolean; // can a flow be started at all (the client is set up)?
   // The consent screen's address. May register the instance's client the first time (Notion); fails with an OAuthProblem in a fixed sentence.
   authorizeUrl(a: { state: string; challenge: string; redirectUri: string; fetch: typeof fetch }): Promise<string>;

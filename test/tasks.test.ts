@@ -216,7 +216,7 @@ test("presets are detached background jobs: the look returns at once, one run pe
   const open = new Promise<void>((res) => (finish = res));
   const w = createWakeups({
     groupChats: true,
-    pipeline: { canSpeak: () => false, enqueue: (_c: any, j: any) => j(), record: (c: Conversation, k: Kind, ts: number, text: string) => recordMessage(k, ts, text, T0, conv.logFile), runTurn: async () => ({ spoke: false }) } as any,
+    pipeline: { canSpeak: () => false, enqueue: (_c: any, j: any) => j(), record: (_c: Conversation, k: Kind, ts: number, text: string) => recordMessage(k, ts, text, T0, conv.logFile), runTurn: async () => ({ spoke: false }) } as any,
     vouch: async () => true,
     runProfile: async (profile) => { r.profiles.push(profile); await open; return { text: "", structured: { eventsSeen: 2, messages: [] } }; },
     presets: { sendBrief: async () => {}, notify: async () => {} },

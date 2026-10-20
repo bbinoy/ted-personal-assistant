@@ -17,10 +17,10 @@ import { macKeychain, type Keychain } from "./keychain.ts";
 import { baseUrlProblem, connectionState } from "./intakelinks.ts";
 import { clientRegistered } from "./notionoauth.ts";
 import { connectionSummary } from "./connections.ts";
-import { readDone } from "./intakelinks.ts";
+import { PURPOSES } from "./intakepurposes.ts";
 import { INTAKE_ROLE } from "./openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./openbao.ts";
-import { appBao, keychainNames, looksLikeApiKey, OWNER } from "./secrets.ts";
+import { appBao, ITEM_KINDS, keychainNames, looksLikeApiKey, OWNER } from "./secrets.ts";
 import { invites, listTenants, OWNER_ID, pausedUntil, people, readConsent, tenantContext } from "./tenants.ts";
 import { Ledger } from "./payments.ts";
 import { messengerDoctor } from "./messenger.ts";
@@ -78,7 +78,10 @@ export async function openbaoCheck(line: Line, o: { bao?: () => OpenBao; keychai
   }
 }
 
-// The intake page (intakeserver.ts): is it configured (INTAKE_BASE_URL, https), is its token write-only (create and update on profile and card items, no
+// "profile, card, google and notion"
+const list = (names: readonly string[]): string => (names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? ""));
+
+// The intake page (intakeserver.ts): is it configured (INTAKE_BASE_URL, https), is its token write-only (create and update on the items of every kind, no
 // read, list or delete, nothing else), and is the process answering on its loopback port. Off is a valid setup: no setup links are offered.
 export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake; bao?: () => OpenBao; keychain?: Keychain; probe?: (port: number) => Promise<boolean>; prefix?: string } = {}): Promise<void> {
   const cfg = o.cfg ?? settings.intake;
@@ -94,17 +97,17 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
     const bao = (o.bao ?? (() => appBao({ keychain, as: "intake", ...(o.prefix ? { cfg: { ...settings.openbao, keychainPrefix: o.prefix } } : {}) })))();
     const t = await bao.lookupSelf();
     const w = (kind: string) => `data/tenants/x/${kind}/y`;
-    const caps = await bao.capabilities([w("profile"), w("card"), w("google"), w("notion"), w("other"), "metadata/tenants/x/profile", "metadata/tenants/x/card", "metadata/tenants/x/google", "metadata/tenants/x/notion"]);
+    const caps = await bao.capabilities([...ITEM_KINDS.map(w), w("other"), ...ITEM_KINDS.map((k) => `metadata/tenants/x/${k}`)]);
     const has = (p: string, c: string) => (caps[p] ?? []).includes(c) || (caps[p] ?? []).includes("root");
     const problems: string[] = [];
     if (t.policies.includes("root") || t.policies.some((p) => p !== "default" && p !== INTAKE_ROLE)) problems.push(`the token has policies besides ${INTAKE_ROLE}`);
-    for (const kind of ["profile", "card", "google", "notion"]) {
+    for (const kind of ITEM_KINDS) {
       if (!has(w(kind), "create") || !has(w(kind), "update")) problems.push(`the token cannot write ${kind} items`);
       if (["read", "delete", "list"].some((c) => has(w(kind), c)) || ["read", "list", "delete", "update"].some((c) => has(`metadata/tenants/x/${kind}`, c))) problems.push(`the token can do more than write ${kind} items`);
     }
-    if ((caps[w("other")] ?? []).some((c) => c !== "deny")) problems.push("the token reaches beyond profile, card, google and notion items");
+    if ((caps[w("other")] ?? []).some((c) => c !== "deny")) problems.push(`the token reaches beyond ${list(ITEM_KINDS)} items`);
     if (problems.length) line(false, "intake write-only token", `${problems.join("; ")}: npm run openbao -- setup repairs it`);
-    else line(true, "intake write-only token", `policy ${INTAKE_ROLE}: create and update of profile, card, google and notion items, no read, list or delete`);
+    else line(true, "intake write-only token", `policy ${INTAKE_ROLE}: create and update of ${list(ITEM_KINDS)} items, no read, list or delete`);
   } catch (e) {
     line("warn", "intake write-only token", e instanceof BaoError ? e.message.slice(0, LIMITS.reason) : "the check failed");
   }
@@ -115,43 +118,60 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
   }
 }
 
-// Google for friends (modules/google.ts): only when some friend has the `google` capability. Is the OAuth client set up (never its value), is the page that signs
-// her in there (INTAKE_BASE_URL), is the pinned server's command on this Mac's PATH, and per friend: connected (since when) or not yet, and the mail and calendar
-// capabilities that make the connection useful. The status is the intake page's own record (names and lengths); no token is read for this.
-export function googleCheck(line: Line, o: { cfg?: typeof settings.google; baseUrl?: string | undefined; onPath?: (command: string) => boolean; friends?: ReturnType<typeof people>; done?: typeof readDone } = {}): void {
-  const cfg = o.cfg ?? settings.google;
-  const friends = (o.friends ?? people()).filter((r) => r.id !== OWNER_ID && r.capabilities.includes("google"));
-  if (!friends.length) return;
-  const what = "google for friends";
-  const missing = [!cfg.clientId && "GOOGLE_OAUTH_CLIENT_ID", !cfg.clientSecret && "GOOGLE_OAUTH_CLIENT_SECRET", !(o.baseUrl ?? settings.intake.baseUrl) && "INTAKE_BASE_URL"].filter(Boolean);
-  if (missing.length) return line(false, what, `${friends.length} friend(s) have the google capability but ${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not set (docs/SETUP.md "Google for friends")`);
-  const onPath = o.onPath ?? ((c: string) => c.includes("/") ? existsSync(c) : (process.env.PATH ?? "").split(":").some((d) => d && existsSync(`${d}/${c}`)));
-  if (!onPath(cfg.command)) line("warn", `${what}: server command`, `${cfg.command} was not found on the PATH (brew install uv); friends' Google tools fail until it is`);
-  else line(true, `${what}: server command`, `${cfg.command} ${cfg.args[0] ?? ""} (pinned by GOOGLE_MCP_ARGS)`);
-  const done = o.done ?? readDone;
-  for (const r of friends) {
-    const d = done(r.id, "google");
-    const tools = ["mail", "calendar"].filter((c) => r.capabilities.includes(c as never));
-    line(d ? true : "warn", `${what}: ${r.id}`, `${d ? `connected since ${d.at.slice(0, 10)}` : "has not connected yet (she asks the assistant for a Google link)"}; tools: ${tools.join(", ") || "none (grant mail and calendar)"}`);
-  }
+// The services a friend connects herself (the OAuth purposes of the intake page, intakepurposes.ts: Google, Notion), ONE check for all of them: only for a service some friend
+// has the capability for. Is what the service needs set up (never its value) and the page that signs her in there (INTAKE_BASE_URL, https), then what is particular to the
+// service (Google: the pinned server's command on this Mac's PATH; Notion: whether the instance's one client is registered yet), and per friend: connected (since when),
+// not yet, or needing to connect again (her permission expired or was withdrawn). The status is the intake page's own record (names and times); no token is read for this
+// and nothing is sent to the service.
+type ServiceExtra = (line: Line, o: ServicesOptions) => void;
+export interface ServicesOptions {
+  friends?: ReturnType<typeof people>;
+  baseUrl?: string | undefined;
+  state?: typeof connectionState;
+  needs?: Readonly<Record<string, readonly string[]>>; // by purpose: the settings that are missing (tests; otherwise the purpose says)
+  onPath?: (command: string) => boolean; // google: is the server's command there?
+  registered?: boolean; // notion: has the instance's client been registered with Notion?
 }
+const SERVICE_EXTRA: Readonly<Record<string, ServiceExtra>> = {
+  google: (line, o) => {
+    const cfg = settings.google;
+    const onPath = o.onPath ?? ((c: string) => (c.includes("/") ? existsSync(c) : (process.env.PATH ?? "").split(":").some((d) => d && existsSync(`${d}/${c}`))));
+    if (!onPath(cfg.command)) line("warn", "google for friends: server command", `${cfg.command} was not found on the PATH (brew install uv); friends' Google tools fail until it is`);
+    else line(true, "google for friends: server command", `${cfg.command} ${cfg.args[0] ?? ""} (pinned by GOOGLE_MCP_ARGS)`);
+  },
+  notion: (line, o) => {
+    const base = "baseUrl" in o ? o.baseUrl : settings.intake.baseUrl;
+    const registered = o.registered ?? clientRegistered(base);
+    line(true, "notion for friends: client", registered ? `registered with Notion for ${new URL(base!).origin}` : "not registered yet: it registers itself the first time a friend opens a Connect Notion link");
+  },
+};
 
-// Notion for friends (modules/notionhosted.ts): only when some friend has the `notion` capability. Is the page that signs her in there (INTAKE_BASE_URL, https), is the
-// instance's one client registered with Notion yet (it registers itself on the first Connect Notion; its id is no secret and is not printed), and per friend: connected
-// (since when), not yet, or needing to connect again (her permission expired or was withdrawn). Nothing is read from her secrets for this and nothing is sent to Notion.
-export function notionCheck(line: Line, o: { baseUrl?: string | undefined; registered?: boolean; friends?: ReturnType<typeof people>; state?: typeof connectionState } = {}): void {
-  const friends = (o.friends ?? people()).filter((r) => r.id !== OWNER_ID && r.capabilities.includes("notion"));
-  if (!friends.length) return;
-  const what = "notion for friends";
-  const base = "baseUrl" in o ? o.baseUrl : settings.intake.baseUrl;
-  const problem = baseUrlProblem({ baseUrl: base, allowHttpLoopback: settings.intake.allowHttpLoopback });
-  if (problem) return line(false, what, `${friends.length} friend(s) have the notion capability but ${problem} (docs/SETUP.md "Notion for friends")`);
-  const registered = o.registered ?? clientRegistered(base);
-  line(true, `${what}: client`, registered ? `registered with Notion for ${new URL(base!).origin}` : "not registered yet: it registers itself the first time a friend opens a Connect Notion link");
-  const state = o.state ?? connectionState;
-  for (const r of friends) {
-    const c = state(r.id, "notion");
-    line(c.state === "connected" ? true : "warn", `${what}: ${r.id}`, c.state === "connected" ? `connected since ${(c.at ?? "").slice(0, 10)}` : c.state === "reconnect" ? `Notion no longer accepts her connection (since ${(c.at ?? "").slice(0, 10)}); she is told to reconnect and gets a new link when she asks` : "has not connected yet (she asks the assistant for a Notion link)");
+export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
+  const everyone = o.friends ?? people();
+  for (const [id, purpose] of Object.entries(PURPOSES)) {
+    if (!purpose.oauth) continue;
+    const friends = everyone.filter((r) => r.id !== OWNER_ID && r.capabilities.includes(purpose.capability));
+    if (!friends.length) continue;
+    const what = `${id} for friends`;
+    const base = "baseUrl" in o ? o.baseUrl : settings.intake.baseUrl;
+    const missing = [...(o.needs?.[id] ?? purpose.needs())];
+    const problems = [...(missing.length ? [`${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not set`] : []), ...[baseUrlProblem({ baseUrl: base, allowHttpLoopback: settings.intake.allowHttpLoopback })].filter((x): x is string => !!x)];
+    if (problems.length) {
+      line(false, what, `${friends.length} friend(s) have the ${id} capability but ${problems.join("; ")} (docs/SETUP.md "${purpose.title.replace(/^Connect /, "")} for friends")`);
+      continue;
+    }
+    SERVICE_EXTRA[id]?.(line, o);
+    const state = o.state ?? connectionState;
+    for (const r of friends) {
+      const c = state(r.id, id);
+      const tools = id === "google" ? `; tools: ${["mail", "calendar"].filter((k) => r.capabilities.includes(k as never)).join(", ") || "none (grant mail and calendar)"}` : "";
+      const service = purpose.title.replace(/^Connect /, "");
+      line(
+        c.state === "connected" ? true : "warn",
+        `${what}: ${r.id}`,
+        `${c.state === "connected" ? `connected since ${(c.at ?? "").slice(0, 10)}` : c.state === "reconnect" ? `${service} no longer accepts her connection (since ${(c.at ?? "").slice(0, 10)}); she is told to reconnect and gets a new link when she asks` : `has not connected yet (she asks the assistant for a ${service} link)`}${tools}`,
+      );
+    }
   }
 }
 
@@ -216,11 +236,11 @@ export async function doctor() {
     line(mode === "600", ".env is owner-only (600)", `mode ${mode}`);
     const env = await readFile(envPath, "utf8");
     line(/^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env), "SIGNAL_OWNER_NUMBER set");
-    line(!/^ANTHROPIC_API_KEY=./m.test(env) || process.env.HARNESS_AUTH === "api-key" ? true : "warn", "no API key shadowing the stored login", "API key lines override login mode only if HARNESS_AUTH=api-key");
+    line(!/^ANTHROPIC_API_KEY=./m.test(env) || settings.credential === "api-key" ? true : "warn", "no API key shadowing the stored login", "API key lines override login mode only if HARNESS_AUTH=api-key");
   }
 
   // The chat platform (MESSENGER): its own checks come from its package (for Signal: the mode, signal-cli installed and linked, the daemon reachable).
-  for (const l of await messengerDoctor(process.env.SIGNAL_ACCOUNT?.trim() || undefined)) line(l.ok, l.what, l.detail);
+  for (const l of await messengerDoctor(settings.signalOwnAccount)) line(l.ok, l.what, l.detail);
 
   await mailCheck(line, settings.mail);
 
@@ -266,8 +286,7 @@ export async function doctor() {
   await openbaoCheck(line);
   await intakeCheck(line);
   tenantCheck(line);
-  googleCheck(line);
-  notionCheck(line);
+  servicesCheck(line);
 
   line(true, "proactive radar", settings.proactive ? `chosen by your chat's gate, about every ${settings.radarMinutes} min (its "[radar] ran" lines are in the log)` : "off (PROACTIVE=off)");
 

@@ -9,12 +9,6 @@ import { settings } from "./settings.ts";
 import { toolsFor } from "./profiletools.ts";
 import { ownerSkills, skillsFor } from "./skills.ts";
 
-// The only skills the model can load. The SDK enforces this list (anything else is refused with
-// "not in this session's skills allowlist"); Skill calls never reach canUseTool.
-// A group or a tenant loads only the shared ones its capabilities allow (skills.ts), never a private one.
-// The owner's are the assistant's own and those of the loaded tool modules (skills.ts): without mail no mail module is loaded, so no mail skill is offered
-// (the others keep a few mail sentences; the system prompt says to skip them, persona.ts).
-export const offeredSkills = (mail: boolean, provider: string = settings.mailProvider): string[] => ownerSkills(mail, provider);
 
 // ---- run profiles ----
 // HOW a run is allowed to work, fixed in code and named: the policy source (policy.ts: which tools are allowed, asked,

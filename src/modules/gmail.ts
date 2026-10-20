@@ -52,8 +52,6 @@ const mail: MailSlot = {
       followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled (unlabel_thread removing INBOX).",
     }),
   createdDraft: (tool, response) => (tool === `${GMAIL_PREFIX}create_draft` ? draftIdOf(response) : undefined),
-  archiveLogOnly: () => !settings.gmailArchiveLive, // Gmail's first week: the heartbeat classifies and logs "would-archive" but archives nothing (GMAIL_ARCHIVE_LIVE=true ends it)
-  reportNote: () => (settings.gmailArchiveLive ? undefined : "Gmail archiving is in LOG-ONLY mode (GMAIL_ARCHIVE_LIVE=false): \"would-archive\" below was classified but NOT archived."),
   brief: {
     delivery: () => (settings.briefEmail && settings.mailSelfAddress ? "email" : "signal"),
     instructions: () => (settings.briefEmail && settings.mailSelfAddress ? briefEmail(settings.mailSelfAddress) : briefSignal()),
@@ -113,11 +111,11 @@ export const gmailModule: ToolModule = {
   floor: {
     // Gmail's rules a row cannot say: attachment content, raw MIME, label renames, archive log-only (gmailrules.ts). They hold whichever provider is
     // active: they only restrict, so the connector's tools stay as refused as before if it is ever seen under another provider.
-    verdict: (tool, input) => gmailVerdict(tool, input, { archiveLive: active() && settings.gmailArchiveLive }),
-    // Archive in log-only mode (GMAIL_ARCHIVE_LIVE=false) is recorded like the heartbeat's, so the report and the brief show it.
+    verdict: (tool, input) => gmailVerdict(tool, input, { archiveLive: active() && settings.archiveLive }),
+    // Archive in log-only mode (ARCHIVE=log) is recorded like the heartbeat's, so the report and the brief show it.
     onDeny: (tool, input) => {
       if (isInboxArchive(tool, input) && active()) {
-        return { record: { tool: "gmail_archive", decision: "would-archive", meta: { id: input.threadId } }, message: "Archiving is in log-only mode (GMAIL_ARCHIVE_LIVE=false): it was recorded as would-archive and the thread stays in the inbox. Carry on without archiving." };
+        return { record: { tool: "gmail_archive", decision: "would-archive", meta: { id: input.threadId } }, message: "Archiving is in log-only mode (ARCHIVE=log): it was recorded as would-archive and the thread stays in the inbox. Carry on without archiving." };
       }
       return isGmailTool(tool) ? { withIds: true } : undefined;
     },
@@ -126,7 +124,12 @@ export const gmailModule: ToolModule = {
   },
   skills: [{ name: "gmail", required: true }],
   setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
-  hide: { prefix: GMAIL_PREFIX, keep: (cfg) => cfg.gmailTools }, // undefined: the whole connector is hidden by prefix, or not in use
+  hide: {
+    prefix: GMAIL_PREFIX,
+    visible: ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"],
+    valid: /^[a-z_]+$/,
+    hint: "a Gmail tool name like get_thread",
+  },
   known: "apply_sensitive_message_label apply_sensitive_thread_label create_draft create_label delete_draft delete_label forward get_draft get_message get_thread label_message label_thread list_drafts list_labels mark_message_spam mark_thread_spam reply search_threads send_message trash_message trash_thread unlabel_message unlabel_thread unmark_message_spam unmark_thread_spam untrash_message untrash_thread update_draft update_label update_message_labels"
     .split(" ")
     .map((t) => `${GMAIL_PREFIX}${t}`),

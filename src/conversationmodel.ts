@@ -15,8 +15,6 @@ import { clean, LIMITS, oneLine } from "./sanitize.ts";
 import { type Timing } from "./timing.ts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-personal-assistant/messenger";
 
-// The one pipeline every conversation goes through: the owner's private chat and each group. What differs
-
 // What a conversation is (the owner's chat or a group: data, never built by hand) and the types the pipeline (conversation.ts) works with.
 
 export interface Conversation {
@@ -104,7 +102,7 @@ export const tenant = (id: string): Conversation => {
     attention: "always",
     optionalPictures: false,
     threadAlways: false,
-    noticeEveryMs: Math.min(5, settings.tenantNoticeMinutes) * 60_000, // she is waiting: told promptly, but not once per message of a flood
+    noticeEveryMs: settings.tenantReplyNoticeMinutes * 60_000, // she is waiting: told promptly, but not once per message of a flood
     notice: noticeFor("friend"), // no terminals, no logs
   });
 };

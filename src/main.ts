@@ -6,7 +6,6 @@ import { approveIn, setApprovers } from "./permissions.ts";
 import { scopeOf } from "./turnscope.ts";
 import * as approvals from "./approvals.ts";
 import { createApprovers } from "./approvers.ts";
-import { config, mask } from "./config.ts";
 import { acceptOwner } from "./guards.ts";
 import { createDreamer, dreamConversations } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
@@ -28,7 +27,8 @@ import { prepareFile, type AudioTools } from "./document.ts";
 import { createOutbound } from "./outbound.ts";
 import { Ledger } from "./payments.ts";
 import { OWNER_KEY } from "./send.ts";
-import { settings } from "./settings.ts";
+import { applyCredentialMode, mask, settings, signalIdentity } from "./settings.ts";
+import { checkHideSettings } from "./modules/index.ts";
 import { unsupportedForVoice } from "./lang.ts";
 import { directOf, type IncomingMessage } from "@ted-personal-assistant/messenger";
 import { loadMessengerInUse } from "./messenger.ts";
@@ -41,14 +41,17 @@ import { tenantHooks } from "./tenanttools.ts";
 import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantContext } from "./tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
 
+applyCredentialMode();
+checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
 ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
 sweepStaleRuns(); // page views and screenshots of a browse run that never ended
 if (new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
 
 // The owner's record in the registry (tenants.ts): made on the first start from SIGNAL_OWNER_NUMBER, its account id learned from her first message.
-const ownerRecord = ensureOwner({ number: config.ownerNumber, aci: config.ownerAci });
+const identity = signalIdentity();
+const ownerRecord = ensureOwner({ number: identity.ownerNumber, aci: identity.ownerAci });
 // The chat platform (MESSENGER, default signal): everything below talks to this interface (packages/messenger) and knows no platform call.
-const messenger = await loadMessengerInUse({ owner: { address: config.ownerNumber, id: config.ownerAci ?? ownerRecord.acis[0] }, account: config.signalAccount });
+const messenger = await loadMessengerInUse({ owner: { address: identity.ownerNumber, id: identity.ownerAci ?? ownerRecord.acis[0] }, account: identity.account });
 // What was said goes into that conversation's own log: the owner's chat, or the group's (made on first use).
 function record(target: string | undefined, kind: Kind, ts: number, text: string, extra?: Extra) {
   // A tenant's own history (tenants.ts), in her folder, bounded by size and never summarised by a model (that call would run on the instance's login).
@@ -208,7 +211,7 @@ startAll();
 process.once("exit", () => (stopAll(), messenger.stop()));
 for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, () => (stopAll(), messenger.stop(), stopQwen(), process.exit(0)));
 await messenger.start();
-console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(config.ownerNumber)}; auth: ${config.credential}`);
+console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
 warmChat();
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).

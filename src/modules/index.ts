@@ -31,6 +31,18 @@ export const registered = (): readonly ToolModule[] =>
 // no skills and no connection; only its floor data (registered() below) keeps restricting, because a floor rule can only take away.
 export const loaded = (mail: string = settings.mailProvider): readonly ToolModule[] => registered().filter((m) => !m.slot || m.name === mail);
 
+// Start-up check of the <MODULE>_TOOLS settings (settings.visibleTools) against the modules: a name that is not a tool name of that connector stops the agent with a
+// message naming the setting.
+export function checkHideSettings(cfg: Readonly<Record<string, readonly string[]>> = settings.visibleTools): void {
+  for (const [module, names] of Object.entries(cfg)) {
+    const env = `${module.toUpperCase()}_TOOLS`;
+    const hide = registered().find((m) => m.name === module)?.hide;
+    if (!hide) continue; // some other variable that happens to end in _TOOLS
+    const bad = names.find((n) => !hide.valid.test(n));
+    if (bad) throw new Error(`${env}: "${bad}" is not ${hide.hint}`);
+  }
+}
+
 export const mailProviders = (): string[] => registered().filter((m) => m.slot === "mail").map((m) => m.name);
 export const mailModule = (mail: string = settings.mailProvider): (ToolModule & { mail: MailSlot }) | undefined => loaded(mail).find((m): m is ToolModule & { mail: MailSlot } => m.slot === "mail" && !!m.mail);
 export const mailSlot = (mail?: string): MailSlot | undefined => mailModule(mail)?.mail;

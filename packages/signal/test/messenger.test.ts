@@ -32,7 +32,7 @@ async function started(account: string, attachmentsDir = "/nonexistent") {
   const m = await createMessenger({ owner: { address: OWNER, id: OWNER_ACI }, account, options: { host: d.host, port: d.port, attachmentsDir }, logger: console });
   stoppers.push(m);
   await m.start(); // the fake listens already, so the daemon is reused
-  await until(() => d.connections > 0);
+  await d.whenConnections((n) => n > 0);
   return { d, m };
 }
 
@@ -123,11 +123,14 @@ test("groups, attachments and long text", async () => {
 });
 
 test("onClose: a lost connection is reported once; stopping on purpose is not a loss", async () => {
+  // (also in the contract every messenger passes, contract.test.ts; kept here for the Signal-specific reason text)
   const lost = await started(BOT);
   const reasons: string[] = [];
-  lost.m.onClose((i) => reasons.push(i.reason));
+  const reported = new Promise<void>((resolve) => lost.m.onClose((i) => (reasons.push(i.reason), resolve())));
   lost.d.dropConnections();
-  await until(() => reasons.length > 0);
+  await reported; // the event itself, however long the machine takes
+  await lost.d.whenConnections((n) => n === 0);
+  assert.equal(reasons.length, 1);
   assert.match(reasons[0]!, /^signal socket closed/);
 
   const quiet = await started(BOT);
@@ -135,7 +138,7 @@ test("onClose: a lost connection is reported once; stopping on purpose is not a 
   quiet.m.onClose((i) => none.push(i.reason));
   quiet.m.stop();
   quiet.m.stop(); // safe twice
-  await new Promise((r) => setTimeout(r, 50));
+  await quiet.d.whenConnections((n) => n === 0); // the daemon saw the client go; had a loss been reported it would have been by now
   assert.deepEqual(none, []);
 });
 

@@ -4,7 +4,7 @@ import { SOURCES } from "../src/audit.ts";
 import { classify } from "../src/policy.ts";
 import { NEVER_ACTIONS } from "../src/neverallowed.ts";
 import { settings } from "../src/settings.ts";
-import { mailProviders } from "../src/modules/index.ts";
+import { mailProviders, registered } from "../src/modules/index.ts";
 import { actionOf, allRows, availableFor, entryFor, isFree, mailView, readsUntrusted } from "../src/toolmanifest.ts";
 import { isJudgeable } from "../src/autojudge.ts";
 import { access } from "./util.ts";
@@ -137,8 +137,10 @@ test("manifest: same action, same behaviour across mail providers", () => {
   }
 });
 
-test("manifest: every Mailbird tool the model is given by default has an entry", () => {
-  for (const t of settings.mailbirdTools) assert.ok(entryFor(`${MB}${t}`, "mailbird"), t);
+test("manifest: every connector tool the model is given by default (a module's `hide.visible`) has an entry", () => {
+  const hiding = registered().filter((m) => m.hide);
+  assert.deepEqual(hiding.map((m) => m.name).sort(), ["gmail", "mailbird", "notion"]);
+  for (const m of hiding) for (const t of m.hide!.visible) assert.ok(allRows().some((r) => r.tool === m.hide!.prefix + t), `${m.name}: ${t}`);
 });
 
 test("manifest: the group's rules are not flags and stay as they were", () => {

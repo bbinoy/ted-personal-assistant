@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { join } from "node:path";
 import type { Keychain } from "./keychain.ts";
 import { BaoError, OpenBao } from "./openbao.ts";
-import { keychainNames } from "./secrets.ts";
+import { ITEM_KINDS, itemKindRule, keychainNames } from "./secrets.ts";
 
 // Installing, starting, initialising, unsealing and configuring the OpenBao server that holds this app's secrets. Used by
 // `npm run openbao` (scripts/openbao.ts) and by the tests. The app itself (openbao.ts, secrets.ts) never needs anything here.
@@ -166,15 +166,10 @@ path "${mount}/data/tenants/${tenant}/*" {
 path "${mount}/metadata/tenants/${tenant}/*" {
   capabilities = ["list", "read", "delete"]
 }
-# A friend's Google grant (the intake page writes it, the process that starts her Google server reads it): read only, nothing else of hers.
-path "${mount}/data/tenants/+/google/*" {
-  capabilities = ["read"]
-}
-# A friend's Notion grant: read, and create and update, because Notion's refresh tokens rotate and the new one is written back before it is used (notionoauth.ts). No delete, no list.
-path "${mount}/data/tenants/+/notion/*" {
-  capabilities = ["read", "create", "update"]
-}
-`;
+${ITEM_KINDS.flatMap((kind) => {
+  const app = itemKindRule(kind).app; // the kinds whose grants the app's token reaches in any tenant's folder (secrets.ts ITEM_KINDS)
+  return app ? [`# ${app.comment}\npath "${mount}/data/tenants/+/${kind}/*" {\n  capabilities = [${app.capabilities.map((c) => `"${c}"`).join(", ")}]\n}\n`] : [];
+}).join("")}`;
 
 // The setup tool's own token. It can only ask for a root token (which also needs the unseal shares) and take a snapshot; it reads no secret.
 // OpenBao 2.7 turns the unauthenticated root-generation endpoints off, so something must hold this much to repair or rotate later.
@@ -187,22 +182,10 @@ path "sys/storage/raft/snapshot" {
 `;
 export const OPERATOR_ROLE = "ted-operator";
 
-// The intake page's token: create and update on profile and card items (`+` is any one tenant id). No read, no list, no delete, no metadata, no other kind.
+// The intake page's token: create and update on the items of every kind (`+` is any one tenant id; secrets.ts ITEM_KINDS). No read, no list, no delete, no metadata, no other kind.
 export const INTAKE_ROLE = "ted-intake";
 export const intakePolicyHcl = (mount: string): string => `# The intake page's token: write-only.
-path "${mount}/data/tenants/+/profile/*" {
-  capabilities = ["create", "update"]
-}
-path "${mount}/data/tenants/+/card/*" {
-  capabilities = ["create", "update"]
-}
-path "${mount}/data/tenants/+/google/*" {
-  capabilities = ["create", "update"]
-}
-path "${mount}/data/tenants/+/notion/*" {
-  capabilities = ["create", "update"]
-}
-`;
+${ITEM_KINDS.map((kind) => `path "${mount}/data/tenants/+/${kind}/*" {\n  capabilities = ["create", "update"]\n}\n`).join("")}`;
 
 // ---- the admin ----
 

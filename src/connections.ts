@@ -1,11 +1,11 @@
-import { connectionState, PURPOSE_CAPABILITY } from "./intakelinks.ts";
-import { purposeOf } from "./intakepurposes.ts";
+import { connectionState } from "./intakelinks.ts";
+import { PURPOSES } from "./intakepurposes.ts";
 import type { Capability } from "./tenants.ts";
 
 // Which of her own accounts a person has connected (Google, Notion: the sign-in purposes of the intake page), for the admin's list and the doctor. Whether, and since
 // when, never what the connection holds: no token is read for this (the intake page's record of names and times, intakelinks.ts connectionState).
 
-export const connectionServices = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSE_CAPABILITY).filter(([p, cap]) => purposeOf(p)?.oauth && capabilities.includes(cap)).map(([p]) => p);
+export const connectionServices = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSES).filter(([, p]) => p.oauth && capabilities.includes(p.capability)).map(([id]) => id);
 
 const day = (iso: string | undefined): string => (iso ?? "").slice(0, 10);
 

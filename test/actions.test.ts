@@ -47,7 +47,7 @@ test("quiet hours wrap midnight", () => {
 });
 
 test("alert: one batched plain message, capped, clipped", () => {
-  const items = Array.from({ length: 10 }, (_, i) => ({ from: "Dr. Weber", subject: "Need your decision by noon " + "x".repeat(200), reason: "client waiting" }));
+  const items = Array.from({ length: 10 }, () => ({ from: "Dr. Weber", subject: "Need your decision by noon " + "x".repeat(200), reason: "client waiting" }));
   const text = formatAlert(items);
   assert.match(text, /^📥 10 emails need you:/);
   assert.match(text, /\.\.\.and 2 more/);

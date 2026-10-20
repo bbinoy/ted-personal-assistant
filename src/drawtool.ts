@@ -1,7 +1,7 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit } from "./audit.ts";
-import { OWNER_KEY } from "./send.ts";
+import { sourceOfKey } from "./ownerkey.ts";
 import { adoptDrawing } from "./shots.ts";
 import { MAX_SVG_CHARS } from "./svgclean.ts";
 import { renderSvg } from "./svgrender.ts";
@@ -15,7 +15,7 @@ const say = (text: string, isError = false): Told => ({ content: [{ type: "text"
 
 // The tool body, apart from the server so tests can call it.
 export async function drawNow(key: string, a: { svg: string; caption?: string }): Promise<Told> {
-  const source = key === OWNER_KEY ? "chat" : "group";
+  const source = sourceOfKey(key);
   const r = await renderSvg(a.svg);
   if (!r.ok) {
     audit("draw", "refused", source, { conversation: source, chars: a.svg.length });

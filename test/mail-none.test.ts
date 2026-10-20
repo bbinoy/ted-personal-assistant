@@ -12,7 +12,7 @@ import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
 import { LAST_BRIEF, missingSetup, setupItems } from "../src/notes.ts";
 import { backgroundSystem, briefSystem, chatContext, chatSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy.ts";
-import { offeredSkills } from "../src/profiles.ts";
+import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
 import { dataPath, readJson } from "../src/state.ts";
 
@@ -22,14 +22,14 @@ test("settings: MAIL_PROVIDER defaults to mailbird, accepts none, accepts gmail,
   const d = loadSettings({});
   assert.equal(d.mailProvider, "mailbird");
   assert.equal(d.mail, true);
-  assert.ok(!d.hiddenConnectors.includes("mcp__mailbird"), "the default keeps Mailbird visible");
+  assert.ok(!hiddenTools([], d).includes("mcp__mailbird"), "the default keeps Mailbird visible");
   assert.equal(loadSettings({ MAIL_PROVIDER: "mailbird" }).mail, true);
   assert.equal(loadSettings({ MAIL_PROVIDER: "" }).mailProvider, "mailbird");
   const none = loadSettings({ MAIL_PROVIDER: "none" });
   assert.equal(none.mailProvider, "none");
   assert.equal(none.mail, false);
-  assert.ok(none.hiddenConnectors.includes("mcp__mailbird"), "without mail the Mailbird server is hidden from the model");
-  assert.ok(none.hiddenConnectors.includes("mcp__claude_ai_Gmail"), "the usual hidden connectors stay hidden");
+  assert.ok(hiddenTools([], none).includes("mcp__mailbird"), "without mail the Mailbird server is hidden from the model");
+  assert.ok(hiddenTools([], none).includes("mcp__claude_ai_Gmail"), "the usual hidden connectors stay hidden");
   assert.equal(loadSettings({ MAIL_PROVIDER: "gmail" }).mailProvider, "gmail"); // test/gmail.test.ts covers the rest
   assert.throws(() => loadSettings({ MAIL_PROVIDER: "imap" }), /MAIL_PROVIDER must be one of none, mailbird, gmail \(got "imap"\)/);
   assert.ok(hiddenTools(["mcp__mailbird__get_message"], none).includes("mcp__mailbird"));
@@ -189,8 +189,8 @@ test("doctor: `npm run doctor` with MAIL_PROVIDER=none and no Mailbird anywhere 
 });
 
 test("offered skills: without mail the two mail skills are gone, the rest are unchanged", () => {
-  const all = offeredSkills(true);
-  const none = offeredSkills(false);
+  const all = ownerSkills(true);
+  const none = ownerSkills(false);
   assert.equal(all.length, 12);
   assert.deepEqual(none, all.filter((s) => !/:mailbird/.test(s)));
   assert.equal(none.length, 10);

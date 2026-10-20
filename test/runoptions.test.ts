@@ -1,13 +1,13 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // The run options of the owner's chat, a group and a tenant, as the code builds them: pinned against test/fixtures/run-options.json, which was
-// captured from the code as it was before the three paths became one builder. RUN_OPTIONS_UPDATE=1 rewrites the fixture; do that only for a
-// change that is meant to alter a run. A second test pins what differs between the three (and only that).
+// captured from the code as it was before the three paths became one builder. SNAPSHOT_WRITE=1 rewrites the fixture (the same switch as the prompts' fixture); do that only
+// for a change that is meant to alter a run. A prompt is pinned as {key, sha}: a failure names the key that drifted. A second test pins what differs between the three (and only that).
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "runoptions-"));
 process.env.ANTHROPIC_API_KEY = "sk-" + "ant-api03-OWNEROWNEROWNEROWNEROWNER";
 process.env.CLAUDE_CODE_OAUTH_TOKEN = "owner-oauth-token";
@@ -25,6 +25,8 @@ const NOW = new Date("2026-10-19T09:00:00.000Z");
 const STYLE = "- be brief";
 const noop = async () => ({ approved: false });
 const sha = (s: string) => createHash("sha256").update(s.replaceAll(settings.dataDir, "<data>").replaceAll(process.cwd(), "<repo>")).digest("hex").slice(0, 16); // (a prompt names the notes folder)
+// A prompt in the fixture: its place (case.field) next to its hash, so that a drift says WHICH prompt changed, not just that a hash did.
+const pinned = (key: string, text: string | undefined) => (text === undefined ? undefined : { key, sha: sha(text) });
 
 const joinAs = (n: number, name: string) => T.tenantContext(T.redeemInvite(T.mintInvite()!.code, { aci: `00000000-0000-4000-8000-00000000000${n}`, name })!);
 const ann = joinAs(1, "Ann"); // has not confirmed her age and region yet
@@ -51,14 +53,14 @@ const scrub = (v: unknown): unknown =>
       .replaceAll(bea.id, "<bea>"),
   );
 
-function describeRun(run: Run): Record<string, any> {
+function describeRun(name: string, run: Run): Record<string, any> {
   const o = buildOptions(noop, run, undefined);
   const system = o.systemPrompt as { type: string; preset?: string; append?: string; prompt?: string; snapshot?: boolean };
   const env = o.env as Record<string, string | undefined>;
   return scrub({
-    run: { ...run, systemPrompt: `sha:${sha(run.systemPrompt)}`, tools: run.tools && [...run.tools].sort() },
+    run: { ...run, systemPrompt: pinned(`${name}.run.systemPrompt`, run.systemPrompt), tools: run.tools && [...run.tools].sort() },
     model: o.model,
-    system: { ...system, append: system.append === undefined ? undefined : `sha:${sha(system.append)}`, prompt: system.prompt === undefined ? undefined : `sha:${sha(system.prompt)}` },
+    system: { ...system, append: pinned(`${name}.system.append`, system.append), prompt: pinned(`${name}.system.prompt`, system.prompt) },
     settings: o.settings,
     mcpServers: o.mcpServers ? Object.keys(o.mcpServers) : null,
     strictMcpConfig: o.strictMcpConfig,
@@ -81,7 +83,7 @@ function describeRun(run: Run): Record<string, any> {
 function cases(): Record<string, Record<string, any>> {
   mock.timers.enable({ apis: ["Date"], now: NOW }); // the prompts carry the clock
   try {
-    return { owner: describeRun(runs.owner()), group: describeRun(runs.group()), tenantAskingConsent: describeRun(runs.tenant(ann)), tenant: describeRun(runs.tenant(bea)) };
+    return { owner: describeRun("owner", runs.owner()), group: describeRun("group", runs.group()), tenantAskingConsent: describeRun("tenantAskingConsent", runs.tenant(ann)), tenant: describeRun("tenant", runs.tenant(bea)) };
   } finally {
     mock.timers.reset();
   }
@@ -99,8 +101,13 @@ const differing = (a: unknown, b: unknown): string[] => {
 
 test("run options: the owner's chat, a group and a tenant are built exactly as they always were", () => {
   const got = cases();
-  if (process.env.RUN_OPTIONS_UPDATE) writeFileSync(FIXTURE, JSON.stringify(got, null, 2) + "\n");
-  assert.deepEqual(got, JSON.parse(readFileSync(FIXTURE, "utf8")));
+  if (process.env.SNAPSHOT_WRITE) return void writeFileSync(FIXTURE, JSON.stringify(got, null, 2) + "\n");
+  assert.ok(existsSync(FIXTURE), "test/fixtures/run-options.json is missing: regenerate it on purpose with SNAPSHOT_WRITE=1 npm test");
+  const stored = JSON.parse(readFileSync(FIXTURE, "utf8"));
+  const x = leaves(got);
+  const y = leaves(stored);
+  const drifted = Object.keys({ ...x, ...y }).filter((k) => x[k] !== y[k]).map((k) => k.replace(/\.(key|sha)$/, "")); // (a prompt is {key, sha}: name the key)
+  assert.deepEqual(got, stored, `run options drifted from test/fixtures/run-options.json at: ${[...new Set(drifted)].join(", ")} (a deliberate change: SNAPSHOT_WRITE=1 npm test)`);
 });
 
 test("run options: what differs between the owner, a group and a tenant, and only that", () => {

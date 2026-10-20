@@ -94,7 +94,7 @@ export function chatSystem(now = new Date(), mail: boolean = settings.mail): str
       sources: SOURCES_RULE,
       reactions: reactionRules(OWNER),
       send: `${SEND_RULE}${voiceRule("owner", capabilitiesOf({ kind: "owner" }))}`,
-      channel: process.env.SIGNAL_ACCOUNT?.trim() && process.env.SIGNAL_ACCOUNT.trim() !== process.env.SIGNAL_OWNER_NUMBER ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`,
+      channel: settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`,
       mailNote: mail ? mailNote() : "",
       logsDir: settings.logsDir,
       stateDir: settings.stateDir,

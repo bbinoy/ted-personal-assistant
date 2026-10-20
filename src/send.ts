@@ -4,7 +4,7 @@ import { audit } from "./audit.ts";
 import { isOneEmoji } from "./reaction.ts";
 import { dropShots, loadShot } from "./shots.ts";
 import { setAsking, type Asking } from "./voicenote.ts";
-import { OWNER_KEY } from "./ownerkey.ts";
+import { OWNER_KEY, sourceOfKey } from "./ownerkey.ts";
 
 // send: the model's way to put something in the conversation NOW while it keeps working: a message ("On it, researching now"), a voice note,
 // a picture (a screenshot of this run's browse, or a drawing from the draw tool), or an emoji reaction. Text the model writes before a tool call stays internal; only this tool
@@ -52,7 +52,7 @@ export interface SendArgs {
 
 // The tool body, apart from the server so tests can call it. Checks which combination makes sense, then hands the content to the turn's sink.
 export async function sendNow(key: string, a: SendArgs): Promise<string> {
-  const source = key === OWNER_KEY ? "chat" : "group";
+  const source = sourceOfKey(key);
   const kinds = [a.text !== undefined, a.picture !== undefined, a.react !== undefined].filter(Boolean).length;
   if (kinds !== 1) return "Send exactly one thing per call: text (add voice: true to speak it), a picture (id, optional caption), or react (one emoji). Call send again for more.";
   if (a.voice !== undefined && a.text === undefined) return "voice only goes with text.";

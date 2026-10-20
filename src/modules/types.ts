@@ -139,8 +139,6 @@ export interface SetupNeed {
 
 // ---- the mail slot ----
 
-// What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
-// MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 // What a module with mail-SENDING tools tells the approval about them, whether or not it is a mail provider: how each row's `view` reads its call, and how the
 // mail client is asked what a send really holds (the read-back). A mail provider (MailSlot) has these; so does a friend's Google module, which is not a provider.
 export interface MailTools {
@@ -154,9 +152,9 @@ export interface MailTools {
   createdDraft?: (tool: string, response: unknown) => string | number | undefined;
 }
 
+// What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
+// MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 export interface MailSlot extends MailTools {
-  archiveLogOnly: () => boolean; // the heartbeat classifies and logs "would-archive" but archives nothing
-  reportNote: () => string | undefined; // one line for `npm run report`
   brief: {
     delivery: () => "email" | "signal"; // how today's brief reaches the owner
     instructions: () => string; // the brief preset's instructions for this provider
@@ -191,14 +189,20 @@ export interface ToolModule {
   titles?: Readonly<Record<string, CallTitle>>; // by tool name
   skills?: readonly ModuleSkill[];
   setup?: readonly SetupNeed[];
-  hide?: { prefix: string; keep: (cfg: HideConfig) => readonly string[] | undefined }; // what the model sees of a connector: tools beyond `keep` are hidden (policy.ts hiddenTools)
+  hide?: ModuleHide; // what the model sees of a connector: tools beyond the visible ones are hidden (policy.ts hiddenTools)
   known?: readonly string[]; // the connector's full tool names as of writing (toolsseen.ts seeds the hiding with them, so even the very first run is trimmed)
   mail?: MailSlot; // slot "mail" only
   mailTools?: MailTools; // a module that is no mail provider but has tools that send mail (a friend's Google): how its sends are shown and read back
 }
 
-export interface HideConfig {
-  notionTools: readonly string[];
-  mailbirdTools: readonly string[];
-  gmailTools?: readonly string[];
+// The tools of a module's connector the model sees. `visible`: the default list, the module's own data; the setting <MODULE>_TOOLS (the module's name in capitals) replaces it
+// (settings.ts visibleTools), checked against `valid`. Every other tool of the connector is hidden by name, and the whole connector while the module is not loaded.
+export interface ModuleHide {
+  prefix: string; // the connector's tool-name prefix: mcp__<server>__
+  visible: readonly string[]; // tool names without the prefix
+  valid: RegExp; // what a tool name of this connector looks like (the setting is checked against it)
+  hint: string; // for the message when it does not
 }
+
+// The visible-tools overrides by module name (settings.visibleTools): a module not named here uses its own default.
+export type HideConfig = Readonly<Record<string, readonly string[]>>;

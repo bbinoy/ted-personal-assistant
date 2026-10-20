@@ -16,7 +16,8 @@ process.env.TENANTS = "on";
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
 const L = await import("../src/intakelinks.ts");
-const { GoogleHub, GoogleSession } = await import("../src/googlemcp.ts");
+const { SessionHub } = await import("../src/mcpproxy.ts");
+const { GoogleSession } = await import("../src/googlemcp.ts");
 const { GoogleMail } = await import("../src/googlemail.ts");
 const { createTenantMailLoops } = await import("../src/mailloops.ts");
 const { mailFiles, mailDigest } = await import("../src/tenantmail.ts");
@@ -32,20 +33,20 @@ const { handlerTask } = await import("../src/handler.ts");
 const FAKE = new URL("./fakegoogle.ts", import.meta.url).pathname;
 const STATE = join(dir, "mailboxes.json");
 const on = settings as unknown as Record<string, unknown>;
-Object.assign(on, { tenants: true, quietStartHour: 0, quietEndHour: 0, heartbeatLive: true });
+Object.assign(on, { archiveLive: false, tenants: true, quietStartHour: 0, quietEndHour: 0 });
 const google = settings.google as unknown as Record<string, unknown>;
 
 const TOKENS: Record<string, string> = {};
 const EMAILS: Record<string, string> = {};
 const TMP = mkdtempSync(join(dir, "tmp-")); // her credentials folders go here, not into the shared temp folder (other test files run at the same time)
-const hub = new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_STATE: STATE, FAKE_GOOGLE_LOG: join(dir, "calls.log") } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: EMAILS[t]! } : undefined)));
+const hub = new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_STATE: STATE, FAKE_GOOGLE_LOG: join(dir, "calls.log") } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: EMAILS[t]! } : undefined)));
 after(() => hub.closeAll());
 
 interface Msg { id: string; from: string; subject: string; date: string; body: string; labels: string[] }
 const mailboxes: Record<string, { messages: Msg[] }> = {};
 const save = () => writeFileSync(STATE, JSON.stringify(mailboxes));
 let seq = 0;
-const mail = (email: string, from: string, subject: string, body = "Body text."): Msg => ({ id: `m${++seq}`, from, subject, date: "Tue, 20 Oct 2026 08:00:00 +0000", body, labels: ["INBOX"] });
+const mail = (_email: string, from: string, subject: string, body = "Body text."): Msg => ({ id: `m${++seq}`, from, subject, date: "Tue, 20 Oct 2026 08:00:00 +0000", body, labels: ["INBOX"] });
 const deliver = (id: string, ...msgs: Msg[]) => {
   mailboxes[EMAILS[id]!]!.messages.push(...msgs);
   save();
@@ -100,7 +101,7 @@ beforeEach(() => {
   blocked.clear();
   cost.clear();
   resetCooldown();
-  google.archiveLive = false;
+  on.archiveLive = false;
 });
 
 test("a friend's mail check: the first look only records the inbox; new mail is triaged once, alerts and handler reports go to HER chat, in her folder, and the owner's files are untouched", async () => {
@@ -217,12 +218,12 @@ test("the cost guard: with no access (her cooldown, day's budget, suspension or 
   await l.tick();
   assert.equal(triaged.length, 0, "no model call while she has no access");
   blocked.delete(id);
-  google.archiveLive = true;
+  on.archiveLive = true;
   await l.tick();
   await l.idle();
   assert.equal(triaged.length, 1, "the mail was still unseen: it is classified now, once");
   reread();
-  assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off) once GOOGLE_ARCHIVE_LIVE is on");
+  assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off) once ARCHIVE is live");
   const rows = readAudit((e) => e.tool === "heartbeat_triage" && e.meta?.tenant === id);
   assert.equal(rows.at(-1)!.decision, "archived");
 });

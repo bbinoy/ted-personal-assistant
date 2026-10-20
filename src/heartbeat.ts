@@ -70,7 +70,6 @@ export interface MailContext {
   files: { seen: string; liveness: string }; // where its seen-mail memory and its last tick are kept (the owner's: state/; a friend's: her folder)
   triage: (mails: MailInput[]) => Promise<Triage[]>; // the small model's classification: on the login for the owner, on the instance key with her notes for a friend
   record: (decision: string, row: Record<string, unknown>) => void; // what was decided about one mail (the owner's: the audit log; a friend's: her own file, wordless in the audit log)
-  archiveLogOnly: () => boolean; // classify and log "would-archive" but archive nothing
   handler: () => boolean; // a background handler exists for this conversation (it drafts replies with its own tools); without one the mail is kept for the brief
   blocked: (what: string) => boolean; // the conversation may not run a model now (payer.ts mayRun: a usage limit, the day's budget, and for a friend the key and her own budget): no model call this tick
   tidyOwnBriefs: boolean; // older copies of the briefs mailed to oneself are archived (the owner's brief; a friend has none)
@@ -85,9 +84,6 @@ export function newMailSource(): MailSource & { connect?: () => Promise<void> } 
   if (!mail) throw new Error("there is no mail provider (MAIL_PROVIDER=none)");
   return mail.source();
 }
-
-// Gmail's first week: the heartbeat classifies and logs "would-archive" but archives nothing (GMAIL_ARCHIVE_LIVE=true ends it).
-const archiveLogOnly = () => mailSlot()?.archiveLogOnly() ?? false;
 
 // Starts every tick-driven job (wake-ups, dream, brief, radar): each in its own try/catch, none awaited, so a job that throws
 // (even synchronously) or hangs never keeps another from starting.
@@ -202,59 +198,57 @@ async function processNewMail(mb: MailSource, fresh: NewMail[], hooks: MailHooks
     return fresh;
   }
   const plan = planActions(results, { maxArchives: settings.maxArchivesPerTick });
-  const decision: string[] = results.map((t) => (settings.heartbeatLive ? "kept" : `would-${t.label}`));
+  const decision: string[] = results.map(() => "kept");
   const extra: Record<number, Record<string, unknown>> = {};
 
-  if (settings.heartbeatLive) {
-    for (const i of plan.archive) {
-      if (ctx.archiveLogOnly()) {
-        decision[i] = "would-archive";
-        continue;
-      }
-      try {
-        // Mailbird may assign a new id on archive: the response is kept so `npm run restore` can find it.
-        extra[i] = { result: short(await mb.call("archive_conversation", { conversationId: fresh[i]!.conversationId })) };
-        decision[i] = "archived";
-      } catch (e) {
-        decision[i] = "archive-failed";
-        extra[i] = { error: (e as Error).message.slice(0, 100) };
-      }
+  for (const i of plan.archive) {
+    if (!settings.archiveLive) {
+      decision[i] = "would-archive"; // ARCHIVE=log: classified and recorded, nothing archived
+      continue;
     }
-    for (const i of plan.deferred) decision[i] = "archive-deferred";
-
-    // act_now: ONE batched message per tick. While today's brief is still due (e.g. the first
-    // tick after the night), the brief reports these itself, so no separate alert is sent.
-    if (plan.alert.length > 0) {
-      if (hooks.briefDue()) {
-        for (const i of plan.alert) decision[i] = "covered-by-brief";
-      } else {
-        const items = plan.alert.map((i) => ({ from: fresh[i]!.from, subject: fresh[i]!.subject, reason: results[i]!.reason }));
-        const template = formatAlert(items);
-        // Written by a model from the facts, plain text; any failure sends the template, so an alert is never lost.
-        const text = hooks.write ? await hooks.write(mailAlertRequest(items, template)).catch(() => template) : template;
-        const ok = await hooks
-          .alert(text)
-          .then(() => true, (e) => (console.error("heartbeat: alert failed:", (e as Error).message), false));
-        for (const i of plan.alert) decision[i] = ok ? "alerted" : "alert-failed";
-      }
+    try {
+      // Mailbird may assign a new id on archive: the response is kept so `npm run restore` can find it.
+      extra[i] = { result: short(await mb.call("archive_conversation", { conversationId: fresh[i]!.conversationId })) };
+      decision[i] = "archived";
+    } catch (e) {
+      decision[i] = "archive-failed";
+      extra[i] = { error: (e as Error).message.slice(0, 100) };
     }
+  }
+  for (const i of plan.deferred) decision[i] = "archive-deferred";
 
-    if (plan.handle.length > 0 && !ctx.handler()) {
-      // A provider without the background handler (Gmail: it drafts replies with Mailbird's tools and shows them as Mailbird drafts). The mail stays in the inbox and the brief lists it.
-      for (const i of plan.handle) decision[i] = "kept-no-handler";
-    } else if (plan.handle.length > 0) {
-      try {
-        hooks.handle(
-          plan.handle.map((i) => {
-            const m = fresh[i]!;
-            return { account: m.accountEmail, conversationId: m.conversationId, messageId: String(Number(m.messageId)) === String(m.messageId) ? Number(m.messageId) : String(m.messageId), from: m.from, subject: m.subject }; // (Mailbird's ids are numbers; another provider's stay as they are)
-          }),
-        );
-        for (const i of plan.handle) decision[i] = "queued-for-handler";
-      } catch (e) {
-        console.error("heartbeat: could not queue for the handler:", (e as Error).message);
-        for (const i of plan.handle) decision[i] = "handler-queue-failed";
-      }
+  // act_now: ONE batched message per tick. While today's brief is still due (e.g. the first
+  // tick after the night), the brief reports these itself, so no separate alert is sent.
+  if (plan.alert.length > 0) {
+    if (hooks.briefDue()) {
+      for (const i of plan.alert) decision[i] = "covered-by-brief";
+    } else {
+      const items = plan.alert.map((i) => ({ from: fresh[i]!.from, subject: fresh[i]!.subject, reason: results[i]!.reason }));
+      const template = formatAlert(items);
+      // Written by a model from the facts, plain text; any failure sends the template, so an alert is never lost.
+      const text = hooks.write ? await hooks.write(mailAlertRequest(items, template)).catch(() => template) : template;
+      const ok = await hooks
+        .alert(text)
+        .then(() => true, (e) => (console.error("heartbeat: alert failed:", (e as Error).message), false));
+      for (const i of plan.alert) decision[i] = ok ? "alerted" : "alert-failed";
+    }
+  }
+
+  if (plan.handle.length > 0 && !ctx.handler()) {
+    // A provider without the background handler (Gmail: it drafts replies with Mailbird's tools and shows them as Mailbird drafts). The mail stays in the inbox and the brief lists it.
+    for (const i of plan.handle) decision[i] = "kept-no-handler";
+  } else if (plan.handle.length > 0) {
+    try {
+      hooks.handle(
+        plan.handle.map((i) => {
+          const m = fresh[i]!;
+          return { account: m.accountEmail, conversationId: m.conversationId, messageId: String(Number(m.messageId)) === String(m.messageId) ? Number(m.messageId) : String(m.messageId), from: m.from, subject: m.subject }; // (Mailbird's ids are numbers; another provider's stay as they are)
+        }),
+      );
+      for (const i of plan.handle) decision[i] = "queued-for-handler";
+    } catch (e) {
+      console.error("heartbeat: could not queue for the handler:", (e as Error).message);
+      for (const i of plan.handle) decision[i] = "handler-queue-failed";
     }
   }
 
@@ -310,7 +304,7 @@ export function createMailCheck(mb: MailSource, ctx: MailContext, hooks: MailHoo
         console.log("heartbeat: baseline recorded, existing inbox treated as seen");
       } else {
         if (mail.fresh.length > 0) for (const m of ctx.blocked("mail triage") ? mail.fresh : await processNewMail(mb, mail.fresh, hooks, ctx)) mail.unsee(m); // usage limit: no model call, the mail waits unseen (cooldown.ts)
-        if (settings.heartbeatLive && !ctx.archiveLogOnly() && mail.staleBriefs.length > 0) await archiveStaleBriefs(mb, mail.staleBriefs);
+        if (settings.archiveLive && mail.staleBriefs.length > 0) await archiveStaleBriefs(mb, mail.staleBriefs);
       }
       mail.commit(); // only now are these messages "seen"
       const prev = readJson<{ lastNewMailAt?: string }>(ctx.files.liveness, {});
@@ -331,7 +325,6 @@ export function ownerMailContext(triage: MailContext["triage"] = (mails) => tria
     files: { seen: OWNER_SEEN, liveness: OWNER_LIVENESS },
     triage,
     record: (decision, row) => recordTriage(OWNER_TRIAGE, decision, row),
-    archiveLogOnly,
     handler: () => !!mailSlot()?.handlerTask, // the provider can draft (its module says what the handler's task is)
     blocked: (what) => isRefusal(mayRun({ kind: "owner" }, what)),
     tidyOwnBriefs: true,
@@ -363,7 +356,7 @@ export function startHeartbeat(hooks: HeartbeatHooks, env: { triage?: typeof tri
   (env.setTimeout ?? setTimeout)(tick, 20_000); // first tick shortly after start
   (env.setInterval ?? setInterval)(tick, settings.heartbeatMinutes * 60_000);
   console.log(
-    `heartbeat: every ${settings.heartbeatMinutes} min, idle ${settings.quietStartHour}:00-${settings.quietEndHour}:00, actions ${settings.heartbeatLive ? "LIVE" : "log-only"}`,
+    `heartbeat: every ${settings.heartbeatMinutes} min, idle ${settings.quietStartHour}:00-${settings.quietEndHour}:00, archiving ${settings.archiveLive ? "LIVE" : "log-only (ARCHIVE=log)"}`,
   );
   if (!mb) console.log("mail: off (MAIL_PROVIDER=none)");
   return { tick, mailCheck: mailCheck ?? mailOff };
