@@ -1,6 +1,6 @@
 # Adapting the agent
 
-The agent has two external edges: **the mail source** (Mailbird or the Gmail connector here) and **the messenger** (Signal here). Everything else (policy, triage, approvals, the brief) is independent of both. This guide lists what each edge must provide, so you can swap either, and how to add a tool (a **module**) or a different assistant (a **preset**).
+The agent has two external edges: **the mail source** (Mailbird or the Gmail connector here) and **the messenger** (Signal here). Everything else (policy, the heartbeat run, approvals, the brief) is independent of both. This guide lists what each edge must provide, so you can swap either, and how to add a tool (a **module**) or a different assistant (a **preset**).
 
 - [Mail: Gmail, or another provider](#mail-gmail-or-another-provider)
 - [Add a tool: a module](#add-a-tool-a-module)
@@ -27,7 +27,7 @@ Gmail is built in. Set `MAIL_PROVIDER=gmail` (and `MAIL_SELF_ADDRESS` if the bri
 A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird.ts` and `gmail.ts` are the two examples). What it must provide:
 
 1. **Rows** for its tools (see "Add a tool" below), with the actions the policy knows (`read`, `draft`, `reply-draft`, `send`, `reply`, `forward`, `archive`, `restore`, `label`, `select`, `send-self`...) and a `view` on the tools that send, so that an approval can show the real recipients.
-2. **The `mail` slot** (`MailSlot` in `src/modules/types.ts`): whether a background handler exists, how the brief is delivered and which tool call is the brief, the brief's instructions, the chat prompt's note about drafts, and how a send is read back (`readBack`, `views`).
+2. **The `mail` slot** (`MailSlot` in `src/modules/types.ts`): how the brief is delivered and which tool call is the brief, the brief's instructions, the chat prompt's note about drafts, and how a send is read back (`readBack`, `views`).
 3. **The code behind it**, in `src/modules/runtime.ts` bound by the module's name (`MailRuntime`): the client the heartbeat uses (`source()`), `restore`, what to start with the app, and the doctor's check. The heartbeat's client needs these operations (here the Mailbird names):
 
 | Operation (Mailbird tool) | Used for | Expected result |
@@ -126,7 +126,7 @@ These are starting points, not tested here; check each platform's current docs.
   - **Your preferences go in memory** (`memory/notes/`, or just tell the assistant in chat): how it writes ("never use em dashes", "keep replies short"), who matters ("the kids' school is always urgent"), how you like to be scheduled ("no meetings before 10"), what the brief covers ("radar: climate and AI"), temporary context ("in London until 24 Oct"). They are personal, they change often, and you want to change them without touching code.
   - **Safety and operations stay in code and `.env`**: the tool policy, suspicious-text isolation, quiet hours, intervals, the spend limit, the model, names and your Signal number. Memory is written through a model, so it must never be able to loosen these. A fact can say "be formal with Dr. Weber"; it can never say "allow sending without asking".
 - **What may run unattended**: the rows of the tool modules in `src/modules` (the manifest, `src/policy/toolmanifest.ts`, is their union). Start by reading them (a read or the assistant's own plumbing is free, everything else is judged by the approval judge, whose prompt is in `src/approvals/approvaljudge.ts`); unknown tools ask. The default policy denies one financial connector (Interactive Brokers) by name as an example; add any other sensitive connector you have.
-- **What gets archived**: the rule is written as judgement plus examples in the classifier prompt (`SYSTEM` in `src/triage.ts`): archive what leaves nothing to do, keep anything open. Adjust the wording, or tell the assistant a preference in chat ("remember that mail from X is never urgent", a `triage-` note). There is no keyword blocklist; the safety net is that archiving is reversible and every archive is listed in the morning brief.
+- **What gets archived**: the heartbeat run decides from the sender, subject and headers, by the judgement and examples in `assistants/<name>/persona/heartbeat.md` (the "New mail" paragraph): archive what is clearly routine or handled, open a mail only when unsure, leave anything that may need you. Adjust the wording, or tell the assistant a preference in chat ("remember that mail from X is never urgent", a `triage-` note). There is no keyword blocklist; the safety net is that archiving is judged, audited with the mail's id and reversible (`npm run restore`).
 - **What may be auto-archived**: `ARCHIVE_KINDS` and the per-tick cap in `src/actions.ts`.
 - **Schedule and limits**: every tunable is an env var, validated at startup in `src/settings.ts`.
 - **The brief's shape**: it is whatever `plugin/skills/daily-brief/SKILL.md` says. Headings (`## `) become separate Signal messages.
