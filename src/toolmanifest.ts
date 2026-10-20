@@ -2,6 +2,7 @@ import type { Source } from "./audit.ts";
 import type { MailView } from "./mailview.ts";
 import { loaded, registered } from "./modules/index.ts";
 import type { CallTitle, MailTools, ToolEntry, ToolModule, ViewKind } from "./modules/types.ts";
+import { NEVER_ACTIONS, nameIsNever } from "./neverallowed.ts";
 import { settings } from "./settings.ts";
 
 // THE tool manifest: every tool the model might get declares here what it is, so one rule applies the same way across mail providers and other tools.
@@ -18,8 +19,10 @@ import { settings } from "./settings.ts";
 // (send, draw, voice, the notes). Anywhere else such a tool is denied outright (policy.ts classify).
 // `cap` is the capability that gates the tool (tenants.ts CAPABILITIES). A group or a tenant is offered the tool only when its capability set holds
 // that capability (capabilities.ts) and `only` names "group" or does not limit the sources. The default is the module's capability.
-// Not here, on purpose: the never-allowed set (policy.ts DENY: trading, trash/delete/spam/block sender) and which tools a group or tenant has at all (its
-// capability set, capabilities.ts). A tool no module lists is unknown: it asks, and is never judged.
+// The never-allowed set is declared HERE, by the rows: an action in NEVER_ACTIONS (trash, delete, spam, block, trade; neverallowed.ts) or a module marked
+// `never`; neverAllowedTool below is the one question policy.ts, the hidden tools and mayFix ask. Not here, on purpose: which tools a group or tenant has at all
+// (its capability set, capabilities.ts). A tool no module lists is unknown: it asks, is never free and never judged (a name that says delete, trash,
+// spam or block is denied, neverallowed.ts).
 
 export type { ToolEntry, ViewKind } from "./modules/types.ts";
 export { addrs, type MailAction, type MailView } from "./mailview.ts";
@@ -41,6 +44,19 @@ function lookup(tool: string, mail: MailProvider): Found | undefined {
   return m.get(tool);
 }
 
+// Every row of every module in the code, loaded or not, for what only restricts: the never-allowed set holds for the mail provider that is not the active one.
+let anyCache: Map<string, Found> | undefined;
+const anyRow = (tool: string): Found | undefined => (anyCache ??= new Map(registered().flatMap((module) => module.rows.map((entry): [string, Found] => [entry.tool, { entry, module }])))).get(tool);
+
+// Never allowed, by the tool's name alone (the arguments are policy.ts isNeverAllowed): its row says trash, delete, spam, block or trade, its module is the trading
+// connector (any tool under its prefix), or, for a tool no module lists, its name says so.
+export function neverAllowedTool(tool: string): boolean {
+  const f = anyRow(tool);
+  if (f) return NEVER_ACTIONS.has(f.entry.action) || !!f.module.never;
+  if (registered().some((m) => m.never && m.connection.kind === "connector" && tool.startsWith(m.connection.prefix))) return true;
+  return nameIsNever(tool);
+}
+
 export const entryFor = (tool: string, mail: MailProvider = settings.mailProvider): ToolEntry | undefined => lookup(tool, mail)?.entry;
 // The loaded module that lists the tool.
 export const moduleOf = (tool: string, mail: MailProvider = settings.mailProvider): ToolModule | undefined => lookup(tool, mail)?.module;
@@ -49,7 +65,7 @@ export const moduleOf = (tool: string, mail: MailProvider = settings.mailProvide
 export const titleOf = (tool: string): CallTitle | undefined => registered().find((m) => m.titles?.[tool])?.titles?.[tool];
 
 // Read verbs, matched against the tool's own name (after the server name), ignoring a "notion-" style prefix: both
-// "get_message" and "notion-fetch" are reads. Covers the read tools nobody listed above.
+// "get_message" and "notion-fetch" are reads. Used only to mark text as untrusted and to tell a read for the audit and the no-repeat rule; it never makes a tool free.
 const READ_VERB = /^(list|get|search|read|query|fetch|summarize|suggest|whats|download|show|ai-search)/i;
 const readVerb = (tool: string) => READ_VERB.test((tool.split("__").pop() ?? "").replace(/^notion-/i, ""));
 
@@ -62,28 +78,35 @@ export function availableFor(tool: string, source: Source, mail?: MailProvider):
   return !e || !e.only || e.only.includes(source);
 }
 
-// A module's `free` and `untrusted` say "all my rows" (true) or "the rows with these actions".
+// A module's `free`, `untrusted` and `ownerOnly` say "all my rows" (true) or "the rows with these actions".
 const covers = (set: true | readonly string[] | undefined, action: string): boolean => set === true || !!set?.includes(action);
 
 // Free: the call runs without the judge and without a question, because it changes nothing of the owner's and sends nothing out: a read, and the
-// assistant's own plumbing (its notes, memory, skills, the conversation's own send, draw and voice, the browser's reads). Everything else, a tool the
-// manifest does not know included, is not free: it is judged (autojudge.ts) or asked. Which PATH a note tool may touch is code (policy.ts classify).
-export function isFree(tool: string, mail: MailProvider = settings.mailProvider): boolean {
+// assistant's own plumbing (its notes, memory, skills, the conversation's own send, draw and voice, the browser's reads), and a call of an action that a module
+// declares free for that call (`freeWhen`: the brief to the owner's own address; it needs the call, hence `call`). Everything else is not free: it is judged
+// (autojudge.ts) or asked. A tool the manifest does not know is never free, whatever its name says (the read-verb heuristic above is for untrusted marking
+// only). Which PATH a note tool may touch is code (policy.ts classify).
+export function isFree(tool: string, mail: MailProvider = settings.mailProvider, call?: { input: Record<string, unknown>; source: Source }): boolean {
   const f = lookup(tool, mail);
-  return f ? covers(f.module.free, f.entry.action) : readVerb(tool);
+  if (!f) return false;
+  return covers(f.module.free, f.entry.action) || (!!call && !!f.module.freeWhen?.[f.entry.action]?.(call.input, call.source));
 }
 
-// Tools of the person's own accounts (a friend's Google): a non-free call is judged and asked even in an isolated run (policy.ts classify).
-export const isPersonal = (tool: string, mail: MailProvider = settings.mailProvider): boolean => !!lookup(tool, mail)?.module.personal;
-
-// Reading these shows the run text a third party wrote: mail, a web page, a search result. After one, the run's arguments may be steered by it
-// (permissions.ts tells the judge). A mail provider's reads only count while that provider is loaded; an unlisted tool with a read verb under a mail
-// connector's prefix counts too, loaded or not (it can only make the judge more careful), and so does anything in the browse run.
+// Reading these shows the run text a third party wrote: mail, a web page, a search result, and any other data kind (an event's description, a Notion page, a
+// Drive file are written by whoever can edit them): every `read` row is untrusted unless its module opts out (`trusted`: public weather data). After one, the
+// run's arguments may be steered by it (permissions.ts tells the judge). A mail provider's reads only count while that provider is loaded; an unlisted tool
+// with a read verb under a connector's prefix counts too, loaded or not (it can only make the judge more careful), and so does anything in the browse run.
 export function readsUntrusted(tool: string, mail: MailProvider = settings.mailProvider): boolean {
   const f = lookup(tool, mail);
   if (!f) return readVerb(tool) && registered().some((m) => m.untrustedPrefix !== undefined && tool.startsWith(m.untrustedPrefix));
-  return covers(f.module.untrusted, f.entry.action);
+  return covers(f.module.untrusted ?? (f.module.trusted ? undefined : ["read"]), f.entry.action);
 }
+
+// Rows that belong to the owner alone (the connectors, the tenant administration, the browser, opening a page): never in a group's or a tenant's tool set.
+export const isOwnerOnly = (tool: string): boolean => {
+  const f = anyRow(tool);
+  return !!f && (covers(f.module.ownerOnly, f.entry.action) || f.module.connection.kind === "connector");
+};
 
 // Pure. The tool's call as one view: send, reply, forward or draft, with bcc and attachments always in it, read by the mail module that lists the tool.
 // Undefined for a tool that is not a mail tool of the loaded provider, or a call that cannot be read (a send of a draft nobody read back).

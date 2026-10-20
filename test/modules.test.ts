@@ -17,14 +17,14 @@ import { CAPABILITIES } from "../src/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "voice", "memory", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
   assert.deepEqual(names(all).filter((n, i) => names(all).indexOf(n) !== i), []);
   const tools = allRows().map((e) => e.tool);
   assert.deepEqual(tools.filter((t, i) => tools.indexOf(t) !== i), []);
-  for (const e of allRows()) assert.deepEqual(Object.keys(e).filter((k) => !["tool", "provider", "action", "cap", "only", "view"].includes(k)), [], e.tool);
+  for (const e of allRows()) assert.deepEqual(Object.keys(e).filter((k) => !["tool", "provider", "action", "cap", "only", "view", "offeredTo"].includes(k)), [], e.tool);
   for (const e of allRows()) assert.ok((CAPABILITIES as readonly string[]).includes(e.cap), `${e.tool}: ${e.cap} is a capability`);
 });
 

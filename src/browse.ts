@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
@@ -122,6 +122,33 @@ export function startRefusal(ctx: Pick<BrowseContext, "mode" | "spent">, now = D
   if ((ctx.spent ?? budgetSpent)()) return "The daily spend limit is reached: no browsing until tomorrow.";
   if (busy) return "Another browser run is in progress. Try again in a minute.";
   return undefined;
+}
+
+// A run that never ended (a crash, a kill) leaves its page views (state/browse/run-*) and its screenshots (state/browse/shots/run-*) on disk. Swept at start-up:
+// folders older than an hour go (no run lasts that long). Page views are untrusted text and the assistant's own chat could read state/, so they must not pile up
+// (policy.ts also hides state/browse from it).
+export const STALE_RUN_MS = 60 * 60_000;
+export function sweepStaleRuns(now = Date.now(), root = join(settings.stateDir, "browse")): number {
+  let removed = 0;
+  for (const dir of [root, join(root, "shots")]) {
+    let names: string[] = [];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      continue; // no folder yet
+    }
+    for (const n of names.filter((x) => x.startsWith("run-"))) {
+      try {
+        if (now - statSync(join(dir, n)).mtimeMs > STALE_RUN_MS) {
+          rmSync(join(dir, n), { recursive: true, force: true });
+          removed++;
+        }
+      } catch {
+        // gone already
+      }
+    }
+  }
+  return removed;
 }
 
 export async function browse(ctx: BrowseContext, rawTask: string, o: { resolver?: Resolver; now?: number; status?: BrowseStatus; vision?: VisionMode; probe?: Probe; profile?: Profile | null; card?: CardAccess | null; frames?: FrameProbe } = {}): Promise<string> {

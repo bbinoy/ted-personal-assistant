@@ -7,26 +7,27 @@ import { settings } from "./settings.ts";
 import { groupTools } from "./capabilities.ts";
 import { registered } from "./modules/index.ts";
 import type { Denial, HideConfig } from "./modules/types.ts";
-import { availableFor, entryFor, isFree, isPersonal, isReadTool, moduleOf } from "./toolmanifest.ts";
+import { destinationIsTrashOrSpam, namesLocalFile, neverActionValue } from "./neverallowed.ts";
+import { isPeopleKey } from "./guests.ts";
+import { availableFor, entryFor, isFree, isReadTool, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
 
 // Permissions as code. Every tool call any agent run wants to make passes classify():
 //   allow - run it
 //   ask   - the owner approves or declines on their phone
 //   deny  - never, whatever anyone says
-// The same for every tool in every place: a tool that does not exist for this source is denied; a free tool (a read, the assistant's own plumbing:
-// toolmanifest.ts isFree) is allowed; anything else is "ask", and permissions.ts lets the approval judge skip the question where code allows it.
+// The same for every tool in every place, ONE fold (classify below): a tool that does not exist for this source or this capability set is denied; the
+// never-allowed set is denied; so are local files; a free tool (a read, the assistant's own plumbing: toolmanifest.ts isFree) is allowed; anything else is
+// "ask", and permissions.ts lets the approval judge skip the question where code allows it. A module's floor can only lower the result.
 // Unknown tools default to "ask", never to "allow".
 
 export type Verdict = "allow" | "ask" | "deny";
 
-// A tool module's own hard rule for a tool of its, or undefined to let the manifest decide.
-function floorVerdict(tool: string, input: Record<string, unknown>, source: Source): Verdict | undefined {
-  for (const m of registered()) {
-    const v = m.floor?.verdict?.(tool, input, source);
-    if (v) return v;
-  }
-  return undefined;
-}
+const RANK: Record<Verdict, number> = { deny: 0, ask: 1, allow: 2 };
+const lower = (a: Verdict, b: Verdict | undefined): Verdict => (b && RANK[b] < RANK[a] ? b : a);
+
+// Never allowed, whoever asks: trading, trash, permanent delete, spam, blocking a sender. By the tool (its row's action, its connector, its name: toolmanifest.ts
+// neverAllowedTool) or by the call's arguments (a TRASH or SPAM label, spam: true, a page to the bin, an action that deletes: neverallowed.ts).
+export const isNeverAllowed = (tool: string, input: Record<string, unknown> = {}): boolean => neverAllowedTool(tool) || destinationIsTrashOrSpam(input) || neverActionValue(input);
 
 // What a denied call is recorded and answered with, if a tool module has something more to say than "blocked by policy" (permissions.ts).
 export function denial(tool: string, input: Record<string, unknown>): Denial | undefined {
@@ -36,16 +37,6 @@ export function denial(tool: string, input: Record<string, unknown>): Denial | u
   }
   return undefined;
 }
-
-// Hard blocks, checked first so nothing below can override them.
-const DENY: RegExp[] = [
-  /^mcp__claude_ai_Interactive_Brokers/, // a chat message must never be able to touch trading
-  /__(trash|delete|untrash|mark_.*spam|unmark_.*spam|set_sender_blocked)/i,
-];
-
-// No tool may reach local files. Mailbird's create_draft accepts file:// attachments, so an
-// injected email could otherwise get ~/.ssh or .env attached to a draft. The agent never needs this.
-const LOCAL_FILE = /file:\/\//i;
 
 // Which tool needs which approval is the manifest (toolmanifest.ts); this file adds what a flag cannot say.
 export { isReadTool };
@@ -63,9 +54,10 @@ const NOTE_FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
 // lead out of them. The repo, .env and the rest of the disk stay out of reach.
 // Not even for the owner's chat: the tenants' folders (their notes, history, sessions: the owner reads none of them through the assistant, which is
 // what keeps one person's chat from becoming another's, tenants.ts), the secret store's folder (config, TLS key, audit log) and the files that hold
-// invitation and intake tickets. The tenants' folders are outside the three above anyway; this is the second lock. The host's admin is not blind:
+// invitation and intake tickets, and the browse worker's page views left on disk (state/browse: pages are untrusted text, and a chat that could read them would
+// hand them to the model). The tenants' folders are outside the three above anyway; this is the second lock. The host's admin is not blind:
 // these are files on the owner's Mac (docs/SAFETY.md), the lock is for the assistant, not against the machine's owner.
-const hiddenData = (): string[] => [settings.tenantsDir, join(settings.stateDir, "openbao"), join(settings.stateDir, "invites.json"), join(settings.stateDir, "intake.json")];
+const hiddenData = (): string[] => [settings.tenantsDir, join(settings.stateDir, "openbao"), join(settings.stateDir, "invites.json"), join(settings.stateDir, "intake.json"), join(settings.stateDir, "browse")];
 const inside = (real: string, dir: string): boolean => real === dir || real.startsWith(dir + sep);
 
 export function isReadableData(path: unknown, dirs: readonly string[] = [settings.logsDir, settings.stateDir, settings.memoryDir]): path is string {
@@ -83,7 +75,7 @@ export function isReadableData(path: unknown, dirs: readonly string[] = [setting
 // Every tool schema the model can see is re-sent on every model call, so hiding tools nobody
 // uses is the biggest saving there is: Notion alone was ~58k tokens of a ~118k floor, one of
 // its tools 21k. Hidden: the connectors in HIDDEN_CONNECTORS, Notion beyond NOTION_TOOLS, Mailbird beyond MAILBIRD_TOOLS (each module's `hide`), and
-// anything policy denies for everyone anyway (it could never run). Both lists are settings
+// anything the never-allowed set denies by its name (it could never run). Both lists are settings
 // (.env): a skill that needs a hidden tool fails, so keep them in step with your skills.
 
 // Names come from the tools a run has seen (agent.ts records them), so a tool a connector
@@ -93,49 +85,45 @@ export function hiddenTools(seen: readonly string[], cfg: HideConfig & { hiddenC
     const keep = m.hide?.keep(cfg); // undefined: the whole connector is hidden by prefix, or not in use
     return m.hide && keep ? [{ prefix: m.hide.prefix, keep: new Set(keep) }] : [];
   });
-  const extra = seen.filter((t) => keeps.some((k) => t.startsWith(k.prefix) && !k.keep.has(t.slice(k.prefix.length))) || DENY.some((re) => re.test(t)));
+  const extra = seen.filter((t) => keeps.some((k) => t.startsWith(k.prefix) && !k.keep.has(t.slice(k.prefix.length))) || neverAllowedTool(t));
   return [...cfg.hiddenConnectors, ...new Set(extra)];
 }
 
 // The web. Pages and search results are untrusted content, like mail, and a fetched URL can carry data out in its query
 // string. A search is free; opening a page is judged, and the address veto is autojudge.ts. A group or a tenant never opens a page.
 
-// groupNotesDir: for a group run, THE one folder its file tools may touch (its own notes). Without it a group
-// gets no file access at all.
+// groupNotesDir: for an isolated run (a group, a tenant), THE one folder its file tools may touch (its own notes). Without it an isolated run gets no file access.
 // tools: the tools that exist for an isolated conversation (a group, a tenant), from its capability set (capabilities.ts); a group's own by default.
-// A tool outside it is denied, whatever it is called. Every tool in it is a free one, so the set decides and only the notes path is looked at here.
+// A tool outside it is denied, whatever it is called.
+//
+// ONE fold for every source (owner, group, tenant, unattended): each step can only lower the verdict.
+//   1. it exists here: the capability set of an isolated run, and `only` of the row
+//   2. never allowed (trading, trash, delete, spam, block: by row, by name, by arguments) and no local files: deny
+//   3. the manifest: free (a read, the assistant's own plumbing, a call a module declares free) is allow, everything else ask
+//   4. every module's floor, the minimum (a friend's Google: no attachments; Gmail: attachment content, archive log-only)
+//   5. the note file tools: only on a path inside the notes (a group's: inside that group's notes folder; the owner's chat: or, for Read, the data folders)
+// What an isolated run holds and the owner does not is the capability set in 1; there is no second rule for it.
 export function classify(tool: string, input: Record<string, unknown>, source: Source, groupNotesDir?: string, tools?: ReadonlySet<string>): Verdict {
-  // A group chat holds other people: no private data, no pages. What it may use is its capability set: web search, the file tools inside that one
-  // group's own notes folder, the memory tools (scoped to that group by the server, memory-tools.ts), send, voice, draw, weather, browse (a separate
-  // run with no owner data, browse.ts, that asks in that group) and the intake link of a tenant (it holds no value).
-  if (source === "group") {
-    if (!(tools ?? groupTools()).has(tool)) return "deny";
-    if (DENY.some((re) => re.test(tool))) return "deny";
-    if (NOTE_FILE_TOOLS.has(tool)) return groupNotesDir && isInside(input.file_path, groupNotesDir) ? "allow" : "deny";
-    // The modules' hard rules restrict here too (a friend's Google tools: no attachments, no TRASH or SPAM, modules/google.ts); a floor can only take away.
-    if (floorVerdict(tool, input, source) === "deny") return "deny";
-    // Every tool the weather, draw, send, voice, memory and browse modules bring is free. A tool of a friend's own accounts (her Google: a send, a draft, a label, an
-    // event) is not: like the owner's it goes to the floor, the judge and, where they say so, to HER chat (permissions.ts).
-    return isPersonal(tool) && !isFree(tool) ? "ask" : "allow";
-  }
-  if (DENY.some((re) => re.test(tool))) return "deny";
-  if (LOCAL_FILE.test(JSON.stringify(input))) return "deny";
-  // The tool modules' hard rules for their own tools, which a row cannot say (Gmail's sensitive labels, attachment content, archive log-only, the brief to
-  // oneself: gmailrules.ts). Every registered module's, loaded or not: they only restrict, so a connector's tools stay as refused as they were.
-  const floor = floorVerdict(tool, input, source);
-  if (floor) return floor;
-  // The note file tools are chat only (manifest) and only on a path inside the notes (or, for Read, the data folders): the path is code.
-  if (NOTE_FILE_TOOLS.has(tool) && !(isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path)))) return "deny";
+  const isolated = source === "group" || tools !== undefined;
+  const offered = tools ?? (isolated ? groupTools() : undefined);
+  if (offered && !offered.has(tool)) return "deny";
   if (!availableFor(tool, source)) return "deny";
-  return isFree(tool) ? "allow" : "ask";
+  if (isNeverAllowed(tool, input) || namesLocalFile(input)) return "deny";
+  let verdict: Verdict = isFree(tool, undefined, { input, source }) ? "allow" : "ask";
+  for (const m of registered()) verdict = lower(verdict, m.floor?.verdict?.(tool, input, source)); // every registered module's, loaded or not: they only restrict
+  if (NOTE_FILE_TOOLS.has(tool)) {
+    const ok = isolated ? !!groupNotesDir && isInside(input.file_path, groupNotesDir) : isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path));
+    if (!ok) return "deny";
+  }
+  return verdict;
 }
 
 // --- "yes, but make it 16:00": consent with a small edit, applied without re-asking ---
 
 // Only low-risk, non-sending tools may be edited-and-approved in one reply: calendar events.
 // Everything else (send, forward, share...) goes back through a fresh approval.
-// Fields that decide who is affected. Never changeable through a chat reply.
-const PROTECTED_FIELD = /^(to|cc|bcc|attendees?|recipients?|emails?|calendarId|guests?)$/i;
+// Fields that decide who is affected (guests.ts isPeopleKey: every field that names people) and which calendar. Never changeable through a chat reply.
+const PROTECTED_FIELD = (field: string): boolean => isPeopleKey(field) || /^calendar_?id$/i.test(field);
 
 export interface Change {
   field: string;
@@ -158,7 +146,7 @@ export function applyChanges(
   const patched = { ...input };
   for (const { field, value } of changes) {
     if (!Object.hasOwn(input, field)) return undefined; // no new fields
-    if (PROTECTED_FIELD.test(field)) return undefined;
+    if (PROTECTED_FIELD(field)) return undefined;
     if (typeof input[field] !== "string" || typeof value !== "string" || value.length > 200) return undefined;
     patched[field] = value;
   }

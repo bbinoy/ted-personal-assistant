@@ -2,9 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SOURCES } from "../src/audit.ts";
 import { classify } from "../src/policy.ts";
+import { NEVER_ACTIONS } from "../src/neverallowed.ts";
 import { settings } from "../src/settings.ts";
 import { mailProviders } from "../src/modules/index.ts";
 import { actionOf, allRows, availableFor, entryFor, isFree, mailView, readsUntrusted } from "../src/toolmanifest.ts";
+import { isJudgeable } from "../src/autojudge.ts";
 import { access } from "./util.ts";
 
 const MANIFEST = allRows();
@@ -34,7 +36,7 @@ test("manifest: every entry classifies the same way for every source: not there 
       assert.equal(actionOf(e.tool), e.action, e.tool);
       // Read/Write/Edit also need a path inside the notes: with none the file rule denies first
       if (e.provider === "builtin" && e.action === "note-file") continue;
-      assert.equal(classify(e.tool, {}, source), !there ? "deny" : isFree(e.tool) ? "allow" : "ask", `${e.tool} (${source})`);
+      assert.equal(classify(e.tool, {}, source), !there || NEVER_ACTIONS.has(e.action) ? "deny" : isFree(e.tool) ? "allow" : "ask", `${e.tool} (${source})`); // (a never-allowed action is denied wherever the tool exists)
     }
   }
 });
@@ -82,16 +84,21 @@ test("manifest: only the browse run has the browser's tools; reading mail or a p
   assert.ok(readsUntrusted("WebFetch"));
   assert.ok(readsUntrusted("mcp__browser__browser_snapshot"));
   assert.ok(readsUntrusted(`${MB}get_new_thing`)); // a read verb of the mail connector counts
-  assert.ok(!readsUntrusted(`${CAL}list_events`));
+  assert.ok(readsUntrusted(`${CAL}list_events`), "every read is untrusted by default: an event's text is written by whoever invited the owner");
+  assert.ok(readsUntrusted(`${N}notion-fetch`) && readsUntrusted("mcp__claude_ai_Google_Drive__read_file_content") && readsUntrusted("mcp__claude_ai_Google_Docs__read_doc"));
+  assert.ok(!readsUntrusted("mcp__weather__get_forecast"), "a module opts out: public data");
   assert.ok(!readsUntrusted(`${MB}archive_conversation`));
   assert.ok(!readsUntrusted("mcp__send__send"));
 });
 
-test("manifest: unknown tools are not free (they ask) and are not judged, unless the name is a read verb", () => {
+test("manifest: unknown tools are never free (they ask) and are never judged, whatever their name says; the read-verb heuristic only marks untrusted text", () => {
   for (const source of SOURCES) if (source !== "group") assert.equal(access("mcp__new_server__do_something", source), "judged", source);
   assert.equal(access("Bash", "chat"), "judged");
   assert.equal(classify("mcp__new_server__do_something", {}, "chat"), "ask");
-  assert.equal(access("mcp__new_server__get_thing", "chat"), "free");
+  assert.equal(access("mcp__new_server__get_thing", "chat"), "judged");
+  assert.equal(classify("mcp__new_server__get_thing", {}, "chat"), "ask");
+  assert.equal(actionOf("mcp__new_server__get_thing"), "read");
+  assert.equal(isJudgeable("mcp__new_server__get_thing", {}), false);
   assert.equal(actionOf("mcp__x__send_search"), "unknown");
 });
 
@@ -153,13 +160,13 @@ test("mailView: Mailbird forward and reply tools, and create/update draft", () =
   assert.deepEqual(mailView(`${MB}forward_conversation`, { conversationId: "g", body: "FYI" }), { action: "forward", to: [], cc: [], bcc: [], subject: "", body: "FYI", hasAttachments: false });
   assert.equal(mailView(`${MB}reply_to_conversation`, { conversationId: "g", body: "ok" })?.action, "draft");
   const d = mailView(`${MB}create_draft`, { accountId: 1, to: [{ email: "A@Example.com", name: "A" }], bcc: [{ email: "b@example.com" }], subject: "S", body: "B", attachments: ["mailbird://x"] });
-  assert.deepEqual(d, { action: "draft", to: ["a@example.com"], cc: [], bcc: ["b@example.com"], subject: "S", body: "B", hasAttachments: true });
+  assert.deepEqual(d, { action: "draft", to: ["a@example.com"], cc: [], bcc: ["b@example.com"], subject: "S", body: "B", hasAttachments: true, attachments: ["mailbird://x"] });
 });
 
 test("mailView: the Gmail connector's send, reply, forward and drafts normalise to the same view", () => {
   const v = (tool: string, input: Record<string, unknown>) => mailView(`${GM}${tool}`, input, undefined, "gmail");
   assert.deepEqual(v("send_message", { to: ["A@example.com"], cc: ["c@example.com"], bcc: ["b@example.com"], subject: "S", body: "B", attachments: [{ content: "eA==", filename: "f.txt" }] }), {
-    action: "send", to: ["a@example.com"], cc: ["c@example.com"], bcc: ["b@example.com"], subject: "S", body: "B", hasAttachments: true,
+    action: "send", to: ["a@example.com"], cc: ["c@example.com"], bcc: ["b@example.com"], subject: "S", body: "B", hasAttachments: true, attachments: ["f.txt"],
   });
   assert.equal(v("send_message", { draftId: "r1" }), undefined); // a draft nobody read back cannot be shown
   assert.deepEqual(v("reply", { messageId: "m", to: ["a@example.com"], bcc: ["b@example.com"], htmlBody: "<p>hi</p>" }), {

@@ -35,12 +35,14 @@ import { loadMessengerInUse } from "./messenger.ts";
 import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-personal-assistant/signal/tts";
 import { Limiter } from "./limiter.ts";
 import { activeTenant, admitStranger } from "./tenantroute.ts";
+import { sweepStaleRuns } from "./browse.ts";
 import { createTenantRunner } from "./tenantrun.ts";
 import { tenantHooks } from "./tenanttools.ts";
 import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, targetOf, tenantByTarget, tenantById, tenantContext } from "./tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-personal-assistant/signal/voice";
 
 ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
+sweepStaleRuns(); // page views and screenshots of a browse run that never ended
 if (new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
 
 // The owner's record in the registry (tenants.ts): made on the first start from SIGNAL_OWNER_NUMBER, its account id learned from her first message.

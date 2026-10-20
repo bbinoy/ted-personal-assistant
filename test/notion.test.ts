@@ -534,7 +534,7 @@ test("notion: reads run free and are shown to the judge as outside text; a page 
   await r.run("notion-update-page", { page_id: "p1", properties: { in_trash: true } });
   await r.run("notion-update-page", { page_id: "p1", archived: true });
   assert.equal(r.judged.length, 0);
-  assert.equal(r.asked.length, 3, "all three are her call");
+  assert.equal(r.asked.length, 1, "a move is her call; a page sent to the bin is denied, however the call spells it");
   // not offered at all
   r = rig(ctx, "auto");
   for (const t of ["notion-get-users", "notion-create-database", "notion-duplicate-page", "notion-delete-page"]) assert.equal((await r.run(t, {})).behavior, "deny", t);

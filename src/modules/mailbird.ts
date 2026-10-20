@@ -50,6 +50,14 @@ export const mailbirdModule: ToolModule = {
     ...mb("archive", "archive_conversation"),
     ...mb("restore", "move_conversation_to_inbox"),
     ...mb("select", "select_conversation"),
+    // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS): trash, permanent delete (a draft thrown away included), spam, blocking a sender.
+    ...mb("trash", "trash_conversation"),
+    ...mb("delete", "delete_conversation_permanently discard_draft"), // discard_draft: no skill or code uses it; deleting is never allowed
+    ...mb("spam", "set_conversation_spam"),
+    ...mb("block", "set_sender_blocked"),
+    // The destination may be Trash or Junk, so the call is the owner's own: filing mail is asked (and never judged), not denied.
+    ...mb("move", "move_conversation"),
+    ...mb("notify", "show_notification"), // a desktop notification: not free, judged like any action
     ...mb("unsubscribe", "unsubscribe_from_newsletter"), // not free: floor, judge, phone like any action; the judge asks when the mail itself pushes it (a phishing pattern)
     ...mb("draft", "create_draft update_draft", { view: "mbDraft" }),
     ...mb("reply-draft", "reply_to_conversation reply_all_to_conversation", { view: "mbReply" }),
@@ -60,11 +68,11 @@ export const mailbirdModule: ToolModule = {
   ],
   free: ["read"],
   titles: { [`${MB}send_message_now`]: { icon: "✉️", title: "Send email now" }, [`${MB}forward_conversation`]: { icon: "✉️", title: "Forward email" } },
-  untrusted: ["read"], // mail is written by third parties
-  untrustedPrefix: MB,
+  untrustedPrefix: MB, // (mail is written by third parties: every read is untrusted by default)
   floor: {
     judgeVeto: { send: (_input, view) => !!view && view.to.length > 0 }, // a mail nobody can be named for is not judged
-    noFix: ["send"],
+    judgeNever: ["move"],
+    noFix: ["send", "unsubscribe"],
   },
   skills: [{ name: "mailbird", required: true }, { name: "mailbird-troubleshooting" }],
   setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],

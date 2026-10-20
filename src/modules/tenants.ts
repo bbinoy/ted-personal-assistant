@@ -9,5 +9,6 @@ export const tenantsModule: ToolModule = {
   connection: { kind: "in-process", name: "tenants", when: (ctx) => ctx.source === "chat" && settings.tenants },
   rows: [...tenants("tenants-read", "create_invite list_tenants resume_tenant", { only: ["chat"] }), ...tenants("tenants-stop", "suspend_tenant remove_tenant", { only: ["chat"] })],
   free: ["tenants-read"],
+  ownerOnly: true,
   floor: { judgeNever: ["tenants-stop"] },
 };

@@ -10,6 +10,7 @@ export interface MailView {
   subject: string;
   body: string;
   hasAttachments: boolean;
+  attachments?: string[]; // what they are called or where they come from (a name, a mailbird:// address), when the call or the mail client says; the approval shows them
 }
 
 // Pure: recipients as lower-case addresses, from strings or {email|address} objects.
@@ -18,6 +19,22 @@ export function addrs(v: unknown): string[] {
     .map((x) => String((x as { email?: string; address?: string })?.email ?? (x as { address?: string })?.address ?? x).trim().toLowerCase())
     .filter(Boolean);
 }
+
+// Pure: the attachments of a call or a draft as short names or addresses, whatever shape the provider gives them (strings, or objects with a filename, name, path, uri, url).
+export function attachmentNames(v: unknown): string[] {
+  return (Array.isArray(v) ? v : []).map((x) => {
+    if (typeof x === "string" || typeof x === "number") return String(x);
+    const o = (x ?? {}) as Record<string, unknown>;
+    const n = o.filename ?? o.fileName ?? o.name ?? o.path ?? o.uri ?? o.url ?? o.fileUrl ?? o.id;
+    return typeof n === "string" || typeof n === "number" ? String(n) : "(unnamed attachment)";
+  });
+}
+
+// The attachment names as the optional field of a view (absent when there are none).
+export const attachmentsNamed = (v: unknown): { attachments?: string[] } => {
+  const a = attachmentNames(v);
+  return a.length ? { attachments: a } : {};
+};
 
 export type MailInput = Record<string, unknown>;
 
@@ -30,4 +47,5 @@ export const nativeView = (action: MailAction, i: MailInput): MailView => ({
   subject: String(i.subject ?? ""),
   body: String(i.body ?? i.htmlBody ?? i.forwardText ?? ""),
   hasAttachments: Array.isArray(i.attachments) && i.attachments.length > 0,
+  ...attachmentsNamed(i.attachments),
 });

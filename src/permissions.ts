@@ -6,7 +6,7 @@ import { describeCall } from "./format.ts";
 import type { MailView } from "./mailview.ts";
 import { mailSlot } from "./modules/index.ts";
 import { classify, denial, isReadTool } from "./policy.ts";
-import { actionOf, entryFor, mailToolsOf, mailView, readsUntrusted } from "./toolmanifest.ts";
+import { entryFor, mailToolsOf, mailView, readsUntrusted } from "./toolmanifest.ts";
 import { OWNER_KEY } from "./send.ts";
 import { LIMITS } from "./sanitize.ts";
 import { OWNER, settings } from "./settings.ts";
@@ -63,7 +63,7 @@ export const setChatOwnerMessage = (text: string) => setConversationMessage(OWNE
 // is read against what it answers. Never consent by itself (autojudge.ts says so to the judge).
 let chatAssistantMessage = "";
 export const setChatAssistantMessage = (text: string) => void (chatAssistantMessage = text.slice(0, LIMITS.quote));
-const MAIL_OUT = new Set(["send", "reply", "forward"]); // actions that put mail in front of other people, judged against the owner's words
+const MAIL_OUT = new Set(["mbSend", "gmSend", "gmReply", "gmForward", "ggSend"]); // the mail views of the calls that put mail in front of other people (not the bare action "send": mcp__send__send is the conversation's own), judged against the owner's words
 // An action the owner approved is done: the same call again (same tool, same arguments) within half an hour is refused
 // without a question, because repeating it would send, create or change it twice (a model once retried a send after a
 // slow status check). A DECLINED call can still be asked again.
@@ -166,7 +166,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     }
     let description = g?.description ?? describeCall(tool, input);
     let view: MailView | undefined;
-    if (MAIL_OUT.has(actionOf(tool))) {
+    if (MAIL_OUT.has(entryFor(tool)?.view ?? "")) {
       // Show what the mail client holds right now, not what the model says it is sending (a send of a draft), and the same view for
       // every provider. If that cannot be read, the owner would be approving blind, so the send does not happen.
       const draft = await (mailToolsOf(tool) ?? mailSlot())?.readBack(entryFor(tool)?.view, input, setup.speaker?.key);

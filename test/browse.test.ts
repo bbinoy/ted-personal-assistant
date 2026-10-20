@@ -182,7 +182,7 @@ test("manifest rows: browser tools exist only for the browse run; reads run free
   assert.equal(classify("mcp__memory__forget_note", {}, "browse"), "deny");
   // other sources get no browser tools
   for (const source of ["chat", "background", "group", "brief"] as const) assert.equal(classify(B + "navigate", { url: "https://example.com" }, source), "deny", source);
-  assert.equal(classify("mcp__browse__browse", { task: "x" }, "group"), settings.browse ? "allow" : "deny");
+  assert.equal(classify("mcp__browse__browse", { task: "x" }, "group"), settings.browse ? "ask" : "deny"); // judged in a group too, with the member's words as provenance
   assert.equal(classify("mcp__browse__browse", { task: "x" }, "chat"), "ask"); // judged like every other tool: the sub-run it starts is sandboxed and guarded step by step
 });
 

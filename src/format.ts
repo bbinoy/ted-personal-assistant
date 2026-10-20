@@ -116,14 +116,14 @@ export function cutBody(body: string): string {
 // Recipients and subject come from the mail client or the model (the subject from the sender of the mail being answered): one clean
 // line each, so a line break cannot fake another header and an invisible or right-to-left character cannot disguise an address.
 // Bcc and attachments are always shown when there are any: they are what a send must not hide.
-export function mailHeader(d: Pick<MailView, "to" | "cc" | "bcc" | "subject" | "hasAttachments">): string {
+export function mailHeader(d: Pick<MailView, "to" | "cc" | "bcc" | "subject" | "hasAttachments" | "attachments">): string {
   const list = (a: string[]) => a.map((x) => clip(x, 200)).join(", ");
   return [
     `To: ${d.to.length ? list(d.to) : "(nobody yet)"}`,
     ...(d.cc.length ? [`Cc: ${list(d.cc)}`] : []),
     ...(d.bcc.length ? [`Bcc: ${list(d.bcc)}`] : []),
     `Subject: ${clip(d.subject, 200)}`,
-    ...(d.hasAttachments ? ["Attachments: yes (names not shown)"] : []),
+    ...(d.hasAttachments ? [d.attachments?.length ? `Attachments: ${d.attachments.slice(0, 8).map((a) => clip(a, 120)).join(", ")}${d.attachments.length > 8 ? ` (+${d.attachments.length - 8} more not shown)` : ""}` : "Attachments: yes (the mail client gave no names)"] : []),
   ].join("\n");
 }
 
