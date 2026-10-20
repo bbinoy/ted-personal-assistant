@@ -1,8 +1,8 @@
 // npm run openbao -- install|setup|status|unseal|keep|backup|service: the secret store of the app (docs/SETUP.md, src/openbaoadmin.ts).
 // Local terminal only. Nothing here prints a secret except `setup`, which shows the three recovery shares once, on the terminal, and nowhere else.
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { ROOT } from "../src/paths.ts";
 import { openbaoCheck } from "../src/doctor.ts";
 import { macKeychain } from "../src/keychain.ts";
 import { Admin, installBinary, layoutOf, ensureCert, writeConfig, PIN } from "../src/openbaoadmin.ts";
@@ -10,7 +10,7 @@ import { ensureNodePath, installJob, keeperPlist, removeJob, serverPlist, servic
 import { readHiddenFromTerminal } from "../src/profilecli.ts";
 import { settings } from "../src/settings.ts";
 
-const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repo = ROOT;
 const cfg = settings.openbao;
 const layout = layoutOf(cfg.dir);
 const names = serviceNames();

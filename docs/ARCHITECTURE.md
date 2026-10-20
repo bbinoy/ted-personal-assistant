@@ -348,6 +348,7 @@ src/gmail.ts         the Gmail provider: a relay run for the heartbeat's connect
 src/gmailrules.ts    Gmail rules a flag cannot say: TRASH/SPAM label values, attachments, log-only archive, the brief to oneself (pure, tested)
 src/budget.ts        daily spend guard
 src/settings.ts      every tunable, validated at startup (pure loader, tested)
+src/paths.ts         the repo root and the folders under it (plugin, assets, assistants), and the default data dir: the only file that locates itself (tested)
 src/state.ts         atomic, synchronous access to state/, logs/ and memory/ (tested)
 src/audit.ts         append-only audit log and its reader
 src/autojudge.ts     the "action" task: the floor in code and the input of the approval judge, one path for every tool in every place
