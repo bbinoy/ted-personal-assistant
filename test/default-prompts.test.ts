@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { BRIEF_INSTRUCTIONS } from "../src/brief.ts";
 import { missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, briefSystem, chatContext, chatSystem, GATE_DEFAULTS, groupSystem, handlerSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
+import { backgroundSystem, briefSystem, chatContext, chatSystem, GATE_DEFAULTS, groupSystem, handlerSystem, heartbeatInstruction, heartbeatSystem } from "../src/persona.ts";
 import { PROFILES } from "../src/profiles.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { settings } from "../src/settings.ts";
@@ -35,13 +35,12 @@ export function snapshot(): Record<string, unknown> {
       chatContext: portable(chatContext({ lastBrief: "yesterday's brief", pings: ["10:00 an alert"] }) ?? ""),
       chatContextSetup: portable(chatContext({ missing, down }) ?? ""),
       brief: portable(briefSystem("MEMORY", missing, down)),
-      radar: portable(radarSystem("MEMORY", missing, down)),
+      heartbeat: portable(heartbeatSystem("MEMORY", missing, down)),
+      heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", lastLook: "Your last look was at 08:30.", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30" }),
       handler: portable(handlerSystem("MEMORY", { missing, down })),
       background: portable(backgroundSystem("MEMORY", missing, down)),
       group: portable(groupSystem()),
-      gateOwner: GATE_DEFAULTS.owner,
       gateGroup: GATE_DEFAULTS.group,
-      ownerGate: ownerGateDefaults({ briefHour: 7, backstopHour: 9, radarMinutes: 180, radar: true, minGapMinutes: 60 }),
     };
   } finally {
     own.signalOwnAccount = signalAccount;

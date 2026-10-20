@@ -33,8 +33,8 @@ test("settings: remote speech needs its keys and a safe address, or the agent do
 
 test("settings: the timing constants keep the values they had when they were hard-coded, and are validated", () => {
   const s = loadSettings({});
-  const ms = { stickyMs: s.groupStickyMinutes * 60_000, noticeMs: s.groupNoticeMinutes * 60_000, memberMs: s.groupMemberCacheMinutes * 60_000, slowMs: s.slowReplySeconds * 1000, echoMs: s.echoWindowMinutes * 60_000, refreshMs: s.warmRefreshMinutes * 60_000, retryMs: s.briefRetryGapMinutes * 60_000, graceH: s.briefPendingGraceHours, seenMs: s.seenMailDays * 24 * 3600_000, noticeAgeMs: s.noticeAgeHours * 3600_000, backoffMs: s.compactBackoffMinutes * 60_000 };
-  assert.deepEqual(ms, { stickyMs: 30 * 60_000, noticeMs: 10 * 60_000, memberMs: 5 * 60_000, slowMs: 20_000, echoMs: 5 * 60_000, refreshMs: 25 * 60_000, retryMs: 10 * 60_000, graceH: 3, seenMs: 14 * 24 * 3600_000, noticeAgeMs: 24 * 3600_000, backoffMs: 3600_000 });
+  const ms = { stickyMs: s.groupStickyMinutes * 60_000, noticeMs: s.groupNoticeMinutes * 60_000, memberMs: s.groupMemberCacheMinutes * 60_000, slowMs: s.slowReplySeconds * 1000, echoMs: s.echoWindowMinutes * 60_000, refreshMs: s.warmRefreshMinutes * 60_000, retryMs: s.briefRetryGapMinutes * 60_000, seenMs: s.seenMailDays * 24 * 3600_000, noticeAgeMs: s.noticeAgeHours * 3600_000, backoffMs: s.compactBackoffMinutes * 60_000 };
+  assert.deepEqual(ms, { stickyMs: 30 * 60_000, noticeMs: 10 * 60_000, memberMs: 5 * 60_000, slowMs: 20_000, echoMs: 5 * 60_000, refreshMs: 25 * 60_000, retryMs: 10 * 60_000, seenMs: 14 * 24 * 3600_000, noticeAgeMs: 24 * 3600_000, backoffMs: 3600_000 });
   assert.equal(loadSettings({ GROUP_STICKY_MINUTES: "45" }).groupStickyMinutes, 45);
   assert.throws(() => loadSettings({ BRIEF_RETRY_GAP_MINUTES: "0" }), /BRIEF_RETRY_GAP_MINUTES/);
   assert.throws(() => loadSettings({ SLOW_REPLY_SECONDS: "soon" }), /SLOW_REPLY_SECONDS/);

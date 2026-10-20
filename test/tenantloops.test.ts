@@ -121,7 +121,7 @@ test("a tenant with heartbeat and wake gets the gate's look and a wake-up, on th
   assert.match(r.seen.runs[0]!.prompt, /Anna: remind me about my sister's birthday/);
   assert.doesNotMatch(r.seen.runs[0]!.prompt, /secret of Bo/);
   assert.deepEqual(r.seen.sent.map((s) => [s.conv.tenantId, s.conv.target]), [[anna.id, `to:${anna.acis[0]}`]], "delivered to her chat only");
-  assert.deepEqual(r.seen.profiles, [], "the owner's background run never runs for her");
+  assert.ok(!r.seen.profiles.includes("background") && !r.seen.profiles.includes("brief"), "the owner's background run never runs for her (the owner's own look is the heartbeat run)");
   assert.match(readFileSync(T.tenantContext(anna).logFile, "utf8"), /wake-up: Remind her/);
   assert.doesNotMatch(readFileSync(T.tenantContext(other).logFile, "utf8"), /wake-up/);
 });
@@ -191,7 +191,8 @@ test("one tenant's failing look or run does not stop the others or the owner", a
   const r = rig({ now: later, gate: (c) => { if (c.tenantId === bad.id) throw new Error("model down"); return { act: true, instructions: "say hi", nextCheckMinutes: 20 }; } });
   await r.wakeups.tick(later);
   assert.deepEqual(r.seen.sent.map((s) => s.conv.tenantId), [good.id]);
-  assert.ok(r.seen.gates.some((g) => !g.conv.tenantId), "the owner was looked at as well");
+  assert.ok(r.seen.profiles.includes("heartbeat"), "the owner was looked at as well (by her heartbeat run, not the gate)");
+  assert.ok(!r.seen.gates.some((g) => !g.conv.tenantId), "the owner has no gate");
   const evening = new Date(NOON.getTime() + 6 * 3600_000);
   const crash = rig({ now: evening, run: (c) => { if (c.tenantId === bad.id) throw new Error("run crashed"); return "hi"; }, ids: [bad.id, good.id] });
   await crash.wakeups.tick(evening);
@@ -258,14 +259,13 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
   assert.equal(coolingDown(Date.now(), ""), false, "the owner's login cooldown is untouched");
 });
 
-test("the gate's rules for a tenant's chat name her, have no brief or radar and nothing of the owner's", () => {
+test("the gate's rules for a tenant's chat name her, have no brief and nothing of the owner's", () => {
   const anna = person("Lea");
   const sys = gateSystem(tenant(anna.id), "clock", "");
   assert.match(sys, /Lea's private chat/);
   assert.match(sys, /Acting on your own/);
   assert.doesNotMatch(sys, /"brief"|"radar"/);
   assert.doesNotMatch(sys, new RegExp(settings.owner));
-  assert.match(gateSystem(owner(), "clock", ""), /task "brief"/);
   assert.match(gateSystem(owner(), "clock", ""), new RegExp(`${settings.owner}'s private chat`));
 });
 

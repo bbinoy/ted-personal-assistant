@@ -6,7 +6,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { ROOT } from "./paths.ts";
 import { spentToday } from "./budget.ts";
-import { inQuietHours } from "./actions.ts";
+import { readRows } from "./heartbeat/rows.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
 import { ownerSkills } from "./skills.ts";
@@ -210,9 +210,9 @@ export const qwenReference = (q: { builtIn?: boolean; refAudio: string }): strin
 
 export const requiredSkills = (mail: boolean, provider: string = settings.mailProvider): string[] => ownerSkills(mail, provider, { required: true });
 
-// What the heartbeat line says after "last tick": mail is only mentioned when there is mail.
-export const heartbeatDetail = (beat: { lastTickAt?: string; lastNewMailAt?: string }, ageMin: number, quiet: boolean, mail: boolean, localTime: (iso: string) => string): string =>
-  beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago${quiet ? ", night idle now" : ""}${mail ? `; last new mail ${beat.lastNewMailAt ? localTime(beat.lastNewMailAt) : "none yet"}` : "; mail off"}` : "no tick recorded yet";
+// What the heartbeat line says: the last tick, and the heartbeat run's last look (state/heartbeat.jsonl).
+export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, lastLookAt: string | undefined, localTime: (iso: string) => string): string =>
+  beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago; last look ${lastLookAt ? localTime(lastLookAt) : "none yet"}` : "no tick recorded yet";
 
 // `npm run doctor`: is everything this agent depends on in place? Prints no secrets.
 export async function doctor() {
@@ -288,16 +288,14 @@ export async function doctor() {
   tenantCheck(line);
   servicesCheck(line);
 
-  line(true, "proactive radar", settings.proactive ? `chosen by your chat's gate, about every ${settings.radarMinutes} min (its "[radar] ran" lines are in the log)` : "off (PROACTIVE=off)");
-
-  const beat = readJson<{ lastTickAt?: string; lastNewMailAt?: string }>("state/heartbeat.json", {});
+  const beat = readJson<{ lastTickAt?: string }>("state/heartbeat.json", {});
   const ageMin = beat.lastTickAt ? (Date.now() - Date.parse(beat.lastTickAt)) / 60_000 : Infinity;
-  const quiet = inQuietHours(new Date(), settings.quietStartHour, settings.quietEndHour);
   line(
-    ageMin <= 2 * settings.heartbeatMinutes + 1 || quiet ? true : "warn",
+    ageMin <= 2 * settings.heartbeatMinutes + 1 ? true : "warn",
     "heartbeat is ticking",
-    heartbeatDetail(beat, ageMin, quiet, settings.mail, localTime),
+    heartbeatDetail(beat, ageMin, readRows().at(-1)?.at, localTime),
   );
+  line(true, "heartbeat run", `the owner's look at chat, mail and calendar on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
 
   const spent = spentToday();
   line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)`);

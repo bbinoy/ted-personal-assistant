@@ -8,9 +8,9 @@ import { fileURLToPath } from "node:url";
 import { BRIEF_INSTRUCTIONS, briefInstructions, runBriefAttempt } from "../src/brief.ts";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
-import { startHeartbeat, type MailSource } from "../src/heartbeat.ts";
+import { startHeartbeat } from "../src/heartbeat.ts";
 import { LAST_BRIEF, missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, briefSystem, chatContext, chatSystem, ownerGateDefaults, radarSystem } from "../src/persona.ts";
+import { backgroundSystem, briefSystem, chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
@@ -47,55 +47,26 @@ async function withMail<T>(mail: boolean, f: () => Promise<T> | T): Promise<T> {
   }
 }
 
-test("heartbeat without mail: no mail client is made, nothing is triaged, liveness is written, one start-up line", async () => {
+test("heartbeat tick without mail: the jobs start and the liveness line is written", async () => {
   await withMail(false, async () => {
-    const lines: string[] = [];
     const log = console.log;
-    console.log = (...a: unknown[]) => void lines.push(a.join(" "));
+    console.log = () => {};
     try {
       const timers: (() => void)[] = [];
-      let made = 0;
-      const touched: string[] = [];
-      const forbidden = new Proxy({}, { get: (_t, name) => () => (touched.push(String(name)), assert.fail("the mail client was used")) }) as unknown as MailSource;
       const ran: string[] = [];
       const hb = startHeartbeat(
-        {
-          alert: async () => touched.push("alert") as unknown as void,
-          handle: () => void touched.push("handle"),
-          briefDue: () => false,
-          onTick: () => void ran.push("jobs"), // wake-ups, the brief and the radar start from here and need no mail check
-        },
-        { newMail: () => (made++, forbidden), setTimeout: (f) => void timers.push(f), setInterval: (f) => void timers.push(f) },
+        { onTick: () => void ran.push("jobs") }, // wake-ups and the brief start from here and need no mail check
+        { setTimeout: (f) => void timers.push(f), setInterval: (f) => void timers.push(f) },
       );
-      assert.equal(made, 0, "no Mailbird is constructed");
       assert.equal(timers.length, 2);
-      assert.ok(lines.includes("mail: off (MAIL_PROVIDER=none)"));
-      const before = lines.length;
       timers[0]!();
       await new Promise((r) => setTimeout(r, 20));
       timers[1]!();
       await new Promise((r) => setTimeout(r, 20));
       assert.deepEqual(ran, ["jobs", "jobs"], "the tick jobs still start");
-      assert.deepEqual(touched, []);
-      assert.equal(lines.length, before, "nothing is logged per tick");
       const beat = readJson<{ lastTickAt?: string }>("state/heartbeat.json", {});
       assert.ok(beat.lastTickAt && Date.now() - Date.parse(beat.lastTickAt) < 5000, "doctor sees the heartbeat ticking");
       void hb;
-    } finally {
-      console.log = log;
-    }
-  });
-});
-
-test("heartbeat with mail still makes its client (the default is unchanged)", async () => {
-  await withMail(true, async () => {
-    const log = console.log;
-    console.log = () => {};
-    try {
-      let made = 0;
-      const fake = { inboxes: async () => [], call: async () => [], close: async () => {} } as unknown as MailSource;
-      startHeartbeat({ alert: async () => {}, handle: () => {}, briefDue: () => false, onTick: () => {} }, { newMail: () => (made++, fake), setTimeout: () => {}, setInterval: () => {} });
-      assert.equal(made, 1);
     } finally {
       console.log = log;
     }
@@ -162,9 +133,9 @@ test("doctor without mail: 'mail: off' is OK, Mailbird is never contacted, no ma
   assert.deepEqual(lines, [[true, "mail: off", "MAIL_PROVIDER=none, chat only"]]);
   assert.ok(!requiredSkills(false).includes("mailbird"));
   assert.ok(requiredSkills(true).includes("mailbird"));
-  assert.equal(heartbeatDetail({ lastTickAt: "2026-10-12T09:00:00Z" }, 3.2, false, false, () => "x"), "last tick 3 min ago; mail off");
-  assert.equal(heartbeatDetail({ lastTickAt: "2026-10-12T09:00:00Z" }, 3.2, false, true, () => "x"), "last tick 3 min ago; last new mail none yet");
-  assert.equal(heartbeatDetail({}, Infinity, false, false, () => "x"), "no tick recorded yet");
+  assert.equal(heartbeatDetail({ lastTickAt: "2026-10-12T09:00:00Z" }, 3.2, undefined, () => "x"), "last tick 3 min ago; last look none yet");
+  assert.equal(heartbeatDetail({ lastTickAt: "2026-10-12T09:00:00Z" }, 3.2, "2026-10-12T09:00:00Z", () => "x"), "last tick 3 min ago; last look x");
+  assert.equal(heartbeatDetail({}, Infinity, undefined, () => "x"), "no tick recorded yet");
   // With mail, a reachable client is OK and an unreachable one still FAILS.
   lines.length = 0;
   await mailbirdCheck(line, async () => 2);
@@ -191,9 +162,9 @@ test("doctor: `npm run doctor` with MAIL_PROVIDER=none and no Mailbird anywhere 
 test("offered skills: without mail the two mail skills are gone, the rest are unchanged", () => {
   const all = ownerSkills(true);
   const none = ownerSkills(false);
-  assert.equal(all.length, 12);
+  assert.equal(all.length, 11);
   assert.deepEqual(none, all.filter((s) => !/:mailbird/.test(s)));
-  assert.equal(none.length, 10);
+  assert.equal(none.length, 9);
 });
 
 test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no email here' sentence is there", () => {
@@ -202,7 +173,7 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
   const prompts = {
     chat: chatSystem(new Date("2026-10-12T09:00:00"), false),
     brief: briefSystem("MEMORY", missing, down, false),
-    radar: radarSystem("MEMORY", missing, down, false),
+    heartbeat: heartbeatSystem("MEMORY", missing, down, false),
     background: backgroundSystem("MEMORY", missing, down, false),
   };
   const sentence = /There is no email in this setup[^\n]*?mail is off here\./;
@@ -217,8 +188,6 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
   const context = chatContext({ lastBrief: "yesterday's brief", missing, down, pings: ["10:00 an alert"] }, false)!; // what moved out of the chat's system prompt
   assert.match(context, /Signal only got a short version/);
   assert.doesNotMatch(context, /mailbird|Reply ready|send_message_now|update_draft|get_message|inbox|by email|email drafts|writes email|handled mail/i);
-  const gate = ownerGateDefaults({ briefHour: 7, backstopHour: 9, radarMinutes: 180, radar: true, minGapMinutes: 60, mail: false });
-  assert.doesNotMatch(gate, /mail/i);
 });
 
 test("setup items without mail: the writing-voice item (email drafts) is not asked for, the rest are", () => {

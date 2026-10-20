@@ -1,31 +1,23 @@
 import { formatAlert, inQuietHours, planActions } from "./actions.ts";
 import { mailBody } from "./mailtext.ts";
-import { mailAlertRequest, type NoticeWriter } from "./notice.ts";
 import { LIMITS, oneLine } from "./sanitize.ts";
-import { audit } from "./audit.ts";
 import type { HandleItem } from "./handler.ts";
 import type { GmailMail } from "./gmail.ts";
 import type { Mailbird } from "./mailbird.ts";
-import { mailSlot } from "./modules/index.ts";
-import { OWNER_TRIAGE, recordTriage } from "./triagelog.ts";
-import { mailRuntime } from "./modules/runtime.ts";
-import { isRefusal, mayRun } from "./payer.ts";
 import { isPaused } from "./pause.ts";
 import { settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
 import { RateLimitError } from "./errors.ts";
-import { triageBatch, type MailInput, type Triage } from "./triage.ts";
+import type { MailInput, Triage } from "./triage.ts";
 
-// The heartbeat: every few minutes (not at night), list the inboxes with NO model call.
-// Only when something new arrived does a model classify it (one batch), and then the
-// pure rules in actions.ts decide what to archive, alert on or hand to the handler.
+// The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (wake-ups, dream, brief, the friends' mail checks).
+// The owner's own proactive work is the heartbeat run (src/heartbeat/look.ts, started from wake.ts), not a mail check.
 //
-// The mail check is ONE function for every conversation that has mail (createMailCheck): the owner's (with her mail provider's client, her files, her chat) and each
-// friend's with the `mail` and `google` capabilities (mailloops.ts: her Google client, her folder, her chat). What differs is a MailContext: where its state files are, how
-// its triage call is made (login or instance key, whose notes), how a decision is recorded, whether there is a handler and what a usage limit means for it. The
-// owner is one conversation among others; nothing here knows a friend by name.
+// The mail check below is ONE function for each FRIEND who has mail through her own Google (mailloops.ts): the heartbeat lists her inbox with NO model call, and only when
+// something new arrived does a model classify it (one batch); then the pure rules in actions.ts decide what to archive, alert on or hand to her handler. What differs per friend
+// is a MailContext: where its state files are, how its triage call is made (the instance key, her notes), how a decision is recorded, whether there is a handler and what a
+// usage limit means for it.
 
-const OWNER_SEEN = "state/seen.json";
 const OWNER_LIVENESS = "state/heartbeat.json"; // last tick, for `npm run doctor`
 const SEEN_TTL_MS = settings.seenMailDays * 24 * 3600_000;
 const BRIEF_SUBJECT = /^\s*[☀🌙]/u; // our own briefs: never triaged
@@ -53,39 +45,29 @@ interface NewMail {
   receivedAtUtc: string;
 }
 
-// What one conversation's mail check does with what it finds: tell its person (the owner, or the friend in her own chat), queue mail for its handler.
+// What one friend's mail check does with what it finds: tell her in her own chat, queue mail for her handler.
 export interface MailHooks {
   alert: (text: string) => Promise<void>; // tell the person something (plain text)
-  write?: NoticeWriter; // writes the alert from the facts (notice.ts); absent: the template text (tests, and friends: the writer runs on the owner's login)
   handle: (items: HandleItem[]) => void; // queue mail for the handler
-  briefDue: () => boolean; // today's brief is still due: it will report urgent mail itself
 }
 
-interface HeartbeatHooks extends MailHooks {
-  onTick: () => void; // tick-driven jobs (wake-ups, dream, brief, radar): independent of the mail check, never awaited
+interface HeartbeatHooks {
+  onTick: () => void; // tick-driven jobs (wake-ups, dream, brief, the friends' mail checks): independent of each other, never awaited
 }
 
 // What differs between the conversations that have a mail check.
 export interface MailContext {
-  files: { seen: string; liveness: string }; // where its seen-mail memory and its last tick are kept (the owner's: state/; a friend's: her folder)
-  triage: (mails: MailInput[]) => Promise<Triage[]>; // the small model's classification: on the login for the owner, on the instance key with her notes for a friend
-  record: (decision: string, row: Record<string, unknown>) => void; // what was decided about one mail (the owner's: the audit log; a friend's: her own file, wordless in the audit log)
+  files: { seen: string; liveness: string }; // where its seen-mail memory and its last tick are kept (a friend's: her folder)
+  triage: (mails: MailInput[]) => Promise<Triage[]>; // the small model's classification: on the instance key with her notes
+  record: (decision: string, row: Record<string, unknown>) => void; // what was decided about one mail (a friend's: her own file, wordless in the audit log)
   handler: () => boolean; // a background handler exists for this conversation (it drafts replies with its own tools); without one the mail is kept for the brief
-  blocked: (what: string) => boolean; // the conversation may not run a model now (payer.ts mayRun: a usage limit, the day's budget, and for a friend the key and her own budget): no model call this tick
-  tidyOwnBriefs: boolean; // older copies of the briefs mailed to oneself are archived (the owner's brief; a friend has none)
+  blocked: (what: string) => boolean; // she may not run a model now (payer.ts mayRun: the key and her own budget): no model call this tick
 }
 
 // What the mail check needs of the mail client (Mailbird, the Gmail relay, or a fake in tests).
 export type MailSource = (Pick<Mailbird, "inboxes" | "call" | "close"> | Pick<GmailMail, "inboxes" | "call" | "close">) & { getMessages?: GmailMail["getMessages"] };
 
-// The mail provider's source (the heartbeat and `npm run triage-check` start from here): the loaded mail module's (src/modules).
-export function newMailSource(): MailSource & { connect?: () => Promise<void> } {
-  const mail = mailRuntime();
-  if (!mail) throw new Error("there is no mail provider (MAIL_PROVIDER=none)");
-  return mail.source();
-}
-
-// Starts every tick-driven job (wake-ups, dream, brief, radar): each in its own try/catch, none awaited, so a job that throws
+// Starts every tick-driven job (wake-ups, dream, brief, the friends' mail checks): each in its own try/catch, none awaited, so a job that throws
 // (even synchronously) or hangs never keeps another from starting.
 export function startJobs(jobs: Record<string, () => unknown>): void {
   for (const [name, f] of Object.entries(jobs)) {
@@ -109,23 +91,15 @@ const newMail = (inbox: { email: string }, row: Row): NewMail => ({
 const seenKey = (m: { conversationId: string; lastMessageId?: number | string; messageId?: number | string }) =>
   `${m.conversationId}:${m.lastMessageId ?? m.messageId}`;
 
-// The cheap pre-check. Returns conversations whose latest message is new, plus older copies
-// of our own brief to tidy away. Nothing is marked seen until the caller commits.
-async function checkMail(mb: MailSource, seenFile: string, tidyOwnBriefs: boolean) {
+// The cheap pre-check. Returns conversations whose latest message is new. Nothing is marked seen until the caller commits.
+async function checkMail(mb: MailSource, seenFile: string) {
   const seen = readJson<Seen>(seenFile, { keys: {} });
   const seeding = !seen.seededAt; // first run ever: record a baseline, triage nothing
   const now = Date.now();
   const fresh: NewMail[] = [];
-  const staleBriefs: string[] = [];
 
   for (const inbox of await mb.inboxes()) {
     const rows = await mb.call<Row[]>("list_conversations", { folderId: inbox.folderId, limit: 100 });
-    // Keep only the newest of our own briefs. "Own" = brief subject AND this account's own name.
-    const own = !tidyOwnBriefs ? [] : rows
-      .filter((r) => BRIEF_SUBJECT.test(r.subject) && r.lastSender === inbox.senderName)
-      .sort((a, b) => b.receivedAtUtc.localeCompare(a.receivedAtUtc));
-    staleBriefs.push(...own.slice(1).map((r) => r.conversationId));
-
     for (const row of rows) {
       const key = seenKey(row);
       if (seen.keys[key]) continue;
@@ -139,7 +113,6 @@ async function checkMail(mb: MailSource, seenFile: string, tidyOwnBriefs: boolea
 
   return {
     fresh,
-    staleBriefs,
     seeding,
     // Mail we chose not to finish with (archive cap reached) stays unseen: the next tick retries it.
     unsee: (m: NewMail) => void delete seen.keys[seenKey(m)],
@@ -217,21 +190,13 @@ async function processNewMail(mb: MailSource, fresh: NewMail[], hooks: MailHooks
   }
   for (const i of plan.deferred) decision[i] = "archive-deferred";
 
-  // act_now: ONE batched message per tick. While today's brief is still due (e.g. the first
-  // tick after the night), the brief reports these itself, so no separate alert is sent.
+  // act_now: ONE batched message per tick.
   if (plan.alert.length > 0) {
-    if (hooks.briefDue()) {
-      for (const i of plan.alert) decision[i] = "covered-by-brief";
-    } else {
-      const items = plan.alert.map((i) => ({ from: fresh[i]!.from, subject: fresh[i]!.subject, reason: results[i]!.reason }));
-      const template = formatAlert(items);
-      // Written by a model from the facts, plain text; any failure sends the template, so an alert is never lost.
-      const text = hooks.write ? await hooks.write(mailAlertRequest(items, template)).catch(() => template) : template;
-      const ok = await hooks
-        .alert(text)
-        .then(() => true, (e) => (console.error("heartbeat: alert failed:", (e as Error).message), false));
-      for (const i of plan.alert) decision[i] = ok ? "alerted" : "alert-failed";
-    }
+    const text = formatAlert(plan.alert.map((i) => ({ from: fresh[i]!.from, subject: fresh[i]!.subject, reason: results[i]!.reason })));
+    const ok = await hooks
+      .alert(text)
+      .then(() => true, (e) => (console.error("heartbeat: alert failed:", (e as Error).message), false));
+    for (const i of plan.alert) decision[i] = ok ? "alerted" : "alert-failed";
   }
 
   if (plan.handle.length > 0 && !ctx.handler()) {
@@ -273,19 +238,7 @@ async function processNewMail(mb: MailSource, fresh: NewMail[], hooks: MailHooks
   return plan.deferred.map((i) => fresh[i]!);
 }
 
-// Older copies of our own brief: archived, keeping the newest one per account.
-async function archiveStaleBriefs(mb: MailSource, ids: string[]) {
-  for (const id of ids.slice(0, 5)) {
-    try {
-      await mb.call("archive_conversation", { conversationId: id });
-      audit("heartbeat_stale_brief", "archived", "heartbeat", { id });
-    } catch (e) {
-      console.error("heartbeat: could not archive an old brief:", (e as Error).message);
-    }
-  }
-}
-
-// The mail check of ONE conversation, as a function to call on every tick: the same code for the owner (startHeartbeat below) and for each friend (mailloops.ts).
+// The mail check of ONE friend, as a function to call on every tick (mailloops.ts).
 // It never overlaps itself, rests in the night and while paused, reads the mailbox with no model call, hands only NEW mail to the small model, acts on the plan, and
 // writes its last tick. A failing mailbox is reported once per outage and reconnected on the next tick.
 export function createMailCheck(mb: MailSource, ctx: MailContext, hooks: MailHooks): () => Promise<void> {
@@ -298,13 +251,12 @@ export function createMailCheck(mb: MailSource, ctx: MailContext, hooks: MailHoo
     if (inQuietHours(new Date(), settings.quietStartHour, settings.quietEndHour)) return;
     running = true;
     try {
-      const mail = await checkMail(mb, ctx.files.seen, ctx.tidyOwnBriefs);
+      const mail = await checkMail(mb, ctx.files.seen);
       failing = false;
       if (mail.seeding) {
         console.log("heartbeat: baseline recorded, existing inbox treated as seen");
       } else {
         if (mail.fresh.length > 0) for (const m of ctx.blocked("mail triage") ? mail.fresh : await processNewMail(mb, mail.fresh, hooks, ctx)) mail.unsee(m); // usage limit: no model call, the mail waits unseen (cooldown.ts)
-        if (settings.archiveLive && mail.staleBriefs.length > 0) await archiveStaleBriefs(mb, mail.staleBriefs);
       }
       mail.commit(); // only now are these messages "seen"
       const prev = readJson<{ lastNewMailAt?: string }>(ctx.files.liveness, {});
@@ -319,64 +271,19 @@ export function createMailCheck(mb: MailSource, ctx: MailContext, hooks: MailHoo
   };
 }
 
-// The owner's context: her provider's client, state/, the audit log, the login, the shared cooldown.
-export function ownerMailContext(triage: MailContext["triage"] = (mails) => triageBatch(mails)): MailContext {
-  return {
-    files: { seen: OWNER_SEEN, liveness: OWNER_LIVENESS },
-    triage,
-    record: (decision, row) => recordTriage(OWNER_TRIAGE, decision, row),
-    handler: () => !!mailSlot()?.handlerTask, // the provider can draft (its module says what the handler's task is)
-    blocked: (what) => isRefusal(mayRun({ kind: "owner" }, what)),
-    tidyOwnBriefs: true,
-  };
-}
-
-// `env` is for tests: a fake mail source (or the factory that would make the real one) and fake timers.
-export function startHeartbeat(hooks: HeartbeatHooks, env: { triage?: typeof triageBatch; mail?: MailSource; newMail?: () => MailSource; setTimeout?: (f: () => void, ms: number) => unknown; setInterval?: (f: () => void, ms: number) => unknown } = {}) {
-  // MAIL_PROVIDER=none: no mail client is made, let alone connected. Only the liveness line is kept (mailOff below).
-  const mb = settings.mail ? (env.mail ?? (env.newMail ?? newMailSource)()) : undefined;
-  const { onTick, ...mailHooks } = hooks;
-  const mailCheck = mb ? createMailCheck(mb, ownerMailContext(env.triage && ((mails) => env.triage!(mails))), mailHooks) : undefined;
-
-  // Without mail the "check" is just proof of life, so `doctor` sees the heartbeat ticking. Same pause and night rules, no calls, no log lines.
-  const mailOff = async () => {
-    if (isPaused() || inQuietHours(new Date(), settings.quietStartHour, settings.quietEndHour)) return;
-    const prev = readJson<{ lastNewMailAt?: string }>(OWNER_LIVENESS, {});
-    writeJson(OWNER_LIVENESS, { lastTickAt: new Date().toISOString(), lastNewMailAt: prev.lastNewMailAt });
-  };
+// The tick: a free timer. `env` is for tests: fake timers.
+export function startHeartbeat(hooks: HeartbeatHooks, env: { setTimeout?: (f: () => void, ms: number) => unknown; setInterval?: (f: () => void, ms: number) => unknown } = {}) {
   const tick = () => {
     try {
-      onTick(); // starts its jobs without waiting for them
+      hooks.onTick(); // starts its jobs without waiting for them
     } catch (e) {
       console.error("heartbeat: tick jobs failed to start:", (e as Error).message);
     }
-    void (mailCheck ?? mailOff)().catch((e) => console.error("heartbeat: mail check failed:", (e as Error).message));
+    if (!isPaused()) writeJson(OWNER_LIVENESS, { lastTickAt: new Date().toISOString() }); // proof of life, so `doctor` sees the heartbeat ticking
   };
 
   (env.setTimeout ?? setTimeout)(tick, 20_000); // first tick shortly after start
   (env.setInterval ?? setInterval)(tick, settings.heartbeatMinutes * 60_000);
-  console.log(
-    `heartbeat: every ${settings.heartbeatMinutes} min, idle ${settings.quietStartHour}:00-${settings.quietEndHour}:00, archiving ${settings.archiveLive ? "LIVE" : "log-only (ARCHIVE=log)"}`,
-  );
-  if (!mb) console.log("mail: off (MAIL_PROVIDER=none)");
-  return { tick, mailCheck: mailCheck ?? mailOff };
-}
-
-// `npm run triage-check`: classify the newest inbox mail exactly as the heartbeat would, and
-// show what it would do. Acts on nothing, writes nothing: a safe way to check the classifier.
-export async function triageCheck(mb: MailSource, count: number) {
-  const mails: NewMail[] = [];
-  for (const inbox of await mb.inboxes()) {
-    const rows = await mb.call<Row[]>("list_conversations", { folderId: inbox.folderId, limit: count });
-    for (const r of rows) {
-      if (BRIEF_SUBJECT.test(r.subject)) continue;
-      mails.push(newMail(inbox, r));
-    }
-  }
-  mails.sort((a, b) => b.receivedAtUtc.localeCompare(a.receivedAtUtc)).splice(count);
-  const results = await triageBatch(await fetchInputs(mb, mails));
-  const plan = planActions(results, { maxArchives: settings.maxArchivesPerTick });
-  const action = (i: number) =>
-    plan.archive.includes(i) ? "archive" : plan.alert.includes(i) ? "alert" : plan.handle.includes(i) ? "handler" : plan.deferred.includes(i) ? "defer" : "keep";
-  return mails.map((m, i) => ({ ...m, ...results[i]!, action: action(i) }));
+  console.log(`heartbeat: a free tick every ${settings.heartbeatMinutes} min; the owner's heartbeat run looks about every ${settings.heartbeatDayMinutes} min in the day on ${settings.heartbeatModel}`);
+  return { tick };
 }

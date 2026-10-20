@@ -23,7 +23,6 @@ import { groupCapabilities, groupTools } from "./policy/capabilities.ts";
 import { hiddenTools } from "./policy/policy.ts";
 import { hiddenOutside } from "./profiletools.ts";
 import { PROFILES } from "./profiles.ts";
-import { changesCalendar, nudgeRadar } from "./radar-nudge.ts";
 import { type ChatSession } from "./session.ts";
 import { settings } from "./settings.ts";
 import { cleanToolOutput } from "./toolclean.ts";
@@ -51,6 +50,7 @@ export interface RunOptions {
   skills?: readonly string[]; // the skills offered (default: the owner's, skills.ts ownerSkills);a group's or tenant's are the shared ones its capabilities allow (skills.ts)
   mcpTools?: ReadonlySet<string>; // an unattended job's own list of MCP tools (profiles.ts): every other connector tool is out of the model's view (profiletools.ts); default: the owner's whole set
   tools?: ReadonlySet<string>; // an isolated conversation (a group, a tenant): the tools that exist for the run, from its capabilities (capabilities.ts); decides its built-ins, its MCP servers and policy.ts classify
+  model?: string; // this run's own model (the heartbeat run's HEARTBEAT_MODEL); default HARNESS_MODEL
   maxTurns: number;
   maxBudgetUsd: number; // hard per-run spend cap. Per RUN, not per session: the SDK does not count the cost a resumed session already had (checked), so owner and groups alike need no adjustment here. The previous total is subtracted only when reporting cost (consume)
   outputFormat?: Options["outputFormat"]; // constrained JSON output
@@ -102,7 +102,7 @@ export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<
 // The built-in tools of a run (everything else is an MCP tool), from the rows of the builtin module (modules/builtin.ts), one list for every run: a group or a
 // tenant has the rows its capability set holds (its own notes, search, skills; before a tenant's age and region are confirmed none, and never opening a page);
 // any other run has the rows offered to its source: the owner's chat everything (skills, its notes, search, opening pages), a background run skills, search and
-// pages, the browse run search only, the brief, the radar and the other unattended runs only skills.
+// pages, the browse run search only, the brief, the heartbeat run and the other unattended runs only skills.
 function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): string[] {
   return builtinModule.rows.filter((r) => (tools ? tools.has(r.tool) && !isOwnerOnly(r.tool) : !!r.offeredTo?.includes(source))).map((r) => r.tool);
 }
@@ -112,7 +112,6 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // call to whoever asked (the brief captures what it sent).
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
     if (opts.memory?.notify) noteWritten(tool, input);
-    if (changesCalendar(tool)) nudgeRadar();
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
@@ -177,7 +176,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
   const env = envFor(payerOf(opts), baseEnv);
   return {
-    model: settings.model,
+    model: opts.model ?? settings.model,
     outputFormat: opts.outputFormat,
     // Wait for every connector before the first model call. By default they connect in the
     // background, and a slow one (seen: ~30s) means the first call runs without its tools,
@@ -257,7 +256,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
   throw new Error("agent stream ended without a result");
 }
 
-// The one place every run passes: chat, groups, wake-ups, brief, radar, the mail handler. On the ceiling the query is aborted, the
+// The one place every run passes: chat, groups, wake-ups, brief, heartbeat run, the mail handler. On the ceiling the query is aborted, the
 // timeout is logged and audited, and the rejection takes the usual error path (a notice, rate-limited in groups; the queue moves on).
 // A chat run (the owner's chat and groups alike) and a background run have their own limits (settings.ts).
 export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number): Promise<T> {

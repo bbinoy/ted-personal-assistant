@@ -5,7 +5,7 @@
       "sessionFile": "state/session.json",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "200ef3eaba87d680"
+        "sha": "c1e9d735eac344df"
       },
       "memory": {
         "dir": "<data>/memory/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "200ef3eaba87d680"
+        "sha": "c1e9d735eac344df"
       },
       "snapshot": false
     },
@@ -64,7 +64,6 @@
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:follow-through",
       "ted-personal-assistant:setup",
-      "ted-personal-assistant:radar",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],

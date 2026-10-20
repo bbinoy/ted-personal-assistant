@@ -173,7 +173,7 @@ export interface MailSlot extends MailTools {
 
 // The code behind a mail slot (runtime.ts): the client, putting a mail back, what to start while the app runs, the doctor check.
 export interface MailRuntime {
-  source: () => MailSource & { connect?: () => Promise<void> }; // the heartbeat's mail client (`npm run triage-check` starts from it too)
+  source: () => MailSource & { connect?: () => Promise<void> }; // a mail client for the provider (the friends' mail check has its own)
   restore: (id: string) => Promise<number>; // `npm run restore <id>`: put an archived mail back in the inbox; prints what happened, returns the exit code
   start: (io: { reply: (text: string) => Promise<number> }) => { propose?: ReturnType<typeof createProposer>["show"] }; // Mailbird's connection and the proposer that shows reply drafts; Gmail's read-backs
   check: (line: DoctorLine) => void | Promise<void>;

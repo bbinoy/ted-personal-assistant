@@ -87,9 +87,8 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
       record: (decision, row) => recordTriage(ctx, decision, row),
       handler: () => !!mailHandlerOf(who(id)), // her mail module can draft
       blocked: (what) => isRefusal(payer(id, what)), // the key's cooldown, her day's budget, suspension or a missing key: no model call
-      tidyOwnBriefs: false,
     };
-    const check = createMailCheck(source, mctx, { alert: (text) => deps.notify(id, text), handle: (items) => handler.enqueue(items), briefDue: () => false });
+    const check = createMailCheck(source, mctx, { alert: (text) => deps.notify(id, text), handle: (items) => handler.enqueue(items) });
     handler.resume(); // anything queued before a restart
     return { check, handler };
   }

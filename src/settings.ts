@@ -182,11 +182,12 @@ export function loadSettings(env: Env) {
     quietStartHour: num(env, "QUIET_START_HOUR", rhythm.heartbeat.quietFromHour, 0, 23),
     quietEndHour: num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23),
 
-    // The radar: while the owner is awake, a model looks at calendar and mail every few hours and
-    // writes to them only when something deserves it (src/radar.ts).
-    proactive: oneOf(env, "PROACTIVE", rhythm.radar.enabled ? "on" : "off", ["on", "off"] as const) === "on",
-    radarMinutes: num(env, "RADAR_MINUTES", rhythm.radar.everyMinutes, 30, 720),
-    maxProactivePerDay: num(env, "MAX_PROACTIVE_PER_DAY", 8, 0, 50),
+    // The owner's heartbeat run (src/heartbeat/look.ts): on every look a model (HEARTBEAT_MODEL: haiku, sonnet, or a full model id) reads the chat, mail, calendar and
+    // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). Over the night window a code cap
+    // of NIGHT_MESSAGES proactive messages holds the rest for the morning look.
+    heartbeatModel: env.HEARTBEAT_MODEL?.trim() || "haiku",
+    heartbeatDayMinutes: rhythm.heartbeat.dayMinutes,
+    nightMessages: num(env, "NIGHT_MESSAGES", 2, 0, 20),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
@@ -273,11 +274,10 @@ export function loadSettings(env: Env) {
     // or your standing tasks, inside the floor that code sets; off asks you about everything that is not a plain read.
     autoApprove: autoApprove(env),
 
-    briefStartHour: num(env, "BRIEF_START_HOUR", rhythm.brief.startHour, 0, 23), // only what the gate's default rules say ("from this hour")
+    briefStartHour: num(env, "BRIEF_START_HOUR", rhythm.brief.startHour, 0, 23), // the hour the brief is due (tasks.ts briefOwed)
     briefMaxAttempts: num(env, "BRIEF_MAX_ATTEMPTS", rhythm.brief.maxAttempts, 1, 10),
-    // The owner's gate (src/gate.ts, wake.ts) decides WHEN the brief and the radar run, by its default rules and the notes; code
-    // keeps the HOW and a deterministic backstop for the brief.
-    briefBackstopHour: num(env, "BRIEF_BACKSTOP_HOUR", rhythm.brief.backstopHour, 0, 24), // no brief logged today by this hour (local): run it anyway. 24: never
+    // The daily brief starts from the deterministic schedule in src/wake.ts: the first look at or after BRIEF_START_HOUR with no brief logged today (BRIEF_BACKSTOP_HOUR=24: never).
+    briefBackstopHour: num(env, "BRIEF_BACKSTOP_HOUR", rhythm.brief.backstopHour, 0, 24), // 24 turns the brief off; any other hour: the brief is due from BRIEF_START_HOUR (kept as a setting so an old .env still loads)
 
     // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every model call, so hide what your skills never use. A skill that needs a
     // hidden tool will fail, so list it here. HIDDEN_CONNECTORS: tool-name prefixes of whole connectors (the Gmail one is shown while MAIL_PROVIDER=gmail, and the mail
@@ -366,7 +366,6 @@ export function loadSettings(env: Env) {
     echoWindowMinutes: num(env, "ECHO_WINDOW_MINUTES", 5, 1, 60), // our own sent text coming back within this long is an echo, not the owner (outbound.ts)
     warmRefreshMinutes: num(env, "WARM_REFRESH_MINUTES", 25, 1, 1440), // the owner's warm process is renewed this often, so it is still fresh after a quiet hour (main.ts)
     briefRetryGapMinutes: num(env, "BRIEF_RETRY_GAP_MINUTES", 10, 1, 240), // an incomplete brief is retried after this long (tasks.ts)
-    briefPendingGraceHours: num(env, "BRIEF_PENDING_GRACE_HOURS", 3, 0, 12), // with the backstop off: urgent mail waits for the brief this long after BRIEF_START_HOUR (tasks.ts)
     seenMailDays: num(env, "SEEN_MAIL_DAYS", 14, 1, 365), // how long the heartbeat remembers it has seen a mail (heartbeat.ts)
     noticeAgeHours: num(env, "NOTICE_AGE_HOURS", 24, 1, 168), // what the assistant sent on its own stays "recent" for the chat this long (messages.ts)
     compactBackoffMinutes: num(env, "COMPACT_BACKOFF_MINUTES", 60, 1, 1440), // after a failed compaction, no new try for this long (session.ts)

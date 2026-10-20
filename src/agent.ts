@@ -11,7 +11,7 @@ import type { Document } from "./document.ts";
 import { tenantKey } from "./ownerkey.ts";
 import { memoryFor, missingSetup, readNotes } from "./notes.ts";
 import { approveIn, type Approve } from "./approvals/permissions.ts";
-import { backgroundSystem, briefSystem, handlerSystem, radarSystem } from "./persona.ts";
+import { backgroundSystem, briefSystem, handlerSystem, heartbeatSystem } from "./persona.ts";
 import { handlerToolsOf } from "./mailhandler.ts";
 import type { Payer } from "./payer.ts";
 import { categoriesFor } from "./preset.ts";
@@ -26,11 +26,11 @@ function profileSystem(name: OwnerProfile): string {
   const notes = memoryFor(PROFILES[name].notes);
   const off = down(); // (read once)
   const missing = missingSetup(readNotes(), off);
-  return name === "brief" ? briefSystem(notes, missing, off) : name === "radar" ? radarSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
+  return name === "brief" ? briefSystem(notes, missing, off) : name === "heartbeat" ? heartbeatSystem(notes, missing, off) : backgroundSystem(notes, missing, off);
 }
 
-// What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's and the radar's
-// instructions), `derived` for a wake-up, whose task a gate model selected from the notes (the person's standing instruction, judged like their chat message).
+// What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the brief's
+// instructions, the heartbeat run's look), `derived` for a wake-up, whose task a gate model selected from the notes (the person's standing instruction, judged like their chat message).
 export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
@@ -40,7 +40,7 @@ const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (
 // The options of an owner profile's run (a fresh session).
 export function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
   const p = PROFILES[name];
-  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
+  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, model: p.model, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
 }
 
 // One run under a named owner profile: always a fresh session.
