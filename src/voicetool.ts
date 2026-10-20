@@ -12,7 +12,7 @@ import { audit } from "./audit.ts";
 import { askingIn, quotedVoiceNote, voiceNote, voiceNotes, type VoiceNote } from "./voicenote.ts";
 import { oneLine } from "./sanitize.ts";
 import { settings } from "./settings.ts";
-import { OWNER_KEY } from "./send.ts";
+import { OWNER_KEY, sourceOfKey } from "./ownerkey.ts";
 import { listGroups } from "./groupstore.ts";
 
 // The voice tool: the cloned voice of a conversation (Qwen only). Each conversation has its own library and active voice (voices.ts):
@@ -49,7 +49,7 @@ const label = (s: string | undefined, max = 40) => oneLine("name", s ?? "", max)
 
 export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise<string> {
   const group = key !== OWNER_KEY;
-  const source = group ? "group" : "chat";
+  const source = sourceOfKey(key);
   const scope = group ? "group" : "owner";
   const why = d.problem();
   if (why) return why;
