@@ -37,7 +37,7 @@ export interface RunExtra {
 }
 
 export interface HeartbeatDeps {
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy">;
   run: (conv: Conversation, payer: Payer, prompt: string, extra: RunExtra) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // agent.ts runHeartbeat
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
@@ -94,6 +94,9 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged })) return "not-due";
     if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
+    // One run at a time per conversation: while a turn of it is settling, queued or running (the owner has just written and is being answered), the look waits. Nothing is
+    // recorded and nothing is dropped: it is still due, and the next tick (a few minutes) looks again.
+    if (pipeline.busy(conv)) return "busy";
     // A look is a model run on someone's account (a friend's: the instance key, billed to her): paused, in a cooldown or past the day's budget means no run, nothing recorded, and the next tick looks again.
     const access = deps.may(conv, "heartbeat look");
     if (isRefusal(access)) return deps.why(access);

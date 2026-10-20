@@ -63,7 +63,7 @@ function rig(o: { key?: string | undefined; answer?: (c: Conv) => { message?: st
   const seen = { provenance: [] as unknown[], runs: [] as { conv: Conv; payer: unknown; prompt: string }[], sent: [] as { conv: Conv; text: string }[] };
   const now = o.now ?? NOON;
   const pipeline = {
-    canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(),
+    canSpeak: () => false, busy: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(),
     enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(),
     record: (conv: Conv, kind: Kind, ts: number, text: string) => recordMessage(kind, ts, text, now, conv.logFile),
     runTurn: async (conv: Conv, turn: { run: (h: unknown) => Promise<{ text: string }> }) => {
@@ -226,7 +226,7 @@ test("quiet-time compaction of a tenant needs heartbeat and her access; it is he
   const ran: string[] = [];
   const mk = (key: string | undefined) => {
     const w = createWakeups({
-      pipeline: { canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never,
+      pipeline: { canSpeak: () => false, busy: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never,
       groupChats: true,
       vouch: async () => true,
       run: async () => ({ text: "" }),

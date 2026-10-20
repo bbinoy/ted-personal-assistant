@@ -24,7 +24,7 @@ const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at:
 const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
 
 interface Answer { sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
-function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[] } = {}) {
+function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
   mkdirSync(join(dir, "n"));
@@ -33,7 +33,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
   let now = DAY;
   let sends = 0; // what the run sent with the send tool while it worked (the real tool is the pipeline's sendWhile)
   const pipeline = {
-    canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>, onSend?: () => void) => { const r = await run(); for (let i = 0; i < sends; i++) onSend?.(); return r; },
+    canSpeak: () => false, busy: () => !!o.busy?.(), sendWhile: async (_c: unknown, run: () => Promise<unknown>, onSend?: () => void) => { const r = await run(); for (let i = 0; i < sends; i++) onSend?.(); return r; },
     enqueue: <T>(_c: Conversation, job: () => Promise<T>) => job(),
     record: (c: Conversation, kind: Kind, ts: number, text: string) => (seen.recorded.push([kind, text]), recordMessage(kind, ts, text, now, c.kind === "owner" ? conv.logFile : c.logFile)),
     runTurn: async (_c: Conversation, turn: any) => {
@@ -127,6 +127,18 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.deepEqual(rows[0], { at: DAY.toISOString(), kind: "owner", night: false, message: true, sent: 0, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
   assert.doesNotMatch(readText(HEARTBEAT_LOG)!, /Eve|Friday|waits/, "the row carries no words");
   assert.ok(seen.recorded.some(([k, t]) => k === "action" && /\[heartbeat\] look: 3 tool call\(s\), 2 mail archived, message sent/.test(t)), "the log gets a counted summary line");
+});
+
+test("owner's look: while a chat turn of the conversation is settling, queued or running the look waits, records nothing, and runs on the next tick", async () => {
+  let turn = true;
+  const { w, conv, seen } = rig(() => ({ message: "A correction." }), { busy: () => turn });
+  assert.equal(await w.look(conv, DAY), "busy");
+  assert.equal(await w.look(conv, min(DAY, 5)), "busy", "the free tick tries again");
+  assert.deepEqual(seen.runs, [], "no model run while the turn works");
+  assert.deepEqual(readRows(), [], "nothing is recorded: the look is still due, not dropped");
+  turn = false;
+  assert.equal(await w.look(conv, min(DAY, 10)), "posted");
+  assert.deepEqual(seen.runs, ["owner"]);
 });
 
 test("owner's look: the delegations to experts are counted in the row and the log line; the expert's cost is in the run's cost", async () => {
@@ -233,7 +245,7 @@ test("groups get the same heartbeat run: one per look, with their own notes, in 
   assert.doesNotMatch(groupPrompt, /archive|calendar for the next 36 hours|expert/i, "a group has no mail, calendar or expert in its instruction");
   assert.deepEqual(readRows().map((r) => r.kind).sort(), ["group", "owner"]);
   const nts = rig(() => ({}), { groups: [G] });
-  const wakeups = createWakeups({ pipeline: { canSpeak: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never, groupChats: false, vouch: async () => true, groups: () => [G], run: async (c) => (nts.seen.runs.push(c.kind), { text: "" }), notesChangedAt: () => 0, now: () => DAY, guards: { paused: () => false, budgetSpent: () => false } });
+  const wakeups = createWakeups({ pipeline: { canSpeak: () => false, busy: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never, groupChats: false, vouch: async () => true, groups: () => [G], run: async (c) => (nts.seen.runs.push(c.kind), { text: "" }), notesChangedAt: () => 0, now: () => DAY, guards: { paused: () => false, budgetSpent: () => false } });
   await wakeups.tick(DAY);
   assert.deepEqual(nts.seen.runs, ["owner"], "groups are not woken on Note to Self");
 });

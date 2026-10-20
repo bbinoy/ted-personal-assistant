@@ -55,6 +55,10 @@ export function createPipeline(deps: PipelineDeps) {
     return run;
   }
 
+  // Is a turn of this conversation settling, queued or running (a chat turn, a reaction, a compaction, a post)? An unattended run (the heartbeat look) does not start then: it
+  // would work from a log the turn is still changing and could contradict what the turn says. It is only delayed: the free tick looks again.
+  const busy = (conv: Conversation): boolean => tails.has(conv.key) || !!bursts.get(conv.key)?.pending.length;
+
   // Burst handling, the same for every conversation: after each message wait a short settling pause; a newer message
   // restarts it and takes over, so a burst is ONE turn. Messages that arrive while that turn is queued join it; ones that
   // arrive while a run is in progress wait in the queue and make the next turn. Messages are kept here, in the order they came.
@@ -559,7 +563,7 @@ export function createPipeline(deps: PipelineDeps) {
   }
 
   // `react`: a quick reaction of our own, no run needed (the gate chose it).
-  return { handleIncoming, enqueue, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
+  return { handleIncoming, enqueue, busy, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
 }
 
 export type Pipeline = ReturnType<typeof createPipeline>;

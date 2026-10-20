@@ -112,7 +112,7 @@ function look(run: () => Promise<{ text: string; structured?: unknown }>) {
   const pipeline = {
     enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(),
     record: () => {},
-    sendWhile: async (_c: unknown, r: () => Promise<unknown>) => r(),
+    busy: () => false, sendWhile: async (_c: unknown, r: () => Promise<unknown>) => r(),
     runTurn: async (_c: unknown, turn: { run: () => Promise<unknown> }) => (await turn.run(), { spoke: true }),
   };
   const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (async (_c: unknown, _p: unknown, _prompt: string, extra: { seenMail: { unseen: (i: string[]) => string[] } }) => (extra.seenMail.unseen(["look-1", "look-2"]), run())) as never, may: () => LOGIN, why: () => "x", notesChangedAt: () => 0, rowsFile: join(dir, "rows.jsonl") });
