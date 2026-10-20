@@ -66,13 +66,14 @@ export const googleModule: ToolModule = {
     [`${GOOGLE_PREFIX}send_gmail_message`]: { icon: "✉️", title: "Send email" },
     [`${GOOGLE_PREFIX}draft_gmail_message`]: { icon: "✉️", title: "Save email draft" },
     [`${GOOGLE_PREFIX}modify_gmail_message_labels`]: { icon: "🏷️", title: "Change email labels", labels: { message_id: "Message", add_label_ids: "Add", remove_label_ids: "Remove" } },
-    [`${GOOGLE_PREFIX}manage_event`]: { icon: "📅", title: "Calendar event", labels: { action: "Action", event_id: "Event", calendar_id: "Calendar" } },
+    [`${GOOGLE_PREFIX}manage_event`]: { icon: "📅", title: "Calendar event", whenDeleting: "Delete calendar event", labels: { action: "Action", event_id: "Event", calendar_id: "Calendar" } },
   },
   floor: {
     verdict,
+    confirmDelete: { tools: ["manage_event"], actions: ["delete"] }, // her calendar delete is asked in HER chat, never judged (neverallowed.ts ConfirmDelete)
     onDeny: (tool) => (tool.startsWith(GOOGLE_PREFIX) ? { withIds: true } : undefined),
     // A mail nobody can be named for is not judged; a calendar event is judged only when it is created or changed and names no guest (anything that would email
-    // people, and every answer to an invite, is the person's call; a delete is never allowed: neverallowed.ts neverActionValue).
+    // people, and every answer to an invite, is the person's call; a delete is asked, never judged: confirmDelete above).
     judgeVeto: { send: named, "calendar-write": (input) => ["create", "update"].includes(calendarAction(input)) && namesNoGuests(input) },
     noFix: ["send"],
     judgeNote: { "calendar-write": notifyLine },

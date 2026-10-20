@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isJudgeable, mayFix, notifyNote } from "../src/autojudge.ts";
 import { namesNoGuests, namesPeople } from "../src/guests.ts";
-import { destinationIsTrashOrSpam, NEVER_ACTIONS, nameIsNever, namesLocalFile } from "../src/neverallowed.ts";
+import { describeCall } from "../src/format.ts";
+import { DELETE_CONFIRM, destinationIsTrashOrSpam, NEVER_ACTIONS, nameIsNever, namesLocalFile } from "../src/neverallowed.ts";
 import { sweepStaleRuns } from "../src/browse.ts";
 import { registered } from "../src/modules/index.ts";
 import { applyChanges, classify, hiddenTools, isNeverAllowed } from "../src/policy.ts";
 import { SOURCES } from "../src/audit.ts";
-import { allRows, isFree, neverAllowedTool } from "../src/toolmanifest.ts";
+import { allRows, confirmsDelete, isFree, neverAllowedTool } from "../src/toolmanifest.ts";
 import { groupTools } from "../src/capabilities.ts";
 import { SYSTEM } from "../src/approvaljudge.ts";
 
@@ -39,9 +40,9 @@ const everyName = [...new Set([...allRows().map((e) => e.tool), ...known, ...liv
 test("never allowed: a row's action in NEVER_ACTIONS decides, for every source and every provider (loaded or not)", () => {
   assert.deepEqual([...NEVER_ACTIONS].sort(), ["block", "delete", "spam", "trade", "trash"]);
   const expected = [
-    `${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}discard_draft`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`,
-    `${GM}trash_message`, `${GM}trash_thread`, `${GM}untrash_message`, `${GM}untrash_thread`, `${GM}mark_message_spam`, `${GM}mark_thread_spam`, `${GM}unmark_message_spam`, `${GM}unmark_thread_spam`, `${GM}delete_draft`, `${GM}delete_label`,
-    `${CAL}delete_event`, `${DRIVE}trash_file`, "mcp__claude_ai_Claude_Docs__delete",
+    `${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`,
+    `${GM}trash_message`, `${GM}trash_thread`, `${GM}untrash_message`, `${GM}untrash_thread`, `${GM}mark_message_spam`, `${GM}mark_thread_spam`, `${GM}unmark_message_spam`, `${GM}unmark_thread_spam`, `${GM}delete_label`,
+    `${DRIVE}trash_file`, "mcp__claude_ai_Claude_Docs__delete",
   ];
   const byRow = allRows().filter((e) => NEVER_ACTIONS.has(e.action)).map((e) => e.tool);
   assert.deepEqual([...byRow].sort(), [...expected].sort());
@@ -78,18 +79,69 @@ test("never allowed: the arguments, snake_case and camelCase, for tools that onl
     { properties: { in_trash: true } }, { allow_deleting_content: true }, { allowDeletingContent: true }, { action: "delete" }, { action: "Trash" },
   ]) {
     assert.ok(isNeverAllowed("mcp__x__update_thing", input), JSON.stringify(input));
-    assert.equal(classify(`${N}notion-update-page`, input, "chat"), "deny", JSON.stringify(input));
+    assert.ok(isNeverAllowed(`${N}notion-create-pages`, input), `${JSON.stringify(input)}: only notion-update-page may carry a bin flag to confirm`);
   }
+  // Notion's page to the bin is the one confirmable argument: update-page only, its own flags only (the owner's connector and a friend's own Notion alike)
+  for (const input of [{ in_trash: true }, { inTrash: true }, { archived: true }, { properties: { in_trash: true } }, { archived: "true" }]) {
+    for (const t of [`${N}notion-update-page`, "mcp__notion__notion-update-page"]) {
+      assert.equal(isNeverAllowed(t, { page_id: "p", ...input }), false, `${t} ${JSON.stringify(input)}`);
+      assert.equal(confirmsDelete(t, { page_id: "p", ...input }), true);
+      assert.equal(isJudgeable(t, { page_id: "p", ...input }), false);
+      assert.equal(mayFix(t, { input: { page_id: "p", ...input } }), false);
+      assert.equal(applyChanges(t, { page_id: "p", ...input }, [{ field: "page_id", value: "q" }]), undefined, "a reply cannot retarget a delete");
+    }
+    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "chat"), "ask");
+    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "brief"), "ask");
+  }
+  for (const input of [{ spam: true }, { trashed: true }, { allow_deleting_content: true }, { archived: true, allow_deleting_content: true }, { labelIds: ["TRASH"] }, { action: "delete" }]) assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "chat"), "deny", JSON.stringify(input));
+  assert.equal(confirmsDelete(`${N}notion-update-page`, { page_id: "p", command: "replace_content" }), false);
+  assert.equal(mayFix(`${N}notion-update-page`, { input: { page_id: "p" } }), true);
   for (const input of [{ labelIds: ["INBOX", "UNREAD"] }, { spam: false }, { archived: false }, { in_trash: false }, { allow_deleting_content: false }, { action: "create" }, { action: "rsvp" }, { query: "trash" }, { body: "this is spam" }]) assert.equal(destinationIsTrashOrSpam(input) || isNeverAllowed("mcp__x__update_thing", input), false, JSON.stringify(input));
-  // the friend's calendar delete, like the owner's
-  assert.equal(classify("mcp__google__manage_event", { action: "delete", event_id: "e" }, "chat"), "deny");
+  // the friend's calendar delete is confirmed like the owner's; any other word for it is still denied
+  const ME = new Set(["mcp__google__manage_event"]); // (a friend's tool exists in her isolated run only)
+  assert.equal(classify("mcp__google__manage_event", { action: "delete", event_id: "e" }, "group", "/n", ME), "ask");
+  assert.equal(classify("mcp__google__manage_event", { action: " Delete ", event_id: "e" }, "group", "/n", ME), "ask");
+  for (const action of ["trash", "purge", "destroy"]) assert.equal(classify("mcp__google__manage_event", { action, event_id: "e" }, "group", "/n", ME), "deny", action);
+  assert.equal(isJudgeable("mcp__google__manage_event", { action: "delete", event_id: "e" }), false);
+  assert.equal(mayFix("mcp__google__manage_event", { input: { action: "delete", event_id: "e" } }), false);
+  assert.equal(isNeverAllowed("mcp__x__manage_event", { action: "delete" }), true, "only her manage_event");
 });
 
-test("a Mailbird move is asked and never judged (the destination may be Trash or Junk); discard_draft is denied, nothing uses it", () => {
+test("the four deletes the owner lets the person confirm: ask on every source, never judged, never fixed, never free, always titled; everything else stays denied", () => {
+  const four: [string, Record<string, unknown>, RegExp][] = [
+    [`${MB}discard_draft`, { messageId: 7 }, /Delete draft[\s\S]*7/],
+    [`${GM}delete_draft`, { draftId: "d1" }, /Delete draft[\s\S]*d1/],
+    [`${CAL}delete_event`, { eventId: "e1", calendarId: "primary" }, /Delete calendar event[\s\S]*e1/],
+    [`${N}notion-update-page`, { page_id: "p1", properties: { in_trash: true } }, /Move Notion page to the bin[\s\S]*p1/],
+  ];
+  assert.ok(!NEVER_ACTIONS.has(DELETE_CONFIRM));
+  for (const [t, input, shown] of four) {
+    for (const source of SOURCES) {
+      if (source === "group") continue;
+      assert.equal(classify(t, input, source), "ask", `${t} (${source})`);
+    }
+    assert.equal(neverAllowedTool(t), false, t);
+    assert.equal(isNeverAllowed(t, input), false, t);
+    assert.equal(isJudgeable(t, input), false, t);
+    assert.equal(mayFix(t, { input }), false, t);
+    assert.equal(isFree(t, undefined, { input, source: "chat" }), false, t);
+    assert.match(describeCall(t, input), shown, t);
+  }
+  assert.equal(describeCall(`${CAL}delete_event`, { eventId: "e1", summary: "Dentist" }).includes("Dentist"), true, "the title the call carries is shown");
+  // the tools are offered to the model: not in the hidden list when seen
+  const hidden = hiddenTools([`${MB}discard_draft`, `${GM}delete_draft`, `${CAL}delete_event`, `${N}notion-update-page`]);
+  for (const [t] of four) assert.ok(!hidden.includes(t), t);
+  // an isolated run only has what its capability set holds: the owner's connectors are not a friend's or a group's
+  assert.equal(classify(`${CAL}delete_event`, { eventId: "e" }, "group"), "deny");
+  // the neighbours stay denied
+  for (const t of [`${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`, `${GM}delete_label`, `${GM}trash_message`, `${GM}untrash_thread`, `${GM}mark_thread_spam`, `${DRIVE}trash_file`, "mcp__claude_ai_Claude_Docs__delete", "mcp__x__delete_draft", "mcp__claude_ai_Interactive_Brokers_IBKR__delete_alert"]) assert.equal(classify(t, {}, "chat"), "deny", t);
+});
+
+test("a Mailbird move is asked and never judged (the destination may be Trash or Junk); discard_draft is asked, never judged", () => {
   assert.equal(classify(`${MB}move_conversation`, { conversationId: "c", destinationFolderId: "x" }, "chat"), "ask");
   assert.equal(isJudgeable(`${MB}move_conversation`, { conversationId: "c" }), false);
   assert.equal(mayFix(`${MB}move_conversation`), false);
-  assert.equal(classify(`${MB}discard_draft`, {}, "chat"), "deny");
+  assert.equal(classify(`${MB}discard_draft`, { messageId: 1 }, "chat"), "ask");
   assert.equal(classify(`${MB}show_notification`, {}, "chat"), "ask");
 });
 
@@ -136,7 +188,10 @@ const TABLE: [string, string, string, string][] = [
   [`${MB}set_sender_blocked`, "deny", "deny", "deny"],
   [`${CAL}list_events`, "allow", "allow", "deny"],
   [`${CAL}create_event`, "ask", "ask", "deny"],
-  [`${CAL}delete_event`, "deny", "deny", "deny"],
+  [`${CAL}delete_event`, "ask", "ask", "deny"],
+  [`${MB}discard_draft`, "ask", "ask", "deny"],
+  [`${GM}delete_draft`, "ask", "ask", "deny"],
+  [`${GM}delete_label`, "deny", "deny", "deny"],
   [`${DRIVE}read_file_content`, "allow", "allow", "deny"],
   [`${DRIVE}update_file`, "ask", "ask", "deny"],
   [`${DRIVE}share_file`, "ask", "ask", "deny"],
@@ -196,8 +251,8 @@ test("guests: every field that names people counts, by token, in any case; remov
 });
 
 test("hidden tools read the same predicate: what is never allowed by name is hidden when seen", () => {
-  const hidden = hiddenTools([`${CAL}delete_event`, `${CAL}list_events`, "mcp__x__trash_thing", "mcp__x__get_thing", `${MB}set_conversation_spam`, `${MB}get_message`]);
-  for (const t of [`${CAL}delete_event`, "mcp__x__trash_thing", `${MB}set_conversation_spam`]) assert.ok(hidden.includes(t), t);
+  const hidden = hiddenTools([`${CAL}trash_event`, `${CAL}list_events`, "mcp__x__trash_thing", "mcp__x__get_thing", `${MB}set_conversation_spam`, `${MB}get_message`]);
+  for (const t of [`${CAL}trash_event`, "mcp__x__trash_thing", `${MB}set_conversation_spam`]) assert.ok(hidden.includes(t), t);
   for (const t of [`${CAL}list_events`, "mcp__x__get_thing", `${MB}get_message`]) assert.ok(!hidden.includes(t), t);
 });
 

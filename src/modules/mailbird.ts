@@ -2,6 +2,7 @@ import { BRIEF_INSTRUCTIONS, BRIEF_TOOL } from "../brieftext.ts";
 import { nativeView } from "../mailview.ts";
 import { extractMessageId, type DraftView } from "../proposals.ts";
 import { handlerTaskText } from "./mailtask.ts";
+import { DELETE_CONFIRM } from "../neverallowed.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // Mailbird, the owner's desktop mail client, through its local MCP server (a user-scope entry of the owner's Claude settings): the default mail provider
@@ -60,9 +61,10 @@ export const mailbirdModule: ToolModule = {
     ...mb("archive", "archive_conversation"),
     ...mb("restore", "move_conversation_to_inbox"),
     ...mb("select", "select_conversation"),
-    // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS): trash, permanent delete (a draft thrown away included), spam, blocking a sender.
+    // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS): trash, permanent delete of a conversation, spam, blocking a sender.
     ...mb("trash", "trash_conversation"),
-    ...mb("delete", "delete_conversation_permanently discard_draft"), // discard_draft: no skill or code uses it; deleting is never allowed
+    ...mb("delete", "delete_conversation_permanently"),
+    ...mb(DELETE_CONFIRM, "discard_draft"), // a draft thrown away: confirmed on the phone, not never-allowed (neverallowed.ts DELETE_CONFIRM); not judged, not fixed, not free
     ...mb("spam", "set_conversation_spam"),
     ...mb("block", "set_sender_blocked"),
     // The destination may be Trash or Junk, so the call is the owner's own: filing mail is asked (and never judged), not denied.
@@ -77,11 +79,11 @@ export const mailbirdModule: ToolModule = {
     ...mb("draft", "forward_conversation", { view: "mbForward" }),
   ],
   free: ["read"],
-  titles: { [`${MB}send_message_now`]: { icon: "✉️", title: "Send email now" }, [`${MB}forward_conversation`]: { icon: "✉️", title: "Forward email" } },
+  titles: { [`${MB}discard_draft`]: { icon: "🗑️", title: "Delete draft", labels: { messageId: "Draft (message id)" } }, [`${MB}send_message_now`]: { icon: "✉️", title: "Send email now" }, [`${MB}forward_conversation`]: { icon: "✉️", title: "Forward email" } },
   untrustedPrefix: MB, // (mail is written by third parties: every read is untrusted by default)
   floor: {
     judgeVeto: { send: (_input, view) => !!view && view.to.length > 0 }, // a mail nobody can be named for is not judged
-    judgeNever: ["move"],
+    judgeNever: ["move", DELETE_CONFIRM],
     noFix: ["send", "unsubscribe"],
   },
   skills: [{ name: "mailbird", required: true }, { name: "mailbird-troubleshooting" }],
@@ -91,7 +93,7 @@ export const mailbirdModule: ToolModule = {
     visible: [
       "summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation",
       "list_attachments", "get_attachment_content", "archive_conversation", "select_conversation", "reply_to_conversation",
-      "reply_all_to_conversation", "create_draft", "update_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing",
+      "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing",
     ],
     valid: /^[a-z_]+$/,
     hint: "a Mailbird tool name like get_message",

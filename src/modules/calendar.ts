@@ -1,4 +1,5 @@
 import { namesNoGuests, namesPeople } from "../guests.ts";
+import { DELETE_CONFIRM } from "../neverallowed.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // Google Calendar, through the owner's claude.ai connector.
@@ -26,16 +27,18 @@ export const calendarModule: ToolModule = {
     ...cal("read", "list_calendars list_events get_event search_events suggest_time"),
     ...cal("calendar-write", "create_event update_event"), // the guest floor is below
     ...cal("calendar-respond", "respond_to_event"),
-    ...cal("delete", "delete_event"), // never allowed, for everyone (neverallowed.ts NEVER_ACTIONS)
+    ...cal(DELETE_CONFIRM, "delete_event"), // asked on the phone, never judged (neverallowed.ts DELETE_CONFIRM)
   ],
   free: ["read"],
   titles: {
     [`${CAL}create_event`]: { icon: "📅", title: "Create calendar event" },
     [`${CAL}update_event`]: { icon: "📅", title: "Change calendar event" },
     [`${CAL}respond_to_event`]: { icon: "📅", title: "Respond to invite" },
+    [`${CAL}delete_event`]: { icon: "🗑️", title: "Delete calendar event", labels: { eventId: "Event", calendarId: "Calendar" } },
   },
   floor: {
     judgeVeto: { "calendar-write": namesNoGuests },
+    judgeNever: [DELETE_CONFIRM],
     noFix: ["calendar-respond"], // answering an invite is the owner's call, not a matter of wrong arguments
     judgeNote: { "calendar-write": notifyLine },
     editable: ["calendar-write"], // "yes, but make it 16:00" may edit an event

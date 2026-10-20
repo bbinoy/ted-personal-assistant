@@ -2,7 +2,7 @@ import { runJudge, withTimeout } from "./approvaljudge.ts";
 import { fence } from "./fence.ts";
 import { OWNER } from "./settings.ts";
 import type { MailView } from "./mailview.ts";
-import { actionOf, entryFor, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
+import { actionOf, confirmsDelete, entryFor, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
 import type { Source } from "./audit.ts";
 import { LIMITS } from "./sanitize.ts";
 
@@ -38,7 +38,7 @@ export { isPlainWebAddress, REBINDING_HOST } from "./webaddress.ts";
 export function isJudgeable(tool: string, input: Record<string, unknown>, view?: MailView): boolean {
   const action = entryFor(tool)?.action;
   const floor = moduleOf(tool)?.floor;
-  if (!action || neverAllowedTool(tool) || floor?.judgeNever?.includes(action)) return false; // (the never-allowed set is denied before the judge; this is the backstop)
+  if (!action || neverAllowedTool(tool) || floor?.judgeNever?.includes(action) || confirmsDelete(tool, input)) return false; // (the never-allowed set is denied before the judge; this is the backstop. A delete the person confirms is theirs alone)
   const veto = floor?.judgeVeto?.[action];
   return veto ? veto(input, view) : true;
 }
@@ -62,10 +62,10 @@ export interface CarriedApproval {
 // Where `fix` is never allowed: the question there is whether the action may happen at all, not whether its arguments are right. A guard-built step (a browse commit
 // step, a payment), an action the module never lets the judge see (judgeNever: sharing, stopping a tenant, moving mail), an action it marks noFix (a mail send, reply or
 // forward, unsubscribing, answering an invite) and a tool no module lists (never judged anyway) are downgraded to ask. The never-allowed set is denied before this.
-export function mayFix(tool: string, o: { guardStep?: boolean; payment?: boolean } = {}): boolean {
+export function mayFix(tool: string, o: { guardStep?: boolean; payment?: boolean; input?: Record<string, unknown> } = {}): boolean {
   const entry = entryFor(tool);
   const floor = moduleOf(tool)?.floor;
-  return !!entry && !o.guardStep && !o.payment && !neverAllowedTool(tool) && !floor?.judgeNever?.includes(entry.action) && !floor?.noFix?.includes(entry.action);
+  return !!entry && !confirmsDelete(tool, o.input) && !o.guardStep && !o.payment && !neverAllowedTool(tool) && !floor?.judgeNever?.includes(entry.action) && !floor?.noFix?.includes(entry.action);
 }
 
 // Pure: one line for the judge (not the owner) that a module may add about its own call: for a calendar write, whether the call names guests or asks for

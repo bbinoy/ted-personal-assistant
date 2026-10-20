@@ -7,6 +7,7 @@ import type { createProposer } from "../propose.ts";
 import type { DraftView } from "../proposals.ts";
 import type { Capability } from "../tenants.ts";
 import type { TenantRun } from "../tenanttools.ts";
+import type { ConfirmDelete } from "../neverallowed.ts";
 import type { MailInput, MailView } from "../mailview.ts";
 
 // A TOOL MODULE: one file in src/modules/ that says everything the harness needs to know about one tool (or one family of tools): how it connects, which
@@ -107,6 +108,9 @@ export interface ModuleFloor {
   noFix?: readonly string[];
   // autojudge.ts: per action, a code-built line for the judge about the call (not shown to the owner).
   judgeNote?: Readonly<Record<string, (input: Record<string, unknown>) => string>>;
+  // neverallowed.ts ConfirmDelete: tools of this module that delete only through an argument (Notion's in_trash, a friend's manage_event with action delete). The call is then
+  // a delete to confirm like a row of action delete-confirm, not a denied one; the same arguments on any other tool stay denied.
+  confirmDelete?: ConfirmDelete;
   // policy.ts isModifiable: actions where "yes, but make it 16:00" may edit the call.
   editable?: readonly string[];
 }
@@ -118,6 +122,7 @@ export interface CallTitle {
   icon: string;
   title: string;
   labels?: Record<string, string>; // argument name -> the label it is shown under
+  whenDeleting?: string; // the title when the call is a delete the person confirms (toolmanifest.ts confirmsDelete): "Move Notion page to the bin"
 }
 
 export interface ModuleSkill {

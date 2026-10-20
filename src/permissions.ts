@@ -215,7 +215,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
       const fx = fixes.get(tool) ?? { n: 0, keys: new Set<string>() };
       if (judged.decision === "fix") {
-        const why = !mayFix(tool, { guardStep: g?.kind === "ask", payment: g?.payment }) ? "not-fixable" : fx.n >= MAX_FIXES ? "fix-cap" : fx.keys.has(key) ? "same-arguments" : undefined;
+        const why = !mayFix(tool, { guardStep: g?.kind === "ask", payment: g?.payment, input }) ? "not-fixable" : fx.n >= MAX_FIXES ? "fix-cap" : fx.keys.has(key) ? "same-arguments" : undefined;
         if (!why) {
           fixes.set(tool, { n: fx.n + 1, keys: fx.keys.add(key) });
           log(tool, "judge-fix", source, { reason: judged.reason, mode: settings.autoApprove, count: fx.n + 1, ...g?.facts });

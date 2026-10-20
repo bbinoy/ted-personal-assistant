@@ -2,6 +2,7 @@ import { BRIEF_SKILL, DONE_MARKER } from "../brieftext.ts";
 import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "../gmailrules.ts";
 import { addrs, nativeView } from "../mailview.ts";
 import type { DraftView } from "../proposals.ts";
+import { DELETE_CONFIRM } from "../neverallowed.ts";
 import { handlerTaskText } from "./mailtask.ts";
 import { settings } from "../settings.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
@@ -94,10 +95,11 @@ export const gmailModule: ToolModule = {
     ...gm("forward", "forward", { view: "gmForward" }),
     ...gm("archive", "unlabel_thread"), // removing INBOX is an archive; undoing it adds a label, which is a different action
     ...gm("label", "label_thread label_message unlabel_message update_message_labels create_label update_label apply_sensitive_message_label apply_sensitive_thread_label"),
-    // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS); untrash and unmark are the same family and stay out of reach too.
+    // Never allowed, for everyone (neverallowed.ts NEVER_ACTIONS), delete_draft aside (below); untrash and unmark are the same family and stay out of reach too.
     ...gm("trash", "trash_message trash_thread untrash_message untrash_thread"),
     ...gm("spam", "mark_message_spam mark_thread_spam unmark_message_spam unmark_thread_spam"),
-    ...gm("delete", "delete_draft delete_label"),
+    ...gm("delete", "delete_label"),
+    ...gm(DELETE_CONFIRM, "delete_draft"), // a draft thrown away: confirmed on the phone, not never-allowed (neverallowed.ts DELETE_CONFIRM)
   ],
   free: ["read"],
   // The brief the run emails to the owner's own address (BRIEF_EMAIL=on): one plain recipient that IS the configured address, nothing else (gmailrules.ts isSelfSend).
@@ -106,6 +108,7 @@ export const gmailModule: ToolModule = {
     [`${GMAIL_PREFIX}send_message`]: { icon: "✉️", title: "Send email" },
     [`${GMAIL_PREFIX}forward`]: { icon: "✉️", title: "Forward email" },
     [`${GMAIL_PREFIX}reply`]: { icon: "✉️", title: "Reply to email" },
+    [`${GMAIL_PREFIX}delete_draft`]: { icon: "🗑️", title: "Delete draft", labels: { draftId: "Draft" } },
   },
   untrustedPrefix: GMAIL_PREFIX,
   floor: {
@@ -120,13 +123,14 @@ export const gmailModule: ToolModule = {
       return isGmailTool(tool) ? { withIds: true } : undefined;
     },
     judgeVeto: { send: named, reply: named, forward: named },
+    judgeNever: [DELETE_CONFIRM],
     noFix: ["send", "reply", "forward"],
   },
   skills: [{ name: "gmail", required: true }],
   setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
   hide: {
     prefix: GMAIL_PREFIX,
-    visible: ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"],
+    visible: ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "delete_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"],
     valid: /^[a-z_]+$/,
     hint: "a Gmail tool name like get_thread",
   },

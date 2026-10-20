@@ -1,4 +1,4 @@
-import { NOTION_FLOOR, notionRows } from "./notion.ts";
+import { NOTION_FLOOR, NOTION_UPDATE_TITLE, notionRows } from "./notion.ts";
 import { tenantOffered, type ToolModule } from "./types.ts";
 
 // Notion for friends (capability `notion`): a friend's OWN Notion, through Notion's hosted MCP server and her own OAuth grant (src/notionoauth.ts, src/notionmcp.ts). The
@@ -6,7 +6,7 @@ import { tenantOffered, type ToolModule } from "./types.ts";
 // owner's (notionRows is shared, not copied); the server calls them under the name `notion`, so a friend's are mcp__notion__notion-search and so on.
 //
 // How a call is treated is not written here: the rows say what a tool is (read, page-write, comment-write, page-move), a read runs free and is shown to the judge as outside text,
-// everything else goes to the central floor, the unified judge and HER chat. The floor is the owner's (notion.ts NOTION_FLOOR): moving a page is always her call, and a page to the bin is never allowed.
+// everything else goes to the central floor, the unified judge and HER chat. The floor is the owner's (notion.ts NOTION_FLOOR): moving a page is always her call, and a page to the bin is a delete she confirms.
 export const NOTION_FRIEND_PREFIX = "mcp__notion__";
 
 const only = { only: ["group"] } as const; // a friend's run is an isolated "group" run; the owner's policy source has no such tool
@@ -24,7 +24,7 @@ export const notionHostedModule: ToolModule = {
   untrustedPrefix: NOTION_FRIEND_PREFIX,
   titles: {
     [`${NOTION_FRIEND_PREFIX}notion-create-pages`]: { icon: "📝", title: "Create Notion page" },
-    [`${NOTION_FRIEND_PREFIX}notion-update-page`]: { icon: "📝", title: "Change Notion page" },
+    [`${NOTION_FRIEND_PREFIX}notion-update-page`]: NOTION_UPDATE_TITLE,
     [`${NOTION_FRIEND_PREFIX}notion-create-comment`]: { icon: "💬", title: "Comment in Notion" },
     [`${NOTION_FRIEND_PREFIX}notion-move-pages`]: { icon: "📂", title: "Move Notion pages" },
   },

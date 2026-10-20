@@ -536,10 +536,13 @@ test("notion: reads run free and are shown to the judge as outside text; a page 
   // never judged: a move, and a page sent to the bin however the call spells it
   r = rig(ctx, "auto");
   await r.run("notion-move-pages", { page_ids: ["p1"], new_parent: { page_id: "p2" } });
+  assert.equal(r.asked.length, 1, "a move is her call");
   await r.run("notion-update-page", { page_id: "p1", properties: { in_trash: true } });
   await r.run("notion-update-page", { page_id: "p1", archived: true });
-  assert.equal(r.judged.length, 0);
-  assert.equal(r.asked.length, 1, "a move is her call; a page sent to the bin is denied, however the call spells it");
+  assert.equal(r.judged.length, 0, "a page to the bin is never judged");
+  assert.equal(r.asked.length, 3, "a page sent to the bin, however the call spells it, is her call in her chat");
+  assert.match(r.asked[1]!, /Move Notion page to the bin[\s\S]*p1/);
+  assert.equal((await r.run("notion-update-page", { page_id: "p1", archived: true, allow_deleting_content: true })).behavior, "deny", "deleting child pages stays denied");
   // not offered at all
   r = rig(ctx, "auto");
   for (const t of ["notion-get-users", "notion-create-database", "notion-duplicate-page", "notion-delete-page"]) assert.equal((await r.run(t, {})).behavior, "deny", t);

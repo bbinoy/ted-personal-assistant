@@ -2,7 +2,7 @@ import type { Source } from "./audit.ts";
 import type { MailView } from "./mailview.ts";
 import { loaded, registered } from "./modules/index.ts";
 import type { CallTitle, MailTools, ToolEntry, ToolModule, ViewKind } from "./modules/types.ts";
-import { NEVER_ACTIONS, nameIsNever } from "./neverallowed.ts";
+import { confirmedArguments, DELETE_CONFIRM, NEVER_ACTIONS, nameIsNever } from "./neverallowed.ts";
 import { settings } from "./settings.ts";
 
 // THE tool manifest: every tool the model might get declares here what it is, so one rule applies the same way across mail providers and other tools.
@@ -62,7 +62,16 @@ export const entryFor = (tool: string, mail: MailProvider = settings.mailProvide
 export const moduleOf = (tool: string, mail: MailProvider = settings.mailProvider): ToolModule | undefined => lookup(tool, mail)?.module;
 
 // How an approval question titles a generically shown call (format.ts): the title a module gives the tool. Every module in the code counts, loaded or not.
-export const titleOf = (tool: string): CallTitle | undefined => registered().find((m) => m.titles?.[tool])?.titles?.[tool];
+export const titleOf = (tool: string, input?: Record<string, unknown>): CallTitle | undefined => {
+  const t = registered().find((m) => m.titles?.[tool])?.titles?.[tool];
+  return t?.whenDeleting && input && confirmsDelete(tool, input) ? { icon: "🗑️", title: t.whenDeleting, labels: t.labels } : t;
+};
+
+// A delete the person confirms (neverallowed.ts DELETE_CONFIRM): the tool's row says so (a draft, a calendar event), or the call uses an argument its module declares
+// confirmable on that tool (Notion's in_trash, manage_event with action delete). Never judged, never fixed, never free; classify asks on the conversation's own phone.
+export const confirmDeleteOf = (tool: string) => anyRow(tool)?.module.floor?.confirmDelete;
+export const confirmsDelete = (tool: string, input: Record<string, unknown> = {}): boolean =>
+  anyRow(tool)?.entry.action === DELETE_CONFIRM || confirmedArguments(tool, input, confirmDeleteOf(tool)).hit;
 
 // Read verbs, matched against the tool's own name (after the server name), ignoring a "notion-" style prefix: both
 // "get_message" and "notion-fetch" are reads. Used only to mark text as untrusted and to tell a read for the audit and the no-repeat rule; it never makes a tool free.
