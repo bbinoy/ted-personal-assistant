@@ -1,6 +1,7 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
 import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
+import type { Taint } from "./chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "./mailview.ts";
@@ -100,18 +101,24 @@ export interface CallGuard {
 // What the approval judge is told about the run, set by code from how the run was started (never by the model): `provenance`: whose words or which fixed or derived
 // text started it (autojudge.ts RunProvenance; read at every call, since a warm process is built before the message that uses it arrives); `browseTask`: the task the
 // assistant wrote for its browser worker, shown next to the provenance the sub-run inherited; `untrusted`: the run reads raw mail or web pages from its first call (the
-// mail handler, the browse worker); Either way the
+// mail handler, the browse worker); `taint`: the session it continues has read some (chatsession.ts), which keeps the flag on in the turns after it. Either way the
 // flag also turns on once the run has read mail or a page. `conversation`: the conversation the run acts for (Conversation.key), handed to the
 // mail read-back.
 export interface JudgeSetup {
   provenance?: () => RunProvenance | undefined;
   browseTask?: string;
   untrusted?: boolean;
+  taint?: Taint;
   conversation?: string;
 }
 
 export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
   let untrusted = !!setup.untrusted;
+  const isUntrusted = () => untrusted || !!setup.taint?.read();
+  const markUntrusted = () => {
+    untrusted = true;
+    setup.taint?.mark();
+  };
   const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
@@ -130,7 +137,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return typeof r === "string" ? { deny: r } : { input: r };
     };
     if (verdict === "allow") {
-      if (readsUntrusted(tool)) untrusted = true;
+      if (readsUntrusted(tool)) markUntrusted();
       // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
       log(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
@@ -174,7 +181,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask);
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input), provenance, untrustedInput: untrusted, approved: g?.carried });
+      judged = await judge({ description: description + notifyNote(tool, input), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
       // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
       const fx = fixes.get(tool) ?? { n: 0, keys: new Set<string>() };
@@ -192,7 +199,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         log(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(key);
-        if (readsUntrusted(tool)) untrusted = true;
+        if (readsUntrusted(tool)) markUntrusted();
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
     }
@@ -215,7 +222,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       source,
     );
     if (d.approved && onceOnly) remember(key);
-    if (d.approved && readsUntrusted(tool)) untrusted = true;
+    if (d.approved && readsUntrusted(tool)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && g?.payment && g.resolve) {
       const f = await final(); // the card is opened only now, after the owner's typed yes

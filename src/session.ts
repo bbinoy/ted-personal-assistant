@@ -18,6 +18,7 @@ export interface ChatSession {
   compactFailedAt?: string; // ISO time of the last failed compaction: back off instead of retrying every turn
   baseTokens?: number; // context size of the session's first turn: tools, skills and prompts, before any conversation. Compaction counts growth from here
   seenAt?: string; // groups: the newest log line the session has been shown (group lines nobody answered are prepended after it)
+  untrustedIn?: string; // the id of the session that has read raw mail or a web page ("pending": the session this turn starts, whose id is not known yet): its context still holds that text, so the approval judge is told from then on (chatsession.ts sessionTaint)
 }
 
 const COMPACT_BACKOFF_MS = settings.compactBackoffMinutes * 60_000;

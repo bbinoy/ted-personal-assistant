@@ -7,7 +7,7 @@ import { browseSystem } from "./browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "./browseguard.ts";
 import { hiddenBrowserTools } from "./browserules.ts";
 import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
-import { chatResume, forgetUnresumable } from "./chatsession.ts";
+import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "./connectors.ts";
 import { noteSuccess, observeRateLimit } from "./cooldown.ts";
 import { failure } from "./errors.ts";
@@ -206,7 +206,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     skills: isolated ? (skills.length ? [...skills] : undefined) : (opts.skills ? [...opts.skills] : ownerSkills()),
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
-      canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted }),
+      canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume) }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
@@ -236,7 +236,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
       const before = readJson<ChatSession>(opts.sessionFile, { costUsd: 0 });
       const baseTokens = before.sessionId === message.session_id ? before.baseTokens : lastContext; // a session from before this existed has none: the absolute limit applies until it starts fresh
-      const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}) };
+      const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
       writeJson(opts.sessionFile, next);
     }
     recordCost(message.total_cost_usd - previousCost, opts.tenant?.costFile); // failures cost money too (a tenant's goes to her own ledger)
