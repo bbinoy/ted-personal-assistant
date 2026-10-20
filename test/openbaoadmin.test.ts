@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configHcl, installBinary, intakePolicyHcl, layoutOf, OPERATOR_POLICY, PIN, policyHcl, ensureDirs } from "../src/openbaoadmin.ts";
+import { ITEM_KINDS } from "../src/secrets.ts";
 import { keeperPlist, serverPlist, serviceNames } from "../src/openbaoservice.ts";
 
 // The pure parts of the setup tool: the pinned download, the config, the policies and the launchd files. (The real server is in openbao-e2e.test.ts.)
@@ -67,4 +68,56 @@ test("launchd files: filled in and escaped; the server job has a 077 umask and n
   assert.ok(!keeper.includes("__") && keeper.includes("<key>OPENBAO_ADDR</key>") && keeper.includes("/srv/repo/scripts/openbao-keep.sh"));
   assert.match(keeper, /<key>StartInterval<\/key>\s*<integer>60<\/integer>/);
   assert.deepEqual(serviceNames({ OPENBAO_LAUNCHD_LABEL: "com.me.x" }), { server: "com.me.x", keeper: "com.me.x-keeper" });
+});
+
+// The policies are GENERATED from secrets.ts ITEM_KINDS. These are the texts they had before that (kept literally): a change to what the tokens may do must be a decision
+// made here, in the open, never a side effect of adding a kind.
+test("policies: generated from the kinds, byte-identical to the hand-written texts for profile, card, google and notion", () => {
+  assert.equal(policyHcl("ted", "owner"), `# The app's token for tenant "owner": its own folder and nothing else.
+path "ted/data/tenants/owner/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+path "ted/metadata/tenants/owner/*" {
+  capabilities = ["list", "read", "delete"]
+}
+# A friend's Google grant (the intake page writes it, the process that starts her Google server reads it): read only, nothing else of hers.
+path "ted/data/tenants/+/google/*" {
+  capabilities = ["read"]
+}
+# A friend's Notion grant: read, and create and update, because Notion's refresh tokens rotate and the new one is written back before it is used (notionoauth.ts). No delete, no list.
+path "ted/data/tenants/+/notion/*" {
+  capabilities = ["read", "create", "update"]
+}
+`);
+  assert.equal(policyHcl("m", "ann-1"), `# The app's token for tenant "ann-1": its own folder and nothing else.
+path "m/data/tenants/ann-1/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+path "m/metadata/tenants/ann-1/*" {
+  capabilities = ["list", "read", "delete"]
+}
+# A friend's Google grant (the intake page writes it, the process that starts her Google server reads it): read only, nothing else of hers.
+path "m/data/tenants/+/google/*" {
+  capabilities = ["read"]
+}
+# A friend's Notion grant: read, and create and update, because Notion's refresh tokens rotate and the new one is written back before it is used (notionoauth.ts). No delete, no list.
+path "m/data/tenants/+/notion/*" {
+  capabilities = ["read", "create", "update"]
+}
+`);
+  assert.equal(intakePolicyHcl("ted"), `# The intake page's token: write-only.
+path "ted/data/tenants/+/profile/*" {
+  capabilities = ["create", "update"]
+}
+path "ted/data/tenants/+/card/*" {
+  capabilities = ["create", "update"]
+}
+path "ted/data/tenants/+/google/*" {
+  capabilities = ["create", "update"]
+}
+path "ted/data/tenants/+/notion/*" {
+  capabilities = ["create", "update"]
+}
+`);
+  assert.deepEqual([...ITEM_KINDS], ["profile", "card", "google", "notion"]);
 });

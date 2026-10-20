@@ -329,25 +329,24 @@ test("google: the write-only intake token cannot read the grant; the app's token
 });
 
 test("doctor: a google line appears only when a friend has the capability; it names what is missing, never a value, and each friend's connection", async () => {
-  const { googleCheck } = await import("../src/doctor.ts");
+  const { servicesCheck } = await import("../src/doctor.ts");
   const out: { ok: unknown; what: string; detail: string }[] = [];
   const line = (ok: boolean | "warn", what: string, detail = "") => void out.push({ ok, what, detail });
-  const cfg = { ...settings.google };
-  googleCheck(line, { cfg, friends: T.people().filter((r) => !r.capabilities.includes("google")) });
+  servicesCheck(line, { friends: T.people().filter((r) => !r.capabilities.includes("google") && !r.capabilities.includes("notion")) });
   assert.equal(out.length, 0, "nobody has it: no line");
   const friends = T.people().filter((r) => r.id === anna.id || r.id === noGoogle.id);
-  googleCheck(line, { cfg: { ...cfg, clientSecret: undefined }, baseUrl: "https://ted.example.test", friends });
+  servicesCheck(line, { needs: { google: ["GOOGLE_OAUTH_CLIENT_SECRET"] }, baseUrl: "https://ted.example.test", friends });
   assert.equal(out[0]!.ok, false);
   assert.match(out[0]!.detail, /GOOGLE_OAUTH_CLIENT_SECRET is not set/);
   out.length = 0;
-  googleCheck(line, { cfg, baseUrl: "https://ted.example.test", friends, onPath: () => true, done: (id) => (id === anna.id ? { at: "2026-10-20T08:00:00.000Z", stored: [] } : undefined) });
+  servicesCheck(line, { needs: { google: [] }, baseUrl: "https://ted.example.test", friends, onPath: () => true, state: (id) => (id === anna.id ? { state: "connected", at: "2026-10-20T08:00:00.000Z" } : { state: "none" }) });
   assert.equal(out.length, 2, "the command and the one friend with the capability");
   assert.deepEqual(out.map((x) => x.ok), [true, true]);
   assert.match(out[1]!.detail, /connected since 2026-10-20/);
   assert.match(out[1]!.detail, /tools: mail, calendar/);
   assert.ok(!JSON.stringify(out).includes("fake-client-secret"), "no secret in a doctor line");
   out.length = 0;
-  googleCheck(line, { cfg, baseUrl: "https://ted.example.test", friends, onPath: () => false, done: () => undefined });
+  servicesCheck(line, { needs: { google: [] }, baseUrl: "https://ted.example.test", friends, onPath: () => false, state: () => ({ state: "none" }) });
   assert.equal(out[0]!.ok, "warn");
   assert.equal(out[1]!.ok, "warn");
 });

@@ -1,7 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { googleReady, settings } from "./settings.ts";
+import { PURPOSES, purposeAvailable } from "./intakepurposes.ts";
+import { settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
 import type { Capability } from "./tenants.ts";
 
@@ -22,13 +23,8 @@ interface Stored {
   payload: LinkPayload;
 }
 
-// The purposes of a link and the capability a person needs for each. EXTENSION POINT: `cvc` is added here and in intakepurposes.ts when it is built; nothing
-// else needs to know a purpose by name.
-export const PURPOSE_CAPABILITY: Readonly<Record<string, Capability>> = { profile: "profile", card: "card", google: "google", notion: "notion" };
-// `google` is offered only while the instance's OAuth client is set up (settings.google): without it there is nothing to sign in with. `notion` needs nothing but the
-// page's public address (the instance registers its own client with Notion the first time, notionoauth.ts).
-const purposeAvailable = (purpose: string): boolean => purpose !== "google" || googleReady();
-export const purposesFor = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSE_CAPABILITY).filter(([p, c]) => capabilities.includes(c) && purposeAvailable(p)).map(([p]) => p);
+// The purposes a person may be offered: the ones whose capability she holds and whose settings are there (intakepurposes.ts: a Purpose says both).
+export const purposesFor = (capabilities: readonly Capability[]): string[] => Object.entries(PURPOSES).filter(([, p]) => capabilities.includes(p.capability) && purposeAvailable(p)).map(([id]) => id);
 
 export const INTAKE_LINK_TOOL = "mcp__intake__get_setup_link";
 export const INTAKE_STATUS_TOOL = "mcp__intake__setup_status";

@@ -2,8 +2,8 @@
 // npm run intake -- link owner <purpose> a one-time link on this Mac's loopback so the owner can enter a detail or a card without the chat
 // Local terminal only. The page writes with its own write-only OpenBao token (npm run openbao -- setup makes it); it prints no value, no code and no path.
 import { macKeychain } from "../src/keychain.ts";
-import { LinkStore, PURPOSE_CAPABILITY } from "../src/intakelinks.ts";
-import { purposeOf } from "../src/intakepurposes.ts";
+import { LinkStore } from "../src/intakelinks.ts";
+import { PURPOSES, purposeOf } from "../src/intakepurposes.ts";
 import { googleProvider } from "../src/googleoauth.ts";
 import { notionProvider } from "../src/notionoauth.ts";
 import { OAuthFlows } from "../src/oauth.ts";
@@ -18,14 +18,14 @@ const say = (l: string) => console.log(l);
 const cfg = settings.intake;
 
 if (cmd === "link") {
-  const cap = purpose && Object.hasOwn(PURPOSE_CAPABILITY, purpose) ? PURPOSE_CAPABILITY[purpose] : undefined;
-  if (who !== OWNER || !purpose || !purposeOf(purpose) || !cap || purposeOf(purpose)?.oauth) { // (the owner's Google and Notion are the Claude connectors; the sign-in purposes are for friends)
-    say(`usage: npm run intake -- link owner <purpose>   (purposes: ${Object.keys(PURPOSE_CAPABILITY).join(", ")})`);
+  const wanted = purpose ? purposeOf(purpose) : undefined;
+  if (who !== OWNER || !purpose || !wanted || wanted.oauth) { // (the owner's Google and Notion are the Claude connectors; the sign-in purposes are for friends)
+    say(`usage: npm run intake -- link owner <purpose>   (purposes: ${Object.keys(PURPOSES).join(", ")})`);
     process.exit(1);
   }
   const rec = ensureOwner({ number: signalIdentity().ownerNumber, aci: signalIdentity().ownerAci });
-  if (!people().some((r) => r.id === rec.id && r.capabilities.includes(cap))) {
-    say(`The owner record lacks the ${cap} capability: npm run tenants -- grant owner ${cap}`);
+  if (!people().some((r) => r.id === rec.id && r.capabilities.includes(wanted.capability))) {
+    say(`The owner record lacks the ${wanted.capability} capability: npm run tenants -- grant owner ${wanted.capability}`);
     process.exit(1);
   }
   const code = new LinkStore().mint({ tenant: OWNER, purpose }, cfg.linkMinutes * 60_000);
