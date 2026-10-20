@@ -9,6 +9,7 @@ import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES
 import { ledgerEntries, withoutDeleted, type Sent } from "./messages.ts";
 import { hasPresets, speakerOf, type Conversation } from "./conversationmodel.ts";
 import { readNotes } from "./notes.ts";
+import { dayPart, namedTimes, passedTimes, TIME_HINT } from "./notetimes.ts";
 import { localDay } from "./pause.ts";
 import { isOneEmoji } from "./reaction.ts";
 import { directGateDefaults, GATE_DEFAULTS, ownerGateDefaults } from "./persona.ts";
@@ -89,6 +90,7 @@ interface GateInput {
   tail: readonly string[]; // the tail of the conversation's log (logTail)
   secondsSinceMine?: number; // message look: how long ago we last spoke here
   duringLastReply?: boolean; // message look: this message arrived while our last message was being written, so that message is not an answer to it
+  notes?: string; // this look's notes text (notesText) when the caller has read it already
   payer?: Payer; // a friend's look: on the instance key, her cost file (payer.ts mayRun); default the login
 }
 export type Gate = (input: GateInput) => Promise<GateOutput>;
@@ -108,7 +110,7 @@ export const styleSummary = (now: Date): string =>
 
 // The conversation's notes as data, bounded like every other prompt that includes notes. The owner's setup and
 // voice notes are not for a gate to read; a group has no such categories.
-function notesText(conv: Conversation, now: Date): string {
+export function notesText(conv: Conversation, now: Date): string {
   const notes = readNotes(now, conv.notesDir).filter((n) => n.category !== "setup" && n.category !== "voice");
   return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
@@ -139,13 +141,18 @@ export const logTail = (conv: Pick<Conversation, "logFile" | "tenantId">, n = 40
 }; // what its author took back is not shown
 
 // What the clock look would be shown, as a hash: used to skip a look when nothing relevant changed since the last quiet
-// answer (wake.ts). The model's own ledger lines ("you looked") are left out, they change on every look. The hour is part
-// of it. A note that names a time of day could come due inside the hour, so then the minute is part of it and nothing is
-// skipped. `extra` is what code knows that the prompt does not spell out (the radar's age, the brief's state).
-const TIME_OF_DAY = /\d{1,2}[:.]\d{2}|\b\d{1,2}\s?(am|pm|h|uhr)\b|\b(at|um|ab|from|until|by|before|after)\s+\d{1,2}\b|o'clock|noon|midnight|mittag/i;
-export function idleFingerprint(input: Pick<GateInput, "conv" | "now" | "tail">, extra = ""): string {
-  const notes = notesText(input.conv, input.now);
-  const when = TIME_OF_DAY.test(notes) ? Math.floor(input.now.getTime() / 60_000) : `${localDay(input.now)}T${input.now.getHours()}`;
+// answer (wake.ts). The model's own ledger lines ("you looked") are left out, they change on every look. The clock part:
+//   notes name times of day   the day, a coarse part of it and WHICH OF THOSE TIMES HAVE PASSED: it changes when a named
+//                             time is crossed (a schedule is never missed) and not otherwise
+//   a time hint, none parsed  the minute (nothing is skipped: the safety net for a phrasing the extraction does not know)
+//   no time at all            the hour
+// `extra` is what code knows that the prompt does not spell out (the radar's age, the brief's state). `notes` is this
+// look's notes text when the caller has read it already (notesText reads the folder).
+export function idleFingerprint(input: Pick<GateInput, "conv" | "now" | "tail">, extra = "", notes: string = notesText(input.conv, input.now)): string {
+  const times = namedTimes(notes);
+  const when = times.length
+    ? `${localDay(input.now)}|${dayPart(input.now)}|${passedTimes(times, input.now)}`
+    : TIME_HINT.test(notes) ? Math.floor(input.now.getTime() / 60_000) : `${localDay(input.now)}T${input.now.getHours()}`;
   const log = input.tail.filter((l) => !/^\[[^\]]*\] \(you looked/.test(l));
   return createHash("sha1").update(JSON.stringify([notes, log, when, extra])).digest("hex");
 }
@@ -218,7 +225,7 @@ export interface GateIO {
 //   result     call -> the result message (init..result is the model)
 //   api        the model time the SDK itself reports
 export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<GateOutput> {
-  const prompt = gatePrompt(input, notesText(input.conv, input.now));
+  const prompt = gatePrompt(input, input.notes ?? notesText(input.conv, input.now));
   const system = gateSystem(input.conv, input.trigger, styleSummary(input.now));
   const t0 = Date.now();
   const at: Record<string, number> = {};

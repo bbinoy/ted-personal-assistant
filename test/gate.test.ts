@@ -342,12 +342,22 @@ test("wake: guards in code, whatever the gate says", async () => {
     await r.wakeups.tick(T0);
     assert.deepEqual([r.c.gates.length, r.c.ownerRuns.length, r.c.groupRuns.length], [0, 0, 0], JSON.stringify(g));
   }
-  // owner quiet hours: no look, no gate, no run (a group has no such hours)
+  // quiet hours: no look, no gate, no run for the owner; a group is held back too unless its notes name a time inside the quiet window
   const night = new Date(2026, 9, 14, 3, 0, 0);
-  const q = rig({ now: night, groups: ["wake-night-group-0123456789ab"] });
+  const NG = "wake-night-group-0123456789ab";
+  const q = rig({ now: night, groups: [NG] });
+  await q.wakeups.tick(night);
+  assert.deepEqual(q.c.gates, []);
+  assert.equal(q.c.ownerRuns.length, 0);
+  const named = group(NG);
+  mkdirSync(named.notesDir!, { recursive: true });
+  writeFileSync(join(named.notesDir!, "scheduling-early.md"), "Post the weather at 6:30.");
   await q.wakeups.tick(night);
   assert.deepEqual(q.c.gates, ["group"]);
-  assert.equal(q.c.ownerRuns.length, 0);
+  writeFileSync(join(named.notesDir!, "scheduling-early.md"), "Post the weather at 15:30.");
+  const q2 = rig({ now: night, groups: [NG] });
+  await q2.wakeups.tick(night);
+  assert.deepEqual(q2.c.gates, []); // a time outside the quiet window does not open the night
   // a group we cannot vouch for is never woken
   const stranger = rig({ vouch: false, groups: [G] });
   await stranger.wakeups.tick(T0);
