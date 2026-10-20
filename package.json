@@ -13,6 +13,7 @@
     "check:isolation": "node --conditions=workspace-source scripts/memory-isolation.ts",
     "check:secrets": "node scripts/check-secrets.ts",
     "install:launchd": "scripts/install-launchd.sh",
+    "install:launchd-intake": "scripts/install-intake-launchd.sh",
     "uninstall:launchd": "scripts/uninstall-launchd.sh",
     "heartbeat-report": "node --conditions=workspace-source --env-file-if-exists=.env scripts/heartbeat-report.ts",
     "signal:hello": "node --conditions=workspace-source --env-file=.env scripts/signal-hello.ts",
