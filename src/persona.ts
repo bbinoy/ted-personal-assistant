@@ -2,7 +2,7 @@ import { fence } from "./fence.ts";
 import { mailSlot } from "./modules/index.ts";
 import { localDay } from "./pause.ts";
 import { NAMES, SKIPPED, type Connector } from "./connectors.ts";
-import { PLUGIN, preset, render, wakeSkill, type PromptKey, type Value } from "./preset.ts";
+import { categoriesFor, PLUGIN, preset, render, wakeSkill, type PromptKey, type Value } from "./preset.ts";
 import { ASSISTANT, OWNER, settings } from "./settings.ts";
 
 // System prompts. The WORDS are the assistant preset's (assistants/<name>/persona/*.md, loaded by preset.ts): who the assistant is,
@@ -99,6 +99,7 @@ export function chatSystem(lastBrief: string | undefined, now = new Date(), miss
       stateDir: settings.stateDir,
       memoryDir: settings.memoryDir,
       selfTimed: SELF_TIMED,
+      categories: categoriesFor("owner").join(", "),
     }),
     rules(mail),
     todayLine(now),
@@ -236,6 +237,7 @@ export function tenantSystem(parts: { name: string; consented: boolean; timed?: 
       timed: !!parts.timed,
       google: !!parts.google,
       digest: parts.digest ? fence("mail_digest", parts.digest) : "",
+      categories: categoriesFor("tenant").join(", "),
       her,
       personality: PERSONALITY,
       selfTimed: SELF_TIMED,

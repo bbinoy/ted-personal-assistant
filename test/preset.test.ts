@@ -141,3 +141,68 @@ test("a second preset changes the persona, the rhythm and the limits without tou
   assert.ok(ted.chat.includes("Ted Lasso") && ted.personality === PERSONALITY);
   assert.deepEqual(ted.rhythm, [7, 9, true, 15, 180]);
 });
+
+// Every run's options built under a second preset whose categories are not Ted's: nothing in code may still name triage, scheduling, context or brief as a
+// category of a conversation. (The words of the persona files are the preset's, and the categories in them are filled in from it.)
+test("a second preset's note categories reach every run: chat, group, friend, brief, radar, handler, dream and the gates", () => {
+  const dir = join(scratch, "coach2");
+  mkdirSync(join(dir, "persona"), { recursive: true });
+  writeFileSync(join(dir, "preset.json"), JSON.stringify({
+    extends: "ted",
+    name: "coach2",
+    notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], group: ["people"], tenant: ["goals", "style"] },
+    profiles: { brief: { notes: ["goals", "style"] }, radar: { notes: ["goals"] }, background: { notes: ["goals"] }, handler: { maxTurns: 12, maxBudgetUsd: 0.7, notes: ["goals", "people", "style"] } },
+  }));
+  const probe = join(scratch, "probe2.ts");
+  const src = new URL("../src/", import.meta.url).pathname;
+  writeFileSync(probe, `
+    const T = await import(${JSON.stringify(src + "tenants.ts")});
+    const { owner, group, tenant } = await import(${JSON.stringify(src + "conversation.ts")});
+    const { runOptionsFor } = await import(${JSON.stringify(src + "runoptions.ts")});
+    const { handlerOptions } = await import(${JSON.stringify(src + "agent.ts")});
+    const { LOGIN } = await import(${JSON.stringify(src + "payer.ts")});
+    const { PROFILES } = await import(${JSON.stringify(src + "profiles.ts")});
+    const { dreamScope } = await import(${JSON.stringify(src + "dreamscope.ts")});
+    const { dreamSystem, directGateDefaults, GATE_DEFAULTS, ownerGateDefaults } = await import(${JSON.stringify(src + "persona.ts")});
+    const { writeFileSync, mkdirSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { NOTES_DIR } = await import(${JSON.stringify(src + "notes.ts")});
+    mkdirSync(NOTES_DIR, { recursive: true });
+    writeFileSync(join(NOTES_DIR, "goals-run.md"), "---\\nname: run\\n---\\n\\nRun a half marathon in spring.\\n");
+    writeFileSync(join(NOTES_DIR, "people-sam.md"), "---\\nname: sam\\n---\\n\\nSam is the training partner.\\n");
+    writeFileSync(join(NOTES_DIR, "triage-x.md"), "---\\nname: x\\n---\\n\\nOLD TRIAGE NOTE.\\n");
+    const rec = T.redeemInvite(T.mintInvite("t").code, { aci: "00000000-0000-4000-8000-000000000001", name: "Mia" });
+    T.provision(rec); T.recordConsent(T.tenantContext(rec), "Germany");
+    const prompt = (o) => typeof o.systemPrompt === "string" ? o.systemPrompt : "";
+    const out = {
+      chat: prompt(runOptionsFor(owner(), {})),
+      group: prompt(runOptionsFor(group("g1"), {})),
+      friend: prompt(runOptionsFor(tenant(rec.id), { apiKey: "k" })),
+      handler: handlerOptions(owner(), LOGIN, undefined, "TASK"),
+      profiles: Object.fromEntries(["chat", "brief", "radar", "background", "group", "handler"].map((k) => [k, [PROFILES[k].maxTurns, PROFILES[k].maxBudgetUsd, PROFILES[k].notes]])),
+      scopes: Object.fromEntries(["owner", "group", "tenant"].map((k) => [k, dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories])),
+      dream: ["owner", "group", "tenant"].map((k) => dreamSystem({ subject: "S", kind: k, categories: dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories })),
+      gates: [GATE_DEFAULTS.owner, GATE_DEFAULTS.group, directGateDefaults("Mia"), ownerGateDefaults({ briefHour: 7, backstopHour: 9, radarMinutes: 180, radar: true, minGapMinutes: 60 })],
+    };
+    out.handler = { systemPrompt: out.handler.systemPrompt, maxTurns: out.handler.maxTurns, maxBudgetUsd: out.handler.maxBudgetUsd };
+    console.log(JSON.stringify(out));
+  `);
+  const out = JSON.parse(execFileSync(process.execPath, ["--conditions=workspace-source", probe], {
+    env: { ...process.env, HARNESS_DATA_DIR: join(scratch, "data2"), ASSISTANT_PRESET: dir, TENANTS: "on", TENANT_ANTHROPIC_API_KEY: "k", OWNER_NAME: "Alex", ASSISTANT_NAME: "Coach" }, encoding: "utf8",
+  }).trim().split("\n").at(-1)!);
+  assert.match(out.chat, /exactly one category of goals, people, style:/);
+  assert.match(out.friend, /with a category of goals, style\./);
+  assert.deepEqual(out.profiles.chat, [40, 2, []]);
+  assert.deepEqual(out.profiles.handler, [12, 0.7, ["goals", "people", "style"]]);
+  assert.deepEqual(out.profiles.brief[2], ["goals", "style"]);
+  assert.deepEqual(out.scopes, { owner: ["goals", "people"], group: ["people"], tenant: ["goals", "style"] });
+  assert.deepEqual([out.handler.maxTurns, out.handler.maxBudgetUsd], [12, 0.7], "the handler's limits are the preset's");
+  assert.match(out.handler.systemPrompt, /half marathon/);
+  assert.match(out.handler.systemPrompt, /training partner/);
+  assert.doesNotMatch(out.handler.systemPrompt, /OLD TRIAGE NOTE/, "a note of a category this assistant does not have is not shown");
+  out.dream.forEach((d: string, i: number) => assert.ok(d.includes(`with a category of ${[["goals, people"], ["people"], ["goals, style"]][i]![0]}.`), `dream ${i}`));
+  for (const [where, text] of Object.entries({ chat: out.chat, group: out.group, friend: out.friend, dream: out.dream.join("\n"), gates: out.gates.join("\n") })) {
+    assert.doesNotMatch(text as string, /\b(triage|scheduling|context)-[a-z]/, `${where}: no Ted file name`);
+    for (const m of (text as string).matchAll(/categor(?:y|ies) of ([a-z, ]+)[.:]/g)) for (const c of m[1]!.split(", ")) assert.ok(["goals", "people", "style"].includes(c), `${where}: "${c}" is not this assistant's category`);
+  }
+});

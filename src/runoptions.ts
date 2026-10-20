@@ -41,8 +41,8 @@ const down = () => disconnected(readConnectors());
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: chatSystem(readText(LAST_BRIEF), i.now, missingSetup(readNotes(), down()), down(), recentNotices()),
   memory: { dir: conv.notesDir, ...(i.notify ? { notify: i.notify } : {}) },
-  maxTurns: 40,
-  maxBudgetUsd: 2.0, // a cold prompt cache alone can cost most of a dollar
+  maxTurns: PROFILES.chat.maxTurns,
+  maxBudgetUsd: PROFILES.chat.maxBudgetUsd, // (the preset's: a cold prompt cache alone can cost most of a dollar)
 });
 
 const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
