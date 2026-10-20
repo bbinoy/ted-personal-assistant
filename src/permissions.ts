@@ -8,6 +8,7 @@ import type { MailView } from "./mailview.ts";
 import { mailSlot } from "./modules/index.ts";
 import { classify, denial, isReadTool } from "./policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "./toolmanifest.ts";
+import { OWNER_KEY } from "./send.ts";
 import { OWNER, settings } from "./settings.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
@@ -52,29 +53,38 @@ export function publicArgs(tool: string, input: Record<string, unknown>): Record
 }
 
 const MAIL_OUT = new Set(["mbSend", "gmSend", "gmReply", "gmForward", "ggSend"]); // the mail views of the calls that put mail in front of other people (not the bare action "send": mcp__send__send is the conversation's own), judged against the owner's words
-// An action the owner approved is done: the same call again (same tool, same arguments) within half an hour is refused
+// An action the owner approved is done: the same call again (same tool, same arguments) in the same conversation within half an hour is refused
 // without a question, because repeating it would send, create or change it twice (a model once retried a send after a
-// slow status check). A DECLINED call can still be asked again.
+// slow status check). A DECLINED call can still be asked again. Per conversation: another conversation's identical call is its own business, and its model is not
+// told something was "already approved" that it never saw.
 const DONE_WINDOW_MS = 30 * 60_000;
 const done = new Map<string, number>();
 // A call whose approval could not be confirmed (no question could be written, a reply could not be read) may be asked again by the
 // agent, but only this many times in total, so the loop cannot spin.
 const MAX_FAILED_ASKS = 2;
-const failures = new Map<string, number>();
+const failures = new Map<string, { n: number; at: number }>();
 // The judge's `fix` verdicts (a call held back for wrong arguments) per tool and run: at most this many, then the owner is asked (autojudge.ts).
 const MAX_FIXES = 2;
 // Keys sorted at every depth. (A JSON.stringify key-list replacer also filters NESTED keys, so two events that differ only
 // in start.dateTime had the same key and the second was refused as "already done".)
 const stable = (v: unknown): unknown => (Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, stable(x)])) : v);
 export const callKey = (tool: string, input: Record<string, unknown>) => `${tool} ${JSON.stringify(stable(input))}`;
-// Entries older than the window can never match again, so they are dropped as new ones come in (the map cannot grow without end).
+// The state above is kept per conversation: the call's key behind the conversation it runs for.
+const scoped = (conversation: string, key: string) => `${conversation}\u0000${key}`;
+// Entries older than the window can never match again, so they are dropped as new ones come in (neither map can grow without end).
 const remember = (key: string) => {
   const now = Date.now();
   for (const [k, at] of done) if (now - at >= DONE_WINDOW_MS) done.delete(k);
   done.set(key, now);
 };
+const failed = (key: string) => {
+  const now = Date.now();
+  for (const [k, f] of failures) if (now - f.at >= DONE_WINDOW_MS) failures.delete(k);
+  failures.set(key, { n: (failures.get(key)?.n ?? 0) + 1, at: now });
+};
 // Only for actions that change something: opening a page again is harmless, and refusing it would just get in the way.
 export const doneCount = () => done.size; // tests
+export const failureCount = () => failures.size; // tests
 const once = (tool: string) => tool !== "WebFetch" && !isReadTool(tool);
 
 // A run that needs rules a flag cannot say per call (the browse run: which element a click is, which address is fine) passes a guard.
@@ -102,8 +112,8 @@ export interface CallGuard {
 // text started it (autojudge.ts RunProvenance; read at every call, since a warm process is built before the message that uses it arrives); `browseTask`: the task the
 // assistant wrote for its browser worker, shown next to the provenance the sub-run inherited; `untrusted`: the run reads raw mail or web pages from its first call (the
 // mail handler, the browse worker); `taint`: the session it continues has read some (chatsession.ts), which keeps the flag on in the turns after it. Either way the
-// flag also turns on once the run has read mail or a page. `conversation`: the conversation the run acts for (Conversation.key), handed to the
-// mail read-back.
+// flag also turns on once the run has read mail or a page. `conversation`: the conversation the run acts for (Conversation.key; the owner's by default): the anti-repeat
+// state below is kept per conversation.
 export interface JudgeSetup {
   provenance?: () => RunProvenance | undefined;
   browseTask?: string;
@@ -119,6 +129,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     untrusted = true;
     setup.taint?.mark();
   };
+  const conversation = setup.conversation ?? OWNER_KEY;
   const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
@@ -157,8 +168,9 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "deny", message: d?.message ?? `${tool} is blocked by policy (or its input is) and cannot be used.` };
     }
     const key = callKey(tool, input);
+    const memo = scoped(conversation, key);
     const onceOnly = g ? !!g.once && !g.payment : once(tool);
-    const doneAt = onceOnly ? done.get(key) : undefined;
+    const doneAt = onceOnly ? done.get(memo) : undefined;
     if (doneAt !== undefined && Date.now() - doneAt < DONE_WINDOW_MS) {
       log(tool, "deny-already-done", source);
       return { behavior: "deny", message: "That exact call was already approved and done a moment ago. Do not repeat it; check its result once if you need to be sure it went through." };
@@ -198,30 +210,30 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       if (mayAutoApprove(settings.autoApprove, judged)) {
         log(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
-        if (onceOnly) remember(key);
+        if (onceOnly) remember(memo);
         if (readsUntrusted(tool)) markUntrusted();
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
     }
-    if ((failures.get(key) ?? 0) >= MAX_FAILED_ASKS) {
+    if ((failures.get(memo)?.n ?? 0) >= MAX_FAILED_ASKS) {
       log(tool, "deny-reask-cap", source);
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
     const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, g?.payment ? { typedYes: true } : undefined);
     if (d.failure) {
-      failures.set(key, (failures.get(key) ?? 0) + 1);
+      failed(memo);
       log(tool, "ask-failed", source, { reason: d.failure });
-      return { behavior: "deny", message: `The approval could not be confirmed: ${d.failure}. Nothing was executed.${d.feedback ? ` ${OWNER} had replied: ${JSON.stringify(d.feedback)}.` : ""} Decide yourself: ask ${OWNER} again in your own words (at most ${MAX_FAILED_ASKS - (failures.get(key) ?? 0)} more time(s) for this call), rephrase the request, or drop the action.` };
+      return { behavior: "deny", message: `The approval could not be confirmed: ${d.failure}. Nothing was executed.${d.feedback ? ` ${OWNER} had replied: ${JSON.stringify(d.feedback)}.` : ""} Decide yourself: ask ${OWNER} again in your own words (at most ${MAX_FAILED_ASKS - (failures.get(memo)?.n ?? 0)} more time(s) for this call), rephrase the request, or drop the action.` };
     }
-    failures.delete(key);
+    failures.delete(memo);
     if (judged) log(tool, "judge-vs-owner", source, { judge: judged.decision, ownerApproved: d.approved });
     log(
       tool,
       d.approved ? (d.updatedInput ? "ask-approved-modified" : "ask-approved") : d.feedback ? "ask-feedback" : "ask-declined",
       source,
     );
-    if (d.approved && onceOnly) remember(key);
+    if (d.approved && onceOnly) remember(memo);
     if (d.approved && readsUntrusted(tool)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && g?.payment && g.resolve) {
