@@ -13,7 +13,7 @@ import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 // --- warm processes for the next message ---
 // Starting Claude Code (process, config, skills, connectors) takes ~3s before the model is even asked. After a reply the
 // next process is started in the background, so the next message only waits for the model. It is used only if nothing it
-// was built from has changed (session, prompt, memory index, a tenant's key and consent), and only while fresh; otherwise a normal start.
+// was built from has changed (session, prompt, memory index, a tenant's key), and only while fresh; otherwise a normal start.
 // One mechanism (SpareSlot, warmslot.ts), one keyed pool (WarmPool: the key is the conversation's key), one idle setting (WARM_IDLE_MINUTES), one
 // switch (WARM): the owner's chat, the group that spoke last and the few tenants most recently active, plus the gate's Haiku spare (gate.ts).
 // A process is built from its conversation's own options only (a group's: its notes folder, session, memory server, no connectors; a tenant's: also
@@ -77,7 +77,7 @@ const memoryIndex = (dir: string) => {
     return "";
   }
 };
-const spareKey = (id: string, o: RunOptions, r: Resume) => JSON.stringify([id, r.resume ?? "", o.systemPrompt, o.memory?.dir ?? "", memoryIndex(o.memory?.dir ?? NOTES_DIR), ...(o.tenant ? [o.tenant.keyTag, o.tenant.consented] : [])]); // a tenant's process is also tied to her key (changed: not reused) and to her consent
+const spareKey = (id: string, o: RunOptions, r: Resume) => JSON.stringify([id, r.resume ?? "", o.systemPrompt, o.memory?.dir ?? "", memoryIndex(o.memory?.dir ?? NOTES_DIR), ...(o.tenant ? [o.tenant.keyTag] : [])]); // a tenant's process is also tied to her key (changed: not reused)
 const labelOf = (conv: Who) => (conv.kind === "owner" ? "chat" : conv.kind); // (for the log lines)
 
 // Starts the next process for a conversation and keeps it as its spare (replacing, and closing, the previous one).

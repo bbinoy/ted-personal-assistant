@@ -5,7 +5,8 @@ import { LINK_CODE, LinkStore, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
 import type { Put } from "./intakepurposes.ts";
 import { CALLBACK, OAuthProblem, bindingCookie, bindingFrom, type OAuthFlows } from "./oauth.ts";
-import { people } from "../tenants/tenants.ts";
+import { capabilitiesOfRecord } from "../tenants/capabilityset.ts";
+import { people, type Capability, type TenantRecord } from "../tenants/tenants.ts";
 
 // The intake page: a separate process (scripts/intake.ts), on 127.0.0.1 only, that is the one place a tenant types a secret. A tunnel the owner sets up
 // (docs/SETUP.md) puts it on the internet over https; this file knows nothing of that. Nothing secret goes through Signal, and the model never sees a
@@ -59,6 +60,7 @@ export interface IntakeDeps {
   oauth?: OAuthFlows; // the sign-in purposes ("Connect Google", "Connect Notion"): their flows in progress; absent: those purposes are not offered
   now?: () => number;
   limits?: Partial<Limits>;
+  capabilities?: (rec: TenantRecord) => ReadonlySet<Capability>; // what a person has (default: capabilityset.ts capabilitiesOfRecord; tests choose)
 }
 
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -170,11 +172,11 @@ export class IntakeServer {
     return this.submit(req, res, code, ip, purpose, payload);
   }
 
-  // The purpose, when this person may still use it: she exists, is active, and holds the capability (a suspended or revoked person's open link is dead).
+  // The purpose, when this person may still use it: she exists, is active, and has the capability (a suspended or removed person's open link is dead).
   private allowed(tenant: string, purposeId: string): Purpose | undefined {
     const rec = people().find((r) => r.id === tenant);
     const purpose = purposeOf(purposeId);
-    return rec && rec.status === "active" && purpose && rec.capabilities.includes(purpose.capability) ? purpose : undefined;
+    return rec && rec.status === "active" && purpose && (this.deps.capabilities ?? capabilitiesOfRecord)(rec).has(purpose.capability) ? purpose : undefined;
   }
 
   // A sign-in purpose: the page is a link to the other service's consent screen, made now with a state bound to this link.

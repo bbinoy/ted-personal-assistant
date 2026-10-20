@@ -14,8 +14,8 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "admin-isolation-"));
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
-const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const { classify, isReadableData } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
@@ -32,7 +32,7 @@ const ann = T.tenantContext(rec);
 const ownerNotes = join(NOTES_DIR, "context-own.md");
 mkdirSync(NOTES_DIR, { recursive: true });
 writeFileSync(ownerNotes, "the owner's own note");
-for (const [dir, file] of [[ann.notesDir, "people-eve.md"], [ann.dir, "tenant.json"], [ann.dir, "consent.json"], [ann.dir, "cost.json"]] as const) writeFileSync(join(dir, file), `{"text":"${CANARY}"}`);
+for (const [dir, file] of [[ann.notesDir, "people-eve.md"], [ann.dir, "tenant.json"], [ann.dir, "meta.json"], [ann.dir, "cost.json"]] as const) writeFileSync(join(dir, file), `{"text":"${CANARY}"}`);
 writeFileSync(ann.logFile, `{"ts":1,"kind":"owner","text":"${CANARY}"}\n`);
 writeFileSync(ann.sessionFile, `{"id":"${CANARY}"}`);
 const bao = join(settings.stateDir, "openbao");
@@ -48,7 +48,7 @@ symlinkSync(ann.notesDir, join(settings.memoryDir, "to-ann-notes"));
 symlinkSync(bao, join(settings.stateDir, "to-bao"));
 
 const HERS = [
-  join(ann.notesDir, "people-eve.md"), ann.logFile, ann.sessionFile, join(ann.dir, "tenant.json"), join(ann.dir, "consent.json"), join(ann.dir, "cost.json"),
+  join(ann.notesDir, "people-eve.md"), ann.logFile, ann.sessionFile, join(ann.dir, "tenant.json"), join(ann.dir, "meta.json"), join(ann.dir, "cost.json"),
   ann.dir, ann.notesDir, settings.tenantsDir, join(settings.tenantsDir, "tenants.json"),
   join(NOTES_DIR, "..", "..", "tenants", ann.id, "notes", "people-eve.md"), // out of the notes with ..
   join(NOTES_DIR, "to-ann", "tenant.json"), join(NOTES_DIR, "to-ann", "notes", "people-eve.md"), join(settings.memoryDir, "to-ann-notes", "people-eve.md"), // through a link
@@ -93,7 +93,7 @@ test("the admin's powers are the instance's: invites, list, suspend, resume and 
   assert.equal(classify("mcp__tenants__suspend_tenant", { id: ann.id }, "chat"), "ask");
   assert.equal(classify("mcp__tenants__remove_tenant", { id: ann.id }, "chat"), "ask");
   assert.equal(classify("mcp__tenants__invite_person", { recipient: "+15555550114" }, "chat"), "ask", "the first hello to a person always asks the owner");
-  // what list_tenants shows is the record: no note, no history line, no consent region
+  // what list_tenants shows is the record: no note, no history line
   const listed = describeTenants().join("\n");
   assert.match(listed, new RegExp(ann.id));
   assert.doesNotMatch(listed, new RegExp(CANARY));

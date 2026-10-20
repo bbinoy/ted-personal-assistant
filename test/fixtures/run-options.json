@@ -248,69 +248,6 @@
     ],
     "canUseTool": "function"
   },
-  "tenantAskingConsent": {
-    "run": {
-      "source": "group",
-      "sessionFile": "<data>/tenants/<ann>/session.json",
-      "systemPrompt": {
-        "key": "tenantAskingConsent.run.systemPrompt",
-        "sha": "dd92f8c1db131248"
-      },
-      "memory": {
-        "dir": "<data>/tenants/<ann>/notes"
-      },
-      "skills": [],
-      "tools": [
-        "mcp__tenant__record_consent"
-      ],
-      "maxTurns": 12,
-      "maxBudgetUsd": 0.5,
-      "tenant": {
-        "id": "<ann>",
-        "key": "tenant:<ann>",
-        "apiKey": "<instance-key>",
-        "keyTag": "f8707298",
-        "costFile": "<data>/tenants/<ann>/cost.json",
-        "logFile": "<data>/tenants/<ann>/messages.jsonl",
-        "consentFile": "<data>/tenants/<ann>/consent.json",
-        "consented": false,
-        "overBudget": "[fn]"
-      }
-    },
-    "model": "sonnet",
-    "system": {
-      "type": "preset",
-      "preset": "claude_code",
-      "append": {
-        "key": "tenantAskingConsent.system.append",
-        "sha": "dd92f8c1db131248"
-      },
-      "snapshot": false
-    },
-    "settings": {
-      "autoMemoryEnabled": true,
-      "autoMemoryDirectory": "<data>/tenants/<ann>/notes"
-    },
-    "mcpServers": [
-      "tenant"
-    ],
-    "strictMcpConfig": true,
-    "tools": [],
-    "settingSources": [],
-    "permissionMode": "default",
-    "maxTurns": 12,
-    "maxBudgetUsd": 0.5,
-    "envChanged": {
-      "ANTHROPIC_API_KEY": "<instance-key>"
-    },
-    "envRemoved": [
-      "CLAUDE_CODE_OAUTH_TOKEN"
-    ],
-    "hooks": [
-      "PostToolUse"
-    ],
-    "canUseTool": "function"
-  },
   "tenant": {
     "run": {
       "source": "group",
@@ -355,8 +292,6 @@
         "keyTag": "f8707298",
         "costFile": "<data>/tenants/<bea>/cost.json",
         "logFile": "<data>/tenants/<bea>/messages.jsonl",
-        "consentFile": "<data>/tenants/<bea>/consent.json",
-        "consented": true,
         "overBudget": "[fn]"
       }
     },

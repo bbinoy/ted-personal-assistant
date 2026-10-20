@@ -10,9 +10,9 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenants-test-"));
 
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
-const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
+const { capabilitiesOfRecord, resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const R = await import("../src/tenants/tenantroute.ts");
 const { createTenantRunner } = await import("../src/conversation/tenantrun.ts");
 const { keyNotices, createKeyNotices } = await import("../src/tenants/keynotice.ts");
@@ -61,13 +61,13 @@ test("config: a tenant.json is checked, never trusted; the old lower-case timezo
   assert.equal(T.parseTenantConfig([]).problems.length, 1);
 });
 
-test("an approved friend is provisioned as the tenant: owner-only folders, notes, a tenant.json, a member with the friend capabilities and no key anywhere", () => {
+test("an approved friend is provisioned as the tenant: owner-only folders, notes, a tenant.json, a member and no key anywhere", () => {
   const rec = join_("Anna");
   const ctx = T.tenantContext(rec);
   for (const d of [ctx.dir, ctx.notesDir, ctx.backupDir]) assert.equal(statSync(d).mode & 0o077, 0, d);
   assert.ok(existsSync(ctx.configFile));
   assert.equal(rec.role, "member");
-  assert.deepEqual(rec.capabilities, ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw"], "the free ones are on and every other capability is off for a new tenant");
+  assert.ok(!("capabilities" in rec), "her capabilities are derived (capabilities.ts), never stored");
   assert.equal(rec.credential, "instance-key");
   assert.ok(!readFileSync(join(settings.dataDir, T.REGISTRY), "utf8").match(/sk-ant|"key"/));
   assert.equal(T.tenantByAci(rec.acis[0]!.toUpperCase())?.id, rec.id, "the account id is matched without regard to case");
@@ -76,7 +76,7 @@ test("an approved friend is provisioned as the tenant: owner-only folders, notes
   assert.equal(tenant(rec.id).direct, true);
 });
 
-test("a hand-edited registry cannot make a bad id, an unknown capability or an unknown role load; an old record gets the safe defaults", () => {
+test("a hand-edited registry cannot make a bad id, or an unknown role load; an old record gets the safe defaults", () => {
   const rec = join_("Bo");
   const file = join(settings.dataDir, T.REGISTRY);
   const reg = JSON.parse(readFileSync(file, "utf8"));
@@ -89,9 +89,10 @@ test("a hand-edited registry cannot make a bad id, an unknown capability or an u
   );
   writeFileSync(file, JSON.stringify(reg));
   assert.equal(T.tenantByAci(ACI_C), undefined, "an invalid id never loads, and 'owner' is never a tenant");
-  assert.ok(!T.people().some((r) => ["../escape", "odd-role", "odd-cap"].includes(r.id)));
+  assert.ok(!T.people().some((r) => ["../escape", "odd-role"].includes(r.id)));
+  assert.ok(T.tenantById("odd-cap") && !("capabilities" in T.tenantById("odd-cap")!), "a stored capability list is ignored, whatever it holds");
   const old = T.tenantById("old-one")!;
-  assert.deepEqual([old.role, old.credential, old.capabilities], ["member", "instance-key", [...T.FRIEND_DEFAULTS]], "omitted fields never make an admin");
+  assert.deepEqual([old.role, old.credential], ["member", "instance-key"], "omitted fields never make an admin");
   assert.ok(!("keyRef" in old));
   assert.ok(T.tenantById(rec.id));
   writeFileSync(file, JSON.stringify({ tenants: reg.tenants.filter((t: { id: string }) => t.id !== "owner" && !t.id.startsWith("odd") && t.id !== "old-one" && t.id !== "../escape") }));
@@ -101,16 +102,6 @@ test("routing: with TENANTS off nothing is answered, as today", () => {
   on.tenants = false;
   assert.deepEqual(R.routeSender({ aci: ACI_C, text: "hello" }), { kind: "ignore", why: "tenants are off" });
   assert.deepEqual(R.routeSender({ aci: ACI_A, text: "hello" }).kind, "ignore", "not even a known tenant");
-});
-
-test("consent: a one-time record; recording it makes an invited tenant active", () => {
-  const rec = join_("Dora");
-  const ctx = T.tenantContext(rec);
-  assert.equal(T.readConsent(ctx), undefined);
-  T.recordConsent(ctx, "  Germany \n");
-  assert.equal(T.readConsent(ctx)?.region, "Germany");
-  assert.equal(T.readConsent(ctx)?.ageConfirmed, true);
-  assert.equal(T.tenantById(rec.id)!.status, "active");
 });
 
 // ---- a tenant's turn ----
@@ -128,18 +119,11 @@ function runner(over: { key?: string | undefined; ask?: (key: string) => Promise
   return { r, asked, alerts };
 }
 
-test("disclosure: plainly an AI, her notes private from other users AND from the admin through it, and the host's own access said honestly; short", () => {
-  assert.match(R.DISCLOSURE, /\bAI\b/);
-  assert.match(R.DISCLOSURE, /private from other users and from the admin/);
-  assert.match(R.DISCLOSURE, /runs this computer could still technically read the files/);
-  assert.ok(R.DISCLOSURE.length < 320, "short");
-});
-
-test("turn: no instance key means a plain 'not set up for friends' with the AI line, a notice for the admin, no model call and never the owner's login", async () => {
+test("turn: no instance key means a plain 'not set up for friends', a notice for the admin, no model call and never the owner's login", async () => {
   const rec = join_("Eve");
   const { r, asked, alerts } = runner({ key: undefined });
   const first = await r.run(tenant(rec.id), "hello");
-  assert.ok(first.text.startsWith(R.DISCLOSURE) && first.text.includes(R.notSetUpReply()));
+  assert.equal(first.text, R.notSetUpReply());
   assert.deepEqual(asked, []);
   assert.equal(alerts.length, 1);
   assert.match(alerts[0]!, /TENANT_ANTHROPIC_API_KEY is not set/);
@@ -199,13 +183,14 @@ test("key notice: a failure on the key from an unattended run, a mail loop or th
   assert.equal(alerts.length, 1);
 });
 
-test("turn: the run gets the instance key, and the first reply carries the AI line exactly once", async () => {
+test("turn: the run gets the instance key, and her first reply is her model reply, unchanged (the greeting is the model's: persona.ts FIRST_CONTACT)", async () => {
   const rec = join_("Finn");
   const { r, asked } = runner({ key: KEY_A });
   const one = await r.run(tenant(rec.id), "hi");
   const two = await r.run(tenant(rec.id), "and again");
   assert.deepEqual(asked.map((a) => a.key), [KEY_A, KEY_A]);
-  assert.equal(one.text, `${R.DISCLOSURE}\n\nhello there`);
+  assert.equal(one.text, "hello there");
+  assert.ok(T.wasDisclosed(T.tenantContext(rec)), "marked once she has had her first reply");
   assert.equal(two.text, "hello there");
 });
 
@@ -284,7 +269,6 @@ test("doctor: shows the instance key (set or not, never its value) and each tena
   lines.length = 0;
   const rec = join_("Doc");
   const ctx = T.tenantContext(rec);
-  T.recordConsent(ctx, "Germany");
   recordCost(0.25, ctx.costFile);
   T.setPaused(ctx, Date.now() + 3600_000);
   assert.ok(looksLikeApiKey(KEY_A) && !looksLikeApiKey("sk-ant-short") && !looksLikeApiKey("hello"));
@@ -311,8 +295,8 @@ const OWNER_ACI = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 test("registry: the owner is seeded from the number as an admin with every capability, pointing at the files the instance has always used", () => {
   const rec = T.ensureOwner({ number: OWNER_NUMBER });
   assert.deepEqual([rec.id, rec.role, rec.status, rec.credential, rec.number, rec.acis], ["owner", "admin", "active", "login", OWNER_NUMBER, []]);
-  assert.deepEqual([...rec.capabilities].sort(), [...T.CAPABILITIES].sort());
-  assert.equal(rec.capabilities.length, T.CAPABILITIES.length);
+  assert.ok(!("capabilities" in rec), "the owner has every capability by being the owner (capabilities.ts), not by a stored list");
+  assert.deepEqual([...capabilitiesOfRecord(rec)].filter((c) => c !== "intake").sort(), T.CAPABILITIES.filter((c) => c !== "intake").sort());
   const paths = T.pathsOf(rec);
   assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: "state/cost.json" }, "no file moved");
   assert.equal(T.ensureOwner({ number: "+15555550105", aci: ACI_A }).number, OWNER_NUMBER, "seeding twice changes nothing");
@@ -388,29 +372,26 @@ test("set-admin: the role moves to one record and only the local CLI does it; no
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : e.name.endsWith(".ts") ? [join(dir, e.name)] : []));
   const importing = files(new URL("../src", import.meta.url).pathname).filter((f) => !f.endsWith("/tenants.ts")).filter((f) => {
     const imports = [...readFileSync(f, "utf8").matchAll(/import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*"(?:\.\.?\/)+(?:tenants\/)?tenants\.ts"/g)].flatMap((m) => m[1]!.split(",").map((x) => x.trim().split(/\s+as\s+/)[0]!));
-    return imports.some((x) => ["setAdmin", "grant", "revoke"].includes(x));
+    return imports.some((x) => ["setAdmin"].includes(x));
   });
-  assert.deepEqual(importing, [], "no module under src/ can change the admin role or a capability");
+  assert.deepEqual(importing, [], "no module under src/ can change the admin role");
   assert.match(readFileSync(new URL("../scripts/tenants.ts", import.meta.url), "utf8"), /set-admin/, "the CLI is where it lives");
 });
 
-test("grant and revoke: one capability at a time, on a real record, no duplicates; the tool set follows", () => {
+test("the CLI has no grant or revoke: nothing about a friend's tools is stored, and to stop a friend the admin suspends or removes her", () => {
+  const cli = readFileSync(new URL("../scripts/tenants.ts", import.meta.url), "utf8");
+  assert.ok(!/\bgrant\b|\brevoke\b/.test(cli));
+  assert.equal((T as Record<string, unknown>).grant, undefined);
+  assert.equal((T as Record<string, unknown>).revoke, undefined);
+  assert.equal((T as Record<string, unknown>).FRIEND_DEFAULTS, undefined);
   const rec = join_("Ida");
-  assert.ok(!rec.capabilities.includes("mail"));
-  assert.deepEqual(T.grant(rec.id, "mail")!.capabilities.filter((c) => c === "mail"), ["mail"]);
-  assert.deepEqual(T.grant(rec.id, "mail")!.capabilities.filter((c) => c === "mail"), ["mail"], "granting twice changes nothing");
-  assert.ok(T.tenantById(rec.id)!.capabilities.includes("mail"), "stored");
-  assert.ok(!T.revoke(rec.id, "mail")!.capabilities.includes("mail"));
-  assert.equal(T.grant("nobody", "mail"), undefined);
-  assert.equal(T.isCapability("everything"), false);
-  const ctx = () => T.tenantContext(T.tenantById(rec.id)!);
-  assert.ok(tenantTools(ctx()).has("mcp__voice__voice"));
-  T.revoke(rec.id, "voice");
-  assert.ok(!tenantTools(ctx()).has("mcp__voice__voice"), "without the capability the tool is not there");
-  assert.deepEqual(ctx().capabilities, T.tenantById(rec.id)!.capabilities);
+  assert.ok(tenantTools(T.tenantContext(rec)).has("mcp__voice__voice"));
+  writeFileSync(T.tenantContext(rec).configFile, JSON.stringify({ voice: false }));
+  assert.ok(!tenantTools(T.tenantContext(T.tenantById(rec.id)!)).has("mcp__voice__voice"), "her own switch in tenant.json still takes a tool away");
   const lines = describeTenants().filter((l) => l.startsWith(rec.id));
-  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, wake, weather, draw/);
-  assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities chat, browse, voice, heartbeat, dream, wake, mail, calendar, notion, profile, card, notes, intake, weather, draw, google, drive, admin/);
+  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, wake, notes, weather, draw;/, "the effective set: voice is off by her own switch, and Google, Notion and the setup page are not set up on this instance");
+  assert.doesNotMatch(lines[0]!, /\b(admin|profile|card|drive)\b/, "the owner's own are not hers");
+  assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities .*admin/);
 });
 
 test("the per-tenant key plumbing is gone: no set-key, forget-key, KeyStore, intake or setup-incomplete state", () => {
@@ -439,6 +420,6 @@ test("registry cache: read again only when the file changed (stat), at once afte
   renameSync(`${path}.other`, path);
   assert.equal(T.tenantById(rec.id)!.status, "active");
   // the records are new objects each time: a caller changing one does not change the next answer
-  T.tenantById(rec.id)!.capabilities.push("admin" as any);
-  assert.ok(!T.tenantById(rec.id)!.capabilities.includes("admin" as any));
+  T.tenantById(rec.id)!.acis.push("x");
+  assert.ok(!T.tenantById(rec.id)!.acis.includes("x"));
 });

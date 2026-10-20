@@ -17,8 +17,8 @@ process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
-const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i]; // (written out by hand, apart from the modules' `ownerOnly`)
 const { classify, isReadableData, hiddenTools } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
@@ -32,7 +32,7 @@ const tenantRunOptions = (ctx: { id: string }, apiKey: string, now?: Date) => ru
 const { browseRunOptions, buildOptions } = await import("../src/run/agentrun.ts");
 const { BrowseGuard } = await import("../src/modules/browse/browseguard.ts");
 const { browse, startRefusal } = await import("../src/modules/browse/browse.ts");
-const { tenantEnv, createTenantServer } = await import("../src/tenants/tenanttools.ts");
+const { tenantEnv } = await import("../src/tenants/tenanttools.ts");
 const { coolingDown, resetCooldown } = await import("../src/core/cooldown.ts");
 const { InstanceKeyError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
@@ -118,7 +118,7 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   assert.equal(isReadableData(join(settings.stateDir, "tenants.json")), true, "the registry: ids, account ids, status; no key, no words");
   assert.equal(isReadableData(join(bea.notesDir, "context-secret.md")), false);
   assert.equal(isReadableData(bea.logFile), false);
-  assert.equal(isReadableData(join(ann.dir, "consent.json")), false);
+  assert.equal(isReadableData(join(ann.dir, "meta.json")), false);
   assert.equal(isReadableData(join(settings.stateDir, "openbao", "tls", "key.pem")), false);
   assert.equal(isReadableData(join(settings.stateDir, "registrations.json")), false);
   symlinkSync(bea.notesDir, join(settings.memoryDir, "sneaky")); // a link from a readable folder into hers
@@ -144,10 +144,10 @@ test("tenant tools: nothing of the owner's, no payment, no saved profile; only w
     assert.equal(asTenant(t, { file_path: join(ann.notesDir, "x.md") }), "deny", t);
   }
   // her own settings can only take tools away
-  assert.ok(!tenantTools({ config: { browse: false }, capabilities: ann.capabilities }).has("mcp__browse__browse"));
-  assert.ok(!tenantTools({ config: { voice: false }, capabilities: ann.capabilities }).has("mcp__voice__voice"));
-  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed, "listing a connector adds nothing in this phase");
-  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
+  assert.ok(!tenantTools({ config: { browse: false } }).has("mcp__browse__browse"));
+  assert.ok(!tenantTools({ config: { voice: false } }).has("mcp__voice__voice"));
+  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] } })].sort(), allowed, "listing a connector adds nothing in this phase");
+  assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] } })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
   // and the owner-only admin tools are the owner's chat's, not hidden away from it
   assert.ok(!hiddenTools(["mcp__tenants__list_tenants", "mcp__tenants__remove_tenant"]).some((t) => t.startsWith("mcp__tenants")));
   assert.equal(classify("mcp__tenants__list_tenants", {}, "chat"), "allow");
@@ -182,7 +182,6 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.equal(env.ANTHROPIC_BASE_URL, undefined);
   assert.equal(env.PATH, "/bin");
   assert.throws(() => tenantEnv({}, ""), /instance API key/);
-  T.recordConsent(ann, "Germany"); // (her age and region are confirmed: the full tool set)
   const noop = async () => ({ approved: false });
   const o = buildOptions(noop, tenantRunOptions(ann, KEY), undefined);
   assert.equal(o.env!.ANTHROPIC_API_KEY, KEY);
@@ -207,22 +206,13 @@ test("tenant key: her run's environment carries HER key and none of the instance
   }
 });
 
-test("consent first: until her age and region are confirmed her run has one tool and no built-ins", async () => {
+test("no age or region gate: a friend's first run has her full tool set at once, with no consent tool and no tenant server", () => {
   const ctx = T.tenantContext(join_("Cleo"));
   const o = buildOptions(async () => ({ approved: false }), tenantRunOptions(ctx, KEY), undefined);
-  assert.deepEqual(o.tools, []);
-  assert.deepEqual(Object.keys(o.mcpServers as object), ["tenant"]);
-  const gate = async (tool: string, input: Record<string, unknown>) => (await o.canUseTool!(tool, input, { signal: new AbortController().signal } as never)) as { behavior: string };
-  assert.equal((await gate(T.TENANT_CONSENT_TOOL, { ageConfirmed: true, region: "Germany" })).behavior, "allow");
-  for (const [tool, input] of [["Read", { file_path: join(ctx.notesDir, "x.md") }], ["WebSearch", { query: "x" }], ["mcp__send__send", { text: "x" }], ["mcp__browse__browse", { task: "xxxxxx" }]] as const) assert.equal((await gate(tool, input)).behavior, "deny", tool);
-  const after = tenantRunOptions(ctx, KEY);
-  assert.equal(after.tenant!.consented, false);
-  T.recordConsent(ctx, "Germany");
-  const done = tenantRunOptions(ctx, KEY);
-  assert.equal(done.tenant!.consented, true);
-  assert.ok(!done.tools!.has(T.TENANT_CONSENT_TOOL));
-  assert.notEqual(done.systemPrompt, after.systemPrompt);
-  assert.ok(createTenantServer({ id: ctx.id, consentFile: ctx.consentFile }));
+  assert.ok((o.tools as string[]).includes("Read"));
+  assert.ok(!Object.keys(o.mcpServers as object).includes("tenant"));
+  assert.ok(!("consented" in tenantRunOptions(ctx, KEY).tenant!));
+  assert.doesNotMatch(tenantRunOptions(ctx, KEY).systemPrompt as string, /18|record_consent|country or region/);
 });
 
 // ---- a run against a fake SDK ----

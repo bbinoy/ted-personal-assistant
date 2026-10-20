@@ -76,7 +76,7 @@ export function mayRun(conv: Pick<Conversation, "kind" | "tenantId">, what: stri
     return LOGIN;
   }
   const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-  if (!rec || (o.chat ? rec.status === "suspended" : rec.status !== "active")) return { refused: "inactive" }; // (an invited friend answers her consent in a chat turn; nothing unattended runs for her until she is active)
+  if (!rec || (o.chat ? rec.status === "suspended" : rec.status !== "active")) return { refused: "inactive" }; // (a suspended friend gets no answer; nothing unattended runs for her unless she is active)
   const ctx = tenantContext(rec);
   const apiKey = o.key ? o.key() : settings.tenantApiKey;
   if (!apiKey) {

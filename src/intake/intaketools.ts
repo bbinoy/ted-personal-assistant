@@ -4,7 +4,8 @@ import { audit } from "../core/audit.ts";
 import { baseUrlProblem, connectionState, INTAKE_LINK_TOOL, INTAKE_STATUS_TOOL, LinkStore, linkUrl, purposesFor, readDone } from "./intakelinks.ts";
 import { purposeOf } from "./intakepurposes.ts";
 import { settings } from "../core/settings.ts";
-import { tenantById } from "../tenants/tenants.ts";
+import { capabilitiesOfRecord } from "../tenants/capabilityset.ts";
+import { tenantById, type Capability, type TenantRecord } from "../tenants/tenants.ts";
 
 // A tenant's two tools for the intake page (intakeserver.ts), in her run only (agentrun.ts) and only when her tool set has them (capabilities.ts):
 //   get_setup_link   mints a single-use link, valid a few minutes, for ONE purpose, bound to her; the assistant puts it in her chat
@@ -13,13 +14,14 @@ import { tenantById } from "../tenants/tenants.ts";
 
 const reply = (text: string, isError = false) => ({ content: [{ type: "text" as const, text }], ...(isError ? { isError: true } : {}) });
 
-export function createIntakeServer(t: { id: string }, links: LinkStore = new LinkStore()) {
+export function createIntakeServer(t: { id: string }, links: LinkStore = new LinkStore(), capabilities: (rec: TenantRecord) => ReadonlySet<Capability> = capabilitiesOfRecord) {
   const purposeArg = { purpose: z.string().max(20).describe("What she wants to set up: profile (a saved detail like an address), card, google (connect her own Gmail and Calendar by signing in on Google's page) or notion (connect her own Notion by signing in on Notion's page)") };
-  // Her record is read at each call: a purpose she lost the capability for, or a suspension, takes effect at once.
+  // Her record is read at each call: a purpose that is no longer set up, or a suspension, takes effect at once.
   const mayUse = (purpose: string): string | undefined => {
     const rec = tenantById(t.id);
     if (!rec || rec.status !== "active") return "She cannot use this.";
-    if (!purposeOf(purpose) || !purposesFor(rec.capabilities).includes(purpose)) return `She cannot set up "${purpose.slice(0, 20)}" (available: ${purposesFor(rec.capabilities).join(", ") || "nothing"}).`;
+    const offered = purposesFor([...capabilities(rec)]);
+    if (!purposeOf(purpose) || !offered.includes(purpose)) return `She cannot set up "${purpose.slice(0, 20)}" (available: ${offered.join(", ") || "nothing"}).`;
     return undefined;
   };
   return createSdkMcpServer({

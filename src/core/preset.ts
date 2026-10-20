@@ -105,7 +105,7 @@ export const PROMPTS = {
   voice: ["own", "group"],
   summary: [],
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
-  tenant: ["browse", "weather", "draw", "consented", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send", "categories"],
+  tenant: ["browse", "weather", "draw", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send", "categories"],
   dream: ["subject", "own", "group", "categories"],
   heartbeatSystem: ["personality", "own", "who", "group"],
   expert: ["personality", "own", "who"],

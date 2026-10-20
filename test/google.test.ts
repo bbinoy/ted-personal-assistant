@@ -22,8 +22,8 @@ const { SessionHub } = await import("../src/intake/mcpproxy.ts");
 const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/modules/google/googlemcp.ts");
 const { serversFor, LIFECYCLE, stopAll, dropAll } = await import("../src/modules/runtime.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
-const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantCapabilities = (ctx: { id?: string; config: any }) => resolveCapabilities((ctx.id && held.get(ctx.id)) || T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
@@ -171,11 +171,12 @@ test("google: a friend who has not connected, or an instance without an OAuth cl
 // ---- the run's side: what a friend's capability set serves ----
 
 let n = 0;
+// A friend's real set is derived (all but the owner's own); the combinations below are what the pure step does with a set, so each person's set is chosen here.
+const held = new Map<string, readonly (typeof T.CAPABILITIES)[number][]>();
 function friend(caps: (typeof T.CAPABILITIES)[number][]): ReturnType<typeof T.tenantContext> {
   const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name: "Friend" })!;
   T.provision(rec);
-  T.recordConsent(T.tenantContext(rec), "Germany");
-  for (const c of caps) T.grant(rec.id, c);
+  held.set(rec.id, caps);
   return T.tenantContext(T.tenantById(rec.id)!);
 }
 const runCtx = (ctx: ReturnType<typeof T.tenantContext>) => {
@@ -197,9 +198,10 @@ test("google: the capability set decides: google with mail and calendar offers t
   const noGoogle = friend(["mail", "calendar"]);
   assert.equal([...tenantTools(noGoogle)].filter((t) => t.startsWith(GOOGLE_PREFIX)).length, 0, "mail and calendar are her own Google or nothing");
   assert.equal(serversFor(runCtx(noGoogle)).google, undefined);
-  assert.equal(allows({ kind: "tenant", tenantId: noGoogle.id }, "mail"), false);
-  assert.equal(allows({ kind: "tenant", tenantId: both.id }, "mail"), true);
-  const plain = friend([]);
+  assert.equal(tenantCapabilities(noGoogle).has("mail"), false);
+  assert.equal(tenantCapabilities(both).has("mail"), true);
+  assert.equal(allows({ kind: "tenant", tenantId: noGoogle.id }, "mail"), true, "a real friend has the whole derived set: her own Google is on once the instance has the OAuth client");
+  const plain = friend(["chat"]);
   assert.equal(serversFor(runCtx(plain)).google, undefined);
   assert.ok(tenantCapabilities(plain).has("chat"));
   // The owner's runs never have her server, whatever the set.
