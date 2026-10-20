@@ -115,5 +115,7 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
     );
   }
 
-  return { tick, loops: () => [...loops.keys()] };
+  // Resolves when no friend's handler is working on a batch (tests).
+  const idle = async (): Promise<void> => void (await Promise.all([...loops.values()].map((l) => l.handler.idle())));
+  return { tick, idle, loops: () => [...loops.keys()] };
 }

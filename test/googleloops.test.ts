@@ -37,7 +37,8 @@ const google = settings.google as unknown as Record<string, unknown>;
 
 const TOKENS: Record<string, string> = {};
 const EMAILS: Record<string, string> = {};
-const hub = new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, env: { FAKE_GOOGLE_STATE: STATE, FAKE_GOOGLE_LOG: join(dir, "calls.log") } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: EMAILS[t]! } : undefined)));
+const TMP = mkdtempSync(join(dir, "tmp-")); // her credentials folders go here, not into the shared temp folder (other test files run at the same time)
+const hub = new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_STATE: STATE, FAKE_GOOGLE_LOG: join(dir, "calls.log") } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: EMAILS[t]! } : undefined)));
 after(() => hub.closeAll());
 
 interface Msg { id: string; from: string; subject: string; date: string; body: string; labels: string[] }
@@ -89,7 +90,6 @@ function loops(extra: Partial<Parameters<typeof createTenantMailLoops>[0]> = {})
     ...extra,
   });
 }
-const settle = () => new Promise((r) => setTimeout(r, 150));
 const inbox = (id: string) => mailboxes[EMAILS[id]!]!.messages;
 const reread = () => Object.assign(mailboxes, JSON.parse(readFileSync(STATE, "utf8")));
 
@@ -117,7 +117,7 @@ test("a friend's mail check: the first look only records the inbox; new mail is 
   // new mail for Anna only
   deliver(anna, mail("", "Boss <boss@example.org>", "URGENT: contract"), mail("", "Shop <shop@example.org>", "Newsletter: deals"), mail("", "Carl <carl@example.org>", "Meeting Thursday?"), mail("", "Eve <eve@example.org>", "Hello again"));
   await l.tick();
-  await settle();
+  await l.idle();
   assert.deepEqual(triaged.map((t) => t.id), [anna], "one small-model batch, for her alone");
   assert.deepEqual(triaged[0]!.subjects.sort(), ["Hello again", "Meeting Thursday?", "Newsletter: deals", "URGENT: contract"]);
   assert.ok(triaged.every((t) => t.subjects.every((s) => !/Invoice/.test(s))), "Bea's mail never reaches Anna's triage, and none of hers reached the model at all");
@@ -160,7 +160,7 @@ test("a friend's mail check: the first look only records the inbox; new mail is 
   // Bea's own turn: her mail is hers
   deliver(bea, mail("", "Dora <dora@example.org>", "URGENT: payment"));
   await l.tick();
-  await settle();
+  await l.idle();
   assert.deepEqual(triaged.at(-1), { id: bea, subjects: ["URGENT: payment"] });
   assert.ok(notices.filter((x) => x.id === bea).length === 1 && notices.filter((x) => x.id === anna).length === noticed);
 });
@@ -198,7 +198,7 @@ test("one friend failing affects nobody else: her server is gone, her check logs
     deliver(good, mail("", "Z <z@example.org>", "URGENT: for Gina"));
     await l.tick();
     await l.tick();
-    await settle();
+    await l.idle();
     assert.ok(notices.some((x) => x.id === good && /URGENT: for Gina/.test(x.text)), "the other friend was served");
     assert.equal(notices.some((x) => x.id === bad), false);
     assert.equal(errors.filter((e) => /heartbeat error/.test(e)).length, 1, "reported once per outage");
@@ -219,7 +219,7 @@ test("the cost guard: with no access (her cooldown, day's budget, suspension or 
   blocked.delete(id);
   google.archiveLive = true;
   await l.tick();
-  await settle();
+  await l.idle();
   assert.equal(triaged.length, 1, "the mail was still unseen: it is classified now, once");
   reread();
   assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off) once GOOGLE_ARCHIVE_LIVE is on");

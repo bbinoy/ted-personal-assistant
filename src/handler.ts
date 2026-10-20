@@ -116,8 +116,16 @@ export function createHandler(deps: { approve: Approve; notify: (text: string) =
     }
   }
 
-  const start = () => void work().catch((e) => console.error("handler error:", (e as Error).message));
+  const pending = new Set<Promise<void>>();
+  const start = () => {
+    const p: Promise<void> = work().catch((e) => console.error("handler error:", (e as Error).message)).finally(() => pending.delete(p));
+    pending.add(p);
+  };
   return {
+    // Resolves when no batch is being handled (tests wait on this instead of a timer).
+    async idle(): Promise<void> {
+      while (pending.size) await Promise.all([...pending]);
+    },
     enqueue(items: HandleItem[]) {
       if (items.length === 0) return;
       writeJson(ctx.queue, [...load(), ...items]);
