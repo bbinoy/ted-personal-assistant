@@ -38,7 +38,7 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
   draw: (ctx) => createDrawServer(ctx.key!),
   voice: (ctx) => createVoiceServer(ctx.key!),
   memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
-  browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.memory?.groupId, key: ctx.key, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
+  browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.memory?.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: (ctx) => {
     const status = browseStatus();

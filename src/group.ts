@@ -3,7 +3,7 @@ import { budgetSpent } from "./budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "./fence.ts";
 import { prepare, runConversation } from "./agent.ts";
-import { setConversationMessage } from "./permissions.ts";
+import { scopeOf } from "./turnscope.ts";
 import { AuthError, RateLimitError } from "./errors.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
@@ -150,7 +150,7 @@ const stickyMs = () => settings.groupStickyMinutes * 60_000;
 
 export function createGroupBrain(brain: Brain) {
   const { pipeline } = brain;
-  type Asked = { line: string; quote: Quote; incoming?: Quote; voice: boolean; picture?: Picture; document?: Document; at: number; edit?: { before?: string } };
+  type Asked = { line: string; said: string; quote: Quote; incoming?: Quote; voice: boolean; picture?: Picture; document?: Document; at: number; edit?: { before?: string } };
   const state = new Map<string, { addressed?: Asked; lastSpoke?: number; running?: boolean; runStart?: number; runEnd?: number; gone?: Set<number> }>(); // gone: timestamps of messages their author deleted
   const warm = brain.warm ?? (brain.run ? undefined : (conv: Conversation, afterTurn: boolean) => {
     prepare(conv, { style: styleLines(new Date()) }, { keep: !afterTurn });
@@ -193,7 +193,8 @@ export function createGroupBrain(brain: Brain) {
     if (!st.running && !isPaused(now) && !budgetSpent()) warm?.(conv, false);
     // The message that addressed us goes to the model whole (a long message too); the 600-character line is for the log and the gate's view.
     const asked = m.reaction ? line : `${speaker(m)}: ${defuseSpeakers(clean("group message", m.text, { max: LIMITS.message }))}`;
-    if (direct) st.addressed = { line: asked, quote: { text: m.text.slice(0, LIMITS.preview), author: m.author ?? "", timestamp: m.timestamp }, incoming: m.quote, voice: !!m.voice, picture: m.picture, document: m.document, at: now.getTime(), edit }; // sticky until answered, or until it is too old to answer (GROUP_STICKY_MINUTES)
+    const said = m.reaction ? `${speaker(m)} reacted ${oneLine("reaction", m.reaction.emoji, 16)}` : asked; // (what the member said, for the approval judge: a reaction is not the text of the message it is on)
+    if (direct) st.addressed = { line: asked, said, quote: { text: m.text.slice(0, LIMITS.preview), author: m.author ?? "", timestamp: m.timestamp }, incoming: m.quote, voice: !!m.voice, picture: m.picture, document: m.document, at: now.getTime(), edit }; // sticky until answered, or until it is too old to answer (GROUP_STICKY_MINUTES)
     // Still waiting for an answer to a direct address? (It lapses after GROUP_STICKY_MINUTES: answering hours later would be odd.)
     const pending = () => {
       if (st.addressed && now.getTime() - st.addressed.at > stickyMs()) st.addressed = undefined;
@@ -263,7 +264,11 @@ export function createGroupBrain(brain: Brain) {
         // Like a private chat, it may answer with an emoji reaction (on the message it is answering), with or without words.
         st.running = true;
         st.runStart = Date.now();
-        setConversationMessage(conv.key, live ? last.text : undefined); // the approval judge's provenance for this turn's browse steps: the member's message that addressed us (permissions.ts)
+        // The approval judge's provenance for this turn (turnscope.ts): the message that ADDRESSED us (not the newest of the burst), a reaction as "<name> reacted <emoji>"; a turn the gate decided
+        // on its own has the gate's task, which is not anybody's words.
+        const turn = scopeOf(conv.key);
+        if (live) turn.say(live.said);
+        else if (hint) turn.derive("gate", hint);
         const res = await pipeline
           .runTurn(conv, {
             run: async (hooks) => ({ text: await (brain.run ?? realRunner)(build, { conv, now, firstOutput: hooks.firstOutput }) }),
@@ -274,7 +279,7 @@ export function createGroupBrain(brain: Brain) {
             announce: !!asked,
           })
           .finally(() => {
-            setConversationMessage(conv.key, undefined);
+            turn.end();
             st.running = false;
             st.runEnd = Date.now();
           });

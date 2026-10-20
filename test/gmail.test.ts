@@ -106,7 +106,7 @@ test("policy: archiving is exactly 'remove INBOX from a thread'; log-only denies
 
 test("log-only archive: a model's archive call is refused politely and recorded as would-archive", async () => {
   await withGmail({ gmailArchiveLive: false }, async () => {
-    const canUse = makeCanUseTool(async () => assert.fail("never asks"), "chat", undefined, undefined, noJudge);
+    const canUse = makeCanUseTool(async () => assert.fail("never asks"), "chat", undefined, noJudge);
     const r = await canUse(`${GM}unlabel_thread`, { threadId: "thread-log-only", labelIds: ["INBOX"] }, opts);
     assert.equal(r!.behavior, "deny");
     assert.match((r as { message: string }).message, /log-only/);
@@ -140,14 +140,14 @@ test("a Gmail send of a draft is approved against the draft as read back; unread
   await withGmail({}, async () => {
     setGmailReaders({ draft: async () => ({ to: ["real@example.com"], cc: ["cc@example.com"], bcc: ["hidden@example.com"], subject: "Terms", body: "see attached", hasAttachments: true }), original: async () => undefined });
     const shown: string[] = [];
-    const canUse = makeCanUseTool(async (d) => (shown.push(d), { approved: true }), "chat", undefined, undefined, noJudge);
+    const canUse = makeCanUseTool(async (d) => (shown.push(d), { approved: true }), "chat", undefined, noJudge);
     const r = await canUse(`${GM}send_message`, { draftId: "draft-1" }, opts);
     assert.equal(r!.behavior, "allow");
     assert.match(shown[0]!, /real@example\.com/);
     assert.match(shown[0]!, /hidden@example\.com/, "bcc is shown");
     // a draft that cannot be read back is not sent
     setGmailReaders({ draft: async () => { throw new Error("connector down"); }, original: async () => undefined });
-    const again = await makeCanUseTool(async () => assert.fail("not asked"), "chat", undefined, undefined, noJudge)(`${GM}send_message`, { draftId: "draft-2" }, opts);
+    const again = await makeCanUseTool(async () => assert.fail("not asked"), "chat", undefined, noJudge)(`${GM}send_message`, { draftId: "draft-2" }, opts);
     assert.equal(again!.behavior, "deny");
     assert.match((again as { message: string }).message, /could not be read back/);
     setGmailReaders(undefined);
@@ -161,7 +161,7 @@ test("a Gmail reply that names no recipients is shown with the people of the ori
       original: async () => ({ to: ["dana@example.com", "third@example.com"], cc: ["boss@example.com"], bcc: [], subject: "Contract", body: "", hasAttachments: false }),
     });
     const shown: string[] = [];
-    const canUse = makeCanUseTool(async (d) => (shown.push(d), { approved: true }), "chat", undefined, undefined, noJudge);
+    const canUse = makeCanUseTool(async (d) => (shown.push(d), { approved: true }), "chat", undefined, noJudge);
     await canUse(`${GM}reply`, { messageId: "m1", body: "Thanks" }, opts);
     assert.match(shown[0]!, /dana@example\.com/);
     assert.doesNotMatch(shown[0]!, /third@example\.com|boss@example\.com/, "a plain reply goes to the sender only");
@@ -174,7 +174,7 @@ test("a Gmail reply that names no recipients is shown with the people of the ori
     assert.doesNotMatch(shown[2]!, /dana@example\.com/);
     // the original cannot be read: a reply with no recipients and a reply-all are not sent
     setGmailReaders({ draft: async () => undefined, original: async () => undefined });
-    const blind = makeCanUseTool(async () => assert.fail("not asked"), "chat", undefined, undefined, noJudge);
+    const blind = makeCanUseTool(async () => assert.fail("not asked"), "chat", undefined, noJudge);
     assert.equal((await blind(`${GM}reply`, { messageId: "m4", body: "x" }, opts))!.behavior, "deny");
     assert.equal((await blind(`${GM}reply`, { messageId: "m5", body: "x", replyAll: true, to: ["a@example.com"] }, opts))!.behavior, "deny");
     setGmailReaders(undefined);
@@ -189,7 +189,7 @@ test("an unattended Gmail send always asks; chat sends are judged; forward and n
     assert.equal(view("forward", { messageId: "m", to: ["x@example.com"], forwardText: "fyi" })?.body, "fyi");
     assert.equal(view("send_message", { draftId: "d" }), undefined, "a draft id alone has no content to show");
     let asked = 0;
-    const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "handler", undefined, undefined, noJudge);
+    const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "handler", undefined, noJudge);
     await canUse(`${GM}send_message`, { to: ["x@example.com"], subject: "s", body: "b" }, opts);
     await canUse(`${GM}forward`, { messageId: "m", to: ["y@example.com"] }, opts);
     assert.equal(asked, 2);

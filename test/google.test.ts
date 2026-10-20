@@ -1,5 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { scopeOf } from "../src/turnscope.ts";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -237,14 +238,13 @@ function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = 
   const judged: { description: string; untrustedInput?: boolean }[] = [];
   const approve = async (description: string) => (asked.push(description), { approved: true });
   const judge = (async (i: { description: string; untrustedInput?: boolean }) => (judged.push(i), { decision: verdict, reason: "t" })) as never;
-  const can = makeCanUseTool(approve as never, "group", ctx.notesDir, undefined, judge, undefined, tenantTools(ctx), true, { speaker: { key: `tenant:${ctx.id}`, member: true } });
+  const can = makeCanUseTool(approve as never, "group", ctx.notesDir, judge, undefined, tenantTools(ctx), true, { provenance: scopeOf(`tenant:${ctx.id}`).read, conversation: `tenant:${ctx.id}` });
   return { asked, judged, run: (tool: string, input: Record<string, unknown>) => can(G + tool, input, opts) as Promise<Out> };
 }
 
 test("google: reads run free; a send, a draft and a label go to the judge and, unless it passes them, to HER chat; the floor refuses what no verdict may allow", async () => {
   const ctx = friend(["google", "mail", "calendar"]);
-  const { setConversationMessage } = await import("../src/permissions.ts");
-  setConversationMessage(`tenant:${ctx.id}`, "write to Carl that Thursday works");
+  scopeOf(`tenant:${ctx.id}`).say("write to Carl that Thursday works");
   // reads
   let r = rig(ctx);
   assert.equal((await r.run("search_gmail_messages", { query: "in:inbox" })).behavior, "allow");
@@ -293,8 +293,7 @@ test("google: reads run free; a send, a draft and a label go to the judge and, u
 
 test("google: a calendar write that names guests, and every answer to an invite, always asks her, a delete is denied and is never judged; a plain one is judged", async () => {
   const ctx = friend(["google", "mail", "calendar"]);
-  const { setConversationMessage } = await import("../src/permissions.ts");
-  setConversationMessage(`tenant:${ctx.id}`, "put the dentist on Wednesday");
+  scopeOf(`tenant:${ctx.id}`).say("put the dentist on Wednesday");
   let r = rig(ctx, "auto");
   assert.equal((await r.run("get_events", {})).behavior, "allow");
   assert.equal((await r.run("manage_event", { action: "create", summary: "Dentist", start_time: "2026-10-21T10:00:00", end_time: "2026-10-21T11:00:00" })).behavior, "allow");

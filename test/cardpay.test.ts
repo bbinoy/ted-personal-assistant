@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { standing } from "./util.ts";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -83,7 +84,7 @@ const rig = async (o: { access?: CardAccess; mode?: "owner" | "group"; frames?: 
   const answer = { approved: true };
   const judged: number[] = [];
   const judge = async (): Promise<Verdict> => (judged.push(1), { decision: "auto", reason: "test" }); // a judge that says yes to everything
-  const canUse = makeCanUseTool(async (description, call, _s, op) => (asked.push({ description, input: call.input, typedYes: op?.typedYes }), { ...answer }), "browse", undefined, "buy a ticket", judge, g);
+  const canUse = makeCanUseTool(async (description, call, _s, op) => (asked.push({ description, input: call.input, typedYes: op?.typedYes }), { ...answer }), "browse", undefined, judge, g, undefined, false, { provenance: standing("buy a ticket") });
   return { g, asked, answer, judged, canUse, ...made };
 };
 
@@ -573,7 +574,7 @@ test("the real asking path: the audited ask holds the placeholder and the code-w
     compose: async (q) => ({ text: `Pay shop.test? ${q.details.includes("Card payment approval") ? "ok" : ""}`, ms: 1, by: "model" as const }),
   });
   const judge = async (): Promise<Verdict> => ({ decision: "auto", reason: "test" });
-  const canUse = makeCanUseTool(approve, "browse", undefined, "buy", judge, g);
+  const canUse = makeCanUseTool(approve, "browse", undefined, judge, g, undefined, false, { provenance: standing("buy") });
   const r = { g, canUse } as unknown as Rig;
   await toPsp(r);
   const res = (await canUse(`${B}type`, { target: "e4", text: "{{card:number}}" }, opts)) as Allowed;

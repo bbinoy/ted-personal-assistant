@@ -269,7 +269,8 @@ test("the handler's run is hers: only her Google tools, her notes, the instance 
   assert.equal(env.ANTHROPIC_API_KEY, "instance-key-not-real");
   assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, undefined, "never the owner's login");
   assert.equal(o.persistSession, undefined);
-  assert.equal(opts.judgeContext, "TASK");
+  assert.deepEqual(opts.provenance?.(), { kind: "standing", task: "TASK" }, "the fixed task, as a job's provenance (never a message of hers)");
+  assert.equal(opts.conversation, `tenant:${opts.tenant?.id}`);
   assert.equal(opts.untrusted, true);
   assert.equal(opts.sessionFile, undefined);
   // a send from the handler is asked in her chat (autoApprove off: nothing is judged)

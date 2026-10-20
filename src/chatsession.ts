@@ -76,8 +76,8 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
           const refused = tenant?.id ? failure(lastError, message.subtype, tenant.id) : undefined;
           throw refused instanceof TenantKeyError ? refused : new Error(`/compact produced no compact_boundary (${message.subtype})`);
         }
-        const { compactFailedAt: _cleared, ...rest } = saved;
-        writeJson(file, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens });
+        const { compactFailedAt: _cleared, untrustedIn: _held, ...rest } = saved;
+        writeJson(file, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens, ...carriedTaint(saved, message.session_id) }); // (a compaction continues the session: its summary may still hold the untrusted text)
         console.log(`${source}: compacted ${boundary.pre_tokens} -> ${boundary.post_tokens ?? "?"} tokens (${mode})`);
         audit("chat_session", "compacted", source);
         return;
@@ -96,9 +96,36 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
 // one instead of failing the same way for ever. Returns whether it did.
 export function forgetUnresumable(file: string, e: unknown, source: Source): boolean {
   if (!/no conversation found|session id.*not found|could not (resume|find) (the )?(session|conversation)/i.test((e as Error)?.message ?? "")) return false;
-  const { sessionId: _gone, baseTokens: _base, lastContextTokens: _ctx, ...rest } = readJson<ChatSession>(file, { costUsd: 0 });
+  const { sessionId: _gone, baseTokens: _base, lastContextTokens: _ctx, untrustedIn: _tainted, ...rest } = readJson<ChatSession>(file, { costUsd: 0 });
   writeJson(file, { ...rest, costUsd: 0 });
   console.error(`${source}: the saved session can no longer be resumed, the next message starts a fresh one`);
   audit("chat_session", "unresumable-reset", source);
   return true;
+}
+
+// ---- the untrusted-input flag of a session ----
+// A session that has read raw mail or a web page still holds that text in its context on every later turn, so the approval judge must be told "untrusted input in
+// this run" from then on, not just in the turn that read it. The flag lives in the session file (ChatSession.untrustedIn, the id of the session) and follows the
+// session: a fresh session starts clean (consume() carries it only for the session that held it), a compaction CONTINUES the session and its summary may still
+// contain the text, so it stays set (compactChatIfNeeded carries it); it is cleared only when a new session starts (or the saved one can no longer be resumed).
+export interface Taint {
+  read(): boolean; // does the session this run continues, or this run itself, hold untrusted input?
+  mark(): void; // this run has read some: kept in the file for the turns after it
+}
+
+export function sessionTaint(file: string | undefined, resume: string | undefined): Taint {
+  let here = false; // this run
+  return {
+    read: () => here || (!!file && !!resume && readJson<ChatSession>(file, { costUsd: 0 }).untrustedIn === resume),
+    mark: () => {
+      here = true;
+      if (file) writeJson(file, { ...readJson<ChatSession>(file, { costUsd: 0 }), untrustedIn: resume ?? "pending" }); // (a fresh run does not know its session id yet: consume() fills it in)
+    },
+  };
+}
+
+// The flag of the session file after a turn that ended in session `id`: kept for the session that held it (or that this turn started and marked), dropped for any other.
+export function carriedTaint(before: ChatSession, id: string): { untrustedIn?: string } {
+  const held = before.untrustedIn;
+  return held !== undefined && (held === "pending" || held === before.sessionId) ? { untrustedIn: id } : {};
 }

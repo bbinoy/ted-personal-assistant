@@ -7,7 +7,7 @@ import { browseSystem } from "./browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "./browseguard.ts";
 import { hiddenBrowserTools } from "./browserules.ts";
 import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
-import { chatResume, forgetUnresumable } from "./chatsession.ts";
+import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "./connectors.ts";
 import { noteSuccess, observeRateLimit } from "./cooldown.ts";
 import { failure } from "./errors.ts";
@@ -16,7 +16,9 @@ import { builtinModule } from "./modules/builtin.ts";
 import { isOwnerOnly } from "./toolmanifest.ts";
 import { serversFor } from "./modules/runtime.ts";
 import type { RunContext } from "./modules/types.ts";
-import { approveIn, makeCanUseTool, type Approve, type JudgeSetup } from "./permissions.ts";
+import { approveIn, makeCanUseTool, type Approve } from "./permissions.ts";
+import type { RunProvenance } from "./autojudge.ts";
+import { scopeOf } from "./turnscope.ts";
 import { groupCapabilities, groupTools } from "./capabilities.ts";
 import { hiddenTools } from "./policy.ts";
 import { PROFILES } from "./profiles.ts";
@@ -55,8 +57,12 @@ export interface RunOptions {
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
   maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else the chat or background one
-  judgeContext?: string; // an unattended job: the instructions it was given, shown to the approval judge (autojudge.ts)
-  speaker?: JudgeSetup["speaker"]; // the conversation whose message started the run, when it is not this run's own conversation (the browse sub-run of a chat, a group or a tenant)
+  // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
+  // read at every call (a warm process is built before the message that uses it arrives): a job passes `() => ({ kind: "standing", task })` with its fixed text, an
+  // unattended turn of a conversation `derived` text (turnscope.ts derivedTurn). A conversation's own turn passes nothing: its turn-scoped messages are its scope's
+  // (turnscope.ts scopeOf, keyed by the conversation). The browse sub-run inherits its parent's.
+  provenance?: () => RunProvenance | undefined;
+  conversation?: string; // the conversation the run acts for, when it is not the run's own source (a tenant's mail handler, the browse sub-run): keys the per-conversation anti-repeat state (permissions.ts)
   untrusted?: boolean; // the run reads raw mail or web pages from its first call (the mail handler, the browse worker): told to the approval judge
   // A tenant's run (tenants.ts): an isolated "group" run on HER OWN Anthropic API key, with her own cost ledger and cooldown. Never absent for a run
   // made for a tenant, and never given the instance's login: without a key the run does not start.
@@ -69,7 +75,7 @@ const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: num
 
 // The browse sub-run (browse.ts calls this through the entry tool): a fresh run with the browser, under the guard. A group's run is the same
 // as the owner's; only `approve` differs (the group's own approver).
-export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, speaker?: RunOptions["speaker"]): RunOptions {
+export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation"> = {}): RunOptions {
   return {
     source: PROFILES.browse.source,
     systemPrompt: browseSystem(undefined, guard.vision, guard.profileKeys(), guard.cardInfo()),
@@ -77,8 +83,8 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, speaker
     maxBudgetUsd: PROFILES.browse.maxBudgetUsd,
     maxMinutes: settings.browseMaxMinutes,
     outputFormat: PROFILES.browse.outputSchema,
-    judgeContext: guard.task,
-    speaker,
+    provenance: parent.provenance, // the words that started the run it works for; its own task is the assistant's (judgeSetup browseTask), added next to them
+    conversation: parent.conversation,
     untrusted: true, // it reads hostile pages
     guard,
     tenant, // the browse worker of a tenant's run is hers too: her key, her ledger (it would otherwise be billed to the instance's login)
@@ -86,7 +92,7 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, speaker
 }
 
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
-export const browseRunner = (approve: Approve, tenant?: TenantRun, speaker?: RunOptions["speaker"]) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, speaker));
+export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
 
 // The built-in tools of a run (everything else is an MCP tool), from the rows of the builtin module (modules/builtin.ts), one list for every run: a group or a
 // tenant has the rows its capability set holds (its own notes, search, skills; before a tenant's age and region are confirmed none, and never opening a page);
@@ -144,13 +150,15 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
   const tellKey = opts.source === "chat" ? OWNER_KEY : opts.source === "group" ? (tenant?.key ?? opts.memory?.groupId) : undefined;
   const mode: BrowseMode = opts.source === "group" ? "group" : "owner";
-  // Whose message the approval judge reads as the provenance of this run's calls: this conversation's own (the browse worker: the one that started it).
-  const speaker = opts.speaker ?? (tellKey ? { key: tellKey, member: opts.source === "group" } : undefined);
+  // Whose words the approval judge reads as the provenance of this run's calls: what the code that started it said, else this conversation's own turn (turnscope.ts;
+  // the browse worker: its parent's). `conversation` keys the per-conversation state of permissions.ts.
+  const provenance = opts.provenance ?? (tellKey ? scopeOf(tellKey).read : undefined);
+  const conversation = opts.conversation ?? tellKey ?? OWNER_KEY;
   const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && opts.memory?.groupId ? approveIn(opts.memory.groupId) : approve; // a tenant's browse run asks HER, in her chat
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId: opts.memory?.groupId, tenant, memory: opts.memory, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, speaker) };
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId: opts.memory?.groupId, tenant, memory: opts.memory, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -198,7 +206,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     skills: isolated ? (skills.length ? [...skills] : undefined) : (opts.skills ? [...opts.skills] : ownerSkills()),
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, opts.judgeContext, undefined, opts.guard, tools, !!tenant, { speaker, untrusted: opts.untrusted }),
+    // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume) }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
@@ -228,7 +237,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
       const before = readJson<ChatSession>(opts.sessionFile, { costUsd: 0 });
       const baseTokens = before.sessionId === message.session_id ? before.baseTokens : lastContext; // a session from before this existed has none: the absolute limit applies until it starts fresh
-      const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}) };
+      const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
       writeJson(opts.sessionFile, next);
     }
     recordCost(message.total_cost_usd - previousCost, opts.tenant?.costFile); // failures cost money too (a tenant's goes to her own ledger)

@@ -11,8 +11,8 @@ import { holdQuote, holdVoiceNote, rememberSender } from "./voicenote.ts";
 import { cardCommand } from "./card.ts";
 import { TYPED_YES_NEEDED } from "./paymentrules.ts";
 import { withSend, type Content, type SendSink } from "./send.ts";
-import { reactionPrompt, splitReaction } from "./reaction.ts";
-import { setChatAssistantMessage } from "./permissions.ts";
+import { reactionMessage, reactionPrompt, splitReaction } from "./reaction.ts";
+import { scopeOf } from "./turnscope.ts";
 import { splitVoice, VOICE_FAILED_NOTE, voiceOption } from "./voicereply.ts";
 import { settings } from "./settings.ts";
 import { UNSURE } from "./lang.ts";
@@ -194,7 +194,7 @@ export function createPipeline(deps: PipelineDeps) {
   async function deliverFinal(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target" | "reaction">): Promise<void> {
     const chosen = splitVoice(replied);
     const { reaction, text } = splitReaction(chosen.text);
-    if (conv.source === "chat") setChatAssistantMessage(text); // the owner's own chat (the others are isolated): the judge reads her next "yes" against it
+    if (conv.source === "chat") scopeOf(conv.key).assistantSaid(text); // the owner's own chat (the others are isolated): the judge reads her next "yes" against it
     await d.send({ kind: "text", text, voice: !!chosen.voice }, false);
     if (reaction && t.target) await d.send({ kind: "reaction", emoji: reaction }, false);
     else if (!t.reaction && !d.state.reacted) status(conv, "✅", t.target); // a reaction the model already put on that message stays
@@ -497,7 +497,8 @@ export function createPipeline(deps: PipelineDeps) {
       const on = findMessage(r.targetTimestamp, conv.logFile);
       record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
       const prompt = reactionPrompt(r.emoji, on);
-      await runTurn(conv, { run: () => deps.run(conv, prompt, prompt), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
+      // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
+      await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
     });
   }
 

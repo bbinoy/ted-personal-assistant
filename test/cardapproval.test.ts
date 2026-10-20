@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { standing } from "./util.ts";
 import { tick as settle } from "./util.ts";
 import { answer, answerReaction, request } from "./approvalrig.ts";
 import { makeApprove } from "../src/approvalask.ts";
@@ -110,7 +111,7 @@ test("the permission layer: a payment ask skips the judge even in broad mode, pa
   const g: GuardDecision = { kind: "ask", judge: false, payment: true, once: true, description: "💳 Card payment approval", resolve: async () => (order.push("resolved"), { ...call.input, text: "RESOLVED" }) };
   const guard: CallGuard = { decide: async () => g };
   const seen: unknown[] = [];
-  const canUse = makeCanUseTool(async (_d, c, _s, o) => (order.push("asked"), seen.push([c.input, o]), { approved: true }), "browse", undefined, "buy", judge, guard);
+  const canUse = makeCanUseTool(async (_d, c, _s, o) => (order.push("asked"), seen.push([c.input, o]), { approved: true }), "browse", undefined, judge, guard, undefined, false, { provenance: standing("buy") });
   const r = (await canUse(call.tool, call.input, { signal: new AbortController().signal } as never)) as { behavior: string; updatedInput?: Record<string, unknown> };
   assert.equal(r.behavior, "allow");
   assert.equal(r.updatedInput?.text, "RESOLVED");
@@ -119,12 +120,12 @@ test("the permission layer: a payment ask skips the judge even in broad mode, pa
   assert.deepEqual(seen, [[call.input, { typedYes: true }]], "the approver sees the placeholder call and the typed-yes flag");
   // not approved: nothing is resolved
   order.length = 0;
-  const no = makeCanUseTool(async () => (order.push("asked"), { approved: false }), "browse", undefined, "buy", judge, guard);
+  const no = makeCanUseTool(async () => (order.push("asked"), { approved: false }), "browse", undefined, judge, guard, undefined, false, { provenance: standing("buy") });
   assert.equal((await no(call.tool, call.input, { signal: new AbortController().signal } as never))!.behavior, "deny");
   assert.deepEqual(order, ["asked"]);
   // a resolve that refuses (kill switch, page changed) denies even after a yes
   const refusing: CallGuard = { decide: async () => ({ ...g, resolve: async () => "Card payments are switched off." }) };
-  const late = makeCanUseTool(async () => ({ approved: true }), "browse", undefined, "buy", judge, refusing);
+  const late = makeCanUseTool(async () => ({ approved: true }), "browse", undefined, judge, refusing, undefined, false, { provenance: standing("buy") });
   const l = (await late(call.tool, call.input, { signal: new AbortController().signal } as never)) as { behavior: string; message?: string };
   assert.equal(l.behavior, "deny");
   assert.match(l.message!, /switched off/);
@@ -143,4 +144,45 @@ test("the question must carry the merchant, the card host, the total with curren
     assert.match(validateQuestion(good.replaceAll(cut, "…"), facts)!, re);
   }
   assert.match(validateQuestion(good.replace("Reply YES to pay or NO.", "Go ahead?"), facts)!, /missing "YES"/);
+});
+
+// ---- a payment resolves only through a direct path ----
+
+test("typed yes: with a payment and a calendar question open, a bare YES that the answer model aims at the payment pays nothing; the owner is asked which one", async () => {
+  const pay = ask(600, true);
+  const cal = request(async () => 601, "Move the dentist", { tool: "mcp__claude_ai_Google_Calendar__update_event", input: { eventId: "e1" } }, undefined, {});
+  let paid = false;
+  let moved = false;
+  void pay.then((d) => (paid = d.approved));
+  void cal.then((d) => (moved = d.approved));
+  await settle();
+  const aimed = { judge: jOf("approve", "A1"), recent: () => [] }; // A1: the payment (asked first)
+  const a = await answer("YES", () => {}, undefined, aimed);
+  assert.equal(a.outcome, "clarify");
+  assert.match(a.reply ?? "", /Which one/);
+  await settle();
+  assert.equal(paid, false);
+  assert.equal(moved, false, "nothing else was approved either");
+  // every outcome the model could choose for the payment is refused the same way, a decline included (the owner meant the other question)
+  for (const outcome of ["approve", "approve_modified", "decline"] as const) assert.equal((await answer("YES", () => {}, undefined, { judge: jOf(outcome, "A1"), recent: () => [] })).outcome, "clarify", outcome);
+  // a reply that quotes the payment is direct: a typed YES approves it
+  assert.deepEqual(await answer("YES", () => {}, { timestamp: 600 }, never), { outcome: "approved" });
+  assert.deepEqual(await pay, { approved: true });
+  // the calendar question still goes through the model's target
+  assert.equal((await answer("yes move it", () => {}, undefined, { judge: jOf("approve", "A1"), recent: () => [] })).outcome, "approved");
+  assert.deepEqual(await cal, { approved: true });
+});
+
+test("approvals are keyed by conversation: the same timestamp in another conversation is another question", async () => {
+  const a = request(async () => 700, "Create event A", { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "a" } }, undefined, { scope: "owner" });
+  const b = request(async () => 700, "Create event B", { tool: "mcp__claude_ai_Google_Calendar__create_event", input: { summary: "b" } }, undefined, { scope: "group-9" });
+  await settle();
+  assert.equal(answerReaction("👍", 700, "group-9"), "approved");
+  assert.deepEqual(await b, { approved: true });
+  let settled = false;
+  void a.then(() => (settled = true));
+  await settle();
+  assert.equal(settled, false, "the owner's question with the same timestamp is still open");
+  assert.equal(answerReaction("👎", 700, "owner"), "declined");
+  assert.deepEqual(await a, { approved: false });
 });

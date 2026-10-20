@@ -10,7 +10,7 @@ import { capProblem } from "./payments.ts";
 import { approvalId, CARD_PLACEHOLDER, cartHash, cartLines, expirySplit, findPayableTotal, formatMoney, frameVerdict, HAS_CARD_PLACEHOLDER, isPsp, kindOfFieldName, parseMoney, paymentOutcome, PSP_HOSTS, riskyBoxes, sameMoney, WORDS, type FieldKind, type Money } from "./paymentrules.ts";
 import { localDay } from "./pause.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput, validPoint } from "./browsevision.ts";
-import { audit } from "./audit.ts";
+import { audit, wordless } from "./audit.ts";
 import type { CarriedApproval } from "./autojudge.ts";
 import { clip } from "./format.ts";
 import { cleanText, LIMITS } from "./sanitize.ts";
@@ -51,6 +51,7 @@ export interface GuardOptions {
   profile?: Profile; // the owner's saved details (profile.ts): the owner's chat run only, a group's guard ignores it
   card?: CardAccess; // the owner's payment card (card.ts): the owner's chat run only, a group's guard ignores it
   frames?: FrameProbe; // the browser's own list of the page's frames (browsecdp.ts); without it a card is never typed into a frame
+  tenant?: boolean; // the run is a tenant's: its audit rows carry no words (the sites she visits, the controls she meets, her task), only how big (audit.ts wordless)
 }
 
 // A saved detail typed by code: the model names a key, never sees the value.
@@ -75,6 +76,7 @@ const short = (tool: string) => tool.slice(BROWSER_PREFIX.length);
 
 export class BrowseGuard {
   readonly mode: BrowseMode;
+  private readonly tenant: boolean;
   readonly task: string;
   readonly outDir: string;
   nodes = new Map<string, Node>(); // the elements of the last page view
@@ -120,6 +122,7 @@ export class BrowseGuard {
 
   constructor(o: GuardOptions) {
     this.mode = o.mode;
+    this.tenant = !!o.tenant;
     this.task = o.task;
     this.outDir = o.outDir;
     this.maxCommits = o.maxCommits ?? settings.browseMaxCommits;
@@ -224,10 +227,14 @@ export class BrowseGuard {
     return id;
   }
 
+  // Every audit row of the guard goes through here: a tenant's carry no words (the audit log is the admin's).
+  private record(tool: string, decision: string, source: "browse", meta?: Record<string, unknown>): void {
+    audit(tool, decision, source, this.tenant ? wordless(meta) : meta);
+  }
   private log(tool: string, verdict: string, input: Record<string, unknown>, extra: Record<string, unknown> = {}) {
     // Typed values are logged as a length, never as text.
     const lens = typeof input.text === "string" ? { textLength: input.text.length } : Array.isArray(input.fields) ? { fieldLengths: (input.fields as { value?: unknown }[]).map((f) => String(f?.value ?? "").length) } : {};
-    audit("browse_step", verdict, "browse", { mode: this.mode, tool: short(tool), host: hostOf(typeof input.url === "string" ? input.url : this.url), ...lens, ...extra });
+    this.record("browse_step", verdict, "browse", { mode: this.mode, tool: short(tool), host: hostOf(typeof input.url === "string" ? input.url : this.url), ...lens, ...extra });
   }
   private deny(tool: string, input: Record<string, unknown>, reason: string, extra: Record<string, unknown> = {}): Decision {
     this.denied++;
@@ -343,7 +350,7 @@ export class BrowseGuard {
   }
 
   private payDeny(tool: string, input: Record<string, unknown>, reason: string, extra: Record<string, unknown> = {}): Decision {
-    audit("card_blocked", "deny", "browse", { reason: reason.slice(0, LIMITS.reason), host: hostOf(this.url), ...extra });
+    this.record("card_blocked", "deny", "browse", { reason: reason.slice(0, LIMITS.reason), host: hostOf(this.url), ...extra });
     return this.deny(tool, input, reason, { card: true, ...extra });
   }
 
@@ -450,7 +457,7 @@ export class BrowseGuard {
     const description = payDetails({ ...target, money: total.money, card: card.info, id, cart: lines, task: this.task, prior });
     const meta = { id, merchant: target.merchant, pspHost: target.psp.join(","), total: formatMoney(total.money), currency: total.money.currency, last4: card.info.last4, cartHash: hash };
     this.log(tool, "ask-pay", { target: input.target }, { role: n.role, step: "pay", ...meta });
-    audit("card_approval", "asked", "browse", meta);
+    this.record("card_approval", "asked", "browse", meta);
     const url = bare(this.url);
     return {
       kind: "ask",
@@ -466,7 +473,7 @@ export class BrowseGuard {
   // The owner said yes. Only now is the card opened (and checked against the one the run started with), and only if nothing changed meanwhile.
   private async payApproved(tool: string, n: Node, input: Record<string, unknown>, a: { id: string; merchant: string; psp: string[]; money: Money; cartHash: string; url: string; frame: boolean; last4: string }): Promise<Record<string, unknown> | string> {
     const card = this.card!;
-    const refuse = (why: string) => (audit("card_blocked", "deny", "browse", { reason: why, id: a.id, afterYes: true }), `${why} Nothing was typed.${HAND}`);
+    const refuse = (why: string) => (this.record("card_blocked", "deny", "browse", { reason: why, id: a.id, afterYes: true }), `${why} Nothing was typed.${HAND}`);
     const off = card.off();
     if (off) return refuse(`Card payments are ${off}.`);
     if (bare(this.url) !== a.url) return refuse("The page changed while the owner was deciding.");
@@ -480,7 +487,7 @@ export class BrowseGuard {
     this.pay.approval = { id: a.id, merchant: a.merchant, psp: a.psp, url: a.url, money: a.money, cartHash: a.cartHash, frames: a.frame, last4: a.last4, expiresAt: Date.now() + APPROVAL_MINUTES * 60_000 };
     this.pay.approved++;
     card.ledger.add({ id: a.id, merchant: a.merchant, totalMinor: a.money.minor, currency: a.money.currency, last4: a.last4, cartHash: a.cartHash, status: "approved" });
-    audit("card_approval", "approved", "browse", { id: a.id, merchant: a.merchant, pspHost: a.psp.join(","), total: formatMoney(a.money), currency: a.money.currency, last4: a.last4, cartHash: a.cartHash });
+    this.record("card_approval", "approved", "browse", { id: a.id, merchant: a.merchant, pspHost: a.psp.join(","), total: formatMoney(a.money), currency: a.money.currency, last4: a.last4, cartHash: a.cartHash });
     return this.cardInput(tool, "number", n.ref, input);
   }
 
@@ -502,7 +509,7 @@ export class BrowseGuard {
     const gone = (why: string) => {
       this.pay.invalidate();
       card.ledger.setStatus(a.id, "failed");
-      audit("card_pay", "aborted", "browse", { id: a.id, merchant: a.merchant, reason: why.slice(0, LIMITS.reason) });
+      this.record("card_pay", "aborted", "browse", { id: a.id, merchant: a.merchant, reason: why.slice(0, LIMITS.reason) });
       return this.payDeny(tool, input, `Nothing was clicked: ${why} Do not try again: the order needs a new approval in a new run.${HAND}`, { changed: true });
     };
     if (Date.now() > a.expiresAt) return gone("the payment approval ran out (it lasts ten minutes).");
@@ -528,7 +535,7 @@ export class BrowseGuard {
     this.pay.card = undefined;
     card.ledger.setStatus(a.id, "clicked");
     this.log(tool, "pay-click", input, { role: n.role, name: n.name.slice(0, LIMITS.control), commit: true });
-    audit("card_pay", "clicked", "browse", { id: a.id, merchant: a.merchant, pspHost: a.psp.join(","), total: formatMoney(a.money), last4: a.last4, host: hostOf(this.url) });
+    this.record("card_pay", "clicked", "browse", { id: a.id, merchant: a.merchant, pspHost: a.psp.join(","), total: formatMoney(a.money), last4: a.last4, host: hostOf(this.url) });
     return { kind: "allow" };
   }
 
@@ -561,7 +568,7 @@ export class BrowseGuard {
     if (this.pay.settled === "confirmed") return `Card payment of ${what}: the page showed a confirmation. Check the amount in the card app too.`;
     if (this.pay.settled === "failed") return `Card payment of ${what}: the page showed that it failed or was declined. Nothing is retried automatically.`;
     this.card?.ledger.setStatus(a.id, "unconfirmed");
-    audit("card_pay", "unconfirmed", "browse", { id: a.id, merchant: a.merchant, last4: a.last4 });
+    this.record("card_pay", "unconfirmed", "browse", { id: a.id, merchant: a.merchant, last4: a.last4 });
     return `Card payment of ${what} was started but NOT confirmed on the page. Check the card app and your e-mail before doing anything; it will not be paid again until you clear it (npm run card -- clear ${a.id}).`;
   }
 
@@ -787,8 +794,8 @@ export class BrowseGuard {
     out = cleanText(out).text; // refs and names are remembered as the model will read them, hidden characters out
     out = this.redact(out);
     if (out.length > SNAPSHOT_CAP) out = `${out.slice(0, SNAPSHOT_CAP)}\n[... ${out.length - SNAPSHOT_CAP} characters of the page view cut: use browser_find for what you need, or a narrower page]`;
-    if (/\[ref=|### Snapshot|Page URL/.test(out)) audit("browse_view", "page", "browse", { tool: short(toolName), chars: out.length, cut: out.length > SNAPSHOT_CAP, fromFile: !!link });
-    if (short(toolName) === "take_screenshot") audit("browse_view", "screenshot", "browse", { tool: short(toolName), chars: out.length });
+    if (/\[ref=|### Snapshot|Page URL/.test(out)) this.record("browse_view", "page", "browse", { tool: short(toolName), chars: out.length, cut: out.length > SNAPSHOT_CAP, fromFile: !!link });
+    if (short(toolName) === "take_screenshot") this.record("browse_view", "screenshot", "browse", { tool: short(toolName), chars: out.length });
     this.remember(toolName, input, out, seen);
     if (cardDone.length) this.pay.lastFillSeq = this.fullSeq; // a whole page view (browser_snapshot) taken after this fill is needed before the click
     if (this.pay.attempted && !this.pay.settled && this.pay.approval) this.afterClick(out);
@@ -803,7 +810,7 @@ export class BrowseGuard {
     if (!o) return;
     this.pay.settled = o;
     this.card?.ledger.setStatus(a.id, o);
-    audit("card_pay", o, "browse", { id: a.id, merchant: a.merchant, last4: a.last4 });
+    this.record("card_pay", o, "browse", { id: a.id, merchant: a.merchant, last4: a.last4 });
   }
 
   remember(toolName: string, input: Record<string, unknown>, text: string, seen: string | undefined) {

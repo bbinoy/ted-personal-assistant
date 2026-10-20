@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { standing } from "./util.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAudit } from "../src/audit.ts";
@@ -352,7 +353,7 @@ test("canUseTool: a judged fill runs with the real value but only the placeholde
   const g = onPage(guard());
   const asked: string[] = [];
   const calls: unknown[] = [];
-  const canUse = makeCanUseTool(async (d, call) => (asked.push(d), calls.push(call.input), { approved: true }), "browse", undefined, "book the train", judgeAuto, g);
+  const canUse = makeCanUseTool(async (d, call) => (asked.push(d), calls.push(call.input), { approved: true }), "browse", undefined, judgeAuto, g, undefined, false, { provenance: standing("book the train") });
   const r = (await canUse(`${B}type`, fill("e5", "email"), opts)) as { behavior: string; updatedInput?: Record<string, unknown> };
   assert.equal(r.behavior, "allow");
   assert.equal(r.updatedInput?.text, EMAIL, "approved by the judge or by the owner, it runs with the real value");
