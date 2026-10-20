@@ -134,7 +134,7 @@ export const mailText = (v: MailView): string => `${MAIL_TITLES[v.action]}\n${ma
 export function describeCall(tool: string, input: Record<string, unknown>, draft?: Omit<MailView, "action">): string {
   const view = mailView(tool, input, draft);
   if (view) return mailText(view);
-  const meta = titleOf(tool);
+  const meta = titleOf(tool, input);
   const lines: string[] = [meta ? `${meta.icon} ${meta.title}` : `❓ ${humanise(tool)}`];
 
   const title = input.summary ?? input.title;

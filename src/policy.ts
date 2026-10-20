@@ -7,9 +7,9 @@ import { settings } from "./settings.ts";
 import { groupTools } from "./capabilities.ts";
 import { loaded, registered } from "./modules/index.ts";
 import type { Denial, HideConfig, ToolModule } from "./modules/types.ts";
-import { destinationIsTrashOrSpam, namesLocalFile, neverActionValue } from "./neverallowed.ts";
+import { confirmedArguments, destinationIsTrashOrSpam, namesLocalFile, neverActionValue } from "./neverallowed.ts";
 import { isPeopleKey } from "./guests.ts";
-import { availableFor, entryFor, isFree, isReadTool, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
+import { availableFor, confirmDeleteOf, confirmsDelete, entryFor, isFree, isReadTool, moduleOf, neverAllowedTool } from "./toolmanifest.ts";
 
 // Permissions as code. Every tool call any agent run wants to make passes classify():
 //   allow - run it
@@ -27,7 +27,11 @@ const lower = (a: Verdict, b: Verdict | undefined): Verdict => (b && RANK[b] < R
 
 // Never allowed, whoever asks: trading, trash, permanent delete, spam, blocking a sender. By the tool (its row's action, its connector, its name: toolmanifest.ts
 // neverAllowedTool) or by the call's arguments (a TRASH or SPAM label, spam: true, a page to the bin, an action that deletes: neverallowed.ts).
-export const isNeverAllowed = (tool: string, input: Record<string, unknown> = {}): boolean => neverAllowedTool(tool) || destinationIsTrashOrSpam(input) || neverActionValue(input);
+// The one exception: the arguments its module declares confirmable on that very tool (a Notion page to the bin, a friend's manage_event delete): a delete the person confirms (toolmanifest.ts confirmsDelete).
+export function isNeverAllowed(tool: string, input: Record<string, unknown> = {}): boolean {
+  const c = confirmedArguments(tool, input, confirmDeleteOf(tool));
+  return neverAllowedTool(tool) || destinationIsTrashOrSpam(input, c.flags) || neverActionValue(input, c.actions);
+}
 
 // What a denied call is recorded and answered with, if a tool module has something more to say than "blocked by policy" (permissions.ts).
 export function denial(tool: string, input: Record<string, unknown>): Denial | undefined {
@@ -110,7 +114,7 @@ export function classify(tool: string, input: Record<string, unknown>, source: S
   if (offered && !offered.has(tool)) return "deny";
   if (!availableFor(tool, source)) return "deny";
   if (isNeverAllowed(tool, input) || namesLocalFile(input)) return "deny";
-  let verdict: Verdict = isFree(tool, undefined, { input, source }) ? "allow" : "ask";
+  let verdict: Verdict = !confirmsDelete(tool, input) && isFree(tool, undefined, { input, source }) ? "allow" : "ask"; // a delete the person confirms is never free
   for (const m of registered()) verdict = lower(verdict, m.floor?.verdict?.(tool, input, source)); // every registered module's, loaded or not: they only restrict
   if (NOTE_FILE_TOOLS.has(tool)) {
     const ok = isolated ? !!groupNotesDir && isInside(input.file_path, groupNotesDir) : isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path));
@@ -143,7 +147,7 @@ export function applyChanges(
   input: Record<string, unknown>,
   changes: Change[],
 ): Record<string, unknown> | undefined {
-  if (!isModifiable(tool) || changes.length === 0 || changes.length > 4) return undefined;
+  if (!isModifiable(tool) || confirmsDelete(tool, input) || changes.length === 0 || changes.length > 4) return undefined;
   const patched = { ...input };
   for (const { field, value } of changes) {
     if (!Object.hasOwn(input, field)) return undefined; // no new fields

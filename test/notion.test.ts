@@ -533,13 +533,20 @@ test("notion: reads run free and are shown to the judge as outside text; a page 
   assert.equal(r.asked.length, 0, "the unified judge may pass a plain page change");
   assert.equal((await r.run("notion-create-comment", { page_id: "p1", rich_text: [] })).behavior, "allow");
   assert.equal(r.judged.length, 2);
-  // never judged: a move, and a page sent to the bin however the call spells it
+  // never judged: a move
   r = rig(ctx, "auto");
   await r.run("notion-move-pages", { page_ids: ["p1"], new_parent: { page_id: "p2" } });
-  await r.run("notion-update-page", { page_id: "p1", properties: { in_trash: true } });
-  await r.run("notion-update-page", { page_id: "p1", archived: true });
   assert.equal(r.judged.length, 0);
-  assert.equal(r.asked.length, 1, "a move is her call; a page sent to the bin is denied, however the call spells it");
+  assert.equal(r.asked.length, 1, "a move is her call");
+  // a page sent to the bin, however the call spells it, is judged with care (told it was not made by the assistant here), and asked in HER chat when the judge asks
+  r = rig(ctx, "ask");
+  await r.run("notion-update-page", { page_id: "p1", properties: { in_trash: true } });
+  await r.run("notion-update-page", { page_id: "p2", archived: true });
+  assert.equal(r.judged.length, 2);
+  assert.match(r.judged[0]!.description, /Created by the assistant in this conversation: no/);
+  assert.equal(r.asked.length, 2, "her call in her chat");
+  assert.match(r.asked[0]!, /Move Notion page to the bin[\s\S]*p1/);
+  assert.equal((await r.run("notion-update-page", { page_id: "p1", archived: true, allow_deleting_content: true })).behavior, "deny", "deleting child pages stays denied");
   // not offered at all
   r = rig(ctx, "auto");
   for (const t of ["notion-get-users", "notion-create-database", "notion-duplicate-page", "notion-delete-page"]) assert.equal((await r.run(t, {})).behavior, "deny", t);

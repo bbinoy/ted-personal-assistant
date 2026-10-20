@@ -7,6 +7,20 @@
 
 export const NEVER_ACTIONS: ReadonlySet<string> = new Set(["trash", "delete", "spam", "block", "trade"]);
 
+// Destructive but allowed, with care: deleting a draft, a calendar event, a Notion page or a Drive file to the bin. NOT in NEVER_ACTIONS. The call is never free and never
+// fixed, goes to the judge (whose default for a delete is ask, told by code whether the assistant made the thing here: created.ts) and otherwise asks on the phone of the
+// conversation that made it; a module's floor may veto judging it (a calendar delete that names guests). A tool that only does it through an argument (Notion's
+// in_trash, a friend's manage_event with action delete) is declared by its module's floor (`confirmDelete`, ConfirmDelete below), for its own tools only.
+export const DELETE_CONFIRM = "delete-confirm";
+
+// What a module's floor says about the arguments of its tools that delete but may be confirmed: the tools (by the name after the server's), the boolean flags
+// (as a tool spells them) and the values of an `action` argument that the call may use for it. Everything else the never-allowed arguments name stays denied.
+export interface ConfirmDelete {
+  tools: readonly string[];
+  flags?: readonly string[];
+  actions?: readonly string[];
+}
+
 export const NEVER_NAME = /(^|[_-])(trash|delete|purge|erase|destroy|spam|junk|block(ed)?)([_-]|$)/i;
 
 // By name: the part after the server name ("mcp__x__delete_thing" -> "delete_thing"), matched at word boundaries, so "blockquote" is not a block.
@@ -37,8 +51,9 @@ const BIN_FLAGS = new Set(["spam", "isspam", "intrash", "istrashed", "trashed", 
 
 // The arguments put something in TRASH or SPAM: a label value (labelIds, addLabelIds, label_ids, labelOption...; adding trashes, removing untrashes), spam: true,
 // in_trash / archived: true (a Notion page to the bin), allow_deleting_content: true (a Notion replace that deletes pages). Generalises the Gmail sensitive-label rule.
-export function destinationIsTrashOrSpam(input: Record<string, unknown>): boolean {
+export function destinationIsTrashOrSpam(input: Record<string, unknown>, except: ReadonlySet<string> = new Set()): boolean {
   for (const [k, v] of walk(input)) {
+    if (except.has(norm(k))) continue; // a flag the tool's module lets the person confirm (confirmedArguments)
     if (/label/i.test(k) && strings(v).some((s) => /^\s*(trash|spam)\s*$/i.test(s))) return true;
     if (BIN_FLAGS.has(norm(k)) && (v === true || (typeof v === "string" && v.trim().toLowerCase() === "true"))) return true;
   }
@@ -46,7 +61,19 @@ export function destinationIsTrashOrSpam(input: Record<string, unknown>): boolea
 }
 
 // An `action` argument that names a delete (a friend's manage_event with action delete): the same words as the name rule.
-export const neverActionValue = (input: Record<string, unknown>): boolean => typeof input.action === "string" && NEVER_NAME.test(input.action.trim());
+export const neverActionValue = (input: Record<string, unknown>, except: readonly string[] = []): boolean =>
+  typeof input.action === "string" && NEVER_NAME.test(input.action.trim()) && !except.includes(input.action.trim().toLowerCase());
+
+// The arguments of a call that a module's floor declares confirmable (ConfirmDelete): which flags and action values to leave out of the never-allowed check, and
+// whether the call uses one of them (it is then a delete to confirm). Only for the tools the module names.
+export function confirmedArguments(tool: string, input: Record<string, unknown>, c: ConfirmDelete | undefined): { flags: ReadonlySet<string>; actions: readonly string[]; hit: boolean } {
+  if (!c || !c.tools.includes(tool.split("__").pop() ?? tool)) return { flags: new Set(), actions: [], hit: false };
+  const flags = new Set((c.flags ?? []).map(norm));
+  const actions = (c.actions ?? []).map((a) => a.toLowerCase());
+  const flag = [...walk(input)].some(([k, v]) => flags.has(norm(k)) && (v === true || (typeof v === "string" && v.trim().toLowerCase() === "true")));
+  const action = typeof input.action === "string" && actions.includes(input.action.trim().toLowerCase());
+  return { flags, actions, hit: flag || action };
+}
 
 // ---- local files ----
 

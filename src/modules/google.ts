@@ -1,4 +1,5 @@
 import { namesNoGuests } from "../guests.ts";
+import { DELETE_CONFIRM } from "../neverallowed.ts";
 import { nativeView } from "../mailview.ts";
 import { notifyLine } from "./calendar.ts";
 import { named } from "./gmail.ts";
@@ -66,14 +67,16 @@ export const googleModule: ToolModule = {
     [`${GOOGLE_PREFIX}send_gmail_message`]: { icon: "✉️", title: "Send email" },
     [`${GOOGLE_PREFIX}draft_gmail_message`]: { icon: "✉️", title: "Save email draft" },
     [`${GOOGLE_PREFIX}modify_gmail_message_labels`]: { icon: "🏷️", title: "Change email labels", labels: { message_id: "Message", add_label_ids: "Add", remove_label_ids: "Remove" } },
-    [`${GOOGLE_PREFIX}manage_event`]: { icon: "📅", title: "Calendar event", labels: { action: "Action", event_id: "Event", calendar_id: "Calendar" } },
+    [`${GOOGLE_PREFIX}manage_event`]: { icon: "📅", title: "Calendar event", whenDeleting: "Delete calendar event", labels: { action: "Action", event_id: "Event", calendar_id: "Calendar" } },
   },
   floor: {
     verdict,
+    confirmDelete: { tools: ["manage_event"], actions: ["delete"] }, // her calendar delete: a destructive action the judge handles with care, asked in HER chat (neverallowed.ts ConfirmDelete)
     onDeny: (tool) => (tool.startsWith(GOOGLE_PREFIX) ? { withIds: true } : undefined),
     // A mail nobody can be named for is not judged; a calendar event is judged only when it is created or changed and names no guest (anything that would email
-    // people, and every answer to an invite, is the person's call; a delete is never allowed: neverallowed.ts neverActionValue).
-    judgeVeto: { send: named, "calendar-write": (input) => ["create", "update"].includes(calendarAction(input)) && namesNoGuests(input) },
+    // people, and every answer to an invite, is the person's call; a delete that names guests is asked, never judged: judgeVeto below).
+    judgeVeto: { send: named, "calendar-write": (input) => ["create", "update"].includes(calendarAction(input)) && namesNoGuests(input), [DELETE_CONFIRM]: namesNoGuests },
+    creates: (name, input) => (name === "manage_event" && calendarAction(input) === "create") || name === "draft_gmail_message",
     noFix: ["send"],
     judgeNote: { "calendar-write": notifyLine },
     editable: ["calendar-write"],

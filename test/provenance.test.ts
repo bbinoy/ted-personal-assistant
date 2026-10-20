@@ -43,7 +43,7 @@ test("a conversation's scope: the owner's last three messages and what the assis
   assert.equal(g.read(), undefined, "forgotten when the turn ends");
   // an unattended turn
   g.derive("gate", "water the plants");
-  assert.deepEqual(g.read(), { kind: "derived", by: "gate", text: "water the plants" });
+  assert.deepEqual(g.read(), { kind: "derived", by: "gate", of: "member", text: "water the plants" });
   g.end();
   assert.equal(g.read(), undefined);
 });
@@ -52,7 +52,7 @@ test("derivedTurn: the task is derived while the run goes on, gone after it, eve
   const seen: unknown[] = [];
   await derivedTurn("g-derived", "gate", "task text", async () => void seen.push(scopeOf("g-derived").read()));
   await assert.rejects(derivedTurn("g-derived", "gate", "t2", async () => { throw new Error("x"); }));
-  assert.deepEqual(seen, [{ kind: "derived", by: "gate", text: "task text" }]);
+  assert.deepEqual(seen, [{ kind: "derived", by: "gate", of: "member", text: "task text" }]);
   assert.equal(scopeOf("g-derived").read(), undefined);
 });
 
@@ -68,7 +68,7 @@ test("no message state is process-global in permissions.ts, and the mail handler
 
 test("the browse sub-run inherits the provenance and the conversation of the run that started it, and its own task is the assistant's", async () => {
   const guard = { task: "pay Dr Strange's invoice", vision: "off", profileKeys: () => [], cardInfo: () => undefined } as unknown as BrowseGuard;
-  const parent = { provenance: () => ({ kind: "derived", by: "gate", text: "wake-up task" }) as const, conversation: "owner" };
+  const parent = { provenance: () => ({ kind: "derived", by: "gate", of: "owner", text: "wake-up task" }) as const, conversation: "owner" };
   const o = browseRunOptions(guard, undefined, parent);
   assert.equal(o.provenance, parent.provenance);
   assert.equal(o.conversation, "owner");
@@ -81,9 +81,9 @@ test("the browse sub-run inherits the provenance and the conversation of the run
   assert.deepEqual(j.seen[0]!.provenance.kind, "derived");
   assert.equal(j.seen[0]!.provenance.browseTask, "pay Dr Strange's invoice");
   const prompt = judgePrompt(j.seen[0] as never);
-  assert.match(prompt, /PROVENANCE: derived task/);
+  assert.match(prompt, /PROVENANCE: scheduled wake-up/);
   assert.match(prompt, /gave its browser worker \(written by the assistant/);
   assert.doesNotMatch(prompt, /job_instructions/);
-  // a worker with no parent provenance has only what the assistant wrote: derived, not standing
+  // a worker with no parent provenance has only what the assistant wrote: derived by the assistant, not standing
   assert.equal(provenanceFor(undefined, "browse", "t")?.kind, "derived");
 });

@@ -307,13 +307,22 @@ test("google: a calendar write that names guests, and every answer to an invite,
   await r.run("manage_event", { action: "create", summary: "Lunch", attendees: ["carl@example.org"], start_time: "2026-10-21T12:00:00", end_time: "2026-10-21T13:00:00" });
   assert.equal(r.judged.length, 0, "guests: the judge is not asked");
   assert.equal(r.asked.length, 1, "she is");
+  r = rig(ctx, "ask");
+  await r.run("manage_event", { action: "delete", event_id: "e1", summary: "Dentist" });
+  assert.equal(r.judged.length, 1, "a delete is judged, with care: told it was not created by the assistant");
+  assert.match(r.judged[0]!.description, /Created by the assistant in this conversation: no/);
+  assert.equal(r.asked.length, 1, "the judge sent it on: it asks HER, in her chat, naming what is deleted");
+  assert.match(r.asked[0]!, /Delete calendar event[\s\S]*Dentist[\s\S]*e1/);
   r = rig(ctx, "auto");
-  assert.equal((await r.run("manage_event", { action: "delete", event_id: "e1" })).behavior, "deny", "a delete is never allowed, for a friend as for the owner");
+  await r.run("manage_event", { action: "delete", event_id: "e1", attendees: ["carl@example.org"] });
+  assert.equal(r.judged.length, 0, "a delete that names guests would email a cancellation: never judged");
+  assert.equal(r.asked.length, 1);
   await r.run("manage_event", { action: "rsvp", event_id: "e2", response: "accepted" });
   // the real field names of the calendar schema all count as guests
   for (const guests of [{ attendeeEmails: ["a@example.org"] }, { addedAttendees: [{ email: "a@example.org" }] }, { addedAttendeeEmails: ["a@example.org"] }]) await r.run("manage_event", { action: "update", event_id: "e3", ...guests });
   assert.equal(r.judged.length, 0);
-  assert.equal(r.asked.length, 4, "the answer to an invite and three updates that name guests are her call"); // (the delete was denied)
+  assert.equal(r.asked.length, 5, "the delete, the answer to an invite and three updates that name guests are her call");
+  assert.equal((await r.run("manage_event", { action: "trash", event_id: "e1" })).behavior, "deny", "another word for deleting stays denied");
 });
 
 test("google: nothing of the owner's or of the Google tools exists for a person without the capability, and the owner's source has none of these tools", () => {

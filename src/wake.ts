@@ -84,7 +84,7 @@ export function createWakeups(deps: WakeDeps) {
       // owner's chat must not wait with it. Only the delivery of the answer takes its place in the queue.
       let done: { text: string; costUsd?: number } | undefined;
       let failure: unknown;
-      await deps.runProfile("background", wakePrompt({ who: speakerOf(conv), where: "chat", now, instructions, lines: logTail(conv, 20), speak }), { provenance: { kind: "derived", by: "gate", text: instructions } }).then((r) => void (done = r), (e) => void (failure = e));
+      await deps.runProfile("background", wakePrompt({ who: speakerOf(conv), where: "chat", now, instructions, lines: logTail(conv, 20), speak }), { provenance: { kind: "derived", by: "gate", of: "owner", text: instructions } }).then((r) => void (done = r), (e) => void (failure = e));
       return pipeline.enqueue(conv, async () => {
         const run = async () => {
           if (done) return done;

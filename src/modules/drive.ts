@@ -1,9 +1,10 @@
+import { DELETE_CONFIRM } from "../neverallowed.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // Google Drive and Google Docs (capability `drive`, the owner's claude.ai connectors; a friend's own Google is a separate capability, modules/google.ts), and the
 // Claude Docs connector. Hidden from the model by default (HIDDEN_CONNECTORS); the rows say what they are for the day they are switched on. Their reads are free
-// and untrusted (a file's text is written by whoever can edit it). Sharing a file hands it to other people: it is never judged and always asks. Trash and delete
-// are never allowed, like everywhere (neverallowed.ts).
+// and untrusted (a file's text is written by whoever can edit it). Sharing a file hands it to other people: it is never judged and always asks. Moving a file to the bin is a destructive action the judge handles with care (neverallowed.ts DELETE_CONFIRM); Claude Docs
+// delete is never allowed, like everywhere (neverallowed.ts).
 const DRIVE = "mcp__claude_ai_Google_Drive__";
 const DOCS = "mcp__claude_ai_Google_Docs__";
 const CLAUDE_DOCS = "mcp__claude_ai_Claude_Docs__";
@@ -16,10 +17,10 @@ export const driveModule: ToolModule = {
     ...drive("read", "search_files read_file_content download_file_content get_file_metadata get_file_permissions list_recent_files"),
     ...drive("drive-write", "create_file update_file copy_file"),
     ...drive("share", "share_file"),
-    ...drive("trash", "trash_file"),
+    ...drive(DELETE_CONFIRM, "trash_file"), // to the bin: allowed but not routine (neverallowed.ts DELETE_CONFIRM), judged with care
   ],
   free: ["read"],
-  titles: { [`${DRIVE}share_file`]: { icon: "🔗", title: "Share a Drive file" } },
+  titles: { [`${DRIVE}share_file`]: { icon: "🔗", title: "Share a Drive file" }, [`${DRIVE}trash_file`]: { icon: "🗑️", title: "Move Drive file to the bin" } },
   floor: { judgeNever: ["share"] },
 };
 

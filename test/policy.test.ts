@@ -55,7 +55,7 @@ test("outward-facing actions are not free: classify asks (the judge may skip the
 });
 
 test("destructive actions and trading are denied, for everyone", () => {
-  for (const t of [`${M}trash_conversation`, `${M}delete_conversation_permanently`, `${C}delete_event`, "mcp__claude_ai_Gmail__trash_thread", `${M}set_sender_blocked`, "mcp__claude_ai_Interactive_Brokers_IBKR__create_order_instruction", "mcp__claude_ai_Interactive_Brokers_IBKR__get_account_balances"])
+  for (const t of [`${M}trash_conversation`, `${M}delete_conversation_permanently`, "mcp__claude_ai_Gmail__trash_thread", `${M}set_sender_blocked`, "mcp__claude_ai_Interactive_Brokers_IBKR__create_order_instruction", "mcp__claude_ai_Interactive_Brokers_IBKR__get_account_balances"])
     for (const source of ["chat", "brief", "handler"] as const) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
 });
 
@@ -118,10 +118,10 @@ test("hidden tools: the defaults hide exactly what the per-provider lists did, f
   const MB = "mcp__mailbird__";
   const GM = "mcp__claude_ai_Gmail__";
   const NO = "mcp__claude_ai_Notion__notion-";
-  const mailbirdKeep = ["summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation", "list_attachments", "get_attachment_content", "archive_conversation", "select_conversation", "reply_to_conversation", "reply_all_to_conversation", "create_draft", "update_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing"];
-  const gmailKeep = ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"];
+  const mailbirdKeep = ["summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation", "list_attachments", "get_attachment_content", "archive_conversation", "select_conversation", "reply_to_conversation", "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing"];
+  const gmailKeep = ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "delete_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"];
   const notionKeep = ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"];
-  const seen = [...mailbirdKeep.map((t) => MB + t), `${MB}snooze_conversation`, `${MB}trash_conversation`, ...gmailKeep.map((t) => GM + t), `${GM}trash_thread`, `${GM}delete_label`, ...notionKeep.map((t) => `mcp__claude_ai_Notion__${t}`), `${NO}query-data-sources`, `${NO}create-comment`, "mcp__claude_ai_Google_Calendar__list_events"];
+  const seen = [...mailbirdKeep.map((t) => MB + t), `${MB}snooze_conversation`, `${MB}trash_conversation`, `${MB}set_sender_blocked`, ...gmailKeep.map((t) => GM + t), `${GM}trash_thread`, `${GM}delete_label`, ...notionKeep.map((t) => `mcp__claude_ai_Notion__${t}`), `${NO}query-data-sources`, `${NO}create-comment`, "mcp__claude_ai_Google_Calendar__list_events"];
   const base = ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"];
   const oracle = (provider: "mailbird" | "gmail" | "none") => {
     const connectors = [base[0]!, ...(provider === "gmail" ? [] : ["mcp__claude_ai_Gmail"]), ...base.slice(1), ...(provider !== "mailbird" ? ["mcp__mailbird"] : [])];

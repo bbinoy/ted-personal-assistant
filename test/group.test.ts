@@ -660,6 +660,6 @@ test("groups: the approval judge is told the message that ADDRESSED us (not the 
   const g2 = gid();
   const gated = rig({ run, gate: async () => ({ act: true, task: "task" as const, instructions: "answer the question about the ball", delaySeconds: 0, nextCheckMinutes: 30 }) });
   await gated.on(mk({ groupId: g2, text: "so who is bringing the ball?", addressedToMe: false }));
-  assert.deepEqual(seen[1], { kind: "derived", by: "gate", text: "answer the question about the ball" });
+  assert.deepEqual(seen[1], { kind: "derived", by: "gate", of: "member", text: "answer the question about the ball" });
   assert.equal(scopeOf(g2).read(), undefined);
 });

@@ -1,6 +1,6 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "./audit.ts";
-import { isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
+import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "./chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
@@ -102,6 +102,8 @@ export interface GuardDecision {
   payment?: boolean; // ask: a card payment. Never judged, never auto-approved; only the owner's typed yes approves it (approvals.ts), and it is not remembered as done (the guard keeps its own once-only)
   carried?: CarriedApproval; // ask + judge: the owner's earlier approved question of this run, offered by code (same run, conversation and host, not expired, no payment); the judge reads it as fenced data
   approved?: (question: string) => void; // ask: told the owner's question after they approve it (the guard keeps it for the rest of the run)
+  allowed?: (by: "judge" | "owner") => void; // defer: told when this very call was let through by the judge's auto or by the owner's yes (the guard learns which site the run has been cleared for)
+  skipped?: { reason: string; host: string }; // allow: the judge was skipped on purpose and code says why (a navigate to a site the run was already cleared for); recorded as judge-skipped
   resolve?: () => Promise<Record<string, unknown> | string>; // the call as it must run, built only now that it is allowed (the card is opened here, after the owner said yes); a string: the call is refused with that reason
 }
 export interface CallGuard {
@@ -168,6 +170,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       if (readsUntrusted(tool)) markUntrusted();
       // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
+      if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
       log(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
@@ -210,12 +213,12 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask);
     if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
+      judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
       // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
       const fx = fixes.get(tool) ?? { n: 0, keys: new Set<string>() };
       if (judged.decision === "fix") {
-        const why = !mayFix(tool, { guardStep: g?.kind === "ask", payment: g?.payment }) ? "not-fixable" : fx.n >= MAX_FIXES ? "fix-cap" : fx.keys.has(key) ? "same-arguments" : undefined;
+        const why = !mayFix(tool, { guardStep: g?.kind === "ask", payment: g?.payment, input }) ? "not-fixable" : fx.n >= MAX_FIXES ? "fix-cap" : fx.keys.has(key) ? "same-arguments" : undefined;
         if (!why) {
           fixes.set(tool, { n: fx.n + 1, keys: fx.keys.add(key) });
           log(tool, "judge-fix", source, { reason: judged.reason, mode: settings.autoApprove, count: fx.n + 1, ...g?.facts });
@@ -229,6 +232,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
         if (readsUntrusted(tool)) markUntrusted();
+        g?.allowed?.("judge");
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
     }
@@ -253,6 +257,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (d.approved && onceOnly) remember(memo);
     if (d.approved && readsUntrusted(tool)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
+    if (d.approved && !d.updatedInput) g?.allowed?.("owner");
     if (d.approved && g?.payment && g.resolve) {
       const f = await final(); // the card is opened only now, after the owner's typed yes
       return "deny" in f ? { behavior: "deny", message: f.deny } : { behavior: "allow", updatedInput: f.input };

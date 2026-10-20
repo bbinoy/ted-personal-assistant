@@ -19,7 +19,7 @@ export class TurnScope {
   readonly member: boolean; // a group or a tenant: not the owner's chat
   #recent: string[] = [];
   #said = "";
-  #derived: Extract<RunProvenance, { kind: "derived" }> | undefined;
+  #derived: Extract<RunProvenance, { kind: "derived" }> | undefined; // (a wake-up's gate-selected task: the person's standing instruction acted on later)
 
   constructor(key: string) {
     this.key = key;
@@ -35,7 +35,7 @@ export class TurnScope {
 
   // An unattended turn of this conversation: the text a gate or the assistant wrote for it. Not anybody's own words.
   derive(by: "gate" | "assistant", text: string): void {
-    this.#derived = { kind: "derived", by, text };
+    this.#derived = by === "gate" ? { kind: "derived", by, of: this.member ? "member" : "owner", text } : { kind: "derived", by, text };
   }
 
   // What the assistant last told the owner in chat (a draft it showed, a plan it announced).
