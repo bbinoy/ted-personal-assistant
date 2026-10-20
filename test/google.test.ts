@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -16,8 +16,8 @@ process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { GoogleHub, GoogleSession, googleProxy, credentialFile } = await import("../src/googlemcp.ts");
-const { serversFor } = await import("../src/modules/runtime.ts");
+const { GoogleHub, GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/googlemcp.ts");
+const { serversFor, LIFECYCLE, stopAll, dropAll } = await import("../src/modules/runtime.ts");
 const { tenantCapabilities, tenantTools } = await import("../src/capabilities.ts");
 const { makeCanUseTool } = await import("../src/permissions.ts");
 const { classify } = await import("../src/policy.ts");
@@ -32,7 +32,8 @@ const MAIL: Record<string, string> = { anna: "anna@example.com", bea: "bea@examp
 const msg = (id: string, from: string, subject: string, body: string) => ({ id, from, subject, date: "Tue, 20 Oct 2026 08:00:00 +0000", body, labels: ["INBOX"] });
 writeFileSync(STATE, JSON.stringify({ "anna@example.com": { messages: [msg("a1", "Carl <carl@example.org>", "Lunch?", "Are you free Thursday?")] }, "bea@example.com": { messages: [msg("b1", "Dora <dora@example.org>", "Invoice", "Bea's private invoice 4711")] } }));
 
-const hub = () => new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: MAIL[t]! } : undefined)));
+const TMP = mkdtempSync(join(dir, "tmp-")); // her credentials folders go here, never into the shared temp folder (another test file may be running at the same time)
+const hub = () => new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: TMP, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => (TOKENS[t] ? { refreshToken: TOKENS[t]!, email: MAIL[t]! } : undefined)));
 const calls = (): Record<string, any>[] => (existsSync(LOG) ? readFileSync(LOG, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 const probe = async (h: InstanceType<typeof GoogleHub>, id: string) => JSON.parse((await h.session(id).call("_probe", {})).text);
 
@@ -72,33 +73,87 @@ test("google: one server process per friend, each with her own token and address
 });
 
 test("google: the token is in a private folder only while her server runs; it is on no command line and the folder is gone after", async () => {
-  const h = hub();
+  const root = mkdtempSync(join(TMP, "own-")); // this test's own temp root: nothing else can create or remove a folder in it
+  const h = new GoogleHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
   const s = h.session("anna");
-  const before = new Set(readdirSync(tmpdir()));
   try {
     await probe(h, "anna");
-  } catch (e) {
+    const folders = readdirSync(root).filter((n) => n.startsWith(TMP_PREFIX));
+    assert.equal(folders.length, 1, "her credentials are in one temp folder named for the server");
+    const folder = join(root, folders[0]!);
+    assert.equal(statSync(folder).mode & 0o077, 0, "owner-only folder");
+    assert.equal(statSync(join(folder, credentialFile("anna@example.com"))).mode & 0o077, 0, "owner-only file");
+    const creds = JSON.parse(readFileSync(join(folder, credentialFile("anna@example.com")), "utf8"));
+    assert.equal(creds.refresh_token, TOKENS.anna);
+    assert.equal(creds.client_id, settings.google.clientId);
+    // The server is started with the folder in its environment, not the token: nothing the transport is given as an argument holds it.
+    assert.ok(!JSON.stringify([process.execPath, FAKE]).includes(TOKENS.anna!));
+    s.close();
+    assert.equal(existsSync(folder), false, "deleted when the process stops");
+    // And it starts again on demand.
+    assert.equal((await probe(h, "anna")).refresh, TOKENS.anna);
+    assert.equal(s.starts, 2);
+  } finally {
     h.closeAll();
-    throw e;
   }
-  const folder = readdirSync(tmpdir()).filter((n) => n.startsWith("ted-google-") && !before.has(n)).map((n) => join(tmpdir(), n)).find((p) => existsSync(join(p, credentialFile("anna@example.com"))));
-  if (!folder) h.closeAll();
-  assert.ok(folder, "her credentials are in a temp folder named for the server");
-  assert.equal(statSync(folder!).mode & 0o077, 0, "owner-only folder");
-  assert.equal(statSync(join(folder!, credentialFile("anna@example.com"))).mode & 0o077, 0, "owner-only file");
-  const creds = JSON.parse(readFileSync(join(folder!, credentialFile("anna@example.com")), "utf8"));
-  assert.equal(creds.refresh_token, TOKENS.anna);
-  assert.equal(creds.client_id, settings.google.clientId);
-  // The server is started with the folder in its environment, not the token: nothing the transport is given as an argument holds it.
-  assert.ok(!JSON.stringify([process.execPath, FAKE]).includes(TOKENS.anna!));
-  s.close();
-  const gone = !existsSync(folder!);
-  if (!gone) h.closeAll();
-  assert.equal(gone, true, "deleted when the process stops");
-  // And it starts again on demand.
-  assert.equal((await probe(h, "anna")).refresh, TOKENS.anna);
-  assert.equal(s.starts, 2);
-  h.closeAll();
+  assert.deepEqual(readdirSync(root), [], "closeAll leaves no folder");
+});
+
+test("google: the start-up sweep removes only stale folders this app made (prefix, real directory, ours, 0700, old enough) and leaves everything else", () => {
+  const root = mkdtempSync(join(TMP, "sweep-"));
+  const old = Date.now() / 1000 - 3600;
+  const make = (name: string, mode = 0o700, age = old) => {
+    const p = join(root, name);
+    mkdirSync(p, { mode });
+    chmodSync(p, mode);
+    writeFileSync(join(p, "x.json"), "{}");
+    utimesSync(p, age, age);
+    return p;
+  };
+  const stale = make(`${TMP_PREFIX}stale1`);
+  const stale2 = make(`${TMP_PREFIX}stale2`);
+  const fresh = make(`${TMP_PREFIX}fresh`, 0o700, Date.now() / 1000 - 30);
+  const loose = make(`${TMP_PREFIX}loose`, 0o755);
+  const other = make("someone-elses");
+  const target = make("target-of-link");
+  symlinkSync(target, join(root, `${TMP_PREFIX}link`));
+  writeFileSync(join(root, `${TMP_PREFIX}file`), "x");
+  assert.equal(sweepStaleCredentialDirs(root), 2);
+  assert.equal(existsSync(stale) || existsSync(stale2), false);
+  for (const kept of [fresh, loose, other, target, join(root, `${TMP_PREFIX}link`), join(root, `${TMP_PREFIX}file`)]) assert.equal(existsSync(kept), true, kept);
+  assert.equal(sweepStaleCredentialDirs(join(root, "missing")), 0, "a missing temp root is nothing to do");
+});
+
+test("google: the module lifecycle: Google and Notion have stop and drop, and stop and drop of idle hubs are harmless", () => {
+  assert.deepEqual(Object.keys(LIFECYCLE).sort(), ["google", "notion"]);
+  assert.equal(typeof LIFECYCLE.google!.start, "function", "google sweeps at start-up");
+  dropAll("nobody");
+  stopAll();
+  stopAll(); // twice is fine
+});
+
+test("google: the proxy fails closed: without her address the call is not forwarded at all, whatever account the model named", async () => {
+  class Unknown extends GoogleSession {
+    override get address(): string | undefined {
+      return undefined;
+    }
+  }
+  const root = mkdtempSync(join(TMP, "closed-"));
+  const h = new GoogleHub((id) => new Unknown(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 20_000, tmpRoot: root, env: { FAKE_GOOGLE_LOG: LOG, FAKE_GOOGLE_STATE: STATE } }), async (t) => ({ refreshToken: TOKENS[t]!, email: MAIL[t]! })));
+  try {
+    const cfg = googleProxy("anna", () => true, h);
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await cfg.instance.connect(a as never);
+    const client = new Client({ name: "t", version: "1" });
+    await client.connect(b);
+    const before = calls().length;
+    const res = (await client.callTool({ name: "search_gmail_messages", arguments: { query: "in:inbox", user_google_email: "bea@example.com" } })) as { isError?: boolean; content: { text: string }[] };
+    assert.equal(res.isError, true);
+    assert.match(res.content[0]!.text, /not available/);
+    assert.equal(calls().length, before, "nothing reached her server");
+  } finally {
+    h.closeAll();
+  }
 });
 
 test("google: a friend who has not connected, or an instance without an OAuth client, gets a plain refusal, not a process", async () => {

@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
@@ -37,6 +37,7 @@ export interface GoogleConfig {
   scopes: readonly string[];
   idleMs: number;
   callMs: number;
+  tmpRoot?: string; // where her private credentials folder is made (default: the system temp folder; tests use their own)
   env?: Record<string, string>; // extra, non-secret environment for the server process (tests)
 }
 
@@ -49,7 +50,37 @@ export const googleConfig = (): GoogleConfig => ({
   scopes: settings.google.scopes,
   idleMs: settings.google.idleMinutes * 60_000,
   callMs: settings.google.callSeconds * 1000,
+  tmpRoot: tmpdir(),
 });
+
+// The prefix of the private folders made here (and the only ones the start-up sweep touches).
+export const TMP_PREFIX = "ted-google-";
+
+// A folder left behind by a process that died without closing its sessions (a crash, a kill, a power cut) holds a refresh token. At start-up, before any session of
+// this process exists, those are removed: only entries of the temp root that carry our prefix, are real directories (not links), belong to this user, are 0700 (as
+// they were made) and are older than `minAgeMs` (so a folder of a process that is running right now is left alone). Returns how many were removed.
+export function sweepStaleCredentialDirs(root: string = tmpdir(), minAgeMs = 5 * 60_000, now: number = Date.now()): number {
+  let removed = 0;
+  let names: string[];
+  try {
+    names = readdirSync(root);
+  } catch {
+    return 0;
+  }
+  for (const name of names) {
+    if (!name.startsWith(TMP_PREFIX)) continue;
+    try {
+      const path = join(root, name);
+      const st = lstatSync(path);
+      if (!st.isDirectory() || (process.getuid && st.uid !== process.getuid()) || (st.mode & 0o077) !== 0 || now - st.mtimeMs < minAgeMs) continue;
+      rmSync(path, { recursive: true, force: true });
+      removed++;
+    } catch {
+      /* gone meanwhile, or not ours to remove */
+    }
+  }
+  return removed;
+}
 
 // Her grant, from her own OpenBao path with the app's token (its policy reads tenants/+/google/* and nothing else of hers: openbaoadmin.ts).
 export async function readGrant(tenantId: string): Promise<GoogleGrant | undefined> {
@@ -62,7 +93,7 @@ export async function readGrant(tenantId: string): Promise<GoogleGrant | undefin
 // The file name the server gives an account's credentials (python urllib.parse.quote(email, safe="@._-")).
 export const credentialFile = (email: string): string => `${email.replace(/[^A-Za-z0-9@._~-]/g, (c) => [...Buffer.from(c)].map((b) => `%${b.toString(16).toUpperCase().padStart(2, "0")}`).join(""))}.json`;
 
-// One friend's server process: started on first use, closed after GOOGLE_MCP_IDLE_MINUTES without use, started again on demand.
+// One friend's server process: started on first use, closed after GOOGLE_MCP_IDLE_MINUTES without use (or when the app stops: modules/runtime.ts), started again on demand.
 export class GoogleSession extends UpstreamSession {
   protected readonly label = "her Google server";
   private readonly cfg: () => GoogleConfig;
@@ -94,7 +125,7 @@ export class GoogleSession extends UpstreamSession {
       throw new GoogleError("her Google connection could not be read (is the secret store running?)");
     }
     if (!grant) throw new GoogleError("she has not connected Google yet");
-    const dir = mkdtempSync(join(tmpdir(), "ted-google-")); // 0700
+    const dir = mkdtempSync(join(cfg.tmpRoot ?? tmpdir(), TMP_PREFIX)); // 0700
     try {
       chmodSync(dir, 0o700);
       writeFileSync(join(dir, credentialFile(grant.email)), JSON.stringify({ token: null, refresh_token: grant.refreshToken, token_uri: cfg.tokenUrl, client_id: cfg.clientId, client_secret: cfg.clientSecret, scopes: [...cfg.scopes], expiry: null }), { mode: 0o600 });
@@ -141,7 +172,9 @@ export function googleProxy(tenantId: string, allowed: (name: string) => boolean
     arguments: async (args) => {
       const session = hub.session(tenantId);
       if (!session.address) await session.tools(); // starts her server and learns her address
-      return session.address ? { ...args, user_google_email: session.address } : args;
+      // Fail closed: without her address the call is not forwarded at all (it would name whatever account the model wrote, or start a sign-in).
+      if (!session.address) throw new GoogleError("her Google account is not known");
+      return { ...args, user_google_email: session.address }; // last, so nothing the model wrote can replace it
     },
     unavailable: (e) => (e instanceof UpstreamError ? `Google is not available for her right now: ${e.message}.` : "Google is not available for her right now."),
   });
