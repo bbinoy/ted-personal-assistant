@@ -14,8 +14,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm audit --audit-level=high
-  # The signal package on its own: nothing of the app is installed or run. Proves it compiles, tests and packs
-  # by itself, and that the tarball that would be published installs and contains no secrets.
+  # The messenger and signal packages on their own: nothing of the app is installed or run. Proves they compile, test and
+  # pack by themselves, and that the two tarballs that would be published install together (signal depends on
+  # messenger) and contain no secrets.
   signal-package:
     runs-on: ubuntu-latest # no ffmpeg or speech tools needed
     steps:
@@ -24,14 +25,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci -w packages/signal
-      - run: npm run typecheck -w packages/signal
-      - run: npm test -w packages/signal
-      - run: npm run build -w packages/signal
-      - run: npm run verify-pack -w packages/signal
+      - run: npm ci -w packages/messenger -w packages/signal
+      - run: npm run typecheck -w packages/messenger -w packages/signal
+      - run: npm test -w packages/messenger -w packages/signal
+      - run: npm run build -w packages/messenger -w packages/signal
+      - name: Pack both, install them together into an empty folder, import every entry point
+        run: npm run verify-pack -w packages/signal -- --keep-tarballs "$RUNNER_TEMP/pack"
       - name: Scan the tarball contents for secrets
         run: |
-          mkdir -p "$RUNNER_TEMP/pack"
-          npm pack -w packages/signal --pack-destination "$RUNNER_TEMP/pack" > /dev/null
-          mkdir "$RUNNER_TEMP/unpacked" && tar -xzf "$RUNNER_TEMP"/pack/*.tgz -C "$RUNNER_TEMP/unpacked"
+          for t in "$RUNNER_TEMP"/pack/*.tgz; do d="$RUNNER_TEMP/unpacked/$(basename "$t" .tgz)"; mkdir -p "$d"; tar -xzf "$t" -C "$d"; done
           node scripts/check-secrets.ts --dir "$RUNNER_TEMP/unpacked"
