@@ -33,7 +33,8 @@ import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
 import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { tenantHooks } from "./tenants/tenanttools.ts";
-import { ensureOwner, learnOwnerAci, markDisclosed, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { createRegistrar } from "./approvals/registerask.ts";
+import { ensureOwner, learnOwnerAci, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
@@ -111,6 +112,7 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one notice for the owner about the shared instance key (keynotice.ts), from every kind of run
 const tenantRunner = createTenantRunner({});
+tenantHooks.sendFirst = messenger.sendFirst?.bind(messenger); // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
 tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts LIFECYCLE: her Google server, her Notion) stop
 const pipeline: Pipeline = createPipeline({
   messenger,
@@ -146,13 +148,20 @@ const groupBrain = createGroupBrain({ pipeline, recent: (groupId) => logTail(gro
 // A group's event goes to the group; anything else must be the owner's own chat (the caller has checked).
 const route = (w: { group?: { id: string } }, ev: Parameters<Pipeline["handleIncoming"]>[1]) =>
   void pipeline.handleIncoming(w.group ? group(w.group.id) : owner(), ev).catch((e) => console.error(`${ev.type} error:`, e.message));
-// With TENANTS=on a private message from someone else is decided by tenantroute.ts: a tenant's goes to her conversation, anybody else gets a fixed
-// reply with no model call (an invitation, a welcome); the assistant answers only what was written to it. Off: ignored, exactly as before.
+// With TENANTS=on a private message from someone else is decided by tenantroute.ts: a tenant's goes to her conversation, anybody else gets ONE fixed line
+// with no model call and the owner is asked in her own chat whether she may join (registerask.ts); what the stranger wrote is held, shown to nobody and
+// replayed as her first turn after the owner's yes. Off: ignored, exactly as before.
+const deliverToTenant = (id: string, m: IncomingMessage) => void pipeline.handleIncoming(tenant(id), { type: "message", m }).catch((e) => console.error("tenant message error:", e.message));
+const registrar = createRegistrar({
+  send: (text) => out.reply(text, { plain: true, kind: "approval" }),
+  // The owner said yes: what she wrote while she waited is her first turn, through the usual tenant path (her gates, the instance key, her persona).
+  joined: (t, held, r) => held.forEach((h) => deliverToTenant(t.id, { from: r.number ?? "", fromUuid: r.aci, fromName: r.name, text: h.text, timestamp: h.timestamp, direct: false, other: true })),
+});
 function fromStranger(m: IncomingMessage): void {
-  const decided = admitStranger({ fromUuid: m.fromUuid, name: m.fromName, text: m.text }, {
+  const decided = admitStranger({ fromUuid: m.fromUuid, name: m.fromName, number: m.from || undefined, text: m.text, timestamp: m.timestamp }, {
     reply: (to, text) => out.reply(text, { plain: true, kind: "other", target: to }),
-    deliver: (t) => void pipeline.handleIncoming(tenant(t.id), { type: "message", m }).catch((e) => console.error("tenant message error:", e.message)),
-    welcomed: (t) => markDisclosed(tenantContext(t)),
+    deliver: (t) => deliverToTenant(t.id, m),
+    requested: (r) => registrar.ask(r),
   });
   if (decided.kind === "ignore") console.log(`ignored a message from someone else (${decided.why})`);
 }
@@ -200,6 +209,7 @@ await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
 warmChat();
+if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a

@@ -172,7 +172,7 @@ test("google: a friend who has not connected, or an instance without an OAuth cl
 
 let n = 0;
 function friend(caps: (typeof T.CAPABILITIES)[number][]): ReturnType<typeof T.tenantContext> {
-  const rec = T.redeemInvite(T.mintInvite("t")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name: "Friend" })!;
+  const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name: "Friend" })!;
   T.provision(rec);
   T.recordConsent(T.tenantContext(rec), "Germany");
   for (const c of caps) T.grant(rec.id, c);

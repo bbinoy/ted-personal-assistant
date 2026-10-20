@@ -117,6 +117,9 @@ export function chatContext(parts: { missing?: readonly string[]; down?: readonl
   return out || undefined;
 }
 
+// A friend's very first turn (runoptions.ts turnContext, told once): she wrote to the assistant as a stranger, the owner has just let her in, and what she wrote is this turn's message. Code-written.
+export const FIRST_CONTACT = "This is the first time she talks to you: she wrote to you before she was a friend, the owner has just let her in, and her message below is what she wrote then. Greet her in a friendly, short, slightly playful way as yourself, then answer what she wrote.";
+
 // Shared by the private chat and groups (not the background presets). Text you write before a tool call stays internal; the send tool (send.ts) is how the person hears something while you work.
 // The voice tool exists only with the cloned voice (TTS_PROVIDER=qwen); the rule is only said then.
 // The sentence comes from the preset (persona/voice.md) with the kind of conversation as flags; the run's own capability set says whether it has the tool.

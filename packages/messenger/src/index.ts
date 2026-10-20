@@ -253,6 +253,13 @@ export interface Messenger {
    * @throws if the platform refuses
    */
   send(target: Target, message: OutgoingMessage): Promise<number>;
+  /**
+   * Optional (only where {@link MessengerCapabilities.people} is true). Sends ONE first message to someone the assistant has no conversation with yet, named the way the platform
+   * names a stranger: a phone number (`+15555550114`) or a username (Signal: `name.42`). The caller supplies the text; the owner decides who gets one.
+   * @returns the sent message's timestamp and, when the platform says who received it, that person's stable account id ({@link IncomingMessage.fromUuid})
+   * @throws if the platform refuses, cannot find the person, or does not offer this
+   */
+  sendFirst?(recipient: string, text: string): Promise<{ timestamp: number; accountId?: string }>;
   /** Reacts to a message with an emoji; a new reaction of ours on the same message replaces the earlier one. Best effort: never throws. */
   react(target: Target, message: MessageRef, emoji: string): Promise<void>;
   /** Shows or clears "typing…". Best effort: never throws. */

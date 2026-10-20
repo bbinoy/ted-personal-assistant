@@ -40,7 +40,7 @@ const rig = () => {
 };
 const cold = (log: string[]) => () => stream(log, "cold") as any;
 let n = 0;
-const person = (name: string) => T.redeemInvite(T.mintInvite()!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
+const person = (name: string) => T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
 const withSettings = async (change: Record<string, unknown>, fn: () => Promise<void>) => {
   const was = Object.fromEntries(Object.keys(change).map((k) => [k, (settings as any)[k]]));
   Object.assign(settings, change);

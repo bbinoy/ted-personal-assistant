@@ -134,6 +134,11 @@ class SignalMessenger implements Messenger {
       ...(target ? { groupId: addressOf(target) } : {}),
     });
   }
+  sendFirst(recipient: string, text: string): Promise<{ timestamp: number; accountId?: string }> {
+    if (!this.capabilities.people) return Promise.reject(new Error("signal: first messages need the assistant's own account (not Note to Self)"));
+    if (!/^\+[1-9]\d{6,14}$/.test(recipient) && !/^[A-Za-z_][A-Za-z0-9_]{2,31}\.\d{2,20}$/.test(recipient)) return Promise.reject(new Error("signal: a recipient is a phone number like +15555550114 or a username like name.42"));
+    return this.#client.sendFirst(text, recipient);
+  }
   react(target: Target, message: MessageRef, emoji: string): Promise<void> {
     return this.#client.react(emoji, message, addressOf(target));
   }

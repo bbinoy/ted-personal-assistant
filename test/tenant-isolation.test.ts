@@ -47,8 +47,7 @@ const CANARY_B = "CANARY-BEA-0815";
 const KEY = "sk-" + "ant-api03-ANNANNANNANNANNANNANNANN";
 let n = 0;
 const join_ = (name: string): import("../src/tenants/tenants.ts").TenantRecord => {
-  const made = T.mintInvite()!;
-  const rec = T.redeemInvite(made.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name });
+  const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name });
   assert.ok(rec);
   return rec;
 };
@@ -110,7 +109,7 @@ test("tenant history: search_logs reads the history file it was built with and n
 test("the owner's chat: no tenant's notes, history or secret store, but its own data as always", () => {
   mkdirSync(join(settings.stateDir, "openbao", "tls"), { recursive: true });
   writeFileSync(join(settings.stateDir, "openbao", "tls", "key.pem"), "private");
-  writeFileSync(join(settings.stateDir, "invites.json"), "{}");
+  writeFileSync(join(settings.stateDir, "registrations.json"), "{}");
   writeFileSync(join(settings.stateDir, "cost.json"), "{}");
   mkdirSync(settings.memoryDir, { recursive: true });
   assert.equal(isReadableData(join(settings.logsDir, "audit.jsonl")), true);
@@ -121,7 +120,7 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   assert.equal(isReadableData(bea.logFile), false);
   assert.equal(isReadableData(join(ann.dir, "consent.json")), false);
   assert.equal(isReadableData(join(settings.stateDir, "openbao", "tls", "key.pem")), false);
-  assert.equal(isReadableData(join(settings.stateDir, "invites.json")), false);
+  assert.equal(isReadableData(join(settings.stateDir, "registrations.json")), false);
   symlinkSync(bea.notesDir, join(settings.memoryDir, "sneaky")); // a link from a readable folder into hers
   assert.equal(isReadableData(join(settings.memoryDir, "sneaky", "context-secret.md")), false);
   for (const tool of ["Read"]) {
@@ -139,7 +138,7 @@ test("tenant tools: nothing of the owner's, no payment, no saved profile; only w
   const allowed = [...tools].sort();
   assert.ok(["Read", "Write", "Edit", "WebSearch", "Skill", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send", "mcp__weather__get_forecast", "mcp__draw__draw"].every((t) => tools.has(t)));
   for (const t of tools) assert.ok(!NEVER_FOR_ISOLATED.some((re) => re.test(t)), t);
-  const seen = ["Bash", "Glob", "Grep", "NotebookEdit", "WebFetch", "mcp__browser__browser_click", "mcp__claude_ai_Interactive_Brokers__create_order_instruction", "mcp__tenants__create_invite", "mcp__tenants__remove_tenant", "mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-search", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__create_event", "mcp__card__pay", "mcp__profile__fill", "mcp__something__unknown"];
+  const seen = ["Bash", "Glob", "Grep", "NotebookEdit", "WebFetch", "mcp__browser__browser_click", "mcp__claude_ai_Interactive_Brokers__create_order_instruction", "mcp__tenants__list_tenants", "mcp__tenants__remove_tenant", "mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-search", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__create_event", "mcp__card__pay", "mcp__profile__fill", "mcp__something__unknown"];
   for (const t of [...MANIFEST.map((e) => e.tool), ...seen]) {
     if (tools.has(t)) continue;
     assert.equal(asTenant(t, { file_path: join(ann.notesDir, "x.md") }), "deny", t);
@@ -150,12 +149,14 @@ test("tenant tools: nothing of the owner's, no payment, no saved profile; only w
   assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed, "listing a connector adds nothing in this phase");
   assert.deepEqual([...tenantTools({ config: { connectors: ["gmail"] }, capabilities: ann.capabilities })].sort(), allowed.filter((t) => t !== "mcp__voice__voice" || true).sort(), "listing a connector adds nothing in this phase");
   // and the owner-only admin tools are the owner's chat's, not hidden away from it
-  assert.ok(!hiddenTools(["mcp__tenants__create_invite", "mcp__tenants__remove_tenant"]).some((t) => t.startsWith("mcp__tenants")));
-  assert.equal(classify("mcp__tenants__create_invite", {}, "chat"), "allow");
+  assert.ok(!hiddenTools(["mcp__tenants__list_tenants", "mcp__tenants__remove_tenant"]).some((t) => t.startsWith("mcp__tenants")));
+  assert.equal(classify("mcp__tenants__list_tenants", {}, "chat"), "allow");
   assert.equal(classify("mcp__tenants__list_tenants", {}, "chat"), "allow");
   assert.equal(classify("mcp__tenants__suspend_tenant", { id: "x" }, "chat"), "ask");
   assert.equal(classify("mcp__tenants__remove_tenant", { id: "x" }, "chat"), "ask");
-  for (const source of ["group", "background", "handler", "radar", "browse", "dream", "heartbeat"] as const) assert.equal(classify("mcp__tenants__create_invite", {}, source), "deny", source);
+  assert.equal(classify("mcp__tenants__invite_person", { recipient: "name.42" }, "chat"), "ask");
+  for (const source of ["group", "background", "handler", "radar", "browse", "dream", "heartbeat"] as const) assert.equal(classify("mcp__tenants__invite_person", { recipient: "name.42" }, source), "deny", source);
+  for (const source of ["group", "background", "handler", "radar", "browse", "dream", "heartbeat"] as const) assert.equal(classify("mcp__tenants__list_tenants", {}, source), "deny", source);
 });
 
 test("tenant browse: the worker gets no saved profile and no card, whatever is offered, and asks her own budget", async () => {

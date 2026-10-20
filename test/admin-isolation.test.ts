@@ -27,8 +27,7 @@ const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
 
 const CANARY = "CANARY-ANN-4242";
-const made = T.mintInvite()!;
-const rec = T.redeemInvite(made.code, { aci: "00000000-0000-4000-8000-000000000001", name: "Ann" })!;
+const rec = T.addTenant({ aci: "00000000-0000-4000-8000-000000000001", name: "Ann" })!;
 const ann = T.tenantContext(rec);
 const ownerNotes = join(NOTES_DIR, "context-own.md");
 mkdirSync(NOTES_DIR, { recursive: true });
@@ -40,7 +39,7 @@ const bao = join(settings.stateDir, "openbao");
 mkdirSync(join(bao, "tls"), { recursive: true });
 writeFileSync(join(bao, "tls", "key.pem"), "private");
 writeFileSync(join(bao, "config.hcl"), "listener");
-writeFileSync(join(settings.stateDir, "invites.json"), "{}");
+writeFileSync(join(settings.stateDir, "registrations.json"), "{}");
 // links from the places the owner's file tools do reach, into hers and into the secret store
 mkdirSync(settings.memoryDir, { recursive: true });
 mkdirSync(settings.logsDir, { recursive: true });
@@ -54,7 +53,7 @@ const HERS = [
   join(NOTES_DIR, "..", "..", "tenants", ann.id, "notes", "people-eve.md"), // out of the notes with ..
   join(NOTES_DIR, "to-ann", "tenant.json"), join(NOTES_DIR, "to-ann", "notes", "people-eve.md"), join(settings.memoryDir, "to-ann-notes", "people-eve.md"), // through a link
 ];
-const SECRETS = [bao, join(bao, "tls", "key.pem"), join(bao, "config.hcl"), join(settings.stateDir, "invites.json"), join(settings.stateDir, "to-bao", "tls", "key.pem")];
+const SECRETS = [bao, join(bao, "tls", "key.pem"), join(bao, "config.hcl"), join(settings.stateDir, "registrations.json"), join(settings.stateDir, "to-bao", "tls", "key.pem")];
 
 test("the admin's file tools: Read, Write and Edit reach none of a tenant's files, `tenants/` or the secret store", () => {
   for (const path of [...HERS, ...SECRETS]) {
@@ -90,9 +89,10 @@ test("no run of the instance has Glob, Grep or Bash (they could list and read an
 
 test("the admin's powers are the instance's: invites, list, suspend, resume and remove, and nothing that reads what a tenant said", () => {
   const admin = MANIFEST.filter((e) => e.tool.startsWith("mcp__tenants__")).map((e) => e.tool.split("__")[2]).sort();
-  assert.deepEqual(admin, ["create_invite", "list_tenants", "remove_tenant", "resume_tenant", "suspend_tenant"]);
+  assert.deepEqual(admin, ["invite_person", "list_tenants", "remove_tenant", "resume_tenant", "suspend_tenant"]);
   assert.equal(classify("mcp__tenants__suspend_tenant", { id: ann.id }, "chat"), "ask");
   assert.equal(classify("mcp__tenants__remove_tenant", { id: ann.id }, "chat"), "ask");
+  assert.equal(classify("mcp__tenants__invite_person", { recipient: "+15555550114" }, "chat"), "ask", "the first hello to a person always asks the owner");
   // what list_tenants shows is the record: no note, no history line, no consent region
   const listed = describeTenants().join("\n");
   assert.match(listed, new RegExp(ann.id));

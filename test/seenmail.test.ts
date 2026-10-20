@@ -65,8 +65,8 @@ test("the log is bounded: the newest SEEN_MAX ids stay, the oldest are forgotten
 });
 
 test("per conversation: the owner's log, each friend's in her own folder; one never shows the other", () => {
-  const rec = T.redeemInvite(T.mintInvite("seen")!.code, { aci: "00000000-0000-4000-8000-0000000000c1", name: "Ana" })!;
-  const rec2 = T.redeemInvite(T.mintInvite("seen")!.code, { aci: "00000000-0000-4000-8000-0000000000c2", name: "Bo" })!;
+  const rec = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c1", name: "Ana" })!;
+  const rec2 = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c2", name: "Bo" })!;
   assert.equal(seenFileOf(owner()), "state/seen-mail.json");
   assert.equal(seenFileOf(tenant(rec.id)), join(T.tenantContext(rec).dir, "seen-mail.json"));
   assert.notEqual(seenFileOf(tenant(rec.id)), seenFileOf(tenant(rec2.id)));
@@ -90,7 +90,7 @@ test("the tool: reports the unseen ids, and the run and its expert share one pen
 });
 
 test("the heartbeat run is given the tracker only where there is mail, and the expert shares the run's server", () => {
-  const ana = T.redeemInvite(T.mintInvite("seen")!.code, { aci: "00000000-0000-4000-8000-0000000000c3", name: "Cy" })!;
+  const ana = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c3", name: "Cy" })!;
   T.provision(ana);
   T.recordConsent(T.tenantContext(ana), "Germany");
   const tracker = createSeenMail(file("f"));

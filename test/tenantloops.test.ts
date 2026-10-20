@@ -44,7 +44,7 @@ beforeEach(() => {
 let n = 0;
 // A tenant by the real path (invite, consent), with the given capabilities on top of the friend defaults.
 function person(name: string, extra: (typeof T.CAPABILITIES)[number][] = ["wake"]): import("../src/tenants/tenants.ts").TenantRecord {
-  const rec = T.redeemInvite(T.mintInvite("test")!.code, { aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
+  const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
   T.provision(rec);
   T.recordConsent(T.tenantContext(rec), "Germany");
   for (const c of extra) T.grant(rec.id, c);

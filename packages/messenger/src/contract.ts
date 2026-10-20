@@ -69,6 +69,18 @@ export function messengerContract(name: string, make: () => Promise<ContractRig>
     assert.equal(new Set(stamps).size, stamps.length, "distinct");
   });
 
+  withRig("sendFirst, where the platform offers it, writes first to a number or a username and returns a timestamp; a refusal rejects", async ({ messenger: m, refuse, accept }) => {
+    if (!m.sendFirst) return; // optional: a platform that cannot write first to a stranger does not offer it
+    for (const to of ["+15555550114", "vera.42"]) {
+      const sent = await m.sendFirst(to, "hello");
+      assert.ok(Number.isFinite(sent.timestamp) && sent.timestamp > 0, to);
+      assert.ok(sent.accountId === undefined || sent.accountId.length > 0);
+    }
+    refuse();
+    await assert.rejects(() => m.sendFirst!("+15555550114", "no"));
+    accept();
+  });
+
   withRig("send fails when the platform refuses, and works again once it does not", async ({ messenger: m, refuse, accept }) => {
     refuse();
     await assert.rejects(() => m.send(OWNER_TARGET, { text: "no" }));

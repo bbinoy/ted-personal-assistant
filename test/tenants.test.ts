@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, renameSync, statSync, writeFileS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Tenancy: the registry, invitations, routing of unknown senders, the gates of a tenant's turn, per-tenant cooldown and budget.
+// Tenancy: the registry, routing of unknown senders, the gates of a tenant's turn, per-tenant cooldown and budget.
 // Its own data folder (before anything reads the settings), because the registry is a file.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenants-test-"));
 
@@ -22,7 +22,6 @@ const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
 const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", costFile: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
 const { recordCost, spentToday, tenantOverBudget } = await import("../src/core/budget.ts");
 const { tenant } = await import("../src/conversation/conversationmodel.ts");
-const { OneTimeCodes, CODE_PATTERN } = await import("../src/secrets/onetime.ts");
 const { looksLikeApiKey } = await import("../src/secrets/secrets.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
@@ -32,22 +31,19 @@ const { acceptOwner } = await import("../src/conversation/guards.ts");
 
 const on = settings as unknown as { tenants: boolean; tenantNoticeMinutes: number };
 const ACI_A = "11111111-1111-4111-8111-111111111111";
-const ACI_B = "22222222-2222-4222-8222-222222222222";
 const ACI_C = "33333333-3333-4333-8333-333333333333";
 const KEY_A = "sk-" + "ant-api03-AAAAAAAAAAAAAAAAAAAAAAAA";
 
 beforeEach(() => {
   on.tenants = true;
-  R.forgetRouting();
   resetCooldown();
 });
 
 let n = 0;
 const fresh = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
-// A new tenant by the real path: an invite code, redeemed.
+// A new tenant by the real path (the owner said yes: registration.ts).
 function join_(name = "Anna", aci = fresh()): import("../src/tenants/tenants.ts").TenantRecord {
-  const made = T.mintInvite("test")!;
-  const rec = T.redeemInvite(made.code, { aci, name });
+  const rec = T.addTenant({ aci, name });
   assert.ok(rec);
   return rec;
 }
@@ -65,31 +61,7 @@ test("config: a tenant.json is checked, never trusted; the old lower-case timezo
   assert.equal(T.parseTenantConfig([]).problems.length, 1);
 });
 
-test("invites: single use, expire, hashed at rest, forgiving about case and dashes", () => {
-  const made = T.mintInvite("for Anna", 1_000_000)!;
-  assert.match(made.code, /^[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}$/);
-  assert.ok(!readFileSync(join(settings.dataDir, T.INVITES), "utf8").includes(made.code), "only the hash is stored");
-  assert.equal(T.redeemInvite(made.code.toLowerCase().replaceAll("-", " "), { aci: "not-an-aci" }, 1_000_001), undefined);
-  const first = T.redeemInvite(made.code.toLowerCase().replaceAll("-", ""), { aci: ACI_A, name: "Anna" }, 1_000_001);
-  assert.ok(first);
-  assert.equal(first.status, "invited");
-  assert.equal(T.redeemInvite(made.code, { aci: ACI_B }, 1_000_002), undefined, "used up");
-  const late = T.mintInvite(undefined, 5_000_000)!;
-  assert.equal(T.redeemInvite(late.code, { aci: ACI_B }, 5_000_000 + settings.inviteTtlHours * 3600_000 + 1), undefined, "expired");
-  const live = T.mintInvite(undefined, 5_000_000)!;
-  assert.equal(T.redeemInvite(live.code, { aci: ACI_A }, 5_000_001), undefined, "someone who already is a tenant cannot join twice");
-  assert.ok(T.redeemInvite(live.code, { aci: ACI_B, name: "Bo" }, 5_000_002), "and the code was not spent by that");
-});
-
-test("invites: a code carried in a sentence is found, and the code space is bounded", () => {
-  assert.equal(CODE_PATTERN.exec("hi! my code is abcd-2345-wxyz, thanks")?.[0], "abcd-2345-wxyz");
-  assert.equal(CODE_PATTERN.exec("just a normal sentence about 2025-10-17"), null);
-  const codes = new OneTimeCodes<number>("state/test-codes.json");
-  for (let i = 0; i < 200; i++) assert.ok(codes.mint(i, 60_000));
-  assert.equal(codes.mint(201, 60_000), undefined, "at most 200 open at once");
-});
-
-test("a redeemed invite provisions the tenant: owner-only folders, notes, a tenant.json, a member with the friend capabilities and no key anywhere", () => {
+test("an approved friend is provisioned as the tenant: owner-only folders, notes, a tenant.json, a member with the friend capabilities and no key anywhere", () => {
   const rec = join_("Anna");
   const ctx = T.tenantContext(rec);
   for (const d of [ctx.dir, ctx.notesDir, ctx.backupDir]) assert.equal(statSync(d).mode & 0o077, 0, d);
@@ -131,62 +103,6 @@ test("routing: with TENANTS off nothing is answered, as today", () => {
   assert.deepEqual(R.routeSender({ aci: ACI_A, text: "hello" }).kind, "ignore", "not even a known tenant");
 });
 
-test("routing: an unknown sender gets the fixed invitation, with no model call, and not twice in a row", () => {
-  const delivered: string[] = [];
-  const said: { to: string; text: string }[] = [];
-  const io = { reply: async (to: string, text: string) => void said.push({ to, text }), deliver: (t: { id: string }) => void delivered.push(t.id) };
-  const a = R.admitStranger({ fromUuid: ACI_C, name: "Stranger", text: "hello, can you help me?" }, io, 1_000);
-  assert.equal(a.kind, "reply");
-  assert.deepEqual(said, [{ to: `to:${ACI_C}`, text: R.invitationReply() }]);
-  assert.deepEqual(delivered, []);
-  const again = R.admitStranger({ fromUuid: ACI_C, text: "hello?" }, io, 2_000);
-  assert.deepEqual(again, { kind: "ignore", why: "already answered" });
-  assert.equal(said.length, 1);
-  R.admitStranger({ fromUuid: ACI_C, text: "still there?" }, io, 1_000 + on.tenantNoticeMinutes * 60_000 + 1);
-  assert.equal(said.length, 2, "the next one only after the notice interval");
-  assert.deepEqual(R.admitStranger({ text: "no account id" }, io, 9_000_000), { kind: "ignore", why: "no account id" });
-  assert.equal(said.length, 2);
-});
-
-test("routing: strangers together get at most a few fixed replies an hour, and wrong codes are limited per person", () => {
-  const io = { reply: async () => {}, deliver: () => {} };
-  let replies = 0;
-  for (let i = 0; i < 40; i++) {
-    const aci = `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, "0")}`;
-    if (R.admitStranger({ fromUuid: aci, text: "hi" }, io, 10_000 + i).kind === "reply") replies++;
-  }
-  assert.equal(replies, 20);
-  R.forgetRouting();
-  const outcomes: string[] = [];
-  for (let i = 0; i < 8; i++) {
-    const d = R.admitStranger({ fromUuid: ACI_C, text: "ABCD-2345-WXYZ" }, io, 100_000 + i * 1000);
-    outcomes.push(d.kind === "ignore" ? d.why : d.kind);
-  }
-  assert.deepEqual(outcomes, ["reply", ...Array(4).fill("already answered"), ...Array(3).fill("too many wrong codes")]);
-  const real = T.mintInvite("brute force")!;
-  assert.deepEqual(R.admitStranger({ fromUuid: ACI_C, text: real.code }, io, 110_000), { kind: "ignore", why: "too many wrong codes" }, "a guesser cannot go on to the real one");
-});
-
-test("routing: a valid code welcomes her (fixed, with the AI line); she is a tenant from then on; a suspended tenant gets nothing", () => {
-  const made = T.mintInvite("for Carl")!;
-  const welcomed: string[] = [];
-  const said: string[] = [];
-  const io = { reply: async (_to: string, text: string) => void said.push(text), deliver: () => {}, welcomed: (t: { id: string }) => void welcomed.push(t.id) };
-  const joined = R.admitStranger({ fromUuid: ACI_C, name: "Carl", text: `my code: ${made.code}` }, io);
-  assert.equal(joined.kind, "reply");
-  assert.equal(welcomed.length, 1);
-  assert.ok(said[0]!.startsWith(R.DISCLOSURE) && /age and region/.test(said[0]!) && /Welcome, Carl/.test(said[0]!));
-  assert.ok(!/API key/.test(said[0]!), "a friend is no longer asked for a key of her own");
-  const delivered: string[] = [];
-  const next = R.admitStranger({ fromUuid: ACI_C, text: "hello" }, { ...io, deliver: (t) => void delivered.push(t.id) });
-  assert.equal(next.kind, "tenant");
-  assert.deepEqual(delivered, welcomed);
-  T.setStatus(welcomed[0]!, "suspended");
-  assert.deepEqual(R.admitStranger({ fromUuid: ACI_C, text: "hello?" }, io), { kind: "ignore", why: "suspended" });
-  assert.equal(R.activeTenant(ACI_C), undefined);
-  assert.equal(said.length, 1, "nothing was said to a suspended tenant");
-});
-
 test("consent: a one-time record; recording it makes an invited tenant active", () => {
   const rec = join_("Dora");
   const ctx = T.tenantContext(rec);
@@ -217,7 +133,6 @@ test("disclosure: plainly an AI, her notes private from other users AND from the
   assert.match(R.DISCLOSURE, /private from other users and from the admin/);
   assert.match(R.DISCLOSURE, /runs this computer could still technically read the files/);
   assert.ok(R.DISCLOSURE.length < 320, "short");
-  assert.ok(R.welcomeReply("Carl").startsWith(R.DISCLOSURE));
 });
 
 test("turn: no instance key means a plain 'not set up for friends' with the AI line, a notice for the admin, no model call and never the owner's login", async () => {

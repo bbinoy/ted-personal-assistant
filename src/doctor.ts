@@ -21,7 +21,8 @@ import { PURPOSES } from "./intake/intakepurposes.ts";
 import { INTAKE_ROLE } from "./secrets/openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./secrets/openbao.ts";
 import { appBao, ITEM_KINDS, keychainNames, looksLikeApiKey, OWNER } from "./secrets/secrets.ts";
-import { invites, listTenants, OWNER_ID, pausedUntil, people, readConsent, tenantContext } from "./tenants/tenants.ts";
+import { openRequests } from "./tenants/registration.ts";
+import { listTenants, OWNER_ID, pausedUntil, people, readConsent, tenantContext } from "./tenants/tenants.ts";
 import { Ledger } from "./modules/browse/payments.ts";
 import { messengerDoctor } from "./conversation/messenger.ts";
 import { settings } from "./core/settings.ts";
@@ -186,7 +187,7 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
   line(key ? (looksLikeApiKey(key) ? true : "warn") : "warn", "tenant API key", key ? (looksLikeApiKey(key) ? "TENANT_ANTHROPIC_API_KEY is set; it must be a separate Console workspace key with a spend limit, never your own" : "TENANT_ANTHROPIC_API_KEY is set but does not look like an Anthropic API key") : "TENANT_ANTHROPIC_API_KEY is not set: friends are told the assistant is not set up for them (set a separate Console workspace key with a spend limit)");
   const all = listTenants();
   const count = (s: string) => all.filter((t) => t.status === s).length;
-  line(true, "tenants", `${all.length} (${count("active")} active, ${count("invited")} invited, ${count("suspended")} suspended); ${invites().count(now)} invite code(s) open`);
+  line(true, "tenants", `${all.length} (${count("active")} active, ${count("invited")} invited, ${count("suspended")} suspended); ${openRequests(now).length} registration request(s) waiting for your answer`);
   for (const rec of all) {
     const ctx = tenantContext(rec);
     const spent = spentToday(ctx.costFile);

@@ -12,7 +12,7 @@ import { ASSISTANTS_DIR } from "./paths.ts";
 // This file imports nothing of the harness (settings.ts reads it for its defaults), only the file system.
 
 export interface CoreSkill { readonly name: string; readonly required?: boolean }
-export interface ProfileData { readonly maxTurns: number; readonly maxBudgetUsd: number; readonly notes: readonly string[] }
+export interface ProfileData { readonly maxTurns: number; readonly maxBudgetUsd: number }
 export interface Rhythm {
   // everyMinutes: the free tick (no model); dayMinutes: the heartbeat run's default gap between two looks in the day; briefTime and briefOverdueHour: the usual time of the
   // daily brief and the hour after which it is overdue (words in the heartbeat instruction, which the notes may change; no code schedules the brief).
@@ -202,7 +202,7 @@ export function loadPreset(dir: string): Preset {
   const p = sec("profiles");
   const profile = (key: ProfileKey): ProfileData => {
     const d = obj(at(`profiles.${key}`), p[key]);
-    return { maxTurns: int(at(`profiles.${key}.maxTurns`), d.maxTurns, 1, 1000), maxBudgetUsd: num(at(`profiles.${key}.maxBudgetUsd`), d.maxBudgetUsd, 0.01, 1000), notes: subset(`profiles.${key}.notes`, d.notes) };
+    return { maxTurns: int(at(`profiles.${key}.maxTurns`), d.maxTurns, 1, 1000), maxBudgetUsd: num(at(`profiles.${key}.maxBudgetUsd`), d.maxBudgetUsd, 0.01, 1000) };
   };
   const profiles = { chat: profile("chat"), heartbeat: profile("heartbeat"), group: profile("group") };
 

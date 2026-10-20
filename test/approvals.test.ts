@@ -62,14 +62,14 @@ test("timeouts per kind; the message has no header or footer", async (t) => {
   await Promise.resolve();
   assert.equal(chatDone, false);
   t.mock.timers.tick(1);
-  assert.deepEqual(await chat, { approved: false });
+  assert.deepEqual(await chat, { approved: false, expired: true });
   assert.equal(bgDone, false);
   assert.equal(answerReaction("👍", 1401), "ignored"); // expired
   t.mock.timers.tick(105 * 60_000 - 1);
   await Promise.resolve();
   assert.equal(bgDone, false);
   t.mock.timers.tick(1);
-  assert.deepEqual(await bg, { approved: false });
+  assert.deepEqual(await bg, { approved: false, expired: true });
   assert.equal(sent.length, 2); // nothing extra sent on expiry
 });
 
