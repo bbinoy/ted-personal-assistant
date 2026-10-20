@@ -9,7 +9,8 @@ import { KEY_TTL_MS, lookDue, lookState, notesChangedAt, recordWake, type LookSt
 import { groupContext, listGroups } from "./groupstore.ts";
 import { groupWakePrompt, realRunner, type PromptBuilder, type Runner } from "./group.ts";
 import { group, owner, tenant, type Conversation, type Pipeline } from "./conversation.ts";
-import { allows, hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
+import { allows } from "./capabilities.ts";
+import { hasPresets, onLogin, speakerOf } from "./conversationmodel.ts";
 import { ledgerEntries, logSignature } from "./messages.ts";
 import { localDay } from "./pause.ts";
 import { voiceOption } from "./voicereply.ts";
@@ -206,7 +207,6 @@ export function createWakeups(deps: WakeDeps) {
     const st = stateOf(conv, now);
     const owed = await backstop(conv, st, now);
     if (owed) return owed;
-    if (!settings.wakeups) return "off";
     if (!allows(conv, "heartbeat") || !allows(conv, "wake")) return "not-allowed"; // a tenant's record decides; nothing for her without both
     if (conv.direct && inQuietHours(now, settings.quietStartHour, settings.quietEndHour)) return "quiet-hours"; // a private chat: the owner's and each tenant's
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news

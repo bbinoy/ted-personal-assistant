@@ -3,7 +3,7 @@ import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
-import { allows } from "./conversationmodel.ts";
+import { allows } from "./capabilities.ts";
 import { failure } from "./errors.ts";
 import { applyPlan } from "./dreamapply.ts";
 import { OWNER_SCOPE, planOps, type NoteFile, type Plan, type Scope } from "./dreamplan.ts";
@@ -192,7 +192,7 @@ export function createDreamer(deps: { run?: Runner } = {}) {
     const today = localDay(now);
     const state = readJson<DreamState>(STATE, {});
     if (state.day === today) return;
-    if (!settings.dream || !allows({ kind: "owner" }, "dream") || isPaused(now) || budgetSpent()) return;
+    if (!allows({ kind: "owner" }, "dream") || isPaused(now) || budgetSpent()) return;
     writeJson(STATE, { ...state, day: today }); // before the run: a crash must not mean a retry on every tick
     const messages = messagesSince(state.lastRunAt);
     const { ownerText } = conversationLines(messages);

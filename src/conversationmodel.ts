@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { errorNotice, groupErrorNotice, tenantErrorNotice } from "./errors.ts";
-import { GROUP_CAPABILITIES } from "./capabilities.ts";
-import { OWNER_ID, people, tenantById, tenantContext, type Capability } from "./tenants.ts";
+import { allows } from "./capabilities.ts";
+import { tenantById, tenantContext } from "./tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
 import { FILE as OWNER_LOG, type Extra, type Kind } from "./messages.ts";
@@ -109,39 +109,13 @@ export const tenant = (id: string): Conversation => {
   });
 };
 
-// ---- what a conversation may do: its record (tenants.ts), not its kind ----
+// ---- what a conversation may do: capabilities.ts capabilitiesOf (its record, the instance's switches and what is set up), not its kind ----
 
-// Needs the instance's own Claude login, with its connectors and its card: effective only for a person whose credential is that login (the owner's),
-// whatever else a record lists. A tenant's own connections (Google, Notion) are tools of the manifest with a capability of their own.
-const ON_LOGIN: readonly Capability[] = ["profile", "card", "admin"];
-// A person on the instance key has mail and calendar (tools, and the mail check) only through her own Google connection: with the `google` capability too.
-const THROUGH_GOOGLE: readonly Capability[] = ["mail", "calendar"];
-// A group has no record: it is looked in on, tidied and woken like any conversation, and has nothing of the owner's (capabilities.ts GROUP_CAPABILITIES).
-
-type Who = Pick<Conversation, "kind" | "tenantId">;
-const recordOf = (conv: Who) => (conv.kind === "owner" ? people().find((r) => r.id === OWNER_ID) : conv.tenantId ? tenantById(conv.tenantId) : undefined);
-
-// Do her runs use the instance's own Claude login (and so the owner's connectors) rather than the instance key? The owner before her record is seeded does.
-export function onLogin(conv: Who): boolean {
-  if (conv.kind === "group") return false;
-  const rec = recordOf(conv);
-  return conv.kind === "owner" ? !rec || rec.credential === "login" : rec?.credential === "login";
-}
-
-// May this conversation use a capability now? A tenant only while she is active (not invited, suspended or removed).
-export function allows(conv: Who, capability: Capability): boolean {
-  if (conv.kind === "group") return GROUP_CAPABILITIES.includes(capability);
-  const rec = recordOf(conv);
-  if (!rec) return conv.kind === "owner"; // the owner before her record is seeded: everything, as ever
-  const login = rec.credential === "login";
-  return rec.status === "active" && rec.capabilities.includes(capability) && (!ON_LOGIN.includes(capability) || login) && (!THROUGH_GOOGLE.includes(capability) || login || (rec.capabilities.includes("google") && googleReady()));
-}
+// Is this the conversation that runs on the instance's own Claude login, with its connectors (the owner's)? A group is isolated, a friend runs on the instance key.
+export const onLogin = (conv: Pick<Conversation, "kind">): boolean => conv.kind === "owner";
 
 // Can it run the daily brief and the radar (tasks.ts)? They read mail and calendar through the owner's connectors.
-export const hasPresets = (conv: Who): boolean => onLogin(conv) && allows(conv, "mail") && allows(conv, "calendar");
-
-// Is the instance's Google OAuth client set (settings.google)? Without it nobody gets Google tools or a mail check of their own.
-export const googleReady = (): boolean => !!settings.google.clientId && !!settings.google.clientSecret;
+export const hasPresets = (conv: Pick<Conversation, "kind" | "tenantId">): boolean => onLogin(conv) && allows(conv, "mail") && allows(conv, "calendar");
 
 // Who the person in a private chat is called in the prompts built for it: the owner as always, a tenant by her name.
 export const speakerOf = (conv: Pick<Conversation, "tenantId">): string => (conv.tenantId ? (tenantById(conv.tenantId)?.name ?? "a friend") : OWNER);

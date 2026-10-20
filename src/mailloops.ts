@@ -3,7 +3,7 @@ import { runTenantHandlerTurn } from "./agent.ts";
 import { audit } from "./audit.ts";
 import { tenantOverBudget } from "./budget.ts";
 import { tenant as tenantConversation } from "./conversation.ts";
-import { allows, googleReady } from "./conversationmodel.ts";
+import { allows } from "./capabilities.ts";
 import { noteRateLimit } from "./cooldown.ts";
 import { GoogleMail } from "./googlemail.ts";
 import { googleHub } from "./googlemcp.ts";
@@ -50,9 +50,9 @@ export function createTenantMailLoops(deps: TenantMailDeps) {
 
   // May she have a mail check now? Her record (active, with the capabilities), the instance's Google client, and her connection (the intake page's record).
   const eligible = (id: string): TenantAccess | undefined => {
-    if (!settings.tenants || !googleReady()) return undefined;
+    if (!settings.tenants) return undefined;
     const who = { kind: "tenant", tenantId: id } as const;
-    if (!allows(who, "heartbeat") || !allows(who, "mail") || !allows(who, "google")) return undefined;
+    if (!allows(who, "heartbeat") || !allows(who, "mail")) return undefined; // (mail of a friend means her own Google with the instance's OAuth client set up: capabilities.ts)
     if (!readDone(id, "google")) return undefined; // she has not connected: there is no mailbox to look at
     return deps.access(id);
   };

@@ -3,11 +3,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "./audit.ts";
 import { budgetSpent } from "./budget.ts";
+import { allows } from "./capabilities.ts";
 import { dreamOver, describePlan, groupConversation, groupDreamPrompt, readNoteFiles, realRunner as dreamRunner, type Runner as DreamRunner } from "./dream.ts";
 import { groupHistorySince, groupScope, listGroups } from "./groupstore.ts";
 import { dreamSystem } from "./persona.ts";
 import { isPaused, localDay } from "./pause.ts";
-import { settings } from "./settings.ts";
 import { LIMITS } from "./sanitize.ts";
 
 // The dream of each group's notes: the same tidy-up as the owner's (dream.ts), over that group's notes and
@@ -26,7 +26,7 @@ export function createGroupDreamer(deps: { run?: DreamRunner } = {}) {
   let inFlight: Promise<void> | undefined;
 
   async function once(now: Date): Promise<void> {
-    if (!settings.dream || isPaused(now) || budgetSpent()) return;
+    if (!allows({ kind: "group" }, "dream") || isPaused(now) || budgetSpent()) return;
     const today = localDay(now);
     let dreamt = 0;
     for (const g of listGroups()) {

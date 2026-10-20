@@ -39,7 +39,9 @@ const { createIntakeServer } = await import("../src/intaketools.ts");
 const { TenantSecrets } = await import("../src/secrets.ts");
 const { serversFor } = await import("../src/modules/runtime.ts");
 const { NOTION_FRIEND_PREFIX: P, NOTION_FRIEND_TOOLS } = await import("../src/modules/notionhosted.ts");
-const { tenantCapabilities, tenantTools } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const { makeCanUseTool, setConversationMessage } = await import("../src/permissions.ts");
 const { classify } = await import("../src/policy.ts");
 const { describeTenants } = await import("../src/tenanttools.ts");

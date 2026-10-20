@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,7 +18,8 @@ const { createTenantRunner } = await import("../src/tenantrun.ts");
 const { keyNotices } = await import("../src/keynotice.ts");
 const { askGateWith, gateSystem, parseGate } = await import("../src/gate.ts");
 const { owner, tenant } = await import("../src/conversation.ts");
-const { allows, hasPresets, onLogin } = await import("../src/conversationmodel.ts");
+const { allows } = await import("../src/capabilities.ts");
+const { hasPresets, onLogin } = await import("../src/conversationmodel.ts");
 const { recordMessage } = await import("../src/messages.ts");
 const { recordCost, spentToday } = await import("../src/budget.ts");
 const { noteRateLimit, resetCooldown } = await import("../src/cooldown.ts");
@@ -352,4 +353,44 @@ test("her prompt says she can act later only when the loops will run for her", a
   const timed = person("Xan");
   assert.match(runOptionsFor(tenant(plain.id), { apiKey: KEY }).systemPrompt as string, /You cannot act on your own later/);
   assert.match(runOptionsFor(tenant(timed.id), { apiKey: KEY }).systemPrompt as string, /You can act on your own at set times/);
+});
+
+test("capabilitiesOf is the one answer: instance switches, her own settings and what is set up reach the owner, a group and a friend alike", () => {
+  const f = settings as unknown as { draw: boolean; dream: boolean; wakeups: boolean; google: { clientId?: string; clientSecret?: string } };
+  const was = { draw: f.draw, dream: f.dream, wakeups: f.wakeups, google: { ...f.google } };
+  try {
+    const bea = person("Bea5", ["wake", "google", "mail"]);
+    const her = { kind: "tenant", tenantId: bea.id } as const;
+    f.google.clientId = f.google.clientSecret = undefined;
+    assert.equal(allows(her, "mail"), false, "no OAuth client: no mail check, no Google tools (one readiness answer)");
+    assert.equal(allows(her, "google"), false);
+    f.google.clientId = "id";
+    f.google.clientSecret = "secret";
+    assert.equal(allows(her, "mail"), true);
+    assert.equal(allows(owner(), "google"), true, "the owner's mail and calendar are her connectors: no OAuth client needed");
+    // her own settings (tenant.json) reach the loops too, not only the tools
+    assert.equal(allows(her, "voice"), true);
+    writeFileSync(T.tenantContext(bea).configFile, JSON.stringify({ voice: false, browse: false }));
+    assert.equal(allows(her, "voice"), false, "a spoken wake-up is never offered to a friend whose voice is off");
+    assert.equal(allows(her, "browse"), false);
+    // the instance's switches take away from everybody, the owner and groups included
+    f.draw = false;
+    assert.equal(allows({ kind: "group" }, "draw"), false);
+    assert.equal(allows(her, "draw"), false);
+    f.dream = false;
+    assert.equal(allows({ kind: "group" }, "dream"), false);
+    assert.equal(allows(owner(), "dream"), false);
+    assert.equal(allows(her, "dream"), false);
+    f.wakeups = false;
+    assert.equal(allows(owner(), "wake"), false);
+    assert.equal(allows(her, "wake"), false);
+    // login-only: the owner has them, nobody else does, whatever a record lists
+    T.grant(bea.id, "profile");
+    T.grant(bea.id, "drive");
+    assert.deepEqual([allows(owner(), "profile"), allows(owner(), "card"), allows(her, "profile"), allows(her, "drive"), allows({ kind: "group" }, "card")], [true, true, false, false, false]);
+    T.setStatus(bea.id, "suspended");
+    assert.equal(allows(her, "chat"), false, "not active: nothing");
+  } finally {
+    Object.assign(f, was);
+  }
 });

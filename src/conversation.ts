@@ -1,7 +1,8 @@
 import { rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { audit } from "./audit.ts";
-import { allows, cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Held, type Incoming, type PipelineDeps, type Turn, type TurnResult } from "./conversationmodel.ts";
+import { allows } from "./capabilities.ts";
+import { cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Held, type Incoming, type PipelineDeps, type Turn, type TurnResult } from "./conversationmodel.ts";
 import { findMessage, revisionsOf, type Extra, type Kind } from "./messages.ts";
 import { DELETED_LINE, editNote, isAuthor, sameText } from "./edit.ts";
 import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "./image.ts";

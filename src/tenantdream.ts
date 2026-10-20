@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { audit } from "./audit.ts";
-import { allows } from "./conversationmodel.ts";
+import { allows } from "./capabilities.ts";
 import { dreamOver, describePlan, dreamPrompt, conversationLines, readNoteFiles, runnerFor, type Runner } from "./dream.ts";
 import type { Scope } from "./dreamplan.ts";
 import { tenantDreamSystem } from "./persona.ts";
@@ -51,7 +51,7 @@ export function createTenantDreamer(deps: { access: (id: string) => TenantAccess
   }
 
   async function once(now: Date): Promise<void> {
-    if (!settings.dream || !settings.tenants || isPaused(now)) return;
+    if (!settings.tenants || isPaused(now)) return;
     for (const id of deps.ids?.() ?? listTenants().map((r) => r.id)) {
       try {
         if (!allows({ kind: "tenant", tenantId: id }, "dream")) continue; // her record: active, with the capability

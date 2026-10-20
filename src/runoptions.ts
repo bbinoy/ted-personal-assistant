@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import type { RunOptions } from "./agentrun.ts";
 import { tenantOverBudget } from "./budget.ts";
 import { disconnected, readConnectors } from "./connectors.ts";
-import { allows, type Conversation } from "./conversationmodel.ts";
+import type { Conversation } from "./conversationmodel.ts";
 import { recentNotices } from "./messages.ts";
 import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
 import { chatSystem, groupSystem, tenantSystem } from "./persona.ts";
-import { groupTools, tenantCapabilities, toolsFor } from "./capabilities.ts";
+import { allows, capabilitiesOf, groupTools, toolsFor } from "./capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "./modules/google.ts";
 import { mailDigest } from "./tenantmail.ts";
 import { PROFILES } from "./profiles.ts";
@@ -63,7 +63,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const apiKey = i.apiKey;
   if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
   const consented = !!readConsent(ctx);
-  const caps = tenantCapabilities(ctx);
+  const caps = capabilitiesOf(conv);
   return {
     systemPrompt: tenantSystem({ name: ctx.name, consented, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL), digest: consented && toolsFor(caps).has(GOOGLE_MAIL_TOOL) ? mailDigest(ctx, i.now ?? new Date()) : undefined, language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     memory: { dir: ctx.notesDir },

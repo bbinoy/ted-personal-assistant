@@ -10,7 +10,9 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tenants-test-"));
 
 const { settings } = await import("../src/settings.ts");
 const T = await import("../src/tenants.ts");
-const { tenantTools } = await import("../src/capabilities.ts");
+const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/capabilities.ts");
+const tenantCapabilities = (ctx: { config: any; capabilities: readonly any[] }) => resolveCapabilities(ctx.capabilities, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsForCaps(tenantCapabilities(ctx));
 const R = await import("../src/tenantroute.ts");
 const { createTenantRunner } = await import("../src/tenantrun.ts");
 const { keyNotices, createKeyNotices } = await import("../src/keynotice.ts");
