@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { noticeFor } from "./errors.ts";
-import { allows } from "./policy/capabilities.ts";
 import { tenantById, tenantContext } from "./tenants/tenants.ts";
 import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
@@ -111,9 +110,6 @@ export const tenant = (id: string): Conversation => {
 
 // Is this the conversation that runs on the instance's own Claude login, with its connectors (the owner's)? A group is isolated, a friend runs on the instance key.
 export const onLogin = (conv: Pick<Conversation, "kind">): boolean => conv.kind === "owner";
-
-// Can it run the daily brief (tasks.ts)? It reads mail and calendar through the owner's connectors.
-export const hasPresets = (conv: Pick<Conversation, "kind" | "tenantId">): boolean => onLogin(conv) && allows(conv, "mail") && allows(conv, "calendar");
 
 // Who the person in a private chat is called in the prompts built for it: the owner as always, a tenant by her name.
 export const speakerOf = (conv: Pick<Conversation, "tenantId">): string => (conv.tenantId ? (tenantById(conv.tenantId)?.name ?? "a friend") : OWNER);

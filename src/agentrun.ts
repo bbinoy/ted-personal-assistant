@@ -29,6 +29,8 @@ import { cleanToolOutput } from "./toolclean.ts";
 import { readJson, writeJson } from "./state.ts";
 import { ownerSkills, skillsFor } from "./skills.ts";
 import { recordToolsSeen, toolsSeen } from "./policy/toolsseen.ts";
+import { createArchiveWatch } from "./policy/archivefloor.ts";
+import { delegationHook, type Delegation, type ExpertSetup } from "./heartbeat/delegation.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
 // browse sub-run. The options of a conversation come from one builder (runoptions.ts), the entry points are agent.ts, the warm processes agentwarm.ts.
@@ -69,6 +71,9 @@ export interface RunOptions {
   // A tenant's run (tenants.ts): an isolated "group" run on HER OWN Anthropic API key, with her own cost ledger and cooldown. Never absent for a run
   // made for a tenant, and never given the instance's login: without a key the run does not start.
   tenant?: TenantRun;
+  // The owner's heartbeat run only: experts it may delegate heavy work to (heartbeat/delegation.ts). Gives the run the Agent tool, the SDK `agents` and the PreToolUse hook that
+  // allows only these agents, at most two per look and no nesting, and keeps a `delegate:` skill out of the run's own hands. `onDelegate` is told each accepted delegation.
+  experts?: { setup: ExpertSetup; onDelegate?: (d: Delegation) => void };
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
@@ -110,12 +115,17 @@ function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): s
 export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined): Options {
   // After a successful tool call: announce a note change on the phone (chat), and report the
   // call to whoever asked (the brief captures what it sent).
+  // An unattended run's archiving floor (policy/archivefloor.ts), one per run; the owner's chat and a group archive what they are told to.
+  const archives = opts.source === "chat" || opts.source === "group" || opts.source === "browse" ? undefined : createArchiveWatch();
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
+    archives?.seen(tool, input, response);
     if (opts.memory?.notify) noteWritten(tool, input);
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
-  const hooks: Partial<Record<"PostToolUse", HookCallbackMatcher[]>> = {
+  const delegation = opts.experts ? delegationHook(opts.experts.setup, opts.source, { onDelegate: opts.experts.onDelegate }) : undefined;
+  const hooks: Partial<Record<"PreToolUse" | "PostToolUse", HookCallbackMatcher[]>> = {
+    ...(delegation ? { PreToolUse: [{ hooks: [delegation.hook] }] } : {}),
     PostToolUse: [
       {
         hooks: [
@@ -200,7 +210,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // Built-ins: Skill, and for chat Read / Write / Edit (confined to the notes folder by
     // policy.ts) and WebSearch / WebFetch (search freely, open a page only after approval). No Bash. Everything else the agent can do is an MCP tool (Mailbird,
     // Notion, Calendar...), gated by canUseTool.
-    tools: builtinTools(opts.source, tools),
+    tools: [...builtinTools(opts.source, tools), ...(delegation ? ["Agent"] : [])],
+    agents: opts.experts?.setup.agents,
     // "user" loads user-scope MCP servers (Mailbird) and CLAUDE.md; the skills offered are
     // limited to the bundled ones below.
     // Not "project": there is no project here.
@@ -212,7 +223,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume) }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf, archives }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

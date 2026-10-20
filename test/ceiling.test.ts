@@ -111,7 +111,7 @@ test("run wrapper: a background run has its own limit and its approval wait is n
   mutable.runMaxMinutesChat = 40;
   mutable.runMaxMinutesBackground = 0.002; // 120 ms
   try {
-    const opts = { source: "brief", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as const;
+    const opts = { source: "handler", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as const;
     // waits 300 ms in a (slow) approval, longer than the whole ceiling, and still finishes
     const slowApproval = ((p: any) => (async function* () {
       await p.options.canUseTool("mcp__x__do", {}, { signal: new AbortController().signal });
@@ -122,7 +122,7 @@ test("run wrapper: a background run has its own limit and its approval wait is n
     assert.equal((await runAgent("p", approve, opts, { query: slowApproval })).text, "hi");
     // a run that merely hangs is still cut
     await assert.rejects(runAgent("p", approve, opts, { query: hung({}) }), /timed out/);
-    assert.ok(readAudit((e) => e.tool === "run" && e.decision === "timeout" && e.source === "brief").length >= 1);
+    assert.ok(readAudit((e) => e.tool === "run" && e.decision === "timeout" && e.source === "handler").length >= 1);
   } finally {
     Object.assign(mutable, was);
   }

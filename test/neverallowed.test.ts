@@ -62,7 +62,7 @@ test("never allowed: a tool no module lists is denied by a name that says trash,
   for (const t of ["mcp__x__trash_thing", "mcp__x__delete", "mcp__x__purge-all", "mcp__x__erase_data", "mcp__x__destroy_it", "mcp__x__mark_spam", "mcp__x__junk_mail", "mcp__x__block_sender", "mcp__x__set_blocked", "mcp__x__notion-delete-page", "mcp__x__do_trash"]) {
     assert.ok(nameIsNever(t), t);
     assert.equal(classify(t, {}, "chat"), "deny", t);
-    for (const source of ["brief", "handler", "background"] as const) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
+    for (const source of ["handler", "background"] as const) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
   }
   for (const t of ["mcp__x__get_thing", "mcp__x__blockquote_style", "mcp__x__undeleted_not_a_token", "mcp__x__list_blocks_free", "mcp__x__spamming", "mcp__x__search_deleted"]) assert.equal(nameIsNever(t), false, t);
   // every read name in the code and in the connectors' lists must survive the rule (a row decides for the ones it lists)
@@ -91,7 +91,7 @@ test("never allowed: the arguments, snake_case and camelCase, for tools that onl
       assert.equal(applyChanges(t, { page_id: "p", ...input }, [{ field: "page_id", value: "q" }]), undefined, "a reply cannot retarget a delete");
     }
     assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "chat"), "ask");
-    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "brief"), "ask");
+    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "handler"), "ask");
   }
   for (const input of [{ spam: true }, { trashed: true }, { allow_deleting_content: true }, { archived: true, allow_deleting_content: true }, { labelIds: ["TRASH"] }, { action: "delete" }]) assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "chat"), "deny", JSON.stringify(input));
   assert.equal(confirmsDelete(`${N}notion-update-page`, { page_id: "p", command: "replace_content" }), false);
@@ -221,10 +221,10 @@ const TABLE: [string, string, string, string][] = [
   ["mcp__new_server__delete_thing", "deny", "deny", "deny"],
 ];
 
-test("the table: the verdict of each tool for the owner's chat, the brief and a group", () => {
+test("the table: the verdict of each tool for the owner's chat, an unattended run and a group", () => {
   for (const [tool, chat, brief, group] of TABLE) {
     assert.equal(classify(tool, {}, "chat"), chat, `${tool} (chat)`);
-    assert.equal(classify(tool, {}, "brief"), brief, `${tool} (brief)`);
+    assert.equal(classify(tool, {}, "handler"), brief, `${tool} (unattended)`);
     assert.equal(classify(tool, {}, "group"), group, `${tool} (group)`);
   }
   assert.ok(!groupTools().has(`${MB}get_message`));
@@ -294,7 +294,7 @@ test("the built-in tools of a run come from the builtin module's rows: the same 
   const tools = (source: (typeof SOURCES)[number], extra: Record<string, unknown> = {}) => buildOptions(async () => ({ approved: false }), { source, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, ...extra } as never, undefined).tools;
   assert.deepEqual(tools("chat", { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"]);
   assert.deepEqual(tools("background"), ["Skill", "WebSearch", "WebFetch"]);
-  for (const source of ["brief", "radar", "handler", "heartbeat", "dream"] as const) assert.deepEqual(tools(source), ["Skill"], source); // (they never open a page: docs/SAFETY.md says so)
+  for (const source of ["radar", "handler", "heartbeat", "dream"] as const) assert.deepEqual(tools(source), ["Skill"], source); // (they never open a page: docs/SAFETY.md says so)
   assert.deepEqual(tools("browse"), ["WebSearch"]);
   assert.deepEqual(tools("group", { tools: new Set(["WebSearch", "Read", "Skill", "WebFetch"]) }), ["Skill", "Read", "WebSearch"], "never opening a page, even if a set held the name");
   assert.deepEqual(tools("group", { tools: new Set() }), []);

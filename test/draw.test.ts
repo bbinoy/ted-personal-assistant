@@ -103,10 +103,10 @@ test("shots: drawings and screenshots count separately, both kinds can be PNG or
 test("draw: manifest and policy: free in chat and group, nowhere else", () => {
   assert.equal(access("mcp__draw__draw", "chat"), "free");
   assert.equal(access("mcp__draw__draw", "group"), "free");
-  for (const source of ["handler", "brief", "radar", "browse", "background", "heartbeat", "dream"] as const) assert.equal(access("mcp__draw__draw", source), undefined, source);
+  for (const source of ["handler", "radar", "browse", "background", "heartbeat", "dream"] as const) assert.equal(access("mcp__draw__draw", source), undefined, source);
   assert.equal(classify("mcp__draw__draw", { svg: SVG }, "chat"), "allow");
   assert.equal(classify("mcp__draw__draw", { svg: SVG }, "group"), "allow");
-  for (const source of ["brief", "radar", "handler", "browse"] as const) assert.equal(classify("mcp__draw__draw", { svg: SVG }, source), "deny", source);
+  for (const source of ["radar", "handler", "browse"] as const) assert.equal(classify("mcp__draw__draw", { svg: SVG }, source), "deny", source);
   assert.equal(classify("mcp__draw__nothing", {}, "group"), "deny");
 });
 
@@ -115,7 +115,7 @@ test("draw: the server exists for chat and group runs only, and the skill is off
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   assert.ok(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes("draw"));
   assert.ok(servers({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g" } }).includes("draw"));
-  for (const source of ["brief", "radar", "handler", "background"] as const) assert.ok(!servers({ ...base, source }).includes("draw"), source);
+  for (const source of ["radar", "handler", "background"] as const) assert.ok(!servers({ ...base, source }).includes("draw"), source);
   assert.equal(ownerSkills(true).includes("ted-personal-assistant:draw"), settings.draw);
 });
 

@@ -96,7 +96,7 @@ export interface Denial {
 
 // What a module may say about its own tools to the central code. All of it restricts or describes; none of it grants more than the manifest.
 export interface ModuleFloor {
-  // policy.ts classify, one step of the fold: a hard rule for this module's tools that a row cannot say (attachment content, archive log-only). It may only
+  // policy.ts classify, one step of the fold: a hard rule for this module's tools that a row cannot say (attachment content, a Gmail archive under another provider). It may only
   // restrict: "ask" or "deny", never "allow" (the verdict is the minimum of deny < ask < allow over the manifest and every floor).
   verdict?: (tool: string, input: Record<string, unknown>, source: Source) => Exclude<FloorVerdict, "allow"> | undefined;
   // permissions.ts, when classify denied the call: what to record and tell the model instead of the plain "blocked by policy".
@@ -163,11 +163,8 @@ export interface MailTools {
 // What the rest of the code needs from the mail provider, so that it never asks for the provider by name. One module of slot "mail" is loaded (settings.mailProvider);
 // MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 export interface MailSlot extends MailTools {
-  brief: {
-    delivery: () => "email" | "signal"; // how today's brief reaches the owner
-    instructions: () => string; // the brief preset's instructions for this provider
-    captured: (tool: string, input: Record<string, unknown>) => { text: string | undefined } | undefined; // the brief the run sent with this provider's mail tool: undefined when the call is not the brief's send
-  };
+  // How the daily brief reaches the owner with this provider's tools, as a sentence for the heartbeat instruction (the daily-brief skill's delivery step).
+  brief: { how: () => string };
   chat: { skill: string; note: (owner: string) => string }; // the chat prompt: the mail skill it names, and what it says about drafts and sending
 }
 

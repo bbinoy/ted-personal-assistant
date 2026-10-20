@@ -74,18 +74,14 @@ test("budget: costs accumulate and the over-budget notice fires once", () => {
 test("settings: defaults, and typos fail loudly instead of becoming NaN", () => {
   const d = loadSettings({});
   assert.equal(d.heartbeatMinutes, 5);
-  assert.deepEqual([d.heartbeatModel, d.heartbeatDayMinutes, d.nightMessages], ["haiku", 30, 2]);
-  assert.equal(loadSettings({ HEARTBEAT_MODEL: "sonnet", NIGHT_MESSAGES: "1" }).heartbeatModel, "sonnet");
-  assert.throws(() => loadSettings({ NIGHT_MESSAGES: "-1" }), /NIGHT_MESSAGES/);
-  assert.equal(d.archiveLive, true);
+  assert.deepEqual([d.heartbeatModel, d.heartbeatDayMinutes], ["haiku", 30]);
+  assert.equal(loadSettings({ HEARTBEAT_MODEL: "sonnet" }).heartbeatModel, "sonnet");
   assert.equal(d.signalHost, "127.0.0.1");
   assert.throws(() => loadSettings({ HEARTBEAT_MINUTES: "abc" }), /HEARTBEAT_MINUTES/);
   assert.throws(() => loadSettings({ HEARTBEAT_MINUTES: "0" }), /HEARTBEAT_MINUTES/);
   assert.throws(() => loadSettings({ QUIET_START_HOUR: "24" }), /QUIET_START_HOUR/);
-  assert.throws(() => loadSettings({ ARCHIVE: "yes" }), /ARCHIVE must be one of live, log/);
-  assert.equal(loadSettings({ ARCHIVE: "log" }).archiveLive, false);
-  // the three old archive switches are gone: they stop the agent and name the new one
-  for (const old of ["HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"]) assert.throws(() => loadSettings({ [old]: "log" }), new RegExp(`${old} is gone.*ARCHIVE=live or ARCHIVE=log`));
+  // the archive switch and its three older forms are gone: archiving is always live, and a line left in .env stops the agent instead of silently ending a trial week
+  for (const old of ["ARCHIVE", "HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"]) assert.throws(() => loadSettings({ [old]: "log" }), new RegExp(`${old} is gone: archiving is always live`));
 });
 
 test("settings: the tool-hiding lists have safe defaults and reject typos", () => {

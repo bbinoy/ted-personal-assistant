@@ -117,7 +117,7 @@ test("an unattended run's send is judged against its standing task, never agains
   scopeOf("owner").say("send it"); // the owner's chat message is nobody's provenance for a job
   const opts = { signal: new AbortController().signal } as never;
   let id = 50;
-  for (const source of ["handler", "brief", "radar", "background"] as const) {
+  for (const source of ["handler", "radar", "background"] as const) {
     const seen: { provenance: { kind: string; task?: string } }[] = [];
     let asked = 0;
     const judge = async (i: never): Promise<Verdict> => (seen.push(i), { decision: "auto", reason: "the task covers it" });

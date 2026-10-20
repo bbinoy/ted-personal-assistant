@@ -7,24 +7,26 @@ import { logTail } from "../gate.ts";
 import { lookDue, recordWake, type LookState } from "../ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../payer.ts";
 import { heartbeatInstruction } from "../persona.ts";
-import type { OwnerProfile } from "../profiles.ts";
+import { delegatedText, expertSetup } from "./delegation.ts";
+import { mailSlot } from "../modules/index.ts";
+import { preset } from "../preset.ts";
+import { PROFILES, type OwnerProfile } from "../profiles.ts";
 import { settings } from "../settings.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
-import { clampLook, mayPostNow, parseAnswer } from "./rules.ts";
-import { appendRow, HEARTBEAT_LOG, readRows, type HeartbeatRow } from "./rows.ts";
+import { clampLook, parseAnswer } from "./rules.ts";
+import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 
 // The owner's heartbeat run: her only proactive path. When a look is due (the next look the model chose, something she wrote, a note that changed) and mayRun allows it,
 // ONE run starts under the "heartbeat" profile (profiles.ts): a fresh session on HEARTBEAT_MODEL with the persona, the notes, the skills and ALL her tools, the local
 // time and the tail of the chat log up front. It reads what it needs (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge -> phone
 // path, with `standing` provenance (the fixed instruction below is what the judge reads as the reason for the run; no message of hers led there). It answers with a
 // message or [[silent]] and the minutes until its next look.
-// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, a cap of NIGHT_MESSAGES proactive messages per
-// night (the rest is held as a line in the log for the morning look), and one row per look in state/heartbeat.jsonl (counts, never words).
+// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in state/heartbeat.jsonl (counts, never words).
 
 export interface HeartbeatDeps {
   pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record">;
-  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
+  runProfile: (profile: OwnerProfile, prompt: string, extra?: { onToolSuccess?: (tool: string, input: unknown) => void; provenance?: RunProvenance; onDelegate?: (agent: string) => void }) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
   notesChangedAt: (dir: string) => number;
@@ -41,6 +43,9 @@ export function lastLookText(looked: string | undefined, now: Date): string {
   return `Your last look was at ${hhmm(at)}${sameDay ? "" : " (an earlier day)"}.`;
 }
 
+// How the daily brief reaches the owner, for the instruction: the mail provider's own words, or the chat alone when there is no mail.
+const briefHow = (): string => (settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format.");
+
 // The fixed text of one look, as the judge's standing provenance and the start of the prompt. Written by code from the preset; no mail, no chat in it.
 export function lookInstruction(now: Date, looked: string | undefined): string {
   return heartbeatInstruction({
@@ -50,6 +55,10 @@ export function lookInstruction(now: Date, looked: string | undefined): string {
     quietFrom: `${String(settings.quietStartHour).padStart(2, "0")}:00`,
     quietTo: `${String(settings.quietEndHour).padStart(2, "0")}:00`,
     dayMinutes: String(settings.heartbeatDayMinutes),
+    delegated: delegatedText(expertSetup(PROFILES.heartbeat.skills, "")),
+    briefTime: preset().rhythm.heartbeat.briefTime,
+    briefOverdueHour: `${String(preset().rhythm.heartbeat.briefOverdueHour).padStart(2, "0")}:00`,
+    briefHow: briefHow(),
   });
 }
 
@@ -70,14 +79,15 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     // Written BEFORE acting: a crash in the run must not mean a retry on every tick.
     recordWake(pipeline, conv, settings.heartbeatDayMinutes, now, clampLook);
     const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour);
-    const rows = readRows(file);
     let toolCalls = 0;
     let archived = 0;
+    let delegations = 0;
     const instruction = lookInstruction(now, st.wake?.looked);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     try {
       reply = await deps.runProfile("heartbeat", lookPrompt(now, instruction, logTail(conv, 40)), {
         provenance: { kind: "standing", task: instruction },
+        onDelegate: () => void delegations++,
         onToolSuccess: (tool) => {
           toolCalls++;
           if (entryFor(tool)?.action === "archive") archived++;
@@ -90,20 +100,15 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : "failed";
     if (answer?.message) {
-      if (mayPostNow(rows, now)) {
-        const message = answer.message;
-        const res = await pipeline.enqueue(conv, async () =>
-          pipeline.runTurn(conv, { run: async () => ({ text: message, costUsd: reply?.costUsd }), background: true, announce: false, kind: "notice" }),
-        ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
-        outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
-      } else {
-        outcome = "held";
-        pipeline.record(conv, "action", Date.now(), `[heartbeat] held for the morning look (night cap of ${settings.nightMessages}): ${answer.message.replace(/\s+/g, " ").slice(0, 600)}`);
-      }
+      const message = answer.message;
+      const res = await pipeline.enqueue(conv, async () =>
+        pipeline.runTurn(conv, { run: async () => ({ text: message, costUsd: reply?.costUsd }), background: true, announce: false, kind: "notice" }),
+      ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
+      outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
-    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived, ${outcome === "posted" ? "message sent" : outcome === "held" ? "message held" : "no message"}`);
+    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
     audit("wake", outcome, "background");
-    appendRow({ at: now.toISOString(), night, message: outcome === "posted", held: outcome === "held", nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations: 0, outcome }, file);
+    appendRow({ at: now.toISOString(), night, message: outcome === "posted", nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
     recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }

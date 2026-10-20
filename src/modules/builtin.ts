@@ -6,7 +6,7 @@ import { rowsOf, type ToolModule } from "./types.ts";
 // The rows are also the ONE list of which built-in tools a run is handed (agentrun.ts builtinTools): `offeredTo` names the sources of an owner run that get the
 // tool (the order here is the order the tool list has), and an isolated run (a group, a tenant) gets the rows its capability set holds.
 const builtin = rowsOf("", "builtin", "chat");
-const OWNER_RUNS: readonly Source[] = ["chat", "brief", "handler", "heartbeat", "radar", "dream", "background"]; // (the browse run has the browser, a group or tenant its capability set)
+const OWNER_RUNS: readonly Source[] = ["chat", "handler", "heartbeat", "radar", "dream", "background"]; // (the browse run has the browser, a group or tenant its capability set)
 export const builtinModule: ToolModule = {
   name: "builtin",
   connection: { kind: "builtin" },

@@ -33,7 +33,7 @@ const { handlerTask } = await import("../src/handler.ts");
 const FAKE = new URL("./fakegoogle.ts", import.meta.url).pathname;
 const STATE = join(dir, "mailboxes.json");
 const on = settings as unknown as Record<string, unknown>;
-Object.assign(on, { archiveLive: false, tenants: true, quietStartHour: 0, quietEndHour: 0 });
+Object.assign(on, { tenants: true, quietStartHour: 0, quietEndHour: 0 });
 const google = settings.google as unknown as Record<string, unknown>;
 
 const TOKENS: Record<string, string> = {};
@@ -101,7 +101,6 @@ beforeEach(() => {
   blocked.clear();
   cost.clear();
   resetCooldown();
-  on.archiveLive = false;
 });
 
 test("a friend's mail check: the first look only records the inbox; new mail is triaged once, alerts and handler reports go to HER chat, in her folder, and the owner's files are untouched", async () => {
@@ -134,13 +133,12 @@ test("a friend's mail check: the first look only records the inbox; new mail is 
   assert.doesNotMatch(handled[0]!.task, /Carl|Meeting|boss@/);
   assert.match(handled[0]!.prompt, /from="Carl"/);
   assert.notEqual(handled[0]!.task, handlerTask(), "her tools, not the owner's");
-  // archive is log-only until switched on: the newsletter stays in the inbox
+  // the newsletter is archived (INBOX label off)
   reread();
-  assert.ok(inbox(anna).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"));
+  assert.equal(inbox(anna).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false);
   // her record: her file has the words, the admin's audit log has none
   const triageFile = readFileSync(mailFiles(T.tenantContext(T.tenantById(anna)!)).triage, "utf8");
   assert.match(triageFile, /URGENT: contract/);
-  assert.match(triageFile, /would-archive/);
   const rows = readAudit((e) => e.tool === "heartbeat_triage" && !!e.meta?.tenant);
   assert.equal(rows.length, 4);
   assert.ok(rows.every((r) => r.meta?.tenant === anna), "tagged with her id");
@@ -208,7 +206,7 @@ test("one friend failing affects nobody else: her server is gone, her check logs
   }
 });
 
-test("the cost guard: with no access (her cooldown, day's budget, suspension or key) nothing is classified and the mail waits unseen; archive stays log-only until switched on", async () => {
+test("the cost guard: with no access (her cooldown, day's budget, suspension or key) nothing is classified and the mail waits unseen", async () => {
   const id = friend("Cora");
   const l = loops();
   await l.tick(); // baseline
@@ -218,12 +216,11 @@ test("the cost guard: with no access (her cooldown, day's budget, suspension or 
   await l.tick();
   assert.equal(triaged.length, 0, "no model call while she has no access");
   blocked.delete(id);
-  on.archiveLive = true;
   await l.tick();
   await l.idle();
   assert.equal(triaged.length, 1, "the mail was still unseen: it is classified now, once");
   reread();
-  assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off) once ARCHIVE is live");
+  assert.equal(inbox(id).find((m) => /Newsletter/.test(m.subject))!.labels.includes("INBOX"), false, "archived (INBOX label off)");
   const rows = readAudit((e) => e.tool === "heartbeat_triage" && e.meta?.tenant === id);
   assert.equal(rows.at(-1)!.decision, "archived");
 });

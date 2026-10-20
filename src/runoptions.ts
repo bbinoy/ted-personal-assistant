@@ -4,13 +4,12 @@ import { tenantOverBudget } from "./budget.ts";
 import { disconnected, readConnectors } from "./connectors.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { recentNotices } from "./messages.ts";
-import { LAST_BRIEF, missingSetup, readNotes } from "./notes.ts";
+import { missingSetup, readNotes } from "./notes.ts";
 import { chatContext, chatSystem, digestContext, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, groupTools, toolsFor } from "./policy/capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "./modules/google/module.ts";
 import { mailDigest } from "./tenantmail.ts";
 import { PROFILES } from "./profiles.ts";
-import { readText } from "./state.ts";
 import { skillsFor } from "./skills.ts";
 import { readConsent, TENANT_CONSENT_TOOL, tenantById, tenantContext, type TenantContext } from "./tenants/tenants.ts";
 
@@ -91,7 +90,7 @@ const SHAPES: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) =>
 const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) => string | undefined> = {
   owner: () => {
     const off = disconnected(readConnectors()); // (read once)
-    return chatContext({ lastBrief: readText(LAST_BRIEF), missing: missingSetup(readNotes(), off), down: off, pings: recentNotices() });
+    return chatContext({ missing: missingSetup(readNotes(), off), down: off, pings: recentNotices() });
   },
   group: () => undefined,
   tenant: (conv, i) => {

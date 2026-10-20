@@ -155,7 +155,7 @@ test("tenant tools: nothing of the owner's, no payment, no saved profile; only w
   assert.equal(classify("mcp__tenants__list_tenants", {}, "chat"), "allow");
   assert.equal(classify("mcp__tenants__suspend_tenant", { id: "x" }, "chat"), "ask");
   assert.equal(classify("mcp__tenants__remove_tenant", { id: "x" }, "chat"), "ask");
-  for (const source of ["group", "background", "brief", "handler", "radar", "browse", "dream", "heartbeat"] as const) assert.equal(classify("mcp__tenants__create_invite", {}, source), "deny", source);
+  for (const source of ["group", "background", "handler", "radar", "browse", "dream", "heartbeat"] as const) assert.equal(classify("mcp__tenants__create_invite", {}, source), "deny", source);
 });
 
 test("tenant browse: the worker gets no saved profile and no card, whatever is offered, and asks her own budget", async () => {

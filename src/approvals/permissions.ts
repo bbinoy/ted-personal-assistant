@@ -6,6 +6,7 @@ import type { Decision } from "./approvals.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
 import { mailSlot } from "../modules/index.ts";
+import { archiveAskNote, type ArchiveWatch } from "../policy/archivefloor.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { OWNER_KEY } from "../ownerkey.ts";
@@ -122,6 +123,12 @@ export interface JudgeSetup {
   untrusted?: boolean;
   taint?: Taint;
   conversation?: string;
+  // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
+  // subagent's), and the type of a subagent by its id (for the audit log).
+  // An unattended run's archiving floor (policy/archivefloor.ts): past the run's cap, or for a mail the run did not read, the owner is asked and the judge is not.
+  archives?: ArchiveWatch;
+  expertBriefs?: () => readonly string[];
+  agentTypeOf?: (agentID: string | undefined) => string | undefined;
 }
 
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
@@ -135,7 +142,8 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     setup.taint?.mark();
   };
   const conversation = setup.conversation ?? OWNER_KEY;
-  const log: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
+  const baseLog: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit;
+  const log = baseLog; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
@@ -152,7 +160,10 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "deny", message: FAILED_CLOSED };
     }
   };
-  async function decide(tool: string, input: Record<string, unknown>, { signal }: { signal: AbortSignal }): Promise<PermissionResult> {
+  async function decide(tool: string, input: Record<string, unknown>, { signal, agentID }: { signal: AbortSignal; agentID?: string }): Promise<PermissionResult> {
+    // A call of an expert subagent (the SDK gives its id): its audit rows say which agent type made it, and the judge reads the run's briefs for the experts next to the provenance.
+    const agentType = agentID ? (setup.agentTypeOf?.(agentID) ?? "subagent") : undefined;
+    const log: typeof audit = agentType ? (t, decision, src, meta) => baseLog(t, decision, src, { ...meta, agent_type: agentType }) : baseLog;
     const g = guard ? await guard.decide(tool, input) : undefined;
     if (g?.kind === "deny") {
       log(tool, "deny-guard", source);
@@ -177,8 +188,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "allow", updatedInput: f.input };
     }
     if (verdict === "deny") {
-      // A tool module may have more to say about its own denied tool (Gmail archive in log-only mode: recorded like the heartbeat's, so the report and
-      // the brief show it, and the model is told to carry on).
+      // A tool module may have more to say about its own denied tool (a record for the audit log, or a message for the model).
       const d = denial(tool, input);
       if (d?.record) {
         log(d.record.tool, d.record.decision, source, d.record.meta);
@@ -209,10 +219,16 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       description = describeCall(tool, input, view);
     }
     let judged: Verdict | undefined;
+    // The archive floor: this call needs the owner, not the judge (a cap per run; a mail the run never read).
+    const archiveAsk = setup.archives?.ask(tool, input);
+    if (archiveAsk) {
+      log(tool, "archive-ask", source, { why: archiveAsk, ...idsOf(input) });
+      description += archiveAskNote(archiveAsk);
+    }
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
-    const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask);
-    if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
+    const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
+    if (!archiveAsk && settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       // A `fix` only ever denies, with a hint (nobody is asked, nothing runs). It is ask where code says so: a send, delete, payment or guard step
       // (mayFix), a third fix for the tool in this run, or the same arguments again, so a confused model cannot loop. 
@@ -232,6 +248,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
         if (readsUntrusted(tool)) markUntrusted();
+        setup.archives?.done(tool, input);
         g?.allowed?.("judge");
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
@@ -256,6 +273,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     );
     if (d.approved && onceOnly) remember(memo);
     if (d.approved && readsUntrusted(tool)) markUntrusted();
+    if (d.approved) setup.archives?.done(tool, input);
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && !d.updatedInput) g?.allowed?.("owner");
     if (d.approved && g?.payment && g.resolve) {

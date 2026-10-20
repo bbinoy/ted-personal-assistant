@@ -120,7 +120,7 @@ test("manifest: a provider's entries take effect only while it is the active mai
   assert.equal(mailView(`${GM}send_message`, { to: ["a@example.com"] }, undefined, "mailbird"), undefined);
   assert.equal(mailView(`${MB}create_draft`, { to: [{ email: "a@example.com" }] }, undefined, "gmail"), undefined);
   // ...and with gmail active the same rule holds as for Mailbird: sends are judged, drafts judged too, reads free, in every place
-  for (const source of ["chat", "handler", "radar", "brief"] as const) {
+  for (const source of ["chat", "handler", "radar"] as const) {
     assert.equal(access(`${GM}send_message`, source, "gmail"), "judged", source);
     assert.equal(access(`${GM}reply`, source, "gmail"), "judged", source);
     assert.equal(access(`${GM}forward`, source, "gmail"), "judged", source);

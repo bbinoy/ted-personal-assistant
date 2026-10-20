@@ -7,7 +7,7 @@ import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./guards.ts";
-import { createDreamer, dreamConversations } from "./dream.ts";
+import { createDreamer, dreamConversations, dreamTrigger } from "./dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./group.ts";
 import { createTenantMailLoops } from "./mailloops.ts";
 import { keyNotices } from "./tenants/keynotice.ts";
@@ -210,7 +210,7 @@ if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies &
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
 
-// One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, which the brief waits for, and the friends', which it does not
+// One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, and the friends'
 // (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
 const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]) });
 const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]) });
@@ -218,14 +218,14 @@ const dream = () => {
   void friendsDreamer.run().catch(() => {});
   return dreamer.run().catch(() => {});
 };
+const dreamAtItsHour = dreamTrigger(dream);
 // The clock of every conversation's own initiative: every tick, each conversation whose next look has come may be woken (wake.ts). The owner's look is the heartbeat
-// run (heartbeat/look.ts); the brief runs from a deterministic rule; a group's or a friend's look goes through the gate.
+// run (heartbeat/look.ts; the daily brief is a skill it delegates); a group's or a friend's look goes through the gate.
 const wakeups = createWakeups({
   pipeline,
   groupChats: messenger.capabilities.groups,
   vouch,
   runProfile: (profile, prompt, extra) => runProfile(profile, prompt, approveBackground, extra),
-  presets: { sendBrief: out.sendBriefSummary, notify: say, beforeBrief: dream },
   compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactConversation(conv, "quiet") },
 });
 
@@ -238,11 +238,12 @@ const tenantMail = createTenantMailLoops({
 });
 
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the
-// dream runs inside the brief preset, before the brief).
+// dream is started by its own job, below).
 startHeartbeat({
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
+      dream: () => dreamAtItsHour(), // the first tick at or after DREAM_HOUR; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
       tenantMail: () => tenantMail.tick(), // each friend's own mail check, triage and handler (mailloops.ts): with her Google
     });
   },

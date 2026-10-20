@@ -7,7 +7,7 @@ import { settings } from "./settings.ts";
 // folders. Paths are always "<folder>/<name>", so the folder is explicit at every call site:
 //   state/   bookkeeping the model never reads (seen.json, cost.json, session.json, paused...)
 //   logs/    agent.log, audit.jsonl, signal-daemon.log, launchd-stderr.log
-//   memory/  what the model reads: notes/ (semantic memory, the SDK auto-memory) and last-brief.md (summary memory)
+//   memory/  what the model reads: notes/ (semantic memory, the SDK auto-memory; status-* notes are the assistant's own records)
 //
 // All access is synchronous on purpose. The files are tiny, and a synchronous
 // read-modify-write cannot be interleaved with anything else in Node's event loop, so

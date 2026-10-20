@@ -1,4 +1,3 @@
-import { BRIEF_INSTRUCTIONS, BRIEF_TOOL } from "../brieftext.ts";
 import { extractMessageId, nativeView } from "../policy/mailview.ts";
 import type { DraftView } from "../proposals.ts";
 import { handlerTaskText } from "./mailtask.ts";
@@ -29,11 +28,7 @@ const mail: MailSlot = {
       followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled.",
     }),
   createdDraft: (tool, response) => (REPLY_TOOLS.has(tool) ? extractMessageId(response) : undefined), // the reply tools save the draft; its id is in their result
-  brief: {
-    delivery: () => "email",
-    instructions: () => BRIEF_INSTRUCTIONS,
-    captured: (tool, input) => (tool === BRIEF_TOOL ? { text: (input as { markdownBody?: string }).markdownBody } : undefined), // the agent emails the brief with this tool
-  },
+  brief: { how: () => "Deliver the full brief by email with the Mailbird send_self_briefing tool, exactly once, with the subject the skill names (never its default subject)." },
   chat: {
     skill: "ted-personal-assistant:mailbird",
     note: (owner) => `Reply drafts: the background handler shows ${owner} drafts as "✉️ Reply ready (draft #<id>)". When ${owner} replies to such a message (you get the quoted message) with "send" or similar, call get_message with that id to be sure which draft it is, then send_message_now with messageId and confirm true; ${owner} is then asked to approve, with the draft shown exactly as Mailbird holds it. If they ask for a change, edit the draft (update_draft) and say so; do not send. If it is unclear which draft they mean, ask. Never send anything ${owner} has not told you to send; a plain yes, ok or 👍 to your offer to send counts.

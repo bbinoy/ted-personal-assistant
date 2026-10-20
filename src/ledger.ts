@@ -1,10 +1,9 @@
 import { readdirSync, statSync } from "node:fs";
 import type { Conversation } from "./conversation.ts";
 import type { Kind, Sent } from "./messages.ts";
-import { localDay } from "./pause.ts";
 
 // The wake/action ledger: the conversation's own log (messages.ts) holds kind "wake" lines (the chosen next look, the last
-// one is the state) and kind "action" lines (something done without posting; the presets' progress, see below). Everything
+// one is the state) and kind "action" lines (something done without posting). Everything
 // the gate and the clock side (wake.ts) know about "what happened so far" is read back from here, in code.
 
 export const MIN_CHECK_MINUTES = 15;
@@ -32,36 +31,20 @@ export function parseWake(text: string): Wake | undefined {
 
 // ---- the ledger ----
 
-// What the presets (tasks.ts) write into the owner's log as kind "action". The gate reads them back as the ledger: they
-// are how it sees when each job last ran, and code derives the attempt count and the dedupe keys from them.
-export const ledger = {
-  briefStarted: (n: number) => `[brief] attempt ${n} started`,
-  briefEnded: (n: number, outcome: string) => `[brief] attempt ${n} → ${outcome}`,
-};
-
 export interface LookState {
   wake?: Wake & { at: string }; // the last chosen next look (at: when it was written)
   lastInboundAt?: string; // the newest thing someone ELSE said or reacted
-  briefAttempts: number; // brief attempts started today
-  lastBriefAttemptAt?: string;
-  briefDone: boolean; // a brief was delivered or posted today
 }
 
 const INBOUND: ReadonlySet<Kind> = new Set<Kind>(["owner", "member", "reaction"]);
 
 // Pure: what the ledger says about this conversation.
-export function lookState(entries: readonly Sent[], now: Date): LookState {
-  const today = localDay(now);
-  const st: LookState = { briefAttempts: 0, briefDone: false };
+export function lookState(entries: readonly Sent[]): LookState {
+  const st: LookState = {};
   for (const e of entries) {
-    const isToday = localDay(new Date(e.at)) === today;
     if (e.kind === "wake") {
       const w = parseWake(e.text);
       if (w) st.wake = { ...w, at: e.at };
-    } else if (e.kind === "brief" && isToday) st.briefDone = true;
-    else if (e.kind === "action") {
-      if (isToday && /^\[brief\] attempt \d+ started/.test(e.text)) (st.briefAttempts++, (st.lastBriefAttemptAt = e.at));
-      else if (isToday && /^\[brief\] attempt \d+ → delivered/.test(e.text)) st.briefDone = true;
     } else if (INBOUND.has(e.kind) && (!st.lastInboundAt || e.at > st.lastInboundAt)) st.lastInboundAt = e.at;
   }
   return st;

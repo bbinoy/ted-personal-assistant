@@ -120,26 +120,3 @@ function tidy(r: Rendered): Rendered {
   }
   return { text: trimmed, styles };
 }
-
-// Split a markdown brief into one piece per section (a section starts at a heading line). Length is not limited here: Signal shows a long message as a preview with "read more".
-export function splitSections(markdown: string): string[] {
-  return markdown.replace(/\r\n/g, "\n").split(/\n(?=#{1,3}\s)/).map((p) => p.trim()).filter(Boolean);
-}
-
-// The short version of a brief for Signal: the pep talk (if there is one) and the Focus section,
-// which the brief skill puts first, plus a footer pointing at the email. The full brief stays in
-// the email. Falls back to the start of the brief if those headings are missing.
-export const BRIEF_FOOTER = "📧 The full brief is in your email. Say \"brief\" and I'll send it here.";
-// Without mail (MAIL_PROVIDER=none) the brief exists only here and in memory/last-brief.md, so the pointer says where the rest is.
-export const BRIEF_FOOTER_NO_MAIL = "The rest of the brief is saved. Say \"brief\" and I'll send it here.";
-const SIGNAL_FALLBACK_CHARS = 700;
-
-export function signalSummary(markdown: string, footer = BRIEF_FOOTER): string {
-  const sections = splitSections(markdown);
-  const head = (s: string) => s.split("\n", 1)[0] ?? "";
-  const pep = sections.find((s) => /^#{1,3}\s.*(pep|💪)/i.test(head(s)));
-  const focus = sections.find((s) => /^#{1,3}\s.*(focus|🎯)/i.test(head(s)));
-  const picked = [pep, focus].filter((s): s is string => !!s);
-  const body = picked.length ? picked.join("\n\n") : (sections[0] ?? markdown).slice(0, SIGNAL_FALLBACK_CHARS);
-  return `${body}\n\n${footer}`;
-}

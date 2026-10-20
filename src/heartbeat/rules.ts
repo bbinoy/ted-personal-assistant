@@ -1,9 +1,7 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { inQuietHours } from "../actions.ts";
 import { settings } from "../settings.ts";
-import type { HeartbeatRow } from "./rows.ts";
 
-// The heartbeat run's pure rules: what its answer looks like, how its next look is clamped, and the night cap. Code keeps these whatever the model decides.
+// The heartbeat run's pure rules: what its answer looks like, and how its next look is clamped. Code keeps these whatever the model decides.
 
 export const MIN_LOOK_MINUTES = 10;
 export const MAX_LOOK_MINUTES = 120;
@@ -49,22 +47,3 @@ export function parseAnswer(structured: unknown, text: string): Answer {
   const silent = !message || message.toLowerCase().includes(SILENT.toLowerCase());
   return { message: silent ? undefined : message, nextCheckMinutes: clampLook(v.nextCheckMinutes) };
 }
-
-// The start of the quiet window `now` is in (22:00 yesterday or today, for a 22-07 window).
-export function nightStart(now: Date, from: number, to: number): Date {
-  const d = new Date(now);
-  d.setHours(from, 0, 0, 0);
-  if (from > to && now.getHours() < to) d.setDate(d.getDate() - 1); // the window wraps midnight and it is the small hours: it began yesterday
-  return d;
-}
-
-// Pure: how many proactive messages went out in the night window that `now` is in (0 in the day).
-export function nightCount(rows: readonly HeartbeatRow[], now: Date, from: number = settings.quietStartHour, to: number = settings.quietEndHour): number {
-  if (!inQuietHours(now, from, to)) return 0;
-  const start = nightStart(now, from, to).getTime();
-  return rows.filter((r) => r.message && Date.parse(r.at) >= start).length;
-}
-
-// Pure: may another proactive message go out now? In the day always; inside the night window up to the cap, then it is held for the morning look.
-export const mayPostNow = (rows: readonly HeartbeatRow[], now: Date, cap: number = settings.nightMessages, from: number = settings.quietStartHour, to: number = settings.quietEndHour): boolean =>
-  !inQuietHours(now, from, to) || nightCount(rows, now, from, to) < cap;

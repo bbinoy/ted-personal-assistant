@@ -10,6 +10,7 @@
 {"tool":"mcp__memory__forget_note","provider":"memory","action":"memory","cap":"chat","only":["chat","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__search_logs","provider":"memory","action":"memory","cap":"chat","only":["chat","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__undo_dream","provider":"memory","action":"memory","cap":"dream","only":["chat","group"],"view":null,"free":true,"untrusted":false},
+{"tool":"mcp__status__write_status_note","provider":"status","action":"status-note","cap":"chat","only":["background"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__browse__browse","provider":"browse","action":"browse","cap":"browse","only":null,"view":null,"free":false,"untrusted":true},
 {"tool":"mcp__browser__browser_snapshot","provider":"browse","action":"browser-read","cap":"browse","only":["browse"],"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__browser__browser_find","provider":"browse","action":"browser-read","cap":"browse","only":["browse"],"view":null,"free":true,"untrusted":true},

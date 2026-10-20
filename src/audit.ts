@@ -8,7 +8,7 @@ import { appendLine, dataPath, readText } from "./state.ts";
 //           triage entries add sender and subject so the brief and `npm run report` can list them.
 
 // The one list of who can act. policy.ts keys its per-source rights by this type (a missing or extra key fails tsc and test/policy.test.ts).
-export const SOURCES = ["chat", "brief", "handler", "heartbeat", "radar", "dream", "group", "background", "browse"] as const;
+export const SOURCES = ["chat", "handler", "heartbeat", "radar", "dream", "group", "background", "browse"] as const;
 export type Source = (typeof SOURCES)[number];
 
 export interface AuditEntry {

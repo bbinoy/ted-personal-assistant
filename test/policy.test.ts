@@ -31,9 +31,9 @@ test("reads are allowed, including Notion's prefixed names (regression: brief hu
 
 test("routine writes are not free: in every place they go to the judge (classify says ask), reads are free", () => {
   for (const t of [`${M}archive_conversation`, `${M}create_draft`, `${M}reply_to_conversation`, `${M}send_self_briefing`, `${N}notion-create-pages`, `${N}notion-update-page`]) {
-    for (const source of ["chat", "brief", "radar", "handler", "background"] as const) assert.equal(classify(t, {}, source), "ask", `${t} (${source})`);
+    for (const source of ["chat", "radar", "handler", "background"] as const) assert.equal(classify(t, {}, source), "ask", `${t} (${source})`);
   }
-  for (const source of ["chat", "brief", "radar", "handler", "background"] as const) assert.equal(classify(`${M}get_message`, {}, source), "allow", source);
+  for (const source of ["chat", "radar", "handler", "background"] as const) assert.equal(classify(`${M}get_message`, {}, source), "allow", source);
 });
 
 test("the mail handler is on the same path as everyone: reads free, every write judged, nothing waved through by who it is", () => {
@@ -56,7 +56,7 @@ test("outward-facing actions are not free: classify asks (the judge may skip the
 
 test("destructive actions and trading are denied, for everyone", () => {
   for (const t of [`${M}trash_conversation`, `${M}delete_conversation_permanently`, "mcp__claude_ai_Gmail__trash_thread", `${M}set_sender_blocked`, "mcp__claude_ai_Interactive_Brokers_IBKR__create_order_instruction", "mcp__claude_ai_Interactive_Brokers_IBKR__get_account_balances"])
-    for (const source of ["chat", "brief", "handler"] as const) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
+    for (const source of ["chat", "handler"] as const) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
 });
 
 test("unknown tools default to ask, never allow", () => {
@@ -86,10 +86,10 @@ test("memory notes: chat may read and write inside the notes folder only; everyt
     assert.equal(classify(t, { file_path: `${NOTES_DIR}/../state/seen.json` }, "chat"), "deny", `${t} ..`);
     assert.equal(classify(t, { file_path: "/etc/passwd" }, "chat"), "deny", `${t} outside`);
     assert.equal(classify(t, {}, "chat"), "deny", `${t} no path`);
-    for (const source of ["brief", "handler", "heartbeat"] as const) assert.equal(classify(t, { file_path: inside }, source), "deny", `${t} (${source})`);
+    for (const source of ["handler", "heartbeat"] as const) assert.equal(classify(t, { file_path: inside }, source), "deny", `${t} (${source})`);
   }
   assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, "chat"), "allow");
-  for (const source of ["brief", "handler", "heartbeat"] as const) assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, source), "deny", source);
+  for (const source of ["handler", "heartbeat"] as const) assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, source), "deny", source);
 });
 
 test("audit ids: keeps ids, drops content", () => {
@@ -149,7 +149,7 @@ test("web: search is free and opening a page is judged in every place (which run
   assert.equal(classify("WebSearch", { query: "weather in zurich" }, "background"), "allow");
   assert.equal(classify("WebFetch", { url: "https://example.com/x", prompt: "hours" }, "background"), "ask");
   assert.equal(classify("WebFetch", { url: "file:///etc/passwd", prompt: "x" }, "background"), "deny");
-  for (const source of ["brief", "radar", "handler", "heartbeat"] as const) {
+  for (const source of ["radar", "handler", "heartbeat"] as const) {
     assert.equal(classify("WebSearch", { query: "x" }, source), "allow", `WebSearch (${source})`);
     assert.equal(classify("WebFetch", { url: "https://example.com" }, source), "ask", `WebFetch (${source})`);
     assert.equal(classify("WebFetch", { url: "file:///etc/passwd" }, source), "deny", `WebFetch file:// (${source})`);
@@ -183,10 +183,10 @@ test("data folders: Read is allowed in chat only, Write and Edit never", () => {
   assert.equal(classify("Read", { file_path: log }, "chat"), "allow");
   assert.equal(classify("Write", { file_path: log }, "chat"), "deny");
   assert.equal(classify("Edit", { file_path: log }, "chat"), "deny");
-  for (const source of ["brief", "handler", "radar"] as const) assert.equal(classify("Read", { file_path: log }, source), "deny", source);
+  for (const source of ["handler", "radar"] as const) assert.equal(classify("Read", { file_path: log }, source), "deny", source);
 });
 
 test("search_logs: chat only", () => {
   assert.equal(classify("mcp__memory__search_logs", { query: "x" }, "chat"), "allow");
-  for (const source of ["brief", "handler", "radar", "heartbeat"] as const) assert.equal(classify("mcp__memory__search_logs", { query: "x" }, source), "deny", source);
+  for (const source of ["handler", "radar", "heartbeat"] as const) assert.equal(classify("mcp__memory__search_logs", { query: "x" }, source), "deny", source);
 });

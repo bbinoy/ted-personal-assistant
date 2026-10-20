@@ -1,8 +1,8 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { audit } from "./audit.ts";
 import { OWNER_SCOPE, type Plan, type Scope } from "./dreamplan.ts";
-import { forgetNote } from "./notes.ts";
+import { forgetNote, STATUS_PREFIX } from "./notes.ts";
 
 // Applying a plan to the notes folder, with a snapshot first, and undoing the latest one.
 
@@ -13,7 +13,7 @@ const stamp = (now: Date) => now.toISOString().replace(/[:.]/g, "-");
 function snapshot(now: Date, scope: Scope): string {
   mkdirSync(scope.backupsDir, { recursive: true, mode: 0o700 });
   const dir = join(scope.backupsDir, stamp(now));
-  cpSync(scope.notesDir, dir, { recursive: true });
+  cpSync(scope.notesDir, dir, { recursive: true, filter: (src) => !basename(src).startsWith(STATUS_PREFIX) }); // a status note is not the dream's: an undo must not bring back yesterday's
   for (const old of readdirSync(scope.backupsDir).sort().slice(0, -KEEP_SNAPSHOTS)) rmSync(join(scope.backupsDir, old), { recursive: true, force: true });
   return dir;
 }
@@ -47,7 +47,7 @@ export function undoLatest(scope: Scope = OWNER_SCOPE): { ok: true; restored: nu
   const latest = snaps.at(-1);
   if (!latest) return { ok: false, error: "there is no dream to undo" };
   const dir = join(scope.backupsDir, latest);
-  for (const f of readdirSync(scope.notesDir)) if (f.endsWith(".md")) rmSync(join(scope.notesDir, f));
+  for (const f of readdirSync(scope.notesDir)) if (f.endsWith(".md") && !f.startsWith(STATUS_PREFIX)) rmSync(join(scope.notesDir, f));
   let restored = 0;
   for (const f of readdirSync(dir)) {
     cpSync(join(dir, f), join(scope.notesDir, f));

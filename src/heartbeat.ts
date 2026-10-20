@@ -10,7 +10,7 @@ import { readJson, writeJson } from "./state.ts";
 import { RateLimitError } from "./errors.ts";
 import type { MailInput, Triage } from "./triage.ts";
 
-// The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (wake-ups, dream, brief, the friends' mail checks).
+// The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (wake-ups, dream, the friends' mail checks).
 // The owner's own proactive work is the heartbeat run (src/heartbeat/look.ts, started from wake.ts), not a mail check.
 //
 // The mail check below is ONE function for each FRIEND who has mail through her own Google (mailloops.ts): the heartbeat lists her inbox with NO model call, and only when
@@ -52,7 +52,7 @@ export interface MailHooks {
 }
 
 interface HeartbeatHooks {
-  onTick: () => void; // tick-driven jobs (wake-ups, dream, brief, the friends' mail checks): independent of each other, never awaited
+  onTick: () => void; // tick-driven jobs (wake-ups, dream, the friends' mail checks): independent of each other, never awaited
 }
 
 // What differs between the conversations that have a mail check.
@@ -67,7 +67,7 @@ export interface MailContext {
 // What the mail check needs of the mail client (Mailbird, the Gmail relay, or a fake in tests).
 export type MailSource = (Pick<Mailbird, "inboxes" | "call" | "close"> | Pick<GmailMail, "inboxes" | "call" | "close">) & { getMessages?: GmailMail["getMessages"] };
 
-// Starts every tick-driven job (wake-ups, dream, brief, the friends' mail checks): each in its own try/catch, none awaited, so a job that throws
+// Starts every tick-driven job (wake-ups, dream, the friends' mail checks): each in its own try/catch, none awaited, so a job that throws
 // (even synchronously) or hangs never keeps another from starting.
 export function startJobs(jobs: Record<string, () => unknown>): void {
   for (const [name, f] of Object.entries(jobs)) {
@@ -175,10 +175,6 @@ async function processNewMail(mb: MailSource, fresh: NewMail[], hooks: MailHooks
   const extra: Record<number, Record<string, unknown>> = {};
 
   for (const i of plan.archive) {
-    if (!settings.archiveLive) {
-      decision[i] = "would-archive"; // ARCHIVE=log: classified and recorded, nothing archived
-      continue;
-    }
     try {
       // Mailbird may assign a new id on archive: the response is kept so `npm run restore` can find it.
       extra[i] = { result: short(await mb.call("archive_conversation", { conversationId: fresh[i]!.conversationId })) };

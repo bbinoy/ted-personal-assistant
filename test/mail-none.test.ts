@@ -1,20 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BRIEF_INSTRUCTIONS, briefInstructions, runBriefAttempt } from "../src/brief.ts";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { startHeartbeat } from "../src/heartbeat.ts";
-import { LAST_BRIEF, missingSetup, setupItems } from "../src/notes.ts";
-import { backgroundSystem, briefSystem, chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
+import { lookInstruction } from "../src/heartbeat/look.ts";
+import { missingSetup, setupItems } from "../src/notes.ts";
+import { backgroundSystem, chatContext, chatSystem, heartbeatSystem } from "../src/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/skills.ts";
 import { loadSettings, settings } from "../src/settings.ts";
-import { dataPath, readJson } from "../src/state.ts";
+import { readJson } from "../src/state.ts";
 
 // MAIL_PROVIDER: mailbird is the default and behaves exactly as before (test/default-prompts.test.ts pins its prompts); none is chat only.
 
@@ -73,57 +73,14 @@ test("heartbeat tick without mail: the jobs start and the liveness line is writt
   });
 });
 
-const BRIEF_TEXT = "## 🎯 Focus\n\n- **Ship the thing**\n\n## 📅 Today\n\n- 10:00 standup";
-
-function attempt(delivery: "email" | "signal", text: string, tool?: unknown) {
-  const calls = { sent: [] as string[], completed: 0, notified: 0 };
-  const log = console.log;
-  console.log = () => {};
-  const done = runBriefAttempt(
-    {
-      run: async (_p, onToolSuccess) => (tool !== undefined && onToolSuccess("mcp__mailbird__send_self_briefing", tool), { text, costUsd: 0.5 }),
-      sendBrief: async (md) => void calls.sent.push(md),
-      notify: async () => void calls.notified++,
-      delivery,
-    },
-    "prompt",
-    1,
-    () => void calls.completed++,
-  ).finally(() => (console.log = log));
-  return done.then((outcome) => ({ outcome, ...calls }));
-}
-
-test("brief without mail: the final text is the brief, marked complete, sent as the Signal summary, saved as memory", async () => {
-  const r = await attempt("signal", `${BRIEF_TEXT}\n\nROUTINE_COMPLETE`);
-  assert.equal(r.outcome, "delivered");
-  assert.equal(r.completed, 1);
-  assert.deepEqual(r.sent, [BRIEF_TEXT]);
-  assert.equal(readFileSync(dataPath(LAST_BRIEF), "utf8"), BRIEF_TEXT);
-});
-
-test("brief without mail: no marker, or only the marker, is incomplete (retried by the existing rules, not delivered)", async () => {
-  for (const text of [BRIEF_TEXT, "ROUTINE_COMPLETE", "  \nROUTINE_COMPLETE\n"]) {
-    const r = await attempt("signal", text);
-    assert.equal(r.outcome, "incomplete", text);
-    assert.equal(r.completed + r.sent.length, 0);
-  }
-});
-
-test("brief with mail (the default): the final text alone does not complete it, the email tool must have run", async () => {
-  const noTool = await attempt("email", `${BRIEF_TEXT}\n\nROUTINE_COMPLETE`);
-  assert.equal(noTool.outcome, "incomplete");
-  assert.equal(noTool.completed + noTool.sent.length, 0);
-  const withTool = await attempt("email", "ROUTINE_COMPLETE", { markdownBody: BRIEF_TEXT });
-  assert.equal(withTool.outcome, "delivered");
-  assert.deepEqual(withTool.sent, [BRIEF_TEXT]);
-});
-
-test("brief instructions: the mail ones are unchanged, the chat-only ones name no mail tool", () => {
-  assert.equal(briefInstructions(true), BRIEF_INSTRUCTIONS);
-  assert.match(BRIEF_INSTRUCTIONS, /send_self_briefing/);
-  const none = briefInstructions(false);
-  assert.doesNotMatch(none, /send_self_briefing|mailbird:/i);
-  assert.match(none, /ROUTINE_COMPLETE/);
+test("the brief's delivery sentence in the heartbeat instruction: the mail provider's own, or the chat alone without mail", async () => {
+  const at = new Date(2026, 9, 14, 8, 0);
+  await withMail(true, () => assert.match(lookInstruction(at, undefined), /send_self_briefing/));
+  await withMail(false, () => {
+    const none = lookInstruction(at, undefined);
+    assert.doesNotMatch(none, /send_self_briefing|mailbird:/i);
+    assert.match(none, /There is no email in this setup: your final answer is the whole brief itself/);
+  });
 });
 
 test("doctor without mail: 'mail: off' is OK, Mailbird is never contacted, no mail skill is required, the heartbeat line is fine", async () => {
@@ -172,7 +129,6 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
   const missing = missingSetup([], [], false);
   const prompts = {
     chat: chatSystem(new Date("2026-10-12T09:00:00"), false),
-    brief: briefSystem("MEMORY", missing, down, false),
     heartbeat: heartbeatSystem("MEMORY", missing, down, false),
     background: backgroundSystem("MEMORY", missing, down, false),
   };
@@ -185,8 +141,7 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
     assert.match(rest, /ted-personal-assistant:daily-brief/, name); // the other skills are still listed
   }
   assert.doesNotMatch(prompts.chat, /how you write|voice \(how/i);
-  const context = chatContext({ lastBrief: "yesterday's brief", missing, down, pings: ["10:00 an alert"] }, false)!; // what moved out of the chat's system prompt
-  assert.match(context, /Signal only got a short version/);
+  const context = chatContext({ missing, down, pings: ["10:00 an alert"] }, false)!; // what moved out of the chat's system prompt
   assert.doesNotMatch(context, /mailbird|Reply ready|send_message_now|update_draft|get_message|inbox|by email|email drafts|writes email|handled mail/i);
 });
 

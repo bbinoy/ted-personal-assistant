@@ -11,10 +11,10 @@ import { ownerSkills, skillsFor } from "./skills.ts";
 
 // ---- run profiles ----
 // HOW a run is allowed to work, fixed in code and named: the policy source (policy.ts: which tools are allowed, asked,
-// denied), the system prompt, the skills offered, the turn and budget limits and the output schema. A Task (tasks.ts)
-// names one; the gate can choose a task but never edit a profile. `notes` are the note categories injected as data.
+// denied), the system prompt, the skills offered, the turn and budget limits and the output schema. The gate can
+// choose the instructions of a free-form wake-up but never name or edit a profile. `notes` are the note categories injected as data.
 // The skills are read from the loaded tool modules when asked for (a getter), so the table can be built before the modules are.
-export type ProfileName = "chat" | "brief" | "heartbeat" | "background" | "group" | "handler" | "browse";
+export type ProfileName = "chat" | "heartbeat" | "background" | "group" | "handler" | "browse";
 interface RunProfile {
   readonly source: Source;
   readonly maxTurns: number;
@@ -33,8 +33,6 @@ export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
   chat: { source: "chat", ...data.chat, get skills() { return ownerSkills(); } },
   // The mail handler (handler.ts), every conversation's: a fresh session, the mail module's tools, standing-task provenance.
   handler: { source: "handler", ...data.handler, get skills() { return ownerSkills(); } },
-  // Unattended daily brief: a fresh session each run, a bigger budget, no banter.
-  brief: { source: "brief", ...data.brief, get skills() { return ownerSkills(); } },
   // The owner's heartbeat run (heartbeat/look.ts): one look at everything, a fresh session each time, on HEARTBEAT_MODEL (Haiku by default). Every connector tool the owner
   // has is offered and every call passes the same floor, judge and phone as anywhere (policy source "background"); it answers with constrained JSON.
   heartbeat: { source: "background", ...data.heartbeat, get skills() { return ownerSkills(); }, get model() { return settings.heartbeatModel; }, outputSchema: HEARTBEAT_SCHEMA },
@@ -49,4 +47,4 @@ export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
   browse: { source: "browse", maxTurns: settings.browseMaxTurns, maxBudgetUsd: settings.browseMaxUsd, skills: [], outputSchema: BROWSE_SCHEMA, notes: [] },
 };
 
-export type OwnerProfile = "brief" | "heartbeat" | "background";
+export type OwnerProfile = "heartbeat" | "background";

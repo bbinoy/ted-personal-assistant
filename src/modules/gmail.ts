@@ -1,4 +1,3 @@
-import { BRIEF_SKILL, DONE_MARKER } from "../brieftext.ts";
 import { GMAIL_PREFIX, gmailVerdict, isGmailTool, isInboxArchive, isSelfSend } from "../gmailrules.ts";
 import { addrs, nativeView } from "../policy/mailview.ts";
 import type { DraftView } from "../proposals.ts";
@@ -8,7 +7,7 @@ import { settings } from "../settings.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "./types.ts";
 
 // The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot
-// say (sensitive labels, attachment content, archiving in log-only mode, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
+// say (sensitive labels, attachment content, the brief to oneself) are gmailrules.ts, which this module hands to the floor.
 // The background handler (handler.ts) drafts replies with create_draft and they are shown on the phone like Mailbird's; sending is only on the owner's word. The mail client (src/gmail.ts), `npm run restore`
 // and the doctor check are runtime.ts.
 
@@ -29,12 +28,13 @@ const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you draft is a G
 
 `;
 
-// The brief preset's instructions (tasks.ts): the mail pass uses the gmail skill and the Gmail connector. The brief is the final answer (Signal, the default) or, with
-// BRIEF_EMAIL=on, also emailed to the owner's own address with send_message (the one send the brief run is allowed, gmailrules.ts).
-const BRIEF_COMMON = `Load the '${BRIEF_SKILL}' skill with the Skill tool and follow it, with these changes because the mail is Gmail: wherever it says to run 'ted-personal-assistant:mailbird', load 'ted-personal-assistant:gmail' instead and use the Gmail tools it names; the mailbird tools do not exist here.`;
-const briefSignal = () => `${BRIEF_COMMON} Do not deliver by email (step 6): your final answer is the brief itself, in the skill's format (Markdown, the sections in its order), with nothing before it, and then one last line with the exact text ${DONE_MARKER}. If the mail tools are unreachable, say so in the brief, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
-const briefEmail = (self: string): string =>
-  `${BRIEF_COMMON} Deliver the brief (step 6) with the Gmail send_message tool, exactly once, to ${JSON.stringify([self])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody). After send_message succeeds, print the exact line ${DONE_MARKER}. If the mail tools are unreachable, send the brief anyway saying so, do the task and calendar parts if you can, and do NOT print ${DONE_MARKER}.`;
+// How the brief is delivered (the daily-brief skill, step 6): the mail pass uses the gmail skill and the Gmail connector. With BRIEF_EMAIL=on the brief is also emailed to
+// the owner's own address with send_message (the one send a background run may do without asking, gmailrules.ts); otherwise the chat message is the brief.
+const BRIEF_GMAIL = "The mail is Gmail: wherever the skill says to run 'ted-personal-assistant:mailbird', load 'ted-personal-assistant:gmail' instead and use the Gmail tools it names; the mailbird tools do not exist here.";
+const briefHow = (): string =>
+  settings.briefEmail && settings.mailSelfAddress
+    ? `${BRIEF_GMAIL} Deliver the full brief with the Gmail send_message tool, exactly once, to ${JSON.stringify([settings.mailSelfAddress])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody).`
+    : `${BRIEF_GMAIL} Do not deliver by email: your final answer is the whole brief itself, in the skill's format.`;
 
 // The id of a Gmail draft a successful create_draft left: its result is the Draft object (`id`, `threadId`, `viewUrl`), as text or as a content array.
 const draftIdOf = (response: unknown): string | undefined => {
@@ -53,11 +53,7 @@ const mail: MailSlot = {
       followUp: "Then load ted-personal-assistant:follow-through and do what follows from it: mark the matching task done, add a follow-up task, archive the confirmation once it is handled (unlabel_thread removing INBOX).",
     }),
   createdDraft: (tool, response) => (tool === `${GMAIL_PREFIX}create_draft` ? draftIdOf(response) : undefined),
-  brief: {
-    delivery: () => (settings.briefEmail && settings.mailSelfAddress ? "email" : "signal"),
-    instructions: () => (settings.briefEmail && settings.mailSelfAddress ? briefEmail(settings.mailSelfAddress) : briefSignal()),
-    captured: (tool, input) => (isSelfSend(tool, input, settings.mailSelfAddress) ? { text: (input as { body?: string }).body } : undefined), // the brief sent to the owner's own address
-  },
+  brief: { how: briefHow },
   chat: { skill: "ted-personal-assistant:gmail", note: GMAIL_DRAFTS },
   readBack: async (kind, input) => {
     if (kind === "gmSend" && typeof input.draftId === "string" && readers) return readers.draft(input.draftId).catch(() => undefined);
@@ -102,8 +98,8 @@ export const gmailModule: ToolModule = {
     ...gm(DELETE_CONFIRM, "delete_draft"), // a draft thrown away: allowed but not routine (neverallowed.ts DELETE_CONFIRM), judged with care
   ],
   free: ["read"],
-  // The brief the run emails to the owner's own address (BRIEF_EMAIL=on): one plain recipient that IS the configured address, nothing else (gmailrules.ts isSelfSend).
-  freeWhen: { send: (input, source) => source === "brief" && active() && settings.briefEmail && isSelfSend(`${GMAIL_PREFIX}send_message`, input, settings.mailSelfAddress) },
+  // The brief the heartbeat's expert emails to the owner's own address (BRIEF_EMAIL=on): one plain recipient that IS the configured address, nothing else (gmailrules.ts isSelfSend).
+  freeWhen: { send: (input, source) => source === "background" && active() && settings.briefEmail && isSelfSend(`${GMAIL_PREFIX}send_message`, input, settings.mailSelfAddress) },
   titles: {
     [`${GMAIL_PREFIX}send_message`]: { icon: "✉️", title: "Send email" },
     [`${GMAIL_PREFIX}forward`]: { icon: "✉️", title: "Forward email" },
@@ -112,16 +108,10 @@ export const gmailModule: ToolModule = {
   },
   untrustedPrefix: GMAIL_PREFIX,
   floor: {
-    // Gmail's rules a row cannot say: attachment content, raw MIME, label renames, archive log-only (gmailrules.ts). They hold whichever provider is
+    // Gmail's rules a row cannot say: attachment content, raw MIME, label renames (gmailrules.ts). They hold whichever provider is
     // active: they only restrict, so the connector's tools stay as refused as before if it is ever seen under another provider.
-    verdict: (tool, input) => gmailVerdict(tool, input, { archiveLive: active() && settings.archiveLive }),
-    // Archive in log-only mode (ARCHIVE=log) is recorded like the heartbeat's, so the report and the brief show it.
-    onDeny: (tool, input) => {
-      if (isInboxArchive(tool, input) && active()) {
-        return { record: { tool: "gmail_archive", decision: "would-archive", meta: { id: input.threadId } }, message: "Archiving is in log-only mode (ARCHIVE=log): it was recorded as would-archive and the thread stays in the inbox. Carry on without archiving." };
-      }
-      return isGmailTool(tool) ? { withIds: true } : undefined;
-    },
+    verdict: (tool, input) => (isInboxArchive(tool, input) && !active() ? "deny" : gmailVerdict(tool, input)), // an archive is the Gmail provider's: under another provider the connector stays refused
+    onDeny: (tool) => (isGmailTool(tool) ? { withIds: true } : undefined),
     judgeVeto: { send: named, reply: named, forward: named },
     creates: (name) => name === "create_draft",
     noFix: ["send", "reply", "forward"],

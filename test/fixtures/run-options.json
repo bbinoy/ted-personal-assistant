@@ -5,7 +5,7 @@
       "sessionFile": "state/session.json",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "c1e9d735eac344df"
+        "sha": "63b1fab423a42d4f"
       },
       "memory": {
         "dir": "<data>/memory/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "c1e9d735eac344df"
+        "sha": "63b1fab423a42d4f"
       },
       "snapshot": false
     },

@@ -36,15 +36,13 @@ export function autoApprove(env: Env): "off" | "auto" {
   throw new Error(`AUTO_APPROVE must be "auto" or "off" (got "${raw}"). Write AUTO_APPROVE=auto (or remove the line) for the approval judge, or AUTO_APPROVE=off to be asked about everything.`);
 }
 
-// ARCHIVE: `live` (the default: the mail check archives what it classifies as archive) or `log` (it classifies and records "would-archive" and archives nothing, and a model run's
-// archive call is refused the same way). ONE switch for every mail check (the owner's and each friend's) and every provider. It replaces HEARTBEAT_ACTIONS,
-// GMAIL_ARCHIVE_LIVE and GOOGLE_ARCHIVE_LIVE, which stop the agent at start-up with a message naming this one.
-const OLD_ARCHIVE_SWITCHES = ["HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"] as const;
-export function archiveLive(env: Env): boolean {
-  for (const old of OLD_ARCHIVE_SWITCHES) {
-    if (env[old]?.trim()) throw new Error(`${old} is gone: one setting, ARCHIVE=live or ARCHIVE=log, now decides whether the mail checks archive (Gmail, Mailbird and friends alike). Remove ${old} from .env; write ARCHIVE=log to keep archiving off (the old false/log), or nothing for live.`);
+// ARCHIVE (and its old forms HEARTBEAT_ACTIONS, GMAIL_ARCHIVE_LIVE, GOOGLE_ARCHIVE_LIVE) is gone: archiving is always live. A line still in .env stops the agent at start-up,
+// so a trial week someone relied on is not silently ended.
+const GONE_ARCHIVE_SWITCHES = ["ARCHIVE", "HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"] as const;
+function rejectArchiveSwitches(env: Env): void {
+  for (const old of GONE_ARCHIVE_SWITCHES) {
+    if (env[old]?.trim()) throw new Error(`${old} is gone: archiving is always live now (an archive is reversible: npm run restore). Remove ${old} from .env.`);
   }
-  return oneOf(env, "ARCHIVE", "live", ["live", "log"] as const) === "live";
 }
 
 // <MODULE>_TOOLS: the tools of one module's connector that stay visible to the model, one setting per module, named after it (NOTION_TOOLS for the module "notion"). Only the
@@ -142,7 +140,8 @@ export const parseLanguages = (raw: string | undefined): string[] => {
 };
 
 export function loadSettings(env: Env) {
-  // The rhythm (when the heartbeat ticks, the brief, the radar, the dream) has its defaults in the assistant preset (preset.ts); each env variable below still overrides its own.
+  // The rhythm (when the heartbeat ticks, the quiet hours, the daily brief's words, the dream) has its defaults in the assistant preset (preset.ts); each env variable below still overrides its own.
+  rejectArchiveSwitches(env);
   const rhythm = presetFor(env).rhythm;
   const kokoro = {
     dir: env.TTS_DIR || `${env.HOME ?? ""}/.cache/ted-personal-assistant/kokoro`,
@@ -170,9 +169,6 @@ export function loadSettings(env: Env) {
 
     mailProvider,
     mailSelfAddress: mailSelf || undefined,
-    // Do the mail checks archive for real (ARCHIVE=live, the default) or only log "would-archive" (ARCHIVE=log, e.g. for the first week with Gmail or a friend's Google)?
-    // The same switch governs a model run's archive calls (policy.ts).
-    archiveLive: archiveLive(env),
     // Gmail only: email the brief to MAIL_SELF_ADDRESS as well as the Signal summary. Off: the brief is the Signal message alone.
     briefEmail: oneOf(env, "BRIEF_EMAIL", "off", ["on", "off"] as const) === "on",
     mail: mailProvider !== "none", // is there any mail to look at? Every mail-only path asks this, never the provider's name
@@ -183,11 +179,9 @@ export function loadSettings(env: Env) {
     quietEndHour: num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23),
 
     // The owner's heartbeat run (src/heartbeat/look.ts): on every look a model (HEARTBEAT_MODEL: haiku, sonnet, or a full model id) reads the chat, mail, calendar and
-    // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). Over the night window a code cap
-    // of NIGHT_MESSAGES proactive messages holds the rest for the morning look.
+    // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). How quiet it is at night is its instruction's business, not code's.
     heartbeatModel: env.HEARTBEAT_MODEL?.trim() || "haiku",
     heartbeatDayMinutes: rhythm.heartbeat.dayMinutes,
-    nightMessages: num(env, "NIGHT_MESSAGES", 2, 0, 20),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
@@ -274,10 +268,6 @@ export function loadSettings(env: Env) {
     // or your standing tasks, inside the floor that code sets; off asks you about everything that is not a plain read.
     autoApprove: autoApprove(env),
 
-    briefStartHour: num(env, "BRIEF_START_HOUR", rhythm.brief.startHour, 0, 23), // the hour the brief is due (tasks.ts briefOwed)
-    briefMaxAttempts: num(env, "BRIEF_MAX_ATTEMPTS", rhythm.brief.maxAttempts, 1, 10),
-    // The daily brief starts from the deterministic schedule in src/wake.ts: the first look at or after BRIEF_START_HOUR with no brief logged today (BRIEF_BACKSTOP_HOUR=24: never).
-    briefBackstopHour: num(env, "BRIEF_BACKSTOP_HOUR", rhythm.brief.backstopHour, 0, 24), // 24 turns the brief off; any other hour: the brief is due from BRIEF_START_HOUR (kept as a setting so an old .env still loads)
 
     // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every model call, so hide what your skills never use. A skill that needs a
     // hidden tool will fail, so list it here. HIDDEN_CONNECTORS: tool-name prefixes of whole connectors (the Gmail one is shown while MAIL_PROVIDER=gmail, and the mail
@@ -301,6 +291,7 @@ export function loadSettings(env: Env) {
     // nightly "dream" that keeps them up to date (dream.ts).
     memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 150, 10, 1000), // the one memory limit: how many notes a run reads (each is cut at MAX_NOTE_CHARS)
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
+    dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
     // Wake-ups (src/gate.ts, src/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").
@@ -365,7 +356,6 @@ export function loadSettings(env: Env) {
     slowReplySeconds: num(env, "SLOW_REPLY_SECONDS", 20, 0, 600), // an answer later than this is threaded under the message (quote.ts)
     echoWindowMinutes: num(env, "ECHO_WINDOW_MINUTES", 5, 1, 60), // our own sent text coming back within this long is an echo, not the owner (outbound.ts)
     warmRefreshMinutes: num(env, "WARM_REFRESH_MINUTES", 25, 1, 1440), // the owner's warm process is renewed this often, so it is still fresh after a quiet hour (main.ts)
-    briefRetryGapMinutes: num(env, "BRIEF_RETRY_GAP_MINUTES", 10, 1, 240), // an incomplete brief is retried after this long (tasks.ts)
     seenMailDays: num(env, "SEEN_MAIL_DAYS", 14, 1, 365), // how long the heartbeat remembers it has seen a mail (heartbeat.ts)
     noticeAgeHours: num(env, "NOTICE_AGE_HOURS", 24, 1, 168), // what the assistant sent on its own stays "recent" for the chat this long (messages.ts)
     compactBackoffMinutes: num(env, "COMPACT_BACKOFF_MINUTES", 60, 1, 1440), // after a failed compaction, no new try for this long (session.ts)
@@ -385,7 +375,7 @@ export function loadSettings(env: Env) {
     dataDir,
     stateDir: join(dataDir, "state"), // bookkeeping the model never reads
     logsDir: join(dataDir, "logs"), // agent.log, audit.jsonl, daemon and launchd output
-    memoryDir: join(dataDir, "memory"), // what the model reads: notes/ (the SDK auto-memory) and last-brief.md
+    memoryDir: join(dataDir, "memory"), // what the model reads: notes/ (the SDK auto-memory) 
     tenantsDir: join(dataDir, "tenants"), // one folder per tenant (notes, history, session, cost, tenant.json): outside logs/, state/ and memory/, so the owner's chat does not read it (policy.ts)
   } as const;
 }

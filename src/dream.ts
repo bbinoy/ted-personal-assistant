@@ -12,7 +12,7 @@ import { clockLine } from "./brief.ts";
 import { fence } from "./fence.ts";
 import { listGroups } from "./groupstore.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "./messages.ts";
-import { NOTES_DIR } from "./notes.ts";
+import { NOTES_DIR, STATUS_PREFIX } from "./notes.ts";
 import { isPaused, localDay } from "./pause.ts";
 import { dreamSystem } from "./persona.ts";
 import { preset } from "./preset.ts";
@@ -21,7 +21,7 @@ import { readJson, writeJson } from "./state.ts";
 import { listTenants } from "./tenants/tenants.ts";
 import { LIMITS, oneLine } from "./sanitize.ts";
 
-// The dream: once a day, before the daily brief, a model with NO tools reads what a conversation's person said since the last dream (their messages and
+// The dream: once a day, on the first tick at or after DREAM_HOUR (dreamTrigger, a plain tick job: nothing else starts it), a model with NO tools reads what a conversation's person said since the last dream (their messages and
 // reactions) next to that conversation's notes, and proposes changes to the notes as JSON: things worth remembering, and a tidy-up (merge duplicates,
 // drop what has expired). It cannot touch anything itself. Code decides what is applied:
 //   - a new fact needs a verbatim quote from the person's own words that day (checked here);
@@ -112,7 +112,7 @@ export const runnerFor = (payer: Payer = LOGIN): Runner => async (prompt, system
 
 export const readNoteFiles = (dir: string = NOTES_DIR): NoteFile[] => {
   try {
-    return readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").sort().map((file) => ({ file, raw: readFileSync(join(dir, file), "utf8") }));
+    return readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md" && !f.startsWith(STATUS_PREFIX)).sort().map((file) => ({ file, raw: readFileSync(join(dir, file), "utf8") }));
   } catch {
     return [];
   }
@@ -224,4 +224,20 @@ export function createDreamer(deps: DreamerDeps = {}) {
 
   // One run at a time; a second caller waits for the first.
   return { run: (now = new Date()) => (inFlight ??= once(now).finally(() => (inFlight = undefined))) };
+}
+
+// The daily trigger: a tick job that runs `run` (the dreamers) on the first tick at or after `hour` (local), and looks again at most once an hour for the rest of the day (a
+// conversation that had too little to dream about may have more later; one already dreamt today is skipped by its own state file). Before the hour nothing runs, so a
+// dream never starts in the middle of the owner's evening. Plain code: no model decides when.
+export function dreamTrigger(run: () => unknown, o: { hour?: () => number; everyMs?: number; enabled?: () => boolean } = {}) {
+  const hour = o.hour ?? (() => settings.dreamHour);
+  const everyMs = o.everyMs ?? 60 * 60_000;
+  let tried: { day: string; at: number } | undefined;
+  return (now: Date = new Date()): unknown => {
+    if ((o.enabled ?? (() => settings.dream))() === false || now.getHours() < hour()) return undefined;
+    const day = localDay(now);
+    if (tried && tried.day === day && now.getTime() - tried.at < everyMs) return undefined;
+    tried = { day, at: now.getTime() };
+    return run();
+  };
 }

@@ -17,7 +17,7 @@ import { CAPABILITIES } from "../src/tenants/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "voice", "memory", "status", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -54,7 +54,7 @@ test("modules: a module's floor keeps restricting when it is not loaded (the Gma
   assert.equal(settings.mailProvider, "mailbird");
   assert.equal(classify(`${GM}apply_sensitive_message_label`, {}, "chat"), "deny");
   assert.equal(classify(`${GM}get_attachment`, {}, "chat"), "deny");
-  assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX"] }, "chat"), "deny"); // archiving is log-only unless the Gmail provider is live
+  assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX"] }, "chat"), "deny"); // an archive is the Gmail provider's: refused under Mailbird
 });
 
 test("modules: every server a module names is built under that name in runtime.ts, and runtime.ts builds no other", () => {
@@ -63,7 +63,7 @@ test("modules: every server a module names is built under that name in runtime.t
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "status", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
@@ -80,7 +80,7 @@ test("modules: each module decides from the run whether it has a server (a conve
   assert.equal(when(module("send"), ctx({ source: "group", key: "g", offers: (t) => t !== "mcp__send__send" })), false, "a group whose capability set lacks it");
   assert.equal(when(module("memory"), chat), true);
   assert.equal(when(module("memory"), ctx({ source: "background", key: undefined })), false);
-  assert.equal(when(module("browse"), ctx({ source: "brief", key: undefined })), false, "the unattended mail runs never browse");
+  assert.equal(when(module("browse"), ctx({ source: "handler", key: undefined })), false, "the unattended mail runs never browse");
   assert.equal(when(module("tenants"), ctx({ source: "group", key: "g" })), false, "the tenant administration is the owner's chat only");
   assert.equal(when(module("intake"), chat), false, "intake is a tenant's");
   assert.equal(when(module("browser"), chat), false, "the browser belongs to the browse run");
@@ -109,7 +109,7 @@ test("modules: a friend's own connection exists for a tenant run whose capabilit
 test("modules: the mail slot answers for the provider, so central code never asks for its name", () => {
   assert.equal(typeof mailSlot("mailbird")?.handlerTask, "function"); // a provider has a handler when it says what the handler's task is
   assert.equal(typeof mailSlot("gmail")?.handlerTask, "function");
-  assert.equal(mailSlot("mailbird")?.brief.delivery(), "email");
+  assert.match(mailSlot("mailbird")?.brief.how() ?? "", /send_self_briefing/);
   assert.equal(mailSlot("mailbird")?.chat.skill, "ted-personal-assistant:mailbird");
   assert.equal(mailSlot("gmail")?.chat.skill, "ted-personal-assistant:gmail");
   for (const m of registered().filter((x) => x.slot === "mail")) {

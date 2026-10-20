@@ -105,7 +105,7 @@ export function hiddenTools(seen: readonly string[], cfg: { hiddenConnectors: re
 //   1. it exists here: the capability set of an isolated run, and `only` of the row
 //   2. never allowed (trading, trash, delete, spam, block: by row, by name, by arguments) and no local files: deny
 //   3. the manifest: free (a read, the assistant's own plumbing, a call a module declares free) is allow, everything else ask
-//   4. every module's floor, the minimum (a friend's Google: no attachments; Gmail: attachment content, archive log-only)
+//   4. every module's floor, the minimum (a friend's Google: no attachments; Gmail: attachment content)
 //   5. the note file tools: only on a path inside the notes (a group's: inside that group's notes folder; the owner's chat: or, for Read, the data folders)
 // What an isolated run holds and the owner does not is the capability set in 1; there is no second rule for it.
 export function classify(tool: string, input: Record<string, unknown>, source: Source, groupNotesDir?: string, tools?: ReadonlySet<string>): Verdict {
