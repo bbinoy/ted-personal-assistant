@@ -88,6 +88,9 @@ export function factsOf(args: Record<string, unknown>, details: string): Facts {
     }
     add(must, "YES");
   }
+  // The call was declined a moment ago (declined.ts): the question must say how long ago, so the owner knows why they are asked again.
+  const gone = /^The owner declined this action (\d+) minutes? ago\.$/m.exec(details)?.[1];
+  if (gone) add(must, `${gone} min`);
   for (const line of details.split("\n")) {
     const h =/^(To|Cc|Bcc|With|Address|Where):\s*(.*)$/.exec(line);
     if (!h) continue;

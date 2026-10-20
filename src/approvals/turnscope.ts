@@ -1,6 +1,7 @@
 import type { RunProvenance } from "./autojudge.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
+import { agoText } from "../core/timezone.ts";
 
 // What a conversation's turn is known to have been asked, for the approval judge's provenance (autojudge.ts RunProvenance): the person's message that started the
 // turn and the two before it (a send is judged against what was said about it, which may have been a message ago: "reply to Armon that Tuesday works" ... "send it"),
@@ -17,7 +18,8 @@ const KEEP = 3;
 export class TurnScope {
   readonly key: string;
   readonly member: boolean; // a group or a tenant: not the owner's chat
-  #recent: string[] = [];
+  #recent: { text: string; reactedOn?: number }[] = []; // reactedOn: for a reaction, when the message it was on was sent (0: not in the log any more)
+  #wroteAt = 0; // the person's newest message of any kind (an answer to a question included), when it arrived
   #said = "";
   #derived: Extract<RunProvenance, { kind: "derived" }> | undefined; // (a wake-up's gate-selected task: the person's standing instruction acted on later)
 
@@ -27,10 +29,16 @@ export class TurnScope {
   }
 
   // A person's message starts a turn. `assistantSaid`: for a reaction, the message that was reacted to (what the owner was answering).
-  say(text: string, assistantSaid?: string): void {
+  // `reactedOn`: for a reaction, when that message was sent. A reaction answers only the message it was on: once the person has written since, the judge is told so.
+  say(text: string, assistantSaid?: string, reactedOn?: number): void {
     this.#derived = undefined;
-    this.#recent = [...this.#recent, text].slice(-KEEP);
+    this.#recent = [...this.#recent, { text, ...(reactedOn !== undefined ? { reactedOn } : {}) }].slice(-KEEP);
     if (assistantSaid !== undefined) this.#said = assistantSaid.slice(0, LIMITS.quote);
+  }
+
+  // The person wrote something (a message that answered an open question too): the pipeline says so on arrival.
+  wrote(at = Date.now()): void {
+    this.#wroteAt = at;
   }
 
   // An unattended turn of this conversation: the text a gate or the assistant wrote for it. Not anybody's own words.
@@ -49,11 +57,18 @@ export class TurnScope {
     if (this.member) this.#recent = [];
   }
 
-  read = (): RunProvenance | undefined => {
+  // A reaction line, with a note when the person has written since the message it was on (code-built, for the judge).
+  #shown(m: { text: string; reactedOn?: number }, now: number): string {
+    if (m.reactedOn === undefined || this.#wroteAt <= m.reactedOn) return m.text;
+    const on = m.reactedOn === 0 ? "an older message" : `a message from ${agoText(now - m.reactedOn)}`;
+    return `${m.text} [a reaction answers only the message it was on: this one was on ${on}, and the owner has written since]`;
+  }
+
+  read = (now = Date.now()): RunProvenance | undefined => {
     if (this.#derived) return this.#derived;
-    const message = this.#recent.at(-1);
-    if (message === undefined) return undefined;
-    return this.member ? { kind: "member", message } : { kind: "owner", message, earlier: this.#recent.slice(0, -1), assistantSaid: this.#said || undefined };
+    const last = this.#recent.at(-1);
+    if (last === undefined) return undefined;
+    return this.member ? { kind: "member", message: last.text } : { kind: "owner", message: this.#shown(last, now), earlier: this.#recent.slice(0, -1).map((m) => this.#shown(m, now)), assistantSaid: this.#said || undefined };
   };
 }
 
