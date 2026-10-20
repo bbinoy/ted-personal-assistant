@@ -34,9 +34,9 @@ export interface ProfileExtra {
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
 // The options of an owner profile's run (a fresh session).
-function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
+export function profileOptions(name: OwnerProfile, extra: ProfileExtra = {}): RunOptions {
   const p = PROFILES[name];
-  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
+  return { source: p.source, systemPrompt: profileSystem(name), skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd, outputFormat: p.outputSchema, onToolSuccess: extra.onToolSuccess, provenance: fixed(extra.provenance) };
 }
 
 // One run under a named owner profile: always a fresh session.

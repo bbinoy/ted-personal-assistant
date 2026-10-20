@@ -20,6 +20,7 @@ import type { RunProvenance } from "./autojudge.ts";
 import { scopeOf } from "./turnscope.ts";
 import { groupCapabilities, groupTools } from "./capabilities.ts";
 import { hiddenTools } from "./policy.ts";
+import { hiddenOutside } from "./profiletools.ts";
 import { PROFILES } from "./profiles.ts";
 import { changesCalendar, nudgeRadar } from "./radar-nudge.ts";
 import { type ChatSession } from "./session.ts";
@@ -47,6 +48,7 @@ export interface RunOptions {
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
   skills?: readonly string[]; // the skills offered (default: the owner's, skills.ts ownerSkills);a group's or tenant's are the shared ones its capabilities allow (skills.ts)
+  mcpTools?: ReadonlySet<string>; // an unattended job's own list of MCP tools (profiles.ts): every other connector tool is out of the model's view (profiletools.ts); default: the owner's whole set
   tools?: ReadonlySet<string>; // an isolated conversation (a group, a tenant): the tools that exist for the run, from its capabilities (capabilities.ts); decides its built-ins, its MCP servers and policy.ts classify
   maxTurns: number;
   maxBudgetUsd: number; // hard per-run spend cap. Per RUN, not per session: the SDK does not count the cost a resumed session already had (checked), so owner and groups alike need no adjustment here. The previous total is subtracted only when reporting cost (consume)
@@ -206,7 +208,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // other skills would cost context on every call and are none of its business).
     plugins: isolated && !skills.length ? undefined : plugin,
     skills: isolated ? (skills.length ? [...skills] : undefined) : (opts.skills ? [...opts.skills] : ownerSkills()),
-    disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
+    disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
     canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume) }),
