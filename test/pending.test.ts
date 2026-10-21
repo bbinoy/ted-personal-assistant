@@ -245,15 +245,15 @@ test("quiet hours: the batch waits in the inbox and goes out as its own message,
   assert.equal(r.sent.length, 0);
   assert.equal(openItems(r.scope).every((p) => p.deferred && !p.sent), true);
   // the owner writes meanwhile and settles one: nothing is dropped as stale, and the resolved one vanishes from the batch
-  assert.equal((await answerIn(r, "2 no")).outcome, "declined");
+  const early = await answerIn(r, "2 no");
+  assert.deepEqual([early.outcome, early.reply], ["clarify", "#2 hasn't been shown to you yet. Nothing was done."]);
   park(r, "Carol", { to: "carol@example.com" });
   assert.equal(await flushPending(r.scope, { ended: false }), "held", "the tick at night: still held");
   r.night = false;
   assert.equal(await flushPending(r.scope, { ended: false }), "sent", "the tick after quiet: asked at once, however young");
   assert.equal(r.sent.length, 1);
-  assert.match(r.sent[0]!.text, /^📬 2 things are waiting for your approval:\n1\. Rebecca [^\n]*\n   ↳ [^\n]*\n3\. Carol /);
-  assert.doesNotMatch(r.sent[0]!.text, /Bob/);
-  assert.deepEqual(openItems(r.scope).map((p) => p.sent?.ts), [r.sent[0]!.ts, r.sent[0]!.ts], "its timestamp is kept: a quote of it answers");
+  assert.match(r.sent[0]!.text, /^📬 3 things are waiting for your approval:\n1\. Rebecca [^\n]*\n   ↳ [^\n]*\n2\. Bob [^\n]*\n   ↳ [^\n]*\n3\. Carol /);
+  assert.deepEqual(openItems(r.scope).map((p) => p.sent?.ts), [r.sent[0]!.ts, r.sent[0]!.ts, r.sent[0]!.ts], "its timestamp is kept: a quote of it answers");
   assert.equal((await answerIn(r, "yes", { timestamp: r.sent[0]!.ts })).outcome, "clarify", "two open items of that batch: which one?");
   r.night = true;
   park(r, "Urgent one", { to: "x@example.com" }, { urgent: true });
@@ -294,6 +294,7 @@ test("a failed follow-up is reported as failed, with its reason", async () => {
   const r = rig();
   r.result = { ran: false, line: "the draft no longer exists" };
   park(r, "A");
+  await flushPending(r.scope, { ended: true });
   assert.equal((await answerIn(r, "all yes")).outcome, "approved");
   await idle();
   assert.equal(r.sent.at(-1)!.text, "⚠️ #1 failed: the draft no longer exists");
@@ -459,7 +460,7 @@ test("/approvals lists the open items with numbers, ages and the hint; '/approva
   assert.ok(listed.includes(ANSWER_HINT));
   assert.deepEqual(openItems(r.scope).every((p) => p.sent), true, "listed items are not asked again in a batch");
   assert.equal(commandReply({ kind: "group", key: "g1", sessionFile: "g" }, "/approvals"), undefined);
-  assert.equal(commandReply(conv, "/approvals clear"), "Dropped 2 waiting actions (#1, #2). Nothing was run.");
+  assert.equal(commandReply(conv, "/approvals clear"), "Dropped 2 waiting actions (#1, #2). Nothing was run. Counted as a no, so they are not proposed again for now.");
   assert.deepEqual(openItems(r.scope), []);
   assert.equal(commandReply(conv, "/approvals clear"), "Nothing was waiting.");
   assert.equal(commandReply(conv, "/approvals"), "Nothing is waiting for your approval.");

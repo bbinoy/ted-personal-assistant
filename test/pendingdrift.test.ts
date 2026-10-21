@@ -46,6 +46,7 @@ test("a draft edited between asking and running: nothing runs, the current versi
 test("a draft that is gone is not run either", async () => {
   const r = rig({ details: async () => undefined });
   const q = park(r.scope, "✉️ Reply\nTo: a@example.com\n\nhi");
+  await flushPending(r.scope, { ended: true });
   await say(r.scope, `${q.n} yes`);
   await idle();
   assert.deepEqual(r.ran, []);
@@ -90,6 +91,7 @@ test("a stuck item whose run did finish (the audit log says so) is simply done; 
   const r = rig({ execute: () => new Promise(() => {}) });
   park(r.scope, "✉️ A\nTo: a@example.com\n\nhi", { to: "a@example.com" });
   park(r.scope, "✉️ B\nTo: b@example.com\n\nhi", { to: "b@example.com" });
+  await flushPending(r.scope, { ended: true });
   await say(r.scope, "all yes");
   audit(SEND, "approval-queue-executed", "background", { n: 1, scope: r.scope, result: "ok" });
   assert.deepEqual(recoverStuck(r.scope, new Set()), ["#2 may not have run (I restarted while doing it). Reply '#2 yes' to try again."]);

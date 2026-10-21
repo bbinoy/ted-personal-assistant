@@ -39,7 +39,7 @@ import { createRegistrar } from "./approvals/registerask.ts";
 import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
 import { runPending } from "./run/pendingrun.ts";
 import { holdingNow } from "./heartbeat/notices.ts";
-import { mayRun } from "./tenants/payer.ts";
+import { isRefusal, mayRun } from "./tenants/payer.ts";
 import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
@@ -88,6 +88,7 @@ setPendingRuntime({
   send: (scope, text) => out.reply(text, { plain: true, kind: "approval", ...(scope === OWNER_KEY ? {} : { target: convOf(scope).target }) }),
   holding: (scope, now) => holdingNow(convOf(scope), now),
   details: (scope, item) => renderDetails(scope, item.tool, item.input),
+  canRun: (scope) => { const r = mayRun(convOf(scope), "approved action"); return isRefusal(r) ? r.refused : undefined; },
   execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
 });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).

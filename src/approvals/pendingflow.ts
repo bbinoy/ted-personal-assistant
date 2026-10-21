@@ -1,11 +1,13 @@
 import { audit, readAudit, wordless, type Source } from "../core/audit.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
-import { OWNER, settings } from "../core/settings.ts";
+import { settings } from "../core/settings.ts";
+import { argsForAudit } from "./auditargs.ts";
 import { noteDeclined } from "./declined.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView } from "./approvalprompt.ts";
-import { addExpired, addPending, clearPending, finishItem, interrupt, markDeferred, markExecuting, markSent, openItems as allItems, sweepExpired, takeExpired, takeItems, type Pending } from "./pending.ts";
+import { addExpired, addPending, clearPending, finishItem, interrupt, markDeferred, markExecuting, markSent, recordDone, setRetry, openItems as allItems, sweepExpired, takeExpired, takeItems, type Pending } from "./pending.ts";
 import { compactFooter, detailsHash, doneLine, expiryLine, failedLine, labelOf, queuedResult, renderBatch, renderList } from "./pendingbatch.ts";
+import { approverName } from "./pendingexec.ts";
 import { parseNumbered } from "./pendingparse.ts";
 import { recentIn } from "./recentchat.ts";
 
@@ -20,14 +22,16 @@ export interface PendingRuntime {
   send(scope: string, text: string): Promise<number>; // the conversation's chat; resolves the sent message's timestamp
   holding(scope: string, now: Date): boolean; // heartbeat/notices.ts holdingNow: is the conversation being left alone now (quiet hours, its /quiet)? The batch then waits in the inbox itself (never in the held posts: it must not go stale, be merged into a digest or count toward the day's cap)
   details?(scope: string, item: Pending): Promise<string | undefined>; // the call's code-rendered details read again now (permissions.ts renderDetails); compared with the hash taken at asking time
-  execute(scope: string, item: Pending): Promise<{ ran: boolean; line: string }>; // the follow-up run of exactly this call (run/pendingrun.ts)
+  execute(scope: string, item: Pending): Promise<{ ran: boolean; line: string; refused?: string }>; // the follow-up run of exactly this call (run/pendingrun.ts); `refused`: the run gate said not now (pause, budget, cooldown...), nothing was tried
+  canRun?(scope: string): string | undefined; // the reason the run gate would refuse an approved item now, or undefined when it would run (the tick retries a refused item by this)
   now?: () => Date;
 }
 let rt: PendingRuntime | undefined;
 export const setPendingRuntime = (r: PendingRuntime | undefined): void => void (rt = r);
 const clock = (): Date => rt?.now?.() ?? new Date();
 const running = new Set<string>(); // follow-up runs of THIS process: "scope#n"
-const openItems = (scope: string): Pending[] => allItems(scope).filter((p) => !p.executing); // what a yes can still apply to
+const busy = (p: Pending): boolean => !!p.executing || !!p.retry; // approved already: running now, or waiting for the run gate
+const openItems = (scope: string): Pending[] => allItems(scope).filter((p) => !busy(p)); // what a yes can still apply to
 
 // A friend's rows carry no words (audit.ts): the admin's audit log is not hers to put words in.
 const rows = (scope: string, meta: Record<string, unknown>) => (isTenantKey(scope) ? wordless(meta) : meta);
@@ -49,9 +53,15 @@ export interface QueueInput {
 export function queueCall(scope: string, q: QueueInput, now: Date = clock()): { n: number; message: string } | undefined {
   const r = addPending(scope, { tool: q.tool, input: structuredClone(q.input), label: q.label, question: q.question, footer: q.footer, detailsHash: q.detailsHash, source: q.source, urgent: q.urgent }, now.getTime());
   if ("full" in r) return void log({ tool: q.tool, scope, source: q.source }, "approval-queue-full");
-  if (!r.duplicate) log({ tool: q.tool, scope, source: q.source }, "approval-queued", { n: r.n, args: q.input, question: q.question, details: q.label });
+  if ("blocked" in r) {
+    // The same call was done (the next look proposes it anew), or expired unanswered a moment ago: it is not parked again, and the run is told why.
+    const b = r.blocked;
+    log({ tool: q.tool, scope, source: q.source }, "approval-queue-repeat-refused", { n: b.n, kind: b.kind });
+    return { n: b.n, message: b.kind === "done" ? `That exact call was already done on ${new Date(b.at).toISOString().slice(0, 10)} (as #${b.n}). Do not repeat it.` : `That exact call was queued earlier (#${b.n}) and not answered in time, so it is not queued again for 24 hours. Do not retry it now.` };
+  }
+  if (!r.duplicate) log({ tool: q.tool, scope, source: q.source }, "approval-queued", { n: r.n, args: argsForAudit(q.input), question: q.question, details: q.label });
   arm(scope);
-  return { n: r.n, message: queuedResult(r.n, OWNER) };
+  return { n: r.n, message: queuedResult(r.n, approverName(scope)) };
 }
 
 // A look that is still running when the first parked call is a few minutes old asks them anyway.
@@ -111,6 +121,8 @@ export async function flushPending(scope: string, o: { ended: boolean }): Promis
         addExpired(scope, told); // not silent: said at the next flush
       }
     }
+    // Approved items the run gate refused earlier: run now if it would let them (it was approved; this is not a new question).
+    if (!rt.canRun?.(scope)) for (const p of allItems(scope).filter((x) => x.retry && !x.executing && !running.has(`${scope}#${x.n}`))) for (const m of markExecuting(scope, [p.n], now.getTime())) enqueueRun(m);
     const unsent = openItems(scope).filter((p) => !p.sent); // (read again: what was answered or dropped meanwhile is gone)
     if (unsent.length === 0) return "none";
     const oldest = Math.min(...unsent.map((p) => p.createdAt));
@@ -149,15 +161,20 @@ const SEVERAL = "Which ones? Say e.g. '1,3 yes', 'all yes' or '2 no'; nothing wa
 // Is this message an answer to the approval inbox of its conversation? undefined = it is not (the usual approval and chat paths go on). A bare unquoted yes / ok never is (SAFETY.md);
 // an edit of a message never reaches here (intake.ts skips edits for every approval answer). `quote`: the message it replies to, if any.
 export async function answerPending(text: string, quote: { timestamp: number } | undefined, ctx: { scope: string; by?: string; voice?: boolean }, deps: PendingDeps = {}): Promise<PendingAnswer | undefined> {
+  const everything = allItems(ctx.scope);
+  if (everything.length === 0) return undefined;
   const items = openItems(ctx.scope);
-  if (items.length === 0 && allItems(ctx.scope).length === 0) return undefined; // (one that is running answers 'no such number' rather than going to the chat)
-  const open = items.map((p) => p.n);
+  // Only what was SHOWN can be answered by "all" or a range: an item still waiting for its batch (or kept back for quiet hours) was never put in front of the owner. It can be named, and is then refused.
+  const shown = items.filter((p) => p.sent);
+  const unshown = items.filter((p) => !p.sent).map((p) => p.n);
   const ts = quote && quote.timestamp !== 0 ? quote.timestamp : undefined;
-  const inBatch = ts === undefined ? [] : items.filter((p) => p.sent?.ts === ts);
+  const inBatch = ts === undefined ? [] : shown.filter((p) => p.sent?.ts === ts);
   // A quote of some other message says the reply is about that message, unless a batch went out held (its timestamp is not known) and this could be it.
-  if (ts !== undefined && inBatch.length === 0 && items.every((p) => p.sent?.ts !== undefined || !p.sent)) return undefined;
-  const runningNs = allItems(ctx.scope).filter((p) => p.executing).map((p) => p.n); // approved, being done now: they are numbers too, but a second yes would do nothing
-  const parsed = parseNumbered(text, [...open, ...runningNs].sort((x, y) => x - y));
+  if (ts !== undefined && inBatch.length === 0 && shown.every((p) => p.sent?.ts !== undefined)) return undefined;
+  const approved = everything.filter(busy); // approved already: running now, or waiting for the run gate: numbers too, but a second yes would do nothing
+  const known = [...items.map((p) => p.n), ...approved.map((p) => p.n)].sort((x, y) => x - y);
+  const all = inBatch.length ? inBatch.map((p) => p.n) : shown.map((p) => p.n); // what "all" stands for: the quoted batch, else everything shown
+  const parsed = parseNumbered(text, known, all);
   if (parsed.kind === "clarify") return { outcome: "clarify", reply: parsed.why };
   if (parsed.kind === "bare") {
     if (inBatch.length === 0) return undefined; // a bare yes / ok that quotes none of the batch is about something else
@@ -165,11 +182,14 @@ export async function answerPending(text: string, quote: { timestamp: number } |
     return settle(ctx, [{ item: inBatch[0]!, yes: parsed.yes }], text);
   }
   if (parsed.kind === "answer") {
-    const by = new Map(items.map((p) => [p.n, p]));
-    const busy = [...parsed.yes, ...parsed.no].filter((n) => runningNs.includes(n));
-    const note = busy.length ? `${busy.map((n) => `#${n}`).join(", ")} ${busy.length === 1 ? "is" : "are"} already running; I'll report when ${busy.length === 1 ? "it's" : "they're"} done.` : "";
+    const named = [...parsed.yes, ...parsed.no];
+    const hidden = named.filter((n) => unshown.includes(n));
+    if (hidden.length) return { outcome: "clarify", reply: `${hidden.map((n) => `#${n}`).join(", ")} ${hidden.length === 1 ? "hasn't" : "haven't"} been shown to you yet. Nothing was done.` };
+    const by = new Map(shown.map((p) => [p.n, p]));
+    const running = approved.filter((p) => named.includes(p.n));
+    const note = running.length ? running.map((p) => (p.executing ? `${`#${p.n}`} is already running; I'll report when it's done.` : `#${p.n} is approved and waiting to run; I'll do it when it can.`)).join(" ") : "";
     const picks = [...parsed.yes.filter((n) => by.has(n)).map((n) => ({ item: by.get(n)!, yes: true })), ...parsed.no.filter((n) => by.has(n)).map((n) => ({ item: by.get(n)!, yes: false }))];
-    if (picks.length === 0) return { outcome: "clarify", reply: note };
+    if (picks.length === 0) return { outcome: "clarify", reply: note || undefined };
     const done = settle(ctx, picks, text);
     return note ? { ...done, reply: [done.reply, note].filter(Boolean).join(" ") } : done;
   }
@@ -221,6 +241,7 @@ function enqueueRun(item: Pending): void {
     let line: string;
     let ok = false;
     let said: string | undefined;
+    let refused: string | undefined;
     try {
       if (!rt) throw new Error("not available");
       const changed = await drift(item);
@@ -229,12 +250,24 @@ function enqueueRun(item: Pending): void {
         const r = await rt.execute(item.scope, item);
         ok = r.ran;
         line = r.line;
+        refused = r.refused;
       }
     } catch (e) {
       line = (e as Error).message || "the run failed";
     }
     line ??= "";
-    if (said === undefined) log(item, ok ? "approval-queue-executed" : "approval-queue-failed", { n: item.n, scope: item.scope, result: line });
+    if (refused !== undefined) {
+      // The run gate said not now: the item was approved, so it stays approved and waiting; the tick runs it when the gate allows (flushPending). Said once.
+      const first = !item.retry?.told;
+      setRetry(item.scope, item.n, true);
+      log(item, "approval-queue-waiting", { n: item.n, scope: item.scope, why: refused });
+      running.delete(id);
+      if (first) await rt?.send(item.scope, `#${item.n} is approved but can't run right now (${refused}); I'll do it when it can.`).catch((e) => console.error("approval inbox: could not report:", (e as Error).message));
+      return;
+    }
+    // A friend's words (what her follow-up run said) never reach the admin's audit log: only that it ran or not.
+    if (said === undefined) log(item, ok ? "approval-queue-executed" : "approval-queue-failed", { n: item.n, scope: item.scope, ok, ...(isTenantKey(item.scope) ? {} : { result: line }) });
+    if (ok) recordDone(item.scope, item.tool, item.input, item.n, clock().getTime());
     finishItem(item.scope, item.n);
     running.delete(id);
     try {
@@ -260,7 +293,7 @@ async function drift(item: Pending): Promise<string | undefined> {
   if (detailsHash(fresh) === item.detailsHash) return undefined;
   finishItem(item.scope, item.n); // (the old number is closed; the same call comes back under a new one)
   const r = addPending(item.scope, { tool: item.tool, input: item.input, label: labelOf(fresh), question: `#${item.n} changed since you approved it; here is the current version.`, footer: compactFooter(fresh), detailsHash: detailsHash(fresh), source: item.source, urgent: item.urgent }, clock().getTime());
-  if ("full" in r) return `⚠️ #${item.n} changed since you approved it, so nothing was run, and the inbox is full. Ask again once there is room.`;
+  if ("full" in r || "blocked" in r) return `⚠️ #${item.n} changed since you approved it, so nothing was run, and the inbox is full. Ask again once there is room.`;
   markSent(item.scope, [r.n], { at: clock().getTime() });
   log(item, "approval-queue-changed", { n: item.n, scope: item.scope, newN: r.n });
   const fresher = allItems(item.scope).find((p) => p.n === r.n)!;
@@ -298,8 +331,11 @@ export function listText(scope: string, now: number = clock().getTime()): string
 }
 export function clearText(scope: string): string {
   const gone = clearPending(scope);
-  for (const p of gone) log(p, "approval-queue-cleared", { n: p.n });
-  return gone.length ? `Dropped ${gone.length} waiting ${gone.length === 1 ? "action" : "actions"} (${gone.map((p) => `#${p.n}`).join(", ")}). Nothing was run.` : "Nothing was waiting.";
+  for (const p of gone) {
+    log(p, "approval-queue-cleared", { n: p.n });
+    noteDeclined(p.scope, p.tool, p.input, clock().getTime()); // an explicit dismissal is a no: final like any decline (declined.ts)
+  }
+  return gone.length ? `Dropped ${gone.length} waiting ${gone.length === 1 ? "action" : "actions"} (${gone.map((p) => `#${p.n}`).join(", ")}). Nothing was run. Counted as a no, so they are not proposed again for now.` : "Nothing was waiting.";
 }
 export const waitingCount = (scope: string): number => openItems(scope).length;
 // At the start (main.ts): what was running when the process stopped is looked at and told, for each conversation that has a file.
