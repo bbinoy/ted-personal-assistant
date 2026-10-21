@@ -5,7 +5,7 @@ import { allows } from "../policy/capabilities.ts";
 import { owner as ownerConversation, group as groupConversation, tenant as tenantConversation, type Conversation } from "./conversationmodel.ts";
 import { oneShot } from "../tenants/haiku.ts";
 import { isRefusal, LOGIN, mayRun, type Payer, type Refusal } from "../tenants/payer.ts";
-import { applyPlan } from "../memory/dreamapply.ts";
+import { applyPlan, baseOf } from "../memory/dreamapply.ts";
 import { planOps, type NoteFile, type Plan, type Scope } from "../memory/dreamplan.ts";
 import { dreamScope, dreamStateFile } from "../modules/memory/dreamscope.ts";
 import { clockLine } from "../core/brief.ts";
@@ -125,7 +125,7 @@ export async function dreamOver(scope: Scope, prompt: string, system: string, ev
   const notes = readNoteFiles(scope.notesDir);
   const raw = await run(prompt, system);
   const plan = planOps(raw, { ownerText: evidenceText, notes, today: localDay(now), now, scope });
-  return { plan, snapshot: applyPlan(plan, now, scope) };
+  return { plan, snapshot: applyPlan(plan, now, scope, baseOf(notes)) }; // `notes`: as read before the model ran; a note edited meanwhile is not overwritten
 }
 
 export const describePlan = (plan: Plan): string[] => {

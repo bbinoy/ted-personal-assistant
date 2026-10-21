@@ -66,7 +66,7 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
     if (p === "sys/health") return send(200, { initialized: true, sealed: f.mode.sealed, version: "2.7.1-fake" });
     if (f.mode.sealed) return send(503, { errors: ["Vault is sealed"] });
     if (token === f.intakeToken) {
-      const writable = (full: string) => new RegExp(`^${mount}/data/tenants/[^/]+/(profile|card|google|notion)/[^/]+$`).test(full);
+      const writable = (full: string) => !full.includes("/tenants/owner/") && new RegExp(`^${mount}/data/tenants/[^/]+/(profile|card|google|notion)/[^/]+$`).test(full);
       if (p === "auth/token/lookup-self") return send(200, { data: { policies: ["default", "ted-intake"], ttl: f.mode.ttl, renewable: true } });
       if (p === "sys/capabilities-self") {
         const out: Record<string, string[]> = {};
@@ -74,7 +74,8 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
         return send(200, { ...out, data: out });
       }
       const w = new RegExp(`^${mount}/(data|metadata)/(.+)$`).exec(p);
-      const ok = w?.[1] === "data" && (req.method === "POST" || req.method === "PUT") && /^tenants\/[^/]+\/(profile|card|google|notion)\/[^/]+$/.test(w[2]!);
+      // (the real policy denies the owner's folder to the page, openbaoadmin.ts intakePolicyHcl)
+      const ok = w?.[1] === "data" && !w[2]!.startsWith("tenants/owner/") && (req.method === "POST" || req.method === "PUT") && /^tenants\/[^/]+\/(profile|card|google|notion)\/[^/]+$/.test(w[2]!);
       if (!ok) return send(403, { errors: ["permission denied"] });
       store.set(w![2]!, JSON.parse(raw).data);
       return send(200, { data: { version: 1 } });

@@ -1,7 +1,7 @@
 // Starts `signal-cli daemon` on localhost, so the client has something to connect to.
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { withoutSecrets } from "./internal/exec.ts";
+import { withoutSecrets } from "@ted-assistant/messenger/env";
 import { silentLogger, type Logger } from "./logger.ts";
 
 function portOpen(host: string, port: number): Promise<boolean> {

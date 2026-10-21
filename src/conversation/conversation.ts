@@ -10,6 +10,8 @@ import { documentNote, takeDocuments, type Document } from "./document.ts";
 import { shouldThread, withQuoteContext } from "./quote.ts";
 import { holdQuote, holdVoiceNote, rememberSender } from "../modules/voice/voicenote.ts";
 import { cardCommand } from "../modules/browse/card.ts";
+import { commandReply } from "./ownercommands.ts";
+import { RunStopped } from "../run/ceiling.ts";
 import { TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 import { withSend, type Content, type SendSink } from "../modules/send/send.ts";
 import { reactionMessage, reactionPrompt, splitReaction } from "../core/reaction.ts";
@@ -314,7 +316,7 @@ export function createPipeline(deps: PipelineDeps) {
       let noticed = false;
       if (!background) status(conv, "⚠️", turn.target);
       // Someone is waiting: say what is wrong (but not over and over, in a group).
-      if (!background && turn.announce) noticed = await warn(conv, e, turn.threadUnder);
+      if (!background && turn.announce && !(e instanceof RunStopped)) noticed = await warn(conv, e, turn.threadUnder); // (stopped by the owner: "Stopped." was the answer)
       return { spoke: false, error: e, noticed };
     } finally {
       typing?.();
@@ -506,6 +508,11 @@ export function createPipeline(deps: PipelineDeps) {
     if (allows(conv, "card") && !edited && !m.picture && !m.document) {
       const said = cardCommand(m.text);
       if (said !== undefined) return void (await out.reply(said, { plain: true }));
+    }
+    // /stop, /pause, /resume, /status: also in code, before any model and ahead of the queue, so "stop" works while a turn runs (ownercommands.ts).
+    if (!edited && !m.picture && !m.document) {
+      const said = commandReply(conv, m.text);
+      if (said !== undefined) return void (await out.reply(said, { plain: true, target: conv.target }));
     }
     // While an approval is pending, a message may be its answer. That must skip the queue.
     scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)

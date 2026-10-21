@@ -49,6 +49,7 @@ export interface GuardOptions {
   vision?: VisionMode; // the vision experiment (browsevision.ts); off: today's behaviour
   probe?: Probe; // click mode: what is under a point of the page, looked up by code (browsecdp.ts)
   cdpPort?: number; // click mode: the browser's debugging port on loopback (browseserver.ts starts the browser with it)
+  proxyPort?: number; // the run's egress proxy on loopback (browseproxy.ts): the browser is started with it (browseserver.ts); the guard only carries the number
   shotsDir?: string; // vision on: where each screenshot is kept as a small jpeg, for the chat to pass on (shots.ts)
   profile?: Profile; // the owner's saved details (profile.ts): the owner's chat run only, a group's guard ignores it
   card?: CardAccess; // the owner's payment card (card.ts): the owner's chat run only, a group's guard ignores it
@@ -93,6 +94,7 @@ export class BrowseGuard {
   private readonly resolver: Resolver;
   readonly vision: VisionMode;
   readonly cdpPort?: number;
+  readonly proxyPort?: number;
   private readonly probe?: Probe;
   private shots = 0;
   readonly shotsDir?: string;
@@ -124,6 +126,7 @@ export class BrowseGuard {
   private fullSeq = 0;
   private readonly cardIntents = new Map<string, FieldKind>(); // decided to type, not yet confirmed done
   private payNote?: string; // the result of the payment for the owner, once the run is over ("" none)
+  private readonly pageChecks = new Map<string, { done?: boolean; wait: Promise<void> }>(); // host of a page that loaded -> does its name resolve to public addresses (checked after the load, in the background; the next call awaits it only if it is still out)
   private cardCvc?: string; // kept (not in `secrets`: three digits cut everywhere would wreck a page) to cut it where a page puts it in an address
   private readonly cardSecrets = new Set<string>(); // the card's forms a page may echo: cut from the worker's final answer too
 
@@ -137,6 +140,7 @@ export class BrowseGuard {
     this.vision = o.vision ?? "off";
     this.probe = o.probe;
     this.cdpPort = o.cdpPort;
+    this.proxyPort = o.proxyPort;
     this.shotsDir = o.shotsDir;
     this.profile = o.mode === "owner" ? o.profile : undefined;
     this.card = o.mode === "owner" ? o.card : undefined;
@@ -361,12 +365,32 @@ export class BrowseGuard {
     return this.deny(tool, input, reason, { card: true, ...extra });
   }
 
-  // After the pay click nothing is typed or clicked again; while a card is typed, the keyboard cannot submit it.
+  // A payment is in progress: approved by the owner and not yet clicked. From the approval to the pay click (or the end of the run), the ONLY click that may happen
+  // is the pay button, checked by payClick; everything else that can press, accept or choose is refused (a click, a dialog, a choice, the keyboard).
+  private get payOpen(): boolean {
+    return !!this.pay.approval && !this.pay.attempted;
+  }
+
+  // A payment whose card details were typed is dropped (the page, the shop or the approval changed): the typed digits are on a page that may still submit, so the
+  // ledger row becomes `unconfirmed` (it counts against the caps and the duplicate check) and the owner is told in the run's result, like any unconfirmed payment.
+  private voidPay(why: string): void {
+    const a = this.pay.approval;
+    if (a && !this.pay.attempted && this.pay.typed.size > 0 && this.payNote === undefined) {
+      this.card?.ledger.setStatus(a.id, "unconfirmed");
+      this.record("card_pay", "unconfirmed", "browse", { id: a.id, merchant: a.merchant, last4: a.last4, reason: why.slice(0, LIMITS.reason) });
+      this.payNote = `Card payment of ${formatMoney(a.money)} at ${a.merchant} (card ••••${a.last4}): card details were typed, then the payment was dropped before the pay click (${why}). Check the card app and your e-mail before doing anything; it will not be paid again until you clear it (npm run card -- clear ${a.id}).`;
+    }
+    this.pay.invalidate();
+  }
+
+  // After the pay click nothing is typed or clicked again; while a payment is open, nothing around it can press or submit it.
   private payLock(tool: string, input: Record<string, unknown>, name: string): Decision | undefined {
     if (this.pay.attempted && /^(type|fill_form|select_option|press_key|handle_dialog|click|mouse_click_xy)$/.test(name)) return this.payDeny(tool, input, "A payment was already attempted in this run. Do not type or click again: read the page (browser_snapshot, browser_wait_for) and report exactly what it says.", { locked: true });
-    if (this.pay.active && name === "press_key" && /^(Enter|NumpadEnter|Space| )$/.test(String(input.key ?? ""))) return this.payDeny(tool, input, "A card is typed: use the page's pay button, not the keyboard.");
-    if (this.pay.active && name === "mouse_click_xy") return this.payDeny(tool, input, "A card is typed: click the pay button by its ref, not at a point.");
-    if (this.pay.active && name === "type" && input.submit === true) return this.payDeny(tool, { target: input.target }, "A card is typed: do not submit with Enter, use the page's pay button.");
+    if (this.payOpen && name === "press_key" && /^(Enter|NumpadEnter|Space| )$/.test(String(input.key ?? ""))) return this.payDeny(tool, input, "A card is typed: use the page's pay button, not the keyboard.");
+    if (this.payOpen && name === "mouse_click_xy") return this.payDeny(tool, input, "A card is typed: click the pay button by its ref, not at a point.");
+    if (this.payOpen && name === "type" && input.submit === true) return this.payDeny(tool, { target: input.target }, "A card is typed: do not submit with Enter, use the page's pay button.");
+    if (this.payOpen && name === "select_option") return this.payDeny(tool, input, "A payment is in progress: choose nothing now. Click the page's pay button, or stop.");
+    if (this.payOpen && name === "handle_dialog" && input.accept === true) return this.payDeny(tool, input, "A payment is in progress: do not accept a dialog. Click the page's pay button, or stop.");
     return undefined;
   }
 
@@ -430,7 +454,7 @@ export class BrowseGuard {
     const a = this.pay.approval;
     if (!a) return this.payAsk(tool, n, input, target, frame, stop, fix);
     // later details of an approved payment: nothing may have changed since the yes
-    const gone = (why: string) => (this.pay.invalidate(), stop(`${why} Nothing more is typed; a new approval would be needed.`, { changed: true }));
+    const gone = (why: string) => (this.voidPay(why), stop(`${why} Nothing more is typed; a new approval would be needed.`, { changed: true }));
     if (Date.now() > a.expiresAt) return gone("The payment approval ran out (it lasts ten minutes).");
     if (bare(this.url) !== a.url) return gone("The page address changed since the owner approved.");
     if (target.merchant !== a.merchant || target.psp.some((h) => !a.psp.includes(h))) return gone("The shop or the payment provider changed since the owner approved.");
@@ -593,6 +617,14 @@ export class BrowseGuard {
     if (!toolName.startsWith("mcp__browser__")) return this.deny(toolName, input, `${toolName} is not available in a browse run.`);
     if (!isAllowedBrowserTool(toolName, this.vision)) return this.deny(toolName, input, `${short(toolName)} is not available.`);
     const name = short(toolName);
+    // The page that loaded is checked again by what its name resolves to (shape starts it, a model step later it has long answered): a redirect onto a name that points inside is withheld. The egress proxy already
+    // refuses the connection itself; this stops the run from working on whatever got through some other way.
+    const loaded = this.pageChecks.get(hostOf(this.url));
+    if (this.url && loaded && loaded.done === false && !(name === "navigate" || (name === "tabs" && typeof input.url === "string"))) {
+      this.nodes.clear();
+      this.url = "";
+      return this.deny(toolName, input, "The page you are on has a name that points to a private address; its content is withheld. Go back or stop.");
+    }
     const locked = this.payLock(toolName, input, name);
     if (locked) return locked;
     switch (name) {
@@ -715,10 +747,13 @@ export class BrowseGuard {
           }
           const bad = /^#/.test(n.url) ? undefined : addressProblem(abs);
           if (bad) return this.deny(toolName, input, `That link is not allowed: ${bad}.`, { role: n.role });
+          if (!/^#/.test(n.url) && !(await resolvesPublic(hostOf(abs), this.resolver))) return this.deny(toolName, input, "That link is not allowed: the name points to a private address.", { role: n.role });
         }
         const c = classifyClick(n);
-        // With a card typed for an approved payment, the next button that could submit it IS the pay click: checked again from the page, once.
+        // With a card typed for an approved payment, the next button that could submit it IS the pay click: checked again from the page, once. Any other click
+        // while a payment is open (a link, a toggle, a button elsewhere) is refused: only a text field may be clicked into (to type the next card detail).
         if (this.pay.active && (c.commit || (n.role === "button" && n.inForm))) return this.payClick(toolName, input, n);
+        if (this.payOpen && (!FIELD_ROLES.test(n.role) || n.url)) return this.payDeny(toolName, input, "A payment is in progress: the only click allowed is the page's pay button (after the card details are typed and a fresh browser_snapshot). Stop otherwise.");
         this.log(toolName, c.commit ? "commit-check" : "click", input, { role: n.role, name: n.name.slice(0, LIMITS.control), commit: c.commit });
         if (c.commit) return this.commit(toolName, input, n, c.why, `Button: “${clip(n.name || "(no label)", 120)}” (${n.role})`);
         return { kind: "defer", description: `🖱️ Browser: click “${clip(n.name || n.ref, 80)}” (${n.role})` };
@@ -775,6 +810,7 @@ export class BrowseGuard {
     if (info.href && info.href.split("#")[0] !== this.url.split("#")[0]) {
       const badLink = addressProblem(info.href);
       if (badLink) return this.deny(tool, input, `That link is not allowed: ${badLink}.`, { role: info.role });
+      if (!(await resolvesPublic(hostOf(info.href), this.resolver))) return this.deny(tool, input, "That link is not allowed: the name points to a private address.", { role: info.role });
     }
     const kind = info.password ? "a password" : sensitiveKind(`${info.hints} ${info.name}`) ?? (AUTOFILL_SENSITIVE.test(info.hints) ? "a payment or login detail" : undefined);
     if (kind) return this.sensitive(tool, input, [{ name: info.name || info.hints || `the field at ${at}`, kind }]);
@@ -806,6 +842,11 @@ export class BrowseGuard {
       this.nodes.clear();
       this.url = "";
       return `### Page\nThe page went to an address that is not allowed (${addressProblem(seen)}); its content is withheld. Go back or stop.`;
+    }
+    if (seen && !this.pageChecks.has(hostOf(seen))) {
+      const check: { done?: boolean; wait: Promise<void> } = { wait: Promise.resolve() };
+      check.wait = resolvesPublic(hostOf(seen), this.resolver).then((ok) => void (check.done = ok));
+      this.pageChecks.set(hostOf(seen), check);
     }
     const cardDone = this.doneCard(short(toolName), input);
     if (cardDone.length) {
@@ -849,7 +890,7 @@ export class BrowseGuard {
       const domain = registeredDomain(hostOf(seen));
       if (domain && this.chain[this.chain.length - 1]?.domain !== domain) this.chain.push({ domain, by: this.navNext ? "navigate" : "follow" });
       // A typed card belongs to the page it was approved on: another page, and the approval is void.
-      if (this.pay.approval && !this.pay.attempted && bare(seen) !== this.pay.approval.url) this.pay.invalidate();
+      if (this.pay.approval && !this.pay.attempted && bare(seen) !== this.pay.approval.url) this.voidPay("the page changed");
     }
     this.navNext = false;
     if (name === "snapshot" && /\[ref=/.test(text)) (this.fullView = text), (this.fullUrl = this.url), this.fullSeq++;

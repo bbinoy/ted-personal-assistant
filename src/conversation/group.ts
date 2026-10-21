@@ -1,10 +1,11 @@
 import { clockLine } from "../core/brief.ts";
-import { budgetSpent } from "../core/budget.ts";
+import { budgetSpent, GROUP_BUDGET_TEXT, groupBudgetDue, groupOverBudget } from "../core/budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { prepare, runConversation } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { AuthError, RateLimitError } from "../tenants/errors.ts";
+import { AuthError, FixedNotice, RateLimitError } from "../tenants/errors.ts";
+import { GROUP_CAP_TEXT, groupCapped } from "../core/capnotice.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
 import { groupContext } from "./groupstore.ts";
@@ -215,7 +216,13 @@ export function createGroupBrain(brain: Brain) {
     // behind an earlier turn.
     const gone = () => !!st.gone?.has(m.timestamp);
     const answer = async (batch: Batch<GroupMessage>, showTyping: () => void): Promise<void> => {
-      if (isPaused(now) || budgetSpent()) return;
+      if (isPaused(now)) return;
+      if (budgetSpent()) {
+        // Someone addressed us and the day's budget turned it away: say so once per group per day (notices.ts), never for a message that was not meant for us.
+        if (pending() && groupBudgetDue(m.groupId, now)) await batch.run(async () => void (await pipeline.runTurn(conv, { run: async () => ({ text: GROUP_BUDGET_TEXT }), background: true, announce: false, kind: "notice" })));
+        return;
+      }
+      if (await groupCapped(groupOverBudget(m.groupId), !!pending(), m.groupId, () => pipeline.warn(conv, new FixedNotice(GROUP_CAP_TEXT)))) return; // this group's own day: a noisy group must not spend the owner's (an address is told once a day, capnotice.ts)
       const asked = pending();
       if (asked) showTyping();
       let delay = 0;

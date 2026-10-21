@@ -57,13 +57,19 @@ export function browseStatus(): BrowseStatus {
 }
 
 // The MCP server of the browser, for the browse run's options only. Isolated (in memory: no cookies, no logins, nothing saved),
-// headless, no service workers, no images to the model, private ranges blocked (a best-effort extra: the guard's address check is
-// the real veto). Started with a minimal environment, in a folder of its own that is removed afterwards.
-export function browserServer(st: Extract<BrowseStatus, { ok: true }>, outDir: string, ua: string | undefined = desktopUserAgent(st.exe), vision: { mode: VisionMode; cdpPort?: number } = { mode: "off" }): McpServerConfig {
+// headless, no service workers, no images to the model, private ranges blocked by name (a best-effort extra) and, the real network veto, the run's egress proxy
+// (the guard's address check on what the worker asks for comes first). Started with a minimal environment, in a folder of its own that is removed afterwards.
+export function browserServer(st: Extract<BrowseStatus, { ok: true }>, outDir: string, ua: string | undefined = desktopUserAgent(st.exe), vision: { mode: VisionMode; cdpPort?: number; proxyPort?: number; unproxiedForTest?: true } = { mode: "off" }): McpServerConfig {
   // An ordinary language and the time zone of this machine, so the page sees what a browser on this computer would send.
   const configFile = join(outDir, "browser-config.json");
   // BROWSE_VISION=click only: the browser also listens on a debugging port on loopback, for the guard's own lookup of what is under a point (browsecdp.ts).
-  const launchOptions = vision.cdpPort ? { launchOptions: { args: [`--remote-debugging-port=${vision.cdpPort}`] } } : {};
+  // Every connection of the browser goes through the run's egress proxy (browseproxy.ts: public addresses only, on the ports a page may use). `<-loopback>` takes away
+  // Chromium's default bypass for localhost, so a page cannot reach the owner's own machine around the proxy; the debugging port is reached by code, not by the browser.
+  // No proxy, no browser: a launch without the egress filter is refused (only a test may say it does without, `unproxiedForTest`).
+  if (!vision.proxyPort && !vision.unproxiedForTest) throw new Error("the egress proxy is missing: the browser is not started without it");
+  // WebRTC (UDP to LAN addresses, outside any proxy) is limited to proxied traffic and QUIC (UDP) is off, so nothing but TCP through the proxy leaves the browser.
+  const args = [...(vision.proxyPort ? [`--proxy-server=http://127.0.0.1:${vision.proxyPort}`, "--proxy-bypass-list=<-loopback>"] : []), "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic", ...(vision.cdpPort ? [`--remote-debugging-port=${vision.cdpPort}`] : [])];
+  const launchOptions = { launchOptions: { args } };
   writeFileSync(configFile, JSON.stringify({ browser: { ...launchOptions, contextOptions: { locale: settings.browseLocale, timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone } } }));
   return {
     type: "stdio",

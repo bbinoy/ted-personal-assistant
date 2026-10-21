@@ -1,6 +1,7 @@
 import { namesNoGuests } from "../../policy/guests.ts";
 import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
 import { nativeView } from "../../policy/mailview.ts";
+import { archiveGate } from "../archivecap.ts";
 import { notifyLine } from "../calendar.ts";
 import { named } from "../gmail/module.ts";
 import { rowsOf, tenantOffered, type FloorVerdict, type ToolModule } from "../types.ts";
@@ -45,6 +46,9 @@ const rows = [
     ...gc("calendar-write", "manage_event", only), // create, update, delete and rsvp by its `action`; only create and update without guests are ever judged (below)
 ];
 
+// The tool names a friend's run is shown for her Google when her connection needs her again (googlemcp.ts placeholders): the module's rows, without the prefix.
+export const GOOGLE_TOOLS: readonly string[] = rows.map((r) => r.tool.slice(GOOGLE_PREFIX.length));
+
 export const googleModule: ToolModule = {
   name: "google",
   // Her server exists for a friend's run whose capability set offers any of its tools; the owner's run never has it (his are the connectors), nor does a group's.
@@ -60,6 +64,7 @@ export const googleModule: ToolModule = {
   },
   floor: {
     verdict,
+    perRun: archiveGate, // a friend's INBOX removal is an archive too (archivecap.ts)
     confirmDelete: { tools: ["manage_event"], actions: ["delete"] }, // her calendar delete: a destructive action the judge handles with care, asked in HER chat (neverallowed.ts ConfirmDelete)
     onDeny: (tool) => (tool.startsWith(GOOGLE_PREFIX) ? { withIds: true } : undefined),
     // A mail nobody can be named for is not judged; a calendar event is judged only when it is created or changed and names no guest (anything that would email

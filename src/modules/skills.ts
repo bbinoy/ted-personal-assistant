@@ -53,7 +53,7 @@ export interface SkillHint {
 }
 
 const FRONT = /^---\r?\n([\s\S]*?)\r?\n---/;
-const TOOL_NAME = /^[A-Za-z][A-Za-z0-9_]*(\*|__\*)?$/;
+const TOOL_NAME = /^[A-Za-z][A-Za-z0-9_-]*(\*|__\*)?$/; // hyphens allowed: claude.ai connector tools are named like mcp__claude_ai_Notion__notion-fetch
 
 // Pure: the hints in one SKILL.md's text. A typo fails loudly (a skill file is code): an unknown model or a malformed tool name throws.
 export function parseHint(text: string, where = "skill"): SkillHint {

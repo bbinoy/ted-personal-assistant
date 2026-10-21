@@ -39,6 +39,8 @@ test("skill hints: delegate and tools are read from the frontmatter; a typo fail
   assert.deepEqual(skillHint("missing", dir), {});
   assert.deepEqual(parseHint("no frontmatter at all"), {});
   assert.throws(() => parseHint("---\ndelegate: haiku\n---\n"), /delegate must be sonnet or opus/);
+  assert.deepEqual(parseHint("---\ntools: [mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__*]\n---\n").tools, ["mcp__claude_ai_Notion__notion-fetch", "mcp__claude_ai_Notion__*"], "a hyphenated connector tool name is a tool name");
+  assert.throws(() => parseHint("---\ntools: [-fetch]\n---\n"), /not a tool name/, "but a name may not start with a hyphen");
   assert.throws(() => parseHint("---\ntools: [Bash(rm -rf)]\n---\n"), /not a tool name/);
 });
 

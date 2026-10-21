@@ -53,7 +53,9 @@ const HERS = [
   join(NOTES_DIR, "..", "..", "tenants", ann.id, "notes", "people-eve.md"), // out of the notes with ..
   join(NOTES_DIR, "to-ann", "tenant.json"), join(NOTES_DIR, "to-ann", "notes", "people-eve.md"), join(settings.memoryDir, "to-ann-notes", "people-eve.md"), // through a link
 ];
-const SECRETS = [bao, join(bao, "tls", "key.pem"), join(bao, "config.hcl"), join(settings.stateDir, "registrations.json"), join(settings.stateDir, "to-bao", "tls", "key.pem")];
+mkdirSync(settings.intake.dir, { recursive: true }); // (the open links, hashed: the real folder is state/intake/, not a file)
+writeFileSync(join(settings.intake.dir, "0123abcd.json"), "{}");
+const SECRETS = [settings.intake.dir, join(settings.intake.dir, "0123abcd.json"), bao, join(bao, "tls", "key.pem"), join(bao, "config.hcl"), join(settings.stateDir, "registrations.json"), join(settings.stateDir, "to-bao", "tls", "key.pem")];
 
 test("the admin's file tools: Read, Write and Edit reach none of a tenant's files, `tenants/` or the secret store", () => {
   for (const path of [...HERS, ...SECRETS]) {

@@ -175,7 +175,7 @@ test("pay: a hosted payment page opened by its address (not reached from the sho
 test("pay: the card is typed only on https, with a fresh snapshot, in an empty enabled field of the right kind, and in order", async () => {
   const deny = async (r: Rig, input: Record<string, unknown>, re: RegExp) => assert.match(((await step(r, "type", input)).res as Denied).message, re);
   const http = await rig();
-  await open(http, "http://shop.test/checkout");
+  open(http, "http://shop.test/checkout");
   http.g.shape(`${B}snapshot`, {}, page("http://shop.test/checkout"));
   await deny(http, { target: "e4", text: "{{card:number}}" }, /only typed on https/);
   const stale = await rig();
@@ -588,4 +588,55 @@ test("the real asking path: the audited ask holds the placeholder and the code-w
   assert.ok(![PAN, EXPIRY, CVC].some((v) => JSON.stringify(asked).includes(v)));
   const outcome = readAudit((e) => e.tool === `${B}type` && e.decision === "approval-outcome").at(-1)!;
   assert.equal(outcome.meta?.argsEqual, true);
+});
+
+// ---- a payment in progress: nothing around the pay button ----
+
+test("while a payment is open every other click, a dialog accept and a choice are refused; only a text field may be clicked into and the pay button goes to payClick", async () => {
+  const r = await rig();
+  await toPsp(r);
+  await typeNumber(r);
+  // approved, number typed: a link, the save-card checkbox and a point click are not free reads any more
+  assert.match(((await step(r, "click", { target: "e9" })).res as Denied).message, /fresh browser_snapshot/, "a pay-like link is held to the pay-click checks");
+  assert.match(((await step(r, "click", { target: "e7" })).res as Denied).message, /only click allowed is the page's pay button/);
+  assert.match(((await step(r, "select_option", { target: "e5", values: ["12"] })).res as Denied).message, /choose nothing now/);
+  assert.match(((await step(r, "handle_dialog", { accept: true })).res as Denied).message, /do not accept a dialog/);
+  assert.equal((await step(r, "handle_dialog", { accept: false })).res.behavior, "allow", "dismissing a dialog is harmless");
+  assert.equal((await step(r, "click", { target: "e5" })).res.behavior, "allow", "clicking into the next text field to type the card detail");
+  await typeRest(r);
+  r.g.shape(`${B}snapshot`, {}, page(PSP, { values: { e4: PAN_SPACED, e5: EXPIRY, e6: CVC } }));
+  assert.equal((await step(r, "click", { target: "e8" })).res.behavior, "allow", "the pay button is still clicked, through the payment checks");
+});
+
+test("with no payment open clicks are as before; once the number is approved the same click is refused", async () => {
+  const r = await rig();
+  await toPsp(r);
+  assert.equal((await step(r, "click", { target: "e7" })).res.behavior, "allow", "no payment open: an ordinary click");
+  await typeNumber(r);
+  assert.ok(r.g.pay.approval);
+  assert.match(((await step(r, "click", { target: "e7" })).res as Denied).message, /payment is in progress/);
+});
+
+test("an approval dropped after card digits were typed marks the ledger row unconfirmed and the owner is told in the result", async () => {
+  const r = await rig();
+  await toPsp(r);
+  const num = await typeNumber(r);
+  assert.equal(num.res.behavior, "allow");
+  const id = r.g.pay.approval!.id;
+  const row = () => r.ledger.rows().find((x) => x.id === id);
+  assert.equal(row()?.status, "approved");
+  assert.ok(r.g.pay.typed.size > 0, "digits are in the page");
+  r.g.shape(`${B}click`, { target: "e9" }, page("https://other.test/checkout")); // the page moved on
+  assert.equal(r.g.pay.approval, undefined);
+  assert.equal(row()?.status, "unconfirmed");
+  assert.ok(r.ledger.duplicate("shop.test", row()!.cartHash), "it counts for the duplicate check and the caps");
+  assert.match(r.g.finishPayment() ?? "", /card details were typed, then the payment was dropped.*npm run card -- clear/s);
+  // no digits typed: nothing to report, the row stays as it was
+  const q = await rig();
+  await toPsp(q);
+  await typeNumber(q);
+  q.g.pay.typed.clear();
+  q.g.shape(`${B}click`, { target: "e9" }, page("https://other.test/checkout"));
+  assert.equal(q.ledger.rows().find((x) => x.status === "unconfirmed"), undefined);
+  assert.equal(q.g.finishPayment(), undefined);
 });

@@ -54,8 +54,9 @@ test("policies: the owner's token reaches tenants/owner/ and nothing else; the o
 test("the intake page's policy is write-only: create and update of profile, card, google and notion items of any tenant, nothing else", () => {
   const p = intakePolicyHcl("ted");
   const blocks = [...p.matchAll(/path "([^"]+)" \{\s*capabilities = \[([^\]]*)\]/g)].map((m) => [m[1], m[2]!.replace(/[" ]/g, "")]);
-  assert.deepEqual(blocks, [["ted/data/tenants/+/profile/*", "create,update"], ["ted/data/tenants/+/card/*", "create,update"], ["ted/data/tenants/+/google/*", "create,update"], ["ted/data/tenants/+/notion/*", "create,update"]]);
-  assert.ok(!/read|list|delete|sudo|metadata|sys\//.test(p.replace(/^#.*$/m, "")));
+  assert.deepEqual(blocks, [["ted/data/tenants/+/profile/*", "create,update"], ["ted/data/tenants/+/card/*", "create,update"], ["ted/data/tenants/+/google/*", "create,update"], ["ted/data/tenants/+/notion/*", "create,update"], ["ted/data/tenants/owner/*", "deny"], ["ted/metadata/tenants/owner/*", "deny"]]);
+  assert.ok(!/read|list|delete|sudo|sys\//.test(p.replace(/^#.*$/gm, "")));
+  assert.ok(!/metadata/.test(p.replace(/^#.*$/gm, "").replace(/path "ted\/metadata\/tenants\/owner\/\*"/, ""))); // (the only metadata path is the owner's, denied)
 });
 
 test("launchd files: filled in and escaped; the server job has a 077 umask and no secret in either", () => {
@@ -105,7 +106,7 @@ path "m/data/tenants/+/notion/*" {
   capabilities = ["read", "create", "update"]
 }
 `);
-  assert.equal(intakePolicyHcl("ted"), `# The intake page's token: write-only.
+  assert.equal(intakePolicyHcl("ted"), `# The intake page's token: write-only, and not for the owner's folder.
 path "ted/data/tenants/+/profile/*" {
   capabilities = ["create", "update"]
 }
@@ -117,6 +118,13 @@ path "ted/data/tenants/+/google/*" {
 }
 path "ted/data/tenants/+/notion/*" {
   capabilities = ["create", "update"]
+}
+# The owner's own folder is not the page's to write, whatever the grants above say (deny wins).
+path "ted/data/tenants/owner/*" {
+  capabilities = ["deny"]
+}
+path "ted/metadata/tenants/owner/*" {
+  capabilities = ["deny"]
 }
 `);
   assert.deepEqual([...ITEM_KINDS], ["profile", "card", "google", "notion"]);

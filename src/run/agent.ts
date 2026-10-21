@@ -75,6 +75,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
     signal: extra.signal,
+    stopScope: conv.sessionFile, // "/stop" in this conversation reaches its look too
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
   };

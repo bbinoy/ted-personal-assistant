@@ -3,11 +3,11 @@ import { gated } from "../core/rungate.ts";
 import { audit, type Source } from "../core/audit.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
-import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "../tenants/payer.ts";
+import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
 import { browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "../modules/browse/browseguard.ts";
 import { hiddenBrowserTools } from "../modules/browse/browserules.ts";
-import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
+import { onStop, pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
@@ -64,6 +64,7 @@ export interface RunOptions {
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
+  stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's session file
   signal?: AbortSignal; // an unattended run is called off from outside (a chat message overtook the heartbeat look, look.ts): while waiting for a place (rungate.ts) it never starts, once running the query is aborted
   maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else the chat or background one
   // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
@@ -82,7 +83,7 @@ export interface RunOptions {
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
-const payerOf = (opts: Pick<RunOptions, "tenant">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, costFile: opts.tenant.costFile } : LOGIN);
+const payerOf = (opts: Pick<RunOptions, "tenant" | "source" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, costFile: opts.tenant.costFile } : loginFor(opts.source === "group" ? (opts.groupId ?? opts.memory?.groupId) : undefined));
 
 // Context size of one model call: everything it was sent.
 const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) =>
@@ -271,10 +272,10 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
 // The one place every run passes: chat, groups, wake-ups, brief, heartbeat run, the mail handler. On the ceiling the query is aborted, the
 // timeout is logged and audited, and the rejection takes the usual error path (a notice, rate-limited in groups; the queue moves on).
 // A chat run (the owner's chat and groups alike) and a background run have their own limits (settings.ts).
-export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number): Promise<T> {
+export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number, scope?: string): Promise<T> {
   const chat = source === "chat" || source === "group";
   try {
-    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run);
+    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run, scope);
   } catch (e) {
     if (e instanceof RunTimeout) {
       console.error(`run: timed out after ${e.minutes} minutes (${source})`);
@@ -288,13 +289,23 @@ export async function runAgent(prompt: string, approve: Approve, opts: RunOption
   const { resume, previousCost } = opts.sessionFile ? chatResume(opts.sessionFile) : { resume: undefined, previousCost: 0 };
   // The entry gate of an unattended run (rungate.ts; every one is a heartbeat look, a chat turn goes through agent.ts runConversation): it waits for a place, and its ceiling starts only once it has one.
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
-  return gated("look", () =>
-    underCeiling(opts.source, (c) => {
+  // "/stop" (ceiling.ts stopRuns) reaches a look too, also while it still waits for a place: `wait` is called off by it, by the caller's signal (a message overtook the look)
+  // and, once running, by the ceiling; the gate place is released as soon as the run's promise rejects.
+  const wait = new AbortController();
+  const callOff = () => wait.abort(opts.signal?.reason);
+  if (opts.signal?.aborted) callOff();
+  opts.signal?.addEventListener("abort", callOff, { once: true });
+  let started = false;
+  const forget = opts.stopScope ? onStop(opts.stopScope, (e) => void (started || wait.abort(e))) : () => {};
+  return gated("look", () => {
+    started = true;
+    return underCeiling(opts.source, (c) => {
       const off = () => c.controller.abort();
-      if (opts.signal?.aborted) off();
-      opts.signal?.addEventListener("abort", off, { once: true });
-      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost).finally(() => opts.signal?.removeEventListener("abort", off));
-    }, opts.maxMinutes), opts.signal).catch((e) => {
+      if (wait.signal.aborted) off();
+      wait.signal.addEventListener("abort", off, { once: true });
+      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
+    }, opts.maxMinutes, opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionFile : undefined));
+  }, wait.signal).finally(() => (forget(), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
     if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);
     throw e;
   });

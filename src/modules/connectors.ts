@@ -1,27 +1,23 @@
-import { registered } from "./index.ts";
+import { loaded, registered } from "./index.ts";
 import { readJson, writeJson } from "../core/state.ts";
+import { settings } from "../core/settings.ts";
 
 // Which connectors the last run could actually see. Notion and Google Calendar come through the
 // owner's Claude account (settings, then connectors); if one is not connected its tools simply do
 // not exist. Knowing that lets the prompts and the brief say "Notion isn't connected" instead of
 // the misleading "tasks are not set up", and stops the agent asking the owner to type in what the
 // connector would have told it.
+//
+// Which connectors there are is the tool modules' business (src/modules): each one with a connector connection and a `key` is recorded under that key; one that also says
+// what the owner calls it (`label`) and what is lost without it (`skipped`) is reported while it is down. Adding a connector module adds it here, to the prompts, the brief
+// and the doctor, with no edit in this file.
 
 const FILE = "state/connectors.json";
 
-interface Connectors {
-  at: string;
-  notion: boolean;
-  calendar: boolean;
-  mail: boolean;
-  gmail?: boolean; // the claude.ai Gmail connector (MAIL_PROVIDER=gmail)
-}
+// A connector's `key` -> whether the last run saw it; `at` is when.
+export type Connectors = { at: string } & { [key: string]: boolean | string | undefined };
 
-export type Connector = "notion" | "calendar";
-
-export const NAMES: Record<Connector, string> = { notion: "Notion", calendar: "Google Calendar" };
-// What the owner loses while a connector is down, in plain words.
-export const SKIPPED: Record<Connector, string> = { notion: "tasks and meeting prep pages", calendar: "the calendar review and the meeting list" };
+export type Connector = string; // a connection.key: "notion", "calendar", "gmail", ...
 
 interface ServerStatus {
   name: string;
@@ -43,11 +39,45 @@ export function detect(tools: readonly string[], servers?: readonly ServerStatus
     return !!s && !["failed", "needs-auth", "disabled"].includes(s.status);
   };
   const seen = registered().flatMap((m) => (m.connection.kind === "connector" && m.connection.key ? [[m.connection.key, up(m.connection.server, m.connection.prefix)] as const] : []));
-  return { at: at.toISOString(), ...Object.fromEntries(seen) } as unknown as Connectors;
+  return { at: at.toISOString(), ...Object.fromEntries(seen) };
 }
 
 export const recordConnectors = (tools: readonly string[], servers?: readonly ServerStatus[]) => writeJson(FILE, detect(tools, servers));
 export const readConnectors = (): Connectors | undefined => readJson<Connectors | undefined>(FILE, undefined);
 
-// Pure: connectors that were missing in the last run. Unknown (no run yet) counts as fine.
-export const disconnected = (c: Connectors | undefined): Connector[] => (c ? (["notion", "calendar"] as const).filter((k) => !c[k]) : []);
+// Did the last run see this connector? Undefined: no run has recorded it yet.
+export const connected = (c: Connectors | undefined, key: string): boolean | undefined => (typeof c?.[key] === "boolean" ? (c[key] as boolean) : undefined);
+
+export interface Reported {
+  key: string;
+  label: string;
+  skipped: string;
+  mail: boolean; // the mail provider's own connector: the mail checks (runtime.ts) already say whether it is there
+}
+
+// The order the owner has always been told them in; connectors not named here follow in module order.
+const ORDER = ["notion", "calendar"];
+
+// The connectors worth reporting while they are down: those of the LOADED modules (Gmail only while MAIL_PROVIDER=gmail) that say what they are called and what is lost, and that
+// the model is meant to see (a connector hidden by HIDDEN_CONNECTORS, like Drive by default, is no outage to talk about; the mail provider's is always in use).
+export function reportable(): Reported[] {
+  const out = loaded().flatMap((m): Reported[] => {
+    const c = m.connection;
+    if (c.kind !== "connector" || !c.key || !c.skipped) return [];
+    if (m.slot !== "mail" && settings.hiddenConnectors.some((h) => c.prefix.startsWith(h))) return [];
+    return [{ key: c.key, label: c.label ?? c.key, skipped: c.skipped, mail: m.slot === "mail" }];
+  });
+  const rank = (k: string) => (ORDER.includes(k) ? ORDER.indexOf(k) : ORDER.length);
+  return out.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r.key) - rank(b.r.key) || a.i - b.i).map(({ r }) => r);
+}
+
+// What the owner calls a connector, and what is lost without it, by its key (the prompts' words). Computed from the modules when read.
+const byKey = (field: "label" | "skipped"): Record<string, string> =>
+  new Proxy({} as Record<string, string>, {
+    get: (_, key) => (typeof key === "string" ? (registered().flatMap((m) => (m.connection.kind === "connector" && m.connection.key === key ? [m.connection[field]] : [])).find(Boolean) ?? key) : undefined),
+  });
+export const NAMES = byKey("label");
+export const SKIPPED = byKey("skipped");
+
+// Pure: connectors that were missing in the last run. Unknown (no run yet) counts as fine, and so does a connector the last run did not record (a module added since).
+export const disconnected = (c: Connectors | undefined): Connector[] => (c ? reportable().filter((r) => c[r.key] === false).map((r) => r.key) : []);

@@ -20,6 +20,11 @@
       "types": "./dist/contract.d.ts",
       "default": "./dist/contract.js"
     },
+    "./env": {
+      "workspace-source": "./src/env.ts",
+      "types": "./dist/env.d.ts",
+      "default": "./dist/env.js"
+    },
     "./package.json": "./package.json"
   },
   "license": "MIT",

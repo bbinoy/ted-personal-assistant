@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { join } from "node:path";
 import type { Keychain } from "./keychain.ts";
 import { BaoError, OpenBao } from "./openbao.ts";
-import { ITEM_KINDS, itemKindRule, keychainNames } from "./secrets.ts";
+import { ITEM_KINDS, itemKindRule, keychainNames, OWNER } from "./secrets.ts";
 
 // Installing, starting, initialising, unsealing and configuring the OpenBao server that holds this app's secrets. Used by
 // `npm run openbao` (scripts/openbao.ts) and by the tests. The app itself (openbao.ts, secrets.ts) never needs anything here.
@@ -182,10 +182,19 @@ path "sys/storage/raft/snapshot" {
 `;
 export const OPERATOR_ROLE = "ted-operator";
 
-// The intake page's token: create and update on the items of every kind (`+` is any one tenant id; secrets.ts ITEM_KINDS). No read, no list, no delete, no metadata, no other kind.
+// The intake page's token: create and update on the items of every kind in a FRIEND's folder (`+` is any one tenant id; secrets.ts ITEM_KINDS). No read, no list, no delete, no metadata,
+// no other kind, and NEVER the owner's folder: the page faces the internet, so a bug in it must not be able to overwrite the owner's card or saved details (an explicit deny beats the
+// `+` grants). The owner sets those on this Mac with npm run card / npm run profile (the app's own token); her own Google and Notion are the Claude connectors, not grants.
 export const INTAKE_ROLE = "ted-intake";
-export const intakePolicyHcl = (mount: string): string => `# The intake page's token: write-only.
-${ITEM_KINDS.map((kind) => `path "${mount}/data/tenants/+/${kind}/*" {\n  capabilities = ["create", "update"]\n}\n`).join("")}`;
+export const intakePolicyHcl = (mount: string): string => `# The intake page's token: write-only, and not for the owner's folder.
+${ITEM_KINDS.map((kind) => `path "${mount}/data/tenants/+/${kind}/*" {\n  capabilities = ["create", "update"]\n}\n`).join("")}# The owner's own folder is not the page's to write, whatever the grants above say (deny wins).
+path "${mount}/data/tenants/${OWNER}/*" {
+  capabilities = ["deny"]
+}
+path "${mount}/metadata/tenants/${OWNER}/*" {
+  capabilities = ["deny"]
+}
+`;
 
 // ---- the admin ----
 

@@ -941,3 +941,38 @@ test("lease: a bare reaction is news for a running look but never calls it off",
   assert.equal(lease.news(), true);
   lease.end();
 });
+
+// ---- /stop, /pause, /resume, /status ----
+
+test("owner chat: /stop aborts the running turn at once, says Stopped. and no 'something broke'; /pause and /resume write and clear the switch, and none of them reaches the model", async () => {
+  const { withCeiling } = await import("../src/run/ceiling.ts");
+  const { isPaused } = await import("../src/core/pause.ts");
+  let prompts = 0;
+  const { r, pipeline } = rig({ run: async () => (prompts++, withCeiling(60_000, () => new Promise<string>(() => {}), owner().sessionFile)) });
+  const turn = pipeline.handleIncoming(owner(), msg({ text: "write me a long report", timestamp: 300 }));
+  await tick();
+  assert.equal(prompts, 1, "the turn is running");
+  await pipeline.handleIncoming(owner(), msg({ text: "/stop", timestamp: 301 }));
+  await turn;
+  assert.deepEqual(r.sent.map((x) => x.text), ["Stopped."], "no error notice for a stopped turn");
+  assert.equal(prompts, 1, "/stop is not a message to the model");
+  await pipeline.handleIncoming(owner(), msg({ text: "/pause 1h", timestamp: 302 }));
+  assert.match(r.sent.at(-1)!.text, /^Paused until \d\d:\d\d\. \/resume to undo\./);
+  assert.equal(isPaused(), true);
+  await pipeline.handleIncoming(owner(), msg({ text: "/resume", timestamp: 303 }));
+  assert.equal(r.sent.at(-1)!.text, "Resumed.");
+  assert.equal(isPaused(), false);
+  await pipeline.handleIncoming(owner(), msg({ text: "/status", timestamp: 304 }));
+  assert.match(r.sent.at(-1)!.text, /^Running \(not paused\)\.\nBudget today: \$/);
+  assert.equal(prompts, 1);
+});
+
+test("a group message /pause from anyone goes to the group's pipeline and touches nothing", async () => {
+  const { isPaused } = await import("../src/core/pause.ts");
+  const seen: string[] = [];
+  const { r, pipeline } = rig({ admitGroup: async (_c: unknown, a: { text: string }) => void seen.push(a.text) });
+  await pipeline.handleIncoming(group("g1"), msg({ text: "/pause 2h", direct: false, groupId: "g1" } as never));
+  assert.equal(isPaused(), false);
+  assert.deepEqual(seen, ["/pause 2h"]);
+  assert.deepEqual(r.sent, []);
+});

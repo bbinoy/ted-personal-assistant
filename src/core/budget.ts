@@ -34,6 +34,31 @@ export function spentToday(file: string = FILE): number {
   return today(file).usd;
 }
 
+// ---- the two aggregate ceilings ----
+// Per group (a group runs on the owner's login, so a noisy one would otherwise spend the owner's whole day and stop her brief) and across all tenants (each has her own ceiling, but
+// together they spend one key): a ledger each, written by payer.ts charge(), read by payer.ts mayRun() and by group.ts before a group's run.
+const GROUP_FILE = "state/group-cost.json";
+const KEY_FILE = "state/key-cost.json";
+interface GroupCost {
+  day: string;
+  usd: Record<string, number>;
+}
+const groupDay = (): GroupCost => {
+  const day = localDay(new Date());
+  const c = readJson<GroupCost | undefined>(GROUP_FILE, undefined);
+  return c?.day === day ? c : { day, usd: {} };
+};
+export function recordGroupCost(groupId: string, usd: number): void {
+  if (!(usd > 0)) return;
+  const c = groupDay();
+  c.usd[groupId] = (c.usd[groupId] ?? 0) + usd;
+  writeJson(GROUP_FILE, c);
+}
+export const groupSpentToday = (groupId: string): number => groupDay().usd[groupId] ?? 0;
+export const groupOverBudget = (groupId: string): boolean => groupSpentToday(groupId) >= settings.groupDailyBudgetUsd;
+export const recordKeyCost = (usd: number): void => recordCost(usd, KEY_FILE);
+export const instanceKeyOverBudget = (): boolean => spentToday(KEY_FILE) >= settings.instanceKeyDailyUsd;
+
 // A tenant's day: spent so far against her own ceiling (0: no spending allowed at all).
 export const tenantOverBudget = (file: string, limitUsd: number): boolean => today(file).usd >= limitUsd;
 
@@ -49,3 +74,13 @@ export function overBudget(): { over: boolean; firstTime: boolean; usd: number }
 // Just the question, without the once-a-day "tell the owner" side effect of overBudget (only the code that
 // can tell the owner should use that one, or a group message could use up the notice).
 export const budgetSpent = (): boolean => today().usd >= settings.dailyBudgetUsd;
+
+// A group: one short line per group per day, when someone addressed it and the budget turned the answer away (group.ts). Returns whether to say it now.
+const groupTold = new Map<string, string>();
+export const GROUP_BUDGET_TEXT = `I've used up my budget for today, so I can't answer until tomorrow. ${settings.owner} can raise it if it is urgent.`;
+export function groupBudgetDue(groupId: string, now: Date = new Date()): boolean {
+  const day = localDay(now);
+  if (groupTold.get(groupId) === day) return false;
+  groupTold.set(groupId, day);
+  return true;
+}

@@ -10,6 +10,7 @@ import { isPaused } from "../core/pause.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
 import { runGate } from "../core/rungate.ts";
+import { noticeBudget, releaseHeld } from "./notices.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
@@ -21,7 +22,8 @@ import { runGate } from "../core/rungate.ts";
 // Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her own budget and the shared
 // key) and runs on the Payer it returns: no per-conversation branches here.
 // The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the owner's once-a-day notice; a tenant's own day is her access,
-// tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours are the instruction's words, not a rule here.
+// tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
+// an unprompted post and the tick delivers what was held as one message); the owner hears of a spent budget once a day and of looks that keep failing (notices.ts).
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
@@ -100,6 +102,7 @@ export function createWakeups(deps: WakeDeps) {
   const nap = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref()));
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
+    if (spent()) noticeBudget(now); // the owner's one notice of the day: background work stops until midnight (budget.ts overBudget says whether it is the first)
     const convs: Conversation[] = [owner()]; // (each conversation asks mayRun: the instance's day budget is the owner's and the groups', a friend's is her own)
     if (settings.wakeups && deps.groupChats) {
       const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
@@ -124,6 +127,7 @@ export function createWakeups(deps: WakeDeps) {
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
         try {
+          await releaseHeld(pipeline, conv, clock()); // what quiet hours or the day's cap held back goes out now, as one message
           if (!started.has(conv.key)) {
             started.add(conv.key);
             const ms = deps.stagger?.(conv) ?? 0;

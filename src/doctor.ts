@@ -10,7 +10,8 @@ import { readRows } from "./heartbeat/rows.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
 import { ownerSkills } from "./modules/skills.ts";
-import { isPaused, localTime } from "./core/pause.ts";
+import { isPaused, localTime, pauseText } from "./core/pause.ts";
+import { errorLinesSince } from "./core/logwindow.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./modules/browse/browseserver.ts";
 import { killSwitch } from "./modules/browse/card.ts";
 import { macKeychain, type Keychain } from "./secrets/keychain.ts";
@@ -23,11 +24,11 @@ import { INTAKE_ROLE } from "./secrets/openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./secrets/openbao.ts";
 import { appBao, ITEM_KINDS, keychainNames, looksLikeApiKey, OWNER } from "./secrets/secrets.ts";
 import { openRequests } from "./tenants/registration.ts";
-import { listTenants, OWNER_ID, pausedUntil, people, tenantContext } from "./tenants/tenants.ts";
+import { listTenants, OWNER_ID, pausedUntil, people, registryProblem, tenantContext } from "./tenants/tenants.ts";
 import { Ledger } from "./modules/browse/payments.ts";
 import { messengerDoctor } from "./conversation/messenger.ts";
 import { settings } from "./core/settings.ts";
-import { disconnected, NAMES, readConnectors } from "./modules/connectors.ts";
+import { disconnected, readConnectors, reportable } from "./modules/connectors.ts";
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
 import { dataPath, readJson, readText } from "./core/state.ts";
@@ -92,7 +93,7 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
   const keychain = o.keychain ?? macKeychain;
   const problem = baseUrlProblem(cfg);
   const hasToken = await keychain.get(keychainNames(o.prefix ?? settings.openbao.keychainPrefix).intake).then((t) => !!t, () => false);
-  if (!cfg.baseUrl) line(true, `${what}: off`, "INTAKE_BASE_URL is not set: friends are told setup links are not available yet (the owner can still use npm run intake -- link owner profile)");
+  if (!cfg.baseUrl) line(true, `${what}: off`, "INTAKE_BASE_URL is not set: friends are told setup links are not available yet (the owner sets her own details with npm run profile and npm run card)");
   else if (problem) return line(false, what, problem);
   else line(true, what, `links point to ${new URL(cfg.baseUrl).origin}`);
   if (!hasToken) return cfg.baseUrl ? line("warn", "intake write-only token", "this Mac's Keychain has none: npm run openbao -- setup") : undefined;
@@ -180,8 +181,10 @@ export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
 
 // The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today against her own limit,
 // and whether she is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
-export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number } = {}): void {
+export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number; broken?: string | undefined } = {}): void {
   const on = o.on ?? settings.tenants;
+  const broken = "broken" in o ? o.broken : registryProblem();
+  if (broken !== undefined) line(false, "friends list", `state/tenants.json can't be read (${broken}); friends are paused, the owner is unaffected. It is kept as is: repair or move it, then restart`);
   if (!on) return line(true, "tenants: off", "TENANTS=off: one person, as always");
   const now = o.now ?? Date.now();
   const key = "key" in o ? o.key : settings.tenantApiKey;
@@ -229,15 +232,15 @@ export async function doctor() {
   };
 
   const major = Number(process.versions.node.split(".")[0]);
-  line(major >= 24, "Node 24+ (runs TypeScript directly)", process.versions.node);
+  line(major >= 24, "Node 24+ (runs TypeScript directly)", major >= 24 ? process.versions.node : `${process.versions.node}; install Node 24 or newer`);
 
   const envPath = `${root}.env`;
-  if (!existsSync(envPath)) line(false, ".env present");
+  if (!existsSync(envPath)) line(false, ".env present", "copy .env.example to .env and fill in SIGNAL_OWNER_NUMBER");
   else {
     const mode = (statSync(envPath).mode & 0o777).toString(8);
-    line(mode === "600", ".env is owner-only (600)", `mode ${mode}`);
+    line(mode === "600", ".env is owner-only (600)", mode === "600" ? `mode ${mode}` : `mode ${mode}; fix: chmod 600 .env`);
     const env = await readFile(envPath, "utf8");
-    line(/^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env), "SIGNAL_OWNER_NUMBER set");
+    line(/^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env), "SIGNAL_OWNER_NUMBER set", /^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env) ? "" : "add SIGNAL_OWNER_NUMBER=+<your number> to .env");
     line(!/^ANTHROPIC_API_KEY=./m.test(env) || settings.credential === "api-key" ? true : "warn", "no API key shadowing the stored login", "API key lines override login mode only if HARNESS_AUTH=api-key");
   }
 
@@ -247,10 +250,10 @@ export async function doctor() {
   await mailCheck(line, settings.mail);
 
   const auth = run("claude", ["auth", "status"]);
-  line(!!auth && !/not logged in|logged out/i.test(auth), "Claude login valid (needed for Notion/Calendar/Gmail connectors)");
+  line(!!auth && !/not logged in|logged out/i.test(auth), "Claude login valid (needed for Notion/Calendar/Gmail connectors)", !!auth && !/not logged in|logged out/i.test(auth) ? "" : "fix: claude auth login");
 
   const lc = run("launchctl", ["list", settings.launchdLabel]);
-  line(lc ? (/"PID"/.test(lc) ? true : "warn") : false, `launchd job ${settings.launchdLabel} loaded and running`, lc ? "" : "not loaded");
+  line(lc ? (/"PID"/.test(lc) ? true : "warn") : false, `launchd job ${settings.launchdLabel} loaded and running`, lc ? "" : "not loaded; fix: scripts/install-launchd.sh");
 
   // The skills ship with the repo (plugin/skills), so there is nothing to install. What each
   // one still needs about the owner lives in memory notes, and the chat sets those up.
@@ -259,7 +262,8 @@ export async function doctor() {
   }
   const conn = readConnectors();
   if (conn) {
-    for (const k of ["notion", "calendar"] as const) line(conn[k] ? true : "warn", `${NAMES[k]} connector`, conn[k] ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors)`);
+    // Every connector module the owner uses (src/modules: Notion, Calendar, Drive and Docs once unhidden, ...); the mail provider's own is the mail check above.
+    for (const r of reportable().filter((x) => !x.mail)) line(conn[r.key] !== false ? true : "warn", `${r.label} connector`, conn[r.key] !== false ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors); without it: ${r.skipped}`);
   }
   const gaps = missingSetup(readNotes(), disconnected(conn), settings.mail);
   line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
@@ -267,7 +271,7 @@ export async function doctor() {
   for (const [name, dir] of [["state", settings.stateDir], ["logs", settings.logsDir], ["memory", settings.memoryDir]] as const) {
     if (!existsSync(dir)) continue;
     const loose = readdirSync(dir).filter((f) => (statSync(`${dir}/${f}`).mode & 0o077) !== 0 && statSync(`${dir}/${f}`).isFile());
-    line((statSync(dir).mode & 0o077) === 0, `${name}/ directory is owner-only`);
+    line((statSync(dir).mode & 0o077) === 0, `${name}/ directory is owner-only`, (statSync(dir).mode & 0o077) === 0 ? "" : `fix: chmod 700 ${dir}`);
     line(loose.length === 0 ? true : "warn", `${name}/ files are owner-only`, loose.length ? `group/world-readable: ${loose.join(", ")}` : "");
   }
   line(true, "memory/notes/", `${readNotes().length} active note(s)`); // the count only, never the notes
@@ -300,16 +304,14 @@ export async function doctor() {
   line(true, "heartbeat run", `every conversation's look (owner, groups, friends with wake) at its chat and what it can read, on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
 
   const spent = spentToday();
-  line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)`);
-  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${dataPath("state/paused")} exists` : "");
+  line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)${spent < settings.dailyBudgetUsd ? "" : `: background work is paused until midnight; to change it set DAILY_BUDGET_USD in .env and restart`}`);
+  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${pauseText() ?? "paused"} (${dataPath("state/paused")}); to resume say /resume in your chat or delete that file` : "");
   const cardOff = killSwitch.off();
   const unconfirmed = new Ledger().rows().filter((r) => r.status === "unconfirmed").length;
   line(unconfirmed ? "warn" : true, "card payments", `${cardOff ? `OFF (${cardOff}); switch on: npm run card -- enable` : "not switched off (npm run card -- list shows the card, if one is saved)"}${unconfirmed ? `; ${unconfirmed} payment(s) unconfirmed: npm run card -- payments` : ""}`);
-  const log = readText("logs/agent.log") ?? "";
-  const hourAgo = new Date(Date.now() - 3600_000);
-  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const recentErrors = log.split("\n").filter((l) => l.includes(" ERR ") && l.slice(0, 5) >= hhmm(hourAgo)).length;
-  line(recentErrors === 0 ? true : "warn", "no errors in the log in the last hour", recentErrors ? `${recentErrors} error line(s) in logs/agent.log` : "");
+  const logFile = dataPath("logs/agent.log");
+  const recentErrors = existsSync(logFile) ? errorLinesSince(readText("logs/agent.log") ?? "", statSync(logFile).mtimeMs, Date.now() - 3600_000) : 0; // (log lines have a time but no date: logwindow.ts)
+  line(recentErrors === 0 ? true : "warn", "no errors in the log in the last hour", recentErrors ? `${recentErrors} error line(s) in logs/agent.log; look at them with: grep " ERR " ${logFile} | tail -n 20` : "");
 
   console.log(bad === 0 ? "\nAll required checks passed." : `\n${bad} check(s) failed.`);
   process.exit(bad === 0 ? 0 : 1);

@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFileAtomic } from "../core/state.ts";
 import { join } from "node:path";
 import { LIMITS } from "../core/sanitize.ts";
 import { localDay } from "../core/pause.ts";
@@ -33,7 +34,7 @@ export function writeInferredNote(
   if (existing && !existing.inferred) return { ok: false, error: `${a.file} is a note the owner confirmed: you cannot change it. Save what you learned as a new note, or tell the owner.` };
   if (!existing && readNotes(now, dir, o.zone).length >= o.maxNotes) return { ok: false, error: "memory is full" };
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  writeFileSync(path, noteContent(a.file, description, text, a.expires, now, "inferred"), { mode: 0o600 });
+  writeFileAtomic(path, noteContent(a.file, description, text, a.expires, now, "inferred"));
   upsertIndex(a.file, `${description} (inferred)`, { notesDir: dir } as never);
   return { ok: true, file: a.file, created: !existing, gist: description };
 }

@@ -4,6 +4,8 @@ import { sleep } from "./util.ts";
 import { Limiter } from "../src/core/limiter.ts";
 import { gated, runGate } from "../src/core/rungate.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
+import { runAgent } from "../src/run/agentrun.ts";
+import { RunStopped, stopRuns } from "../src/run/ceiling.ts";
 import { WarmPool } from "../src/run/agentwarm.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -110,5 +112,25 @@ test("warm pool: GROUP_WARM_SLOTS groups keep a process (least recently used goe
     assert.equal(pool.slot(g(4), true), undefined, "0: none");
   } finally {
     [s.warm, s.groupWarmSlots] = was;
+  }
+});
+
+test("/stop reaches a look that still waits for a place in the run gate, and the gate is left clean", async () => {
+  const was = settings.maxConcurrentRuns;
+  s.maxConcurrentRuns = 1;
+  try {
+    let free!: () => void;
+    const holder = gated("look", () => new Promise<void>((r) => (free = r)));
+    const look = runAgent("p", (async () => ({ approved: false })) as never, { source: "background", stopScope: "scope-x" } as never, { query: (() => assert.fail("never started")) as never });
+    await sleep(5);
+    assert.equal(runGate.queued, 1);
+    assert.equal(stopRuns("scope-x"), 1);
+    await assert.rejects(look, RunStopped);
+    assert.equal(runGate.queued, 0, "it left the line");
+    free();
+    await holder;
+    assert.equal(runGate.running, 0);
+  } finally {
+    s.maxConcurrentRuns = was;
   }
 });

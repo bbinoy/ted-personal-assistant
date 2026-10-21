@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { credentialedProxy, SessionHub, UpstreamError, UpstreamSession, type Opened, type SessionLimits } from "../../intake/mcpproxy.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { connectionState, markNeedsReconnect } from "../../intake/intakelinks.ts";
+import { credentialedProxy, SessionHub, UpstreamError, UpstreamSession, type Opened, type SessionLimits, type ToolResult } from "../../intake/mcpproxy.ts";
 import { appBao, GOOGLE_ITEM, TenantSecrets } from "../../secrets/secrets.ts";
 import { settings } from "../../core/settings.ts";
 
@@ -22,6 +24,19 @@ import { settings } from "../../core/settings.ts";
 // access token itself with the OAuth client's id and secret. Its "stateless" mode needs OAuth 2.1 over HTTP and does not take a token from the environment.
 
 export class GoogleError extends UpstreamError {}
+// Her connection is not usable until she connects again: never made, or Google no longer accepts her permission (revoked, expired, the grant gone). The proxy tells the run so
+// and offers the setup link, like Notion's NotionReconnect (intake/notionoauth.ts).
+export class GoogleReconnect extends GoogleError {}
+
+const PURPOSE = "google"; // the intake purpose she connects again with (intakepurposes.ts)
+
+// Pure: does this tool result say that Google no longer accepts her grant? Only an error result that names the refused grant, or the server's own "authentication needed"
+// message at the very START of a short result: mail she reads is someone else's text (a mail that says "ACTION REQUIRED" must not disconnect her), and it never starts that way.
+// UNVERIFIED LIVE against the pinned server's wording, like the rest of this file: the first revoked grant is the check.
+export function grantGone(r: { text: string; isError: boolean }): boolean {
+  if (r.isError && /invalid_grant|expired or revoked|revoked|RefreshError|refresh token.{0,40}(invalid|expired)|re-?authenticat|authentication (is )?(needed|required)/i.test(r.text.slice(0, 2000))) return true;
+  return r.text.length < 1500 && /^[\s*#>-]*(ACTION REQUIRED:?\s*)?Google Authentication (Needed|Required)/i.test(r.text);
+}
 
 export interface GoogleGrant {
   refreshToken: string;
@@ -124,7 +139,7 @@ export class GoogleSession extends UpstreamSession {
     } catch {
       throw new GoogleError("her Google connection could not be read (is the secret store running?)");
     }
-    if (!grant) throw new GoogleError("she has not connected Google yet");
+    if (!grant) throw new GoogleReconnect("she has not connected Google yet");
     const dir = mkdtempSync(join(cfg.tmpRoot ?? tmpdir(), TMP_PREFIX)); // 0700
     try {
       chmodSync(dir, 0o700);
@@ -144,6 +159,22 @@ export class GoogleSession extends UpstreamSession {
     return { transport, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
   }
 
+  // Before a run starts using her server, and before every call: if Google refused her grant earlier (marked below) she is not connected until she signs in again, which
+  // clears the mark (intakelinks.ts connectionState: a newer completed form). Reads one small file; no server is started for it.
+  override async prepare(): Promise<void> {
+    if (connectionState(this.tenantId, PURPOSE).state === "reconnect") throw new GoogleReconnect("her Google permission expired or was withdrawn");
+  }
+
+  // A call whose answer is "Google no longer accepts her grant" is not a tool failure the model can fix: it is recorded (she is told to reconnect, the admin's list and the
+  // doctor show it), her server is stopped (it holds the dead token), and the run is told to ask her to connect again.
+  override async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+    const r = await super.call(name, args);
+    if (!grantGone(r)) return r;
+    markNeedsReconnect(this.tenantId, PURPOSE);
+    this.close();
+    throw new GoogleReconnect("her Google permission expired or was withdrawn");
+  }
+
   // Her address, once her server is up (starts it if it is not).
   async account(): Promise<string> {
     await this.ready();
@@ -155,11 +186,18 @@ export class GoogleSession extends UpstreamSession {
 export type GoogleHub = SessionHub<GoogleSession>;
 export const googleHub: GoogleHub = new SessionHub((id) => new GoogleSession(id));
 
+// What the model reads when her Google cannot be used. A fixed sentence; the one thing it is told to DO is the reconnect (the same as for Notion, notionmcp.ts).
+export const GOOGLE_RECONNECT_TEXT =
+  'Google is not connected for her right now: she never connected it, or her permission expired or was withdrawn. Tell her so in your reply and offer to send her a new link: call get_setup_link with purpose "google" and put the link in your reply. Do not try Google again until she has connected.';
+
+export const googleUnavailable = (e: unknown): string => (e instanceof GoogleReconnect ? GOOGLE_RECONNECT_TEXT : e instanceof UpstreamError ? `Google is not available for her right now: ${e.message}.` : "Google is not available for her right now.");
+
 // ---- what the model's run gets: a proxy to her server, no command line, no environment (mcpproxy.ts) ----
 
 // The in-process MCP server of a friend's run. `allowed`: the tools her run is offered (its capability set); anything else is refused here too. Every call is forwarded
 // with `user_google_email` set to HER address, whatever the model wrote, so a call cannot reach (or start a sign-in for) another account.
-export function googleProxy(tenantId: string, allowed: (name: string) => boolean, hub: GoogleHub = googleHub): McpSdkServerConfigWithInstance {
+export function googleProxy(tenantId: string, allowed: (name: string) => boolean, hub: GoogleHub = googleHub, tools: readonly string[] = []): McpSdkServerConfigWithInstance {
+  const stand = (name: string): Tool => ({ name, description: "Google (her connection needs her to connect again: calling this says how).", inputSchema: { type: "object", additionalProperties: true } });
   return credentialedProxy({
     name: "google",
     session: () => hub.session(tenantId),
@@ -171,6 +209,7 @@ export function googleProxy(tenantId: string, allowed: (name: string) => boolean
       if (!session.address) throw new GoogleError("her Google account is not known");
       return { ...args, user_google_email: session.address }; // last, so nothing the model wrote can replace it
     },
-    unavailable: (e) => (e instanceof UpstreamError ? `Google is not available for her right now: ${e.message}.` : "Google is not available for her right now."),
+    unavailable: googleUnavailable,
+    placeholders: (e) => (e instanceof GoogleReconnect ? tools.map(stand) : undefined),
   });
 }

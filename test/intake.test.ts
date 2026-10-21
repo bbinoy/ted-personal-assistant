@@ -336,13 +336,15 @@ test("a friend's card: number, expiry and holder are stored; a security code is 
   await assert.rejects(new IntakeWriter(bao.bao({ token: bao.intakeToken })).for(ann.id)("card", "primary", { ...stored, CVV: FAKE_CVC }), /security code is never stored/);
   // a bad card: not valid, expired, not a number
   for (const bad of [{ number: "4242 4242 4242 4241" }, { expiry: "01/20" }, { expiry: "soon" }, { currency: "CHFF" }, { number: "abcd" }, { holder: "" }]) assert.equal((await post(s.base, s.mint(ann.id, "card"), { ...card, ...bad })).r.status, 400, JSON.stringify(bad));
-  // the owner's own card
+  // the owner's own card is not the page's to write (it faces the internet): the writer refuses it, and the page's token is denied the folder anyway
   const mine = s.mint("owner", "card");
   const own = await open(s.base, mine);
   assert.match(own.html, /name="cvc"/);
-  assert.equal((await post(s.base, mine, { ...card, cvc: "73" }, own.csrf)).r.status, 400);
-  assert.equal((await post(s.base, mine, { ...card, cvc: FAKE_CVC }, own.csrf)).r.status, 200);
-  assert.equal(bao.store.get("tenants/owner/card/primary")!.cvc, FAKE_CVC);
+  assert.notEqual((await post(s.base, mine, { ...card, cvc: FAKE_CVC }, own.csrf)).r.status, 200);
+  assert.equal(bao.store.has("tenants/owner/card/primary"), false);
+  assert.throws(() => new IntakeWriter(bao.bao({ token: bao.intakeToken })).for("owner"), /never writes the owner.s folder/);
+  await assert.rejects(bao.bao({ token: bao.intakeToken }).write("tenants/owner/card/primary", { pan: "x" }), /OpenBao refused the request/);
+  assert.equal(bao.store.has("tenants/owner/card/primary"), false);
   assert.ok(!printed.join("\n").includes(FAKE_CVC) && !printed.join("\n").includes("4242424242424242"));
 });
 
@@ -467,7 +469,7 @@ test("doctor: the page is off without INTAKE_BASE_URL, and a token that can read
   const lines: { ok: boolean | "warn"; what: string; detail: string }[] = [];
   const line = (ok: boolean | "warn", what: string, detail = "") => void lines.push({ ok, what, detail });
   const keychain = { get: async () => "fake-intake-token", set: async () => {}, remove: async () => true };
-  const off = { baseUrl: undefined, port: 1, allowHttpLoopback: false, linkMinutes: 15, dir: "" };
+  const off = { baseUrl: undefined, port: 1, allowHttpLoopback: false, linkMinutes: 15, clientIpHeader: "x-forwarded-for", dir: "" };
   await intakeCheck(line, { cfg: off, keychain, bao: () => bao.bao({ token: bao.intakeToken }) });
   assert.equal(lines[0]!.what, "intake page: off");
   assert.equal(lines[0]!.ok, true);

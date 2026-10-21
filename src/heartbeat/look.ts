@@ -15,11 +15,13 @@ import { settings } from "../core/settings.ts";
 import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
-import { clampLook, parseAnswer } from "../run/rules.ts";
+import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
+import { RunStopped } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
+import { countPosts, observeLook, postNotice, submitPost } from "./notices.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown, the day's budget, a friend's
@@ -131,6 +133,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
+    let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
     const h = history.get(conv.key) ?? { preempted: 0 };
     history.set(conv.key, h);
@@ -156,23 +159,30 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
         () => void sent++,
       );
     } catch (e) {
-      if (!overtaken.signal.aborted) console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
+      failure = e;
+      if (!overtaken.signal.aborted && !(e instanceof RunStopped)) console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
     } finally {
       lease?.end();
     }
 
-    const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
-    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : overtaken.signal.aborted ? "preempted" : "failed";
+    const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
+    const calledOff = overtaken.signal.aborted || failure instanceof RunStopped; // a message overtook it, or the owner said /stop: not a failure
+    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : calledOff ? "preempted" : "failed";
     const stale = !!lease?.news() && toolCalls === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
+    countPosts(conv, sent, now); // (what the run sent while it worked counts toward the day's cap)
     if (answer?.message && !stale) {
       const message = answer.message;
-      const res = await pipeline.enqueue(conv, async () =>
-        pipeline.runTurn(conv, { run: async () => ({ text: message, costUsd: reply?.costUsd }), background: true, announce: false, kind: "notice" }),
-      ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
-      outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
+      // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
+      if (submitPost(conv, message, answer.urgent, now) === "held") pipeline.record(conv, "action", Date.now(), `[heartbeat] held for later (quiet hours or the day's limit): ${message.slice(0, 300)}`);
+      else {
+        const res = await postNotice(pipeline, conv, message, reply?.costUsd);
+        if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);
+        outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
+      }
     }
     if (outcome === "preempted") h.preempted++;
     else (h.preempted = 0, (h.completedAt = now.getTime()));
+    if (outcome !== "preempted") observeLook(conv, outcome, failure, now);
     if (outcome === "failed" || outcome === "preempted") seenMail.discard();
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
