@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { isInside } from "./contain.ts";
 import { settings } from "./settings.ts";
@@ -11,8 +11,9 @@ import { settings } from "./settings.ts";
 //
 // All access is synchronous on purpose. The files are tiny, and a synchronous
 // read-modify-write cannot be interleaved with anything else in Node's event loop, so
-// two callers can never lose each other's update. Writes go to a temporary file and are
-// renamed into place, so a crash mid-write leaves the old version, never a torn file.
+// two callers can never lose each other's update. Writes go to a temporary file, are fsynced, and are
+// renamed into place (then the folder is fsynced), so a crash or power cut leaves the old version or the new one, never a torn or empty file.
+// A file that does not parse is never silently replaced by defaults: it is moved aside as <name>.corrupt-<time> (readJson) or, for the tenant registry, left alone and saving refused.
 
 // A typo or a ".." must fail loudly, not write outside the three folders.
 const REL = /^(state|logs|memory)\/(?!\.)[\w.-]+$/;
@@ -37,23 +38,70 @@ export function readText(rel: string): string | undefined {
   }
 }
 
-export function writeText(rel: string, text: string): void {
-  const path = dataPath(rel);
+let tmpSeq = 0;
+
+// The one atomic write for any file under the data root (state, logs, notes): temp file with a unique name (pid + counter), written, fsynced, closed, renamed over the target,
+// then the folder fsynced (best effort: not every platform lets a folder be opened). `mode`: owner-only by default.
+export function writeFileAtomic(path: string, text: string, mode = 0o600): void {
   ensureDir(path);
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, text, { mode: 0o600 });
-  renameSync(tmp, path);
+  const tmp = `${path}.${process.pid}.${++tmpSeq}.tmp`;
+  const fd = openSync(tmp, "w", mode);
+  try {
+    writeSync(fd, text);
+    fsyncSync(fd);
+  } catch (e) {
+    closeSync(fd);
+    rmSync(tmp, { force: true });
+    throw e;
+  }
+  closeSync(fd);
+  try {
+    renameSync(tmp, path);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
+  try {
+    const dfd = openSync(dirname(path), "r");
+    try { fsyncSync(dfd); } finally { closeSync(dfd); }
+  } catch { /* best effort: the rename itself is already atomic */ }
+}
+
+export function writeText(rel: string, text: string): void {
+  writeFileAtomic(dataPath(rel), text);
+}
+
+// Parses a state file: absent -> undefined; unreadable JSON -> `{ corrupt }` (the file is left where it is).
+export function parseJson<T>(rel: string): { value: T | undefined } | { corrupt: string } {
+  const raw = readText(rel);
+  if (raw === undefined) return { value: undefined };
+  try {
+    return { value: JSON.parse(raw) as T };
+  } catch (e) {
+    return { corrupt: (e as Error).message };
+  }
+}
+
+// The bad file is kept for a human (<name>.corrupt-<time>), not overwritten by the next save of defaults.
+function setAside(rel: string): string | undefined {
+  const path = dataPath(rel);
+  const to = `${path}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  try {
+    renameSync(path, to);
+    return to;
+  } catch {
+    return undefined;
+  }
 }
 
 export function readJson<T>(rel: string, fallback: T): T {
-  const raw = readText(rel);
-  if (raw === undefined) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    console.error(`state: ${rel} is unreadable, starting from defaults`);
+  const r = parseJson<T>(rel);
+  if ("corrupt" in r) {
+    const kept = setAside(rel);
+    console.error(`state: ${rel} is unreadable (${r.corrupt}); ${kept ? `moved aside to ${kept}` : "could not be moved aside"}, starting from defaults`);
     return fallback;
   }
+  return r.value === undefined ? fallback : r.value;
 }
 
 export function writeJson(rel: string, value: unknown): void {

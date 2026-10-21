@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { isInside } from "../core/contain.ts";
 import { fence } from "../core/fence.ts";
@@ -6,6 +6,7 @@ import { LIMITS } from "../core/sanitize.ts";
 import { preset } from "../core/preset.ts";
 import { localDay } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
+import { writeFileAtomic } from "../core/state.ts";
 
 // Owner notes: the SDK's own auto-memory, in memory/notes/. The chat agent keeps them as small
 // markdown files (one fact each) plus an index, MEMORY.md, that the SDK loads into every chat
@@ -127,7 +128,7 @@ export function forgetNote(file: string, dir: string = NOTES_DIR): { ok: true; r
   const index = join(dir, "MEMORY.md");
   if (existsSync(index)) {
     const kept = readFileSync(index, "utf8").split("\n").filter((l) => !l.includes(`(${file})`));
-    writeFileSync(index, kept.join("\n"));
+    writeFileAtomic(index, kept.join("\n"));
   }
   return { ok: true, removed };
 }

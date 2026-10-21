@@ -23,7 +23,7 @@ import { INTAKE_ROLE } from "./secrets/openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./secrets/openbao.ts";
 import { appBao, ITEM_KINDS, keychainNames, looksLikeApiKey, OWNER } from "./secrets/secrets.ts";
 import { openRequests } from "./tenants/registration.ts";
-import { listTenants, OWNER_ID, pausedUntil, people, tenantContext } from "./tenants/tenants.ts";
+import { listTenants, OWNER_ID, pausedUntil, people, registryProblem, tenantContext } from "./tenants/tenants.ts";
 import { Ledger } from "./modules/browse/payments.ts";
 import { messengerDoctor } from "./conversation/messenger.ts";
 import { settings } from "./core/settings.ts";
@@ -180,8 +180,10 @@ export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
 
 // The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today against her own limit,
 // and whether she is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
-export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number } = {}): void {
+export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number; broken?: string | undefined } = {}): void {
   const on = o.on ?? settings.tenants;
+  const broken = "broken" in o ? o.broken : registryProblem();
+  if (broken !== undefined) line(false, "friends list", `state/tenants.json can't be read (${broken}); friends are paused, the owner is unaffected. It is kept as is: repair or move it, then restart`);
   if (!on) return line(true, "tenants: off", "TENANTS=off: one person, as always");
   const now = o.now ?? Date.now();
   const key = "key" in o ? o.key : settings.tenantApiKey;

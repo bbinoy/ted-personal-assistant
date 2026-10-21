@@ -1,6 +1,8 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
 import { capNoticesTo } from "./core/capnotice.ts";
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
+import type { PipelineDeps } from "./conversation/conversationmodel.ts";
+import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
 import { approveIn, setApprovers } from "./approvals/permissions.ts";
@@ -35,7 +37,7 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { tenantHooks } from "./tenants/tenanttools.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { ensureOwner, learnOwnerAci, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
@@ -116,16 +118,17 @@ capNoticesTo((text) => void out.replyPlain(text, "notice")); // the owner's one 
 const tenantRunner = createTenantRunner({});
 tenantHooks.sendFirst = messenger.sendFirst?.bind(messenger); // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
 tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts LIFECYCLE: her Google server, her Notion) stop
+// One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
+const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
+  const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
+  turn.say(ownerMessage, reactedTo, reactedAt);
+  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
+};
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,
   record,
-  // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
-  run: (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
-    const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
-    turn.say(ownerMessage, reactedTo, reactedAt);
-    return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
-  },
+  run: runChat,
   picture: async (m) => preparePicture(await messenger.attachmentFile(m.image!)), // the messenger resolves the id to its own file (Signal: a plain file name inside signal-cli's folder)
   document: async (m) => prepareFile(await messenger.attachmentFile(m.file!), m.file!.name, audioTools), // the same; an audio file is transcribed (queued with voice messages)
   longText: (m) => messenger.readLongText(m.longText!), // the same
@@ -211,6 +214,8 @@ await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
 warmChat();
+if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
+replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));

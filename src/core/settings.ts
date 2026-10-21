@@ -360,6 +360,7 @@ export function loadSettings(env: Env) {
     groupMemberCacheMinutes: num(env, "GROUP_MEMBER_CACHE_MINUTES", 5, 0, 1440), // how long "the owner is in this group" is remembered (group.ts)
     slowReplySeconds: num(env, "SLOW_REPLY_SECONDS", 20, 0, 600), // an answer later than this is threaded under the message (quote.ts)
     echoWindowMinutes: num(env, "ECHO_WINDOW_MINUTES", 5, 1, 60), // our own sent text coming back within this long is an echo, not the owner (outbound.ts)
+    replayMinutes: num(env, "REPLAY_MINUTES", 30, 0, 1440), // at start, an owner or friend message younger than this that was never answered (the restart lost it) is answered now (replay.ts; 0: off)
     warmRefreshMinutes: num(env, "WARM_REFRESH_MINUTES", 25, 1, 1440), // the owner's warm process is renewed this often, so it is still fresh after a quiet hour (main.ts)
     noticeAgeHours: num(env, "NOTICE_AGE_HOURS", 24, 1, 168), // what the assistant sent on its own stays "recent" for the chat this long (messages.ts)
     compactBackoffMinutes: num(env, "COMPACT_BACKOFF_MINUTES", 60, 1, 1440), // after a failed compaction, no new try for this long (session.ts)
