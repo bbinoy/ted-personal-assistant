@@ -205,3 +205,22 @@ test("an archive names the mail the run had seen and says how to undo it", async
   assert.match(lines[0]!.text, /^Archived “LinkedIn digest: 5 jobs” from LinkedIn\. Why: /);
   assert.match(lines[0]!.text, /Undo: npm run restore c-9001, or say 'restore that'\.$/);
 });
+
+test("a look that read notes before acting says so: 'per your notes' in reading order, at most three names, inferred ones marked; one that read none keeps the generic line", async () => {
+  reset();
+  const key = fresh("owner");
+  const tool = `${MB}archive_conversation`;
+  const seen: { file: string; inferred: boolean }[] = [];
+  const generic = makeCanUseTool(async () => ({ approved: false }), "background", undefined, judge({ decision: "auto", reason: "routine" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "look" }), conversation: key, notesSeen: () => seen });
+  const before = journal(key).length;
+  await generic(tool, { conversationId: "n-1" }, opts);
+  await noteDone({ conv: key, source: "background", tool, input: { conversationId: "n-1" } });
+  seen.push({ file: "triage-linkedin", inferred: false }, { file: "people-eve", inferred: true }, { file: "triage-newsletters", inferred: false }, { file: "context-trip", inferred: false });
+  await generic(tool, { conversationId: "n-2" }, opts);
+  await noteDone({ conv: key, source: "background", tool, input: { conversationId: "n-2" } });
+  const lines = journal(key).slice(before);
+  assert.equal(lines.length, 2);
+  assert.match(lines[0]!.text, /Why: a periodic look at your accounts, on its standing instructions; auto-approved/);
+  assert.doesNotMatch(lines[0]!.text, /per your notes/);
+  assert.match(lines[1]!.text, /; per your notes: triage-linkedin, people-eve \(inferred\), triage-newsletters and 1 more\./);
+});

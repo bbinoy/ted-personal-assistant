@@ -201,7 +201,15 @@ export interface WhyInput {
   judge?: string; // the judge's reason (auto-approved)
   approval?: { n: number }; // the approval inbox's number the person answered yes to
   asked?: boolean;
+  notes?: readonly { file: string; inferred: boolean }[]; // the notes the run had read before this call, in order
   now?: number;
+}
+
+// Pure: "per your notes: triage-linkedin, triage-newsletters (inferred) and 2 more" from the notes a run had read (at most 3 names); empty when it read none.
+export function notesText(notes: readonly { file: string; inferred: boolean }[] | undefined): string {
+  if (!notes?.length) return "";
+  const names = notes.slice(0, 3).map((n) => `${n.file}${n.inferred ? " (inferred)" : ""}`);
+  return `per your notes: ${names.join(", ")}${notes.length > 3 ? ` and ${notes.length - 3} more` : ""}`;
 }
 
 // Pure but for the turn scope's clock: the why of a call. First what code knows: the approval they answered, else whose words or which instruction started the run.
@@ -217,7 +225,7 @@ export function whyOf(o: WhyInput): Why {
     : "no reason was recorded";
   const how = o.step === "auto-approved" ? `auto-approved by the safety check${o.judge ? ` (${clip(o.judge, 100)})` : ""}` : o.step === "approved" && !o.approval ? "you approved it when asked" : "";
   const reason = ownReasonOf(o.input);
-  return { text: [base, how].filter(Boolean).join("; "), ...(reason ? { reason } : {}), ...(o.asked || o.step !== "allow" ? { asked: true } : {}) };
+  return { text: [base, how, notesText(o.notes)].filter(Boolean).join("; "), ...(reason ? { reason } : {}), ...(o.asked || o.step !== "allow" ? { asked: true } : {}) };
 }
 
 // ---- the success ----
