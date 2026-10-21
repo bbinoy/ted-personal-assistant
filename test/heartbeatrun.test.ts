@@ -23,8 +23,8 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
 
-interface Answer { sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
-function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean } = {}) {
+interface Answer { hold?: Promise<unknown>; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
+function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
   mkdirSync(join(dir, "n"));
@@ -33,7 +33,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
   let now = DAY;
   let sends = 0; // what the run sent with the send tool while it worked (the real tool is the pipeline's sendWhile)
   const pipeline = {
-    canSpeak: () => false, busy: () => !!o.busy?.(), sendWhile: async (_c: unknown, run: () => Promise<unknown>, onSend?: () => void) => { const r = await run(); for (let i = 0; i < sends; i++) onSend?.(); return r; },
+    ...o.pipeline, canSpeak: () => false, busy: () => !!o.busy?.(), sendWhile: async (_c: unknown, run: () => Promise<unknown>, onSend?: () => void) => { const r = await run(); for (let i = 0; i < sends; i++) onSend?.(); return r; },
     enqueue: <T>(_c: Conversation, job: () => Promise<T>) => job(),
     record: (c: Conversation, kind: Kind, ts: number, text: string) => (seen.recorded.push([kind, text]), recordMessage(kind, ts, text, now, c.kind === "owner" ? conv.logFile : c.logFile)),
     runTurn: async (_c: Conversation, turn: any) => {
@@ -53,6 +53,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       seen.provenance.push(extra.provenance);
       const a = answer();
       sends = a.sends ?? 0;
+      if (a.hold) await Promise.race([a.hold, new Promise((_, no) => extra.signal?.addEventListener("abort", () => no(new Error("aborted")), { once: true }))]); // a run that goes on until it is called off
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
       for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
@@ -60,6 +61,9 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
     },
     notesChangedAt: () => 0,
     now: () => now,
+    awaitingApproval: o.awaitingApproval,
+    stagger: o.stagger,
+    sleep: o.sleep,
     guards: { paused: () => !!o.paused, budgetSpent: () => !!o.spent },
   });
   const wakeLine = () => ledgerEntries(conv.logFile).filter((e) => e.kind === "wake").map((e) => parseWake(e.text)!).at(-1)!;
@@ -269,4 +273,53 @@ test("the report: counts per day, messages by day and night, dollars and the nex
   const mixed = heartbeatReport([...rows, row(new Date(2026, 9, 14, 9, 30), { kind: "tenant", message: true, costUsd: 0.02, outcome: "posted" }), row(new Date(2026, 9, 14, 9, 40), { kind: "group", costUsd: 0.01 })], DAY, 7).join("\n");
   assert.match(mixed, /by conversation: owner 4 look\(s\), 2 message\(s\), \$0\.07; groups 1 look\(s\), 0 message\(s\), \$0\.01; friends 1 look\(s\), 1 message\(s\), \$0\.02/);
   assert.deepEqual(heartbeatReport([], DAY), ["No heartbeat looks in the last 7 day(s)."]);
+});
+
+// ---- the lease: a look and a chat turn of one conversation (conversation.ts lease) ----
+function leaseRig() {
+  const lease = { aborts: 0, ended: 0, news: false, parked: undefined as undefined | (() => boolean), abort: undefined as undefined | (() => void) };
+  const pipeline = {
+    lease: (_c: unknown, abort: () => void, parked: () => boolean) => ((lease.abort = () => (lease.aborts++, abort())), (lease.parked = parked), { news: () => lease.news, end: () => void lease.ended++ }),
+  };
+  return { lease, pipeline };
+}
+
+test("a look is called off when a message overtakes it: no post, no run left, the mail not marked seen, the row says so", async () => {
+  const l = leaseRig();
+  const never = new Promise(() => {});
+  const { w, conv, seen } = rig(() => ({ hold: never, message: "never said" }), { pipeline: l.pipeline });
+  const done = w.look(conv, DAY);
+  await new Promise((r) => setTimeout(r, 10));
+  l.lease.news = true;
+  l.lease.abort!(); // what conversation.ts overtake does for a message that is not an approval answer
+  assert.equal(await done, "preempted");
+  assert.deepEqual(seen.posted, []);
+  assert.equal(l.lease.ended, 1, "the lease is given back");
+  assert.equal(readRows().at(-1)?.outcome, "preempted");
+});
+
+test("a look that has only read, when news came meanwhile, drops its message-only post as stale; one that acted still posts", async () => {
+  for (const [calls, outcome, posted] of [[[], "silent", 0], [["mcp__mailbird__archive_conversation"], "posted", 1]] as const) {
+    const l = leaseRig();
+    const { w, conv, seen } = rig(() => ({ message: "Eve is waiting.", calls: [...calls] }), { pipeline: { lease: (c: unknown, a: () => void, p: () => boolean) => ((l.lease.news = true), l.pipeline.lease(c, a, p)) } });
+    assert.equal(await w.look(conv, DAY), outcome);
+    assert.equal(seen.posted.length, posted);
+  }
+});
+
+test("without news a message-only post goes out as always, and the lease asks the approvals whether the look is parked", async () => {
+  const l = leaseRig();
+  const { w, conv, seen } = rig(() => ({ message: "Eve is waiting." }), { pipeline: l.pipeline, awaitingApproval: () => true });
+  assert.equal(await w.look(conv, DAY), "posted");
+  assert.deepEqual(seen.posted, ["Eve is waiting."]);
+  assert.equal(l.lease.parked!(), true);
+});
+
+test("the first look of a conversation after a start waits its stagger once; later looks do not", async () => {
+  const naps: number[] = [];
+  const { w, seen } = rig(() => ({ message: "[[silent]]" }), { stagger: () => 4000, sleep: async (ms) => void naps.push(ms) });
+  await w.tick(DAY);
+  await w.tick(min(DAY, 60));
+  assert.deepEqual(naps, [4000], "once for the conversation, not on every tick");
+  assert.ok(seen.runs.length >= 1);
 });

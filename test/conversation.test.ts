@@ -905,3 +905,29 @@ test("a thumbs-up on a payment question is answered with 'type YES' and starts n
   assert.match(r.sent[0]!.text, /needs a typed YES/);
   assert.deepEqual(r.prompts, []);
 });
+
+test("lease: a message to the conversation calls a running look off unless it is parked on an approval; either way the look is told there was news", async () => {
+  for (const parked of [false, true]) {
+    const { pipeline } = rig();
+    let aborted = 0;
+    const lease = pipeline.lease(owner(), () => void aborted++, () => parked);
+    assert.equal(lease.news(), false);
+    await pipeline.handleIncoming(owner(), msg({ timestamp: 300 }));
+    assert.equal(aborted, parked ? 0 : 1);
+    assert.equal(lease.news(), true);
+    lease.end();
+    await pipeline.handleIncoming(owner(), msg({ timestamp: 301 }));
+    assert.equal(aborted, parked ? 0 : 1, "an ended lease is not touched again");
+  }
+});
+
+test("bursts: an entry whose messages nobody answered (a group message the gate let pass) is dropped, so the conversation is not busy for ever", async () => {
+  const { pipeline } = rig();
+  const g = group("quiet-group-0123456789abcdef");
+  await pipeline.burst(g, { timestamp: 1 }, async () => {}); // settled, and nothing ran
+  assert.equal(pipeline.busy(g), false);
+  let ran = 0;
+  await pipeline.burst(g, { timestamp: 2 }, async (b) => b.run(async () => void ran++));
+  assert.equal(ran, 1);
+  assert.equal(pipeline.busy(g), false);
+});

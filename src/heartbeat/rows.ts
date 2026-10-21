@@ -16,7 +16,7 @@ export interface HeartbeatRow {
   toolCalls: number; // tool calls that ran (the run's own and its subagents')
   archived: number; // mail archived in this look
   delegations: number; // experts it called (heartbeat/delegation.ts); their cost is in costUsd (the SDK's total includes subagents)
-  outcome: "posted" | "silent" | "failed";
+  outcome: "posted" | "silent" | "failed" | "preempted"; // preempted: a message to the conversation overtook the look and it was called off (conversation.ts lease)
 }
 
 export const appendRow = (row: HeartbeatRow, file: string = HEARTBEAT_LOG): void => appendLine(file, JSON.stringify(row));

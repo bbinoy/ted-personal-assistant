@@ -1,4 +1,5 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { gated } from "../core/rungate.ts";
 import { audit, type Source } from "../core/audit.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
@@ -63,6 +64,7 @@ export interface RunOptions {
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
+  signal?: AbortSignal; // an unattended run is called off from outside (a chat message overtook the heartbeat look, look.ts): while waiting for a place (rungate.ts) it never starts, once running the query is aborted
   maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else the chat or background one
   // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
   // read at every call (a warm process is built before the message that uses it arrives): a job passes `() => ({ kind: "standing", task })` with its fixed text, an
@@ -284,8 +286,15 @@ export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promi
 
 export async function runAgent(prompt: string, approve: Approve, opts: RunOptions, io: { query?: typeof query } = {}): Promise<AgentReply> {
   const { resume, previousCost } = opts.sessionFile ? chatResume(opts.sessionFile) : { resume: undefined, previousCost: 0 };
+  // The entry gate of an unattended run (rungate.ts; every one is a heartbeat look, a chat turn goes through agent.ts runConversation): it waits for a place, and its ceiling starts only once it has one.
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
-  return underCeiling(opts.source, (c) => consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost), opts.maxMinutes).catch((e) => {
+  return gated("look", () =>
+    underCeiling(opts.source, (c) => {
+      const off = () => c.controller.abort();
+      if (opts.signal?.aborted) off();
+      opts.signal?.addEventListener("abort", off, { once: true });
+      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost).finally(() => opts.signal?.removeEventListener("abort", off));
+    }, opts.maxMinutes), opts.signal).catch((e) => {
     if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);
     throw e;
   });

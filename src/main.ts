@@ -12,7 +12,7 @@ import { createGroupBrain, groupName, ownerInGroup } from "./conversation/group.
 import { keyNotices } from "./tenants/keynotice.ts";
 import { groupDir, recordGroup } from "./conversation/groupstore.ts";
 import { logTail } from "./conversation/gate.ts";
-import { createWakeups } from "./heartbeat/wake.ts";
+import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
@@ -218,8 +218,8 @@ setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings
 
 // One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, and the friends'
 // (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
-const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]) });
-const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]) });
+const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]), busy: (conv) => pipeline.busy(conv) });
+const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]), busy: (conv) => pipeline.busy(conv) });
 const dream = () => {
   void friendsDreamer.run().catch(() => {});
   return dreamer.run().catch(() => {});
@@ -230,6 +230,7 @@ const dreamAtItsHour = dreamTrigger(dream);
 const wakeups = createWakeups({
   pipeline,
   groupChats: messenger.capabilities.groups,
+  stagger: startupStagger,
   vouch,
   run: (conv, payer, prompt, extra) => runHeartbeat(conv, payer, prompt, approveIn(conv.key, { background: true }), extra),
   compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactConversation(conv, "quiet") },

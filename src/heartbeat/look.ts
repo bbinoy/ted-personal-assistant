@@ -18,6 +18,7 @@ import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseAnswer } from "../run/rules.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
+import { hasOpen } from "../approvals/approvals.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
@@ -34,10 +35,12 @@ export interface RunExtra {
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
+  signal?: AbortSignal; // the look is called off (a message overtook it): the run stops, or never starts if it still waits for a place (rungate.ts)
 }
 
 export interface HeartbeatDeps {
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy"> & Partial<Pick<Pipeline, "lease">>;
+  awaitingApproval?: (conv: Conversation) => boolean; // is a question of the look open in the chat (default approvals.ts hasOpen): a message then does not call the look off
   run: (conv: Conversation, payer: Payer, prompt: string, extra: RunExtra) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // agent.ts runHeartbeat
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
@@ -94,8 +97,9 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged })) return "not-due";
     if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
-    // One run at a time per conversation: while a turn of it is settling, queued or running (the owner has just written and is being answered), the look waits. Nothing is
-    // recorded and nothing is dropped: it is still due, and the next tick (a few minutes) looks again.
+    // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
+    // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
+    // a message to the conversation OVERTAKES it: the look is called off unless it waits on an approval, and a closing message-only post is dropped when news came meanwhile.
     if (pipeline.busy(conv)) return "busy";
     // A look is a model run on someone's account (a friend's: the instance key, billed to her): paused, in a cooldown or past the day's budget means no run, nothing recorded, and the next tick looks again.
     const access = deps.may(conv, "heartbeat look");
@@ -112,6 +116,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
+    const overtaken = new AbortController();
+    const lease = pipeline.lease?.(conv, () => overtaken.abort(), () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
     try {
       reply = await pipeline.sendWhile(
         conv,
@@ -119,6 +125,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
+            signal: overtaken.signal,
             onDelegate: () => void delegations++,
             onToolSuccess: (tool) => {
               toolCalls++;
@@ -128,19 +135,22 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
         () => void sent++,
       );
     } catch (e) {
-      console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
+      if (!overtaken.signal.aborted) console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
+    } finally {
+      lease?.end();
     }
 
     const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
-    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : "failed";
-    if (answer?.message) {
+    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : overtaken.signal.aborted ? "preempted" : "failed";
+    const stale = !!lease?.news() && toolCalls === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
+    if (answer?.message && !stale) {
       const message = answer.message;
       const res = await pipeline.enqueue(conv, async () =>
         pipeline.runTurn(conv, { run: async () => ({ text: message, costUsd: reply?.costUsd }), background: true, announce: false, kind: "notice" }),
       ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
       outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
-    if (outcome === "failed") seenMail.discard();
+    if (outcome === "failed" || outcome === "preempted") seenMail.discard();
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);

@@ -9,6 +9,7 @@ import { ledgerEntries, logSignature } from "../core/messages.ts";
 import { isPaused } from "../core/pause.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
+import { runGate } from "../core/rungate.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
@@ -24,7 +25,10 @@ import { settings } from "../core/settings.ts";
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy"> & Partial<Pick<Pipeline, "lease">>;
+  stagger?: (conv: Conversation) => number; // ms a conversation waits before its FIRST look since the process started, so a restart that finds every one due does not start them all at once (default none; main.ts startupStagger)
+  sleep?: (ms: number) => Promise<void>; // (tests)
+  awaitingApproval?: HeartbeatDeps["awaitingApproval"]; // (tests) default: a question of the conversation open in the chat (approvals.ts)
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
   run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runHeartbeat, with that conversation's approver)
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
@@ -35,6 +39,9 @@ interface WakeDeps {
   now?: () => Date;
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
 }
+
+// The wait before a conversation's first look after a start: random within the tick interval, at most 5 minutes (a spread of work, not a delay of any one look).
+export const startupStagger = (): number => Math.random() * Math.min(settings.heartbeatMinutes * 60_000, 5 * 60_000);
 
 export function createWakeups(deps: WakeDeps) {
   const { pipeline } = deps;
@@ -56,6 +63,7 @@ export function createWakeups(deps: WakeDeps) {
   function quietCompact(conv: Conversation): void {
     const key = `compact:${conv.key}`;
     if (!deps.compact || running.has(key) || !deps.compact.due(conv)) return;
+    if (runGate.full) return; // the run gate (rungate.ts) has no free place: a compaction that waits holds the conversation's queue, so it is left for a later tick
     if (isRefusal(may(conv, "compaction"))) return; // billed like any call: stops with the pause switch, the cooldown and the budget (hers: the key and her own budget)
     const run = deps.compact.run;
     const job = pipeline.enqueue(conv, () => run(conv)).then(
@@ -78,7 +86,7 @@ export function createWakeups(deps: WakeDeps) {
     return st;
   }
 
-  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed });
+  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed, awaitingApproval: deps.awaitingApproval });
 
   // One conversation, one look. Returns what happened (for the log and tests).
   async function look(conv: Conversation, now: Date): Promise<string> {
@@ -88,6 +96,8 @@ export function createWakeups(deps: WakeDeps) {
 
   // Every conversation looks on its own: a slow brief or a failing group never delays another conversation.
   const busy = new Set<string>();
+  const started = new Set<string>(); // conversations that have had their first look since the process started
+  const nap = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref()));
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
     const convs: Conversation[] = [owner()]; // (each conversation asks mayRun: the instance's day budget is the owner's and the groups', a friend's is her own)
@@ -114,6 +124,12 @@ export function createWakeups(deps: WakeDeps) {
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
         try {
+          if (!started.has(conv.key)) {
+            started.add(conv.key);
+            const ms = deps.stagger?.(conv) ?? 0;
+            if (ms > 0) await nap(ms);
+            if (paused(clock())) return;
+          }
           await look(conv, clock());
         } catch (e) {
           console.error(`wake: ${conv.kind} look failed:`, (e as Error).message);

@@ -20,6 +20,7 @@ import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import { PROFILES } from "./profiles.ts";
 import type { SeenMail } from "../modules/seenmail/seenmail.ts";
 import { lookerOf, unattendedTools, type Looker } from "./scope.ts";
+import { gated } from "../core/rungate.ts";
 import { settings } from "../core/settings.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 
@@ -31,6 +32,7 @@ export interface ProfileExtra {
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
+  signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
@@ -72,6 +74,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     outputFormat: p.outputSchema,
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
+    signal: extra.signal,
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
   };
@@ -89,6 +92,10 @@ export type TurnBuilder = (since?: string) => { prompt: string; seenAt?: string;
 // The one path of a chat turn: the conversation's own resumed session, options (runoptions.ts) and approver (its key), on the conversation's
 // warm process when it still fits (agentwarm.ts), else a cold start.
 export async function runConversation(conv: Conversation, inputs: RunInputs, build: TurnBuilder, onFirstOutput?: () => void, io: { query?: typeof query } = {}): Promise<AgentReply> {
+  return gated("chat", () => chatTurn(conv, inputs, build, onFirstOutput, io)); // a place in the run gate (rungate.ts), which a chat turn never waits for
+}
+
+async function chatTurn(conv: Conversation, inputs: RunInputs, build: TurnBuilder, onFirstOutput?: () => void, io: { query?: typeof query } = {}): Promise<AgentReply> {
   const r = chatResume(conv.sessionFile);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const o = { ...runOptionsFor(conv, inputs), seenAt, onFirstOutput };
