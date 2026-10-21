@@ -56,6 +56,9 @@ export function groupDir(groupId: string, name?: string): string {
   return dir;
 }
 
+/** A forgotten group: what is remembered in memory of its name (its folder is the caller's to delete). */
+export const forgetGroupCache = (groupId: string): void => void named.delete(groupId);
+
 export const groupScope = (groupId: string): Scope => {
   groupDir(groupId); // (the folder is made first)
   const p = convPaths(groupConvId(groupId));

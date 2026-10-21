@@ -106,9 +106,14 @@ export const setAsking = (key: string, a: Asking | undefined): void => void (a ?
 export const askingIn = (key: string): Asking | undefined => asking.get(key);
 
 /** A removed friend (or group): everything held for conversation `key`. Returns the attachment ids of its notes, so their files can go too. Idempotent (the folder goes with the conversation; this is for the part that is read before it is deleted). */
-export function forgetConversation(key: string): string[] {
-  const conv = convIdOfKey(key);
-  const ids = load(key).notes.map((n) => n.id);
+export const forgetConversation = (key: string): string[] => forgetConvId(convIdOfKey(key));
+/** The same by the conversation's folder name (a group's raw id is not known to the one who forgets it). */
+export function forgetConvId(conv: ConvId): string[] {
+  let ids: string[] = [];
+  try {
+    const raw = JSON.parse(readFileSync(fileOf(conv), "utf8")) as Partial<Store>;
+    ids = (Array.isArray(raw.notes) ? raw.notes : []).map((n) => n.id).filter((i): i is string => typeof i === "string");
+  } catch { /* none, or damaged: nothing to name */ }
   cache.delete(conv);
   rmSync(fileOf(conv), { force: true });
   return ids;
