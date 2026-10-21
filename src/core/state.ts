@@ -83,8 +83,7 @@ export function parseJson<T>(rel: string): { value: T | undefined } | { corrupt:
 }
 
 // The bad file is kept for a human (<name>.corrupt-<time>), not overwritten by the next save of defaults.
-function setAside(rel: string): string | undefined {
-  const path = dataPath(rel);
+export function moveAside(path: string): string | undefined {
   const to = `${path}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   try {
     renameSync(path, to);
@@ -93,6 +92,8 @@ function setAside(rel: string): string | undefined {
     return undefined;
   }
 }
+
+const setAside = (rel: string) => moveAside(dataPath(rel));
 
 export function readJson<T>(rel: string, fallback: T): T {
   const r = parseJson<T>(rel);

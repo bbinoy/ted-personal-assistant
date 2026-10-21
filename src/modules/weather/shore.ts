@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFileAtomic } from "../../core/state.ts";
 import { join } from "node:path";
 import { settings } from "../../core/settings.ts";
 
@@ -133,7 +134,7 @@ export async function shoreExposure(lat: number, lon: number, io: { fetch: typeo
     if (!elements) return { error: "the map service did not answer (it limits requests); try again in a few minutes" };
     try {
       mkdirSync(join(settings.stateDir, "shore"), { recursive: true });
-      writeFileSync(file, JSON.stringify(elements));
+      writeFileAtomic(file, JSON.stringify(elements));
     } catch { /* the cache is a convenience */ }
   }
   const { features, coast } = featuresFrom(elements);
