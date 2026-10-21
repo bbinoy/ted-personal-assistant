@@ -341,6 +341,7 @@ src/approvals/approvalreport.ts  `npm run report`: each approval ask with its ex
 src/approvals/pending.ts         the approval inbox's state: the exact calls an unattended run parked for a yes, one atomic file per conversation, numbers, expiry
 src/approvals/pendingflow.ts     parking, the batch message (held in quiet hours), answering by number or by quote, running an approved item, `/approvals`
 src/approvals/pendingparse.ts    reads a numbered answer ("1,3 yes", "all yes", "2 no") in code; ambiguity resolves nothing (pure)
+src/approvals/auditargs.ts       a call's arguments for the audit log, size-capped (approvalask.ts, pendingflow.ts)
 src/approvals/pendingbatch.ts    the code-written texts of the inbox: the batch, the list, the result and expiry lines (pure)
 src/approvals/pendingexec.ts     the exact guard of the follow-up run (the recorded call allowed, any other non-read call denied), its fixed prompt and the outcome line
 src/approvals/registerask.ts     asks the owner in her own chat whether a stranger may join; yes lets her in, no is remembered
