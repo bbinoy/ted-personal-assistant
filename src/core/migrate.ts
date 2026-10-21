@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { closeSync, copyFileSync, cpSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, cpSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import {
   convIdOfKey, friendConvId, groupConvId, hashOf, isConvId, LAYOUT_VERSION, layout, legacyLayout, tenantIdOfConv, type ConvId,
@@ -84,8 +84,11 @@ export function planMigration(root: string, fs: FsView = realFs, now: Date = new
     claimed.add(from);
     add("move", from, to, note ? { note } : {});
   };
+  // a folder with no file at any depth (what is left of a library whose contents were moved) is not data: it is never a step
+  const hollow = (p: string): boolean => fs.isDir(p) && fs.list(p).every((e) => e.dir && hollow(join(p, e.name)));
   const orphan = (from: string, why: string) => {
     claimed.add(from);
+    if (hollow(from)) return;
     add("orphan", from, join(L.instance.migrationOrphans, relative(L.root, from)), { note: why });
   };
   // a file with its rotated generations and moved-aside copies
@@ -632,7 +635,11 @@ function sweepEmpty(root: string, ops: readonly Op[]): void {
     let p = o.from;
     while (p !== dirname(p) && !keep.has(p) && p.startsWith(layout(root).root + sep)) { dirs.add(p); p = dirname(p); }
   }
-  for (const d of [...dirs].sort((a, b) => b.length - a.length)) try { rmdirSync(d); } catch { /* not empty, or not there */ }
+  for (const d of [...dirs].sort((a, b) => b.length - a.length)) {
+    try {
+      if (emptyTree(d)) rmSync(d, { recursive: true, force: true }); // no file at any depth: only folders go, never a file
+    } catch { /* not there */ }
+  }
 }
 
 const nowOf = (o: MigrateOptions): Date => (o.now ?? (() => new Date()))();
