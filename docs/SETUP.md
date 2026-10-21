@@ -35,7 +35,7 @@ npm run doctor
 npm run install:launchd               # installs a launchd job; the agent starts now and at login
 ```
 
-Send yourself a message on Signal. The first heartbeat look works through the inbox the assistant has not looked at yet (the `seen_mail` log is empty at first; a big inbox is worked off over successive looks). The first daily brief is started by the heartbeat run around 07:30 (its rules are in `assistants/ted/persona/heartbeat.md`).
+Send yourself a message on Signal. The first heartbeat look works through the inbox the assistant has not looked at yet (the `seen_mail` log is empty at first; a big inbox is worked off over successive looks). So that the first look does not triage a whole backlog, mail older than `MAIL_BACKLOG_DAYS` (7) is marked as seen without being sorted, and the assistant tells you so once in its first message; `MAIL_BACKLOG_DAYS=0` turns that off. The first daily brief is started by the heartbeat run around 07:30 (its rules are in `assistants/ted/persona/heartbeat.md`).
 
 ### Choosing a messenger
 
@@ -224,6 +224,7 @@ Off by default. A friend can connect her OWN Notion; her Notion tools are Notion
 - **Heartbeat run**: every few minutes a free timer checks whose look has come; the owner's look is one run on `HEARTBEAT_MODEL` (default `haiku`): it reads the recent chat, your mail since its last look, the calendar, your tasks and notes, does what is routine within the usual rules (everything that sends, shares or spends still asks on your phone), and messages you only when something deserves it. It chooses its own next look (10 to 120 minutes; about 30 in the day). Quiet hours (22:00-07:00 by default) are its judgement, from the notes and the chat. By default it sends only a handful of messages at night, and only what cannot wait; tell it in chat ("I'm working late, tell me everything tonight") to lift that. `npm run heartbeat-report` shows what it did. It needs the calendar and mail connectors for the parts it reads.
 - Tuning: every knob is an env var, listed in `.env.example` (heartbeat interval, quiet hours, spend limit, model). They are validated at startup: a typo stops the agent with a clear message in the log.
 - Chat session: it keeps recent history across days (never reset just because time passed) and is compacted when the conversation has grown `CHAT_COMPACT_GROWTH_TOKENS` (default 100000) beyond its first turn: in the background once it has been quiet for `COMPACT_QUIET_MINUTES` (default 5), or right after a reply if it grew 1.5 times past that, the same for your chat and every group, so long conversations stay cheap. Both are optional settings in `.env`.
-- Pause: `touch state/paused` (or write a date into it to resume on that day). The heartbeat run stops with it.
+- Pause: `touch state/paused` (or write a date into it to resume on that day), or from your chat: `/pause 2h`, `/pause until 18:00`, `/resume`. The heartbeat run stops with it. `/status` gives a short summary and `/stop` (or `stop!`) aborts a turn that is running.
+- Quiet hours and caps: unprompted heartbeat messages are held in `QUIET_HOURS` (default from the assistant preset, 22:00-07:00) and delivered as one message when they end, unless the run marks one urgent; `MAX_UNPROMPTED_PER_DAY` (6) caps them per conversation per day. You are told once a day when `DAILY_BUDGET_USD` is reached, and once when background looks keep failing (with the command to fix it).
 
 Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Safety](SAFETY.md) · [Adapting](ADAPTING.md)

@@ -269,10 +269,10 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
 // The one place every run passes: chat, groups, wake-ups, brief, heartbeat run, the mail handler. On the ceiling the query is aborted, the
 // timeout is logged and audited, and the rejection takes the usual error path (a notice, rate-limited in groups; the queue moves on).
 // A chat run (the owner's chat and groups alike) and a background run have their own limits (settings.ts).
-export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number): Promise<T> {
+export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number, scope?: string): Promise<T> {
   const chat = source === "chat" || source === "group";
   try {
-    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run);
+    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run, scope);
   } catch (e) {
     if (e instanceof RunTimeout) {
       console.error(`run: timed out after ${e.minutes} minutes (${source})`);
@@ -285,7 +285,7 @@ export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promi
 export async function runAgent(prompt: string, approve: Approve, opts: RunOptions, io: { query?: typeof query } = {}): Promise<AgentReply> {
   const { resume, previousCost } = opts.sessionFile ? chatResume(opts.sessionFile) : { resume: undefined, previousCost: 0 };
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
-  return underCeiling(opts.source, (c) => consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost), opts.maxMinutes).catch((e) => {
+  return underCeiling(opts.source, (c) => consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost), opts.maxMinutes, opts.source === "chat" || opts.source === "group" ? opts.sessionFile : undefined).catch((e) => {
     if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);
     throw e;
   });

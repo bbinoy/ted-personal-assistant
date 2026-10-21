@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { startup, type SDKMessage, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
-import { RunTimeout } from "./ceiling.ts";
+import { RunStopped, RunTimeout } from "./ceiling.ts";
 import { forgetUnresumable, type Resume } from "./chatsession.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { userInput } from "./image.ts";
@@ -109,9 +109,9 @@ export async function runWarmOrCold(conv: Who, o: RunOptions, r: Resume, input: 
         return q;
       };
       return consume(warm ? firstWarm(onWarm, () => cold(c.controller), (e) => console.error(`${label}: warm process failed, starting normally:`, e.message)) : cold(c.controller), o, r.previousCost);
-    });
+    }, undefined, o.sessionFile);
   } catch (e) {
-    if (e instanceof RunTimeout && slot?.holder === conv.key) slot.drop(); // after an abort the conversation gets no spare built meanwhile
+    if ((e instanceof RunTimeout || e instanceof RunStopped) && slot?.holder === conv.key) slot.drop(); // after an abort the conversation gets no spare built meanwhile
     if (o.sessionFile) forgetUnresumable(o.sessionFile, e, o.source);
     throw e;
   }

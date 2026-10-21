@@ -8,7 +8,7 @@ import { join } from "node:path";
 // until the look ends well; the run and its expert share the pending set; nothing about the mailbox or the provider is known to code.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "seenmail-test-"));
 
-const { createSeenMail, createSeenMailServer, seenFileOf, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
+const { createSeenMail, createSeenMailServer, isBacklog, seenFileOf, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
 const { createHeartbeatLook } = await import("../src/heartbeat/look.ts");
 const { heartbeatOptions } = await import("../src/run/agent.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
@@ -137,4 +137,34 @@ test("a look that ends well commits what it was told was new; a look that fails 
     console.error = err;
   }
   assert.equal(readFileSync(join(dir, "rows.jsonl"), "utf8").trim().split("\n").length, 2);
+});
+
+test("the first run does not triage the backlog: mail older than MAIL_BACKLOG_DAYS is marked seen unread, later runs are not affected", () => {
+  const NOW = Date.parse("2026-10-20T12:00:00Z");
+  assert.equal(isBacklog("2026-10-01T09:00:00Z", NOW, 7), true);
+  assert.equal(isBacklog("2026-10-18T09:00:00Z", NOW, 7), false);
+  assert.equal(isBacklog("not a date", NOW, 7), false, "an unreadable date is triaged, not skipped");
+  assert.equal(isBacklog(undefined, NOW, 7), false);
+  assert.equal(isBacklog("2020-01-01T00:00:00Z", NOW, 0), false, "0 days: the cutoff is off");
+  const f = file("backlog");
+  const first = createSeenMail(f, SEEN_MAX, 7, () => NOW);
+  const received = { old1: "2026-09-01T00:00:00Z", old2: "2026-10-10T00:00:00Z", fresh: "2026-10-19T08:00:00Z" };
+  assert.deepEqual(first.unseen(["old1", "old2", "fresh", "nodate"], received), ["fresh", "nodate"]);
+  assert.equal(first.aged(), 2);
+  assert.deepEqual(first.unseen(["old1", "fresh"], received), ["fresh"], "asking again within the look gives the same answer");
+  first.commit();
+  assert.deepEqual(ids(f).sort(), ["fresh", "nodate", "old1", "old2"].sort());
+  // from now on a log exists: an old mail that turns up unseen is an ordinary new mail
+  const second = createSeenMail(f, SEEN_MAX, 7, () => NOW);
+  assert.deepEqual(second.unseen(["older", "fresh"], { older: "2026-01-01T00:00:00Z" }), ["older"]);
+  assert.equal(second.aged(), 0);
+});
+
+test("seen_mail tells the run, once, how many old mails it skipped on the first look", async () => {
+  const f = file("backlog-tool");
+  const seen = createSeenMail(f, SEEN_MAX, 7, () => Date.parse("2026-10-20T12:00:00Z"));
+  const server = createSeenMailServer(seen) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: unknown) => Promise<{ content: { text: string }[] }> }> } };
+  const out = await server.instance._registeredTools.seen_mail!.handler({ ids: ["a", "b"], received: { a: "2026-01-01T00:00:00Z", b: "2026-10-19T00:00:00Z" } });
+  assert.match(out.content[0]!.text, /Not looked at yet \(1 of 2\):\nb/);
+  assert.match(out.content[0]!.text, /first look: 1 mail\(s\) older than 7 days were marked as looked at/);
 });
