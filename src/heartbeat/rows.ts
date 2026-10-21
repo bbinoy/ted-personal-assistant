@@ -16,7 +16,7 @@ export interface HeartbeatRow {
   toolCalls: number; // tool calls that ran (the run's own and its subagents')
   archived: number; // mail archived in this look
   delegations: number; // experts it called (heartbeat/delegation.ts); their cost is in costUsd (the SDK's total includes subagents)
-  outcome: "posted" | "silent" | "failed";
+  outcome: "posted" | "silent" | "failed" | "timeout"; // timeout: the run hit its wall-clock ceiling (HEARTBEAT_TIMEOUT_MINUTES / EXPERT_TIMEOUT_MINUTES) and was aborted
 }
 
 export const appendRow = (row: HeartbeatRow, file: string = HEARTBEAT_LOG): void => appendLine(file, JSON.stringify(row));

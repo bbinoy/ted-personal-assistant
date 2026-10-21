@@ -62,7 +62,8 @@ export interface RunOptions {
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
-  maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else the chat or background one
+  maxMinutes?: number; // a wall-clock ceiling of its own (the browse run, a heartbeat look), else the chat or background one
+  expertMaxMinutes?: number; // a heartbeat look: when it delegates to an expert the whole ceiling becomes this many minutes (never less than maxMinutes)
   // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
   // read at every call (a warm process is built before the message that uses it arrives): a job passes `() => ({ kind: "standing", task })` with its fixed text, an
   // unattended turn of a conversation `derived` text (turnscope.ts derivedTurn). A conversation's own turn passes nothing: its turn-scoped messages are its scope's
@@ -284,7 +285,12 @@ export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promi
 export async function runAgent(prompt: string, approve: Approve, opts: RunOptions, io: { query?: typeof query } = {}): Promise<AgentReply> {
   const { resume, previousCost } = opts.sessionFile ? chatResume(opts.sessionFile) : { resume: undefined, previousCost: 0 };
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
-  return underCeiling(opts.source, (c) => consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost), opts.maxMinutes).catch((e) => {
+  return underCeiling(opts.source, (c) => {
+    // (a delegation gives the look more time: the first call to an expert extends the ceiling)
+    const experts = opts.experts && opts.expertMaxMinutes ? { ...opts.experts, onDelegate: (d: Delegation) => (c.extend(opts.expertMaxMinutes! * 60_000), opts.experts!.onDelegate?.(d)) } : opts.experts;
+    const o = experts === opts.experts ? opts : { ...opts, experts };
+    return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), o, resume), abortController: c.controller } }), opts, previousCost);
+  }, opts.maxMinutes).catch((e) => {
     if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);
     throw e;
   });

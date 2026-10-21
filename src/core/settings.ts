@@ -195,6 +195,10 @@ export function loadSettings(env: Env) {
     compactMaxMinutes: num(env, "COMPACT_MAX_MINUTES", 10, 1, 120), // a compaction that takes longer is abandoned (chatsession.ts); the failure backoff applies
     runMaxMinutesChat: num(env, "RUN_MAX_MINUTES_CHAT", 40, 1, 1440),
     runMaxMinutesBackground: num(env, "RUN_MAX_MINUTES_BACKGROUND", 180, 1, 2880),
+    // A heartbeat look (the owner's, a group's, a friend's) is a short job: a model call that hangs (a lost connection, a sleeping Mac) must free its conversation soon, and the look is due again
+    // on the next ticks. An expert the look delegates to may take longer: the look's whole allowance then becomes EXPERT_TIMEOUT_MINUTES. Approval waits are not counted (ceiling.ts).
+    heartbeatTimeoutMinutes: num(env, "HEARTBEAT_TIMEOUT_MINUTES", 10, 1, 240),
+    expertTimeoutMinutes: num(env, "EXPERT_TIMEOUT_MINUTES", 20, 1, 240),
 
     // The browser sub-task (src/modules/browse/browse.ts): a separate run that opens pages, reads them and fills forms for the owner's chat, background
     // jobs and groups. Pages are untrusted; the run holds no mail, calendar or notes. A commit step (book, buy, send...) asks the owner,

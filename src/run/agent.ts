@@ -68,6 +68,8 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
   return {
     ...base,
     model: p.model,
+    maxMinutes: settings.heartbeatTimeoutMinutes, // short on purpose: a look that hangs frees its conversation and is retried on the next ticks (an expert it delegates to: expertMaxMinutes in all)
+    expertMaxMinutes: settings.expertTimeoutMinutes,
     outputFormat: p.outputSchema,
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),

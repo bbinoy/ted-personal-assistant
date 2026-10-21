@@ -16,6 +16,7 @@ import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseAnswer } from "../run/rules.ts";
+import { RunTimeout } from "../run/ceiling.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
@@ -112,6 +113,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
+    let timedOut = false;
     try {
       reply = await pipeline.sendWhile(
         conv,
@@ -128,11 +130,12 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
         () => void sent++,
       );
     } catch (e) {
-      console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
+      timedOut = e instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
+      console.error(`heartbeat: the ${conv.kind} run ${timedOut ? "timed out" : "failed"}:`, (e as Error).message);
     }
 
     const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
-    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : "failed";
+    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : timedOut ? "timeout" : "failed";
     if (answer?.message) {
       const message = answer.message;
       const res = await pipeline.enqueue(conv, async () =>
@@ -140,13 +143,15 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
       outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
-    if (outcome === "failed") seenMail.discard();
+    const failed = outcome === "failed" || outcome === "timeout";
+    const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
+    if (failed) seenMail.discard();
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
     audit("wake", outcome, onLogin(conv) ? "background" : "group"); // (a friend's rows carry no words: permissions.ts)
-    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
-    recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
+    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
+    recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }
 

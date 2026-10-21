@@ -13,6 +13,7 @@ import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readText } from "../src/core/state.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
+import { RunTimeout } from "../src/run/ceiling.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -23,7 +24,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
 
-interface Answer { sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
+interface Answer { timeout?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -53,6 +54,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       seen.provenance.push(extra.provenance);
       const a = answer();
       sends = a.sends ?? 0;
+      if (a.timeout) throw new RunTimeout(10 * 60_000);
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
       for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
@@ -229,6 +231,26 @@ test("owner's look: a failing run is a failed row and a default next look; it ne
   }
 });
 
+test("a look that times out is a 'timeout' row, posts nothing, and is due again on the next ticks (10 min: the tick within the 10..120 rule), not after the day's 30", async () => {
+  const err = console.error;
+  console.error = () => {};
+  try {
+    for (const [answer, outcome] of [[{ timeout: true }, "timeout"], [{ throws: true }, "failed"]] as const) {
+      const { w, conv, seen, wakeLine, at } = rig(() => answer);
+      assert.equal(await w.look(conv, DAY), outcome);
+      assert.deepEqual(seen.posted, []);
+      const rows = readRows();
+      assert.deepEqual(rows.map((r) => [r.outcome, r.message, r.costUsd, r.nextCheckMinutes]), [[outcome, false, 0, 10]]);
+      assert.equal(Date.parse(wakeLine().next), DAY.getTime() + 10 * 60_000);
+      at(min(DAY, 5));
+      assert.equal(await w.look(conv, min(DAY, 5)), "not-due", "not on the very next minute");
+      assert.equal(await w.look(conv, min(DAY, 10)), outcome, "due again after the retry time");
+    }
+  } finally {
+    console.error = err;
+  }
+});
+
 test("groups get the same heartbeat run: one per look, with their own notes, in their own chat; a group with nothing to look at costs nothing; Note to Self never wakes groups", async () => {
   const G = "hb-group-0123456789abcdef";
   const EMPTY = "hb-empty-group-0123456789ab";
@@ -268,5 +290,8 @@ test("the report: counts per day, messages by day and night, dollars and the nex
   assert.doesNotMatch(text, /by conversation/, "only the owner's rows: no split");
   const mixed = heartbeatReport([...rows, row(new Date(2026, 9, 14, 9, 30), { kind: "tenant", message: true, costUsd: 0.02, outcome: "posted" }), row(new Date(2026, 9, 14, 9, 40), { kind: "group", costUsd: 0.01 })], DAY, 7).join("\n");
   assert.match(mixed, /by conversation: owner 4 look\(s\), 2 message\(s\), \$0\.07; groups 1 look\(s\), 0 message\(s\), \$0\.01; friends 1 look\(s\), 1 message\(s\), \$0\.02/);
+  const timed = heartbeatReport([row(DAY, { outcome: "timeout", costUsd: 0 }), row(min(DAY, 5), { outcome: "failed", costUsd: 0 }), row(min(DAY, 10))], DAY, 7).join("\n");
+  assert.match(timed, /failed looks: 2, of which 1 timed out/);
+  assert.match(timed, /^\d{4}-\d\d-\d\d +3 +0 +0 +2 /m, "the failed column counts timeouts too");
   assert.deepEqual(heartbeatReport([], DAY), ["No heartbeat looks in the last 7 day(s)."]);
 });
