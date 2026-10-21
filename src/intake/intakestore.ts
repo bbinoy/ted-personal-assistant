@@ -1,5 +1,5 @@
 import type { Data, OpenBao } from "../secrets/openbao.ts";
-import { cvcProblem, ITEM_KINDS, ITEM_NAME, SecretsError, TENANT_ID, type ItemKind } from "../secrets/secrets.ts";
+import { cvcProblem, ITEM_KINDS, ITEM_NAME, OWNER, SecretsError, TENANT_ID, type ItemKind } from "../secrets/secrets.ts";
 import type { Put } from "./intakepurposes.ts";
 
 // The intake page's way into OpenBao: it can write an item and nothing else (there is no read, list or delete here, and the page's token is
@@ -15,6 +15,7 @@ export class IntakeWriter {
   // The writer for one tenant's items.
   for(tenant: string): Put {
     if (!TENANT_ID.test(tenant)) throw new SecretsError("not a tenant id");
+    if (tenant === OWNER) throw new SecretsError("the intake page never writes the owner's folder (npm run card / npm run profile do, on this Mac)"); // (and the page's OpenBao token is denied it, openbaoadmin.ts intakePolicyHcl)
     return async (kind: ItemKind, name: string, data: Data) => {
       if (!ITEM_KINDS.includes(kind)) throw new SecretsError("not a kind of secret item");
       if (!ITEM_NAME.test(name)) throw new SecretsError("not a valid item name");

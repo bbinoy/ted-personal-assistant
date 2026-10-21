@@ -33,7 +33,8 @@ const NOTICES: Readonly<Record<Kind, Readonly<Record<Audience, string>>>> = {
   other: { owner: "Something broke on my end. Check the logs, I'm not telling you what it was.", group: OTHER, friend: OTHER },
 };
 const kindOf = (e: unknown): Kind => (e instanceof AuthError ? "auth" : e instanceof RateLimitError ? "limit" : e instanceof InstanceKeyError ? (e.why === "limit" ? "limit" : e.why) : "other");
-export const noticeFor = (audience: Audience) => (e: unknown): string => NOTICES[kindOf(e)][audience];
+export class FixedNotice extends Error {} // a notice that is its own message (a daily ceiling was hit: capnotice.ts), shown as it is
+export const noticeFor = (audience: Audience) => (e: unknown): string => (e instanceof FixedNotice ? e.message : NOTICES[kindOf(e)][audience]);
 
 // The SDK reports a failed turn as an assistant error code and an error result. `payer`: whose call it was. On the instance key any refusal of the key is the key's (HTTP
 // 429, 400 and 402 arrive as rate_limit, invalid_request, billing_error): its cooldown, and the owner's one notice (keynotice.ts); on the login an expired login or the plan's limit.

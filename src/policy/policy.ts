@@ -61,7 +61,7 @@ const NOTE_FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
 // pending registrations (strangers' held messages), intake tickets, and the browse worker's page views left on disk (state/browse: pages are untrusted text, and a chat that could read them would
 // hand them to the model). The tenants' folders are outside the three above anyway; this is the second lock. The host's admin is not blind:
 // these are files on the owner's Mac (docs/SAFETY.md), the lock is for the assistant, not against the machine's owner.
-const hiddenData = (): string[] => [settings.tenantsDir, join(settings.stateDir, "openbao"), join(settings.stateDir, "registrations.json"), join(settings.stateDir, "intake.json"), join(settings.stateDir, "browse")];
+const hiddenData = (): string[] => [settings.tenantsDir, join(settings.stateDir, "openbao"), join(settings.stateDir, "registrations.json"), settings.intake.dir, join(settings.stateDir, "intake-status.json"), join(settings.stateDir, "browse")];
 const inside = (real: string, dir: string): boolean => real === dir || real.startsWith(dir + sep);
 
 export function isReadableData(path: unknown, dirs: readonly string[] = [settings.logsDir, settings.stateDir, settings.memoryDir]): path is string {

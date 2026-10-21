@@ -1,4 +1,5 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
+import { capNoticesTo } from "./core/capnotice.ts";
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
@@ -111,6 +112,7 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 // Needs a messenger other people can write to: with Signal that is the assistant's own account (in Note to Self there is nobody else to talk to).
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one notice for the owner about the shared instance key (keynotice.ts), from every kind of run
+capNoticesTo((text) => void out.replyPlain(text, "notice")); // the owner's one line a day when friends' shared daily limit is reached (capnotice.ts)
 const tenantRunner = createTenantRunner({});
 tenantHooks.sendFirst = messenger.sendFirst?.bind(messenger); // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
 tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts LIFECYCLE: her Google server, her Notion) stop

@@ -228,6 +228,8 @@ export function loadSettings(env: Env) {
       port: num(env, "INTAKE_PORT", 8787, 1024, 65_535), // the page listens on 127.0.0.1 and nowhere else
       allowHttpLoopback: oneOf(env, "INTAKE_ALLOW_HTTP_LOOPBACK", "off", ["on", "off"] as const) === "on", // tests only: lets INTAKE_BASE_URL be an http://127.0.0.1 address
       linkMinutes: num(env, "INTAKE_LINK_MINUTES", 15, 1, 60), // how long a setup link works (once)
+      // The request header that carries the visitor's address behind a tunnel, for the page's rate limits: x-forwarded-for (its last entry) unless the tunnel sets another, like cf-connecting-ip for Cloudflare Tunnel.
+      clientIpHeader: (env.INTAKE_CLIENT_IP_HEADER?.trim().toLowerCase() || "x-forwarded-for").replace(/[^a-z0-9-]/g, "") || "x-forwarded-for",
       dir: join(dataDir, "state/intake"), // the open links (hashed) and what was stored (lengths only)
     },
     // Google for friends (src/modules/google/googlemcp.ts, src/intake/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend (every friend has the `google` capability once the OAuth client is set) connects her own Google
@@ -299,6 +301,8 @@ export function loadSettings(env: Env) {
     wakeups: oneOf(env, "WAKEUPS", "on", ["on", "off"] as const) === "on",
 
     dailyBudgetUsd: num(env, "DAILY_BUDGET_USD", 20, 0, 10_000),
+    // One group's day on the owner's login (src/core/budget.ts): a noisy group stops itself before it spends the owner's whole day (and with it her brief). Default a quarter of DAILY_BUDGET_USD.
+    groupDailyBudgetUsd: num(env, "GROUP_DAILY_BUDGET_USD", num(env, "DAILY_BUDGET_USD", 20, 0, 10_000) * 0.25, 0, 10_000),
 
     // Several people on one instance (src/tenants/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Off: nothing changes, an unknown sender is ignored as always.
     // On: an unknown sender gets one fixed line (no model call) and the owner is asked in her chat whether to let her in, and each friend is a tenant with
@@ -310,6 +314,7 @@ export function loadSettings(env: Env) {
     // run only, as ANTHROPIC_API_KEY in that run's environment (tenanttools.ts tenantEnv), and dropped from process.env below. Unset: tenants get a plain "not set up".
     tenantApiKey: env.TENANT_ANTHROPIC_API_KEY?.trim() || undefined,
     tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on the instance key (tenant.json may lower or raise it)
+    instanceKeyDailyUsd: num(env, "INSTANCE_KEY_DAILY_USD", 10, 0, 100_000), // ALL tenants together on the instance key per day (each also has her own ceiling above; tenant.json may raise those, this one it cannot)
     tenantNoticeMinutes: num(env, "TENANT_NOTICE_MINUTES", 30, 0, 1440), // a fixed setup, limit or cooldown notice to one person at most this often
     tenantReplyNoticeMinutes: num(env, "TENANT_REPLY_NOTICE_MINUTES", 5, 0, 1440), // a failure notice in HER chat (she is waiting for an answer): told promptly, but not once per message of a flood
     tenantKeyNoticeMinutes: num(env, "TENANT_KEY_NOTICE_MINUTES", 180, 0, 10_080), // the owner hears of a refused or missing instance key at most this often (keynotice.ts)
