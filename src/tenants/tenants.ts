@@ -20,7 +20,7 @@ import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 //   notes-backup/  snapshots of her notes
 //   messages.jsonl everything said in her chat, size-bounded (no summary model: that would run on the owner's login)
 //   session.json   her resumed SDK session
-//   cost.json      what she spent today on the instance key
+//   (her spend is rows of the spend table in instance.db, keyed by her convId: core/budget.ts)
 //   meta.json      small bookkeeping (first greeting done, notice times)
 // Of conversations/ the owner's chat may read only conversations/owner/ (policy.ts): the owner does not read a friend's
 // notes or history through the assistant. The host's admin can, of course: the files are on the owner's Mac (docs/SAFETY.md).

@@ -25,14 +25,14 @@ const reset = () => {
   for (const t of ["spend", "notices", "looks", "intake", "kv"]) instanceDb().run(`DELETE FROM ${t}`);
 };
 
-test("the file is instance/instance.db of the data folder, in WAL mode, schema 1, and the doctor's check reads it", () => {
+test("the file is instance/instance.db of the data folder, in WAL mode, schema 2, and the doctor's check reads it", () => {
   assert.equal(instanceDb().path, instancePaths().db);
   assert.equal(instanceDb().journalMode, "wal");
-  assert.equal(instanceDb().version, 1);
+  assert.equal(instanceDb().version, 2);
   const lines: [unknown, string, string][] = [];
   assert.equal(dbCheck((ok, what, detail) => void lines.push([ok, what, detail ?? ""])), true);
   assert.equal(lines[0]![0], true);
-  assert.match(lines[0]![2], /wal mode, schema 1, quick_check ok; \d+ spend, \d+ payment, \d+ look row/);
+  assert.match(lines[0]![2], /wal mode, schema 2, integrity_check ok; \d+ spend, \d+ payment, \d+ look row/);
   const broken = mkdtempSync(join(tmpdir(), "instancedb-broken-"));
   const bad: [unknown, string, string][] = [];
   assert.equal(dbCheck((ok, what, detail) => void bad.push([ok, what, detail ?? ""]), join(broken, "nope", "x.db")), true, "a database that does not exist yet is made (a new folder)");

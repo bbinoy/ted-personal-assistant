@@ -1,5 +1,5 @@
 import { instancePaths } from "./convpaths.ts";
-import { Db, openDb, type Migration } from "./db.ts";
+import { Db, LedgerCorruptError, openDb, type Migration } from "./db.ts";
 
 // instance/instance.db: the process-wide records that used to be one small file each (layout 2) and are now tables of ONE database (layout 3; docs/ARCHITECTURE.md "instance.db"). The agent
 // and the intake page (a separate process) both open it; WAL lets them share it. Opened lazily at the first use, once per path, closed at exit (core/db.ts).
@@ -98,6 +98,19 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 2,
+    name: "a payment's latest row is the newest by (ts, seq), not the last imported",
+    // The archives of layout 2 are named by the year of their FIRST line (payments-2025-2 can hold newer rows than payments-2026), so insertion order says nothing about time for imported rows.
+    up: `
+      DROP VIEW payments_latest;
+      CREATE VIEW payments_latest AS
+        SELECT p.*, g.first_ts AS first_ts, g.first_seq AS first_seq
+        FROM payments p
+        JOIN (SELECT id, MIN(ts) AS first_ts, MIN(seq) AS first_seq FROM payments GROUP BY id) g ON g.id = p.id
+        WHERE NOT EXISTS (SELECT 1 FROM payments q WHERE q.id = p.id AND (q.ts > p.ts OR (q.ts = p.ts AND q.seq > p.seq)));
+    `,
+  },
 ];
 
 const dbs = new Map<string, Db>();
@@ -106,12 +119,34 @@ const dbs = new Map<string, Db>();
 export function openInstanceDbAt(path: string): Db {
   const have = dbs.get(path);
   if (have?.isOpen) return have;
-  const db = openDb(path, { migrations: INSTANCE_SCHEMA, rebuildable: false, label: "the instance database" });
+  const db = openDb(path, { migrations: INSTANCE_SCHEMA, rebuildable: false, verify: true, label: "the instance database" });
   dbs.set(path, db);
   return db;
 }
-/** The instance database of the current data folder (the path comes from core/convpaths.ts). */
-export const instanceDb = (): Db => openInstanceDbAt(instancePaths().db);
+// DEGRADED MODE: a damaged ledger database does not crash-loop the agent under launchd with a message nobody reads. The start (migrateatstart.ts) records the damage, chat goes on, and everything
+// that spends or pays fails closed (budget.ts answers "spent", the card is not opened, background work is refused as if over budget); the owner is told once per start, the doctor and /status say it.
+let damage: LedgerCorruptError | undefined;
+/** The message of the damage, or undefined when the ledger database is fine (or not opened yet). */
+export const ledgerDamage = (): string | undefined => damage?.message;
+export const DAMAGED_NOTICE = "My ledger (instance/instance.db) is damaged, so background work and payments are off. Your data is untouched; see npm run doctor.";
+/** Opens the instance database at start; true when it is usable. A damaged one switches the degraded mode on (and is not touched). Any other failure still throws. */
+export function openAtStart(): boolean {
+  try {
+    openInstanceDbAt(instancePaths().db);
+    return true;
+  } catch (e) {
+    if (!(e instanceof LedgerCorruptError)) throw e;
+    damage = e;
+    return false;
+  }
+}
+/** Tests: forget a recorded damage. */
+export const clearLedgerDamage = (): void => void (damage = undefined);
+/** The instance database of the current data folder (the path comes from core/convpaths.ts). Throws the damage while the degraded mode is on. */
+export function instanceDb(): Db {
+  if (damage) throw damage;
+  return openInstanceDbAt(instancePaths().db);
+}
 export function closeInstanceDb(): void {
   for (const d of dbs.values()) d.close();
   dbs.clear();
@@ -119,16 +154,20 @@ export function closeInstanceDb(): void {
 
 // ---- kv: small single values, JSON ----
 
+// (a value that cannot be read is the fallback, one that cannot be written is logged: a timer or a run never dies of a busy, full or damaged database)
 export function kvGet<T>(key: string, fallback: T): T {
-  const r = instanceDb().get<{ value: string }>("SELECT value FROM kv WHERE key = ?", key);
-  if (!r) return fallback;
   try {
-    return JSON.parse(r.value) as T;
+    const r = instanceDb().get<{ value: string }>("SELECT value FROM kv WHERE key = ?", key);
+    return r ? (JSON.parse(r.value) as T) : fallback;
   } catch {
     return fallback;
   }
 }
 export function kvSet(key: string, value: unknown, now = Date.now()): void {
-  instanceDb().run("INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", key, JSON.stringify(value), now);
+  try {
+    instanceDb().run("INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", key, JSON.stringify(value), now);
+  } catch (e) {
+    console.error(`instance database: could not store "${key}" (${(e as Error).message})`);
+  }
 }
 export const kvDelete = (key: string): void => void instanceDb().run("DELETE FROM kv WHERE key = ?", key);

@@ -45,6 +45,7 @@ import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
+import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
 import { writeAgentPid } from "./core/migrateservices.ts";
 import { retentionTrigger, runRetention } from "./core/retention.ts";
 import { registerFileRules } from "./heartbeat/retentionrules.ts";
@@ -55,7 +56,7 @@ applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
 ensureNotesDir(); // first run: conversations/owner/notes/, where the chat agent keeps its notes
 sweepStaleRuns(); // page views and screenshots of a browse run that never ended
-if (new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
+if (!ledgerDamage() && new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
 
 // The owner's record in the registry (tenants.ts): made on the first start from SIGNAL_OWNER_NUMBER, its account id learned from her first message.
 const identity = signalIdentity();
@@ -237,6 +238,7 @@ await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
 warmChat();
+if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 const reorganised = ownerNotice(settings.dataDir); // the data folder was moved to the current layout at this start (or an earlier one whose notice could not be sent): she is told once
 if (reorganised) void say(reorganised).then(() => markOwnerTold(settings.dataDir)).catch(() => {});

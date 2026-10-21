@@ -63,7 +63,7 @@ test("payment ledger: no rotation, nothing is ever deleted by volume, and the ca
   for (let i = 0; i < 300; i++) l.add({ id: `pad${String(i).padStart(5, "0")}`, merchant: `pad-${fat.slice(0, 5000)}`, totalMinor: 1, currency: "EUR", last4: "1111", cartHash: `h-pad-${i}`, status: "failed" }, now);
   assert.deepEqual([l.spentToday("EUR", now), !!l.duplicate("shop", "h-today", now)], [2500, true]);
   assert.equal(capProblem(1000, { purchaseMinor: 5000, dayMinor: 3000 } as never, l.spentToday("EUR", now)) !== undefined, true, "the daily cap still counts today's payment");
-  assert.equal(l.rows().some((r) => r.id === "old00001"), true, "the old payment is still a row of the ledger");
+  assert.equal(l.allRows().some((r) => r.id === "old00001"), true, "the old payment is still a row of the ledger");
   assert.equal(l.history("old00001").length, 1);
   assert.equal(l.setStatus("open0001", "unconfirmed", now), true);
   assert.equal(l.rows().find((r) => r.id === "open0001")?.status, "unconfirmed");
