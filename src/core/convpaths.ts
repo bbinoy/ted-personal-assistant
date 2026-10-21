@@ -238,6 +238,8 @@ export interface LegacyLayout {
   logs: string;
   groupsDir: string;
   groupLog: (key12: string) => string;
+  groupMeta: (key12: string) => string; // memory/groups/<key>/meta.json: the group's id and name, the only place its id is written down
+  registry: string; // state/tenants.json: the friends list
   /** The owner's own files in state/, memory/ and logs/, each with where it goes (folders and sqlite's side files included). */
   owner: { from: string; to: string }[];
   /** Process-wide files and folders of state/, each with where it goes in instance/ (and the optional rewrite of its keys: group ids to folder names). */
@@ -268,6 +270,8 @@ export function legacyLayout(root: string): LegacyLayout {
     logs,
     groupsDir: join(memory, "groups"),
     groupLog: (key12) => join(logs, `group-${key12}.jsonl`),
+    groupMeta: (key12) => join(memory, "groups", key12, "meta.json"),
+    registry: s("tenants.json"),
     owner: [
       { from: join(memory, "notes"), to: o.notes },
       { from: s("session.json"), to: o.session },
@@ -291,8 +295,6 @@ export function legacyLayout(root: string): LegacyLayout {
       { from: s("group-cost.json"), to: i.groupCost, rekey: "group-cost" },
       { from: s("heartbeat.json"), to: i.heartbeat },
       { from: s("heartbeat.jsonl"), to: i.heartbeatRows },
-      { from: s("heartbeat.jsonl.1"), to: `${i.heartbeatRows}.1` },
-      { from: s("heartbeat.jsonl.2"), to: `${i.heartbeatRows}.2` },
       { from: s("connectors.json"), to: i.connectors },
       { from: s("tools-seen.json"), to: i.toolsSeen },
       { from: s("notion-client.json"), to: i.notionClient },

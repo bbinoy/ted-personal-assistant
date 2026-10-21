@@ -2,6 +2,7 @@
 // (npm run intake -- link owner <purpose> is gone: the page never writes the owner's folder; npm run card / npm run profile do)
 // Local terminal only. The page writes with its own write-only OpenBao token (npm run openbao -- setup makes it); it prints no value, no code and no path.
 import "../src/core/log.ts"; // first, like main.ts: timestamps, redaction (a token-shaped string never reaches a file), owner-only files, and the stderr file trimmed at start
+import "../src/core/requirelayout.ts"; // an old data folder stops the page with a sentence: start the agent once or run npm run migrate
 import { macKeychain } from "../src/secrets/keychain.ts";
 import { LinkStore } from "../src/intake/intakelinks.ts";
 import { googleProvider } from "../src/intake/googleoauth.ts";

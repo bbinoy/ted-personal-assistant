@@ -32,7 +32,8 @@ import { disconnected, readConnectors, reportable } from "./modules/connectors.t
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
 import { dataPath, readJson, readText } from "./core/state.ts";
-import { convPaths, conversationsDir, instancePaths, logPaths, OWNER_CONV } from "./core/convpaths.ts";
+import { convPaths, conversationsDir, instancePaths, LAYOUT_VERSION, logPaths, OWNER_CONV } from "./core/convpaths.ts";
+import { readVersion } from "./core/migrate.ts";
 
 type Line = DoctorLine;
 
@@ -269,6 +270,8 @@ export async function doctor() {
   const gaps = missingSetup(readNotes(), disconnected(conn), settings.mail);
   line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
 
+  const layoutVersion = readVersion(settings.dataDir);
+  line(layoutVersion === LAYOUT_VERSION ? true : "warn", "data layout", layoutVersion === LAYOUT_VERSION ? `version ${layoutVersion}: instance/, conversations/<id>/, logs/` : "not stamped yet: the first start does it (or run npm run migrate)");
   for (const [name, dir] of [["instance", instancePaths().dir], ["conversations", conversationsDir()], ["logs", logPaths().dir]] as const) {
     if (!existsSync(dir)) continue;
     const loose = readdirSync(dir).filter((f) => (statSync(`${dir}/${f}`).mode & 0o077) !== 0 && statSync(`${dir}/${f}`).isFile());

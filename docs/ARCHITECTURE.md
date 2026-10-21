@@ -612,6 +612,9 @@ src/core/paths.ts      the repo root and the folders under it (plugin, assets, a
 src/core/preset.ts     the assistant preset: loader, validation and templates (assistants/<name>/preset.json and persona/*.md)
 src/core/convpaths.ts  THE one place that builds a path under the data folder: instance/, conversations/<convId>/, logs/ (grep-tested)
 src/core/state.ts      atomic, synchronous access to files under the data folder, by the absolute path convpaths.ts gave (tested)
+src/core/migrate.ts    the move from the old layout (state/, memory/, tenants/) to layout 2: a pure plan, resumable moves, orphans, the version file (tested)
+src/core/migrateatstart.ts side-effect import for main.ts: migrates before any module opens a file, refuses a newer layout
+src/core/requirelayout.ts side-effect import for the CLIs and the intake page: refuse an old or newer layout with a sentence
 src/core/audit.ts      append-only audit log and its reader
 src/core/log.ts        redacting, rotating agent.log; owner-only permissions
 src/core/logtrim.ts    cuts launchd-stderr.log down in place at start (pure part tested)

@@ -1,6 +1,7 @@
 // npm run tenants -- list | pending | invite <+number|username> | approve <id> | decline <id> | forget <id> | remove <id> | timezone <id> <zone|default> | set-admin <id>: the administrator's terminal side of tenants
 // (docs/SETUP.md "More than one person"). Local terminal only. This is the ONLY place the admin role changes: no tool, no chat path,
 // no model can reach it (a friend's capabilities are not stored: every capability but the owner's own, tenants.ts OWNER_ONLY; to stop a friend, suspend or remove her). test/tenants.test.ts walks every tool.
+import "../src/core/requirelayout.ts";
 import { settings, signalIdentity } from "../src/core/settings.ts";
 import { loadMessengerInUse } from "../src/conversation/messenger.ts";
 import { approve, decline, describePending, forget, invitePerson } from "../src/tenants/registration.ts";

@@ -1,3 +1,4 @@
+import "../src/core/requirelayout.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { readRows } from "../src/heartbeat/rows.ts";
 

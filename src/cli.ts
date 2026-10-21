@@ -1,3 +1,4 @@
+import "./core/requirelayout.ts"; // first: an old or newer data folder stops the tool with a sentence (npm run migrate)
 import { readAudit } from "./core/audit.ts";
 import { entryFor } from "./policy/toolmanifest.ts";
 import { mailRuntime } from "./modules/runtime.ts";

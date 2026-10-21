@@ -1,4 +1,5 @@
 // npm run profile -- set|list|domains|delete: the owner's saved details for the browse worker (src/modules/browse/profilecli.ts). Local terminal only.
+import "../src/core/requirelayout.ts";
 import { ProfileStore } from "../src/modules/browse/profile.ts";
 import { profileCli, readHiddenFromTerminal } from "../src/modules/browse/profilecli.ts";
 
