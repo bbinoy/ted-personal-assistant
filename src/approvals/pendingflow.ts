@@ -1,11 +1,11 @@
-import { audit, wordless, type Source } from "../core/audit.ts";
+import { audit, readAudit, wordless, type Source } from "../core/audit.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { noteDeclined } from "./declined.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView } from "./approvalprompt.ts";
-import { addExpired, addPending, clearPending, markSent, openItems, sweepExpired, takeExpired, takeItems, type Pending } from "./pending.ts";
-import { doneLine, expiryLine, failedLine, queuedResult, renderBatch, renderList } from "./pendingbatch.ts";
+import { addExpired, addPending, clearPending, finishItem, interrupt, markExecuting, markSent, openItems as allItems, sweepExpired, takeExpired, takeItems, type Pending } from "./pending.ts";
+import { compactFooter, detailsHash, doneLine, expiryLine, failedLine, labelOf, queuedResult, renderBatch, renderList } from "./pendingbatch.ts";
 import { parseNumbered } from "./pendingparse.ts";
 import { recentIn } from "./recentchat.ts";
 
@@ -19,12 +19,15 @@ const BATCH_WAIT_MS = 5 * 60_000; // a parked call is asked at the latest this l
 export interface PendingRuntime {
   send(scope: string, text: string): Promise<number>; // the conversation's chat; resolves the sent message's timestamp
   hold(scope: string, text: string, urgent: boolean, now: Date): boolean; // heartbeat/notices.ts submitPost: true = held (quiet hours, the day's cap) and delivered later with the rest
+  details?(scope: string, item: Pending): Promise<string | undefined>; // the call's code-rendered details read again now (permissions.ts renderDetails); compared with the hash taken at asking time
   execute(scope: string, item: Pending): Promise<{ ran: boolean; line: string }>; // the follow-up run of exactly this call (run/pendingrun.ts)
   now?: () => Date;
 }
 let rt: PendingRuntime | undefined;
 export const setPendingRuntime = (r: PendingRuntime | undefined): void => void (rt = r);
 const clock = (): Date => rt?.now?.() ?? new Date();
+const running = new Set<string>(); // follow-up runs of THIS process: "scope#n"
+const openItems = (scope: string): Pending[] => allItems(scope).filter((p) => !p.executing); // what a yes can still apply to
 
 // A friend's rows carry no words (audit.ts): the admin's audit log is not hers to put words in.
 const rows = (scope: string, meta: Record<string, unknown>) => (isTenantKey(scope) ? wordless(meta) : meta);
@@ -38,12 +41,13 @@ export interface QueueInput {
   label: string;
   question: string;
   footer: string;
+  detailsHash?: string;
   source: Source;
   urgent?: boolean;
 }
 // Park the call. Returns the text the run's tool call gets back (permissions.ts), or undefined when the inbox is full (the caller then denies the call).
 export function queueCall(scope: string, q: QueueInput, now: Date = clock()): { n: number; message: string } | undefined {
-  const r = addPending(scope, { tool: q.tool, input: structuredClone(q.input), label: q.label, question: q.question, footer: q.footer, source: q.source, urgent: q.urgent }, now.getTime());
+  const r = addPending(scope, { tool: q.tool, input: structuredClone(q.input), label: q.label, question: q.question, footer: q.footer, detailsHash: q.detailsHash, source: q.source, urgent: q.urgent }, now.getTime());
   if ("full" in r) return void log({ tool: q.tool, scope, source: q.source }, "approval-queue-full");
   if (!r.duplicate) log({ tool: q.tool, scope, source: q.source }, "approval-queued", { n: r.n, args: q.input, question: q.question, details: q.label });
   arm(scope);
@@ -78,6 +82,14 @@ export async function flushPending(scope: string, o: { ended: boolean }): Promis
   flushing.add(scope);
   try {
     const now = clock();
+    const lost = recoverStuck(scope);
+    if (lost.length) {
+      try {
+        await deliver(scope, lost.join("\n"), false, now);
+      } catch (e) {
+        console.error("approval inbox: could not tell what was interrupted:", (e as Error).message); // (the list marks them)
+      }
+    }
     const dropped = sweepExpired(scope, now.getTime());
     for (const p of dropped) log(p, "approval-expired", { n: p.n, ageDays: settings.pendingActionDays });
     const told = takeExpired(scope);
@@ -128,7 +140,7 @@ const SEVERAL = "Which ones? Say e.g. '1,3 yes', 'all yes' or '2 no'; nothing wa
 // an edit of a message never reaches here (intake.ts skips edits for every approval answer). `quote`: the message it replies to, if any.
 export async function answerPending(text: string, quote: { timestamp: number } | undefined, ctx: { scope: string; by?: string; voice?: boolean }, deps: PendingDeps = {}): Promise<PendingAnswer | undefined> {
   const items = openItems(ctx.scope);
-  if (items.length === 0) return undefined;
+  if (items.length === 0 && allItems(ctx.scope).length === 0) return undefined; // (one that is running answers 'no such number' rather than going to the chat)
   const open = items.map((p) => p.n);
   const ts = quote && quote.timestamp !== 0 ? quote.timestamp : undefined;
   const inBatch = ts === undefined ? [] : items.filter((p) => p.sent?.ts === ts);
@@ -162,11 +174,13 @@ export async function answerPending(text: string, quote: { timestamp: number } |
 
 // Apply the decisions: a no is final (declined.ts), a yes starts the follow-up run of exactly that call. The reply says what was understood.
 function settle(ctx: { scope: string; by?: string }, picks: readonly { item: Pending; yes: boolean }[], reply: string): PendingAnswer {
-  const taken = new Map(takeItems(ctx.scope, picks.map((p) => p.item.n)).map((p) => [p.n, p]));
+  const noN = picks.filter((p) => !p.yes).map((p) => p.item.n);
+  const gone = new Map(takeItems(ctx.scope, noN).map((p) => [p.n, p]));
+  const marked = new Map(markExecuting(ctx.scope, picks.filter((p) => p.yes).map((p) => p.item.n), clock().getTime()).map((p) => [p.n, p])); // (kept in the file until its run ends: a crash in between is noticed)
   const yes: Pending[] = [];
   const no: Pending[] = [];
   for (const p of picks) {
-    const item = taken.get(p.item.n);
+    const item = p.yes ? marked.get(p.item.n) : gone.get(p.item.n);
     if (!item) continue; // resolved meanwhile
     log(item, p.yes ? "approval-queue-approved" : "approval-queue-declined", { n: item.n, by: ctx.by, reply });
     if (p.yes) yes.push(item);
@@ -181,23 +195,34 @@ function settle(ctx: { scope: string; by?: string }, picks: readonly { item: Pen
   return { outcome: yes.length ? "approved" : "declined", reply: said };
 }
 
-// One follow-up run at a time per conversation, in the order approved; the result is told in chat. Never throws.
+// One follow-up run at a time per conversation, in the order approved; the result is told in chat. Never throws. Before it runs, the call's details are read again: if they are not what the
+// owner approved (a draft edited since), NOTHING runs and the current version is parked as a new item.
 const chains = new Map<string, Promise<void>>();
 function enqueueRun(item: Pending): void {
+  const id = `${item.scope}#${item.n}`;
+  running.add(id);
   const next = (chains.get(item.scope) ?? Promise.resolve()).then(async () => {
     let line: string;
     let ok = false;
+    let said: string | undefined;
     try {
       if (!rt) throw new Error("not available");
-      const r = await rt.execute(item.scope, item);
-      ok = r.ran;
-      line = r.line;
+      const changed = await drift(item);
+      if (changed) said = changed;
+      else {
+        const r = await rt.execute(item.scope, item);
+        ok = r.ran;
+        line = r.line;
+      }
     } catch (e) {
       line = (e as Error).message || "the run failed";
     }
-    log(item, ok ? "approval-queue-executed" : "approval-queue-failed", { n: item.n, result: line });
+    line ??= "";
+    if (said === undefined) log(item, ok ? "approval-queue-executed" : "approval-queue-failed", { n: item.n, scope: item.scope, result: line });
+    finishItem(item.scope, item.n);
+    running.delete(id);
     try {
-      await rt?.send(item.scope, ok ? doneLine(item.n, line) : failedLine(item.n, line));
+      await rt?.send(item.scope, said ?? (ok ? doneLine(item.n, line) : failedLine(item.n, line)));
     } catch (e) {
       console.error("approval inbox: could not report:", (e as Error).message);
     }
@@ -205,16 +230,55 @@ function enqueueRun(item: Pending): void {
   chains.set(item.scope, next);
   void next.finally(() => chains.get(item.scope) === next && chains.delete(item.scope));
 }
+export const forgetRuns = (): void => (chains.clear(), running.clear()); // tests: the process "restarts"
 export const idle = (): Promise<void> => Promise.all([...chains.values()]).then(() => undefined); // tests
+
+// Compare the details now with the ones the owner was shown. Returns the message to send instead of running (the call is not made), or undefined when they are the same.
+async function drift(item: Pending): Promise<string | undefined> {
+  if (!item.detailsHash || !rt?.details) return undefined;
+  const fresh = await rt.details(item.scope, item).catch(() => undefined);
+  if (fresh === undefined) {
+    log(item, "approval-queue-changed", { n: item.n, scope: item.scope, unreadable: true });
+    return `⚠️ #${item.n} was not run: what it refers to can no longer be read (the draft may be gone).`;
+  }
+  if (detailsHash(fresh) === item.detailsHash) return undefined;
+  finishItem(item.scope, item.n); // (the old number is closed; the same call comes back under a new one)
+  const r = addPending(item.scope, { tool: item.tool, input: item.input, label: labelOf(fresh), question: `#${item.n} changed since you approved it; here is the current version.`, footer: compactFooter(fresh), detailsHash: detailsHash(fresh), source: item.source, urgent: item.urgent }, clock().getTime());
+  if ("full" in r) return `⚠️ #${item.n} changed since you approved it, so nothing was run, and the inbox is full. Ask again once there is room.`;
+  markSent(item.scope, [r.n], { at: clock().getTime() });
+  log(item, "approval-queue-changed", { n: item.n, scope: item.scope, newN: r.n });
+  const fresher = allItems(item.scope).find((p) => p.n === r.n)!;
+  return `⚠️ #${item.n} changed since you approved it, so nothing was run. Here is the current version as #${r.n}:\n${renderBatch([fresher]).split("\n").slice(1).join("\n")}`;
+}
+
+// An item still marked as running that this process is not running: the process stopped while doing it. If the audit log has a row saying it finished, it is simply done; otherwise it may not
+// have run and is NEVER retried by itself (the call may have happened): it goes back to waiting for a yes and the owner is told once.
+export function recoverStuck(scope: string, active: ReadonlySet<string> = running): string[] {
+  const stuck = allItems(scope).filter((p) => p.executing && !active.has(`${scope}#${p.n}`));
+  const lines: string[] = [];
+  for (const p of stuck) {
+    const at = p.executing!.at;
+    const finished = readAudit((e) => (e.decision === "approval-queue-executed" || e.decision === "approval-queue-failed") && e.meta?.n === p.n && e.meta?.scope === scope && Date.parse(e.ts) >= at - 1000, `"${p.tool}"`).length > 0;
+    if (finished) {
+      finishItem(scope, p.n);
+      continue;
+    }
+    interrupt(scope, [p.n]);
+    log(p, "approval-queue-interrupted", { n: p.n, scope });
+    lines.push(`#${p.n} may not have run (I restarted while doing it). Reply '#${p.n} yes' to try again.`);
+  }
+  return lines;
+}
 
 // ---- /approvals ----
 
 export function listText(scope: string, now: number = clock().getTime()): string {
+  const lost = recoverStuck(scope);
   sweepExpired(scope, now);
-  const items = openItems(scope);
+  const items = allItems(scope);
   const unsent = items.filter((p) => !p.sent).map((p) => p.n);
   if (unsent.length) markSent(scope, unsent, { at: now }); // listed: shown now, so the batch does not repeat it
-  return renderList(items, now);
+  return [...lost, renderList(items, now)].join("\n\n");
 }
 export function clearText(scope: string): string {
   const gone = clearPending(scope);
@@ -222,3 +286,5 @@ export function clearText(scope: string): string {
   return gone.length ? `Dropped ${gone.length} waiting ${gone.length === 1 ? "action" : "actions"} (${gone.map((p) => `#${p.n}`).join(", ")}). Nothing was run.` : "Nothing was waiting.";
 }
 export const waitingCount = (scope: string): number => openItems(scope).length;
+// At the start (main.ts): what was running when the process stopped is looked at and told, for each conversation that has a file.
+export const recoverAtStart = (scopes: readonly string[]): Promise<unknown> => Promise.all(scopes.map((s) => flushPending(s, { ended: false }).catch(() => undefined)));

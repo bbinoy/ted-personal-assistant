@@ -8,7 +8,7 @@ import { isTenantKey } from "../core/ownerkey.ts";
 import { questionFooter } from "./questionfooter.ts";
 import { declinedAgo } from "./declined.ts";
 import { queueCall } from "./pendingflow.ts";
-import { compactFooter, labelOf } from "./pendingbatch.ts";
+import { compactFooter, detailsHash, labelOf } from "./pendingbatch.ts";
 
 // Said under every question of an unattended run: a bare yes does not answer it (approvals.ts), so the owner is told how, by code.
 export const BACKGROUND_HINT = "\n\n↩️ Reply to this message or react 👍 / 👎 to answer.";
@@ -48,7 +48,7 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     if (c.text === undefined) return { approved: false, failure: `no question could be written that states the exact arguments (${c.failure})` };
     // The model's words, then a footer code renders from the exact details (questionfooter.ts): recipients, attachments, the start of the text. A card payment keeps its own code-built facts.
     if (parkIt) {
-      const q = queueCall(scope, { tool: call.tool, input: call.input, label: labelOf(description), question: c.text, footer: compactFooter(description), source });
+      const q = queueCall(scope, { tool: call.tool, input: call.input, label: labelOf(description), question: c.text, footer: compactFooter(description), detailsHash: detailsHash(description), source });
       if (!q) return { approved: false, failure: "the approval inbox is full; drop some with /approvals clear or answer them" };
       return { approved: false, queued: q, question: c.text };
     }

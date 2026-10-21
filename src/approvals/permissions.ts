@@ -136,6 +136,19 @@ export interface JudgeSetup {
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
 const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not retry it; tell the owner in your own words what you could not do.";
 
+// The code-rendered details of a plain call as the owner is shown them (what decide() below builds for a call with no guard): the mail as the client holds it right now, the object's name.
+// The approval inbox re-reads them before running an approved call and runs nothing if they changed since it was asked (pendingflow.ts). undefined = they cannot be read now (the draft is gone).
+export async function renderDetails(conversation: string, tool: string, input: Record<string, unknown>): Promise<string | undefined> {
+  let description = describeCall(tool, input);
+  if (MAIL_OUT.has(entryFor(tool)?.view ?? "")) {
+    const draft = await (mailToolsOf(tool) ?? mailSlot())?.readBack(entryFor(tool)?.view, input, conversation);
+    const view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
+    if (!view || (view.action !== "forward" && view.to.length === 0)) return undefined;
+    description = describeCall(tool, input, view);
+  }
+  return description + (await objectLines(conversation, tool, input));
+}
+
 export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
   let untrusted = !!setup.untrusted;
   const isUntrusted = () => untrusted || !!setup.taint?.read();

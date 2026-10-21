@@ -21,6 +21,9 @@ export interface Pending {
   source: Source;
   createdAt: number;
   urgent?: boolean; // the run marked it time-critical: sent at once, even in quiet hours (nothing sets it yet)
+  detailsHash?: string; // the code-rendered details at asking time (pendingbatch.ts detailsHash): the follow-up run re-reads them and runs nothing if they differ (a draft edited meanwhile)
+  executing?: { at: number }; // approved and its follow-up run started: kept until the run ends, so a crash in between is noticed (recoverStuck)
+  interrupted?: true; // it was executing when the process stopped and no audit row says it finished: asked about again, never retried by itself
   sent?: { at: number; ts?: number; held?: true }; // asked in a batch: when, and the batch message's timestamp (absent when it was held for quiet hours and went out with the morning release)
 }
 
@@ -53,7 +56,7 @@ const save = (scope: string, f: PendingFile): void => writeJson(pendingFileOf(sc
 export function splitExpired(items: readonly Pending[], now: number, days: number): { keep: Pending[]; dropped: Pending[] } {
   const keep: Pending[] = [];
   const dropped: Pending[] = [];
-  for (const p of items) (now - p.createdAt >= days * 86_400_000 ? dropped : keep).push(p);
+  for (const p of items) (now - p.createdAt >= days * 86_400_000 && !p.executing ? dropped : keep).push(p);
   return { keep, dropped };
 }
 
@@ -112,4 +115,24 @@ export function takeItems(scope: string, ns: readonly number[]): Pending[] {
   return taken;
 }
 
-export const clearPending = (scope: string): Pending[] => takeItems(scope, openItems(scope).map((p) => p.n));
+// Approved: kept in the file, marked as running, until finishItem. Returns the ones that were open (not already running).
+export function markExecuting(scope: string, ns: readonly number[], at: number): Pending[] {
+  const f = load(scope);
+  const marked = f.items.filter((p) => ns.includes(p.n) && !p.executing);
+  for (const p of marked) {
+    p.executing = { at };
+    delete p.interrupted;
+  }
+  if (marked.length) save(scope, f);
+  return marked;
+}
+export const finishItem = (scope: string, n: number): void => void takeItems(scope, [n]);
+
+// Back to waiting for a yes (the run never reported): marked so the list says so.
+export function interrupt(scope: string, ns: readonly number[]): void {
+  const f = load(scope);
+  for (const p of f.items) if (ns.includes(p.n)) (delete p.executing, (p.interrupted = true));
+  save(scope, f);
+}
+
+export const clearPending = (scope: string): Pending[] => takeItems(scope, openItems(scope).filter((p) => !p.executing).map((p) => p.n)); // (one that is running is not taken back)

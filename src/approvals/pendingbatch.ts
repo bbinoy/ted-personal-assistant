@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { clip } from "../core/sanitize.ts";
 import type { Dropped, Pending } from "./pending.ts";
 import { questionFooter } from "./questionfooter.ts";
@@ -24,8 +25,13 @@ export function ageText(ms: number): string {
   return h < 48 ? `${h} h` : `${Math.round(h / 24)} d`;
 }
 
+// A fingerprint of the code-rendered details, without the lines that legitimately change between asking and running (the "declined N minutes ago" line, a looked-up name).
+export const detailsHash = (details: string): string =>
+  createHash("sha256").update(details.split("\n").filter((l) => !/^(Named:|The owner declined this action)/.test(l)).join("\n")).digest("hex").slice(0, 24);
+
 function itemLines(p: Pending, age?: string): string[] {
-  const head = `${p.n}. ${p.label}${age ? ` (${age})` : ""} ${one(p.question, 300)}`;
+  const tag = p.executing ? " — running now" : p.interrupted ? " — may not have run, reply to try again" : "";
+  const head = `${p.n}. ${p.label}${age ? ` (${age})` : ""}${tag} ${one(p.question, 300)}`;
   return p.footer ? [head, `   ↳ ${p.footer}`] : [head];
 }
 
