@@ -6,10 +6,13 @@ import { settings } from "../src/core/settings.ts";
 import { dataPath, readJson, writeJson } from "../src/core/state.ts";
 import { localDay } from "../src/core/pause.ts";
 import { GROUP_BUDGET_TEXT, groupBudgetDue } from "../src/core/budget.ts";
-import { combine, createFailureTracker, heldFileOf, noticeBudget, noticeOwner, ownerNotices, planFlush, planPost, releaseHeld, submitPost, countPosts } from "../src/heartbeat/notices.ts";
+import { combine, createFailureTracker, heldFileOf, noticeBudget, noticeOwner, ownerNotices, planFlush, planPost, releaseHeld, stillTrue, submitPost, countPosts } from "../src/heartbeat/notices.ts";
 import { AuthError, causeOf, InstanceKeyError, noticeFor, RateLimitError } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { parseHeartbeatAnswer } from "../src/run/rules.ts";
+import { recordMessage } from "../src/core/messages.ts";
+import { gateSink, sendNow, withSend } from "../src/modules/send/send.ts";
+import { capNoticesTo, reportInstanceCap } from "../src/core/capnotice.ts";
 import { errorLinesSince } from "../src/core/logwindow.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -187,4 +190,64 @@ test("the doctor's error window: dates are rebuilt from the file's time, so yest
   // old text comparison would have said: 00:20 minus an hour = 23:20, and "00:10" < "23:20" lost the newest error
   assert.equal(errorLinesSince("", mtime, mtime - 3600_000), 0);
   assert.equal(errorLinesSince(log, mtime, mtime - 24 * 3600_000), 3);
+});
+
+const pipe = (sent: string[]) => ({ enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) }) as any;
+
+test("held items are checked before delivery: yesterday's budget notice is dropped, a post is dropped once the owner has written since", async () => {
+  reset();
+  ownerNotices.sendTo(() => {});
+  const c = owner();
+  noticeOwner("Daily budget of $20 reached, background work paused until midnight.", NIGHT, { sameDay: true });
+  noticeOwner("something failed", NIGHT);
+  const sent: string[] = [];
+  assert.equal(await releaseHeld(pipe(sent), c, MORNING), true);
+  assert.deepEqual(sent, ["something failed"], "the budget line said 'until midnight': false the next morning");
+  // a held post, then the owner writes: the post may contradict what they said
+  reset();
+  submitPost(c, "your parcel is late", false, NIGHT);
+  recordMessage("owner", NIGHT.getTime() + 60_000, "never mind the parcel", new Date(NIGHT.getTime() + 60_000), c.logFile);
+  assert.equal(await releaseHeld(pipe(sent), c, MORNING), false);
+  assert.deepEqual(readJson<{ held: unknown[] }>(heldFileOf(c), { held: [1] }).held, [], "dropped, not kept");
+  // and what is held for over a day and a half is no longer news
+  const old = [{ text: "x", why: "quiet" as const, at: NIGHT.getTime(), day: "d" }];
+  assert.equal(stillTrue(old, NIGHT.getTime() + 37 * 3_600_000, "d", []).length, 0);
+  assert.equal(stillTrue(old, NIGHT.getTime() + 3_600_000, "d", []).length, 1);
+  assert.equal(stillTrue([{ text: "n", why: "quiet", notice: true, at: 1, day: "d" }], 2, "d", [5]).length, 1, "a system notice does not depend on what the owner wrote");
+  ownerNotices.sendTo(undefined);
+});
+
+test("the send tool of an unattended look is held at 02:00 unless urgent; a chat turn's sink is never gated", async () => {
+  reset();
+  const c = owner();
+  const AT = new Date(2026, 9, 14, 2, 0, 0);
+  const delivered: string[] = [];
+  const sink = async (x: any) => (delivered.push(x.text), "sent");
+  const gate = (text: string, urgent: boolean) => (submitPost(c, text, urgent, AT) === "held" ? "held for later" : undefined);
+  const told = await withSend("owner", sink, async () => {
+    gateSink("owner", gate);
+    return [await sendNow("owner", { text: "morning news" }), await sendNow("owner", { text: "fire!", urgent: true })];
+  });
+  assert.deepEqual(told, ["held for later", "sent"]);
+  assert.deepEqual(delivered, ["fire!"]);
+  assert.equal(readJson<{ held: { text: string }[] }>(heldFileOf(c), { held: [] }).held[0]?.text, "morning news");
+  const chat: string[] = [];
+  await withSend("owner", async (x: any) => (chat.push(x.text), "sent"), () => sendNow("owner", { text: "hello" }));
+  assert.deepEqual(chat, ["hello"], "no gate on another run's sink");
+});
+
+test("the instance-cap notice to the owner respects quiet hours; a group's budget line survives a restart", async () => {
+  reset();
+  rmSync(dataPath("state/cap-notices.json"), { force: true });
+  const told: string[] = [];
+  ownerNotices.sendTo((t) => told.push(t));
+  capNoticesTo((t) => noticeOwner(t, NIGHT, { sameDay: true }));
+  assert.equal(reportInstanceCap(5, NIGHT.getTime()), true);
+  assert.deepEqual(told, [], "night: held, not sent");
+  assert.equal(readJson<{ held: unknown[] }>(heldFileOf(owner()), { held: [] }).held.length, 1);
+  capNoticesTo(undefined);
+  ownerNotices.sendTo(undefined);
+  assert.equal(groupBudgetDue("gx", DAY), true);
+  assert.ok(readJson<{ keys: string[] }>("state/cap-notices.json", { keys: [] }).keys.includes("group-budget:gx"), "written to the state file: a restart does not forget it");
+  assert.equal(groupBudgetDue("gx", DAY), false);
 });

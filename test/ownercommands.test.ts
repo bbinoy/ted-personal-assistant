@@ -100,3 +100,8 @@ test("the last look comes from the heartbeat's own rows (the owner's), newest fi
   assert.deepEqual(lastOwnerLook(rows.split("\n").slice(0, 2).join("\n")), { at: new Date("2026-10-14T10:00:00.000Z"), outcome: "posted" });
   assert.equal(lastOwnerLook(undefined), undefined);
 });
+
+test("/stop also drops the messages still waiting for their turn, and says Stopped. for that alone", () => {
+  assert.equal(commandReply(ownerConv, "/stop", { stop: () => 0, dropQueued: () => 2 }), "Stopped.");
+  assert.equal(commandReply(ownerConv, "/stop", { stop: () => 0, dropQueued: () => 0 }), "Nothing is running right now.");
+});

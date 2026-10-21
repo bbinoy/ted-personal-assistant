@@ -3,6 +3,7 @@ import { overBudget } from "../core/budget.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { settings } from "../core/settings.ts";
+import { ledgerEntries } from "../core/messages.ts";
 import { readJson, writeJson } from "../core/state.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
 import { causeOf, type Cause } from "../tenants/errors.ts";
@@ -35,6 +36,23 @@ export interface Held {
   text: string;
   why: "quiet" | "cap";
   notice?: boolean; // a system notice (exempt from the cap)
+  at?: number; // when it was held (epoch ms); older rows have none and are kept as they were
+  day?: string; // the conversation's day it was held on
+  sameDay?: boolean; // true only for the day it was written (the budget notice: "paused until midnight" is false the next morning)
+}
+
+const STALE_MS = 36 * 3_600_000; // nothing held is delivered after this: it is no longer news
+
+// Pure: what of the held items is still true at `now`? A same-day notice from an earlier day is dropped; a held POST is dropped if someone wrote in the conversation after it was
+// held (`wroteAt`: the times of what people wrote, epoch ms; the owner has moved on and the post may contradict it); anything older than 36 hours is dropped.
+export function stillTrue(held: readonly Held[], now: number, today: string, wroteAt: readonly number[]): Held[] {
+  return held.filter((h) => {
+    if (h.at === undefined) return true;
+    if (now - h.at > STALE_MS) return false;
+    if (h.sameDay && h.day !== today) return false;
+    if (!h.notice && wroteAt.some((t) => t > h.at!)) return false;
+    return true;
+  });
 }
 
 // The one message that holds everything: a single item as it is, several as a short list.
@@ -133,7 +151,7 @@ export function submitPost(conv: Conversation, text: string, urgent: boolean, no
     save(conv, st);
     return "post";
   }
-  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: plan === "hold-quiet" ? "quiet" : "cap" });
+  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: plan === "hold-quiet" ? "quiet" : "cap", at: now.getTime(), day: st.day });
   save(conv, st);
   return "held";
 }
@@ -156,6 +174,12 @@ export async function releaseHeld(pipeline: Pick<Pipeline, "enqueue" | "runTurn"
   if (!Array.isArray(first.held) || first.held.length === 0) return false; // the usual tick: one small read, nothing more
   const zone = zoneFor(conv);
   const st = load(conv, now, zone);
+  const wrote = ledgerEntries(conv.logFile).filter((e) => e.kind === "owner" || e.kind === "member" || e.kind === "edit").map((e) => Date.parse(e.at));
+  const keep = stillTrue(st.held, now.getTime(), st.day, wrote);
+  if (keep.length !== st.held.length) {
+    st.held = keep; // what is no longer true is dropped, not delivered
+    save(conv, st);
+  }
   if (!planFlush({ night: isNight(now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: st.held.length })) return false;
   const batch = st.held.slice();
   const res = await postNotice(pipeline, conv, combine(batch));
@@ -175,13 +199,13 @@ export const ownerNotices = {
 };
 
 // A system notice for the owner: now, or held until the quiet window ends. Never throws.
-export function noticeOwner(text: string, now: Date = new Date()): void {
+export function noticeOwner(text: string, now: Date = new Date(), o: { sameDay?: boolean } = {}): void {
   try {
     const conv = owner();
     const zone = zoneFor(conv);
     if (isNight(now, zone)) {
       const st = load(conv, now, zone);
-      if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: "quiet", notice: true });
+      if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: "quiet", notice: true, at: now.getTime(), day: st.day, sameDay: o.sameDay });
       return save(conv, st);
     }
     send?.(text);
@@ -194,7 +218,7 @@ export function noticeOwner(text: string, now: Date = new Date()): void {
 export const budgetText = (): string => `Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. Raise DAILY_BUDGET_USD to change it.`;
 export function noticeBudget(now: Date = new Date()): boolean {
   const b = overBudget(); // (the only caller: asking elsewhere never uses up the day's one notice)
-  if (b.firstTime) noticeOwner(budgetText(), now);
+  if (b.firstTime) noticeOwner(budgetText(), now, { sameDay: true });
   return b.firstTime;
 }
 
