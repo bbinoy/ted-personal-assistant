@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import { OWNER_SCOPE, type Plan, type Scope } from "./dreamplan.ts";
 import { settings } from "../core/settings.ts";
@@ -80,6 +80,6 @@ export function undoLatest(scope: Scope = OWNER_SCOPE): { ok: true; restored: nu
     if (f !== "MEMORY.md") restored++;
   }
   rmSync(dir, { recursive: true, force: true });
-  audit("dream_undo", "restored", "chat", { restored });
+  emitRecord("dream_undo", "restored", "chat", { restored });
   return { ok: true, restored, from: latest };
 }

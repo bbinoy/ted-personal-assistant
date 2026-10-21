@@ -24,13 +24,13 @@ const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude
 
 const P = (s: string) => `ted-personal-assistant:${s}`;
 const WEATHER = ["get_distance", "get_forecast", "get_marine_forecast", "get_spot_info", "search_places"].map((t) => `mcp__weather__${t}`);
-const CHAT = ["Edit", "Read", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__search_logs", "mcp__send__send"];
+const CHAT = ["Edit", "Read", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__send__send"];
 const sorted = (s: Iterable<string>) => [...s].sort();
 const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities });
 const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
-  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__notes__read_note", "mcp__notes__write_note", "mcp__voice__voice", ...WEATHER]);
+  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__notes__journal", "mcp__notes__read_note", "mcp__notes__write_note", "mcp__voice__voice", ...WEATHER]);
   const shared = [P("research-booking"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(groupTools()), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
@@ -55,7 +55,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     chat: { tools: [], skills: [] },
     browse: { tools: ["Skill", "mcp__browse__browse"], skills: [P("research-booking")] },
     voice: { tools: ["mcp__voice__voice"], skills: [] },
-    heartbeat: { tools: ["mcp__notes__read_note", "mcp__notes__write_note"], skills: [] }, // a schedule, and the note tools of its looks
+    heartbeat: { tools: ["mcp__notes__journal", "mcp__notes__read_note", "mcp__notes__write_note"], skills: [] }, // a schedule, and the note tools of its looks
     dream: { tools: ["mcp__memory__undo_dream"], skills: [] },
     wake: { tools: [], skills: [] },
     weather: { tools: ["Skill", ...WEATHER], skills: [P("surf-conditions")] },

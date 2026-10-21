@@ -327,6 +327,7 @@ export function loadSettings(env: Env) {
     messageLogMb: num(env, "MESSAGE_LOG_MB", 1, 0.01, 100),
     groupLogMb: num(env, "GROUP_LOG_MB", 0.5, 0.01, 100), // per group, the same size-bounding
     summaryWords: num(env, "SUMMARY_WORDS", 60, 10, 400),
+    journalKeepDays: num(env, "JOURNAL_KEEP_DAYS", 90, 1, 3650), // journal lines (what the assistant DID, core/events.ts) survive log compaction verbatim this long; older ones go without a summary (messages.ts)
 
     // What background runs may read of the owner's notes (chat reads them as files, on demand), and the
     // nightly "dream" that keeps them up to date (dream.ts).

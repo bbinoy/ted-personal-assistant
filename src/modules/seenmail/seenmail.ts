@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../../core/audit.ts";
+import { emitRecord } from "../../core/events.ts";
 import { settings } from "../../core/settings.ts";
 import { liveConvDb, peekConvDb } from "../../core/convdb.ts";
 import type { Db } from "../../core/db.ts";
@@ -118,7 +118,7 @@ export function createSeenMailServer(seen: SeenMail) {
           const fresh = seen.unseen(ids, received);
           const aged = seen.aged();
           const lost = seen.reset();
-          audit("seen_mail", "checked", "background", { asked: ids.length, unseen: fresh.length, aged });
+          emitRecord("seen_mail", "checked", "background", { asked: ids.length, unseen: fresh.length, aged });
           const note = lost && aged > 0 ? `\n\nYou lost track of which mail was already handled (the notebook it was kept in was damaged), so the ${aged} mail(s) in the inbox now were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence: "I lost track of which mail I'd already handled, so I skipped what's in your inbox now; new mail from here on is handled as usual."` : aged > 0 ? `\n\nThis is your first look: ${aged} mail(s) older than ${settings.mailBacklogDays} days were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence.` : "";
           return reply((fresh.length ? `Not looked at yet (${fresh.length} of ${ids.length}):\n${fresh.join("\n")}` : `Nothing new: all ${ids.length} were looked at in earlier looks.`) + note);
         },

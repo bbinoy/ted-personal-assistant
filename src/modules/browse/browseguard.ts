@@ -10,7 +10,8 @@ import { capProblem } from "./payments.ts";
 import { approvalId, CARD_PLACEHOLDER, cartHash, cartLines, expirySplit, findPayableTotal, formatMoney, frameVerdict, HAS_CARD_PLACEHOLDER, isPsp, kindOfFieldName, parseMoney, paymentOutcome, PSP_HOSTS, riskyBoxes, sameMoney, WORDS, type FieldKind, type Money } from "./paymentrules.ts";
 import { localDay } from "../../core/pause.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput, validPoint } from "./browsevision.ts";
-import { audit, wordless } from "../../core/audit.ts";
+import { emit } from "../../core/events.ts";
+import { OWNER_KEY } from "../../core/ownerkey.ts";
 import { isPlainWebAddress } from "../../policy/webaddress.ts";
 import type { CarriedApproval } from "../../approvals/autojudge.ts";
 import { clip, cleanText, LIMITS } from "../../core/sanitize.ts";
@@ -240,7 +241,11 @@ export class BrowseGuard {
 
   // Every audit row of the guard goes through here: a tenant's carry no words (the audit log is the admin's).
   private record(tool: string, decision: string, source: "browse", meta?: Record<string, unknown>): void {
-    audit(tool, decision, source, this.tenant ? wordless(meta) : meta);
+    emit({ type: "tool", tool, decision, source, friend: !!this.tenant, meta });
+  }
+  // A card payment changed status: the journal line of money moving, in the owner's log (only the owner's own chat ever pays: approvals.ts typed yes). The ledger is the record of the payment itself.
+  private paid(status: string, a: NonNullable<PayRun["approval"]>): void {
+    emit({ type: "payment", status, conv: OWNER_KEY, source: "browse", text: `${formatMoney(a.money)} at ${a.merchant} (card ••••${a.last4})` });
   }
   private log(tool: string, verdict: string, input: Record<string, unknown>, extra: Record<string, unknown> = {}) {
     // Typed values are logged as a length, never as text.
@@ -600,6 +605,7 @@ export class BrowseGuard {
     if (this.pay.settled === "failed") return `Card payment of ${what}: the page showed that it failed or was declined. Nothing is retried automatically.`;
     this.card?.ledger.setStatus(a.id, "unconfirmed");
     this.record("card_pay", "unconfirmed", "browse", { id: a.id, merchant: a.merchant, last4: a.last4 });
+    this.paid("unconfirmed", a);
     return `Card payment of ${what} was started but NOT confirmed on the page. Check the card app and your e-mail before doing anything; it will not be paid again until you clear it (npm run card -- clear ${a.id}).`;
   }
 
@@ -879,6 +885,7 @@ export class BrowseGuard {
     this.pay.settled = o;
     this.card?.ledger.setStatus(a.id, o);
     this.record("card_pay", o, "browse", { id: a.id, merchant: a.merchant, last4: a.last4 });
+    this.paid(o, a);
   }
 
   remember(toolName: string, input: Record<string, unknown>, text: string, seen: string | undefined) {

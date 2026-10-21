@@ -114,15 +114,20 @@ export function tailLine(m: Sent, who: string = OWNER): string {
   }
   const flat = m.text.replace(/\n+/g, " / ").slice(0, LIMITS.line);
   if (m.kind === "action") return `${t} (you acted without posting: ${flat})`;
+  if (m.kind === "journal") return `${t} (you did: ${flat})`; // one line per action, with why (core/events.ts); the look reads what it already did and does not repeat it
   if (m.kind === "owner") return `${t} ${who}: ${flat}`;
   if (m.kind === "member" || m.kind === "reaction" || m.kind === "delete") return `${t} ${flat}`;
   if (m.kind === "edit") return `${t} (an edit of an earlier message, not a new one) ${flat}`;
   return `${t} ${settings.assistant}: ${flat}`;
 }
 
+const JOURNAL_IN_TAIL = 12; // a busy look can write dozens of journal lines; the tail keeps the newest few so they do not push the conversation out of it (the journal tool has the rest)
 export const logTail = (conv: Pick<Conversation, "logFile" | "tenantId">, n = 40): string[] => {
   const who = speakerOf(conv);
-  return withoutDeleted(ledgerEntries(conv.logFile)).slice(-n).map((m) => tailLine(m, who));
+  const all = withoutDeleted(ledgerEntries(conv.logFile));
+  const keepFrom = all.filter((m) => m.kind === "journal").length - JOURNAL_IN_TAIL; // how many of the oldest journal lines to leave out
+  let seen = 0;
+  return all.filter((m) => m.kind !== "journal" || ++seen > keepFrom).slice(-n).map((m) => tailLine(m, who));
 }; // what its author took back is not shown
 
 // "typing…" is already showing while a delay runs, so a long one only makes the answer late; the cap is enforced in parseGate.

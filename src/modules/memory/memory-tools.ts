@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../../core/audit.ts";
+import { emitRecord } from "../../core/events.ts";
 import { undoLatest } from "../../memory/dreamapply.ts";
 import type { Scope } from "../../memory/dreamplan.ts";
 import { FILE } from "../../core/messages.ts";
@@ -9,6 +9,7 @@ import { fence } from "../../core/fence.ts";
 import { searchLogs } from "../../core/logsearch.ts";
 import { ownerSearchScope, searchConversation, type Scope as Scope2 } from "../../memory/search.ts";
 import { forgetNote } from "../../memory/notes.ts";
+import { journalTool } from "./journaltool.ts";
 import { settings } from "../../core/settings.ts";
 
 // The SDK's auto-memory lets an agent create and edit notes with ordinary file tools (limited to ONE notes
@@ -68,7 +69,7 @@ export function createMemoryServer(scope: MemoryScope) {
         { file: z.string().describe("The note's file name, like style-no-em-dashes.md") },
         async ({ file }) => {
           const r = forgetNote(file, notesDir);
-          audit("memory_forget", r.ok ? "removed" : "not-removed", source);
+          emitRecord("memory_forget", r.ok ? "removed" : "not-removed", source);
           if (!r.ok) return reply(r.error, true);
           record(`➖ forgot ${file}`);
           return reply(`Forgot ${file}.`);
@@ -94,20 +95,21 @@ export function createMemoryServer(scope: MemoryScope) {
           return reply(`Restored ${r.restored} notes to how they were before the dream.`);
         },
       ),
+      journalTool(notesDir, source, zone), // what was done here and why (read-only, this conversation's own journal)
       tool("search_logs", describeSearch(tenantLog ? "this chat" : groupId ? "this group" : "your chat with the owner", !groupId && !tenantLog), searchShape(!groupId && !tenantLog), async (a) => {
         const file = (a as { file?: string }).file?.trim();
         if (!groupId && !tenantLog && file && !/^messages?(\.jsonl)?$/i.test(file)) {
           // A group's history by its name (or its folder name): the plain all-words match over that group's messages. Any other name is a log in logs/ (audit, agent...).
           const { listGroups, searchHistoryFile } = await import("../../conversation/groupstore.ts");
           const g = listGroups().find((x) => x.name.toLowerCase() === file.toLowerCase() || x.convId === file.toLowerCase());
-          if (g) { audit("memory_search", "searched", source); return reply(fence("history", searchHistoryFile(convPaths(g.convId).messages, a), 12_000)); }
+          if (g) { emitRecord("memory_search", "searched", source); return reply(fence("history", searchHistoryFile(convPaths(g.convId).messages, a), 12_000)); }
           return reply(searchLogs(settings.logsDir, a));
         }
         const { groupLogFile } = await import("../../conversation/groupstore.ts");
         const owner = !groupId && (!tenantLog || tenantLog === FILE);
         const conv = convOfPath(notesDir) ?? OWNER_CONV; // (the notes folder is inside the conversation's own folder)
         const scope: Scope2 = owner ? { ...ownerSearchScope(), notesDir } : { logFile: tenantLog ?? groupLogFile(groupId!), notesDir, indexPath: convPaths(conv).search };
-        audit("memory_search", "searched", source);
+        emitRecord("memory_search", "searched", source);
         return reply(fence("history", await searchConversation(scope, a, { zone: zone?.() }), 12_000));
       }),
     ],

@@ -1,6 +1,8 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { gated, parked, type RunKind } from "../core/rungate.ts";
-import { audit, type Source } from "../core/audit.ts";
+import { type Source } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
+import { noteDone } from "../approvals/journalrender.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
 import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
@@ -130,6 +132,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
     if (opts.memory?.notify) noteWritten(tool, input);
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
+    void noteDone({ conv: conversation, source: opts.source, tool, input, response }); // the journal line of an action, with the why the permission layer recorded (core/events.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
   const delegation = opts.experts ? delegationHook(opts.experts.setup, opts.source, { onDelegate: opts.experts.onDelegate }) : undefined;
@@ -288,7 +291,7 @@ export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promi
   } catch (e) {
     if (e instanceof RunTimeout) {
       console.error(`run: timed out after ${e.minutes} minutes (${source})`);
-      audit("run", "timeout", source, { minutes: e.minutes });
+      emitRecord("run", "timeout", source, { minutes: e.minutes });
     }
     throw e;
   }

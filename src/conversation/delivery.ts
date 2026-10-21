@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { dirname } from "node:path";
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import type { Conversation, PipelineDeps, Turn, TurnResult } from "./conversationmodel.ts";
 import { shouldThread } from "./quote.ts";
 import { RunStopped } from "../run/ceiling.ts";
@@ -189,14 +189,14 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
       const sent = d.state;
       turn.timing?.mark("total");
       turn.timing?.report(); // before compaction: that runs after the reply and is not part of the wait
-      if (conv.kind === "group") audit("group_reply", sent.spoke || sent.reacted ? "sent" : "silent", "group");
+      if (conv.kind === "group") emitRecord("group_reply", sent.spoke || sent.reacted ? "sent" : "silent", "group");
       if (!turn.reaction) await deps.compact?.(conv, "urgent");
       return { spoke: sent.spoke };
     } catch (e) {
       turn.timing?.mark("total");
       turn.timing?.report();
       console.error(background ? `agent error (${turn.background ? "wake-up" : "reaction"}):` : `${conv.kind}: run failed:`, (e as Error).message); // a reaction needs no apology
-      if (conv.kind === "group") audit("group_reply", "failed", "group", { error: (e as Error).message.slice(0, LIMITS.preview) });
+      if (conv.kind === "group") emitRecord("group_reply", "failed", "group", { error: (e as Error).message.slice(0, LIMITS.preview) });
       let noticed = false;
       if (!background) status(conv, "⚠️", turn.target);
       // Someone is waiting: say what is wrong (but not over and over, in a group).

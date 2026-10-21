@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../../core/audit.ts";
+import { emitRecord } from "../../core/events.ts";
 import { sourceOfKey } from "../../core/ownerkey.ts";
 import { adoptDrawing } from "../send/shots.ts";
 import { MAX_SVG_CHARS } from "./svgclean.ts";
@@ -18,12 +18,12 @@ export async function drawNow(key: string, a: { svg: string; caption?: string })
   const source = sourceOfKey(key);
   const r = await renderSvg(a.svg);
   if (!r.ok) {
-    audit("draw", "refused", source, { conversation: source, chars: a.svg.length });
+    emitRecord("draw", "refused", source, { conversation: source, chars: a.svg.length });
     return say(`Not drawn: ${r.message}. Fix the SVG and call draw again.`, true);
   }
   const shot = adoptDrawing(key, r.png, a.caption ?? "");
   if (!shot) return say("Not drawn: too many drawings in this turn. Send one of the earlier ones.", true);
-  audit("draw", "drawn", source, { conversation: source, id: shot.id, size: shot.size, removed: r.removed.length });
+  emitRecord("draw", "drawn", source, { conversation: source, id: shot.id, size: shot.size, removed: r.removed.length });
   const note = r.removed.length ? ` Parts that are not allowed were removed (${r.removed.join(", ")}); the picture may differ from what you meant.` : "";
   return {
     content: [

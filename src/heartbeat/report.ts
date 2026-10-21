@@ -1,5 +1,5 @@
 import { localDay } from "../core/pause.ts";
-import type { HeartbeatRow } from "./rows.ts";
+import type { HeartbeatRow } from "../core/looks.ts";
 
 // `npm run heartbeat-report [days]`: what the heartbeat run did for every conversation, from its rows (the looks table of instance.db): counts and dollars, never words or names.
 

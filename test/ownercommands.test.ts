@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
-import { appendRow, type HeartbeatRow } from "../src/heartbeat/rows.ts";
+import { appendRow, type HeartbeatRow } from "../src/core/looks.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { commandReply, lastOwnerLook, parseCommand, statusText } from "../src/conversation/ownercommands.ts";
 import { isPaused, pauseText } from "../src/core/pause.ts";

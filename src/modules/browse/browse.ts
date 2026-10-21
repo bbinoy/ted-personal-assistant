@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit, wordless } from "../../core/audit.ts";
+import { emit } from "../../core/events.ts";
 import { budgetSpent } from "../../core/budget.ts";
 import { addressProblem, type Resolver, type VisionMode } from "./browserules.ts";
 import { BrowseGuard, type BrowseMode } from "./browseguard.ts";
@@ -211,7 +211,7 @@ type BrowseOptions = { resolver?: Resolver; now?: number; status?: BrowseStatus;
 export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptions = {}): Promise<string> {
   const task = clean1(rawTask, 2000);
   if (!task) return "No task given.";
-  const log: typeof audit = ctx.tenant ? (tool, decision, source, meta) => audit(tool, decision, source, wordless(meta)) : audit; // (her rows say what happened and how big, never what she asked for)
+  const log = (tool: string, decision: string, source: "browse", meta?: Record<string, unknown>): void => emit({ type: "tool", tool, decision, source, friend: !!ctx.tenant, meta }); // (her rows say what happened and how big, never what she asked for)
   const refusal = startRefusal(ctx, o.now, o.status);
   if (refusal) {
     log("browse_run", "refused", "browse", { mode: ctx.mode, reason: refusal.slice(0, 100) });
@@ -246,7 +246,7 @@ export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptio
   }
 }
 
-async function runBrowse(ctx: BrowseContext, task: string, log: typeof audit, o: BrowseOptions, proxyPort: number | undefined): Promise<string> {
+async function runBrowse(ctx: BrowseContext, task: string, log: (tool: string, decision: string, source: "browse", meta?: Record<string, unknown>) => void, o: BrowseOptions, proxyPort: number | undefined): Promise<string> {
   mkdirSync(instancePaths().browse, { recursive: true });
   const outDir = mkdtempSync(join(instancePaths().browse, "run-"));
   const vision = o.vision ?? settings.browseVision;

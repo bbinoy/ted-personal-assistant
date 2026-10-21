@@ -31,7 +31,7 @@ const SEGMENT = 4 << 20;
 const NOT_SPOKEN: ReadonlySet<string> = new Set(["reaction", "approval", "action", "wake"]); // reactions, approvals and the gate's ledger are no conversation: not indexed
 const isSearchable = (kind: string) => !!kind && !NOT_SPOKEN.has(kind) && kind !== "delete"; // a deletion marker is kept (not searchable) so a deleted message is left out of results
 const MAX_NOTE_BYTES = 20_000;
-const KNOWN_KINDS = ["owner", "chat", "member", "edit", "summary", "notice", "brief", "draft", "other"];
+const KNOWN_KINDS = ["owner", "chat", "member", "edit", "summary", "notice", "brief", "draft", "other", "journal"]; // (journal: what the assistant did and why, core/events.ts: found like anything said)
 
 export const yieldLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 

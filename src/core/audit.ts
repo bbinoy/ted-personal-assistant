@@ -3,7 +3,7 @@ import { redactSecrets } from "./redact.ts";
 import { appendLine, dataPath, readText } from "./state.ts";
 import { logPaths } from "./convpaths.ts";
 
-// One append-only log for everything the agent does or observes.
+// One append-only log for everything the agent does or observes. Written only by the audit sink of the event stream (core/events.ts).
 //   source: who acted (a chat turn, a heartbeat run, the dream, the heartbeat itself)
 //   meta:   small structured details. Agent tool calls log ids only, never content; heartbeat
 //           triage entries add sender and subject so the brief and `npm run report` can list them.
@@ -33,7 +33,8 @@ const FILE = logPaths().audit;
 const MAX_BYTES = 20 * 1024 * 1024;
 let appends = 0;
 
-export function audit(tool: string, decision: string, source: Source, meta?: Record<string, unknown>): void {
+// The audit sink's writer (core/sinks/auditsink.ts); nothing else writes this log. Callers tell core/events.ts what happened.
+export function writeAuditRow(tool: string, decision: string, source: Source, meta?: Record<string, unknown>): void {
   const entry = { ts: new Date().toISOString(), source, tool, decision, ...(meta ? { meta } : {}) };
   appendLine(FILE, redactSecrets(JSON.stringify(entry))); // an error message or a subject can carry a key; senders and subjects stay readable (phone numbers are not masked here)
   // Keep one previous generation; readers only ever need the recent past.

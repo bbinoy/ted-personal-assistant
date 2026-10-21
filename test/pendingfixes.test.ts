@@ -6,7 +6,8 @@ import { exactGuard, pendingPrompt, pendingSystem } from "../src/approvals/pendi
 import { clearText, flushPending, idle, queueCall, setPendingRuntime, type PendingRuntime } from "../src/approvals/pendingflow.ts";
 import { declinedAgo, resetDeclined } from "../src/approvals/declined.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { audit, readAudit, wordless } from "../src/core/audit.ts";
+import { readAudit, wordless } from "../src/core/audit.ts";
+import { emitRecord } from "../src/core/events.ts";
 import { settings } from "../src/core/settings.ts";
 import { commandReply } from "../src/conversation/ownercommands.ts";
 import { LIMITS } from "../src/core/sanitize.ts";
@@ -203,7 +204,7 @@ test("the approval-queued audit row clips huge arguments", () => {
   queueCall(r.scope, { tool: SEND, input: { body: "x".repeat(LIMITS.args * 2) }, label: "big", question: "q", footer: "", source: "background" }, NOW);
   const row = readAudit((e) => e.decision === "approval-queued" && e.tool === SEND && typeof e.meta?.argsChars === "number" && e.meta.argsChars < LIMITS.args * 2 + 200);
   assert.ok(row.length > 0, "the friend's row carries a length only, and a clipped one");
-  audit("x", "noop", "background");
+  emitRecord("x", "noop", "background");
   const ownerRig = rig({}, "owner");
   void ownerRig;
   queueCall("owner", { tool: SEND, input: { body: "y".repeat(LIMITS.args * 2) }, label: "big", question: "q", footer: "", source: "background" }, NOW);

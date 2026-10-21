@@ -7,7 +7,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { ROOT } from "./core/paths.ts";
 import { spentToday } from "./core/budget.ts";
-import { lastLookAt } from "./heartbeat/rows.ts";
+import { lastLookAt } from "./core/looks.ts";
 import { HEARTBEAT_KEY } from "./heartbeat/heartbeat.ts";
 import { kvGet, openInstanceDbAt } from "./core/instancedb.ts";
 import { mailRuntime } from "./modules/runtime.ts";

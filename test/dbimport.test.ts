@@ -207,7 +207,7 @@ test("retention rules for the tables: looks, spend and notices are pruned by age
   const { settings } = await import("../src/core/settings.ts");
   const { instanceDb } = await import("../src/core/instancedb.ts");
   const { recordSpend } = await import("../src/core/budget.ts");
-  const { appendRow } = await import("../src/heartbeat/rows.ts");
+  const { appendRow } = await import("../src/core/looks.ts");
   const { markCapNotice } = await import("../src/core/capnotice.ts");
   const db = instanceDb();
   for (const t of ["spend", "looks", "notices", "payments"]) db.run(`DELETE FROM ${t}`);

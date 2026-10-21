@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { audit } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
 import { allows } from "../policy/capabilities.ts";
 import { owner as ownerConversation, group as groupConversation, tenant as tenantConversation, type Conversation } from "./conversationmodel.ts";
 import { oneShot } from "../tenants/haiku.ts";
@@ -196,12 +196,12 @@ export function createDreamer(deps: DreamerDeps = {}) {
       writeDream(stateConv, { day: today, lastRunAt: now.toISOString() });
       const label = conv.kind === "owner" ? "dream" : `${conv.kind} dream (${conv.tenantId ?? subjectOf(conv)})`;
       if (conv.kind !== "tenant") for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
-      audit("dream_run", snapshot ? "changed" : "no-change", "dream", { ...tag, actions: plan.actions.length, rejected: plan.rejected.length });
+      emit({ type: "dream", result: snapshot ? "changed" : "no-change", source: "dream", conv: conv.key, friend: false, meta: { ...tag, actions: plan.actions.length, rejected: plan.rejected.length }, text: `Tidied my notes in the nightly dream (${plan.actions.length} change${plan.actions.length === 1 ? "" : "s"})` });
       console.log(`${label}: ${plan.actions.length} change(s), ${plan.rejected.length} rejected`);
       if (snapshot && conv.kind !== "tenant") console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
     } catch (e) {
       console.error(`dream (${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""}): failed:`, (e as Error).message);
-      audit("dream_run", "failed", "dream", { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) });
+      emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: false, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });
     }
     return true;
   }

@@ -1,6 +1,7 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { gated } from "../core/rungate.ts";
-import { audit, type Source } from "../core/audit.ts";
+import { type Source } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { withCeiling } from "./ceiling.ts";
 import { failure, isApiRefusal } from "../tenants/errors.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
@@ -85,14 +86,14 @@ export async function compactChatIfNeeded(conv: ConvId = OWNER_CONV, source: Sou
         writeSession(conv, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens, ...carriedTaint(saved, message.session_id) }); // (a compaction continues the session: its summary may still hold the untrusted text)
         forgetShown(conv); // the summary may have lost what the conversation was last told at the start of a turn (turncontext.ts)
         console.log(`${source}: compacted ${boundary.pre_tokens} -> ${boundary.post_tokens ?? "?"} tokens (${mode})`);
-        audit("chat_session", "compacted", source);
+        emitRecord("chat_session", "compacted", source);
         return;
       }
       throw new Error("compaction stream ended without a result");
     }));
   } catch (e) {
     console.error(`${source}: compaction failed:`, (e as Error).message);
-    audit("chat_session", "compact-failed", source);
+    emitRecord("chat_session", "compact-failed", source);
     writeSession(conv, { ...readSession(conv), compactFailedAt: new Date().toISOString() });
   }
 }
@@ -113,7 +114,7 @@ export function forgetUnresumable(conv: ConvId, e: unknown, source: Source): boo
   const { sessionId: _gone, baseTokens: _base, lastContextTokens: _ctx, untrustedIn: _tainted, ...rest } = readSession(conv);
   writeSession(conv, { ...rest, costUsd: 0 });
   console.error(`${source}: the saved session can no longer be resumed, the next message starts a fresh one`);
-  audit("chat_session", "unresumable-reset", source);
+  emitRecord("chat_session", "unresumable-reset", source);
   return true;
 }
 

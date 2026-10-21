@@ -1,4 +1,4 @@
-import { audit } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
 import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
@@ -22,7 +22,7 @@ import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { flushPending } from "../approvals/pendingflow.ts";
-import { appendRow, type HeartbeatRow } from "./rows.ts";
+import type { HeartbeatRow } from "../core/looks.ts";
 import { observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
 
@@ -151,7 +151,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           // What the run sends with the send tool is held like its final answer (quiet hours, the day's cap) unless it says urgent (notices.ts).
           gateSink(conv.key, (text, urgent) => {
             if (submitPost(conv, text, urgent, now) !== "held") return undefined;
-            pipeline.record(conv, "action", Date.now(), `[heartbeat] held for later (quiet hours or the day's limit): ${text.slice(0, 300)}`);
+            emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
           return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
@@ -184,7 +184,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (answer?.message && !stale) {
       const message = answer.message;
       // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
-      if (submitPost(conv, message, answer.urgent, now, answer.needsYou) === "held") pipeline.record(conv, "action", Date.now(), `[heartbeat] held for later (quiet hours or the day's limit): ${message.slice(0, 300)}`);
+      if (submitPost(conv, message, answer.urgent, now, answer.needsYou) === "held") emit({ type: "notice", state: "held", conv: conv.key, text: message, source: onLogin(conv) ? "background" : "group" });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);
@@ -197,9 +197,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (outcome === "failed" || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
-    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
-    audit("wake", outcome, onLogin(conv) ? "background" : "group"); // (a friend's rows carry no words: permissions.ts)
-    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome });
+    // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
+    emit({ type: "look", conv: conv.key, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
     recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }

@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { audit } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
 import { forgetNotices } from "../core/capnotice.ts";
 import { forgetSpend } from "../core/budget.ts";
 import { forgetInBackups } from "../core/dbimport.ts";
@@ -96,6 +96,6 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
       out.manual = `her secret-store items are still in OpenBao (the app's token may not delete another person's folder). As the admin, run: ${adminCommand(id)}`;
     }
   }
-  audit("tenant_status", "removed", "chat", { tenant: id, steps: out.removed.length, ...(out.manual ? { manual: true } : {}) });
+  emit({ type: "removal", tool: "tenant_status", decision: "removed", source: "chat", meta: { tenant: id, steps: out.removed.length, ...(out.manual ? { manual: true } : {}) }, text: `Removed the friend ${id} and her data (${out.removed.length} step(s)${out.manual ? ", one left for you to do by hand" : ""})` });
   return out;
 }
