@@ -15,7 +15,7 @@ import { settings } from "../core/settings.ts";
 import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
-import { clampLook, parseAnswer } from "../run/rules.ts";
+import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
@@ -131,7 +131,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
     }
 
-    const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
+    const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : "failed";
     if (answer?.message) {
       const message = answer.message;

@@ -33,7 +33,7 @@ export interface Answer {
 }
 
 // Pure: the run's answer. The constrained JSON is read first, a JSON text second; anything else is silent (a run that did not follow the format must never post its reasoning).
-export function parseAnswer(structured: unknown, text: string): Answer {
+export function parseHeartbeatAnswer(structured: unknown, text: string): Answer {
   let raw: unknown = structured;
   if (!raw || typeof raw !== "object") {
     try {
