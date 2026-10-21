@@ -1,5 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import { writeFileAtomic } from "../../core/state.ts";
 import { join } from "node:path";
 import { z } from "zod";
 import { audit } from "../../core/audit.ts";
@@ -25,7 +26,7 @@ export function writeStatusNote(name: string, text: string, now: Date = new Date
   tomorrow.setDate(tomorrow.getDate() + 1);
   const file = `${STATUS_PREFIX}${name}.md`;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  writeFileSync(join(dir, file), `---\nexpires: ${localDay(tomorrow)}\n---\n${body}\n`);
+  writeFileAtomic(join(dir, file), `---\nexpires: ${localDay(tomorrow)}\n---\n${body}\n`);
   return { ok: true, file };
 }
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "../core/audit.ts";
 import { isInside } from "../core/contain.ts";
@@ -8,7 +8,7 @@ import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 import { OWNER_SESSION_FILE } from "../core/ownerkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
-import { dataPath, parseJson, readJson, writeJson } from "../core/state.ts";
+import { dataPath, parseJson, readJson, writeFileAtomic, writeJson } from "../core/state.ts";
 import { isZone, systemZone } from "../core/timezone.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
@@ -347,7 +347,7 @@ export function provision(rec: TenantRecord): TenantContext {
   const ctx = tenantContext(rec);
   mkdirSync(ctx.notesDir, { recursive: true, mode: 0o700 });
   mkdirSync(ctx.backupDir, { recursive: true, mode: 0o700 });
-  if (!existsSync(ctx.configFile)) writeFileSync(ctx.configFile, "{}\n", { mode: 0o600 });
+  if (!existsSync(ctx.configFile)) writeFileAtomic(ctx.configFile, "{}\n");
   return tenantContext(rec);
 }
 
@@ -395,7 +395,7 @@ export function setTimeZone(id: string, zone: string | undefined): TenantRecord 
   }
   if (zone === undefined) delete raw.timeZone;
   else raw.timeZone = zone.trim();
-  writeFileSync(ctx.configFile, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  writeFileAtomic(ctx.configFile, `${JSON.stringify(raw, null, 2)}\n`);
   return rec;
 }
 

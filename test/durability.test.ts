@@ -312,3 +312,21 @@ test("replayUnanswered: if the run acted before it died, the request is NOT re-r
   assert.deepEqual(told, [SORRY]);
   assert.match(replayPrompt([line(5, "owner", "x")]), /check whether it was already done/);
 });
+
+// ---- a group's meta.json ----
+
+test("groupstore: a torn meta.json is moved aside and the group goes on with defaults (no throw on every message)", async () => {
+  const { groupDir } = await import("../src/conversation/groupstore.ts");
+  const dir = groupDir("group-corrupt-1", "Book club");
+  const meta = join(dir, "meta.json");
+  writeFileSync(meta, '{"id":"group-corrupt-1","na');
+  const silence = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(groupDir("group-corrupt-1", "Book club 2"), dir); // a different name bypasses the in-memory cache
+  } finally {
+    console.error = silence;
+  }
+  assert.deepEqual(JSON.parse(readFileSync(meta, "utf8")), { id: "group-corrupt-1", name: "Book club 2" });
+  assert.equal(readdirSync(dir).filter((f) => f.startsWith("meta.json.corrupt-")).length, 1);
+});
