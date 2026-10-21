@@ -174,7 +174,10 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead: opts.notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation }) };
+  // Whether this run read a note a background look inferred (read_note tells us): the approval judge then does not take a wake-up's task as the person's word (permissions.ts).
+  let readInferred = false;
+  const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { inferred?: boolean }) => void (n.inferred && (readInferred = true)) };
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -222,7 +225,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, inferredNoteRead: () => readInferred, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

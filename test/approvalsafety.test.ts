@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { questionFooter } from "../src/approvals/questionfooter.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
-import { doubtfulNotes } from "../src/approvals/notetrust.ts";
+import { createNotesServer } from "../src/modules/memory/notestools.ts";
 import { recipientsOutside, type RunProvenance, type Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { describeCall } from "../src/approvals/format.ts";
@@ -93,55 +93,38 @@ test("a send in an untrusted run to someone the owner did not name is never judg
   assert.deepEqual({ judged, asked }, { judged: 2, asked: 1 }, "the owner wrote the address: judged");
 });
 
-// ---- a wake-up selected from inferred or fresh notes is not trusted (A5) ----
+// ---- a wake-up in a run that read an inferred note is not trusted (A5) ----
 
-const day = 24 * 3_600_000;
-const note = (dir: string, file: string, ageMs: number, inferred = false) => {
-  const path = join(dir, file);
-  writeFileSync(path, `---\nname: ${file}\n${inferred ? "origin: inferred\n" : ""}---\nbody\n`);
-  const t = new Date(Date.now() - ageMs);
-  utimesSync(path, t, t);
-};
-
-test("doubtfulNotes: inferred notes and notes changed in the last 24 hours; not old confirmed ones, the index or status records", () => {
-  const dir = mkdtempSync(join(tmpdir(), "notes-"));
-  try {
-    note(dir, "facts-old.md", 3 * day);
-    note(dir, "MEMORY.md", 0);
-    note(dir, "status-run.md", 0);
-    assert.deepEqual(doubtfulNotes(dir), []);
-    note(dir, "facts-fresh.md", 60_000);
-    note(dir, "triage-old-guess.md", 30 * day, true);
-    assert.deepEqual(doubtfulNotes(dir).sort(), ["facts-fresh.md", "triage-old-guess.md"]);
-    assert.deepEqual(doubtfulNotes(join(dir, "nope")), []);
-    assert.deepEqual(doubtfulNotes(undefined), []);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+test("a wake-up task is judged unless the run itself read an inferred note; then the owner is asked", async () => {
+  setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
+  let judged = 0;
+  let asked = 0;
+  let readInferred = false; // what agentrun.ts keeps from read_note's onRead
+  const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "the task covers it" });
+  const wake = makeCanUseTool(async () => (asked++, { approved: true }), "background", undefined, judge as never, undefined, undefined, false, {
+    provenance: () => ({ kind: "derived", by: "gate", of: "owner", text: "reply to jessica@example.com" }),
+    conversation: "owner",
+    inferredNoteRead: () => readInferred,
+  });
+  assert.equal((await wake(SEND, { messageId: 901, confirm: true }, opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 }, "nothing inferred was read (the folder may hold some): judged like a chat message");
+  readInferred = true;
+  assert.equal((await wake(SEND, { messageId: 902, confirm: true }, opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 1, asked: 1 }, "an inferred note was read: not judged, asked");
 });
 
-test("a wake-up task is judged only while no note is inferred or fresh; the owner is asked otherwise", async () => {
+test("read_note reports whether the note it returned was inferred", async () => {
   const dir = mkdtempSync(join(tmpdir(), "notes-"));
   try {
-    setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
-    let judged = 0;
-    let asked = 0;
-    const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "the task covers it" });
-    const wake = makeCanUseTool(async () => (asked++, { approved: true }), "background", undefined, judge as never, undefined, undefined, false, {
-      provenance: () => ({ kind: "derived", by: "gate", of: "owner", text: "reply to jessica@example.com" }),
-      conversation: "owner",
-      notesDir: dir,
-    });
-    note(dir, "facts-old.md", 3 * day);
-    assert.equal((await wake(SEND, { messageId: 901, confirm: true }, opts))!.behavior, "allow");
-    assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 }, "only old confirmed notes: judged like a chat message");
-    note(dir, "triage-guess.md", 30 * day, true);
-    assert.equal((await wake(SEND, { messageId: 902, confirm: true }, opts))!.behavior, "allow");
-    assert.deepEqual({ judged, asked }, { judged: 1, asked: 1 }, "an inferred note: not judged, asked");
-    rmSync(join(dir, "triage-guess.md"));
-    note(dir, "facts-new.md", 1000);
-    assert.equal((await wake(SEND, { messageId: 903, confirm: true }, opts))!.behavior, "allow");
-    assert.deepEqual({ judged, asked }, { judged: 1, asked: 2 }, "a note changed within a day: not judged, asked");
+    writeFileSync(join(dir, "people-anna.md"), "---\nname: anna\n---\nAnna likes tea\n");
+    writeFileSync(join(dir, "people-bob.md"), "---\nname: bob\norigin: inferred\n---\nBob moved\n");
+    const seen: { file: string; inferred?: boolean }[] = [];
+    const server = createNotesServer({ dir, write: [], maxNotes: 10, onRead: (n) => seen.push(n) }, "background") as unknown as { instance: { _registeredTools: Record<string, { handler: (a: unknown) => Promise<unknown> }> } };
+    const read = server.instance._registeredTools.read_note!.handler;
+    await read({ file: "people-anna.md" });
+    await read({ file: "people-bob.md" });
+    await read({ file: "people-nobody.md" });
+    assert.deepEqual(seen, [{ file: "people-anna.md", inferred: undefined }, { file: "people-bob.md", inferred: true }]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

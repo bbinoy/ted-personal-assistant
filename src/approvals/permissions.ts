@@ -1,9 +1,6 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "../core/audit.ts";
 import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
-import { doubtfulNotes } from "./notetrust.ts";
-import { NOTES_DIR } from "../memory/notes.ts";
-import { groupNotesDir } from "../conversation/groupstore.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { objectLines } from "./describe.ts";
@@ -13,7 +10,7 @@ import type { MailView } from "../policy/mailview.ts";
 import { mailSlot } from "../modules/index.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
-import { isTenantKey, OWNER_KEY } from "../core/ownerkey.ts";
+import { OWNER_KEY } from "../core/ownerkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
@@ -127,15 +124,12 @@ export interface JudgeSetup {
   untrusted?: boolean;
   taint?: Taint;
   conversation?: string;
-  notesDir?: string; // the conversation's notes (default: the owner's, or the group's; a tenant's are not looked at): the folder a wake-up's task may have been selected from (notetrust.ts)
+  inferredNoteRead?: () => boolean; // this run has read (read_note) a note a background look inferred (origin: inferred): such a note is untrusted text, so a wake-up is not judged
   // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
   // subagent's), and the type of a subagent by its id (for the audit log).
   expertBriefs?: () => readonly string[];
   agentTypeOf?: (agentID: string | undefined) => string | undefined;
 }
-
-// The notes folder of a conversation, for the judge's note floor: the owner's, a group's; a tenant's is not looked at.
-const notesDirOf = (conversation: string): string | undefined => (conversation === OWNER_KEY ? NOTES_DIR : isTenantKey(conversation) ? undefined : groupNotesDir(conversation));
 
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
 const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not retry it; tell the owner in your own words what you could not do.";
@@ -235,12 +229,12 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
     // Two floors in code on top of isJudgeable, for what third-party text may have steered: a send to someone the person's words and the thread do not account for, in a run that
-    // has read untrusted mail or pages; and a wake-up while the notes it was selected from may be inferred or fresh (notetrust.ts). Either way the owner is asked.
+    // has read untrusted mail or pages; and a wake-up in a run that has read an inferred note. Either way the owner is asked.
     const outside = view && isUntrusted() && MAIL_OUT.has(entryFor(tool)?.view ?? "") ? recipientsOutside(view, input, provenance) : [];
     if (outside.length) log(tool, "judge-floor", source, { reason: "untrusted-recipient", recipients: outside.length });
-    const doubtful = provenance?.kind === "derived" && provenance.by === "gate" ? doubtfulNotes(setup.notesDir ?? notesDirOf(conversation)) : [];
-    if (doubtful.length) log(tool, "judge-floor", source, { reason: "untrusted-notes", notes: doubtful.slice(0, 5) });
-    if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && !doubtful.length && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
+    const doubtful = provenance?.kind === "derived" && provenance.by === "gate" && !!setup.inferredNoteRead?.();
+    if (doubtful) log(tool, "judge-floor", source, { reason: "inferred-note-read" });
+    if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && !doubtful && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;

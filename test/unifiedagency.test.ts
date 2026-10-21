@@ -235,7 +235,7 @@ test("mail handler: a run steered by injected mail text is asked, because the ju
   ];
   for (const [tool, input] of steered) assert.notEqual(((await canUse(tool, input, opts)) as Out).behavior, "allow", tool);
   assert.equal(asked, steered.length, "every one reached the owner's phone");
-  assert.deepEqual(j.seen.map((s) => s.untrustedInput), [true, true], "the send and the page reached the judge (the others were stopped by the floor first), both flagged");
+  assert.deepEqual(j.seen.map((s) => s.untrustedInput), [true], "only the page reached the judge, flagged (the send went to an address nobody wrote in an untrusted run, the others were stopped by the floor first)");
 });
 
 test("AUTO_APPROVE=off asks about everything that is not free, and calls no judge", async () => {
