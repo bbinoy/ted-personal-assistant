@@ -16,6 +16,7 @@ import { logTail } from "./conversation/gate.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
+import { ownerSearchScope, warmSearchIndex } from "./memory/search.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
 import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
@@ -83,8 +84,8 @@ const warmChat = () => prepare(owner(), { notify: say });
 // instead of starting that many whisper processes. One line for the owner's chat and every group.
 const transcribing = new Limiter(() => settings.transcribeConcurrency);
 
-// A voice message's words, from the local speech model; the transcript is logged (logs/voice.jsonl) to inspect a
-// mishearing. Throws a sentence the user can be told if it cannot be made out.
+// A voice message's words, from the local speech model; the transcript goes into the message log like any message (a
+// mishearing can be searched there). Throws a sentence the user can be told if it cannot be made out.
 async function transcript(m: IncomingMessage): Promise<string> {
   let heard = "";
   try {
@@ -222,6 +223,8 @@ if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies &
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
+// The owner's search index (memory/search.ts) is brought up to date a little after start-up, in small slices that leave the event loop free, so the first real search_logs is quick.
+setTimeout(() => void warmSearchIndex(ownerSearchScope()).catch(() => {}), 20_000).unref();
 
 // One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, and the friends'
 // (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.

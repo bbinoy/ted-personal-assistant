@@ -20,6 +20,7 @@ import { createStatusServer } from "./status/statusnote.ts";
 import { createSeenMailServer } from "./seenmail/seenmail.ts";
 import { settings } from "../core/settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
+import { zoneOf } from "../tenants/tenants.ts";
 import { createVoiceServer } from "./voice/voicetool.ts";
 import { createWeatherServer } from "./weather/weathertools.ts";
 import { loaded, mailModule } from "./index.ts";
@@ -57,7 +58,7 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   weather: { server: () => createWeatherServer() },
   draw: { server: (ctx) => createDrawServer(ctx.key!) },
   voice: { server: (ctx) => createVoiceServer(ctx.key!) },
-  memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }) },
+  memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }) },
   notes: { server: (ctx) => createNotesServer(ctx.notesRead!, ctx.source) },
   status: { server: () => createStatusServer() },
   seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
