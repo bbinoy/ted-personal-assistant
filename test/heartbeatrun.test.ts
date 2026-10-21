@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { group, owner, type Conversation } from "../src/conversation/conversation.ts";
 import { clampLook, parseAnswer, HEARTBEAT_SCHEMA } from "../src/run/rules.ts";
-import { lastLookText, lookInstruction, lookPrompt } from "../src/heartbeat/look.ts";
+import { lastLookText, lookInstruction, lookPrompt, preemptible } from "../src/heartbeat/look.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { HEARTBEAT_LOG, readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
 import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
@@ -322,4 +322,36 @@ test("the first look of a conversation after a start waits its stagger once; lat
   await w.tick(min(DAY, 60));
   assert.deepEqual(naps, [4000], "once for the conversation, not on every tick");
   assert.ok(seen.runs.length >= 1);
+});
+
+test("preemptible: not after 2 preempted looks in a row, nor when the last full look is older than 2x the interval (30 minutes at least)", () => {
+  const T = DAY.getTime();
+  assert.equal(preemptible({ preempted: 0 }, T, 30), true, "no history: yes");
+  assert.equal(preemptible({ preempted: 1, completedAt: T - 10 * 60_000 }, T, 30), true);
+  assert.equal(preemptible({ preempted: 2, completedAt: T - 10 * 60_000 }, T, 30), false, "two in a row");
+  assert.equal(preemptible({ preempted: 0, completedAt: T - 59 * 60_000 }, T, 30), true);
+  assert.equal(preemptible({ preempted: 0, completedAt: T - 61 * 60_000 }, T, 30), false, "older than 2x30");
+  assert.equal(preemptible({ preempted: 0, completedAt: T - 29 * 60_000 }, T, 5), true, "30 minutes at least");
+  assert.equal(preemptible({ preempted: 0, completedAt: T - 31 * 60_000 }, T, 5), false);
+});
+
+test("a look that was preempted twice runs to completion the third time, though the message still counts as news", async () => {
+  const l = leaseRig();
+  const never = new Promise(() => {});
+  let release!: () => void;
+  const { w, conv, seen } = rig(() => ({ hold: l.lease.aborts >= 2 ? new Promise<void>((r) => (release = r)) : never, message: "Eve is waiting." }), { pipeline: l.pipeline });
+  for (let i = 0; i < 2; i++) {
+    const done = w.look(conv, min(DAY, i * 40));
+    await new Promise((r) => setTimeout(r, 10));
+    l.lease.news = true;
+    l.lease.abort!();
+    assert.equal(await done, "preempted");
+  }
+  const third = w.look(conv, min(DAY, 80));
+  await new Promise((r) => setTimeout(r, 10));
+  l.lease.news = true;
+  l.lease.abort!(); // the guard declines
+  release();
+  assert.equal(await third, "silent", "it ran to completion; read-only with news, so its post was dropped as stale");
+  assert.deepEqual(seen.posted, []);
 });

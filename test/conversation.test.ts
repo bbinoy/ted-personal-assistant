@@ -931,3 +931,13 @@ test("bursts: an entry whose messages nobody answered (a group message the gate 
   assert.equal(ran, 1);
   assert.equal(pipeline.busy(g), false);
 });
+
+test("lease: a bare reaction is news for a running look but never calls it off", async () => {
+  const { pipeline } = rig();
+  let aborted = 0;
+  const lease = pipeline.lease(owner(), () => void aborted++, () => false);
+  await pipeline.handleIncoming(owner(), react());
+  assert.equal(aborted, 0);
+  assert.equal(lease.news(), true);
+  lease.end();
+});

@@ -69,11 +69,12 @@ export function createPipeline(deps: PipelineDeps) {
     looks.set(conv.key, mine);
     return { news: () => mine.news, end: () => void (looks.get(conv.key) === mine && looks.delete(conv.key)) };
   }
-  function overtake(conv: Conversation): void {
+  // `written`: a message someone wrote (it may call the look off); a bare reaction only makes it news. (The look's own guard, look.ts preemptible, may still decline to abort.)
+  function overtake(conv: Conversation, written = true): void {
     const mine = looks.get(conv.key);
     if (!mine) return;
     mine.news = true;
-    if (!mine.parked()) mine.abort();
+    if (written && !mine.parked()) mine.abort();
   }
 
   // Burst handling, the same for every conversation: after each message wait a short settling pause; a newer message
@@ -543,7 +544,7 @@ export function createPipeline(deps: PipelineDeps) {
     const outcome = deps.approvals.answerReaction(r.emoji, r.targetTimestamp, conv.key, r.from || r.fromUuid);
     if (outcome === "needs_text") return void (await out.reply(TYPED_YES_NEEDED, { plain: true })); // a payment is not approved by a reaction
     if (outcome !== "ignored") return void console.log(`approval ${outcome} (by reaction)`);
-    overtake(conv);
+    overtake(conv, false); // an emoji is news for the look but never calls it off
     await enqueue(conv, async () => {
       console.log(`owner reacted ${r.emoji}`);
       const on = findMessage(r.targetTimestamp, conv.logFile);

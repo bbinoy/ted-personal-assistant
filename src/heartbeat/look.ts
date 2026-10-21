@@ -88,8 +88,23 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
 export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string): string =>
   [clockLine(now, zone), instruction, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].join("\n\n");
 
+// How a conversation's recent looks ended, for the starvation guard below.
+export interface LookHistory {
+  preempted: number; // consecutive looks that ended preempted, up to now
+  completedAt?: number; // ms: when the last look that was not preempted began
+}
+
+// May a message call the running look off? Not if that would starve it: a conversation that chats steadily would otherwise preempt every look, and triage (the mail, the brief) would
+// never finish while each aborted look still costs money. So a look is preemptible only while (a) fewer than 2 looks in a row ended preempted and (b) the last look that was not
+// preempted is younger than 2x the look interval (30 minutes at least). Otherwise it runs to completion (the message is still news: a read-only look's post is dropped as stale).
+export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: number): boolean {
+  if (h.preempted >= 2) return false;
+  return h.completedAt === undefined || nowMs - h.completedAt < Math.max(2 * intervalMinutes, 30) * 60_000;
+}
+
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
+  const history = new Map<string, LookHistory>(); // per conversation, in memory (a restart starts fresh)
   const file = deps.rowsFile ?? HEARTBEAT_LOG;
 
   // One look of one conversation. Returns what happened (for the log and tests).
@@ -117,7 +132,13 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     const overtaken = new AbortController();
-    const lease = pipeline.lease?.(conv, () => overtaken.abort(), () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
+    const h = history.get(conv.key) ?? { preempted: 0 };
+    history.set(conv.key, h);
+    const callOff = () => {
+      if (preemptible(h, now.getTime(), settings.heartbeatDayMinutes)) overtaken.abort();
+      else console.log(`heartbeat: a message came while the ${conv.kind} look ran; it is not called off (${h.preempted} preempted in a row, or the last full look is old)`);
+    };
+    const lease = pipeline.lease?.(conv, callOff, () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
     try {
       reply = await pipeline.sendWhile(
         conv,
@@ -150,6 +171,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
       outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
+    if (outcome === "preempted") h.preempted++;
+    else (h.preempted = 0, (h.completedAt = now.getTime()));
     if (outcome === "failed" || outcome === "preempted") seenMail.discard();
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
