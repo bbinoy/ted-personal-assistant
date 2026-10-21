@@ -30,7 +30,7 @@ const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities })
 const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
-  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER]);
+  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__notes__read_note", "mcp__voice__voice", ...WEATHER]);
   const shared = [P("research-booking"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(groupTools()), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
@@ -55,7 +55,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     chat: { tools: [], skills: [] },
     browse: { tools: ["Skill", "mcp__browse__browse"], skills: [P("research-booking")] },
     voice: { tools: ["mcp__voice__voice"], skills: [] },
-    heartbeat: { tools: [], skills: [] }, // a schedule, not a tool
+    heartbeat: { tools: ["mcp__notes__read_note"], skills: [] }, // a schedule, and the read-only note tool of its looks
     dream: { tools: ["mcp__memory__undo_dream"], skills: [] },
     wake: { tools: [], skills: [] },
     weather: { tools: ["Skill", ...WEATHER], skills: [P("surf-conditions")] },

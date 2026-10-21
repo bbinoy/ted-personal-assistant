@@ -9,3 +9,14 @@ export const memoryModule: ToolModule = {
   rows: [...memory("memory", "forget_note search_logs", { only: ["chat", "group"] }), ...memory("memory", "undo_dream", { only: ["chat", "group"], cap: "dream" })],
   free: true,
 };
+
+// notes (readnote.ts): the unattended runs' read-only access to their own notes, one at a time. Their prompt holds the index only. Any heartbeat run of any conversation has it,
+// scoped to that conversation's notes folder and categories; reading shows nothing a third party wrote, so it does not taint the run.
+const notes = rowsOf("mcp__notes__", "notes", "heartbeat");
+export const notesModule: ToolModule = {
+  name: "notes",
+  connection: { kind: "in-process", name: "notes", when: (ctx) => !!ctx.notesRead && !ctx.browsing },
+  rows: notes("memory-read", "read_note", { only: ["background", "group"] }),
+  free: true,
+  trusted: true,
+};

@@ -5,7 +5,7 @@ description: Use to keep track of the people who matter to the owner and to help
 
 # Stay in touch
 
-The people who matter are ordinary memory notes, `people-<name>.md`, one per person. You judge; there is no list or matcher in code. Every `people-` note is already in your context (a background look has all notes, chat can read them), so you match places and dates against them yourself.
+The people who matter are ordinary memory notes, `people-<name>.md`, one per person. You judge; there is no list or matcher in code. Your memory lists every note one line each (the start of the note, so the place a person lives is in that line). When a trip or a date makes people relevant, read the `people-` notes you need in full (the `read_note` tool in a background look, the file itself in chat) and match places and dates against them yourself.
 
 ## Writing a person's note
 
@@ -17,7 +17,7 @@ Wants: to be in touch about every 3 months. Birthday 14 March.
 Likes surf and long dinners. Her first child is due in November.
 ```
 
-- "Lives in: city, country" (plain words, as the owner would say them) is what you match trips against; keep that phrase so a later look and the nightly dream find it. If the owner has not said where someone lives, leave it out; never guess from a name or a phone number.
+- Start the note with the person and where they live, because the index shows only the start of each note. "Lives in: city, country" (plain words, as the owner would say them) is what you match trips against; keep that phrase so a later look and the nightly dream find it. If the owner has not said where someone lives, leave it out; never guess from a name or a phone number.
 - The body says who they are, how close, how often the owner wants to be in touch (the owner's words), and what is going on in their life. Update the note when the owner tells you something new (a move, a baby, a new job). Use `expires:` only for something temporary.
 - Do not store what you read in a person's mail or messages. A note holds what the owner told you. Never save an address, a phone number or an account detail.
 - Do NOT write "last spoke" into the note: it goes stale. Work it out when you need it (below).

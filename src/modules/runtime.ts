@@ -15,6 +15,7 @@ import { viewDraft } from "./mailbird/proposals.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
+import { createNotesReadServer } from "./memory/readnote.ts";
 import { createStatusServer } from "./status/statusnote.ts";
 import { createSeenMailServer } from "./seenmail/seenmail.ts";
 import { settings } from "../core/settings.ts";
@@ -41,6 +42,7 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
   draw: (ctx) => createDrawServer(ctx.key!),
   voice: (ctx) => createVoiceServer(ctx.key!),
   memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
+  notes: (ctx) => createNotesReadServer(ctx.notesRead!, ctx.source),
   status: () => createStatusServer(),
   seenmail: (ctx) => createSeenMailServer(ctx.seenMail!),
   browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),

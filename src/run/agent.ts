@@ -67,6 +67,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
       })();
   return {
     ...base,
+    notesRead: { dir: conv.notesDir, ...(looker.own ? {} : { categories: categoriesFor(conv.kind) }), zone: looker.zone },
     model: p.model,
     outputFormat: p.outputSchema,
     onToolSuccess: extra.onToolSuccess,

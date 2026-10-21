@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { categoryOf, forgetNote, isIndex, isNotePath, MAX_NOTE_CHARS, memoryFor, NOTES_DIR, notesBlock, parseNote, readNotes } from "../src/memory/notes.ts";
+import { categoryOf, forgetNote, isIndex, isNotePath, MAX_NOTE_CHARS, memoryFor, NOTES_DIR, notesBlock, parseNote, readNote, readNotes } from "../src/memory/notes.ts";
 import { fence } from "../src/core/fence.ts";
 import { settings } from "../src/core/settings.ts";
 import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
@@ -38,21 +38,40 @@ test("notes: expired notes are hidden, the last day still counts, the index is n
   assert.deepEqual(readNotes(new Date("2026-10-25T12:00:00")).map((n) => n.file), ["style-brief.md"]);
 });
 
-test("notes: a run sees only its categories, fenced as data, with caps", () => {
+test("notes: a run's prompt holds an index of its categories, fenced as data, one line per note, with a cap", () => {
   reset();
   put("triage-quark.md", "Quark is never urgent");
-  put("people-weber.md", "Dr. Weber is a client");
+  put("people-weber.md", "Dr. Weber is a client. Lives in: Bern.\nA second line about a long story.");
   put("style-dashes.md", "Never use em dashes");
   assert.ok(memoryFor(["triage", "people"]).includes("Quark") && memoryFor(["triage", "people"]).includes("Weber"));
   assert.doesNotMatch(memoryFor(["triage", "people"]), /em dashes/);
   assert.equal(memoryFor(["context"]), "");
   assert.match(memoryFor(["style"]), /<owner_memory>[\s\S]*em dashes[\s\S]*<\/owner_memory>/);
+  const block = memoryFor(["people"]);
+  assert.match(block, /- \[people\] people-weber\.md: Dr\. Weber is a client\. Lives in: Bern\./, "file name and the start of the note");
+  assert.doesNotMatch(block, /long story/, "only the first line: the rest is read with read_note");
+  assert.match(block, /read_note/);
   const big = Array.from({ length: settings.memoryMaxNotes + 20 }, (_, i) => ({ file: `style-${i}.md`, category: "style" as const, text: "x" }));
-  const block = notesBlock(big, ["style"]);
-  assert.equal(block.match(/\[style\]/g)!.length, settings.memoryMaxNotes, "capped by count");
-  const words = "word ".repeat(MAX_NOTE_CHARS); // varied text: the sanitiser collapses a run of one character
-  const one = notesBlock([{ file: "style-big.md", category: "style", text: words }], ["style"]);
-  assert.ok(one.includes(words.slice(0, MAX_NOTE_CHARS).trim()) && !one.includes(words.slice(0, MAX_NOTE_CHARS + 10)), "each note cut at the per-note limit");
+  assert.equal(notesBlock(big, ["style"]).match(/\[style\]/g)!.length, settings.memoryMaxNotes, "capped by count");
+  const words = "word ".repeat(100);
+  assert.ok(notesBlock([{ file: "style-big.md", category: "style", text: words }], ["style"]).length < 1200, "a long note is one short line in the index");
+});
+
+test("notes: read_note reads one offered note in full, and nothing else", () => {
+  reset();
+  put("people-weber.md", "Dr. Weber is a client.\nSecond line.");
+  put("style-dashes.md", "Never use em dashes");
+  put("context-trip.md", "away", "expires: 2026-10-24\n");
+  const now = new Date("2026-10-25T12:00:00");
+  const r = readNote("people-weber.md", NOTES_DIR, ["people", "style"], now);
+  assert.ok(r.ok && /Second line/.test(r.note.text), "the whole note");
+  assert.equal(readNote("style-dashes.md", NOTES_DIR, ["people"], now).ok, false, "a category the run was not offered");
+  assert.equal(readNote("context-trip.md", NOTES_DIR, undefined, now).ok, false, "expired");
+  assert.equal(readNote("context-trip.md", NOTES_DIR, undefined, new Date("2026-10-24T12:00:00")).ok, true, "the last day still counts");
+  for (const f of ["../x.md", "MEMORY.md", "people/weber.md", "people-weber", "nope.md", ""]) assert.equal(readNote(f, NOTES_DIR, undefined, now).ok, false, f);
+  put("people-long.md", "word ".repeat(MAX_NOTE_CHARS));
+  const big = readNote("people-long.md", NOTES_DIR, undefined, now);
+  assert.ok(big.ok && big.note.text.length === MAX_NOTE_CHARS, "cut at the per-note limit");
 });
 
 test("notes: a closing tag in any case cannot escape the fence", () => {
