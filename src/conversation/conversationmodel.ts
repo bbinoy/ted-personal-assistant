@@ -5,7 +5,7 @@ import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { type Picture } from "../run/image.ts";
 import { type Document } from "./document.ts";
-import { OWNER_SESSION_FILE, tenantKey } from "../core/ownerkey.ts";
+import { tenantKey } from "../core/ownerkey.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, friendConvId, groupConvId, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
@@ -25,7 +25,6 @@ export interface Conversation {
   readonly source: "chat" | "group"; // policy source (src/policy/policy.ts); a tenant's is "group" (isolated: none of the owner's data), with her own folder
   readonly logFile: string; // this conversation's message log
   readonly notesDir: string; // this conversation's notes (the SDK auto-memory folder; the only place its file tools may write)
-  readonly sessionFile: string; // the resumed SDK session (session.ts): idle reset and compaction work on it
   readonly gate: boolean; // is the participation gate in front of it
   readonly approvals: boolean; // the owner's own turn path (an approval answer is read before the queue); groups read it in intake() before the gate, and any member's answer counts there
   readonly vouch: boolean; // is the owner's membership checked before anything is read (groups: a stranger cannot add us to a group and use us)
@@ -44,7 +43,6 @@ const OWNER_CONVERSATION: Conversation = Object.freeze({
   source: "chat",
   logFile: OWNER_LOG,
   notesDir: NOTES_DIR,
-  sessionFile: OWNER_SESSION_FILE,
   gate: false,
   approvals: true,
   vouch: false,
@@ -71,7 +69,6 @@ export const group = (groupId: string): Conversation => {
     source: "group",
     logFile: p.messages,
     notesDir: p.notes,
-    sessionFile: p.session,
     gate: true,
     approvals: false,
     vouch: true,
@@ -99,7 +96,6 @@ export const tenant = (id: string): Conversation => {
     source: "group",
     logFile: ctx.logFile,
     notesDir: ctx.notesDir,
-    sessionFile: ctx.sessionFile,
     gate: false,
     approvals: true, // the owner's turn path: an answer to her own question is read before the queue (scoped to her chat, approvals.ts)
     vouch: false,

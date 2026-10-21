@@ -2,8 +2,10 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rm
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { layout, isConvId, dataRoot, type Layout } from "../core/convpaths.ts";
+import { convDbAt } from "../core/convdb.ts";
 import { registerRetention, type RetentionResult, type RetentionRule } from "../core/retention.ts";
 import { registerDbRules } from "./dbretention.ts";
+import { registerConvRules } from "./convretention.ts";
 import { copyTruncateIfOver } from "../core/rotate.ts";
 import { settings } from "../core/settings.ts";
 import { writeFileAtomic } from "../core/state.ts";
@@ -104,20 +106,21 @@ export function auditRule(L: () => Layout, days: () => number): RetentionRule {
 
 // ---- signal-cli's saved attachments ----
 
-/** The attachment file names something still needs: a voice note or audio file in any conversation's voices/sources.json inside its own look-back, and any name mentioned in a pending approval. */
+/** The attachment file names something still needs: a voice note or audio file in any conversation's assistant.db inside its own look-back, and any name mentioned in a pending approval. */
 export function neededAttachments(L: Layout, now: number, candidates: ReadonlySet<string>): Set<string> {
   const needed = new Set<string>();
   for (const conv of names(L.conversations)) {
     if (!isConvId(conv)) continue;
-    const p = L.conv(conv);
-    try {
-      const raw = JSON.parse(readFileSync(p.voiceSources, "utf8")) as { notes?: { id?: unknown; ts?: unknown }[] };
-      for (const n of raw.notes ?? []) if (typeof n.id === "string" && (typeof n.ts !== "number" || now - n.ts < VOICE_SOURCE_WINDOW_MS)) needed.add(n.id);
-    } catch { /* none, or damaged: nothing named */ }
-    try {
-      const pending = readFileSync(p.pending, "utf8");
-      for (const c of candidates) if (pending.includes(c)) needed.add(c); // (the whole file as text: whatever shape an item has, a mention keeps the file)
-    } catch { /* none */ }
+    if (!existsSync(L.conv(conv).db)) continue; // (a conversation with no database has no voice notes and no approvals; none is made here)
+    const db = convDbAt(L.root, conv);
+    for (const n of db.all<{ id: string; ts: number }>("SELECT id, ts FROM voice_notes")) if (now - n.ts < VOICE_SOURCE_WINDOW_MS) needed.add(n.id);
+    // every text of the approval inbox as one string: whatever shape an item has, a mention keeps the file
+    const pending = [
+      ...db.all<Record<string, unknown>>("SELECT tool, input, label, question, footer, details_hash FROM pending_items").flatMap((r) => Object.values(r)),
+      ...db.all<{ label: string }>("SELECT label FROM pending_expired").map((r) => r.label),
+      ...db.all<{ key: string }>("SELECT key FROM pending_blocked").map((r) => r.key),
+    ].join("\n");
+    for (const c of candidates) if (pending.includes(c)) needed.add(c);
   }
   return needed;
 }
@@ -319,4 +322,5 @@ export function registerFileRules(): void {
     tmpRule(() => tmpdir(), () => settings.tmpSweepHours),
   ]) registerRetention(r);
   registerDbRules(); // the tables of instance.db (looks, spend, notices; payments only if PAYMENTS_KEEP_YEARS is set)
+  registerConvRules(); // the bounded tables of every conversation's assistant.db (seen mail, held posts, the approval inbox's block list, voice notes)
 }

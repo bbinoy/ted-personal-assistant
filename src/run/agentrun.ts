@@ -27,7 +27,8 @@ import { PROFILES } from "./profiles.ts";
 import { type ChatSession } from "./session.ts";
 import { settings } from "../core/settings.ts";
 import { cleanToolOutput } from "../core/toolclean.ts";
-import { readJson, writeJson } from "../core/state.ts";
+import { readSession, writeSession } from "./sessionstore.ts";
+import type { ConvId } from "../core/convpaths.ts";
 import { ownerSkills, skillsFor } from "../modules/skills.ts";
 import { recordToolsSeen, toolsSeen } from "../policy/toolsseen.ts";
 import type { SeenMail } from "../modules/seenmail/seenmail.ts";
@@ -45,7 +46,7 @@ export interface AgentReply {
 export interface RunOptions {
   source: Source; // audit tag: who is acting
   systemPrompt: string;
-  sessionFile?: string; // chat and groups: continue + save the conversation here; brief and the rest: fresh every run
+  sessionConv?: ConvId; // chat and groups: continue + save the conversation's session here (its assistant.db); brief and the rest: fresh every run
   // Turns on the SDK's auto-memory: notes in `dir`, the only place the file tools may write (policy.ts).
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
@@ -185,7 +186,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // Whether this run read a note a background look inferred (read_note tells us): the approval judge then does not take a wake-up's task as the person's word (permissions.ts).
   let readInferred = false;
   const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { inferred?: boolean }) => void (n.inferred && (readInferred = true)) };
-  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, stopScope: opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionFile : undefined) }) };
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, stopScope: opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined) }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -233,7 +234,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
@@ -260,12 +261,12 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     }
     if (message.type !== "result") continue;
     if (opts.memory?.notify) announceMemoryChanges(opts.memory.notify, message.subtype === "success" ? message.result : "");
-    if (opts.sessionFile) {
+    if (opts.sessionConv) {
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
-      const before = readJson<ChatSession>(opts.sessionFile, { costUsd: 0 });
+      const before = readSession(opts.sessionConv);
       const baseTokens = before.sessionId === message.session_id ? before.baseTokens : lastContext; // a session from before this existed has none: the absolute limit applies until it starts fresh
       const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
-      writeJson(opts.sessionFile, next);
+      writeSession(opts.sessionConv, next);
     }
     charge(payer, message.total_cost_usd - previousCost, opts.source); // failures cost money too (a friend's goes to her own ledger)
     if (message.subtype === "success" && !message.is_error) {
@@ -294,7 +295,7 @@ export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promi
 }
 
 export async function runAgent(prompt: string, approve: Approve, opts: RunOptions, io: { query?: typeof query } = {}): Promise<AgentReply> {
-  const { resume, previousCost } = opts.sessionFile ? chatResume(opts.sessionFile) : { resume: undefined, previousCost: 0 };
+  const { resume, previousCost } = opts.sessionConv ? chatResume(opts.sessionConv) : { resume: undefined, previousCost: 0 };
   // The entry gate of an unattended run (rungate.ts; every one is a heartbeat look, a chat turn goes through agent.ts runConversation): it waits for a place, and its ceiling starts only once it has one.
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
   // "/stop" (ceiling.ts stopRuns) reaches a look too, also while it still waits for a place: `wait` is called off by it, by the caller's signal (a message overtook the look)
@@ -313,9 +314,9 @@ export async function runAgent(prompt: string, approve: Approve, opts: RunOption
       if (wait.signal.aborted) off();
       wait.signal.addEventListener("abort", off, { once: true });
       return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
-    }, opts.maxMinutes, opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionFile : undefined));
+    }, opts.maxMinutes, opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined));
   }, wait.signal).finally(() => (forget(), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
-    if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);
+    if (opts.sessionConv) forgetUnresumable(opts.sessionConv, e, opts.source);
     throw e;
   });
 }

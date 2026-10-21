@@ -1,3 +1,4 @@
+import { removeConvDir } from "../src/core/convdb.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defer, tick } from "./util.ts";
@@ -49,7 +50,7 @@ test("groups: a group run is built with its own memory folder, its own session a
   const o = buildOptions(async () => ({ approved: false }), runOptionsFor(conv), undefined);
   assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
   assert.notEqual(conv.notesDir, owner().notesDir);
-  assert.ok(conv.sessionFile.startsWith(convPaths(groupConvId("g-build")).dir));
+  assert.equal(runOptionsFor(conv).sessionConv, groupConvId("g-build"), "its own session: the session row of its own assistant.db");
   assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "voice", "memory", "browse"]]);
   assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
   const oo = buildOptions(async () => ({ approved: false }), { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: NOTES_DIR } }, undefined);
@@ -358,7 +359,7 @@ const G1 = "R3JvdXAxR3JvdXAxR3JvdXAx";
 const G2 = "R3JvdXAyR3JvdXAyR3JvdXAy";
 const fresh = () => {
   for (const g of [G1, G2]) {
-    rmSync(groupDir(g), { recursive: true, force: true });
+    removeConvDir(groupConvId(g)); // (closes its assistant.db first)
     rmSync(dataPath(groupLogFile(g)), { force: true });
   }
 };

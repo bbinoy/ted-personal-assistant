@@ -3,10 +3,10 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { dataDirOf } from "./paths.ts";
 
 // THE one place that knows where anything lives under the data root. Every reader and writer asks here; test/convpaths.test.ts greps src/ and scripts/ for the file names
-// and folders below spelled out anywhere else, so a new store cannot scatter again. The layout (layout version 3; docs/ARCHITECTURE.md "Where the data lives"):
+// and folders below spelled out anywhere else, so a new store cannot scatter again. The layout (layout version 4; docs/ARCHITECTURE.md "Where the data lives"):
 //
 //   <data>/instance/                 process-wide: the friends list, registrations, intake links, the card switch... and instance.db (SQLite: spend, notices, heartbeat looks, payments, intake marks, kv)
-//   <data>/conversations/<convId>/   ONE folder per conversation, the same shape for the owner, each friend and each group (ConvPaths below)
+//   <data>/conversations/<convId>/   ONE folder per conversation, the same shape for the owner, each friend and each group (ConvPaths below): assistant.db (its small mutable state, layout 4), messages.jsonl, notes/...
 //   <data>/logs/                     audit.jsonl, agent.log, signal-daemon.log and launchd's stderr files, nothing else
 //   <data>/state/                    only software installed with absolute paths baked in (OpenBao, the Qwen voice's Python environment): not moved, see InstancePaths.installed
 //
@@ -18,8 +18,9 @@ import { dataDirOf } from "./paths.ts";
 
 export type ConvId = string;
 export const OWNER_CONV: ConvId = "owner";
-export const LAYOUT_VERSION = 3;
-export const MOVES_VERSION = 2; // the version the file moves (core/migrate.ts planMigration) end at; version 3 adds the import into instance.db (core/dbimport.ts)
+export const LAYOUT_VERSION = 4;
+export const MOVES_VERSION = 2; // the version the file moves (core/migrate.ts planMigration) end at; version 3 adds the import into instance.db (core/dbimport.ts), version 4 the import into each conversation's assistant.db (core/convimport.ts)
+export const INSTANCE_DB_VERSION = 3; // the stamp between the two imports: instance.db is filled, the conversations' files are still files
 
 const TENANT_ID = /^[a-z][a-z0-9_-]{0,31}$/; // (the same pattern as secrets.ts TENANT_ID, which this file may not import)
 const CONV_ID = /^(?:owner|friend-[a-z][a-z0-9_-]{0,31}|group-[0-9a-f]{16})$/;
@@ -63,20 +64,15 @@ const idOf = (c: ConvRef): ConvId => {
 
 export interface ConvPaths {
   dir: string;
+  db: string; // assistant.db: SQLite, WAL (core/convdb.ts): the conversation's small mutable state (session pointer, dream day, held posts, seen mail, /quiet, the approval inbox, voice-note sources, a friend's bookkeeping)
+  dbDamaged: string; // written when assistant.db was damaged and set aside: the conversation's background work stops until a person looks (core/convdb.ts)
   messages: string; // the conversation's history (jsonl, size-bounded)
   notes: string; // its notes (the SDK's auto-memory folder, MEMORY.md); the only place its file tools reach
   notesBackup: string; // snapshots of the notes made by the dream
-  session: string; // the resumed SDK session pointer
-  dream: string; // when the dream last ran
-  heldPosts: string; // posts held back by quiet hours
-  seenMail: string; // the mail ids its heartbeat run has worked through
-  quiet: string; // its /quiet switch
-  pending: string; // the approval inbox
   search: string; // the search index (a cache, rebuilt when wrong)
-  voices: string; // cloned voices (<voices>/<name>/, active.json: packages/speech scopeRoot) and the voice-note sources
-  voiceSources: string; // the voice notes received here (src/modules/voice/voicenote.ts)
+  voices: string; // cloned voices (<voices>/<name>/, active.json: packages/speech scopeRoot)
   tenantJson: string; // a friend's typed overrides
-  meta: string; // a friend's bookkeeping (first greeting, notice times), a group's id and name
+  meta: string; // a GROUP's id and name: the only place the raw id is written (the folder name is its hash); identity, not state, so it stays a file when assistant.db is set aside
 }
 
 export interface InstancePaths {
@@ -169,18 +165,13 @@ export function layout(root: string): Layout {
       const dir = join(conversations, idOf(c));
       return {
         dir,
+        db: join(dir, "assistant.db"),
+        dbDamaged: join(dir, "assistant.db.damaged"),
         messages: join(dir, "messages.jsonl"),
         notes: join(dir, "notes"),
         notesBackup: join(dir, "notes-backup"),
-        session: join(dir, "session.json"),
-        dream: join(dir, "dream.json"),
-        heldPosts: join(dir, "held-posts.json"),
-        seenMail: join(dir, "seen-mail.json"),
-        quiet: join(dir, "quiet.json"),
-        pending: join(dir, "pending.json"),
         search: join(dir, "search.sqlite"),
         voices: join(dir, "voices"),
-        voiceSources: join(dir, "voices", "sources.json"),
         tenantJson: join(dir, "tenant.json"),
         meta: join(dir, "meta.json"),
       };
@@ -207,6 +198,43 @@ export const logPaths = (): LogPaths => here().logs;
 export const conversationsDir = (): string => here().conversations;
 export const convPaths = (conv: ConvRef): ConvPaths => here().conv(conv);
 export const convDir = (conv: ConvRef): string => here().conv(conv).dir;
+
+// ---- the per-conversation files of layout version 3 that assistant.db replaced (layout version 4): ONLY for the migration (src/core/migrate.ts, core/convimport.ts) ----
+//
+//   conversations/<convId>/   session.json dream.json held-posts.json seen-mail.json quiet.json pending.json voices/sources.json meta.json (a friend's; a group's stays a file)
+//   The older layouts' moves land on these names, so the one import (core/convimport.ts) reads them wherever a file came from.
+
+export interface Layout3Conv {
+  session: string;
+  dream: string;
+  heldPosts: string;
+  seenMail: string;
+  quiet: string;
+  pending: string;
+  voiceSources: string;
+  friendMeta: string;
+}
+export interface Layout3 {
+  conv: (c: ConvRef) => Layout3Conv;
+}
+export function layout3(root: string): Layout3 {
+  const conversations = join(resolve(root), "conversations");
+  return {
+    conv(c) {
+      const dir = join(conversations, idOf(c));
+      return {
+        session: join(dir, "session.json"),
+        dream: join(dir, "dream.json"),
+        heldPosts: join(dir, "held-posts.json"),
+        seenMail: join(dir, "seen-mail.json"),
+        quiet: join(dir, "quiet.json"),
+        pending: join(dir, "pending.json"),
+        voiceSources: join(dir, "voices", "sources.json"),
+        friendMeta: join(dir, "meta.json"),
+      };
+    },
+  };
+}
 
 // ---- the process-wide files of layout version 2 that instance.db replaced (layout version 3): ONLY for the migration (src/core/migrate.ts, core/dbimport.ts) ----
 //
@@ -290,7 +318,7 @@ export function legacyLayout(root: string): LegacyLayout {
   const memory = join(r, "memory");
   const logs = join(r, "logs");
   const L = layout(r);
-  const o = L.conv(OWNER_CONV);
+  const o = { ...L.conv(OWNER_CONV), ...layout3(r).conv(OWNER_CONV) }; // (the old moves land on the layout-3 names; core/convimport.ts imports them into assistant.db)
   const i = L.instance;
   const v2 = layout2(r);
   const withSide = (from: string, to: string) => ["", "-journal", "-wal", "-shm"].map((x) => ({ from: from + x, to: to + x }));

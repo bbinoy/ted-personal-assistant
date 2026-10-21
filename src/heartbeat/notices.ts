@@ -1,13 +1,13 @@
 import { overBudget } from "../core/budget.ts";
+import { takeCapNotice } from "../core/capnotice.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { settings } from "../core/settings.ts";
 import { ledgerEntries } from "../core/messages.ts";
-import { readJson, writeJson } from "../core/state.ts";
+import { convDb, damagedConvs } from "../core/convdb.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
 import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
 import { isQuiet } from "../conversation/quiet.ts";
-import { convIdOf, convPaths } from "../core/convpaths.ts";
 import { askLines, type LineWriter } from "./digestlines.ts";
 import { digestDue, digestText, oneLine, planDigest } from "./digest.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -108,7 +108,7 @@ export function createFailureTracker(o: { count?: number; windowMs?: number } = 
   };
 }
 
-// ---- the state: one small file per conversation ----
+// ---- the state: two tables of the conversation's assistant.db (`hold`: the day's count; `held_posts`: what is held, oldest first) ----
 
 interface HoldState {
   day: string; // the conversation's own day the count belongs to
@@ -116,16 +116,44 @@ interface HoldState {
   held: Held[];
 }
 
-// In the conversation's folder, like its seen-mail.json (seenmail.ts).
-export const heldFileOf = (conv: Pick<Conversation, "kind"> & { readonly tenantId?: string; readonly groupId?: string; readonly convId?: string }): string => convPaths(convIdOf(conv)).heldPosts;
+type HeldRow = { text: string; why: string; notice: number | null; needs_you: number | null; at: number | null; day: string | null; same_day: number | null };
+const heldOf = (r: HeldRow): Held => ({
+  text: r.text,
+  why: r.why === "cap" ? "cap" : "quiet",
+  ...(r.notice !== null ? { notice: !!r.notice } : {}),
+  ...(r.needs_you !== null ? { needsYou: !!r.needs_you } : {}),
+  ...(r.at !== null ? { at: r.at } : {}),
+  ...(r.day !== null ? { day: r.day } : {}),
+  ...(r.same_day !== null ? { sameDay: !!r.same_day } : {}),
+});
+const flag = (b: boolean | undefined): number | null => (typeof b === "boolean" ? (b ? 1 : 0) : null);
 
-const MAX_HELD = 30; // a flood is dropped oldest first: this is a morning digest, not an archive
-function load(conv: Conversation, now: Date, zone: string): HoldState {
-  const raw = readJson<Partial<HoldState>>(heldFileOf(conv), {});
-  const day = dayIn(now, zone);
-  return { day, posted: raw.day === day && typeof raw.posted === "number" ? raw.posted : 0, held: Array.isArray(raw.held) ? raw.held.filter((h): h is Held => !!h && typeof h.text === "string") : [] };
+/** How many posts are held (the usual tick: one small query, nothing more). */
+export const heldCount = (conv: Pick<Conversation, "convId">): number => convDb(conv.convId).num("SELECT COUNT(*) FROM held_posts");
+/** The held posts, oldest first (a read for the tests and the doctor). */
+export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<HeldRow>("SELECT text, why, notice, needs_you, at, day, same_day FROM held_posts ORDER BY seq").map(heldOf);
+/** Forget the day's count and everything held (tests). */
+export function resetHeld(conv: Pick<Conversation, "convId">): void {
+  const db = convDb(conv.convId);
+  db.tx(() => (db.run("DELETE FROM held_posts"), db.run("DELETE FROM hold")));
 }
-const save = (conv: Conversation, st: HoldState): void => writeJson(heldFileOf(conv), { ...st, held: st.held.slice(-MAX_HELD) });
+
+export const MAX_HELD = 30; // a flood is dropped oldest first: this is a morning digest, not an archive (a retention rule, heartbeat/convretention.ts, keeps the same bound)
+function load(conv: Conversation, now: Date, zone: string): HoldState {
+  const db = convDb(conv.convId);
+  const raw = db.get<{ day: string; posted: number }>("SELECT day, posted FROM hold WHERE id = 1");
+  const day = dayIn(now, zone);
+  return { day, posted: raw?.day === day ? raw.posted : 0, held: db.all<HeldRow>("SELECT text, why, notice, needs_you, at, day, same_day FROM held_posts ORDER BY seq").map(heldOf) };
+}
+// The whole state in one transaction (the file was one atomic write): the count, and the held posts, newest MAX_HELD.
+function save(conv: Conversation, st: HoldState): void {
+  const db = convDb(conv.convId);
+  db.tx(() => {
+    db.run("INSERT INTO hold (id, day, posted) VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET day = excluded.day, posted = excluded.posted", st.day, st.posted);
+    db.run("DELETE FROM held_posts");
+    for (const h of st.held.slice(-MAX_HELD)) db.run("INSERT INTO held_posts (text, why, notice, needs_you, at, day, same_day) VALUES (?, ?, ?, ?, ?, ?, ?)", h.text, h.why, flag(h.notice), flag(h.needsYou), h.at ?? null, h.day ?? null, flag(h.sameDay));
+  });
+}
 const zoneFor = (conv: Conversation): string => zoneOf(conv);
 const isNight = (now: Date, zone: string): boolean => inQuietHours(now, settings.quietStartHour, settings.quietEndHour, zone);
 // Is this conversation being left alone right now: the quiet window, or its own /quiet (conversation/quiet.ts)?
@@ -164,8 +192,7 @@ export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv
 // On every tick: if quiet is over (the window, or /quiet) and something is held, or a digest slot has passed for what the cap held, post it as ONE digest (digest.ts). Kept if the post fails.
 // `lines`: the optional model that shortens the owner's items (digestlines.ts; the code's own lines when it is absent, fails, times out or answers wrongly). Returns whether it posted.
 export async function releaseHeld(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, now: Date, o: { lines?: LineWriter } = {}): Promise<boolean> {
-  const first = readJson<Partial<HoldState>>(heldFileOf(conv), {});
-  if (!Array.isArray(first.held) || first.held.length === 0) return false; // the usual tick: one small read, nothing more
+  if (heldCount(conv) === 0) return false; // the usual tick: one small read, nothing more
   const zone = zoneFor(conv);
   const st = load(conv, now, zone);
   const wrote = ledgerEntries(conv.logFile).filter((e) => e.kind === "owner" || e.kind === "member" || e.kind === "edit").map((e) => Date.parse(e.at));
@@ -221,6 +248,19 @@ export function noticeBudget(now: Date = new Date()): boolean {
   const b = overBudget(); // (the only caller: asking elsewhere never uses up the day's one notice)
   if (b.firstTime) noticeOwner(budgetText(), now, { sameDay: true });
   return b.firstTime;
+}
+
+// 1b. A conversation's database (assistant.db, core/convdb.ts) was damaged and set aside: once a day, until a person looks (npm run doctor says which file and what to do). Chat in it goes on with a fresh
+// start; its background work is stopped (payer.ts mayRun). Returns how many notices it made.
+export function noticeDamaged(now: Date = new Date()): number {
+  let n = 0;
+  for (const d of damagedConvs()) {
+    if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
+    const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
+    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh. Chatting there still works, but my background work for it (looks, the dream, approvals) is stopped until you check: run npm run doctor on the Mac.`, now);
+    n++;
+  }
+  return n;
 }
 
 // 2. Looks that fail on and on. Called by look.ts with each finished look; `error` is what the run threw, if it did.

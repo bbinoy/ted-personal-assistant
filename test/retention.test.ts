@@ -1,3 +1,4 @@
+import { convDbAt } from "../src/core/convdb.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
@@ -148,9 +149,11 @@ test("signal attachments: old files go; a voice note inside its 7-day window, a 
   const voiceStale = put(join(att, "voice-stale"), "d", 45); // its note is 20 days old: outside the window
   const inPending = put(join(att, "needed-by-approval"), "e", 45);
   const otherConv = put(join(att, "note-from-other-conv"), "f", 45);
-  put(L.conv("owner").voiceSources, JSON.stringify({ notes: [{ ts: ago(3).getTime(), id: "voice-fresh" }, { ts: ago(20).getTime(), id: "voice-stale" }], quotes: {} }));
-  put(L.conv("friend-anna").voiceSources, JSON.stringify({ notes: [{ ts: ago(1).getTime(), id: "note-from-other-conv" }] }));
-  put(L.conv("friend-anna").pending, JSON.stringify({ items: [{ n: 1, tool: "x", input: { file: "needed-by-approval" } }] }));
+  const od = convDbAt(L.root, "owner");
+  for (const [ts, id] of [[ago(3).getTime(), "voice-fresh"], [ago(20).getTime(), "voice-stale"]] as const) od.run("INSERT INTO voice_notes (ts, id, size, by, snippet) VALUES (?, ?, 0, '', '')", ts, id);
+  const ad = convDbAt(L.root, "friend-anna");
+  ad.run("INSERT INTO voice_notes (ts, id, size, by, snippet) VALUES (?, 'note-from-other-conv', 0, '', '')", ago(1).getTime());
+  ad.run("INSERT INTO pending_items (n, tool, input, label, question, footer, scope, source, created_at) VALUES (1, 'x', ?, '', '', '', 'tenant:anna', 'background', 0)", JSON.stringify({ file: "needed-by-approval" }));
   symlinkSync(old, join(att, "alink"));
   put(join(att, ".hidden"), "h", 90);
   mkdirSync(join(att, "adir"));
@@ -314,8 +317,9 @@ test("never: every rule, a century on, leaves the current audit file, the kill s
     put(join(L.conv("owner").notes, "people-live.md"), note(undefined), 900),
     put(join(L.conv("owner").notes, "MEMORY.md"), "- [Live](people-live.md) - y\n", 900),
     put(L.conv("owner").messages, "{}\n", 900),
-    put(L.conv("owner").pending, "{}", 900),
+    L.conv("owner").db,
   ];
+  convDbAt(L.root, "owner").run("INSERT INTO quiet (id, until) VALUES (1, '')"); // (a real database: the attachment rule opens it to read what it names)
   put(join(att, "x"), "x", 900);
   const rules = [auditRule(() => L, () => 90), signalAttachmentRule(() => L, () => att, () => 30), expiredNotesRule(() => L, () => 30), notesBackupRule(() => L, () => 7), openbaoRule(() => L, () => 20, () => 7), shoreRule(() => L, () => 50), tmpRule(() => join(dir, "tmp"), () => 24)];
   const later = new Date(NOW.getTime() + 36_500 * DAY);

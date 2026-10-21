@@ -7,7 +7,7 @@ import { dataPath, readJson, writeJson } from "../src/core/state.ts";
 import { localDay } from "../src/core/pause.ts";
 import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { combine, createFailureTracker, heldFileOf, noticeBudget, noticeOwner, ownerNotices, planFlush, planPost, releaseHeld, stillTrue, submitPost, countPosts } from "../src/heartbeat/notices.ts";
+import { combine, createFailureTracker, heldPosts, resetHeld, noticeBudget, noticeOwner, ownerNotices, planFlush, planPost, releaseHeld, stillTrue, submitPost, countPosts } from "../src/heartbeat/notices.ts";
 import { AuthError, causeOf, InstanceKeyError, noticeFor, RateLimitError } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { parseHeartbeatAnswer } from "../src/run/rules.ts";
@@ -24,7 +24,7 @@ s.maxUnpromptedPerDay = 3;
 const DAY = new Date(2026, 9, 14, 14, 0, 0);
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
 const MORNING = new Date(2026, 9, 15, 7, 30, 0);
-const reset = () => rmSync(dataPath(heldFileOf(owner())), { force: true });
+const reset = () => resetHeld(owner());
 
 test("planPost: urgent always goes, the quiet window holds, then the day's cap", () => {
   assert.equal(planPost({ urgent: true, night: true, posted: 99, cap: 6 }), "post");
@@ -66,7 +66,7 @@ test("held posts: night holds, day posts, the cap holds the rest, and one combin
   assert.equal(await releaseHeld(pipeline, c, MORNING), true);
   assert.deepEqual(sent, ["A few things I held back:\n- a reminder\n- mail from the bank"]);
   assert.equal(await releaseHeld(pipeline, c, MORNING), false, "nothing left");
-  assert.deepEqual(readJson<{ held: unknown[] }>(heldFileOf(c), { held: [1] }).held, []);
+  assert.deepEqual(heldPosts(c), []);
 });
 
 test("the day's cap: the posts past it are held for the next day, urgent ones are exempt, pieces sent while working count", async () => {
@@ -90,7 +90,7 @@ test("a post that fails to go out keeps what was held", async () => {
   submitPost(c, "keep me", false, NIGHT);
   const failing = { enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async () => ({ spoke: false, error: new Error("offline") }) } as any;
   assert.equal(await releaseHeld(failing, c, MORNING), false);
-  assert.equal(readJson<{ held: unknown[] }>(heldFileOf(c), { held: [] }).held.length, 1);
+  assert.equal(heldPosts(c).length, 1);
 });
 
 test("failure tracker: 3 in a row (or an hour of failures) is said ONCE with the cause and the fix, recovery once", () => {
@@ -152,7 +152,7 @@ test("causeOf and the owner's failure messages: login, limit, timeout, connector
 test("the budget notice: once a day, in the owner's chat, naming the limit and the setting", () => {
   instanceDb().run("DELETE FROM spend");
   instanceDb().run("DELETE FROM notices");
-  rmSync(dataPath(heldFileOf(owner())), { force: true });
+  resetHeld(owner());
   const told: string[] = [];
   ownerNotices.sendTo((t) => told.push(t));
   assert.equal(noticeBudget(DAY), false, "under budget: nothing");
@@ -211,7 +211,7 @@ test("held items are checked before delivery: yesterday's budget notice is dropp
   submitPost(c, "your parcel is late", false, NIGHT);
   recordMessage("owner", NIGHT.getTime() + 60_000, "never mind the parcel", new Date(NIGHT.getTime() + 60_000), c.logFile);
   assert.equal(await releaseHeld(pipe(sent), c, MORNING), false);
-  assert.deepEqual(readJson<{ held: unknown[] }>(heldFileOf(c), { held: [1] }).held, [], "dropped, not kept");
+  assert.deepEqual(heldPosts(c), [], "dropped, not kept");
   // and what is held for over a day and a half is no longer news
   const old = [{ text: "x", why: "quiet" as const, at: NIGHT.getTime(), day: "d" }];
   assert.equal(stillTrue(old, NIGHT.getTime() + 37 * 3_600_000, "d", []).length, 0);
@@ -233,7 +233,7 @@ test("the send tool of an unattended look is held at 02:00 unless urgent; a chat
   });
   assert.deepEqual(told, ["held for later", "sent"]);
   assert.deepEqual(delivered, ["fire!"]);
-  assert.equal(readJson<{ held: { text: string }[] }>(heldFileOf(c), { held: [] }).held[0]?.text, "morning news");
+  assert.equal(heldPosts(c)[0]?.text, "morning news");
   const chat: string[] = [];
   await withSend("owner", async (x: any) => (chat.push(x.text), "sent"), () => sendNow("owner", { text: "hello" }));
   assert.deepEqual(chat, ["hello"], "no gate on another run's sink");
@@ -247,7 +247,7 @@ test("the instance-cap notice to the owner respects quiet hours; a group's budge
   capNoticesTo((t) => noticeOwner(t, NIGHT, { sameDay: true }));
   assert.equal(reportInstanceCap(5, NIGHT.getTime()), true);
   assert.deepEqual(told, [], "night: held, not sent");
-  assert.equal(readJson<{ held: unknown[] }>(heldFileOf(owner()), { held: [] }).held.length, 1);
+  assert.equal(heldPosts(owner()).length, 1);
   capNoticesTo(undefined);
   ownerNotices.sendTo(undefined);
   assert.equal(groupBudgetDue("gx", DAY), true);

@@ -33,8 +33,10 @@ import { settings } from "./core/settings.ts";
 import { disconnected, readConnectors, reportable } from "./modules/connectors.ts";
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
-import { dataPath, readJson, readText } from "./core/state.ts";
-import { convPaths, conversationsDir, dataRoot, instancePaths, LAYOUT_VERSION, layout, logPaths, OWNER_CONV } from "./core/convpaths.ts";
+import { dataPath, readText } from "./core/state.ts";
+import { checkConvDbFile, damagedConvs } from "./core/convdb.ts";
+import { readDream } from "./modules/memory/dreamscope.ts";
+import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, layout, logPaths, OWNER_CONV } from "./core/convpaths.ts";
 import { layoutState, readVersion, refusal, stragglers } from "./core/migrate.ts";
 import { readRetentionState, retentionSummary } from "./core/retention.ts";
 import { staleForReview } from "./heartbeat/retentionrules.ts";
@@ -226,6 +228,23 @@ export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, l
   beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago; last look ${lastLookAt ? localTime(lastLookAt) : "none yet"}` : "no tick recorded yet";
 
 // instance.db opens, is in WAL mode, has the schema this code knows, and passes SQLite's quick check; the row counts say whether the ledgers are there (never what is in them).
+/** The conversations' databases (assistant.db): a damaged one FAILS with the file's name and what to do; the healthy ones are one line. Reads each read-only, never opens one the normal way (which would set a damaged one aside). */
+export function convDbCheck(line: Line, root: string = dataRoot()): void {
+  const L = layout(root);
+  const names = existsSync(L.conversations) ? readdirSync(L.conversations).filter(isConvId) : [];
+  const damaged = new Map(damagedConvs(root).map((d) => [d.conv, d]));
+  let ok = 0;
+  for (const conv of names) {
+    const p = L.conv(conv);
+    const marker = damaged.get(conv);
+    const verdict = existsSync(p.db) ? checkConvDbFile(p.db) : "ok";
+    if (marker) line(false, `conversation database ${conv}`, `was damaged${marker.at ? ` at ${localTime(marker.at)}` : ""} and set aside as ${marker.keptAs || "assistant.db.corrupt-*"}; its background work (looks, dream, approvals) is stopped, chat goes on with a fresh start. Restore the set-aside file with the agent stopped (or sqlite3 .recover), then delete ${p.dbDamaged}; deleting only that file accepts the fresh start`);
+    else if (verdict !== "ok") line(false, `conversation database ${conv}`, `${verdict}; restore ${p.db} from your backup with the agent stopped, or the agent will set it aside at its next use`);
+    else if (existsSync(p.db)) ok++;
+  }
+  if (ok > 0 || names.length === 0) line(true, "conversation databases", `${ok} assistant.db file(s), quick_check ok`);
+}
+
 export function dbCheck(line: Line, path: string = instancePaths().db): boolean {
   try {
     const db = openInstanceDbAt(path);
@@ -282,6 +301,7 @@ export async function doctor() {
   }
   // On an old data folder doctor still runs (it is what one reaches for when things look wrong): the layout line fails and says what to do, and only the checks that read the new layout are skipped.
   const legacy = refusal(layoutState(settings.dataDir)) !== null;
+  if (!legacy) convDbCheck(line);
   const dbOk = !legacy && dbCheck(line); // (instance.db: spend, payments, looks, notices, intake marks, connectors; a damaged one skips the checks that read it)
   const conn = dbOk ? readConnectors() : undefined;
   if (conn) {
@@ -315,7 +335,7 @@ export async function doctor() {
   const where = settings.tts.provider === "elevenlabs" ? "ElevenLabs (spoken text is sent to elevenlabs.io)" : settings.tts.provider === "http" ? `your own server at ${new URL(settings.tts.http.url).host} (spoken text is sent there)` : settings.tts.provider === "qwen" ? (qwen!.ok ? `local cloned voice (Qwen3-TTS ${settings.tts.qwen.model.split("/").pop()}; reference: ${qwenReference(settings.tts.qwen)}); fallback: ${settings.tts.fallback}` : `Qwen voice not ready (${qwen!.missing.join(", ")}); ${tts.ok ? "Kokoro speaks instead" : "no fallback"}`) : `local Kokoro, voice ${settings.tts.kokoro.voice}`;
   line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
 
-  const dream = readJson<{ lastRunAt?: string }>(convPaths(OWNER_CONV).dream, {});
+  const dream = legacy ? {} : readDream(OWNER_CONV);
   if (!legacy) line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (DREAM_HOUR); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
 
   if (!legacy) {

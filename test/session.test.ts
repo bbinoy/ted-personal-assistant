@@ -71,17 +71,15 @@ test("session: quiet compaction waits for the conversation to be still; urgent n
 });
 
 test("session: a session the SDK can no longer resume is forgotten, any other error is not", async () => {
-  const { mkdirSync, writeFileSync, readFileSync } = await import("node:fs");
-  const { dirname } = await import("node:path");
   const { forgetUnresumable } = await import("../src/run/chatsession.ts");
-  const file = scratch(`session-${process.pid}.json`); // state files are relative to the data dir (HARNESS_DATA_DIR in tests)
-  const { dataPath } = await import("../src/core/state.ts");
-  mkdirSync(dirname(dataPath(file)), { recursive: true }); // a fresh data directory has no state/ yet
-  writeFileSync(dataPath(file), JSON.stringify({ sessionId: "s1", costUsd: 3, baseTokens: 50_000, lastContextTokens: 80_000, seenAt: "x" }));
+  const { readSession, writeSession } = await import("../src/run/sessionstore.ts");
+  const { groupConvId } = await import("../src/core/convpaths.ts");
+  const file = groupConvId(`session-${process.pid}`); // the session record is in the conversation's own assistant.db
+  writeSession(file, { sessionId: "s1", costUsd: 3, baseTokens: 50_000, lastContextTokens: 80_000, seenAt: "x" });
   assert.equal(forgetUnresumable(file, new Error("network down"), "chat"), false);
-  assert.equal(JSON.parse(readFileSync(dataPath(file), "utf8")).sessionId, "s1");
+  assert.equal(readSession(file).sessionId, "s1");
   assert.equal(forgetUnresumable(file, new Error("No conversation found with session ID: s1"), "chat"), true);
-  const after = JSON.parse(readFileSync(dataPath(file), "utf8"));
+  const after = readSession(file);
   assert.equal(after.sessionId, undefined);
   assert.equal(after.seenAt, "x", "a group keeps what it has been shown");
   assert.equal(planSession(after, now, opts), "fresh");

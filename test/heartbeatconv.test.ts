@@ -61,7 +61,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   const conv = tenant(id);
   const o = heartbeatOptions(conv, payerOf(id), { provenance: { kind: "standing", task: "THE LOOK" } }, NOW);
   assert.equal(o.source, "group", "the isolated policy source: none of the owner's data");
-  assert.deepEqual([o.sessionFile, o.memory, o.seenAt], [undefined, undefined, undefined], "a fresh session, no auto-memory: a run that reads mail cannot write notes");
+  assert.deepEqual([o.sessionConv, o.memory, o.seenAt], [undefined, undefined, undefined], "a fresh session, no auto-memory: a run that reads mail cannot write notes");
   assert.equal(o.model, settings.heartbeatModel);
   assert.ok(o.outputFormat);
   assert.deepEqual(o.provenance?.(), { kind: "standing", task: "THE LOOK" });
@@ -141,7 +141,7 @@ test("a friend on an instance without Google has no expert and no mail in her in
   assert.equal(go.source, "group");
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
   assert.deepEqual([...go.tools!].sort(), [...unattendedTools(groupTools())].sort(), "the group's capability set, less the notes' file tools");
-  assert.deepEqual([go.sessionFile, go.memory, go.tenant], [undefined, undefined, undefined]);
+  assert.deepEqual([go.sessionConv, go.memory, go.tenant], [undefined, undefined, undefined]);
   assert.ok(go.maxBudgetUsd <= 0.5);
   assert.match(system(go), /in a group chat on Signal/);
   const gb = buildOptions(async () => ({ approved: false }), go, undefined);

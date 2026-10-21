@@ -1,6 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { budgetSpent, groupOverBudget, instanceKeyOverBudget, recordSpend, tenantOverBudget } from "../core/budget.ts";
-import { groupConvId, OWNER_CONV } from "../core/convpaths.ts";
+import { convDamage } from "../core/convdb.ts";
+import { convIdOf, groupConvId, OWNER_CONV } from "../core/convpaths.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { cooldownUntil, coolingDown, noteSuccess, observeRateLimit, skipForCooldown } from "../core/cooldown.ts";
 import { reportKeyProblem } from "./keynotice.ts";
@@ -61,7 +62,7 @@ export const cooldownOf = (p: Payer, now: number = Date.now()): number | undefin
 // ---- may it run now ----
 
 export interface Refusal {
-  refused: "paused" | "inactive" | "no-key" | "cooldown" | "budget" | "group-budget" | "instance-budget"; // group-budget: that group's own day is spent; instance-budget: all tenants together have spent the key's day
+  refused: "paused" | "damaged" | "inactive" | "no-key" | "cooldown" | "budget" | "group-budget" | "instance-budget"; // group-budget: that group's own day is spent; instance-budget: all tenants together have spent the key's day
   until?: number; // cooldown: when it ends (epoch ms)
   limit?: number; // budget, group-budget, instance-budget: the ceiling that is spent
 }
@@ -81,9 +82,19 @@ export interface MayRunOptions {
 //   owner, group   login; unattended work stops with the pause switch, the shared cooldown of the usage limit (logged once per episode) and the instance's day budget; a group
 //                  also stops, chat or not, at its own day's ceiling (GROUP_DAILY_BUDGET_USD)
 //   friend         she must be active (a chat turn: not suspended); the instance key must be set (else the owner hears of it once); the key must not be in a cooldown; her own day's budget must not be spent; nor the instance key's day across all tenants (INSTANCE_KEY_DAILY_USD)
+// (a conversation the caller only half names, as some callers and tests do, is not one whose database can be damaged)
+const damaged = (conv: Pick<Conversation, "kind" | "tenantId"> & { groupId?: string }): boolean => {
+  try {
+    return convDamage(convIdOf(conv)) !== undefined;
+  } catch {
+    return false;
+  }
+};
+
 export function mayRun(conv: Pick<Conversation, "kind" | "tenantId"> & { groupId?: string }, what: string, o: MayRunOptions = {}): Payer | Refusal {
   const now = o.now ?? Date.now();
   if (!o.chat && (o.paused ?? isPaused)(new Date(now))) return { refused: "paused" };
+  if (!o.chat && damaged(conv)) return { refused: "damaged" }; // its assistant.db was damaged and set aside (core/convdb.ts): chat goes on with a fresh start, nothing unattended runs for it until a person looks
   if (conv.kind === "group" && conv.groupId && (o.groupSpent ?? groupOverBudget)(conv.groupId)) return { refused: "group-budget", limit: settings.groupDailyBudgetUsd }; // even a turn that was asked for: a noisy group is how the owner's day goes
   if (conv.kind !== "tenant") {
     if (o.chat) return loginFor(conv.kind === "group" ? conv.groupId : undefined);

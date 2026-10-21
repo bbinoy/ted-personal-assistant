@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ROOT } from "../src/core/paths.ts";
-import { groupConvId, layout, layout2 } from "../src/core/convpaths.ts";
+import { groupConvId, layout, layout2, layout3 } from "../src/core/convpaths.ts";
+import { convDbAt } from "../src/core/convdb.ts";
 import { openInstanceDbAt } from "../src/core/instancedb.ts";
 import { lateNotice, markLateTold, markOwnerTold, migrate, ownerNotice, planMigration, REORGANISED_TEXT, reconcile, stragglers, type Plan } from "../src/core/migrate.ts";
 import { migrateSafely, type Services } from "../src/core/migrateservices.ts";
@@ -126,11 +127,15 @@ test("a plan finished before an old process wrote again (a rollback to old code,
   rmSync(L.instance.layoutVersion); // rolled back: the stamp is gone, the plan says everything is done
   put(root, "state/payments.jsonl", `${JSON.stringify({ id: "after", ts: "2031-01-01T00:00:00.000Z", merchant: "m", totalMinor: 5, currency: "EUR", last4: "1", cartHash: "c", status: "confirmed" })}\n`);
   put(root, "state/session.json", '{"sessionId":"written by old code"}');
-  rmSync(L.conv("owner").session);
   const log: string[] = [];
   migrate(root, { log: (l) => log.push(l) });
   assert.deepEqual(stragglers(root), []);
-  assert.equal(read(L.conv("owner").session), '{"sessionId":"written by old code"}');
+  // (moved into place like before, then imported into the owner's assistant.db: what the database holds wins for a one-record store, the late bytes are in the backup)
+  assert.equal(convDbAt(root, "owner").get<{ session_id: string }>("SELECT session_id FROM session")?.session_id, "owner-s");
+  assert.equal(existsSync(layout3(root).conv("owner").session), false);
+  const noted = convDbAt(root, "owner").get<{ backup: string; note: string }>("SELECT backup, note FROM legacy_imports WHERE name = 'conversations/owner/session.json' AND note IS NOT NULL");
+  assert.match(noted?.note ?? "", /already holds a session record/);
+  assert.equal(read(join(root, noted!.backup)), '{"sessionId":"written by old code"}');
   assert.deepEqual(openInstanceDbAt(L.instance.db).all<{ id: string }>("SELECT id FROM payments").map((r) => r.id), ["after"], "moved into instance/ and imported into instance.db");
   assert.ok(log.some((l) => /more step/.test(l)));
   const plan = JSON.parse(read(L.instance.migrationPlan)) as Plan;
@@ -182,11 +187,11 @@ test("a conflict on a conversation's data stops the migration with a sentence an
   assert.throws(() => migrate(root), /state\/session\.json and conversations\/owner\/session\.json both exist with different content.*stops here/s);
   assert.equal(existsSync(L.instance.layoutVersion), false, "not stamped");
   assert.equal(read(join(root, "state/session.json")), '{"sessionId":"owner-s"}', "the source is where it was");
-  assert.equal(read(L.conv("owner").session), '{"sessionId":"somebody else wrote this"}', "the target was not promoted over it, and the source not orphaned");
+  assert.equal(read(layout3(root).conv("owner").session), '{"sessionId":"somebody else wrote this"}', "the target was not promoted over it, and the source not orphaned");
   assert.equal(existsSync(join(L.instance.migrationOrphans, "state/session.json")), false);
-  rmSync(L.conv("owner").session); // the person chose
-  migrate(root);
-  assert.equal(read(L.conv("owner").session), '{"sessionId":"owner-s"}');
+  rmSync(layout3(root).conv("owner").session); // the person chose
+  migrate(root, { movesOnly: true }); // (the moves; the import into assistant.db is tested in convimport.test.ts)
+  assert.equal(read(layout3(root).conv("owner").session), '{"sessionId":"owner-s"}');
   assert.equal(read(L.instance.tenants), '{"tenants":[]}', "an instance file with other content is set aside, not overwritten");
   assert.ok(existsSync(join(L.instance.migrationOrphans, "state/tenants.json")));
 });
@@ -245,11 +250,11 @@ test("two old folders for one group: the one named by the hash of its id is kept
 test("voice-note sources that clash with ones already in the conversation: notes AND quotes are set aside", () => {
   const root = old();
   put(root, "conversations/owner/voices/sources.json", '{"notes":[{"ts":99}],"quotes":{}}');
-  migrate(root);
+  migrate(root, { movesOnly: true });
   const aside = JSON.parse(read(join(layout(root).instance.migrationOrphans, "state/voice/sources.json")));
   assert.deepEqual(aside.notes.owner, [{ ts: 1, id: "o.aac" }]);
   assert.deepEqual(aside.quotes.owner, { "10": 1 });
-  assert.equal(read(layout(root).conv("owner").voiceSources), '{"notes":[{"ts":99}],"quotes":{}}');
+  assert.equal(read(layout3(root).conv("owner").voiceSources), '{"notes":[{"ts":99}],"quotes":{}}');
 });
 
 test("the browse folder is a cache: browsers set up by the new code before the first start are kept, duplicates discarded, the rest merged in, no conflict", () => {

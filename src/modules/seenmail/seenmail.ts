@@ -1,17 +1,17 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit } from "../../core/audit.ts";
-import type { Conversation } from "../../conversation/conversationmodel.ts";
 import { settings } from "../../core/settings.ts";
-import { readJson, readText, writeJson } from "../../core/state.ts";
-import { convIdOf, convPaths } from "../../core/convpaths.ts";
+import { convDb } from "../../core/convdb.ts";
+import type { Db } from "../../core/db.ts";
+import type { ConvId } from "../../core/convpaths.ts";
 
 // "Mail since your last look" is not a time window but a memory of ids: the mail the conversation's heartbeat run has already worked through. The run lists the inbox with
 // its own mail tool (whatever the provider: Mailbird, Gmail, a friend's Google) and asks the `seen_mail` tool which of those ids it has not looked at yet. Code knows no
 // mailbox and no provider here: an id is a string exactly as the mail tool returned it.
 //   * The ids a call returns as new are PENDING: they join the conversation's seen log only when the look ends well (commit). A look that failed or was cut short leaves
 //     them unseen, so the mail is worked through by the next look; an offline gap is worked off over successive looks, not lost.
-//   * The log is bounded (the last SEEN_MAX ids) and belongs to ONE conversation: it is in that conversation's folder.
+//   * The log is bounded (the last SEEN_MAX ids: trimSeenMail, also a retention rule) and belongs to ONE conversation: it is the `seen_mail` table of that conversation's assistant.db.
 //   * The run and the expert it calls share one pending set (they share the run's tool servers).
 //   * The FIRST look (no log yet) does not triage the whole backlog: mail the run says arrived more than MAIL_BACKLOG_DAYS ago (`received`, as the mail tool gave it) is marked seen
 //     without being returned, and the tool says so once, so the owner hears of it in the first message (isBacklog).
@@ -21,10 +21,12 @@ export const SEEN_MAX = 2000;
 export const MAX_IDS_PER_CALL = 500;
 const MAX_ID_CHARS = 200;
 
-export const seenFileOf = (conv: Pick<Conversation, "kind"> & { readonly tenantId?: string; readonly groupId?: string; readonly convId?: string }): string => convPaths(convIdOf(conv)).seenMail;
-
-interface Log {
-  ids: string[]; // oldest first
+/** The retention query that bounds the log: everything but the newest `max` ids goes. Returns how many went (`dryRun`: how many would). */
+export function trimSeenMail(db: Db, max: number = SEEN_MAX, dryRun = false): number {
+  const cut = db.get<{ seq: number }>("SELECT seq FROM seen_mail ORDER BY seq DESC LIMIT 1 OFFSET ?", max)?.seq; // the newest id that is already past the bound
+  if (cut === undefined) return 0;
+  if (dryRun) return db.num("SELECT COUNT(*) FROM seen_mail WHERE seq <= ?", cut);
+  return db.run("DELETE FROM seen_mail WHERE seq <= ?", cut).changes;
 }
 
 // Pure: is this mail old enough to count as backlog on a first run? `received` is whatever date text the mail tool gave; one that cannot be read is not backlog (it is triaged).
@@ -45,21 +47,17 @@ export interface SeenMail {
   pending: () => number;
 }
 
-export function createSeenMail(file: string, max: number = SEEN_MAX, backlogDays: number = settings.mailBacklogDays, now: () => number = Date.now): SeenMail {
+export function createSeenMail(conv: ConvId, max: number = SEEN_MAX, backlogDays: number = settings.mailBacklogDays, now: () => number = Date.now): SeenMail {
   const pending = new Set<string>();
   const backlog = new Set<string>();
-  const firstRun = readText(file) === undefined; // no log yet: nothing was ever worked through
-  const load = (): string[] => {
-    const raw = readJson<Partial<Log>>(file, {}).ids;
-    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
-  };
+  const firstRun = convDb(conv).num("SELECT COUNT(*) FROM seen_mail") === 0; // no log yet: nothing was ever worked through
+  const known = (id: string): boolean => convDb(conv).get("SELECT 1 FROM seen_mail WHERE id = ?", id) !== undefined;
   return {
     unseen(ids, received) {
-      const known = new Set(load());
       const out: string[] = [];
       for (const raw of ids.slice(0, MAX_IDS_PER_CALL)) {
         const id = String(raw).trim().slice(0, MAX_ID_CHARS);
-        if (!id || known.has(id) || out.includes(id)) continue;
+        if (!id || known(id) || out.includes(id)) continue;
         if (firstRun && (backlog.has(id) || isBacklog(received?.[raw] ?? received?.[id], now(), backlogDays))) backlog.add(id);
         else out.push(id);
       }
@@ -69,9 +67,19 @@ export function createSeenMail(file: string, max: number = SEEN_MAX, backlogDays
     aged: () => backlog.size,
     commit() {
       if (pending.size === 0 && backlog.size === 0) return;
-      const mine = new Set([...pending, ...backlog]);
-      const kept = load().filter((id) => !mine.has(id));
-      writeJson(file, { ids: [...backlog, ...kept, ...pending].slice(-max) } satisfies Log); // (the backlog first: it is the oldest, so it is the first to age out of the bounded log)
+      const db = convDb(conv);
+      db.tx(() => {
+        // an id already in the log moves; the backlog goes to the OLD end (it is the oldest, so it is the first to age out of the bounded log), the pending ones to the newest
+        for (const id of [...backlog].reverse()) {
+          db.run("DELETE FROM seen_mail WHERE id = ?", id);
+          db.run("INSERT INTO seen_mail (seq, id) VALUES ((SELECT COALESCE(MIN(seq), 1) - 1 FROM seen_mail), ?)", id);
+        }
+        for (const id of pending) {
+          db.run("DELETE FROM seen_mail WHERE id = ?", id);
+          db.run("INSERT INTO seen_mail (id) VALUES (?)", id);
+        }
+        trimSeenMail(db, max);
+      });
       pending.clear();
       backlog.clear();
     },

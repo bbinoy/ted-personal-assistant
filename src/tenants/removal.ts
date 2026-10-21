@@ -1,11 +1,13 @@
-import { existsSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "../core/audit.ts";
 import { forgetNotices } from "../core/capnotice.ts";
 import { forgetSpend } from "../core/budget.ts";
 import { forgetInBackups } from "../core/dbimport.ts";
+import { forgetConvInBackups } from "../core/convimport.ts";
 import { isInside } from "../core/contain.ts";
-import { convPaths, conversationsDir, dataRoot, friendConvId } from "../core/convpaths.ts";
+import { removeConvDir } from "../core/convdb.ts";
+import { dataRoot, friendConvId } from "../core/convpaths.ts";
 import { forgetTenantConnections } from "../intake/intakelinks.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 import { tenantKey } from "../core/ownerkey.ts";
@@ -75,15 +77,14 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
   });
   if (tenantById(id)) out.registry = deleteTenant(id, d.drop ? { drop: d.drop } : {}); // (her registry entry first: from that moment she is nobody; then her whole folder)
   step("her conversation folder", () => {
-    const dir = convPaths(conv).dir;
-    const had = existsSync(dir);
-    if (isInside(dir, conversationsDir())) rmSync(dir, { recursive: true, force: true }); // (also when the registry entry was gone already)
+    const had = removeConvDir(conv); // (also when the registry entry was gone already; its assistant.db connection is closed first)
     return had && !out.registry;
   });
   step("her saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));
   step("her connection marks", () => forgetTenantConnections(id));
   step("her spend rows (unnamed; the totals stay)", () => forgetSpend(conv));
   step("her name in the import's backups", () => forgetInBackups(dataRoot(), id, conv) > 0);
+  step("her files in the assistant.db import's backups", () => forgetConvInBackups(dataRoot(), conv) > 0);
   step("her notice marks", () => forgetNotices((k) => k === `friend:${id}` || k === `warn:${conv}`));
   for (const secrets of d.secrets ?? []) {
     try {

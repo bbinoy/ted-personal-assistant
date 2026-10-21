@@ -202,8 +202,8 @@ test("layout 2: the owner's chat reads only conversations/owner/{notes,messages.
   const friend = convPaths(friendConvId("zed-1"));
   const other = convPaths(groupConvId("another-group"));
   const touch = (p: string) => (mkdirSync(join(p, ".."), { recursive: true }), writeFileSync(p, "x"));
-  const everything = [O.notes + "/MEMORY.md", O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon, O.session, O.pending, O.search, O.dream, O.notesBackup + "/s/n.md", O.voiceSources, O.heldPosts,
-    group.messages, group.notes + "/a.md", group.session, friend.messages, friend.notes + "/a.md", friend.tenantJson, other.notes + "/a.md",
+  const everything = [O.notes + "/MEMORY.md", O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon, O.db, `${O.db}-wal`, O.dbDamaged, O.search, O.notesBackup + "/s/n.md",
+    group.messages, group.notes + "/a.md", group.db, friend.messages, friend.notes + "/a.md", friend.tenantJson, other.notes + "/a.md",
     instancePaths().tenants, instancePaths().db, `${instancePaths().db}-wal`, `${instancePaths().db}-shm`, instancePaths().openbao + "/config.hcl", logPaths().launchdStderr, join(conversationsDir(), "stray.txt")];
   for (const p of everything) touch(p);
   const readable = new Set([O.notes + "/MEMORY.md", O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon]);
@@ -216,7 +216,7 @@ test("layout 2: the owner's chat reads only conversations/owner/{notes,messages.
   for (const [src, mine, tools] of [["group", group, undefined], ["group", friend, new Set(["Read", "Write", "Edit"])]] as const) {
     for (const tool of ["Read", "Write", "Edit"]) {
       assert.equal(classify(tool, { file_path: `${mine.notes}/new.md` }, src, mine.notes, tools), "allow", `${tool} own note`);
-      for (const p of [mine.session, mine.messages, O.notes + "/MEMORY.md", O.messages, other.notes + "/a.md", instancePaths().tenants, `${mine.notes}/../session.json`, `${mine.notes}/../../owner/notes/MEMORY.md`, `${mine.dir}/notes-backup/x.md`]) {
+      for (const p of [mine.db, mine.messages, O.notes + "/MEMORY.md", O.messages, other.notes + "/a.md", instancePaths().tenants, `${mine.notes}/../assistant.db`, `${mine.notes}/../../owner/notes/MEMORY.md`, `${mine.dir}/notes-backup/x.md`]) {
         assert.equal(classify(tool, { file_path: p }, src, mine.notes, tools), "deny", `${tool} ${p}`);
       }
     }

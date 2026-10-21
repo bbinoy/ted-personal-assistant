@@ -6,7 +6,8 @@ import { settings } from "../src/core/settings.ts";
 import { describePlan, layoutState, planMigration, readVersion, refusal, stragglers } from "../src/core/migrate.ts";
 import { migrateSafely } from "../src/core/migrateservices.ts";
 import { describeImport } from "../src/core/dbimport.ts";
-import { LAYOUT_VERSION } from "../src/core/convpaths.ts";
+import { describeConvImport } from "../src/core/convimport.ts";
+import { INSTANCE_DB_VERSION, LAYOUT_VERSION, MOVES_VERSION } from "../src/core/convpaths.ts";
 
 const args = process.argv.slice(2);
 const say = (l: string) => void process.stdout.write(`${l}\n`); // (not console.log: after log.ts that only reaches agent.log)
@@ -23,8 +24,9 @@ if (state.state === "newer") {
 say(`data folder: ${root}`);
 say(`layout version: ${readVersion(root) ?? "none (old layout, or a new folder)"}; this code writes ${LAYOUT_VERSION}`);
 if (args.includes("--dry-run")) {
-  const plan = state.state === "current" || readVersion(root) === 2 ? { ...planMigration(root), ops: stragglers(root) } : planMigration(root);
-  const imports = describeImport(root, plan.ops.map((o) => o.to)); // layout 3: the small files that go into instance/instance.db
+  const plan = state.state === "current" || readVersion(root) === MOVES_VERSION || readVersion(root) === INSTANCE_DB_VERSION ? { ...planMigration(root), ops: stragglers(root) } : planMigration(root);
+  const willExist = plan.ops.map((o) => o.to);
+  const imports = [...(readVersion(root) === INSTANCE_DB_VERSION ? [] : describeImport(root, willExist)), ...describeConvImport(root, willExist, plan.ops.map((o) => ({ from: o.from, to: o.to })))]; // layouts 3 and 4: the small files that go into instance/instance.db, and each conversation's into its assistant.db
   for (const l of plan.ops.length === 0 && imports.length > 0 ? [] : describePlan(plan)) say(l);
   for (const l of imports) say(l);
   say("Dry run: nothing was moved.");

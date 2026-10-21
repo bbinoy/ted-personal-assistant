@@ -1,0 +1,293 @@
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { conversationsDir, convPaths, isConvId, layout, type ConvId, type ConvPaths, type ConvRef } from "./convpaths.ts";
+import { Db, LedgerCorruptError, moveCorruptAside, openDb, type Migration } from "./db.ts";
+import { DatabaseSync } from "node:sqlite";
+import { isInside } from "./contain.ts";
+import { writeFileAtomic } from "./state.ts";
+
+// <conversation>/assistant.db: the small mutable state of ONE conversation, one SQLite file in its folder (docs/ARCHITECTURE.md "assistant.db"). It replaced one little JSON file per kind of
+// state (layout 4): the resumed session, the dream's day, the posts held for quiet hours, the mail ids already worked through, /quiet, the approval inbox, the voice notes received, a friend's bookkeeping.
+// A conversation's state is in ITS file and nowhere else: a query cannot reach another conversation's rows because it has no connection to them (test/convdb.test.ts), and forgetting a conversation is
+// still deleting its folder (the connection is closed first: forgetConv / closeConvDb).
+//
+//   session / dream / hold / quiet / friend / pending_state   ONE row each (id = 1): a CHECK keeps it so
+//   held_posts       the posts quiet hours or the day's cap kept back, oldest first (bounded where they are written)
+//   seen_mail        the mail ids the heartbeat has worked through, oldest first: seq orders them, the bound (2000) is a query (trimSeenMail), also a retention rule
+//   pending_*        the approval inbox: items (numbered, never reused), the ones expired and not yet told, the calls not to park again for a while
+//   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
+//   friend_notices   a friend's fixed notices (kind -> last time)
+//   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
+//
+// NOT rebuildable. Losing the approval inbox or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
+// one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
+// and a fresh empty database starts, so CHAT KEEPS WORKING (a fresh session; the person can still talk to it). While the marker is there that conversation's BACKGROUND work is refused (payer.ts mayRun:
+// the heartbeat look, the dream, quiet compaction, approved actions), the owner is told once a day (heartbeat/notices.ts) and the doctor fails with the file's name. A person restores the set-aside file
+// (or `sqlite3 .recover`) and deletes the marker; deleting only the marker accepts the fresh start. The other conversations are not affected: each has its own file.
+//
+// How to add state (the upcoming tasks are the example): append ONE numbered step to CONV_SCHEMA below (version n+1, `CREATE TABLE items (...)`, `CREATE TABLE task_events (...)`). Steps run in order, each in
+// its own transaction, at the first open of each conversation's file; a step is never edited once shipped. Then a small store module over convDb(conv), and, if the table grows, a retention rule (heartbeat/convretention.ts).
+
+export const CONV_SCHEMA: readonly Migration[] = [
+  {
+    version: 1,
+    name: "session, dream, held posts, seen mail, quiet, approval inbox, voice notes, friend bookkeeping",
+    up: `
+      CREATE TABLE session (
+        id                  INTEGER PRIMARY KEY CHECK (id = 1),
+        session_id          TEXT,                                   -- the SDK session this conversation resumes
+        cost_usd            REAL NOT NULL DEFAULT 0,                -- total_cost_usd is cumulative across a resumed session
+        last_turn_at        TEXT,                                   -- ISO
+        last_context_tokens INTEGER,
+        compact_failed_at   TEXT,
+        base_tokens         INTEGER,
+        seen_at             TEXT,                                   -- the newest log line the session has been shown (groups)
+        untrusted_in        TEXT                                    -- the session that has read raw mail or a web page ("pending": the one this turn starts)
+      );
+
+      CREATE TABLE dream (
+        id          INTEGER PRIMARY KEY CHECK (id = 1),
+        day         TEXT,                                           -- local day of the last attempt
+        last_run_at TEXT                                            -- ISO: when the last real run started
+      );
+
+      CREATE TABLE hold (
+        id     INTEGER PRIMARY KEY CHECK (id = 1),
+        day    TEXT NOT NULL,                                       -- the conversation's own day the count belongs to
+        posted INTEGER NOT NULL                                     -- unprompted posts so far that day
+      );
+      CREATE TABLE held_posts (
+        seq       INTEGER PRIMARY KEY AUTOINCREMENT,                -- oldest first
+        text      TEXT NOT NULL,
+        why       TEXT NOT NULL,                                    -- quiet, cap
+        notice    INTEGER,
+        needs_you INTEGER,
+        at        INTEGER,
+        day       TEXT,
+        same_day  INTEGER
+      );
+
+      CREATE TABLE seen_mail (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,                      -- oldest first: the bound drops the lowest
+        id  TEXT NOT NULL UNIQUE
+      );
+
+      CREATE TABLE quiet (
+        id    INTEGER PRIMARY KEY CHECK (id = 1),                   -- a row = /quiet is set
+        until TEXT NOT NULL                                         -- '' = until /unquiet, else an ISO time
+      );
+
+      CREATE TABLE pending_state (
+        id   INTEGER PRIMARY KEY CHECK (id = 1),
+        next INTEGER NOT NULL                                       -- the next number to hand out: only counts up, never reused
+      );
+      CREATE TABLE pending_items (
+        n            INTEGER PRIMARY KEY,
+        tool         TEXT NOT NULL,
+        input        TEXT NOT NULL,                                 -- JSON: exactly as the run called it
+        label        TEXT NOT NULL,
+        question     TEXT NOT NULL,
+        footer       TEXT NOT NULL,
+        scope        TEXT NOT NULL,                                 -- the conversation key: only an answer there applies
+        source       TEXT NOT NULL,
+        created_at   INTEGER NOT NULL,
+        urgent       INTEGER,
+        details_hash TEXT,
+        deferred     INTEGER,
+        executing_at INTEGER,                                       -- approved and running (a crash in between is noticed: recoverStuck)
+        retry_told   INTEGER,                                       -- NOT NULL = approved but the run gate refused it; 1 = the owner has been told
+        interrupted  INTEGER,
+        sent_at      INTEGER,
+        sent_ts      INTEGER,
+        sent_held    INTEGER
+      );
+      CREATE TABLE pending_expired (
+        seq   INTEGER PRIMARY KEY AUTOINCREMENT,                    -- dropped on expiry and not yet told to the owner
+        n     INTEGER NOT NULL,
+        label TEXT NOT NULL
+      );
+      CREATE TABLE pending_blocked (
+        seq   INTEGER PRIMARY KEY AUTOINCREMENT,                    -- a call that must not be parked again for a while
+        key   TEXT NOT NULL,
+        n     INTEGER NOT NULL,
+        at    INTEGER NOT NULL,
+        until INTEGER NOT NULL,
+        kind  TEXT NOT NULL                                         -- done, expired
+      );
+      CREATE INDEX pending_blocked_key ON pending_blocked (key);
+
+      CREATE TABLE voice_notes (
+        seq     INTEGER PRIMARY KEY AUTOINCREMENT,                  -- oldest first: the bound keeps the newest
+        ts      INTEGER NOT NULL UNIQUE,                            -- the voice message's timestamp: its id in the conversation
+        id      TEXT NOT NULL,                                      -- attachment id
+        size    INTEGER NOT NULL,
+        by      TEXT NOT NULL,
+        by_name TEXT,
+        snippet TEXT NOT NULL,
+        kind    TEXT,                                               -- voice (default), file
+        name    TEXT,
+        seconds REAL
+      );
+      CREATE TABLE voice_quotes (
+        seq       INTEGER PRIMARY KEY AUTOINCREMENT,                -- oldest first
+        message_ts INTEGER NOT NULL UNIQUE,
+        quoted_ts  INTEGER NOT NULL
+      );
+
+      CREATE TABLE friend (
+        id           INTEGER PRIMARY KEY CHECK (id = 1),
+        paused_until INTEGER,                                       -- her cooldown (for npm run doctor, a separate process)
+        disclosed_at TEXT                                           -- when she had her first reply
+      );
+      CREATE TABLE friend_notices (
+        kind TEXT PRIMARY KEY,
+        at   TEXT NOT NULL
+      );
+
+      CREATE TABLE legacy_imports (
+        name        TEXT NOT NULL,                                  -- the layout-3 file, relative to the data folder
+        sha256      TEXT NOT NULL,                                  -- of its bytes: the same name with other bytes is a new file
+        rows        INTEGER NOT NULL,
+        imported_at TEXT NOT NULL,
+        backup      TEXT,                                           -- where the original was copied before it was removed
+        note        TEXT,
+        PRIMARY KEY (name, sha256)
+      );
+    `,
+  },
+];
+
+// ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----
+
+interface Entry {
+  db: Db;
+  conv: ConvId;
+  used: number;
+}
+const open = new Map<string, Entry>(); // by the file's path
+const IDLE_MS = 10 * 60_000;
+
+export interface Damage {
+  at: string; // ISO
+  keptAs: string; // the set-aside file
+}
+
+export const convDamage = (c: ConvRef | ConvPaths): Damage | undefined => {
+  const p = typeof c === "object" && "dbDamaged" in c ? c : convPaths(c);
+  try {
+    const m = JSON.parse(readFileSync(p.dbDamaged, "utf8")) as Partial<Damage>;
+    return { at: typeof m.at === "string" ? m.at : "", keptAs: typeof m.keptAs === "string" ? m.keptAs : "" };
+  } catch {
+    return existsSync(p.dbDamaged) ? { at: "", keptAs: "" } : undefined; // (a marker nobody can read still stops the background work)
+  }
+};
+/** The conversations whose database was set aside and not yet looked at, from the markers on disk. Never opens a database. */
+export function damagedConvs(root?: string): (Damage & { conv: ConvId })[] {
+  const L = root ? layout(root) : undefined;
+  const dir = L ? L.conversations : conversationsDir();
+  const out: (Damage & { conv: ConvId })[] = [];
+  try {
+    for (const conv of readdirSync(dir)) {
+      if (!isConvId(conv)) continue;
+      const d = convDamage(L ? L.conv(conv) : conv);
+      if (d) out.push({ conv, ...d });
+    }
+  } catch {
+    /* no conversations yet */
+  }
+  return out;
+}
+/** A person has looked: the conversation's background work may run again (the fresh database stays; restore the set-aside file first if its state matters). */
+export const clearDamage = (c: ConvRef): void => rmSync(convPaths(c).dbDamaged, { force: true });
+
+function attempt(p: ConvPaths, conv: ConvId): Db {
+  // verify: the full integrity check once per open (a few small tables: cheap); a page SQLite cannot read shows here, not at the first query in the middle of a turn
+  return openDb(p.db, { migrations: CONV_SCHEMA, rebuildable: false, verify: true, label: `${conv}'s assistant.db` });
+}
+
+function openFor(p: ConvPaths, conv: ConvId): Db {
+  const have = open.get(p.db);
+  if (have?.db.isOpen) {
+    have.used = Date.now();
+    return have.db;
+  }
+  let db: Db;
+  try {
+    db = attempt(p, conv);
+  } catch (e) {
+    const corrupt = e instanceof LedgerCorruptError || (e as { errcode?: number }).errcode === 11;
+    if (!corrupt) throw e;
+    const kept = moveCorruptAside(p.db);
+    const why = (e as Error).message.slice(0, 200);
+    writeFileAtomic(p.dbDamaged, JSON.stringify({ at: new Date().toISOString(), keptAs: kept, why } satisfies Damage & { why: string }));
+    console.error(`convdb: ${conv}'s assistant.db is damaged (${why}); set aside as ${kept}. Chat goes on with a fresh start; its background work is stopped until a person looks (npm run doctor).`);
+    db = attempt(p, conv);
+  }
+  open.set(p.db, { db, conv, used: Date.now() });
+  return db;
+}
+
+/** The conversation's database of the current data folder: opened at the first use (made, migrated, checked), the same connection after that. */
+export const convDb = (conv: ConvRef): Db => openFor(convPaths(conv), typeof conv === "string" ? conv : conv.convId);
+/** The same at an explicit data root (the migration and its tests). */
+export const convDbAt = (root: string, conv: ConvId): Db => openFor(layout(root).conv(conv), conv);
+/** Is the database there? (A reader that must not make one: the retention rules, the doctor.) */
+export const hasConvDb = (conv: ConvRef): boolean => existsSync(convPaths(conv).db);
+
+/** Close this conversation's connection (and with it its -wal and -shm files): before its folder is deleted, and by the idle sweep. A later use opens it again. */
+export function closeConvDb(conv: ConvRef): void {
+  const p = convPaths(conv);
+  const e = open.get(p.db);
+  if (!e) return;
+  e.db.close();
+  open.delete(p.db);
+}
+export function closeConvDbAt(root: string, conv: ConvId): void {
+  const e = open.get(layout(root).conv(conv).db);
+  if (!e) return;
+  e.db.close();
+  open.delete(layout(root).conv(conv).db);
+}
+/** Close the connections nobody has used for `idleMs` (the tick does; a conversation that talks keeps its). Returns how many. A store never holds a Db across calls, so a closed one is simply opened again. */
+export function closeIdleConvDbs(now = Date.now(), idleMs = IDLE_MS): number {
+  let n = 0;
+  for (const [path, e] of [...open]) {
+    if (e.db.inTx || now - e.used < idleMs) continue;
+    e.db.close();
+    open.delete(path);
+    n++;
+  }
+  return n;
+}
+export function closeAllConvDbs(): void {
+  for (const e of open.values()) e.db.close();
+  open.clear();
+}
+export const openConvDbCount = (): number => open.size;
+
+/**
+ * Forgetting a conversation: its connection is closed FIRST (a deleted folder under an open SQLite handle leaves the -wal and -shm files, or a handle that writes into nothing), then the whole folder goes.
+ * Idempotent. Returns whether there was a folder. The one place the three removals (a friend, a group, a deleted tenant) delete a conversation's folder.
+ */
+export function removeConvDir(conv: ConvRef): boolean {
+  const dir = convPaths(conv).dir;
+  closeConvDb(conv);
+  const had = existsSync(dir);
+  if (isInside(dir, conversationsDir())) rmSync(dir, { recursive: true, force: true });
+  return had;
+}
+
+/** The doctor's look at one conversation's database file WITHOUT opening it the normal way (which would set a damaged one aside): read-only, quick_check. "ok", or what is wrong. */
+export function checkConvDbFile(path: string): string {
+  let raw: DatabaseSync | undefined;
+  try {
+    raw = new DatabaseSync(path, { readOnly: true });
+    const rows = raw.prepare("PRAGMA quick_check").all() as Record<string, unknown>[];
+    const verdict = rows.map((r) => String(Object.values(r)[0])).slice(0, 3).join("; ");
+    const v = Number(Object.values(raw.prepare("PRAGMA user_version").get() as Record<string, unknown>)[0]);
+    return verdict !== "ok" ? verdict : v > CONV_SCHEMA.length ? `schema version ${v} is newer than this code knows (${CONV_SCHEMA.length})` : "ok";
+  } catch (e) {
+    return (e as Error).message;
+  } finally {
+    try { raw?.close(); } catch { /* already closed */ }
+  }
+}

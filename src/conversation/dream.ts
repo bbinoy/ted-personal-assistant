@@ -7,7 +7,7 @@ import { oneShot } from "../tenants/haiku.ts";
 import { isRefusal, LOGIN, mayRun, type Payer, type Refusal } from "../tenants/payer.ts";
 import { applyPlan, baseOf } from "../memory/dreamapply.ts";
 import { planOps, type NoteFile, type Plan, type Scope } from "../memory/dreamplan.ts";
-import { dreamScope, dreamStateFile } from "../modules/memory/dreamscope.ts";
+import { dreamScope, dreamStateConv, readDream, writeDream, type DreamState } from "../modules/memory/dreamscope.ts";
 import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
@@ -17,7 +17,6 @@ import { isPaused, localDay } from "../core/pause.ts";
 import { dreamSystem } from "../run/persona.ts";
 import { preset } from "../core/preset.ts";
 import { OWNER, settings } from "../core/settings.ts";
-import { readJson, writeJson } from "../core/state.ts";
 import { listTenants, speakerOf } from "../tenants/tenants.ts";
 import { LIMITS, oneLine } from "../core/sanitize.ts";
 
@@ -30,7 +29,7 @@ import { LIMITS, oneLine } from "../core/sanitize.ts";
 //   - a cap on changes per run, and a snapshot first so "undo the dream" puts everything back.
 // ONE dreamer for every conversation (createDreamer): the owner's chat, each group and each friend. What differs is data: whose notes (dreamScope), the
 // note categories they have (the preset), whose words count as evidence (a private chat's person, or a group's members), who pays (payer.ts mayRun) and the
-// state file in the conversation's own folder. A conversation is dreamt when its capability set has `dream` (capabilities.ts), once it has enough new lines
+// state in the conversation's own assistant.db. A conversation is dreamt when its capability set has `dream` (capabilities.ts), once it has enough new lines
 // (the preset's rhythm.dream) and its payer may run. It works silently: what it did is in the log (a friend's: counts only, in her audit row words stay out)
 // and the snapshot lets "undo the dream" put the notes back. Nothing it reads is mail: the person's messages are the only ground for a note, so a crafted
 // email cannot plant a memory.
@@ -135,11 +134,6 @@ export const describePlan = (plan: Plan): string[] => {
 
 // ---- the daily run ----
 
-interface DreamState {
-  day?: string; // local day of the last attempt
-  lastRunAt?: string; // when the last real run started: what it covered ends here
-}
-
 type Kind = Conversation["kind"];
 
 // The conversations to look at: the owner's chat, every group that has a folder, every friend of the registry (when TENANTS is on). Each is gated by its own capabilities.
@@ -184,22 +178,22 @@ export function createDreamer(deps: DreamerDeps = {}) {
   async function one(conv: Conversation, now: Date): Promise<boolean> {
     if (!allows(conv, "dream")) return false; // its record: active, with the capability; the instance's DREAM switch
     if (deps.busy?.(conv)) return false; // someone is talking to it: the dream is for the quiet, and does not tidy notes under a turn that is using them
-    const stateFile = dreamStateFile(conv);
+    const stateConv = dreamStateConv(conv);
     const today = localDay(now);
-    const state = readJson<DreamState>(stateFile, {});
+    const state: DreamState = readDream(stateConv);
     if (state.day === today) return false;
     const rhythm = preset().rhythm.dream;
     const said = conversationLines(messagesSince(state.lastRunAt, conv.logFile), subjectOf(conv), conv.kind === "group" ? "member" : "owner");
     if (said.count < (conv.kind === "group" ? rhythm.minNewLines.group : rhythm.minNewLines.direct)) return false; // next to nothing said since the last time: left alone, without even marking the day
     const payer = payerOf(conv, now);
     if (isRefusal(payer)) return false;
-    writeJson(stateFile, { ...state, day: today }); // before the run: a crash must not mean a retry on every tick
+    writeDream(stateConv, { ...state, day: today }); // before the run: a crash must not mean a retry on every tick
     const tag = { kind: conv.kind, ...(conv.tenantId ? { tenant: conv.tenantId } : {}) };
     try {
       const scope = scopeOf(conv);
       const { prompt, system } = promptOf(conv, now, readNoteFiles(scope.notesDir), said.lines);
       const { plan, snapshot } = await dreamOver(scope, prompt, system, said.text, now, deps.run?.(payer, conv) ?? runnerFor(payer));
-      writeJson(stateFile, { day: today, lastRunAt: now.toISOString() });
+      writeDream(stateConv, { day: today, lastRunAt: now.toISOString() });
       const label = conv.kind === "owner" ? "dream" : `${conv.kind} dream (${conv.tenantId ?? subjectOf(conv)})`;
       if (conv.kind !== "tenant") for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
       audit("dream_run", snapshot ? "changed" : "no-change", "dream", { ...tag, actions: plan.actions.length, rejected: plan.rejected.length });
@@ -229,7 +223,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
 }
 
 // The daily trigger: a tick job that runs `run` (the dreamers) on the first tick at or after `hour` (local), and looks again at most once an hour for the rest of the day (a
-// conversation that had too little to dream about may have more later; one already dreamt today is skipped by its own state file). Before the hour nothing runs, so a
+// conversation that had too little to dream about may have more later; one already dreamt today is skipped by its own state). Before the hour nothing runs, so a
 // dream never starts in the middle of the owner's evening. Plain code: no model decides when.
 export function dreamTrigger(run: () => unknown, o: { hour?: () => number; everyMs?: number; enabled?: () => boolean } = {}) {
   const hour = o.hour ?? (() => settings.dreamHour);

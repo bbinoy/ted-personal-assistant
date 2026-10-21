@@ -7,11 +7,11 @@ import { commandReply, lastOwnerLook, parseCommand, statusText } from "../src/co
 import { isPaused, pauseText } from "../src/core/pause.ts";
 import { dataPath, readText, writeText } from "../src/core/state.ts";
 import { RunStopped, stopRuns, withCeiling } from "../src/run/ceiling.ts";
-import { convPaths, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
-const ownerConv = { kind: "owner", key: "owner", sessionFile: convPaths(OWNER_CONV).session } as const;
-const friendConv = { kind: "tenant", key: "tenant:x", sessionFile: "x/session.json" } as const;
+const ownerConv = { kind: "owner", key: "owner", convId: OWNER_CONV } as const;
+const friendConv = { kind: "tenant", key: "tenant:x", convId: "friend-x" } as const;
 const clear = () => rmSync(dataPath(instancePaths().paused), { force: true });
 
 test("parseCommand: exactly the commands, nothing inside a sentence", () => {
@@ -68,23 +68,23 @@ test("pause, resume and status are the owner's; a friend can only stop her own r
   assert.equal(readText(instancePaths().paused), undefined);
   let stopped = "";
   assert.equal(commandReply(friendConv, "stop!", { stop: (s) => ((stopped = s), 1) }), "Stopped.");
-  assert.equal(stopped, "x/session.json");
+  assert.equal(stopped, "friend-x");
   assert.equal(commandReply(ownerConv, "/stop", { stop: () => 0 }), "Nothing is running right now.");
-  assert.equal(commandReply({ kind: "group", key: "g", sessionFile: "g/s.json" }, "/stop"), undefined, "a group has no commands");
+  assert.equal(commandReply({ kind: "group", key: "g", convId: groupConvId("g") }, "/stop"), undefined, "a group has no commands");
   assert.match(commandReply(ownerConv, "/pause banana")!, /\/pause 2h/);
 });
 
 test("/stop aborts the conversation's running turn at once, with RunStopped; other runs and later ones are untouched", async () => {
   let signal: AbortSignal | undefined;
-  const running = withCeiling(60_000, (c) => ((signal = c.signal), new Promise<string>(() => {})), convPaths(OWNER_CONV).session);
+  const running = withCeiling(60_000, (c) => ((signal = c.signal), new Promise<string>(() => {})), OWNER_CONV);
   const other = withCeiling(60_000, (c) => new Promise<string>((r) => c.signal.addEventListener("abort", () => r("aborted"))), "other/session.json");
   other.catch(() => {});
-  assert.equal(stopRuns(convPaths(OWNER_CONV).session), 1);
+  assert.equal(stopRuns(OWNER_CONV), 1);
   await assert.rejects(running, RunStopped);
   assert.equal(signal?.aborted, true, "the query's abort signal fired");
-  assert.equal(stopRuns(convPaths(OWNER_CONV).session), 0, "nothing left to stop");
+  assert.equal(stopRuns(OWNER_CONV), 0, "nothing left to stop");
   assert.equal(stopRuns("other/session.json"), 1);
-  assert.equal(await withCeiling(60_000, async () => "fine", convPaths(OWNER_CONV).session), "fine", "the next turn runs normally");
+  assert.equal(await withCeiling(60_000, async () => "fine", OWNER_CONV), "fine", "the next turn runs normally");
 });
 
 test("/status: a phone-sized summary", () => {

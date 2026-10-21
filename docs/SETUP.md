@@ -235,10 +235,10 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Safety
 
 ## Backup
 
-All state is under the data folder (`HARNESS_DATA_DIR`). To back it up, either **stop the agent and the intake page and copy `instance/`** (and `conversations/`), or take a consistent copy of the database while they run with SQLite itself:
+All state is under the data folder (`HARNESS_DATA_DIR`). To back it up, either **stop the agent and the intake page and copy `instance/`** (and `conversations/`), or take a consistent copy of each database while they run with SQLite itself (the instance's, and one `assistant.db` per conversation):
 
 ```
 sqlite3 instance/instance.db ".backup /path/to/instance-backup.db"
 ```
 
-Copying `instance.db` alone while the agent runs can miss what is still in `instance.db-wal`; copy all three files together, or use `.backup`. To restore, stop everything and put the file back as `instance/instance.db` (delete any stale `instance.db-wal` and `instance.db-shm` next to it). `npm run doctor` reports the database (WAL, schema version, quick check, row counts).
+Each conversation also has its own `conversations/<convId>/assistant.db` (its session pointer, the approval inbox, held posts, seen mail, `/quiet`, voice-note snippets): `for d in conversations/*/; do sqlite3 "$d/assistant.db" ".backup /path/to/backup/$(basename $d).db"; done` while the agent runs, or copy the folders with the agent stopped. A file copied while the agent runs can miss what is still in its `-wal` file; copy all three files together, or use `.backup`. If the doctor reports a conversation database as damaged, the agent has already set the file aside (`assistant.db.corrupt-<time>`) and started that conversation fresh: restore your backup of it with the agent stopped, then delete `assistant.db.damaged` in that folder (see the doctor line). To restore, stop everything and put the file back as `instance/instance.db` (delete any stale `instance.db-wal` and `instance.db-shm` next to it). `npm run doctor` reports the database (WAL, schema version, quick check, row counts).

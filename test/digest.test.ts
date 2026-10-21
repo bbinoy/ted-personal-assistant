@@ -9,7 +9,7 @@ import { dataPath, readJson } from "../src/core/state.ts";
 import { dedupe, digestDue, digestText, kindOfItem, lastSlotBefore, oneLine, planDigest, subjectOf, zonedInstant } from "../src/heartbeat/digest.ts";
 import { usableLines } from "../src/heartbeat/digestlines.ts";
 import { parseHeartbeatAnswer } from "../src/run/rules.ts";
-import { heldFileOf, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
+import { heldPosts, resetHeld, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
@@ -138,7 +138,7 @@ test("digestDue: quiet-held items at once, cap-held items once a slot has passed
   assert.equal(digestDue({ held: [{ text: "old row" }], now: noon, zone: Z, slots }), true, "a row without a time is not kept waiting");
 });
 
-const reset = () => rmSync(dataPath(heldFileOf(owner())), { force: true });
+const reset = () => resetHeld(owner());
 const pipe = (sent: string[]) => ({ enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) }) as any;
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
 const MORNING = new Date(2026, 9, 15, 7, 30, 0);
@@ -154,7 +154,7 @@ test("releaseHeld sends ONE grouped digest at the end of quiet hours, with the c
   const sent: string[] = [];
   assert.equal(await releaseHeld(pipe(sent), c, MORNING), true);
   assert.deepEqual(sent, ["A few things I held back:\nNeeds you\n- Can you confirm the dentist on Friday?\nFYI\n- Your parcel arrived at the door!\nSystem\n- My background checks have failed 3 times in a row. Run `npm run doctor`."]);
-  assert.deepEqual(readJson<{ held: unknown[] }>(heldFileOf(c), { held: [1] }).held, []);
+  assert.deepEqual(heldPosts(c), []);
   ownerNotices.sendTo(undefined);
 });
 
@@ -196,7 +196,7 @@ test("the look's needsYou flag: parsed (only a literal true), carried on the hel
   submitPost(c, "Did you know octopuses have three hearts?", false, NIGHT, false);
   submitPost(c, "Anna is waiting at the door", false, NIGHT, true);
   submitPost(c, "Lunch on Friday?", false, NIGHT); // (held without the flag: the words decide)
-  const rows = readJson<{ held: { text: string; needsYou?: boolean }[] }>(heldFileOf(c), { held: [] }).held;
+  const rows = heldPosts(c);
   assert.deepEqual(rows.map((h) => h.needsYou), [false, true, undefined]);
   const sent: string[] = [];
   await releaseHeld(pipe(sent), c, MORNING);

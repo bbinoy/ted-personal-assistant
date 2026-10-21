@@ -98,5 +98,5 @@ const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) 
 export const turnContext = (conv: Conversation, inputs: RunInputs = {}): string | undefined => CONTEXTS[conv.kind](conv, inputs);
 
 export function runOptionsFor(conv: Conversation, inputs: RunInputs = {}): RunOptions {
-  return { source: conv.source, sessionFile: conv.sessionFile, ...SHAPES[conv.kind](conv, inputs) };
+  return { source: conv.source, sessionConv: conv.convId, ...SHAPES[conv.kind](conv, inputs) };
 }

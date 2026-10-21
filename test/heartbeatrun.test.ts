@@ -10,12 +10,12 @@ import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
 import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
-import { createSeenMail, seenFileOf } from "../src/modules/seenmail/seenmail.ts";
+import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath } from "../src/core/state.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
-import { heldFileOf, ownerNotices } from "../src/heartbeat/notices.ts";
+import { heldPosts, resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 import { clearPending, openItems } from "../src/approvals/pending.ts";
 import { queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
@@ -27,7 +27,7 @@ const DAY = new Date(2026, 9, 14, 14, 0, 0); // a Wednesday, 14:00 local
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
 const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
-const reset = () => (instanceDb().run("DELETE FROM looks"), rmSync(dataPath(heldFileOf(owner())), { force: true })); // (the rows, and what quiet hours held)
+const reset = () => (instanceDb().run("DELETE FROM looks"), resetHeld(owner())); // (the rows, and what quiet hours held)
 
 interface Answer { mail?: string[]; hold?: Promise<unknown>; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; during?: () => void }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
@@ -462,5 +462,5 @@ test("a post dropped as stale does not mark the mail it reported as seen: the ne
   const { w, conv, seen } = rig(() => ({ message: "Eve is waiting.", mail: [id], calls: ["mcp__seenmail__seen_mail"] }), { pipeline: { lease: (c: unknown, a: () => void, p: () => boolean) => ((l.lease.news = true), l.pipeline.lease(c, a, p)) } });
   assert.equal(await w.look(conv, DAY), "silent");
   assert.deepEqual(seen.posted, []);
-  assert.deepEqual(createSeenMail(seenFileOf(conv)).unseen([id]), [id], "not committed");
+  assert.deepEqual(createSeenMail(conv.convId).unseen([id]), [id], "not committed");
 });

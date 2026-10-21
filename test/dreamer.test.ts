@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { allows } from "../src/policy/capabilities.ts";
 import { group as groupConversation, owner } from "../src/conversation/conversationmodel.ts";
 import { createDreamer, dreamConversations, dreamPrompt, type Runner } from "../src/conversation/dream.ts";
-import { dreamScope, dreamStateFile } from "../src/modules/memory/dreamscope.ts";
+import { dreamScope, dreamStateConv, readDream, writeDream } from "../src/modules/memory/dreamscope.ts";
+import { convDb, removeConvDir } from "../src/core/convdb.ts";
 import { groupDir, groupLogFile, groupNotesDir } from "../src/conversation/groupstore.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { createMemoryServer } from "../src/modules/memory/memory-tools.ts";
@@ -15,7 +16,7 @@ import { dreamSystem } from "../src/run/persona.ts";
 import { preset } from "../src/core/preset.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readJson, writeJson } from "../src/core/state.ts";
-import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { convPaths, groupConvId, OWNER_CONV } from "../src/core/convpaths.ts";
 
 // The ONE dreamer (dream.ts createDreamer): the owner's chat and every group go through the same gates (the `dream` capability, the day guard, the preset's
 // minimum of new lines), the same run and the same audit row; only the data differs (dreamscope.ts).
@@ -23,7 +24,7 @@ import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 const NOW = new Date("2026-10-14T07:00:00");
 const G = (n: number) => `R3JvdXA${n}R3JvdXAxR3JvdXAx`;
 const reset = () => {
-  rmSync(dataPath(convPaths(OWNER_CONV).dream), { force: true });
+  convDb(OWNER_CONV).run("DELETE FROM dream");
   rmSync(dataPath(convPaths(OWNER_CONV).messages), { force: true });
   rmSync(NOTES_DIR, { recursive: true, force: true });
   mkdirSync(NOTES_DIR, { recursive: true });
@@ -42,7 +43,7 @@ test("one dreamer: the owner and the groups, the group threshold and the nightly
   reset();
   const ids = [1, 2, 3, 4, 5, 6, 7].map(G);
   for (const [i, g] of ids.entries()) {
-    rmSync(groupDir(g), { recursive: true, force: true });
+    removeConvDir(groupConvId(g)); // (closes its assistant.db first)
     rmSync(dataPath(groupLogFile(g)), { force: true });
     groupDir(g, `Group ${i}`);
     for (let n = 0; n < (i === 6 ? 2 : 3); n++) say(n, groupLogFile(g)); // the last group said too little
@@ -77,7 +78,7 @@ test("one dreamer: the owner and the groups, the group threshold and the nightly
 test("the capability decides: a group is dreamt only while its capability set has `dream` (DREAM=off takes it from everybody)", async () => {
   reset();
   const g = G(8);
-  rmSync(groupDir(g), { recursive: true, force: true });
+  removeConvDir(groupConvId(g)); // (closes its assistant.db first)
   rmSync(dataPath(groupLogFile(g)), { force: true });
   groupDir(g, "Quiet hours");
   for (let n = 0; n < 4; n++) say(n, groupLogFile(g));
@@ -99,17 +100,17 @@ test("the capability decides: a group is dreamt only while its capability set ha
   }
 });
 
-test("state files: the owner's stays in state/dream.json, a group's in its folder; a file written by the old dreamers is honoured", async () => {
+test("dream state: the owner's and a group's are each in their own conversation's assistant.db; a record written by the old dreamers is honoured", async () => {
   reset();
   const g = G(9);
-  rmSync(groupDir(g), { recursive: true, force: true });
+  removeConvDir(groupConvId(g)); // (closes its assistant.db first)
   rmSync(dataPath(groupLogFile(g)), { force: true });
   groupDir(g, "Old state");
-  assert.equal(dreamStateFile(owner()), convPaths(OWNER_CONV).dream);
-  assert.equal(dreamStateFile({ kind: "group", groupId: g }), join(groupDir(g), "dream.json"));
+  assert.equal(dreamStateConv(owner()), OWNER_CONV);
+  assert.equal(dreamStateConv({ kind: "group", groupId: g }), groupConvId(g));
   // what the old dreamers had written: a day that is over and the time the last run started
-  writeJson(convPaths(OWNER_CONV).dream, { day: "2026-10-13", lastRunAt: "2026-10-13T21:00:00.000Z" });
-  writeFileSync(join(groupDir(g), "dream.json"), JSON.stringify({ day: "2026-10-13", lastRunAt: "2026-10-13T21:00:00.000Z" }));
+  writeDream(OWNER_CONV, { day: "2026-10-13", lastRunAt: "2026-10-13T21:00:00.000Z" });
+  writeDream(groupConvId(g), { day: "2026-10-13", lastRunAt: "2026-10-13T21:00:00.000Z" });
   recordMessage("owner", 5, "old line before the last dream", new Date("2026-10-13T20:00:00Z")); // before lastRunAt: already covered
   for (let n = 0; n < 5; n++) say(n, groupLogFile(g)); // all at 20:00Z, before lastRunAt
   const c = counting();
@@ -121,7 +122,7 @@ test("state files: the owner's stays in state/dream.json, a group's in its folde
   assert.equal(c.calls.length, 1);
   assert.match(c.calls[0]!, /a new thing after the last dream/);
   assert.doesNotMatch(c.calls[0]!, /old line before/);
-  assert.equal(readJson<{ lastRunAt?: string }>(convPaths(OWNER_CONV).dream, {}).lastRunAt, NOW.toISOString());
+  assert.equal(readDream(OWNER_CONV).lastRunAt, NOW.toISOString());
 });
 
 test("one prompt: the same template for the owner, a friend and a group, with their categories from the preset", () => {
@@ -143,7 +144,7 @@ test("one prompt: the same template for the owner, a friend and a group, with th
 test("undo: a conversation that is dreamt can undo its dream with its own memory server (a group here; a friend in tenantloops.test.ts)", async () => {
   reset();
   const g = G(3);
-  rmSync(groupDir(g), { recursive: true, force: true });
+  removeConvDir(groupConvId(g)); // (closes its assistant.db first)
   rmSync(dataPath(groupLogFile(g)), { force: true });
   groupDir(g, "Undo");
   writeFileSync(join(groupNotesDir(g), "context-old.md"), "---\nname: old\nexpires: 2026-10-01\n---\n\nPitch booked for 1 Oct.\n");
