@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as approvals from "../src/approvals/approvals.ts";
-import { forgetArmed } from "../src/core/sinks/journalsink.ts";
-import { forgetSeenMail, noteDone, rememberMail } from "../src/approvals/journalrender.ts";
+import { armedCount, forgetArmed } from "../src/core/sinks/journalsink.ts";
+import { endRun } from "../src/core/events.ts";
+import { forgetSeenMail, journalable, noteDone, rememberMail } from "../src/approvals/journalrender.ts";
 import { exactGuard } from "../src/approvals/pendingexec.ts";
 import { flushPending, idle, queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
 import { compactFooter } from "../src/approvals/pendingbatch.ts";
@@ -223,4 +224,38 @@ test("a look that read notes before acting says so: 'per your notes' in reading 
   assert.match(lines[0]!.text, /Why: a periodic look at your accounts, on its standing instructions; auto-approved/);
   assert.doesNotMatch(lines[0]!.text, /per your notes/);
   assert.match(lines[1]!.text, /; per your notes: triage-linkedin, people-eve \(inferred\), triage-newsletters and 1 more\./);
+});
+
+test("delegations and the SDK's own tools are no actions; plumbing is never armed; a run's why is not used by another run and is dropped when the run ends", async () => {
+  reset();
+  for (const t of ["Agent", "Task", "TodoWrite", "ToolSearch", "Skill", "mcp__send__send", "mcp__memory__journal", "mcp__memory__search_logs"]) assert.equal(journalable(t), false, t);
+  assert.equal(journalable(FORGET), true);
+  const key = fresh("owner");
+  const before = journal(key).length;
+  const mk = (run: string) => makeCanUseTool(async () => ({ approved: false }), "chat", undefined, undefined, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "forget it" }), conversation: key, run });
+  await mk("run-a")("mcp__send__send", { text: "hello" }, opts);
+  await mk("run-a")("mcp__memory__journal", {}, opts);
+  assert.equal(armedCount(), 0, "plumbing leaves nothing in memory");
+  await mk("run-a")(FORGET, { file: "a.md" }, opts);
+  assert.equal(armedCount(), 1);
+  await noteDone({ conv: key, run: "run-b", source: "chat", tool: FORGET, input: { file: "a.md" } });
+  assert.match(journal(key).at(-1)!.text, /Why: no reason was recorded/, "another run's why is not attached");
+  endRun("run-a");
+  assert.equal(armedCount(), 0, "dropped when its run ends");
+  await noteDone({ conv: key, run: "run-a", source: "chat", tool: FORGET, input: { file: "a.md" } });
+  assert.match(journal(key).at(-1)!.text, /Why: no reason was recorded/);
+  assert.equal(journal(key).length - before, 2);
+});
+
+test("a why that cannot be worked out (a bad time) never fails the permission decision: the call is allowed, audited, and journalled with no reason", async () => {
+  reset();
+  const key = fresh("owner");
+  const before = journal(key).length;
+  scopeOf(key).say("forget the old gym");
+  (scopeOf(key) as unknown as { lastSaidAt: () => number }).lastSaidAt = () => Number.POSITIVE_INFINITY; // an invalid instant: the clock formatting throws RangeError
+  const can = canUse(key);
+  assert.equal(((await can(FORGET, { file: "gym.md" }, opts)) as Out).behavior, "allow");
+  assert.ok(audit(FORGET, (e) => e.decision === "allow").length >= 1, "the allow row was written");
+  await noteDone({ conv: key, source: "chat", tool: FORGET, input: { file: "gym.md" } });
+  assert.match(journal(key).slice(before)[0]!.text, /Why: no reason was recorded for this call\.$/);
 });

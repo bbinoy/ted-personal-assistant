@@ -1,4 +1,7 @@
 import { emit } from "../core/events.ts";
+import { convIdOfKey, convPaths } from "../core/convpaths.ts";
+import { ledgerEntries } from "../core/messages.ts";
+import { journalable } from "../approvals/journalrender.ts";
 import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
@@ -128,6 +131,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const looker = lookerOf(conv);
     const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour, looker.zone);
     let toolCalls = 0;
+    const journalFile = convPaths(convIdOfKey(conv.key)).messages; // where the journal sink writes this conversation's lines
+    const journaled = (): number => ledgerEntries(journalFile).filter((m) => m.kind === "journal").length;
+    const journaledBefore = journaled();
+    let steps = 0; // calls that could have a journal line (an action, not a read or plumbing)
     let acted = 0; // tool calls that are not reads (listing the inbox or asking seen_mail is looking, not acting)
     let archived = 0;
     let delegations = 0;
@@ -163,6 +170,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
               toolCalls++;
               if (!isReadTool(tool) && tool !== "mcp__seenmail__seen_mail") acted++;
               if (entryFor(tool)?.action === "archive") archived++;
+              if (journalable(tool)) steps++;
             },
           });
         },
@@ -198,7 +206,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
-    emit({ type: "look", conv: conv.key, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
+    const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
+    emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
     recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }

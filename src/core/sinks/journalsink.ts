@@ -13,33 +13,40 @@ import type { Event, Sink, Why } from "../events.ts";
 // A line is written when a call SUCCEEDED (the "done" event, from the SDK's PostToolUse), with the why the permission layer recorded when it let the call run (the "tool" event of the allow,
 // auto-approved, approved or executed step). So a call that was refused, declined, or failed after being allowed leaves no line: the journal says what was done, the audit log what was decided.
 
-const ARM_TTL_MS = 60 * 60_000; // an allowed call that never reports success (it failed, the run ended) is forgotten after this
-const MAX_ARMED = 200;
+const ARM_TTL_MS = 30 * 60_000; // an allowed call that never reports success (it failed, the run ended) is forgotten after this
+const MAX_ARMED = 50;
 interface Armed {
   tool: string;
   keys: string[];
   why: Why;
   at: number;
 }
-const armed = new Map<string, Armed[]>(); // by conversation key
+const armed = new Map<string, Armed[]>(); // by conversation key and run: one run's why never attaches to another run's success
+const slot = (conv: string, run: string | undefined): string => `${conv}\u0000${run ?? ""}`;
 
 export const forgetArmed = (): void => armed.clear(); // tests
+export const armedCount = (): number => [...armed.values()].reduce((n, l) => n + l.length, 0); // tests
 
-function arm(conv: string, tool: string, inputs: readonly Record<string, unknown>[], why: Why, now = Date.now()): void {
-  const list = (armed.get(conv) ?? []).filter((a) => now - a.at < ARM_TTL_MS);
-  list.push({ tool, keys: inputs.map((i) => callKey(tool, i)), why, at: now });
-  armed.set(conv, list.slice(-MAX_ARMED));
+/** A run is over: what it armed and never reported is dropped (the call failed or was never made). */
+export function endRun(run: string): void {
+  for (const k of [...armed.keys()]) if (k.endsWith(`\u0000${run}`)) armed.delete(k);
 }
 
-// The why recorded for this very call (same tool and arguments), else for the oldest allowed call of the same tool not yet reported (the owner edited the arguments, or code narrowed them).
-function take(conv: string, tool: string, input: Record<string, unknown>, now = Date.now()): Why | undefined {
-  const list = (armed.get(conv) ?? []).filter((a) => now - a.at < ARM_TTL_MS);
+function arm(conv: string, run: string | undefined, tool: string, inputs: readonly Record<string, unknown>[], why: Why, now = Date.now()): void {
+  const list = (armed.get(slot(conv, run)) ?? []).filter((a) => now - a.at < ARM_TTL_MS);
+  list.push({ tool, keys: inputs.map((i) => callKey(tool, i)), why, at: now });
+  armed.set(slot(conv, run), list.slice(-MAX_ARMED));
+}
+
+// The why recorded for this very call (same tool and arguments) in this run, else for the oldest allowed call of the same tool in the same run not yet reported (the owner edited the arguments, or code narrowed them).
+function take(conv: string, run: string | undefined, tool: string, input: Record<string, unknown>, now = Date.now()): Why | undefined {
+  const list = (armed.get(slot(conv, run)) ?? []).filter((a) => now - a.at < ARM_TTL_MS);
   const key = callKey(tool, input);
   const i = list.findIndex((a) => a.tool === tool && a.keys.includes(key));
   const j = i >= 0 ? i : list.findIndex((a) => a.tool === tool);
   const hit = j >= 0 ? list[j] : undefined;
   if (j >= 0) list.splice(j, 1);
-  armed.set(conv, list);
+  armed.set(slot(conv, run), list);
   return hit?.why;
 }
 
@@ -54,7 +61,7 @@ export interface JournalLine {
 }
 
 const flat = (s: string, n: number): string => {
-  const t = clip(s, 1_000_000); // (controls, bidi and invisible characters out, one line)
+  const t = clip(s, 1_000_000).replace(/\b(Why|Undo)\s*:/gi, "$1 -"); // (controls, bidi and invisible characters out, one line; a mail subject cannot fake the Why: or Undo: part of a line)
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
@@ -72,11 +79,13 @@ export function journalText(p: { what: string; why?: Why; undo?: string }): stri
 const NO_WHY: Why = { text: "no reason was recorded for this call" };
 
 // Pure (given the lookup of recorded whys): the journal lines an event stands for.
-export function project(e: Event, why: (conv: string, tool: string, input: Record<string, unknown>) => Why | undefined = () => undefined): JournalLine[] {
+export function project(e: Event, why: (conv: string, run: string | undefined, tool: string, input: Record<string, unknown>) => Why | undefined = () => undefined): JournalLine[] {
   switch (e.type) {
+    case "look":
+      return e.unjournaled && e.conv !== undefined ? [{ conv: e.conv, cat: "other", text: journalText({ what: `Looked and took ${e.unjournaled} step${e.unjournaled === 1 ? "" : "s"} that leave no line of their own (browser steps or bookkeeping)`, why: { text: "a periodic look at your accounts, on its standing instructions" } }) }] : [];
     case "done": {
       if (e.conv === undefined) return [];
-      const w = e.why ?? why(e.conv, e.tool, e.input);
+      const w = e.why ?? why(e.conv, e.run, e.tool, e.input);
       if (e.cat === "browse" && !w?.asked) return []; // the browser's every click and page is no action worth a line; a step somebody was asked about (or the judge) is
       return [{ conv: e.conv, cat: e.cat, text: journalText({ what: e.what, why: w ?? NO_WHY, undo: e.undo }) }];
     }
@@ -103,7 +112,7 @@ export const journalSink: Sink = {
   handle(e) {
     if (e.type === "tool") {
       const step = stepOf(e.decision);
-      if (e.call && e.why && step && LETS_RUN.has(step)) arm(e.conv ?? OWNER_KEY, e.tool, e.call.final ? [e.call.input, e.call.final] : [e.call.input], e.why);
+      if (e.call && e.why && step && LETS_RUN.has(step)) arm(e.conv ?? OWNER_KEY, e.run, e.tool, e.call.final ? [e.call.input, e.call.final] : [e.call.input], e.why);
       return;
     }
     for (const l of project(e, take)) recordMessage("journal", stamp(), l.text, new Date(), convPaths(convIdOfKey(l.conv)).messages, { cat: l.cat });

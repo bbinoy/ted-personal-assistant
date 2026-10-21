@@ -21,10 +21,12 @@ import { scopeOf } from "./turnscope.ts";
 const NOT_ACTIONS = new Set(["send", "seenmail", "status", "draw", "voice", "weather"]);
 const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]), notes: new Set(["write_note"]) }; // (the rest of these servers read: search_logs, journal, read_note)
 const NOTE_WRITES = new Set(["Write", "Edit"]);
+const NOT_TOOLS = new Set(["Agent", "Task", "TodoWrite", "ToolSearch"]); // the SDK's own: a delegation is the expert's actions (each its own line), not an action itself
 
 // Pure: does a successful call of this tool belong in the journal? Never a read (a look-up, a search, the journal itself); never plumbing.
 export function journalable(tool: string): boolean {
   if (isReadTool(tool)) return false;
+  if (NOT_TOOLS.has(tool)) return false;
   const e = entryFor(tool);
   if (!e) return true; // a tool the manifest does not know is not a read (the verbs say so): an action
   if (e.provider === "builtin") return NOTE_WRITES.has(tool);
@@ -214,6 +216,14 @@ export function notesText(notes: readonly { file: string; inferred: boolean }[] 
 
 // Pure but for the turn scope's clock: the why of a call. First what code knows: the approval they answered, else whose words or which instruction started the run.
 export function whyOf(o: WhyInput): Why {
+  try {
+    return whyOfUnsafe(o);
+  } catch (e) {
+    console.error(`journal: could not work out why (${(e as Error)?.name ?? "error"})`); // (a bad time zone must never fail the permission decision it is part of)
+    return { text: "no reason was recorded for this call" };
+  }
+}
+function whyOfUnsafe(o: WhyInput): Why {
   const at = scopeOf(o.conv).lastSaidAt();
   const p = o.provenance;
   const base =
@@ -231,7 +241,7 @@ export function whyOf(o: WhyInput): Why {
 // ---- the success ----
 
 // A tool call succeeded (run/agentrun.ts afterTool): tell the event stream. Never throws: the journal is a record, the run goes on.
-export async function noteDone(o: { conv: string | undefined; source: Source; tool: string; input: Record<string, unknown>; response?: unknown }): Promise<void> {
+export async function noteDone(o: { conv: string | undefined; run?: string; source: Source; tool: string; input: Record<string, unknown>; response?: unknown }): Promise<void> {
   const conv = o.conv ?? OWNER_KEY;
   try {
     if (isReadTool(o.tool)) {
@@ -239,7 +249,7 @@ export async function noteDone(o: { conv: string | undefined; source: Source; to
       return;
     }
     if (!journalable(o.tool)) return;
-    emit({ type: "done", conv, tool: o.tool, source: o.source, input: o.input, ...render(conv, o.tool, o.input, o.response) });
+    emit({ type: "done", conv, ...(o.run ? { run: o.run } : {}), tool: o.tool, source: o.source, input: o.input, ...render(conv, o.tool, o.input, o.response) });
   } catch (e) {
     console.error(`journal: could not record ${o.tool} (${(e as Error)?.message ?? "error"})`);
   }

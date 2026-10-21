@@ -465,3 +465,15 @@ test("a post dropped as stale does not mark the mail it reported as seen: the ne
   assert.deepEqual(seen.posted, []);
   assert.deepEqual(createSeenMail(conv.convId).unseen([id]), [id], "not committed");
 });
+
+test("owner's look: browser steps leave no line of their own, so the look writes one short journal line; a look that only read writes none", async () => {
+  const { w, conv } = rig(() => ({ calls: ["mcp__browser__browser_click", "mcp__browser__browser_navigate"] }));
+  const before = ledgerEntries().filter((e) => e.kind === "journal").length;
+  await w.look(conv, DAY);
+  const lines = ledgerEntries().filter((e) => e.kind === "journal").slice(before);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0]!.text, /^Looked and took 2 steps that leave no line of their own/);
+  const reads = rig(() => ({ calls: ["mcp__mailbird__list_conversations"] }));
+  await reads.w.look(reads.conv, min(DAY, 60));
+  assert.equal(ledgerEntries().filter((e) => e.kind === "journal").length - before, 1, "reading is not acting");
+});

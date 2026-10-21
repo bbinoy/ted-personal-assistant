@@ -31,11 +31,11 @@ type Meta = Record<string, unknown>;
 
 export type Event =
   // A permission decision or a step on the way to one (approvals/permissions.ts, approvalask.ts, approvals.ts, pendingflow.ts). `call` + `why` on the steps that let a call run: the journal keeps them until the call succeeds.
-  | ({ type: "tool"; tool: string; decision: string; source: Source; meta?: Meta; call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why } & Where)
+  | ({ type: "tool"; run?: string; tool: string; decision: string; source: Source; meta?: Meta; call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why } & Where)
   // A tool call that SUCCEEDED (the SDK's PostToolUse, run/agentrun.ts): the journal line of an action. `what`, `cat` and `undo` are rendered by code (approvals/journalrender.ts). No audit row: the decision rows say it ran.
-  | ({ type: "done"; tool: string; source: Source; input: Record<string, unknown>; what: string; cat: string; undo?: string; why?: Why } & Where)
+  | ({ type: "done"; run?: string; tool: string; source: Source; input: Record<string, unknown>; what: string; cat: string; undo?: string; why?: Why } & Where)
   // One heartbeat look: the audit row "wake" and the metrics row.
-  | ({ type: "look"; row: HeartbeatRow; source: Source } & Where)
+  | ({ type: "look"; row: HeartbeatRow; source: Source; unjournaled?: number } & Where) // unjournaled: steps it took that wrote no journal line (a browser step), so the look is not silent in the log
   // The nightly dream of a conversation's notes.
   | ({ type: "dream"; result: "changed" | "no-change" | "failed"; source: Source; meta: Meta; text?: string } & Where)
   // A message the assistant had for the person: held for later (quiet hours, the day's limit) or sent.
@@ -70,6 +70,8 @@ export function emit(e: Event): void {
   }
   if (threw) throw failed;
 }
+
+export { endRun } from "./sinks/journalsink.ts"; // a run is over: the why it kept for calls that never reported success is dropped
 
 /** The common case: an audit-only record (tool, decision, source, optional meta). */
 export const emitRecord = (tool: string, decision: string, source: Source, meta?: Meta): void => emit({ type: "record", tool, decision, source, ...(meta ? { meta } : {}) });

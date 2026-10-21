@@ -28,7 +28,12 @@ export const journalShape = {
 export function journalTool(notesDir: string, source: Source, zone?: () => string | undefined) {
   return tool("journal", JOURNAL_DESCRIPTION, journalShape, async (a) => {
     emitRecord("journal", "read", source);
-    const file = convPaths(convOfPath(notesDir) ?? OWNER_CONV).messages;
+    const conv = convOfPath(notesDir) ?? (notesDir === convPaths(OWNER_CONV).notes ? OWNER_CONV : undefined); // (found from the notes folder; a folder that is no conversation's is refused, never read as the owner's)
+    if (!conv) {
+      emitRecord("journal", "refused", source);
+      return { content: [{ type: "text" as const, text: "The journal is not available here." }], isError: true };
+    }
+    const file = convPaths(conv).messages;
     return { content: [{ type: "text" as const, text: fence("journal", readJournal(file, a, { zone: zone?.() }), 12_000) }] };
   });
 }
