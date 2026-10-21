@@ -136,17 +136,27 @@ export interface JudgeSetup {
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
 const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not retry it; tell the owner in your own words what you could not do.";
 
-// The code-rendered details of a plain call as the owner is shown them (what decide() below builds for a call with no guard): the mail as the client holds it right now, the object's name.
-// The approval inbox re-reads them before running an approved call and runs nothing if they changed since it was asked (pendingflow.ts). undefined = they cannot be read now (the draft is gone).
-export async function renderDetails(conversation: string, tool: string, input: Record<string, unknown>): Promise<string | undefined> {
-  let description = describeCall(tool, input);
+// The ONE place the code-rendered details of a call are built, for the ask path below (shown to the owner, judged, hashed) and for the approval inbox's re-read before it runs an approved call
+// (renderDetails, pendingflow.ts): identical by construction. A mail send is shown as the mail client holds it right now, not as the model says it is sending (a send of a draft), the same view for
+// every provider; if that cannot be read the owner would be approving blind, so there is no view and no details (`unreadable`). A call on an object by its id names the object (describe.ts);
+// a guard-built step and a payment have their own text (`own`) and no object line.
+export async function renderCall(conversation: string | undefined, tool: string, input: Record<string, unknown>, own?: { description?: string; payment?: boolean }): Promise<{ description: string; view?: MailView } | { unreadable: true }> {
+  let description = own?.description ?? describeCall(tool, input);
+  let view: MailView | undefined;
   if (MAIL_OUT.has(entryFor(tool)?.view ?? "")) {
     const draft = await (mailToolsOf(tool) ?? mailSlot())?.readBack(entryFor(tool)?.view, input, conversation);
-    const view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
-    if (!view || (view.action !== "forward" && view.to.length === 0)) return undefined;
+    view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
+    if (!view || (view.action !== "forward" && view.to.length === 0)) return { unreadable: true };
     description = describeCall(tool, input, view);
   }
-  return description + (await objectLines(conversation, tool, input));
+  if (!own?.payment && !own?.description) description += await objectLines(conversation ?? OWNER_KEY, tool, input);
+  return { description, view };
+}
+
+// The details as the owner was shown them, read again now. undefined = they cannot be read (the draft is gone).
+export async function renderDetails(conversation: string, tool: string, input: Record<string, unknown>): Promise<string | undefined> {
+  const r = await renderCall(conversation, tool, input);
+  return "unreadable" in r ? undefined : r.description;
 }
 
 export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
@@ -230,21 +240,13 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       log(tool, "deny-already-done", source);
       return { behavior: "deny", message: "That exact call was already approved and done a moment ago. Do not repeat it; check its result once if you need to be sure it went through." };
     }
-    let description = g?.description ?? describeCall(tool, input);
-    let view: MailView | undefined;
-    if (MAIL_OUT.has(entryFor(tool)?.view ?? "")) {
-      // Show what the mail client holds right now, not what the model says it is sending (a send of a draft), and the same view for
-      // every provider. If that cannot be read, the owner would be approving blind, so the send does not happen.
-      const draft = await (mailToolsOf(tool) ?? mailSlot())?.readBack(entryFor(tool)?.view, input, setup.conversation);
-      view = mailView(tool, input, draft && { ...draft, bcc: draft.bcc ?? [], hasAttachments: draft.hasAttachments ?? false });
-      if (!view || (view.action !== "forward" && view.to.length === 0)) {
-        log(tool, "deny-unreadable-draft", source);
-        return { behavior: "deny", message: "That mail could not be read back, so it cannot be shown for approval and was not sent." };
-      }
-      description = describeCall(tool, input, view);
+    const rendered = await renderCall(setup.conversation, tool, input, g);
+    if ("unreadable" in rendered) {
+      log(tool, "deny-unreadable-draft", source);
+      return { behavior: "deny", message: "That mail could not be read back, so it cannot be shown for approval and was not sent." };
     }
-    // A call on an object by its id names the object (describe.ts), not only the id; a payment and a guard-built step have their own text.
-    if (!g?.payment && !g?.description) description += await objectLines(conversation, tool, input);
+    let description = rendered.description;
+    const view: MailView | undefined = rendered.view;
     // A decline is final until the person asks again in a new message (declined.ts): the question and the judge are told, and the judge cannot loosen it.
     const declinedMs = g?.payment ? undefined : declinedAgo(conversation, tool, input, Date.now(), g?.description);
     if (declinedMs !== undefined) description += `\n${declinedLine(declinedMs)}`;

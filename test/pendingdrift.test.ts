@@ -5,6 +5,8 @@ import { openItems } from "../src/approvals/pending.ts";
 import { compactFooter, detailsHash } from "../src/approvals/pendingbatch.ts";
 import { flushPending, forgetRuns, idle, listText, queueCall, recoverStuck, setPendingRuntime, type PendingRuntime } from "../src/approvals/pendingflow.ts";
 import { audit } from "../src/core/audit.ts";
+import { makeCanUseTool, renderDetails } from "../src/approvals/permissions.ts";
+import { setDraftReader } from "../src/modules/mailbird/module.ts";
 
 // The approval inbox after the yes: a target that changed since it was asked is not run, and a run cut short by a stop is noticed (never retried by itself). Fake values only.
 
@@ -65,7 +67,8 @@ test("an approved item stays marked as running until its run ends; a stop in bet
   const [p] = openItems(r.scope);
   assert.ok(p!.executing, "still in the file, marked as running");
   assert.match(listText(r.scope), /1\. ✉️ Reply to Rebecca .*running now/);
-  assert.equal((await say(r.scope, "1 yes")).outcome, "clarify", "a running item cannot be approved twice");
+  const again = await say(r.scope, "1 yes");
+  assert.deepEqual([again.outcome, again.reply], ["clarify", "#1 is already running; I'll report when it's done."], "a running item cannot be approved twice");
   assert.deepEqual(recoverStuck(r.scope), [], "this process is still running it");
   // the restart: nothing runs here, and the audit log has no finished row
   const lost = recoverStuck(r.scope, new Set());
@@ -98,4 +101,28 @@ test("a stuck item whose run did finish (the audit log says so) is simply done; 
   const before = r2.sent.length;
   assert.equal(recoverStuck(r2.scope).length, 0);
   assert.equal(r2.sent.length, before);
+});
+
+test("the details shown at asking time and the ones re-read before running are the same text (one function builds both), for every kind of call that has details", async () => {
+  setDraftReader(async () => ({ to: ["rebecca@example.com"], cc: ["bob@example.com"], bcc: [], subject: "Thursday", body: "Thursday works for me", hasAttachments: false }) as never);
+  const calls: [string, Record<string, unknown>][] = [
+    ["mcp__mailbird__send_message_now", { messageId: 801, confirm: true }], // a send of a draft
+    ["mcp__mailbird__reply_to_conversation", { conversationId: "c1", body: "ok" }], // a reply
+    ["mcp__mailbird__forward_conversation", { conversationId: "c1", to: ["rebecca@example.com"] }], // a forward
+    ["mcp__mailbird__create_draft", { to: ["rebecca@example.com"], subject: "Thursday", body: "hi" }], // a draft
+    ["mcp__claude_ai_Google_Calendar__create_event", { summary: "Dentist", startTime: "2026-10-16T10:00:00", endTime: "2026-10-16T11:00:00", attendees: ["rebecca@example.com"] }], // an invite
+    ["mcp__claude_ai_Google_Calendar__delete_event", { eventId: "e1" }], // an object named by its id
+  ];
+  for (const [tool, input] of calls) {
+    let asked: string | undefined;
+    const can = makeCanUseTool(async (d) => ((asked = d), { approved: false }), "background", undefined, (async () => ({ decision: "ask", reason: "t" })) as never, undefined, undefined, false, { conversation: "owner" });
+    await can(tool, input, { signal: new AbortController().signal } as never);
+    assert.ok(asked, `${tool} was asked about`);
+    const again = await renderDetails("owner", tool, input);
+    assert.equal(detailsHash(again!), detailsHash(asked!), tool);
+    setDraftReader(async () => ({ to: ["mallory@example.com"], cc: [], bcc: [], subject: "Thursday", body: "other", hasAttachments: false }) as never);
+    const changed = await renderDetails("owner", tool, input);
+    if (tool.includes("mailbird__send")) assert.notEqual(detailsHash(changed!), detailsHash(asked!), `${tool}: a changed draft is seen`);
+    setDraftReader(async () => ({ to: ["rebecca@example.com"], cc: ["bob@example.com"], bcc: [], subject: "Thursday", body: "Thursday works for me", hasAttachments: false }) as never);
+  }
 });

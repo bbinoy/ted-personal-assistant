@@ -156,7 +156,8 @@ export async function answerPending(text: string, quote: { timestamp: number } |
   const inBatch = ts === undefined ? [] : items.filter((p) => p.sent?.ts === ts);
   // A quote of some other message says the reply is about that message, unless a batch went out held (its timestamp is not known) and this could be it.
   if (ts !== undefined && inBatch.length === 0 && items.every((p) => p.sent?.ts !== undefined || !p.sent)) return undefined;
-  const parsed = parseNumbered(text, open);
+  const runningNs = allItems(ctx.scope).filter((p) => p.executing).map((p) => p.n); // approved, being done now: they are numbers too, but a second yes would do nothing
+  const parsed = parseNumbered(text, [...open, ...runningNs].sort((x, y) => x - y));
   if (parsed.kind === "clarify") return { outcome: "clarify", reply: parsed.why };
   if (parsed.kind === "bare") {
     if (inBatch.length === 0) return undefined; // a bare yes / ok that quotes none of the batch is about something else
@@ -165,7 +166,12 @@ export async function answerPending(text: string, quote: { timestamp: number } |
   }
   if (parsed.kind === "answer") {
     const by = new Map(items.map((p) => [p.n, p]));
-    return settle(ctx, [...parsed.yes.map((n) => ({ item: by.get(n)!, yes: true })), ...parsed.no.map((n) => ({ item: by.get(n)!, yes: false }))], text);
+    const busy = [...parsed.yes, ...parsed.no].filter((n) => runningNs.includes(n));
+    const note = busy.length ? `${busy.map((n) => `#${n}`).join(", ")} ${busy.length === 1 ? "is" : "are"} already running; I'll report when ${busy.length === 1 ? "it's" : "they're"} done.` : "";
+    const picks = [...parsed.yes.filter((n) => by.has(n)).map((n) => ({ item: by.get(n)!, yes: true })), ...parsed.no.filter((n) => by.has(n)).map((n) => ({ item: by.get(n)!, yes: false }))];
+    if (picks.length === 0) return { outcome: "clarify", reply: note };
+    const done = settle(ctx, picks, text);
+    return note ? { ...done, reply: [done.reply, note].filter(Boolean).join(" ") } : done;
   }
   // Free words that quote the batch: the answer model reads them (the same one as for every approval), and only a plain yes / no per item counts.
   if (inBatch.length === 0 || !text.trim()) return undefined;
