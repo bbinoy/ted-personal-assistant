@@ -12,19 +12,19 @@ const { dataPath } = await import("../src/core/state.ts");
 const ACI = "11111111-2222-4333-8444-555555555555";
 
 test("a corrupt registry pauses the friends only: the owner is still routed and start-up does not crash; nothing is saved over the file", async () => {
-  T.ensureOwner({ number: "+15550000001" });
+  T.ensureOwner({ number: "+10000000001" });
   const path = dataPath(T.REGISTRY);
   const good = readFileSync(path, "utf8");
   writeFileSync(path, "{ torn");
   const silence = console.error;
   console.error = () => {};
   try {
-    const owner = T.ensureOwner({ number: "+15550000001" }); // what main.ts does at every start
+    const owner = T.ensureOwner({ number: "+10000000001" }); // what main.ts does at every start
     assert.equal(owner.role, "admin");
-    assert.equal(T.resolveSender({ number: "+15550000001" })?.id, T.OWNER_ID, "the owner is routed from her settings");
+    assert.equal(T.resolveSender({ number: "+10000000001" })?.id, T.OWNER_ID, "the owner is routed from her settings");
     assert.deepEqual(T.listTenants(), [], "no friend is routed");
     assert.equal(T.tenantByAci(ACI), undefined);
-    assert.equal(T.learnOwnerAci({ number: "+15550000001", aci: ACI }), false, "nothing is learned into an unreadable file");
+    assert.equal(T.learnOwnerAci({ number: "+10000000001", aci: ACI }), false, "nothing is learned into an unreadable file");
     assert.throws(() => T.addTenant({ aci: ACI, name: "Eve" }), /refusing to overwrite/);
     assert.ok(T.registryProblem(), "the problem is reported");
     assert.match(T.REGISTRY_NOTICE, /friends are paused/);

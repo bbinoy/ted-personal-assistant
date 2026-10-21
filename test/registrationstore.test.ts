@@ -41,7 +41,7 @@ test("an id names one person: a short prefix, an unknown id, or a prefix two peo
   Reg.register({ aci: aci(2, "dddddddd"), name: "Una", text: "a", timestamp: 1 }, NOW);
   Reg.register({ aci: aci(3, "dddddddd"), name: "Vic", text: "b", timestamp: 2 }, NOW + 1000);
   const before = file();
-  for (const id of ["", "ddddd", "dddddd", "dddddddd", "eeeeeeee", "+15555550199"]) {
+  for (const id of ["", "ddddd", "dddddd", "dddddddd", "eeeeeeee", "+10000000004"]) {
     assert.equal(Reg.approve(id, NOW + 2000), undefined, `approve ${id}`);
     assert.equal(Reg.decline(id, NOW + 2000), false, `decline ${id}`);
     assert.equal(Reg.forget(id, NOW + 2000), false, `forget ${id}`);
@@ -82,8 +82,8 @@ test("invited: one hello makes one reply a friend, by account id or by number, f
   assert.equal(Reg.takeInvited({ aci: aci(7) }, NOW), false, "somebody else");
   assert.equal(Reg.takeInvited({ aci: aci(6) }, NOW), true, "the account id, whatever its case");
   assert.equal(Reg.takeInvited({ aci: aci(6) }, NOW), false, "used up");
-  Reg.markInvited({ number: "+15555550123" }, NOW);
-  assert.equal(Reg.takeInvited({ aci: aci(8), number: "+15555550123" }, NOW), true, "by number, when the messenger gives it");
+  Reg.markInvited({ number: "+10000000002" }, NOW);
+  assert.equal(Reg.takeInvited({ aci: aci(8), number: "+10000000002" }, NOW), true, "by number, when the messenger gives it");
   Reg.markInvited({ aci: aci(9) }, NOW);
   assert.equal(Reg.takeInvited({ aci: aci(9) }, NOW + 31 * DAY), false, "a month later it has lapsed");
   for (let i = 0; i < 60; i++) Reg.markInvited({ aci: aci(100 + i) }, NOW);
@@ -94,16 +94,16 @@ test("invited: one hello makes one reply a friend, by account id or by number, f
 test("the owner's hello: only a number or a username, only the fixed text, and only a reply from someone we can recognise is pre-approved", async () => {
   const sent = [] as { to: string; text: string }[];
   const send = (accountId?: string) => async (to: string, text: string) => (sent.push({ to, text }), { timestamp: 1, accountId });
-  for (const bad of ["", "ann", "+0123", "15555550114", "ann.4 ; rm", "+1555555011499999999"]) {
+  for (const bad of ["", "ann", "+0123", "15555550114", "ann.4 ; rm", "+1000000000599999999"]) {
     await assert.rejects(Reg.invitePerson(bad, send(), NOW), /phone number/, bad);
   }
   assert.equal(sent.length, 0, "nothing was sent to a recipient that is not one");
   assert.deepEqual(await Reg.invitePerson("ann.42", send(), NOW), { preapproved: false }); // (a username the messenger could not resolve: the ordinary request)
   assert.deepEqual(await Reg.invitePerson("ann.42", send(aci(10)), NOW), { preapproved: true });
-  assert.deepEqual(await Reg.invitePerson("+15555550124", send(), NOW), { preapproved: true });
+  assert.deepEqual(await Reg.invitePerson("+10000000003", send(), NOW), { preapproved: true });
   assert.equal(sent.length, 3);
   assert.ok(sent.every((s) => s.text === Reg.helloText()), "the fixed hello and nothing else");
   assert.equal(Reg.takeInvited({ aci: aci(10) }, NOW), true);
-  assert.equal(Reg.takeInvited({ aci: aci(11), number: "+15555550124" }, NOW), true);
-  assert.equal(Reg.isRecipient("+15555550124") && Reg.isRecipient("ann.42") && !Reg.isRecipient("ann"), true);
+  assert.equal(Reg.takeInvited({ aci: aci(11), number: "+10000000003" }, NOW), true);
+  assert.equal(Reg.isRecipient("+10000000003") && Reg.isRecipient("ann.42") && !Reg.isRecipient("ann"), true);
 });
