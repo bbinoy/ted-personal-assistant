@@ -12,12 +12,26 @@ const FILE = "state/cap-notices.json";
 interface Seen {
   day: string;
   keys: string[];
+  at?: Record<string, number>; // notices throttled by an interval instead of a day (below): key -> when it last went out
 }
 const today = (now: number): Seen => {
   const day = localDay(new Date(now));
   const s = readJson<Seen | undefined>(FILE, undefined);
-  return s?.day === day ? s : { day, keys: [] };
+  return s?.day === day ? s : { day, keys: [], ...(s?.at ? { at: s.at } : {}) };
 };
+
+// The same file for the notices that repeat after an INTERVAL (the shared key's problem every few hours, a group's error notice every few minutes): the time of the last
+// one, so a restart does not send it again. Entries older than a day are dropped when one is written (no interval is longer).
+export const lastNoticeAt = (key: string): number | undefined => readJson<Seen | undefined>(FILE, undefined)?.at?.[key];
+export function markNoticeAt(key: string, now = Date.now()): void {
+  const s = today(now);
+  const at = Object.fromEntries(Object.entries(s.at ?? {}).filter(([, t]) => now - t < 24 * 3_600_000));
+  writeJson(FILE, { ...s, at: { ...at, [key]: now } });
+}
+export function clearNoticeAt(prefix: string): void {
+  const s = readJson<Seen | undefined>(FILE, undefined);
+  if (s?.at) writeJson(FILE, { ...s, at: Object.fromEntries(Object.entries(s.at).filter(([k]) => !k.startsWith(prefix))) });
+}
 export const capNoticeDue = (key: string, now = Date.now()): boolean => !today(now).keys.includes(key);
 export function markCapNotice(key: string, now = Date.now()): void {
   const s = today(now);
