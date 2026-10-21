@@ -35,7 +35,7 @@ type Run = (prompt: string) => Promise<unknown>;
 const viaJudge = (io: JudgeIO, ms: number): Run => async (prompt) => (await withTimeout(runJudge("write", prompt, io), ms))?.out;
 
 // ONE model call writes the question, always in the owner's language; code checks that every address, URL, id, title, time, date, amount
-// and the words Cc / Bcc from the exact arguments appear in it (questionfacts.ts) and that no other address does. If anything
+// and the words Cc / Bcc from the exact arguments appear in it (questionfacts.ts) and that no address or URL outside the arguments and details does. If anything
 // fails (error, timeout, junk, a missing fact) there is NO question and no retry: the caller does not ask, the action is not
 // approved, and the failure is audited with the full arguments. Never throws.
 export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeoutMs = 15_000, run: Run = viaJudge(io, timeoutMs)): Promise<Composed> {

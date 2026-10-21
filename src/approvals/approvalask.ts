@@ -5,6 +5,7 @@ import { recentIn } from "./recentchat.ts";
 import { composeQuestion } from "./approvalmodel.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
+import { questionFooter } from "./questionfooter.ts";
 
 // Asking the owner: a model writes the question in one call and code validates it against the exact arguments (approvalmodel.ts,
 // questionfacts.ts); if that fails nothing is asked. The ask is audited with the FULL arguments, the exact text sent and, afterwards,
@@ -32,7 +33,8 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     // One model call writes it, code validates it. No question means no ask and no card: the agent gets the failure as the tool result.
     const c = await compose({ tool: call.tool, args: call.input, details: description, recent: recentIn(scope), background, source });
     if (c.text === undefined) return { approved: false, failure: `no question could be written that states the exact arguments (${c.failure})` };
-    const question = c.text;
+    // The model's words, then a footer code renders from the exact details (questionfooter.ts): recipients, attachments, the start of the text. A card payment keeps its own code-built facts.
+    const question = o?.typedYes ? c.text : c.text + questionFooter(description);
     const asked = structuredClone(call.input);
     audit(call.tool, "approval-asked", source, rows({ args: argsForAudit(asked), question, details: description, writeMs: c.ms, by: c.by }));
     const d = await request(send, description, call, abort, { background, question, scope, source, typedYes: o?.typedYes });
