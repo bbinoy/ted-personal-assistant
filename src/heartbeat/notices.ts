@@ -1,4 +1,3 @@
-import { dirname, join } from "node:path";
 import { overBudget } from "../core/budget.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
@@ -6,17 +5,21 @@ import { settings } from "../core/settings.ts";
 import { ledgerEntries } from "../core/messages.ts";
 import { readJson, writeJson } from "../core/state.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
-import { causeOf, type Cause } from "../tenants/errors.ts";
-import { tenantById, tenantContext, zoneOf } from "../tenants/tenants.ts";
+import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
+import { isQuiet, siblingFile } from "../conversation/quiet.ts";
+import { askLines, type LineWriter } from "./digestlines.ts";
+import { digestDue, digestText, oneLine, planDigest } from "./digest.ts";
+import { zoneOf } from "../tenants/tenants.ts";
 
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Three small, separate mechanisms, all pure planners over a little state:
 //   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat; in a group once per group per day
 //      and only when someone addressed it.
 //   2. the failure notice: looks that fail on and on (3 in a row, or failures for an hour) are said ONCE per incident with the cause class and the fix, and "back to normal" when one works.
 //      The owner's own and a group's look are told as such; friends' only as a count (no names, no words of theirs).
-//   3. quiet hours and the day's cap, in code: an unprompted heartbeat post inside the quiet window, or past MAX_UNPROMPTED_PER_DAY, is HELD (state, per conversation) and goes out as ONE
-//      combined message when the window ends (or the next day, for the cap). The run marks a post `urgent` (rules.ts) only when it is time-critical: that is exempt from both.
-// The system notices of 1 and 2 respect the quiet window too (held, then delivered with the rest), and are exempt from the cap.
+//   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY,
+//      is HELD (state, per conversation) and goes out as ONE curated digest (digest.ts: grouped needs you / FYI / system, deduplicated, newest first, capped) when quiet ends, and at the
+//      DIGEST_TIMES slots for what the cap held. The run marks a post `urgent` (rules.ts) only when it is time-critical: that is exempt from all of it.
+// The system notices of 1 and 2 respect the quiet window too (held, then delivered with the rest), and are exempt from the cap. Every failure notice ENDS with the one step to take (errors.ts FIXES).
 
 // ---- the pure planners ----
 
@@ -55,26 +58,13 @@ export function stillTrue(held: readonly Held[], now: number, today: string, wro
   });
 }
 
-// The one message that holds everything: a single item as it is, several as a short list.
-export function combine(held: readonly Held[]): string {
-  if (held.length === 1) return held[0]!.text;
-  return `A few things I held back:\n${held.map((h) => `- ${h.text.replace(/\s*\n\s*/g, " ")}`).join("\n")}`;
-}
+// The one message that holds everything, as the digest the owner gets (digest.ts): a single item as it is, several grouped, deduplicated, newest first and capped.
+export const combine = (held: readonly Held[]): string => digestText(planDigest(held, settings.digestMaxItems));
 
 // ---- the failure tracker ----
 
 export type Scope = "owner" | "group" | "tenant";
 const HOUR = 3_600_000;
-const FIX: Readonly<Record<Cause, { what: string; fix: string }>> = {
-  login: { what: "my Claude login expired", fix: "On the Mac run `claude auth login`." },
-  limit: { what: "the plan's usage limit is hit", fix: "It lifts by itself; nothing to do." },
-  billing: { what: "the shared API key has no credit left", fix: "Check the account behind TENANT_ANTHROPIC_API_KEY in .env, then restart." },
-  refused: { what: "the shared API key was refused", fix: "Check TENANT_ANTHROPIC_API_KEY in .env, then restart." },
-  timeout: { what: "the runs are timing out", fix: "Run `npm run doctor`; if it keeps happening, RUN_MAX_MINUTES_BACKGROUND in .env raises the limit." },
-  connector: { what: "a connector (Notion, Calendar or Gmail) is not answering", fix: "Run `npm run doctor`, then add the connector again in your Claude account (Settings, Connectors)." },
-  other: { what: "the model run keeps failing", fix: "Run `npm run doctor`; the details are in logs/agent.log." },
-};
-
 interface Streak {
   n: number;
   since: number;
@@ -108,7 +98,7 @@ export function createFailureTracker(o: { count?: number; windowMs?: number } = 
       const first = scope !== "tenant" || toldFriends() === 0; // friends: one notice for all of them while the incident lasts
       st.told = true;
       if (!first) return [];
-      const c = FIX[cause ?? "other"];
+      const c = FIXES[cause ?? "other"];
       const when = timeIn(new Date(st.since), zone);
       if (scope === "tenant") return [`Background work for ${[...streaks.values()].filter((x) => x.scope === "tenant" && x.n > 0).length} friend(s) keeps failing (since ${when}): ${c.what}. ${c.fix}`];
       return [`My background checks${scope === "group" ? " in one of your groups" : ""} have failed ${st.n} times in a row (since ${when}): ${c.what}. ${c.fix}`];
@@ -125,11 +115,7 @@ interface HoldState {
 }
 
 // Next to the conversation's other bookkeeping, like seen-mail.json (seenmail.ts).
-export const heldFileOf = (conv: Pick<Conversation, "tenantId" | "kind" | "sessionFile">): string => {
-  if (conv.kind === "owner") return "state/held-posts.json";
-  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-  return join(rec ? tenantContext(rec).dir : dirname(conv.sessionFile), "held-posts.json");
-};
+export const heldFileOf = (conv: Pick<Conversation, "tenantId" | "kind" | "sessionFile">): string => siblingFile(conv, "held-posts.json");
 
 const MAX_HELD = 30; // a flood is dropped oldest first: this is a morning digest, not an archive
 function load(conv: Conversation, now: Date, zone: string): HoldState {
@@ -140,12 +126,14 @@ function load(conv: Conversation, now: Date, zone: string): HoldState {
 const save = (conv: Conversation, st: HoldState): void => writeJson(heldFileOf(conv), { ...st, held: st.held.slice(-MAX_HELD) });
 const zoneFor = (conv: Conversation): string => zoneOf(conv);
 const isNight = (now: Date, zone: string): boolean => inQuietHours(now, settings.quietStartHour, settings.quietEndHour, zone);
+// Is this conversation being left alone right now: the quiet window, or its own /quiet (conversation/quiet.ts)?
+const holding = (conv: Conversation, now: Date, zone: string): boolean => isNight(now, zone) || isQuiet(conv, now);
 
 // A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).
 export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date): "post" | "held" {
   const zone = zoneFor(conv);
   const st = load(conv, now, zone);
-  const plan = planPost({ urgent, night: isNight(now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay });
+  const plan = planPost({ urgent, night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay });
   if (plan === "post") {
     if (!urgent) st.posted++;
     save(conv, st);
@@ -168,8 +156,9 @@ export function countPosts(conv: Conversation, n: number, now: Date): void {
 export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, text: string, costUsd?: number) =>
   pipeline.enqueue(conv, async () => pipeline.runTurn(conv, { run: async () => ({ text, costUsd }), background: true, announce: false, kind: "notice" })).catch((e) => ({ error: e as unknown, spoke: false }));
 
-// On every tick: if the quiet window is over (or the day turned, for the cap) and something is held, post it as ONE message. Kept if the post fails. Returns whether it posted.
-export async function releaseHeld(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, now: Date): Promise<boolean> {
+// On every tick: if quiet is over (the window, or /quiet) and something is held, or a digest slot has passed for what the cap held, post it as ONE digest (digest.ts). Kept if the post fails.
+// `lines`: the optional model that shortens the owner's items (digestlines.ts; the code's own lines when it is absent, fails, times out or answers wrongly). Returns whether it posted.
+export async function releaseHeld(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, now: Date, o: { lines?: LineWriter } = {}): Promise<boolean> {
   const first = readJson<Partial<HoldState>>(heldFileOf(conv), {});
   if (!Array.isArray(first.held) || first.held.length === 0) return false; // the usual tick: one small read, nothing more
   const zone = zoneFor(conv);
@@ -180,9 +169,16 @@ export async function releaseHeld(pipeline: Pick<Pipeline, "enqueue" | "runTurn"
     st.held = keep; // what is no longer true is dropped, not delivered
     save(conv, st);
   }
-  if (!planFlush({ night: isNight(now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: st.held.length })) return false;
+  if (!planFlush({ night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: st.held.length })) return false;
+  if (!digestDue({ held: st.held, now: now.getTime(), zone, slots: settings.digestMinutes })) return false;
   const batch = st.held.slice();
-  const res = await postNotice(pipeline, conv, combine(batch));
+  const plan = planDigest(batch, settings.digestMaxItems);
+  const shown = plan.groups.flatMap((g) => g.items);
+  let lines: string[] | undefined;
+  const write = o.lines ?? (settings.digestSummarize && conv.kind === "owner" ? askLines : undefined); // (the model reads the owner's items only: a friend's run is paid by the shared key)
+  if (write && shown.length > 1) lines = await write(shown.map((h) => h.text)).catch(() => undefined); // (a failed or slow model is just the code's lines)
+  const text = digestText(plan, (h) => lines?.[shown.indexOf(h)] ?? oneLine(h.text));
+  const res = await postNotice(pipeline, conv, text);
   if (res.error) return false;
   const now2 = load(conv, now, zone); // (re-read: a look may have held more meanwhile)
   now2.held = now2.held.filter((h) => !batch.some((b) => b.text === h.text));
@@ -198,12 +194,12 @@ export const ownerNotices = {
   sendTo: (fn: ((text: string) => void) | undefined): void => void (send = fn), // main.ts: the owner's chat
 };
 
-// A system notice for the owner: now, or held until the quiet window ends. Never throws.
-export function noticeOwner(text: string, now: Date = new Date(), o: { sameDay?: boolean } = {}): void {
+// A system notice for the owner: now, or held until the quiet window (or /quiet) ends, then in the digest. `urgent` goes at once. Never throws.
+export function noticeOwner(text: string, now: Date = new Date(), o: { sameDay?: boolean; urgent?: boolean } = {}): void {
   try {
     const conv = owner();
     const zone = zoneFor(conv);
-    if (isNight(now, zone)) {
+    if (!o.urgent && holding(conv, now, zone)) {
       const st = load(conv, now, zone);
       if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: "quiet", notice: true, at: now.getTime(), day: st.day, sameDay: o.sameDay });
       return save(conv, st);
@@ -215,7 +211,7 @@ export function noticeOwner(text: string, now: Date = new Date(), o: { sameDay?:
 }
 
 // 1. The budget: once a day, from the tick (wake.ts), when the day's spend has reached the ceiling.
-export const budgetText = (): string => `Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. Raise DAILY_BUDGET_USD to change it.`;
+export const budgetText = (): string => `Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. To lift it today, raise DAILY_BUDGET_USD in .env and restart.`;
 export function noticeBudget(now: Date = new Date()): boolean {
   const b = overBudget(); // (the only caller: asking elsewhere never uses up the day's one notice)
   if (b.firstTime) noticeOwner(budgetText(), now, { sameDay: true });

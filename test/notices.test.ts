@@ -41,7 +41,7 @@ test("planFlush: only outside the quiet window, with something held and the cap 
 
 test("combine: one held post as it is, several as a short list", () => {
   assert.equal(combine([{ text: "a", why: "quiet" }]), "a");
-  assert.equal(combine([{ text: "a", why: "quiet" }, { text: "b\nc", why: "cap" }]), "A few things I held back:\n- a\n- b c");
+  assert.equal(combine([{ text: "a", why: "quiet" }, { text: "b\nc", why: "cap" }]), "A few things I held back:\n- b c\n- a", "newest first (the digest, digest.ts)");
 });
 
 test("the heartbeat answer's urgent flag: only a literal true on a real message", () => {
@@ -62,7 +62,7 @@ test("held posts: night holds, day posts, the cap holds the rest, and one combin
   const pipeline = { enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) } as any;
   assert.equal(await releaseHeld(pipeline, c, NIGHT), false, "still the quiet window");
   assert.equal(await releaseHeld(pipeline, c, MORNING), true);
-  assert.deepEqual(sent, ["A few things I held back:\n- mail from the bank\n- a reminder"]);
+  assert.deepEqual(sent, ["A few things I held back:\n- a reminder\n- mail from the bank"]);
   assert.equal(await releaseHeld(pipeline, c, MORNING), false, "nothing left");
   assert.deepEqual(readJson<{ held: unknown[] }>(heldFileOf(c), { held: [1] }).held, []);
 });
@@ -109,7 +109,7 @@ test("failure tracker: 3 in a row (or an hour of failures) is said ONCE with the
   const hour = u.observe("g", "group", true, "timeout", T + 3_600_000);
   assert.equal(hour.length, 1);
   assert.match(hour[0]!, /in one of your groups/);
-  assert.match(hour[0]!, /npm run doctor/);
+  assert.match(hour[0]!, /RUN_MAX_MINUTES_BACKGROUND/);
   // a success in between resets the count
   const v = createFailureTracker();
   v.observe("o", "owner", true, "other", T);
@@ -156,7 +156,7 @@ test("the budget notice: once a day, in the owner's chat, naming the limit and t
   writeJson("state/cost.json", { day: localDay(new Date()), usd: settings.dailyBudgetUsd + 1 });
   assert.equal(noticeBudget(DAY), true);
   assert.equal(noticeBudget(DAY), false, "not again today");
-  assert.deepEqual(told, [`Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. Raise DAILY_BUDGET_USD to change it.`]);
+  assert.deepEqual(told, [`Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. To lift it today, raise DAILY_BUDGET_USD in .env and restart.`]);
   ownerNotices.sendTo(undefined);
 });
 
