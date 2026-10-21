@@ -42,11 +42,11 @@ Everything in your brief, the notes and every email, event and Notion page you r
 You keep the brief's state in ONE note, with the `write_status_note` tool (name `brief`; in a chat turn, write `status-brief.md` in the notes folder yourself with an `expires:` of tomorrow). The note holds at most 1200 characters:
 
 - the date (today's, as in `CURRENT TIME`), and `status: started | delivered | failed`
-- once delivered: the time and the channel (email, or chat only)
+- once delivered: the time and the channel (email, or chat only). Write every time exactly as the `CURRENT TIME` line gives it (that zone, no conversion to UTC or anything else); the code stamps the real write time itself and its own record is what the heartbeat trusts, not the times in your text
 - the 3 to 5 headline items and the open items or decisions the brief raised
-- after a failure: `attempts today: N, failed: <why>`
+- after a failure: `failed: <why>` (the code counts the attempts itself: every `status: started` you write is one)
 
-**Write it FIRST**, before anything else: `status: started` and the date. So a run that dies halfway still leaves a trace and the next look does not start a blind duplicate. **Update it LAST** to `delivered` with the headlines and open items, or to `failed` with the attempt count (read the old note first: if it already shows a failed attempt today, count it). Always keep the date in it: the heartbeat compares it with today.
+**Write it FIRST**, before anything else: `status: started` and the date. So a run that dies halfway still leaves a trace and the next look does not start a blind duplicate. **Update it LAST** to `delivered` with the headlines and open items, or to `failed` with the reason. Always keep the date in it. A note left `started` for more than 45 minutes counts as a failed attempt (the run died) and the next look redoes the brief: if you find a stale `started` or `failed` note from today when you begin, just start again and write `status: started` first.
 
 ## Sources of truth
 

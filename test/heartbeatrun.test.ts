@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { group, owner, type Conversation } from "../src/conversation/conversation.ts";
@@ -13,6 +13,7 @@ import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readText } from "../src/core/state.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
+import { statusFact, writeStatusNote } from "../src/modules/status/statusnote.ts";
 import { RunAborted, RunTimeout } from "../src/run/ceiling.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 
@@ -54,12 +55,12 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       seen.provenance.push(extra.provenance);
       const a = answer();
       sends = a.sends ?? 0;
+      for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
       if (a.gate) await a.gate;
       if (a.hang) await new Promise<never>((_, reject) => extra.signal?.addEventListener("abort", () => reject(new RunAborted(String(extra.signal?.reason)))));
       if (a.timeout) throw new RunTimeout(10 * 60_000);
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
-      for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
       return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30 } };
     },
     notesChangedAt: () => 0,
@@ -295,6 +296,35 @@ test("after a sleep the looks start staggered: at most the cap at a time; those 
     await w.tick(DAY);
     await w.idle();
     assert.equal(seen.runs.length, 6, "all four are due again and run");
+  } finally {
+    console.error = err;
+  }
+});
+
+test("a look that is stopped after delegating the brief marks its 'started' note failed at once, for a timeout, a sleep and a failure alike; a delivered note and a look without a delegation are left alone", async () => {
+  const err = console.error;
+  console.error = () => {};
+  try {
+    for (const answer of [{ delegates: 1, timeout: true }, { delegates: 1, hang: true }, { delegates: 1, throws: true }] as const) {
+      const { w, conv, seen } = rig(() => answer);
+      writeStatusNote("brief", "status: started", min(new Date(), -12), conv.notesDir);
+      const look = w.look(conv, new Date());
+      if (answer.hang) (await new Promise((r) => setTimeout(r, 10)), w.slept());
+      await look;
+      assert.match(seen.prompts[0]!, /status-brief: started 12 min ago/, "the instruction carries the fact line from the note");
+      const after = readFileSync(join(conv.notesDir, "status-brief.md"), "utf8");
+      assert.match(after, /status: failed/);
+      assert.match(after, /attempts: 1\n/);
+      assert.match(statusFact("brief", new Date(), undefined, conv.notesDir), /^status-brief: failed at /);
+    }
+    const kept = rig(() => ({ delegates: 1, timeout: true }));
+    writeStatusNote("brief", "status: delivered", min(new Date(), -30), kept.conv.notesDir);
+    await kept.w.look(kept.conv, new Date());
+    assert.match(readFileSync(join(kept.conv.notesDir, "status-brief.md"), "utf8"), /status: delivered/);
+    const plain = rig(() => ({ timeout: true }));
+    writeStatusNote("brief", "status: started", min(new Date(), -12), plain.conv.notesDir);
+    await plain.w.look(plain.conv, new Date());
+    assert.match(readFileSync(join(plain.conv.notesDir, "status-brief.md"), "utf8"), /status: started/, "nothing was delegated: the look did not write it");
   } finally {
     console.error = err;
   }

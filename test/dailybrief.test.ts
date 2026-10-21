@@ -47,7 +47,7 @@ test("the status note: written by the one narrow tool, status-<name>.md only, on
   const dir = mkdtempSync(join(tmpdir(), "status-"));
   const now = new Date(2026, 9, 14, 9, 0);
   assert.deepEqual(writeStatusNote("brief", "2026-10-14\nstatus: started", now, dir), { ok: true, file: "status-brief.md" });
-  assert.match(readFileSync(join(dir, "status-brief.md"), "utf8"), /^---\nexpires: 2026-10-15\n---\n2026-10-14\nstatus: started\n$/);
+  assert.match(readFileSync(join(dir, "status-brief.md"), "utf8"), /^---\nexpires: 2026-10-15\nwritten: 2026-10-14T[\d:.]+Z\nattempts: 1\n---\n2026-10-14\nstatus: started\n$/);
   assert.equal(categoryOf("status-brief.md"), "status");
   assert.deepEqual(readNotes(now, dir).map((n) => [n.file, n.category, n.text]), [["status-brief.md", "status", "2026-10-14\nstatus: started"]]);
   assert.deepEqual(readNotes(new Date(2026, 9, 16, 9, 0), dir), [], "expired after tomorrow");

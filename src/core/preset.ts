@@ -109,7 +109,7 @@ export const PROMPTS = {
   dream: ["subject", "own", "group", "categories"],
   heartbeatSystem: ["personality", "own", "who", "group"],
   expert: ["personality", "own", "who"],
-  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefHow", "who", "Who", "own", "reads", "mail", "experts", "brief", "sources"],
+  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefFact", "briefHow", "who", "Who", "own", "reads", "mail", "experts", "brief", "sources"],
   gateGroup: ["participation", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;
 export type PromptKey = keyof typeof PROMPTS;

@@ -18,6 +18,8 @@ import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseAnswer } from "../run/rules.ts";
 import { RunAborted, RunTimeout } from "../run/ceiling.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
+import { NOTES_DIR } from "../memory/notes.ts";
+import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 
@@ -61,7 +63,8 @@ export function lastLookText(looked: string | undefined, now: Date, zone: string
 const briefHow = (): string => (settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format.");
 
 // The fixed text of one look, as the judge's standing provenance and the start of the prompt. Written by code from the preset and the conversation's capabilities; no mail, no chat in it.
-export function lookInstruction(now: Date, looked: string | undefined, looker: Looker = lookerOf(owner())): string {
+// `notesDir`: where the conversation's status notes are (the daily brief's state: its fact line is computed from there).
+export function lookInstruction(now: Date, looked: string | undefined, looker: Looker = lookerOf(owner()), notesDir: string = NOTES_DIR): string {
   const today = dayAt(now, 0, looker.zone);
   return heartbeatInstruction({
     now: `${WEEKDAYS[today.weekday]} ${today.date} ${timeIn(now, looker.zone)}`,
@@ -73,6 +76,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     delegated: looker.experts ? delegatedText(expertSetup(looker.skills, "")) : "",
     briefTime: preset().rhythm.heartbeat.briefTime,
     briefOverdueHour: `${String(preset().rhythm.heartbeat.briefOverdueHour).padStart(2, "0")}:00`,
+    briefFact: looker.brief ? statusFact("brief", now, looker.zone, notesDir) : "",
     briefHow: looker.brief ? briefHow() : "",
     who: looker.who,
     own: looker.own,
@@ -113,7 +117,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let delegations = 0;
     const seenMail = createSeenMail(seenFileOf(conv)); // the ids the run is told are new count as seen only if this look ends well
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
-    const instruction = lookInstruction(now, st.wake?.looked, looker);
+    const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let timedOut = false;
     let interrupted = false;
@@ -153,6 +157,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
     }
     const failed = outcome === "failed" || outcome === "timeout";
+    // A look that ended badly after delegating the brief must not leave its note `started` for 45 minutes: the code marks it failed now, so the next look redoes it (heartbeat.md)
+    if (failed && looker.brief && delegations > 0 && failStartedNote("brief", timedOut ? "the run timed out" : interrupted ? "the run was stopped, the Mac slept" : "the run failed", new Date(), conv.notesDir, looker.zone)) console.error("heartbeat: the brief's note was left 'started'; marked failed");
     const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
     if (failed) seenMail.discard();
     else seenMail.commit();
