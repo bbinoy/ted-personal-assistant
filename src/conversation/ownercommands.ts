@@ -151,7 +151,7 @@ const real: CommandDeps = {
       quiet: quietText(conv, now, zoneOf(conv)),
       spentUsd: spentToday(),
       limitUsd: settings.dailyBudgetUsd,
-      lastLook: lastOwnerLook(readText(ROWS_FILE)),
+      lastLook: lastOwnerLook([`${ROWS_FILE}.2`, `${ROWS_FILE}.1`, ROWS_FILE].map((f) => readText(f) ?? "").join("\n")), // (the rotated generations too, heartbeat/rows.ts)
       approvals: openCount(conv.key),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };

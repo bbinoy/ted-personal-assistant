@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, fstatSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,5 +53,37 @@ test("daemon: a host other than this machine is refused unless allowed", async (
     assert.equal((await ensureSignalDaemon({ account: "+10000000000", host: fake.host, port: fake.port, allowNonLoopback: true })).started, false);
   } finally {
     await fake.close();
+  }
+});
+
+test("daemon: a log descriptor given as a function is not opened for a reused daemon, and is closed after a spawn", { skip: process.platform === "win32" && "needs a shell script" }, async () => {
+  let opened = 0;
+  const open = () => (opened++, openSync(join(mkdtempSync(join(tmpdir(), "daemon-log-")), "d.log"), "a"));
+  const fake = await FakeSignalDaemon.start();
+  try {
+    await ensureSignalDaemon({ account: "+10000000000", host: fake.host, port: fake.port, logFd: open });
+    assert.equal(opened, 0, "a reused daemon keeps its own file: nothing to open (or rotate)");
+  } finally {
+    await fake.close();
+  }
+  const bin = mkdtempSync(join(tmpdir(), "fake-signal-cli-"));
+  writeFileSync(join(bin, "signal-cli"), "#!/bin/sh\nexit 3\n");
+  chmodSync(join(bin, "signal-cli"), 0o755);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}:${oldPath}`;
+  let fd = -1;
+  try {
+    const port = await new Promise<number>((resolve) => {
+      const s = net.createServer().listen(0, "127.0.0.1", () => {
+        const p = (s.address() as net.AddressInfo).port;
+        s.close(() => resolve(p));
+      });
+    });
+    await assert.rejects(ensureSignalDaemon({ account: "+10000000000", host: "127.0.0.1", port, logFd: () => (fd = open()) }), /exited before/);
+    assert.equal(opened, 1);
+    assert.throws(() => fstatSync(fd), /EBADF/, "our copy of the descriptor is closed");
+  } finally {
+    process.env.PATH = oldPath;
+    rmSync(bin, { recursive: true, force: true });
   }
 });

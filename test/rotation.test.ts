@@ -47,6 +47,9 @@ test("heartbeat rows: rotated by size, and the report still reads every generati
   assert.ok(read.length < 100 && read.length >= 20, "the oldest generation was dropped");
   assert.deepEqual(read.map((r) => r.archived), read.map((r) => r.archived).slice().sort((a, b) => a - b), "oldest first across generations");
   assert.equal(read.at(-1)!.archived, 99);
+  assert.equal(rows.readRows(`${file}`).length, read.length);
+  const current = readFileSync(join(settings.stateDir, "hb-rotation.jsonl"), "utf8").trim().split("\n");
+  assert.equal(JSON.parse(current.at(-1)!).archived, 99, "the newest row is always in the CURRENT file (rotation happens before the append)");
 });
 
 test("payment ledger: rotation archives the year, never deletes, and the caps and the duplicate check give the same answers before and after", () => {
@@ -78,3 +81,13 @@ test("payment ledger: rotation archives the year, never deletes, and the caps an
 function readdirArchive(): string[] {
   return readdirSync(settings.stateDir).filter((n) => /^payments-rot-test-\d{4}.*\.jsonl$/.test(n));
 }
+
+test("/status: the last look is found even when the current rows file is empty (it reads the rotated generations too)", async () => {
+  const { lastOwnerLook, ROWS_FILE } = await import("../src/conversation/ownercommands.ts");
+  const { readText } = await import("../src/core/state.ts");
+  const line = JSON.stringify({ at: "2026-10-14T12:00:00.000Z", night: false, outcome: "silent" });
+  writeFileSync(join(settings.stateDir, "heartbeat.jsonl.1"), `${line}\n`);
+  writeFileSync(join(settings.stateDir, "heartbeat.jsonl"), "");
+  const text = [`${ROWS_FILE}.2`, `${ROWS_FILE}.1`, ROWS_FILE].map((f) => readText(f) ?? "").join("\n");
+  assert.deepEqual(lastOwnerLook(text), { at: new Date("2026-10-14T12:00:00.000Z"), outcome: "silent" });
+});

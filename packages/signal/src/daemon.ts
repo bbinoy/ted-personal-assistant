@@ -1,5 +1,6 @@
 // Starts `signal-cli daemon` on localhost, so the client has something to connect to.
 import { spawn } from "node:child_process";
+import { closeSync } from "node:fs";
 import net from "node:net";
 import { withoutSecrets } from "@ted-assistant/messenger/env";
 import { silentLogger, type Logger } from "./logger.ts";
@@ -17,7 +18,7 @@ export interface DaemonOptions {
   account: string; // the signal-cli account to run as
   host: string; // where it listens; must be this machine unless allowNonLoopback is set
   port: number;
-  logFd?: number; // where the daemon's output goes (a file descriptor opened for appending); default: discarded
+  logFd?: number | (() => number); // where the daemon's output goes (a file descriptor opened for appending); default: discarded. A function is called ONLY when a daemon is started (not when one is reused) and the descriptor it returns is closed here once the child has its own copy
   logger?: Logger;
   allowNonLoopback?: boolean; // you know the socket is unauthenticated and have put your own protection around it
 }
@@ -51,11 +52,17 @@ export async function ensureSignalDaemon(opts: DaemonOptions): Promise<SignalDae
     log.info("signal-cli daemon already running, reusing it");
     return { started: false, stop() {}, exited: new Promise(() => {}) };
   }
-  const out = logFd ?? "ignore";
-  const child = spawn("signal-cli", ["-a", account, "daemon", "--tcp", `${host}:${port}`, "--no-receive-stdout"], {
-    stdio: ["ignore", out, out],
-    env: withoutSecrets(process.env), // it parses what strangers send; it needs none of the app's keys
-  });
+  const ours = typeof logFd === "function" ? logFd() : undefined; // opened for this spawn only: ours to close
+  const out = ours ?? (typeof logFd === "number" ? logFd : "ignore");
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn("signal-cli", ["-a", account, "daemon", "--tcp", `${host}:${port}`, "--no-receive-stdout"], {
+      stdio: ["ignore", out, out],
+      env: withoutSecrets(process.env), // it parses what strangers send; it needs none of the app's keys
+    });
+  } finally {
+    if (ours !== undefined) closeSync(ours); // the child has its own copy; ours would leak one descriptor per start
+  }
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
     child.once("exit", (code, signal) => resolve({ code, signal }));
     child.once("error", () => resolve({ code: null, signal: null })); // could not be started at all (not installed)

@@ -26,13 +26,11 @@ export async function loadMessengerInUse(who: { owner: MessengerConfig["owner"];
     ...who,
     options: options(),
     logger: console, // the app's console is the timestamped, redacting one from log.ts
-    openLog: (file) => {
-      const fd = openLog(`logs/${file}`);
-      // a long-running daemon keeps its log open for days: check hourly, cut by copy-truncate (state.ts openLog)
-      if (!cutting) cutting = setInterval(() => copyTruncateIfOver(dataPath(`logs/${file}`), LOG_MAX_BYTES, 2), 3_600_000).unref();
-      return fd;
-    },
+    openLog: (file) => openLog(`logs/${file}`), // rotated here (rename) only when a daemon is started: a reused one keeps writing this same file
+
   });
+  // A daemon (ours or a reused one) keeps signal-daemon.log open for days: check hourly and cut it by copy-truncate (its descriptor is O_APPEND).
+  cutting ??= setInterval(() => copyTruncateIfOver(dataPath("logs/signal-daemon.log"), LOG_MAX_BYTES, 2), 3_600_000).unref();
   return current;
 }
 
