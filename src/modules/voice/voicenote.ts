@@ -103,3 +103,14 @@ export function rememberSender(key: string, id: string | undefined, name: string
 }
 export const setAsking = (key: string, a: Asking | undefined): void => void (a ? asking.set(key, { ...a, authorName: a.authorName ?? (a.author ? names.get(`${key}|${a.author}`) : undefined) }) : asking.delete(key));
 export const askingIn = (key: string): Asking | undefined => asking.get(key);
+
+/** A removed friend (or group): everything held for conversation `key`. Returns the attachment ids of its notes, so their files can go too. Idempotent. */
+export function forgetConversation(key: string): string[] {
+  const s = load();
+  const ids = (s.notes[key] ?? []).map((n) => n.id);
+  if (!(key in s.notes) && !(key in s.quotes)) return ids;
+  delete s.notes[key];
+  delete s.quotes[key];
+  save();
+  return ids;
+}

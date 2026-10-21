@@ -24,6 +24,7 @@ const USAGE = [
   "  status               is it running, sealed or open, is the app's token the narrow one it should be",
   "  unseal [--recovery]  unseal from this Mac's Keychain; with --recovery, from two recovery shares typed at hidden prompts",
   "  keep [--quiet]       what the keeper job runs every minute: unseal if sealed, renew the tokens",
+  "  forget-tenant <id>   delete a removed friend's items (tenants/<id>/*) with a short-lived root token (npm run tenants -- remove <id> prints this when needed)",
   "  backup               a Raft snapshot (encrypted by OpenBao) into " + layout.backups,
   "  service install|uninstall   the launchd jobs only",
 ];
@@ -115,6 +116,11 @@ async function main(argv: string[]): Promise<number> {
   }
   if (cmd === "backup") {
     out(`Snapshot: ${await admin.backup()} (encrypted by OpenBao; restoring it needs the unseal shares)`);
+    return 0;
+  }
+  if (cmd === "forget-tenant" && arg) {
+    // The admin side of removing a friend (npm run tenants -- remove <id> prints this command when the app's token could not): her items, with a short-lived root token.
+    out(`${arg}: ${await admin.forgetTenant(arg)} secret-store item(s) removed.`);
     return 0;
   }
   if (cmd === "service" && (arg === "install" || arg === "uninstall")) {

@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { join } from "node:path";
 import type { Keychain } from "./keychain.ts";
 import { BaoError, OpenBao } from "./openbao.ts";
-import { ITEM_KINDS, itemKindRule, keychainNames, OWNER } from "./secrets.ts";
+import { deleteTenantItems, ITEM_KINDS, itemKindRule, keychainNames, OWNER } from "./secrets.ts";
 
 // Installing, starting, initialising, unsealing and configuring the OpenBao server that holds this app's secrets. Used by
 // `npm run openbao` (scripts/openbao.ts) and by the tests. The app itself (openbao.ts, secrets.ts) never needs anything here.
@@ -403,6 +403,18 @@ export class Admin {
     await run(this.o.layout.bin, ["operator", "raft", "snapshot", "save", file], { env: { BAO_ADDR: this.o.addr, BAO_TOKEN: token, BAO_CACERT: this.o.layout.cert } });
     chmodSync(file, 0o600);
     return file;
+  }
+
+  // A removed friend's items (tenants/<id>/*), with a root token from the Keychain shares, in memory only and revoked after: the app's own token may not delete
+  // another person's folder. How many items went.
+  async forgetTenant(id: string): Promise<number> {
+    await this.waitUp();
+    const root = await this.generateRoot(await this.savedShares());
+    try {
+      return await deleteTenantItems(this.api(root), id);
+    } finally {
+      await this.revoke(root);
+    }
   }
 
   // The keeper's second job: the tokens are periodic and must be renewed before they lapse.

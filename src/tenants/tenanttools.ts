@@ -7,8 +7,9 @@ import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
 import { capabilitiesOfRecord } from "./capabilityset.ts";
 import { invitePerson } from "./registration.ts";
-import { deleteTenant, OWNER_ID, people, setStatus, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
-import { TENANT_ID } from "../secrets/secrets.ts";
+import { OWNER_ID, people, setStatus, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
+import { appBao, deleteTenantItems, TENANT_ID } from "../secrets/secrets.ts";
+import { removeTenant, type RemovalDeps } from "./removal.ts";
 
 // The tenant administration: a small in-process MCP server (like memory-tools.ts) in the owner's chat, only with TENANTS=on: list tenants, suspend, resume, delete
 // (the last two ask on the phone, toolmanifest.ts).
@@ -36,6 +37,7 @@ export const tenantHooks: { drop?: (id: string) => void; sendFirst?: (recipient:
 export interface AdminDeps {
   drop?: (id: string) => void; // stop anything in flight for her (warm process, queue state)
   sendFirst?: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }>; // the messenger's first message to somebody (undefined: the platform has none)
+  secrets?: RemovalDeps["secrets"]; // how her secret-store items are deleted when she is removed (default: the app's token; tests)
 }
 
 const when = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
@@ -110,9 +112,9 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
         { ...idArg, confirm: z.literal(true).describe("Always true: the owner's approval is what actually decides") },
         async ({ id }) => {
           if (!found(id)) return reply("No such tenant.", true);
-          deleteTenant(id, { drop: deps.drop ?? tenantHooks.drop });
+          const r = await removeTenant(id, { drop: (t) => (deps.drop ?? tenantHooks.drop)?.(t), secrets: deps.secrets ?? [(t) => deleteTenantItems(appBao(), t)] });
           audit("tenant_status", "deleted", "chat", { tenant: id });
-          return reply(`Deleted ${id} and her data.`);
+          return reply([`Deleted ${id} and her data${r?.removed.length ? `: ${r.removed.join(", ")}` : ""}.`, ...(r?.failed.length ? [`Not removed (ask again): ${r.failed.join(", ")}.`] : []), ...(r?.manual ? [r.manual] : [])].join(" "));
         },
       ),
     ],

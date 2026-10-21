@@ -1,4 +1,4 @@
-// npm run tenants -- list | pending | invite <+number|username> | approve <id> | decline <id> | forget <id> | timezone <id> <zone|default> | set-admin <id>: the administrator's terminal side of tenants
+// npm run tenants -- list | pending | invite <+number|username> | approve <id> | decline <id> | forget <id> | remove <id> | timezone <id> <zone|default> | set-admin <id>: the administrator's terminal side of tenants
 // (docs/SETUP.md "More than one person"). Local terminal only. This is the ONLY place the admin role changes: no tool, no chat path,
 // no model can reach it (a friend's capabilities are not stored: every capability but the owner's own, tenants.ts OWNER_ONLY; to stop a friend, suspend or remove her). test/tenants.test.ts walks every tool.
 import { settings, signalIdentity } from "../src/core/settings.ts";
@@ -6,10 +6,14 @@ import { loadMessengerInUse } from "../src/conversation/messenger.ts";
 import { approve, decline, describePending, forget, invitePerson } from "../src/tenants/registration.ts";
 import { describeTenants } from "../src/tenants/tenanttools.ts";
 import { ensureOwner, setAdmin, setTimeZone } from "../src/tenants/tenants.ts";
+import { removeTenant } from "../src/tenants/removal.ts";
+import { appBao, deleteTenantItems } from "../src/secrets/secrets.ts";
+import { Admin, layoutOf } from "../src/secrets/openbaoadmin.ts";
+import { macKeychain } from "../src/secrets/keychain.ts";
 
 const [cmd, arg, ...rest] = process.argv.slice(2);
 const say = (l: string) => console.log(l);
-const usage = `usage: npm run tenants -- list | pending | invite <+number|username> | approve <id> | decline <id> | forget <id> | timezone <id> <zone|default> | set-admin <id>`;
+const usage = `usage: npm run tenants -- list | pending | invite <+number|username> | approve <id> | decline <id> | forget <id> | remove <id> | timezone <id> <zone|default> | set-admin <id>`;
 
 // The admin role is the way back in after a lock-out, so it works with TENANTS off too; everything about friends needs TENANTS=on.
 if (cmd !== "set-admin" && !settings.tenants) {
@@ -58,6 +62,21 @@ if (cmd === "list") {
   const ok = cmd === "decline" ? decline(arg) : forget(arg);
   say(ok ? `${cmd}: done.` : "No such request.");
   process.exit(ok ? 0 : 1);
+} else if (cmd === "remove" && arg) {
+  // A friend and ALL her data: folder, cloned voices, voice-note index and audio, intake marks and her items in the secret store. The app's token may not delete another
+  // person's folder in OpenBao, so this tries it with the admin's own (a short-lived root token from the Keychain shares) when the app's is refused; if neither works the
+  // exact command is printed. Safe to run again.
+  const cfg = settings.openbao;
+  const admin = new Admin({ layout: layoutOf(cfg.dir), addr: cfg.addr, mount: cfg.mount, role: cfg.role, tenant: "owner", prefix: cfg.keychainPrefix, keychain: macKeychain });
+  const r = await removeTenant(arg, { secrets: [(t) => deleteTenantItems(appBao(), t), (t) => admin.forgetTenant(t)] });
+  if (!r) {
+    say("Not a friend's id.");
+    process.exit(1);
+  }
+  say(r.removed.length || r.registry ? `${arg}: removed${r.registry ? " (registry entry and folder)" : ""}${r.removed.length ? `, ${r.removed.join(", ")}` : ""}.` : `${arg}: nothing left to remove.`);
+  if (r.failed.length) say(`Not removed (run it again): ${r.failed.join(", ")}.`);
+  if (r.manual) say(r.manual);
+  process.exit(r.failed.length || r.manual ? 1 : 0);
 } else if (cmd === "timezone" && arg && rest[0]) {
   // Her clock for the heartbeat run and the day her notes expire on (tenant.json "timeZone"); `default` goes back to the owner's, the Mac's.
   try {
