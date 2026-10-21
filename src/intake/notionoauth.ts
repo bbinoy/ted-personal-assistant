@@ -15,7 +15,7 @@ import { instancePaths } from "../core/convpaths.ts";
 //   1. DISCOVERS the server's OAuth endpoints: the MCP server's /.well-known/oauth-protected-resource names its authorization server, whose
 //      /.well-known/oauth-authorization-server lists the authorization, token and registration endpoints (RFC 9728 / 8414).
 //   2. REGISTERS ONE CLIENT for the whole instance, once (RFC 7591 dynamic registration, a public client: no secret), with the redirect address
-//      <INTAKE_BASE_URL>/oauth/notion/callback. Its id is remembered in state/notion-client.json (an id is not a secret; the intake page, which has only a write-only
+//      <INTAKE_BASE_URL>/oauth/notion/callback. Its id is remembered in instance/notion-client.json (an id is not a secret; the intake page, which has only a write-only
 //      OpenBao token, must be able to read it). It is never registered again per person or per session: registering again orphans refresh tokens. Only a changed redirect
 //      address (a new tunnel address) makes a new registration, and grants made under the old client keep refreshing, because each grant stores the client id it was issued to.
 //   3. Runs the authorisation-code flow with PKCE (S256) that every service shares (oauth.ts), and stores her grant under tenants/<id>/notion/oauth.
@@ -35,7 +35,7 @@ export interface Endpoints {
   registration: string;
 }
 
-// What is remembered of the one registration (state/notion-client.json).
+// What is remembered of the one registration (instance/notion-client.json).
 export interface ClientRecord {
   client_id: string;
   redirect_uri: string;

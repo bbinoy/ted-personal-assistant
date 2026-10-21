@@ -332,5 +332,5 @@ export function warmSearchIndex(scope: Scope, zone: string = systemZone()): Prom
   });
 }
 
-/** The owner's conversation: messages.jsonl, memory/notes, state/search.sqlite. */
+/** The owner's conversation: its folder's messages.jsonl, notes/ and search.sqlite. */
 export const ownerSearchScope = (): Scope => ({ logFile: FILE, notesDir: NOTES_DIR, indexPath: convPaths(OWNER_CONV).search });

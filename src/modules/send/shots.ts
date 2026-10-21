@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { instancePaths } from "../../core/convpaths.ts";
 
 // Pictures of a turn, kept so the model can send one with the `send` tool (send.ts): screenshots of a browse run and drawings (drawtool.ts). The worker
-// keeps each screenshot as a small jpeg in a private folder (state/browse/shots); the browse result lists them by short id (shot1, shot2...). A drawing is
+// keeps each screenshot as a small jpeg in a private folder (instance/browse/shots); the browse result lists them by short id (shot1, shot2...). A drawing is
 // a PNG that code rendered from the model's sanitised SVG, kept in the same turn folder (img1, img2...). The model names an id; code looks it up in THIS
 // conversation's turn only (never a path) and checks the file again (a plain file in that folder, jpeg or png bytes, size).
 // A screenshot is page content: untrusted, only ever sent to the conversation that asked for it, never fed back as an instruction. The files are

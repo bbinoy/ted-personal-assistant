@@ -14,7 +14,7 @@ import { forgetShown } from "./turncontext.ts";
 // Every conversation (the owner's chat, each group) persists across restarts, with the hygiene rules in
 // session.ts (fresh after idle, compacted when large). total_cost_usd is cumulative across a resumed
 // session, so we keep the running total and report each turn's delta. The owner's session pointer is
-// state/session.json; a group's is session.json in its own folder (conversation.ts).
+// the owner's conversations/owner/session.json; every conversation's is session.json in its own folder (core/convpaths.ts).
 
 export interface Resume {
   resume?: string; // session to continue (chat only)

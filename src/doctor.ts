@@ -217,7 +217,7 @@ export const qwenReference = (q: { builtIn?: boolean; refAudio: string }): strin
 
 export const requiredSkills = (mail: boolean, provider: string = settings.mailProvider): string[] => ownerSkills(mail, provider, { required: true });
 
-// What the heartbeat line says: the last tick, and the heartbeat run's last look (state/heartbeat.jsonl).
+// What the heartbeat line says: the last tick, and the heartbeat run's last look (instance/heartbeat.jsonl).
 export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, lastLookAt: string | undefined, localTime: (iso: string) => string): string =>
   beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago; last look ${lastLookAt ? localTime(lastLookAt) : "none yet"}` : "no tick recorded yet";
 

@@ -20,7 +20,7 @@
 **Commits**
 
 - One logical change per commit; the tests pass at every commit that is merged.
-- Never commit secrets, `.env`, private data (`memory/`, `state/`, `logs/`) or local plans and reports (`plans/`). `npm run check:secrets` must pass.
+- Never commit secrets, `.env`, private data (`conversations/`, `instance/`, `state/`, `logs/`, and the older `memory/`, `tenants/`) or local plans and reports (`plans/`). `npm run check:secrets` must pass.
 - Do not rewrite shared history: no force-push to `main`, no rebase of `main`.
 
 **Branches**

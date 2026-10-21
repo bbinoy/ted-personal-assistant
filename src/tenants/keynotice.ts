@@ -24,7 +24,7 @@ export interface KeyNotices {
   reset(): void;
 }
 
-// `persist`: the time of the last notice is kept in state/cap-notices.json (capnotice.ts), so a restart does not repeat it; the shared instance is the persistent one.
+// `persist`: the time of the last notice is kept in instance/cap-notices.json (capnotice.ts), so a restart does not repeat it; the shared instance is the persistent one.
 export function createKeyNotices(o: { everyMs?: () => number; persist?: boolean } = {}): KeyNotices {
   const every = o.everyMs ?? (() => settings.tenantKeyNoticeMinutes * 60_000);
   const last = new Map<KeyProblem, number>();

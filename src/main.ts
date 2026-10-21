@@ -48,7 +48,7 @@ import { markOwnerTold, ownerNotice } from "./core/migrate.ts";
 
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
-ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
+ensureNotesDir(); // first run: conversations/owner/notes/, where the chat agent keeps its notes
 sweepStaleRuns(); // page views and screenshots of a browse run that never ended
 if (new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
 

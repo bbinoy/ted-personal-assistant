@@ -141,7 +141,7 @@ Personal agents are having a moment. Ted sits in the middle: hosted products lik
 
 ## Make it yours
 
-- **Your preferences**: personality, tone, length, who matters, what the brief includes. They live in small notes (`memory/notes/`) that you can also change by chatting. No code, no restart.
+- **Your preferences**: personality, tone, length, who matters, what the brief includes. They live in small notes (`conversations/owner/notes/`) that you can also change by chatting. No code, no restart.
 - **Your mail**: it ships with [Mailbird](https://www.getmailbird.com/). If you use Gmail only, set `MAIL_PROVIDER=gmail` to use your Claude account's Gmail connector instead and skip the local client ([docs/SETUP.md](docs/SETUP.md#gmail-no-local-mail-client)).
 - **Your messenger**: Signal is a thin layer. Telegram, Slack, iMessage and WhatsApp are realistic swaps.
 - **Your rules**: what runs unattended, what needs approval and what is blocked is one short, tested file.

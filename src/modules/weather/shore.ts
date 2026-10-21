@@ -5,7 +5,7 @@ import { instancePaths } from "../../core/convpaths.ts";
 
 // Which wind directions are onshore, side-on or offshore at a launch point, from OpenStreetMap water outlines: for each of 16 directions, how many
 // metres of open water the wind has crossed before it reaches the spot. Pure geometry; the model compares it with the forecast direction.
-// The outline of a lake or coast does not change, so a spot is fetched once and kept in state/shore/ (the public map server is for light use).
+// The outline of a lake or coast does not change, so a spot is fetched once and kept in instance/shore/ (the public map server is for light use).
 // It knows shapes only: rocks, shipping, shallows and local effects are not in the data.
 const R = 6371000;
 const rad = (d: number) => (d * Math.PI) / 180;

@@ -17,7 +17,7 @@ import { listGroups } from "../../conversation/groupstore.ts";
 import { convIdOfKey, groupConvId } from "../../core/convpaths.ts";
 
 // The voice tool: the cloned voice of a conversation (Qwen only). Each conversation has its own library and active voice (voices.ts):
-// the owner's chat in state/voice, each group in its own folder, so a voice made in a group is only ever used in that group.
+// every conversation in its own folder (conversations/<convId>/voices), so a voice made in a group is only ever used in that group.
 // A voice is built from a voice note that was RECEIVED IN THIS CONVERSATION (voicenote.ts): the model names it by its id from the
 // conversation's own list (default: the message it is answering, or the voice note that message replies to). Code checks that the id is one of
 // this conversation's recent notes, that the file is still there, and has the messenger resolve the id to its file; a path is never taken from anyone.

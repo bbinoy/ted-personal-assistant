@@ -16,5 +16,5 @@ export const ASSETS_DIR = join(ROOT, "assets");
 export const VOICES_DIR = join(ASSETS_DIR, "voices");
 export const ASSISTANTS_DIR = join(ROOT, "assistants");
 
-// The data root (state/, logs/, memory/): HARNESS_DATA_DIR when set (tests do), else the repo root.
+// The data root (instance/, conversations/, logs/): HARNESS_DATA_DIR when set (tests do), else the repo root.
 export const dataDirOf = (env: Record<string, string | undefined>): string => (env.HARNESS_DATA_DIR ? resolve(env.HARNESS_DATA_DIR) : ROOT);

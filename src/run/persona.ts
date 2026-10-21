@@ -13,7 +13,7 @@ import { convPaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
 // how it talks, what each kind of run is told. This file is the other half: it fills in what only code knows (the owner's name, which
 // tools exist, the folders, the date, what is connected) and adds the rules that are the harness's own, not a personality's.
 //
-// They are built per run, not constants, because they carry the owner's memory (memory/notes/).
+// They are built per run, not constants, because they carry the owner's memory (conversations/owner/notes/).
 // What belongs in the preset: the default personality and the technical facts it talks about. Personal
 // preferences (tone tweaks, "never use em dashes", people, topics) live in notes instead, so
 // the owner can change them from chat. Memory is written through the model, so it is never
