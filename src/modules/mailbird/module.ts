@@ -24,7 +24,8 @@ const mail: MailSlot = {
   },
   readBack: async (kind, input) => {
     const id = Number(input.messageId);
-    return kind === "mbSend" && draftReader && Number.isFinite(id) ? draftReader(id).catch(() => undefined) : undefined;
+    // An unreadable draft refuses the send (permissions.ts), so the reason is logged here: the owner sees "could not be read back", the log says why.
+    return kind === "mbSend" && draftReader && Number.isFinite(id) ? draftReader(id).catch((e) => (console.error(`mailbird: draft ${id} could not be read back: ${(e as Error)?.message?.slice(0, 200)}`), undefined)) : undefined;
   },
   views: {
     mbSend: (_i, draft) => draft && { action: "send", ...draft }, // a send of an existing draft has no content in its input: it is shown from the draft as read back, or not at all
