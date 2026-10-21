@@ -298,7 +298,7 @@ What is left is model time: a tool question is two or three model calls of 2 to 
 The `src/` root holds only the three entry points, `main.ts`, `cli.ts` and `doctor.ts`. Everything else is a folder, and folders depend downward only: `heartbeat/` on `conversation/` on `run/` on `modules/` on `approvals/` on `policy/` on `tenants/`, `intake/` and `memory/` (one box) on `secrets/` on `core/`. `test/boundaries.test.ts` enforces it on value imports; the subsections below say what each folder is for. A tool is a folder under `src/modules/` (see CONTRIBUTING.md).
 
 ```
-src/main.ts          wiring: Signal in (to the conversation pipeline), heartbeat, dream, approvals
+src/main.ts          composition: Signal in (to the conversation pipeline), heartbeat, dream, approvals; builds the AppContext and calls wire()
 packages/messenger/  @ted-assistant/messenger (published, built): the Messenger interface (types, addressing, loadMessenger), a FakeMessenger for tests and the contract suite every platform package runs (/contract); platform packages implement it
 packages/signal/     @ted-assistant/signal: signal-cli JSON-RPC client, daemon start, the Messenger adapter (entry point /messenger), a workspace package with its own README and tests
 packages/speech/     @ted-assistant/speech (private): text to speech (Qwen3-TTS, Kokoro, optional ElevenLabs / HTTP), speech to text (whisper.cpp), voice libraries and reference clips, the Python scripts and docs/remote-tts.md; entry points /tts and /voice
@@ -631,6 +631,7 @@ src/heartbeat/wake.ts       the clock side: on each tick start the heartbeat run
 src/heartbeat/look.ts       a conversation's heartbeat run (the owner's, a group's, a friend's): when it is due, the prompt, the run (standing provenance), posting, the row
 src/heartbeat/rows.ts       state/heartbeat.jsonl: one counted row per look, no words
 src/heartbeat/notices.ts    what the owner is told and what is held back: the budget notice, looks that keep failing (cause and fix), quiet hours and the day's cap for unprompted posts
+src/heartbeat/wiring.ts    AppContext and wire(): the one place the module-level hooks (approvers, owner notices, tenant send/drop) are set from main.ts, with a startup check that none is missing
 src/heartbeat/report.ts     `npm run heartbeat-report`: the rows as counts, dollars and the next-look distribution
 ```
 
