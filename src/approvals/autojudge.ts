@@ -3,7 +3,7 @@ import { fence } from "../core/fence.ts";
 import { createdFact } from "./created.ts";
 import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { OWNER } from "../core/settings.ts";
-import type { MailView } from "../policy/mailview.ts";
+import { addrs, type MailView } from "../policy/mailview.ts";
 import { actionOf, confirmsDelete, entryFor, moduleOf, neverAllowedTool } from "../policy/toolmanifest.ts";
 import type { Source } from "../core/audit.ts";
 import { LIMITS } from "../core/sanitize.ts";
@@ -43,6 +43,15 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
   if (!action || neverAllowedTool(tool) || floor?.judgeNever?.includes(action)) return false; // (the never-allowed set is denied before the judge; this is the backstop)
   const veto = floor?.judgeVeto?.[confirmsDelete(tool, input) ? DELETE_CONFIRM : action]; // a destructive call is vetoed as a delete (guests named: a cancellation is emailed), whatever the tool's action
   return veto ? veto(input, view) : true;
+}
+
+// Pure: the recipients of an outgoing mail that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail or pages may have had
+// its recipient steered, so such a send is never judged (permissions.ts): the owner is asked. An address counts as the person's when it is written in their message (or the earlier
+// ones); a reply whose recipients the call does not name itself goes to the thread's own people. A standing task or a wake-up has no words of a person's: every named recipient is outside.
+export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined): string[] {
+  const words = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n").toLowerCase();
+  const named = new Set([input.to, input.cc, input.bcc].flatMap((v) => addrs(v)));
+  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !words.includes(a) && !(view.action === "reply" && !named.has(a)));
 }
 
 // Pure: does this mode let a verdict skip the phone?
