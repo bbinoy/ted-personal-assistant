@@ -135,7 +135,7 @@ const NAMES = [
   "messages.jsonl", "session.json", "dream.json", "held-posts.json", "seen-mail.json", "quiet.json", "pending.json", "search.sqlite", "notes-backup", "tenant.json", "meta.json", "cost.json",
   "tenants.json", "registrations.json", "intake-status.json", "intake-problems.json", "cap-notices.json", "key-cost.json", "group-cost.json", "heartbeat.json", "heartbeat.jsonl",
   "connectors.json", "tools-seen.json", "notion-client.json", "notion-client.lock", "payments.jsonl", "card.disabled", "layout-version", "migration-plan.json", "migration-orphans",
-  "audit.jsonl", "agent.log", "signal-daemon.log", "launchd-stderr.log", "intake-launchd-stderr.log",
+  "retention.json", "audit.jsonl", "agent.log", "signal-daemon.log", "launchd-stderr.log", "intake-launchd-stderr.log",
 ];
 const FOLDERS = ["state", "instance", "conversations", "memory", "logs"];
 const isPathBuilding = (lit: string, file: string): string | undefined => {

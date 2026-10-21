@@ -333,6 +333,18 @@ export function loadSettings(env: Env) {
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
     dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
+    // The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window. RETENTION=off disables all of it; each window is a setting (0 where noted: that rule off).
+    retention: oneOf(env, "RETENTION", "on", ["on", "off"] as const) === "on",
+    auditRetentionDays: num(env, "AUDIT_RETENTION_DAYS", 90, 1, 3650), // rotated audit generations lose lines older than this; the current file is never touched
+    signalAttachmentDays: num(env, "SIGNAL_ATTACHMENT_DAYS", process.platform === "darwin" ? 30 : 0, 0, 3650), // signal-cli's saved attachments older than this (0: off, the default off the owner's Mac)
+    expiredNoteDeleteDays: num(env, "EXPIRED_NOTE_DELETE_DAYS", 30, 1, 3650), // an expired note is set aside in notes-backup/expired/; deleted for good this many days after its expiry
+    notesBackupKeep: num(env, "NOTES_BACKUP_KEEP", 7, 1, 100), // dream snapshots kept per conversation
+    openbaoLogMb: num(env, "OPENBAO_LOG_MB", 20, 1, 1000), // OpenBao's audit, server and keeper logs are rotated at this size (2 generations kept)
+    openbaoBackupKeep: num(env, "OPENBAO_BACKUP_KEEP", 7, 1, 100), // raft snapshots kept
+    shoreCacheKeep: num(env, "SHORE_CACHE_KEEP", 50, 1, 10000), // cached shore outlines kept (newest by mtime)
+    tmpSweepHours: num(env, "TMP_SWEEP_HOURS", 24, 1, 720), // temporary folders of picture, voice and Google work older than this are swept
+    migrationReviewDays: num(env, "MIGRATION_REVIEW_DAYS", 30, 1, 3650), // doctor warns about migration-backup / migration-orphans older than this (never deleted automatically)
+
     // Wake-ups (src/conversation/gate.ts, src/heartbeat/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").
     wakeups: oneOf(env, "WAKEUPS", "on", ["on", "off"] as const) === "on",
