@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { conversationsDir, convPaths, isConvId, layout, type ConvId, type ConvPaths, type ConvRef } from "./convpaths.ts";
 import { Db, LedgerCorruptError, moveCorruptAside, openDb, type Migration } from "./db.ts";
 import { DatabaseSync } from "node:sqlite";
@@ -143,6 +144,18 @@ export const CONV_SCHEMA: readonly Migration[] = [
         at   TEXT NOT NULL
       );
 
+      CREATE TABLE reset (
+        id INTEGER PRIMARY KEY CHECK (id = 1),                      -- a row = this database REPLACED a damaged one: the first look marks every mail in the inbox as seen (never a re-triage)
+        at TEXT NOT NULL
+      );
+      CREATE TABLE pending_lost (
+        seq   INTEGER PRIMARY KEY AUTOINCREMENT,                    -- approvals that could not be restored: the owner can ask again
+        n     INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        why   TEXT NOT NULL,                                        -- damaged, late-file
+        at    TEXT NOT NULL
+      );
+
       CREATE TABLE legacy_imports (
         name        TEXT NOT NULL,                                  -- the layout-3 file, relative to the data folder
         sha256      TEXT NOT NULL,                                  -- of its bytes: the same name with other bytes is a new file
@@ -169,15 +182,30 @@ const IDLE_MS = 10 * 60_000;
 export interface Damage {
   at: string; // ISO
   keptAs: string; // the set-aside file
+  pendingLost?: { n: number; label: string }[]; // approvals that were waiting in the damaged file and are NOT copied (a damaged page could replay damaged arguments): the owner can ask again
+  salvaged?: { seenMail: number; session: boolean }; // what was copied out of the damaged file into the fresh one
 }
 
+const CORRUPT = "assistant.db.corrupt-";
+/** The damage of a conversation's database: its marker, or (a marker lost to a crash or a hand) a set-aside file next to the database. Undefined: none. */
 export const convDamage = (c: ConvRef | ConvPaths): Damage | undefined => {
   const p = typeof c === "object" && "dbDamaged" in c ? c : convPaths(c);
   try {
     const m = JSON.parse(readFileSync(p.dbDamaged, "utf8")) as Partial<Damage>;
-    return { at: typeof m.at === "string" ? m.at : "", keptAs: typeof m.keptAs === "string" ? m.keptAs : "" };
+    return {
+      at: typeof m.at === "string" ? m.at : "",
+      keptAs: typeof m.keptAs === "string" ? m.keptAs : "",
+      ...(Array.isArray(m.pendingLost) ? { pendingLost: m.pendingLost } : {}),
+      ...(m.salvaged ? { salvaged: m.salvaged } : {}),
+    };
   } catch {
-    return existsSync(p.dbDamaged) ? { at: "", keptAs: "" } : undefined; // (a marker nobody can read still stops the background work)
+    if (existsSync(p.dbDamaged)) return { at: "", keptAs: "" }; // (a marker nobody can read still stops the background work)
+  }
+  try {
+    const kept = readdirSync(p.dir).find((f) => f.startsWith(CORRUPT) && !/-(wal|shm)$/.test(f));
+    return kept ? { at: "", keptAs: join(p.dir, kept) } : undefined; // (the file was set aside and the marker never written, or lost)
+  } catch {
+    return undefined;
   }
 };
 /** The conversations whose database was set aside and not yet looked at, from the markers on disk. Never opens a database. */
@@ -197,11 +225,78 @@ export function damagedConvs(root?: string): (Damage & { conv: ConvId })[] {
   return out;
 }
 /** A person has looked: the conversation's background work may run again (the fresh database stays; restore the set-aside file first if its state matters). */
-export const clearDamage = (c: ConvRef): void => rmSync(convPaths(c).dbDamaged, { force: true });
+export function clearDamage(c: ConvRef): void {
+  const p = convPaths(c);
+  rmSync(p.dbDamaged, { force: true });
+  try {
+    for (const f of readdirSync(p.dir)) if (f.startsWith(CORRUPT)) renameSync(join(p.dir, f), join(p.dir, f.replace(CORRUPT, "assistant.db.reviewed-"))); // (kept for a human, no longer "damaged")
+  } catch {
+    /* no folder */
+  }
+}
+
+/** The damage policy belongs to the AGENT. Any other process (a CLI, the intake page, a script) that finds a damaged file must not rename it under the agent's open handle: it gets this error and the file stays. */
+export class ConvDbDamagedError extends Error {
+  constructor(path: string, why: string) {
+    super(`${path} is damaged (${why}); only the running agent sets a conversation database aside (restart it, or run npm run doctor)`);
+    this.name = "ConvDbDamagedError";
+  }
+}
+let agentMode = false;
+/** The agent process says so once at start (migrateatstart.ts): only then may a damaged database be set aside and replaced. */
+export const useConvDbAgentMode = (on = true): void => void (agentMode = on);
 
 function attempt(p: ConvPaths, conv: ConvId): Db {
   // verify: the full integrity check once per open (a few small tables: cheap); a page SQLite cannot read shows here, not at the first query in the middle of a turn
   return openDb(p.db, { migrations: CONV_SCHEMA, rebuildable: false, verify: true, label: `${conv}'s assistant.db` });
+}
+
+/** Copies what can still be read out of the damaged copy into the fresh database, table by table, each in its own try/catch: the mail ids (so the inbox is not triaged again) and the session pointer. Approvals are NOT copied: they are listed. */
+function salvage(kept: string, fresh: Db, damage: Damage): void {
+  let raw: DatabaseSync | undefined;
+  try {
+    raw = new DatabaseSync(kept, { readOnly: true });
+  } catch {
+    return; // not even a database
+  }
+  try {
+    const ids: string[] = [];
+    try {
+      for (const r of raw.prepare("SELECT id FROM seen_mail ORDER BY seq").all() as { id: unknown }[]) if (typeof r.id === "string") ids.push(r.id);
+    } catch {
+      /* this table is not readable */
+    }
+    const keep = ids.slice(-2000);
+    fresh.tx(() => {
+      for (const id of keep) fresh.run("INSERT OR IGNORE INTO seen_mail (id) VALUES (?)", id);
+    });
+    let session = false;
+    try {
+      const r = raw.prepare("SELECT session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in FROM session WHERE id = 1").get() as Record<string, string | number | null> | undefined;
+      if (r) {
+        fresh.run(
+          "INSERT OR REPLACE INTO session (id, session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)",
+          ...([r.session_id, typeof r.cost_usd === "number" ? r.cost_usd : 0, r.last_turn_at, r.last_context_tokens, r.compact_failed_at, r.base_tokens, r.seen_at, r.untrusted_in].map((v) => (typeof v === "string" || typeof v === "number" ? v : null)) as (string | number | null)[]),
+        );
+        session = true;
+      }
+    } catch {
+      /* not readable */
+    }
+    const lost: { n: number; label: string }[] = [];
+    try {
+      for (const r of raw.prepare("SELECT n, label FROM pending_items ORDER BY n").all() as { n: unknown; label: unknown }[]) if (typeof r.n === "number") lost.push({ n: r.n, label: typeof r.label === "string" ? r.label.slice(0, 120) : "" });
+    } catch {
+      /* not readable */
+    }
+    damage.salvaged = { seenMail: keep.length, session };
+    if (lost.length) {
+      damage.pendingLost = lost.slice(0, 40);
+      for (const l of damage.pendingLost) fresh.run("INSERT INTO pending_lost (n, label, why, at) VALUES (?, ?, 'damaged', ?)", l.n, l.label, damage.at);
+    }
+  } finally {
+    try { raw.close(); } catch { /* closed */ }
+  }
 }
 
 function openFor(p: ConvPaths, conv: ConvId): Db {
@@ -216,11 +311,18 @@ function openFor(p: ConvPaths, conv: ConvId): Db {
   } catch (e) {
     const corrupt = e instanceof LedgerCorruptError || (e as { errcode?: number }).errcode === 11;
     if (!corrupt) throw e;
-    const kept = moveCorruptAside(p.db);
     const why = (e as Error).message.slice(0, 200);
-    writeFileAtomic(p.dbDamaged, JSON.stringify({ at: new Date().toISOString(), keptAs: kept, why } satisfies Damage & { why: string }));
-    console.error(`convdb: ${conv}'s assistant.db is damaged (${why}); set aside as ${kept}. Chat goes on with a fresh start; its background work is stopped until a person looks (npm run doctor).`);
+    if (!agentMode) throw new ConvDbDamagedError(p.db, why); // (not the agent: the file stays where it is, the agent may hold it open)
+    const at = new Date().toISOString();
+    const to = `${p.db}.corrupt-${at.replace(/[:.]/g, "-")}`;
+    const damage: Damage & { why: string } = { at, keptAs: to, why };
+    writeFileAtomic(p.dbDamaged, JSON.stringify(damage)); // FIRST: the marker, so a crash between the two steps still leaves the conversation marked
+    moveCorruptAside(p.db, to);
+    console.error(`convdb: ${conv}'s assistant.db is damaged (${why}); set aside as ${to}. Chat goes on with a fresh start; its background work is stopped until a person looks (npm run doctor).`);
     db = attempt(p, conv);
+    db.run("INSERT OR REPLACE INTO reset (id, at) VALUES (1, ?)", at); // the first look after this skips every mail in the inbox: a fresh database never means "triage it all again"
+    salvage(to, db, damage);
+    writeFileAtomic(p.dbDamaged, JSON.stringify(damage));
   }
   open.set(p.db, { db, conv, used: Date.now() });
   return db;
@@ -232,6 +334,16 @@ export const convDb = (conv: ConvRef): Db => openFor(convPaths(conv), typeof con
 export const convDbAt = (root: string, conv: ConvId): Db => openFor(layout(root).conv(conv), conv);
 /** Is the database there? (A reader that must not make one: the retention rules, the doctor.) */
 export const hasConvDb = (conv: ConvRef): boolean => existsSync(convPaths(conv).db);
+/** The database for a READ: undefined when the conversation has none yet (or was forgotten), so a read neither makes a folder nor brings a forgotten conversation back. The caller answers its default. */
+export const peekConvDb = (conv: ConvRef): Db | undefined => (hasConvDb(conv) ? convDb(conv) : undefined);
+/**
+ * The database for a WRITE of a look or a follow-up run that started earlier: undefined when the conversation is (now) damaged. The open itself may be what finds the damage (an idle connection was closed
+ * meanwhile); the check comes AFTER it, so the run's few rows are never written into the fresh database that replaced the damaged one.
+ */
+export function liveConvDb(conv: ConvRef): Db | undefined {
+  const db = convDb(conv);
+  return convDamage(conv) ? undefined : db;
+}
 
 /** Close this conversation's connection (and with it its -wal and -shm files): before its folder is deleted, and by the idle sweep. A later use opens it again. */
 export function closeConvDb(conv: ConvRef): void {

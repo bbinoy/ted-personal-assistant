@@ -29,6 +29,7 @@
     "tenants": "node --conditions=workspace-source --env-file-if-exists=.env scripts/tenants.ts",
     "migrate": "node --conditions=workspace-source --env-file-if-exists=.env scripts/migrate.ts",
     "retention": "node --conditions=workspace-source --env-file-if-exists=.env scripts/retention.ts",
+    "convdb": "node --conditions=workspace-source --env-file-if-exists=.env scripts/convdb.ts",
     "forget": "node --conditions=workspace-source --env-file-if-exists=.env scripts/forget.ts",
     "browse:smoke": "node --conditions=workspace-source --env-file-if-exists=.env scripts/browse-smoke.ts",
     "setup:hooks": "git config core.hooksPath .githooks"

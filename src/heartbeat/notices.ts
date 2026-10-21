@@ -4,7 +4,7 @@ import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { settings } from "../core/settings.ts";
 import { ledgerEntries } from "../core/messages.ts";
-import { convDb, damagedConvs } from "../core/convdb.ts";
+import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
 import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
 import { isQuiet } from "../conversation/quiet.ts";
@@ -129,7 +129,7 @@ const heldOf = (r: HeldRow): Held => ({
 const flag = (b: boolean | undefined): number | null => (typeof b === "boolean" ? (b ? 1 : 0) : null);
 
 /** How many posts are held (the usual tick: one small query, nothing more). */
-export const heldCount = (conv: Pick<Conversation, "convId">): number => convDb(conv.convId).num("SELECT COUNT(*) FROM held_posts");
+export const heldCount = (conv: Pick<Conversation, "convId">): number => peekConvDb(conv.convId)?.num("SELECT COUNT(*) FROM held_posts") ?? 0; // (a tick asks every conversation: it makes no database)
 /** The held posts, oldest first (a read for the tests and the doctor). */
 export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<HeldRow>("SELECT text, why, notice, needs_you, at, day, same_day FROM held_posts ORDER BY seq").map(heldOf);
 /** Forget the day's count and everything held (tests). */
@@ -257,7 +257,8 @@ export function noticeDamaged(now: Date = new Date()): number {
   for (const d of damagedConvs()) {
     if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh. Chatting there still works, but my background work for it (looks, the dream, approvals) is stopped until you check: run npm run doctor on the Mac.`, now);
+    const lost = d.pendingLost?.length ? ` Approvals that were waiting there are not restored (they could have been damaged), ask me again if you still want them: ${d.pendingLost.slice(0, 8).map((p) => `#${p.n}${p.label ? ` ${p.label}` : ""}`).join("; ")}${d.pendingLost.length > 8 ? "; ..." : ""}.` : "";
+    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream, approvals) is stopped until you check: run npm run doctor on the Mac.${lost}`, now);
     n++;
   }
   return n;

@@ -1,4 +1,4 @@
-import { convDb } from "../core/convdb.ts";
+import { convDb, peekConvDb } from "../core/convdb.ts";
 import { timeIn } from "../core/timezone.ts";
 import { convIdOf } from "../core/convpaths.ts";
 import type { Conversation } from "./conversationmodel.ts";
@@ -10,7 +10,7 @@ import type { Conversation } from "./conversationmodel.ts";
 
 type Where = Pick<Conversation, "kind"> & { readonly tenantId?: string; readonly groupId?: string; readonly convId?: string };
 
-export const quietValue = (conv: Where): string | undefined => convDb(convIdOf(conv)).get<{ until: string }>("SELECT until FROM quiet WHERE id = 1")?.until;
+export const quietValue = (conv: Where): string | undefined => peekConvDb(convIdOf(conv))?.get<{ until: string }>("SELECT until FROM quiet WHERE id = 1")?.until;
 
 export const setQuiet = (conv: Where, until: string): void =>
   void convDb(convIdOf(conv)).run("INSERT INTO quiet (id, until) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET until = excluded.until", until);

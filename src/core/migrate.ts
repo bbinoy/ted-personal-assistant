@@ -805,9 +805,9 @@ export function reconcile(root: string, o: MigrateOptions = {}, wait = 30_000): 
       log(`migrate: late file ${relative(L.root, op.from)} ${mover.orphans.length + mover.merged.length > before ? "handled (merged or set aside, see above)" : `moved to ${relative(L.root, op.to)}`}`);
     }
     sweepEmpty(L.root, ops);
-    let prior: { files: string[]; told?: boolean } = { files: [] };
+    let prior: { files: string[]; lost?: string[]; told?: boolean } = { files: [] };
     try { prior = JSON.parse(readFileSync(L.instance.migrationLate, "utf8")); } catch { /* the first time */ }
-    writeFileAtomic(L.instance.migrationLate, JSON.stringify({ files: [...new Set([...(prior.told ? [] : prior.files), ...files])] }));
+    writeFileAtomic(L.instance.migrationLate, JSON.stringify({ files: [...new Set([...(prior.told ? [] : prior.files), ...files])], lost: prior.told ? [] : (prior.lost ?? []) }));
     return { files };
   } finally {
     release();
@@ -831,9 +831,11 @@ export function markOwnerTold(root: string): void {
 /** Files an old version wrote after the move (reconcile), told once. */
 export function lateNotice(root: string): string | undefined {
   try {
-    const l = JSON.parse(readFileSync(layout(root).instance.migrationLate, "utf8")) as { files?: string[]; told?: boolean };
-    if (l.told || !l.files?.length) return undefined;
-    return `An older version of me was still writing to the old storage places after they were moved. I merged the logs and put the rest in the migration-orphans folder inside my instance folder (or moved it into place where nothing was there): ${l.files.slice(0, 8).join(", ")}${l.files.length > 8 ? ", ..." : ""}. Nothing was deleted.`;
+    const l = JSON.parse(readFileSync(layout(root).instance.migrationLate, "utf8")) as { files?: string[]; lost?: string[]; told?: boolean };
+    if (l.told || (!l.files?.length && !l.lost?.length)) return undefined;
+    const lost = l.lost?.length ? ` Some approvals an older version of me had parked could not be restored, because the new storage already held an approval list; they are not run, and you can ask me again: ${l.lost.slice(0, 8).join("; ")}${l.lost.length > 8 ? "; ..." : ""}.` : "";
+    const files = l.files?.length ? `An older version of me was still writing to the old storage places after they were moved. I merged the logs and put the rest in the migration-orphans folder inside my instance folder (or moved it into place where nothing was there): ${l.files.slice(0, 8).join(", ")}${l.files.length > 8 ? ", ..." : ""}. Nothing was deleted.` : "An older version of me was still writing to its old storage after the move.";
+    return files + lost;
   } catch {
     return undefined;
   }

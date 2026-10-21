@@ -242,8 +242,7 @@ export function migrateDb(db: Db, ms: readonly Migration[]): number {
   return applied;
 }
 
-export function moveCorruptAside(path: string): string {
-  const to = `${path}.corrupt-${stamp()}`;
+export function moveCorruptAside(path: string, to: string = `${path}.corrupt-${stamp()}`): string {
   renameSync(path, to);
   for (const side of ["-wal", "-shm"]) {
     try {

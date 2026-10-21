@@ -4,7 +4,7 @@ import { groupDir, groupScope } from "../../conversation/groupstore.ts";
 import { preset } from "../../core/preset.ts";
 import { settings } from "../../core/settings.ts";
 import { convIdOf, type ConvId } from "../../core/convpaths.ts";
-import { convDb } from "../../core/convdb.ts";
+import { convDb, peekConvDb } from "../../core/convdb.ts";
 import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 // WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it, the note categories it has (the preset's notes.dream for the owner,
@@ -34,7 +34,7 @@ export interface DreamState {
   lastRunAt?: string; // when the last real run started: what it covered ends here
 }
 export function readDream(conv: ConvId): DreamState {
-  const r = convDb(conv).get<{ day: string | null; last_run_at: string | null }>("SELECT day, last_run_at FROM dream WHERE id = 1");
+  const r = peekConvDb(conv)?.get<{ day: string | null; last_run_at: string | null }>("SELECT day, last_run_at FROM dream WHERE id = 1");
   return { ...(r?.day != null ? { day: r.day } : {}), ...(r?.last_run_at != null ? { lastRunAt: r.last_run_at } : {}) };
 }
 export const writeDream = (conv: ConvId, s: DreamState): void =>

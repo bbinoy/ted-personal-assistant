@@ -7,8 +7,9 @@ import { join } from "node:path";
 // <conversation>/assistant.db (src/core/convdb.ts): one file per conversation, its policy for a damaged file, the closing before a folder is deleted, no reading across conversations, and the stores over it.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "convdb-test-"));
 
-const { CONV_SCHEMA, checkConvDbFile, clearDamage, closeAllConvDbs, closeConvDb, closeIdleConvDbs, convDamage, convDb, damagedConvs, openConvDbCount, removeConvDir } = await import("../src/core/convdb.ts");
+const { CONV_SCHEMA, checkConvDbFile, clearDamage, closeAllConvDbs, closeConvDb, closeIdleConvDbs, ConvDbDamagedError, convDamage, convDb, damagedConvs, hasConvDb, openConvDbCount, removeConvDir, useConvDbAgentMode } = await import("../src/core/convdb.ts");
 const { convPaths, friendConvId, groupConvId, OWNER_CONV } = await import("../src/core/convpaths.ts");
+useConvDbAgentMode(); // (this test file plays the agent: only the agent applies the damage policy; the observer case is tested below)
 const { openDb } = await import("../src/core/db.ts");
 const { readSession, writeSession } = await import("../src/run/sessionstore.ts");
 const { clearQuiet, isQuiet, quietValue, setQuiet } = await import("../src/conversation/quiet.ts");
@@ -16,7 +17,7 @@ const { mayRun, isRefusal } = await import("../src/tenants/payer.ts");
 const { convDbCheck } = await import("../src/doctor.ts");
 const { owner, group } = await import("../src/conversation/conversationmodel.ts");
 const { addPending, markExecuting, openItems, pruneBlocked, recordDone, sweepExpired, takeExpired } = await import("../src/approvals/pending.ts");
-const { createSeenMail, SEEN_MAX, trimSeenMail } = await import("../src/modules/seenmail/seenmail.ts");
+const { createSeenMail, createSeenMailServer, SEEN_MAX, trimSeenMail } = await import("../src/modules/seenmail/seenmail.ts");
 const { holdQuote, holdVoiceNote, MAX_AGE_MS, NOTES_PER_CONVERSATION, pruneVoiceNotes, quotedVoiceNote, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { heldPosts, resetHeld, submitPost, MAX_HELD, noticeDamaged, ownerNotices } = await import("../src/heartbeat/notices.ts");
 const { convDbRule } = await import("../src/heartbeat/convretention.ts");
@@ -143,7 +144,7 @@ test("the owner is told once a day while a database stays damaged, and the docto
   convDbCheck((ok, what, detail = "") => void lines.push([ok, what, detail]), dataRoot());
   const fail = lines.find((l) => l[0] === false && l[1] === `conversation database ${bad}`);
   assert.ok(fail, JSON.stringify(lines));
-  assert.match(fail[2], /set aside as .*assistant\.db\.corrupt-.*Restore the set-aside file with the agent stopped.*delete .*assistant\.db\.damaged/s);
+  assert.match(fail[2], /set aside as .*assistant\.db\.corrupt-.*Restore the set-aside file with the agent stopped.*npm run convdb -- accept /s);
   assert.ok(lines.some((l) => l[1] === "conversation databases"), "the healthy ones are one line");
   clearDamage(bad);
 });
@@ -305,4 +306,166 @@ test("the rule visits only conversations that have a database, and makes none", 
   convDbRule(() => layout(root)).run(new Date(), { dryRun: false });
   assert.deepEqual(readdirSync(layout(root).conversations).sort(), before);
   assert.equal(OWNER_CONV, owner().convId);
+});
+
+// ---- the adversarial review: damage mid-look, a reset never re-triages, only the agent applies the policy, marker first, reads make nothing, late approvals are surfaced ----
+
+const smash = (p: string, from = 4096 * 2) => {
+  const bytes = readFileSync(p);
+  for (let i = from; i < from + 300; i++) bytes[i] = 0xff;
+  writeFileSync(p, bytes);
+};
+const quiet = async <T>(f: () => T): Promise<T> => {
+  const was = console.error;
+  console.error = () => {};
+  try {
+    return f();
+  } finally {
+    console.error = was;
+  }
+};
+
+test("damage found MID-LOOK (the idle connection was closed during a long look): the look's ids are NOT committed into the fresh database", async () => {
+  const c = friendConvId("midlook-1");
+  const first = createSeenMail(c);
+  first.unseen(["old-1"]);
+  first.commit();
+  const running = createSeenMail(c); // a look that started before
+  assert.deepEqual(running.unseen(["old-1", "new-1", "new-2"]), ["new-1", "new-2"]);
+  closeIdleConvDbs(Date.now() + 3_600_000, 60_000); // the tick closed the idle connection while the look was parked
+  const p = convPaths(c).db;
+  writeFileSync(p, "garbage ".repeat(2000)); // damaged meanwhile
+  await quiet(() => running.commit()); // the reopen finds the damage
+  assert.ok(convDamage(c), "marked");
+  const fresh = convDb(c);
+  assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail WHERE id IN ('new-1','new-2')"), 0, "nothing of the look was written into the replacement");
+  assert.equal(running.pending(), 0);
+  // the pending approvals of a follow-up run are not written either
+  assert.deepEqual(markExecuting(`tenant:midlook-1`, [1], 5), []);
+  assert.deepEqual(addPending("tenant:midlook-1", { tool: "t", input: {}, label: "l", question: "q", footer: "", source: "background" }, 1), { full: true });
+  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_items"), 0);
+  clearDamage(c);
+});
+
+test("a reset WITH salvage: the mail ids and the session pointer are copied out of the damaged copy; its approvals are listed, not copied; the flag is set", async () => {
+  const c = friendConvId("salvage-1");
+  const db = convDb(c);
+  for (let i = 0; i < 30; i++) db.run("INSERT INTO seen_mail (id) VALUES (?)", `kept-${i}`);
+  writeSession(c, { sessionId: "sess-kept", costUsd: 4 });
+  db.run("INSERT INTO pending_items (n, tool, input, label, question, footer, scope, source, created_at) VALUES (7, 'send', '{}', 'Reply to Anna', 'q', 'f', 'tenant:salvage-1', 'background', 1)");
+  for (let i = 0; i < 3000; i++) db.run("INSERT INTO held_posts (text, why) VALUES (?, 'quiet')", `post ${i} ${"y".repeat(100)}`); // (a later part of the file: the damaged page is there, the early tables are readable)
+  db.checkpoint();
+  closeConvDb(c);
+  const size = statSync(convPaths(c).db).size;
+  smash(convPaths(c).db, size - 4096 * 3);
+  await quiet(() => convDb(c));
+  const d = convDamage(c)!;
+  assert.ok(d, "marked");
+  assert.deepEqual(d.salvaged, { seenMail: 30, session: true });
+  assert.deepEqual(d.pendingLost, [{ n: 7, label: "Reply to Anna" }]);
+  const fresh = convDb(c);
+  assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail"), 30, "the ids are preserved, in order");
+  assert.equal(fresh.get<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq LIMIT 1")?.id, "kept-0");
+  assert.equal(readSession(c).sessionId, "sess-kept");
+  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_items"), 0, "approvals are never copied out of a damaged file");
+  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_lost"), 1);
+  assert.ok(fresh.get("SELECT at FROM reset"), "the reset flag is set");
+  // the owner is told what is gone
+  const told: string[] = [];
+  ownerNotices.sendTo((t) => told.push(t));
+  noticeDamaged(new Date(2026, 9, 21, 14, 0, 0));
+  ownerNotices.sendTo(undefined);
+  assert.match(told.join("\n"), /#7 Reply to Anna/);
+  clearDamage(c);
+});
+
+test("a reset WITHOUT salvage: the first look marks EVERY listed id as seen, dates given or not, and never says 'first look'; the flag is spent when that look ends well", async () => {
+  const c = friendConvId("reset-1");
+  writeSession(c, { sessionId: "x", costUsd: 0 });
+  closeConvDb(c);
+  writeFileSync(convPaths(c).db, Buffer.alloc(9000, 3)); // nothing readable
+  await quiet(() => convDb(c));
+  assert.equal(convDb(c).num("SELECT COUNT(*) FROM seen_mail"), 0);
+  assert.ok(convDb(c).get("SELECT at FROM reset"));
+  clearDamage(c); // a person looked: background work may run again
+  const seen = createSeenMail(c);
+  assert.equal(seen.reset(), true);
+  assert.deepEqual(seen.unseen(["a", "b", "c"]), [], "no dates were given: all of them are still skipped");
+  assert.deepEqual(seen.unseen(["a", "d"], { d: new Date().toISOString() }), [], "a recent date does not make one new either");
+  assert.equal(seen.aged(), 4);
+  const server = createSeenMailServer(seen) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: unknown) => Promise<{ content: { text: string }[] }> }> } };
+  const out = await server.instance._registeredTools.seen_mail!.handler({ ids: ["a", "e"] });
+  const text = out.content[0]!.text;
+  assert.match(text, /I lost track of which mail I'd already handled, so I skipped what's in your inbox now; new mail from here on is handled as usual/);
+  assert.doesNotMatch(text, /first look/);
+  assert.match(text, /Nothing new/);
+  seen.commit();
+  assert.equal(convDb(c).get("SELECT at FROM reset"), undefined, "spent");
+  assert.equal(convDb(c).num("SELECT COUNT(*) FROM seen_mail"), 5);
+  const next = createSeenMail(c);
+  assert.equal(next.reset(), false);
+  assert.deepEqual(next.unseen(["a", "brand-new"]), ["brand-new"], "from here on mail is handled as usual");
+  // a look that ended badly keeps the flag
+  const c2 = friendConvId("reset-2");
+  await quiet(() => (writeSession(c2, { costUsd: 0 }), closeConvDb(c2), writeFileSync(convPaths(c2).db, Buffer.alloc(9000, 3)), convDb(c2)));
+  clearDamage(c2);
+  const bad = createSeenMail(c2);
+  bad.unseen(["z"]);
+  bad.discard();
+  assert.ok(convDb(c2).get("SELECT at FROM reset"), "the flag stays until a look that ended well");
+});
+
+test("only the AGENT applies the damage policy: any other process gets an error and the file stays exactly where it is", async () => {
+  const c = friendConvId("observer-1");
+  writeSession(c, { costUsd: 1 });
+  closeConvDb(c);
+  const p = convPaths(c).db;
+  writeFileSync(p, "garbage ".repeat(2000));
+  useConvDbAgentMode(false);
+  try {
+    assert.throws(() => convDb(c), ConvDbDamagedError);
+    assert.equal(readFileSync(p, "utf8").slice(0, 7), "garbage", "not renamed under a process that may hold it open");
+    assert.equal(convDamage(c), undefined, "no marker either");
+    assert.deepEqual(readdirSync(convPaths(c).dir).filter((f) => /corrupt|damaged/.test(f)), []);
+  } finally {
+    useConvDbAgentMode(true);
+  }
+  await quiet(() => convDb(c)); // the agent does
+  assert.ok(convDamage(c));
+  clearDamage(c);
+});
+
+test("the marker is written BEFORE the file is moved, and a set-aside file with no marker still counts as damage until it is accepted", async () => {
+  const c = friendConvId("marker-1");
+  writeSession(c, { costUsd: 1 });
+  closeConvDb(c);
+  writeFileSync(convPaths(c).db, "garbage ".repeat(2000));
+  await quiet(() => convDb(c));
+  const d = convDamage(c)!;
+  assert.equal(JSON.parse(readFileSync(convPaths(c).dbDamaged, "utf8")).keptAs, d.keptAs);
+  // the marker is lost (a crash after the move, or a hand): the set-aside file alone says so
+  readdirSync(convPaths(c).dir);
+  writeFileSync(convPaths(c).dbDamaged, "not json");
+  assert.ok(convDamage(c));
+  const { rmSync } = await import("node:fs");
+  rmSync(convPaths(c).dbDamaged);
+  assert.match(convDamage(c)?.keptAs ?? "", /assistant\.db\.corrupt-/);
+  assert.deepEqual(damagedConvs().filter((x) => x.conv === c).length, 1);
+  clearDamage(c); // accepted: the set-aside file is renamed, no longer damage
+  assert.equal(convDamage(c), undefined);
+  assert.ok(readdirSync(convPaths(c).dir).some((f) => f.startsWith("assistant.db.reviewed-")), "kept for a human");
+});
+
+test("reads make nothing: a tick over a conversation that has no database (or was forgotten) neither makes a folder nor a file", () => {
+  const ghost = friendConvId("ghost-1");
+  const dir = convPaths(ghost).dir;
+  assert.equal(existsSync(dir), false);
+  assert.equal(isQuiet({ kind: "tenant", convId: ghost }, new Date()), false);
+  assert.deepEqual(readSession(ghost), { costUsd: 0 });
+  assert.equal(quietValue({ kind: "tenant", convId: ghost }), undefined);
+  assert.equal(voiceNotes(`tenant:ghost-1`).length, 0);
+  assert.deepEqual(openItems("tenant:ghost-1"), []);
+  assert.equal(createSeenMail(ghost).unseen(["a"]).length, 1);
+  assert.equal(hasConvDb(ghost), false);
+  assert.equal(existsSync(dir), false, "no folder was made by any read");
 });

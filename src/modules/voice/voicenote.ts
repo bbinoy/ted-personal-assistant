@@ -1,4 +1,4 @@
-import { convDb, hasConvDb } from "../../core/convdb.ts";
+import { convDb, hasConvDb, peekConvDb } from "../../core/convdb.ts";
 import { convIdOfKey, type ConvId } from "../../core/convpaths.ts";
 import type { Db } from "../../core/db.ts";
 
@@ -73,7 +73,7 @@ export function holdQuote(key: string, messageTs: number, quotedTs: number): voi
 
 /** The voice notes of a conversation that are still in the look-back, newest first. */
 export function voiceNotes(key: string, now = Date.now()): VoiceNote[] {
-  return db(key).all<NoteRow>(`SELECT ${COLS} FROM voice_notes WHERE ? - ts < ? ORDER BY ts DESC`, now, MAX_AGE_MS).map(noteOf);
+  return (peekConvDb(convIdOfKey(key))?.all<NoteRow>(`SELECT ${COLS} FROM voice_notes WHERE ? - ts < ? ORDER BY ts DESC`, now, MAX_AGE_MS) ?? []).map(noteOf);
 }
 
 /** One voice note of THIS conversation by its id (timestamp), if it is in the look-back. */
@@ -81,7 +81,7 @@ export const voiceNote = (key: string, ts: number, now = Date.now()): VoiceNote 
 
 /** The voice note a message replies to, if it is one received in this conversation. */
 export function quotedVoiceNote(key: string, messageTs: number, now = Date.now()): VoiceNote | undefined {
-  const q = db(key).get<{ quoted_ts: number }>("SELECT quoted_ts FROM voice_quotes WHERE message_ts = ?", messageTs)?.quoted_ts;
+  const q = peekConvDb(convIdOfKey(key))?.get<{ quoted_ts: number }>("SELECT quoted_ts FROM voice_quotes WHERE message_ts = ?", messageTs)?.quoted_ts;
   return q === undefined ? undefined : voiceNote(key, q, now);
 }
 
