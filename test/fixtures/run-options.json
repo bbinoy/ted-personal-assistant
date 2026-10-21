@@ -5,7 +5,7 @@
       "sessionFile": "state/session.json",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "a1683003d424b8ba"
+        "sha": "73ffa6ce5f772204"
       },
       "memory": {
         "dir": "<data>/memory/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "a1683003d424b8ba"
+        "sha": "73ffa6ce5f772204"
       },
       "snapshot": false
     },
@@ -63,6 +63,7 @@
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:follow-through",
+      "ted-personal-assistant:stay-in-touch",
       "ted-personal-assistant:setup",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
@@ -184,6 +185,8 @@
         "mcp__memory__forget_note",
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
+        "mcp__notes__read_note",
+        "mcp__notes__write_note",
         "mcp__send__send",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
@@ -275,6 +278,8 @@
         "mcp__memory__forget_note",
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
+        "mcp__notes__read_note",
+        "mcp__notes__write_note",
         "mcp__send__send",
         "mcp__voice__voice",
         "mcp__weather__get_distance",

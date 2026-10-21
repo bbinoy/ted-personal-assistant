@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { audit } from "../../core/audit.ts";
-import { MAX_NOTE_CHARS, NOTES_DIR, STATUS_PREFIX } from "../../memory/notes.ts";
+import { MAX_STATUS_CHARS, NOTES_DIR, STATUS_PREFIX } from "../../memory/notes.ts";
 import { localDay } from "../../core/pause.ts";
 
 // The assistant's own state, as memory: status-<name>.md in the notes folder (category `status`, assistant-written records such as status-brief: whether today's daily
@@ -20,7 +20,7 @@ export function writeStatusNote(name: string, text: string, now: Date = new Date
   if (!NAME.test(name)) return { ok: false, error: "the name is lower-case words with dashes, like brief (the file becomes status-brief.md)" };
   const body = text.replace(/[\u0000-\u0008\u000B-\u001F\u007F\u2028\u2029]/g, "").trim();
   if (!body) return { ok: false, error: "the note is empty" };
-  if (body.length > MAX_NOTE_CHARS) return { ok: false, error: `too long (${body.length} characters, the most is ${MAX_NOTE_CHARS}): keep the date, the status and the headlines only` };
+  if (body.length > MAX_STATUS_CHARS) return { ok: false, error: `too long (${body.length} characters, the most is ${MAX_STATUS_CHARS}): keep the date, the status and the headlines only` };
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const file = `${STATUS_PREFIX}${name}.md`;

@@ -18,7 +18,7 @@ function snapshot(now: Date, scope: Scope): string {
   return dir;
 }
 
-function upsertIndex(file: string, description: string, scope: Scope): void {
+export function upsertIndex(file: string, description: string, scope: Scope): void {
   const path = join(scope.notesDir, "MEMORY.md");
   const lines = existsSync(path) ? readFileSync(path, "utf8").split("\n").filter((l) => l && !l.includes(`(${file})`)) : [];
   const title = file.replace(/\.md$/, "").replace(/^[a-z]+-/, "").replace(/-/g, " ");

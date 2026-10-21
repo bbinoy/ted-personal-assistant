@@ -59,6 +59,7 @@ export interface RunContext {
   groupId?: string;
   tenant?: TenantRun; // a tenant's run (her key, her ledger)
   memory?: RunOptions["memory"];
+  notesRead?: RunOptions["notesRead"]; // an unattended run's notes (heartbeat): its read-only note tool
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: its tracker of the inbox mail already worked through (seenmail.ts)
   guard?: BrowseGuard; // the browse run's guard
   mode: "owner" | "group";

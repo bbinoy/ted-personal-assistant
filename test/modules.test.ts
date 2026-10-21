@@ -17,7 +17,7 @@ import { CAPABILITIES } from "../src/tenants/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "voice", "memory", "notes", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -63,7 +63,7 @@ test("modules: every server a module names is built under that name in runtime.t
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "notes", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
@@ -83,6 +83,9 @@ test("modules: each module decides from the run whether it has a server (a conve
   assert.equal(when(module("send"), ctx({ source: "group", key: "g", offers: (t) => t !== "mcp__send__send" })), false, "a group whose capability set lacks it");
   assert.equal(when(module("memory"), chat), true);
   assert.equal(when(module("memory"), ctx({ source: "background", key: undefined })), false);
+  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined })), false, "no notes of its own, no read_note");
+  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined, notesRead: { dir: "/n", write: [], maxNotes: 1 } })), true, "a heartbeat run reads its notes one at a time");
+  assert.equal(when(module("notes"), chat), false, "chat reads them as files");
   assert.equal(when(module("browse"), ctx({ source: "handler", key: undefined })), false, "the unattended mail runs never browse");
   assert.equal(when(module("tenants"), ctx({ source: "group", key: "g" })), false, "the tenant administration is the owner's chat only");
   assert.equal(when(module("intake"), chat), false, "intake is a tenant's");
@@ -121,7 +124,7 @@ test("modules: the mail slot answers for the provider, so central code never ask
 
 test("modules: skills come from the loaded modules, in the order the owner's list always had; shared ones need a capability", () => {
   const P = (s: string) => `ted-personal-assistant:${s}`;
-  const mailbird = ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "setup", "surf-conditions", "draw"].map(P);
+  const mailbird = ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"].map(P);
   if (settings.weather && settings.draw) assert.deepEqual(ownerSkills(true, "mailbird"), mailbird);
   assert.deepEqual(ownerSkills(true, "gmail").filter((s) => /mail/.test(s)), [P("gmail")]);
   assert.ok(!ownerSkills(true, "gmail").includes(P("mailbird")));
