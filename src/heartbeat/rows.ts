@@ -24,8 +24,8 @@ export interface HeartbeatRow {
 export const MAX_BYTES = 2 * 1024 * 1024;
 export const GENERATIONS = 2;
 export function appendRow(row: HeartbeatRow, file: string = HEARTBEAT_LOG): void {
+  rotateIfOver(dataPath(file), MAX_BYTES, GENERATIONS); // BEFORE the append: the newest row is always in the current file (/status reads its last row)
   appendLine(file, JSON.stringify(row));
-  rotateIfOver(dataPath(file), MAX_BYTES, GENERATIONS);
 }
 
 // Every readable row (the rotated generations too), oldest first; a torn or foreign line is skipped.
