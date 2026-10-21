@@ -1,7 +1,7 @@
 import { capNoticesTo } from "../core/capnotice.ts";
 import { setApprovers } from "../approvals/permissions.ts";
 import { keyNotices } from "../tenants/keynotice.ts";
-import { ownerNotices } from "./notices.ts";
+import { noticeOwner, ownerNotices } from "./notices.ts";
 import { tenantHooks } from "../tenants/tenanttools.ts";
 
 // Everything main.ts must hand to the modules that cannot import the messenger (or each other) themselves: the senders that reach the owner's chat, the approvers, and the
@@ -22,7 +22,7 @@ export function wire(ctx: AppContext): void {
   wired = true;
   setApprovers(ctx.approvers);
   keyNotices.sendTo(ctx.notifyOwner);
-  capNoticesTo(ctx.notifyOwner);
+  capNoticesTo((text) => noticeOwner(text, new Date(), { sameDay: true })); // (held in quiet hours like the other owner notices)
   ownerNotices.sendTo(ctx.notifyOwner);
   tenantHooks.sendFirst = ctx.sendFirst;
   tenantHooks.drop = ctx.dropTenant;

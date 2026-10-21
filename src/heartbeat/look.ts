@@ -22,7 +22,8 @@ import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
-import { countPosts, observeLook, postNotice, submitPost } from "./notices.ts";
+import { observeLook, postNotice, submitPost } from "./notices.ts";
+import { gateSink } from "../modules/send/send.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown, the day's budget, a friend's
@@ -147,8 +148,14 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     try {
       reply = await pipeline.sendWhile(
         conv,
-        () =>
-          deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
+        () => {
+          // What the run sends with the send tool is held like its final answer (quiet hours, the day's cap) unless it says urgent (notices.ts).
+          gateSink(conv.key, (text, urgent) => {
+            if (submitPost(conv, text, urgent, now) !== "held") return undefined;
+            pipeline.record(conv, "action", Date.now(), `[heartbeat] held for later (quiet hours or the day's limit): ${text.slice(0, 300)}`);
+            return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
+          });
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
             signal: overtaken.signal,
@@ -158,7 +165,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
               if (!isReadTool(tool) && tool !== "mcp__seenmail__seen_mail") acted++;
               if (entryFor(tool)?.action === "archive") archived++;
             },
-          }),
+          });
+        },
         () => void sent++,
       );
     } catch (e) {
@@ -172,7 +180,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const calledOff = overtaken.signal.aborted || failure instanceof RunStopped; // a message overtook it, or the owner said /stop: not a failure
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : calledOff ? "preempted" : "failed";
     const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
-    countPosts(conv, sent, now); // (what the run sent while it worked counts toward the day's cap)
     if (answer?.message && !stale) {
       const message = answer.message;
       // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.

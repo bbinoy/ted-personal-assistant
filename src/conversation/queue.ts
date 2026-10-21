@@ -96,7 +96,15 @@ export function createQueue(deps: Pick<PipelineDeps, "now" | "wait" | "settleMs"
     if (st) st.pending = st.pending.filter((x) => !stamps.includes(stampOf(x)));
   }
 
-  return { enqueue, busy, lease, overtake, burst, burstQueued, wait, pendingOf, authorOf, dropPending };
+  // Everything still settling or queued behind a running turn ("/stop", ownercommands.ts): dropped, so no turn is made of it. Returns how many messages.
+  function dropAllPending(conv: Conversation): number {
+    const st = bursts.get(conv.key);
+    const n = st?.pending.length ?? 0;
+    if (st) st.pending = [];
+    return n;
+  }
+
+  return { enqueue, busy, lease, overtake, burst, burstQueued, wait, pendingOf, authorOf, dropPending, dropAllPending };
 }
 
 export type Queue = ReturnType<typeof createQueue>;

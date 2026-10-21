@@ -976,3 +976,17 @@ test("a group message /pause from anyone goes to the group's pipeline and touche
   assert.deepEqual(seen, ["/pause 2h"]);
   assert.deepEqual(r.sent, []);
 });
+
+test("owner chat: /stop within the settle window drops the message that was about to run, and what is queued behind a stopped turn", async () => {
+  let prompts = 0;
+  const h = hold();
+  const { r, pipeline } = rig({ wait: h.wait, run: async () => (prompts++, "ok") });
+  const pending = pipeline.handleIncoming(owner(), msg({ text: "archive all newsletters", timestamp: 400 }));
+  await tick();
+  await pipeline.handleIncoming(owner(), msg({ text: "/stop", timestamp: 401 }));
+  h.release();
+  await pending;
+  await tick();
+  assert.equal(r.sent[0]?.text, "Stopped.");
+  assert.equal(prompts, 0, "the message never ran");
+});

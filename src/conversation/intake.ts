@@ -224,7 +224,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     }
     // /stop, /pause, /resume, /status: also in code, before any model and ahead of the queue, so "stop" works while a turn runs (ownercommands.ts).
     if (!edited && !m.picture && !m.document) {
-      const said = commandReply(conv, m.text);
+      const said = commandReply(conv, m.text, { dropQueued: () => queue.dropAllPending(conv) });
       if (said !== undefined) return void (await out.reply(said, { plain: true, target: conv.target }));
     }
     // While an approval is pending, a message may be its answer. That must skip the queue.

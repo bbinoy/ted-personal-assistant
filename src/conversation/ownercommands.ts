@@ -96,6 +96,7 @@ const USAGE = "Say /pause 2h, /pause until 18:00, /pause (until /resume), or /re
 export interface CommandDeps {
   now: () => Date;
   stop: (scope: string) => number;
+  dropQueued: () => number; // the messages of this conversation still settling or queued behind the turn (conversation.ts): they are dropped, not run
   setPause: (content: string) => void;
   clearPause: () => void;
   facts: (conv: Conversation, now: Date) => StatusFacts;
@@ -103,6 +104,7 @@ export interface CommandDeps {
 const real: CommandDeps = {
   now: () => new Date(),
   stop: stopRuns,
+  dropQueued: () => 0,
   setPause: (content) => writeText("state/paused", content),
   clearPause: () => rmSync(dataPath("state/paused"), { force: true }),
   facts: (conv, now) => {
@@ -125,7 +127,7 @@ export function commandReply(conv: Pick<Conversation, "kind" | "key" | "sessionF
   if (!cmd) return undefined;
   if (cmd.kind === "stop") {
     if (conv.kind === "group") return undefined; // (a group has its own door; a command there is just a message)
-    return d.stop(conv.sessionFile) > 0 ? "Stopped." : "Nothing is running right now.";
+    return d.stop(conv.sessionFile) + d.dropQueued() > 0 ? "Stopped." : "Nothing is running right now.";
   }
   if (conv.kind !== "owner") return undefined; // pause and status are the owner's
   switch (cmd.kind) {

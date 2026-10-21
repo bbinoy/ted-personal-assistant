@@ -1,3 +1,4 @@
+import { takeCapNotice } from "./capnotice.ts";
 import { localDay } from "./pause.ts";
 import { settings } from "./settings.ts";
 import { readJson, writeJson } from "./state.ts";
@@ -76,11 +77,6 @@ export function overBudget(): { over: boolean; firstTime: boolean; usd: number }
 export const budgetSpent = (): boolean => today().usd >= settings.dailyBudgetUsd;
 
 // A group: one short line per group per day, when someone addressed it and the budget turned the answer away (group.ts). Returns whether to say it now.
-const groupTold = new Map<string, string>();
 export const GROUP_BUDGET_TEXT = `I've used up my budget for today, so I can't answer until tomorrow. ${settings.owner} can raise it if it is urgent.`;
-export function groupBudgetDue(groupId: string, now: Date = new Date()): boolean {
-  const day = localDay(now);
-  if (groupTold.get(groupId) === day) return false;
-  groupTold.set(groupId, day);
-  return true;
-}
+// (kept in state/cap-notices.json like the other once-a-day notices, so a restart does not say it twice)
+export const groupBudgetDue = (groupId: string, now: Date = new Date()): boolean => takeCapNotice(`group-budget:${groupId}`, now.getTime());
