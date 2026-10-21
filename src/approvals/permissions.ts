@@ -98,6 +98,7 @@ export interface GuardDecision {
   reason?: string;
   description?: string;
   once?: boolean; // an approved call is not repeated
+  done?: boolean; // allow: the call is remembered as done once let through (the approval inbox's follow-up run): the same call within the window is refused without a question
   judge?: boolean; // ask: goes to the approval judge first (a browse commit step); only its "auto" skips the owner. Without it the owner is always asked
   redacted?: Record<string, unknown>; // ask: the call as the question writer, the approval card and the audit see it (a typed secret cut to its length); the real input still runs
   facts?: Record<string, unknown>; // ask: what the judge's audit row records about the step (host, role, name)
@@ -218,6 +219,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       // content), so "what did it archive?" can always be answered from the audit log.
       if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
       log(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
+      if (g?.done) remember(scoped(conversation, callKey(tool, input))); // a call the guard let through once-only (the approval inbox's) is done: asking for it again within the window is refused
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
       return { behavior: "allow", updatedInput: f.input };

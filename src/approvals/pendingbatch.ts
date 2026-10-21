@@ -30,7 +30,7 @@ export const detailsHash = (details: string): string =>
   createHash("sha256").update(details.split("\n").filter((l) => !/^(Named:|The owner declined this action)/.test(l)).join("\n")).digest("hex").slice(0, 24);
 
 function itemLines(p: Pending, age?: string): string[] {
-  const tag = p.executing ? " — running now" : p.interrupted ? " — may not have run, reply to try again" : "";
+  const tag = p.executing ? " — running now" : p.retry ? " — approved, waiting to run" : p.interrupted ? " — may not have run, reply to try again" : "";
   const head = `${p.n}. ${p.label}${age ? ` (${age})` : ""}${tag} ${one(p.question, 300)}`;
   return p.footer ? [head, `   ↳ ${p.footer}`] : [head];
 }

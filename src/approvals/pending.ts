@@ -24,8 +24,18 @@ export interface Pending {
   detailsHash?: string; // the code-rendered details at asking time (pendingbatch.ts detailsHash): the follow-up run re-reads them and runs nothing if they differ (a draft edited meanwhile)
   deferred?: true; // quiet hours (or /quiet) kept its batch back: it is asked, as its own message, as soon as they end (pendingflow.ts)
   executing?: { at: number }; // approved and its follow-up run started: kept until the run ends, so a crash in between is noticed (recoverStuck)
+  retry?: { told: boolean }; // approved, but the run gate refused it (paused, budget, cooldown...): it waits approved and is run by the tick when it can; `told`: the owner has been told
   interrupted?: true; // it was executing when the process stopped and no audit row says it finished: asked about again, never retried by itself
   sent?: { at: number; ts?: number; held?: true }; // asked in a batch: when, and the batch message's timestamp (absent when it was held for quiet hours and went out with the morning release)
+}
+
+// A call that must not be parked again for a while: one that was done (7 days: the next look would propose it anew) or that expired unanswered (24 hours: not asked again on every look).
+export interface Blocked {
+  key: string;
+  n: number;
+  at: number;
+  until: number;
+  kind: "done" | "expired";
 }
 
 export interface Dropped {
@@ -37,6 +47,7 @@ interface PendingFile {
   next: number; // the next number to hand out
   items: Pending[];
   expired: Dropped[]; // dropped on expiry and not yet told to the owner
+  blocked: Blocked[];
 }
 
 const MAX_ITEMS = 40; // a flood is refused, not queued without end
@@ -49,6 +60,7 @@ function load(scope: string): PendingFile {
     next: typeof raw.next === "number" && raw.next >= 1 ? raw.next : 1,
     items: Array.isArray(raw.items) ? raw.items.filter((p): p is Pending => !!p && typeof p.n === "number" && typeof p.tool === "string" && !!p.input && typeof p.input === "object") : [],
     expired: Array.isArray(raw.expired) ? raw.expired.filter((d): d is Dropped => !!d && typeof d.n === "number") : [],
+    blocked: Array.isArray(raw.blocked) ? raw.blocked.filter((b): b is Blocked => !!b && typeof b.key === "string" && typeof b.until === "number") : [],
   };
 }
 const save = (scope: string, f: PendingFile): void => writeJson(pendingFileOf(scope), f);
@@ -57,7 +69,7 @@ const save = (scope: string, f: PendingFile): void => writeJson(pendingFileOf(sc
 export function splitExpired(items: readonly Pending[], now: number, days: number): { keep: Pending[]; dropped: Pending[] } {
   const keep: Pending[] = [];
   const dropped: Pending[] = [];
-  for (const p of items) (now - p.createdAt >= days * 86_400_000 && !p.executing ? dropped : keep).push(p);
+  for (const p of items) (now - p.createdAt >= days * 86_400_000 && !p.executing && !p.retry ? dropped : keep).push(p);
   return { keep, dropped };
 }
 
@@ -68,6 +80,8 @@ export function sweepExpired(scope: string, now: number): Pending[] {
   if (dropped.length === 0) return [];
   f.items = keep;
   f.expired.push(...dropped.map((p) => ({ n: p.n, label: p.label })));
+  f.blocked.push(...dropped.map((p): Blocked => ({ key: callKey(p.tool, p.input), n: p.n, at: now, until: now + 86_400_000, kind: "expired" }))); // (the next look does not ask the same thing again at once)
+  f.blocked = f.blocked.filter((b) => b.until > now).slice(-100);
   save(scope, f);
   return dropped;
 }
@@ -88,11 +102,13 @@ export function addExpired(scope: string, told: readonly Dropped[]): void {
 export const openItems = (scope: string): Pending[] => load(scope).items;
 
 // Park a call. The same call (tool and arguments) already parked keeps its number: a run that asks twice does not make two items.
-export function addPending(scope: string, p: Omit<Pending, "n" | "createdAt" | "scope" | "sent">, now: number): { n: number; duplicate: boolean } | { full: true } {
+export function addPending(scope: string, p: Omit<Pending, "n" | "createdAt" | "scope" | "sent">, now: number): { n: number; duplicate: boolean } | { full: true } | { blocked: Blocked } {
   const f = load(scope);
   const key = callKey(p.tool, p.input);
   const same = f.items.find((x) => callKey(x.tool, x.input) === key);
   if (same) return { n: same.n, duplicate: true };
+  const blocked = f.blocked.find((b) => b.key === key && b.until > now);
+  if (blocked) return { blocked };
   if (f.items.length >= MAX_ITEMS) return { full: true };
   const n = f.next++;
   f.items.push({ ...p, n, scope, createdAt: now });
@@ -133,13 +149,27 @@ export function markExecuting(scope: string, ns: readonly number[], at: number):
   if (marked.length) save(scope, f);
   return marked;
 }
+// It ran: gone from the list, and remembered as done so the next look cannot park the same call again.
+export function recordDone(scope: string, tool: string, input: Record<string, unknown>, n: number, now: number): void {
+  const f = load(scope);
+  f.blocked = [...f.blocked.filter((b) => b.until > now), { key: callKey(tool, input), n, at: now, until: now + 7 * 86_400_000, kind: "done" as const }].slice(-100);
+  save(scope, f);
+}
+
+// The run gate refused an approved item: it stays, approved, and the tick runs it when it can.
+export function setRetry(scope: string, n: number, told: boolean): void {
+  const f = load(scope);
+  for (const p of f.items) if (p.n === n) (delete p.executing, (p.retry = { told }));
+  save(scope, f);
+}
+
 export const finishItem = (scope: string, n: number): void => void takeItems(scope, [n]);
 
 // Back to waiting for a yes (the run never reported): marked so the list says so.
 export function interrupt(scope: string, ns: readonly number[]): void {
   const f = load(scope);
-  for (const p of f.items) if (ns.includes(p.n)) (delete p.executing, (p.interrupted = true));
+  for (const p of f.items) if (ns.includes(p.n)) (delete p.executing, delete p.retry, (p.interrupted = true));
   save(scope, f);
 }
 
-export const clearPending = (scope: string): Pending[] => takeItems(scope, openItems(scope).filter((p) => !p.executing).map((p) => p.n)); // (one that is running is not taken back)
+export const clearPending = (scope: string): Pending[] => takeItems(scope, openItems(scope).filter((p) => !p.executing && !p.retry).map((p) => p.n)); // (one that is running is not taken back)

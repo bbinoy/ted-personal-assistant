@@ -52,8 +52,8 @@ function tokens(text: string): Tok[] | undefined {
 
 const CLARIFY = "I could not tell which ones you mean. Say e.g. '1,3 yes', 'all yes' or '2 no'; nothing was done.";
 
-// `open`: the numbers of the open items. A message that is not an answer is { kind: "none" }.
-export function parseNumbered(text: string, open: readonly number[]): Parsed {
+// `open`: the numbers that exist; `all`: what the word "all" stands for (the items the owner was shown, or the batch her reply quotes: never more than that). A message that is not an answer is { kind: "none" }.
+export function parseNumbered(text: string, open: readonly number[], all: readonly number[] = open): Parsed {
   const toks = tokens(text);
   if (!toks || toks.length === 0) return { kind: "none" };
   const verbs = toks.filter((t) => t.t === "yes" || t.t === "no").length;
@@ -86,7 +86,7 @@ export function parseNumbered(text: string, open: readonly number[]): Parsed {
   const no = new Set<number>();
   for (const c of clauses) {
     if (c.subjects.some((s) => s.t === "all") && c.subjects.length > 1) return { kind: "clarify", why: CLARIFY }; // "all 2 yes"
-    const ns = c.subjects[0]!.t === "all" ? [...open] : c.subjects.flatMap((s) => (s.t === "num" ? [s.n] : []));
+    const ns = c.subjects[0]!.t === "all" ? [...all] : c.subjects.flatMap((s) => (s.t === "num" ? [s.n] : []));
     for (const n of ns) (c.yes ? yes : no).add(n);
   }
   if (clauses.some((c) => c.subjects[0]!.t === "all") && clauses.length > 1) return { kind: "clarify", why: CLARIFY }; // "all yes 2 no" is a contradiction

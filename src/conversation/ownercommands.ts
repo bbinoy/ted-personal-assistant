@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { openCount } from "../approvals/approvals.ts";
-import { clearText, listText } from "../approvals/pendingflow.ts";
+import { clearText, listText, waitingCount } from "../approvals/pendingflow.ts";
 import { spentToday } from "../core/budget.ts";
 import { pauseText } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
@@ -151,8 +151,8 @@ const real: CommandDeps = {
       quiet: quietText(conv, now, zoneOf(conv)),
       spentUsd: spentToday(),
       limitUsd: settings.dailyBudgetUsd,
+      approvals: openCount(conv.key) + waitingCount(conv.key), // (the questions open in the chat, and the calls parked in the approval inbox)
       lastLook: lastOwnerLook([`${ROWS_FILE}.2`, `${ROWS_FILE}.1`, ROWS_FILE].map((f) => readText(f) ?? "").join("\n")), // (the rotated generations too, heartbeat/rows.ts)
-      approvals: openCount(conv.key),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };
   },

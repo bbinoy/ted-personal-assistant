@@ -5,6 +5,7 @@ import { recentIn } from "./recentchat.ts";
 import { composeQuestion } from "./approvalmodel.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
+import { argsForAudit } from "./auditargs.ts";
 import { questionFooter } from "./questionfooter.ts";
 import { declinedAgo } from "./declined.ts";
 import { queueCall } from "./pendingflow.ts";
@@ -18,11 +19,7 @@ export const BACKGROUND_HINT = "\n\n↩️ Reply to this message or react 👍 /
 // the outcome and whether the call that ran has the arguments the question was written for, so a divergence between intent and
 // behaviour can be investigated.
 
-// Full arguments, size-capped; audit() redacts secrets in the whole line.
-export const argsForAudit = (input: Record<string, unknown>): unknown => {
-  const json = JSON.stringify(input);
-  return json.length <= LIMITS.args ? input : `${json.slice(0, LIMITS.args)}… (+${json.length - LIMITS.args} more characters)`;
-};
+export { argsForAudit } from "./auditargs.ts";
 
 // Plain equality of two argument sets (key order does not matter).
 export const sameArgs = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => callKey("", a) === callKey("", b);
