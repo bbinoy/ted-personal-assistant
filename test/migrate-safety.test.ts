@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -276,6 +276,28 @@ test("doctor fails a check while something is in the old places of a migrated fo
   assert.match(doctor(), /FAIL\s+files in the old places\s+\(1 path\(s\) an older version wrote after the move \(state\/payments\.jsonl\)/);
   reconcile(root);
   assert.doesNotMatch(doctor(), /files in the old places/);
+});
+
+test("the real run does exactly the dry run's steps and orphans: the empty folders left by moved libraries are neither steps nor orphans, and the owner's notice lists the real orphans only", () => {
+  const root = old();
+  const dry = planMigration(root);
+  const dryOrphans = dry.ops.filter((o) => o.kind === "orphan").map((o) => o.from.slice(root.length + 1)).sort();
+  const log: string[] = [];
+  const r = migrate(root, { log: (l) => log.push(l) });
+  assert.equal(r.plan!.ops.length, dry.ops.length, "no second round of steps");
+  assert.equal(r.moved, dry.ops.length);
+  assert.equal(dryOrphans.length, 8);
+  const realOrphans = r.plan!.ops.filter((o) => o.kind === "orphan").map((o) => o.from.slice(root.length + 1)).sort();
+  assert.deepEqual(realOrphans, dryOrphans);
+  assert.deepEqual([...r.orphans].sort(), [...dryOrphans, "state/voice/sources.json"].sort(), "the eight, plus the sources of conversations that are not here");
+  // no orphan is an empty folder
+  assert.equal(existsSync(join(layout(root).instance.migrationOrphans, "state/voice/groups/81628494d931c841")), false, "no empty library shell set aside");
+  assert.equal(existsSync(join(root, "state/voice/groups")), false, "the empty legacy folders are gone");
+  assert.equal(log.filter((l) => l.includes("set aside") && l.includes("voices of a conversation")).length, 1, "only the library of nobody");
+  const text = ownerNotice(root)!;
+  assert.match(text, /9 item\(s\)/);
+  assert.doesNotMatch(text, /81628494d931c841|dc09cefd04c569a9/);
+  assert.match(text, /state\/voice\/groups\/deadbeefdeadbeef/);
 });
 
 test("planning stays pure and the hash helpers agree with the fixture", () => {
