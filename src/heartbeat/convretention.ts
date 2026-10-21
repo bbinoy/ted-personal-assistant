@@ -30,7 +30,7 @@ export function convDbRule(L: () => Layout): RetentionRule {
     everyHours: 24,
     run(now, o) {
       const l = L();
-      const parts = { seen: 0, held: 0, blocked: 0, voice: 0 };
+      const parts = { seen: 0, held: 0, blocked: 0, voice: 0, lost: 0 };
       for (const conv of names(l.conversations)) {
         if (!isConvId(conv) || !existsSync(l.conv(conv).db)) continue;
         const db = convDbAt(l.root, conv);
@@ -40,9 +40,11 @@ export function convDbRule(L: () => Layout): RetentionRule {
         if (over > 0 && !o.dryRun) db.run("DELETE FROM held_posts WHERE seq IN (SELECT seq FROM held_posts ORDER BY seq LIMIT ?)", over);
         parts.blocked += pruneBlocked(db, now.getTime(), o.dryRun);
         parts.voice += pruneVoiceNotes(db, now.getTime(), o.dryRun);
+        const cut = new Date(now.getTime() - 30 * 86_400_000).toISOString(); // (the doctor lists approvals that were not restored for 30 days)
+        parts.lost += o.dryRun ? db.num("SELECT COUNT(*) FROM pending_lost WHERE at < ?", cut) : db.run("DELETE FROM pending_lost WHERE at < ?", cut).changes;
       }
-      const removed = parts.seen + parts.held + parts.blocked + parts.voice;
-      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} seen-mail id(s) past ${SEEN_MAX}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.blocked} expired block(s), ${parts.voice} voice row(s) past their window` };
+      const removed = parts.seen + parts.held + parts.blocked + parts.voice + parts.lost;
+      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} seen-mail id(s) past ${SEEN_MAX}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.blocked} expired block(s), ${parts.voice} voice row(s) past their window, ${parts.lost} not-restored approval note(s) older than 30 days` };
     },
   };
 }

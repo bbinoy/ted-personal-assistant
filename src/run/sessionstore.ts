@@ -1,4 +1,4 @@
-import { convDb } from "../core/convdb.ts";
+import { convDb, peekConvDb } from "../core/convdb.ts";
 import type { ConvRef } from "../core/convpaths.ts";
 import type { ChatSession } from "./session.ts";
 
@@ -17,7 +17,7 @@ interface Row {
 }
 
 export function readSession(conv: ConvRef): ChatSession {
-  const r = convDb(conv).get<Row>("SELECT session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in FROM session WHERE id = 1");
+  const r = peekConvDb(conv)?.get<Row>("SELECT session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in FROM session WHERE id = 1");
   if (!r) return { costUsd: 0 };
   return {
     ...(r.session_id !== null ? { sessionId: r.session_id } : {}),

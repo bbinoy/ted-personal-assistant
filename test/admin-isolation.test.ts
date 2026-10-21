@@ -36,7 +36,7 @@ mkdirSync(NOTES_DIR, { recursive: true });
 writeFileSync(ownerNotes, "the owner's own note");
 for (const [dir, file] of [[ann.notesDir, "people-eve.md"], [ann.dir, "tenant.json"], [ann.dir, "meta.json"], [ann.dir, "cost.json"]] as const) writeFileSync(join(dir, file), `{"text":"${CANARY}"}`);
 writeFileSync(ann.logFile, `{"ts":1,"kind":"owner","text":"${CANARY}"}\n`);
-writeFileSync(annDb, `{"id":"${CANARY}"}`);
+(await import("../src/core/convdb.ts")).convDb(ann.convId).run("INSERT INTO session (id, session_id, cost_usd) VALUES (1, ?, 0)", CANARY); // (a real database: a junk file would be a damaged one)
 const bao = instancePaths().openbao;
 mkdirSync(join(bao, "tls"), { recursive: true });
 writeFileSync(join(bao, "tls", "key.pem"), "private");

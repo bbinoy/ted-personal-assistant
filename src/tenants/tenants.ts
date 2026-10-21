@@ -8,7 +8,7 @@ import { TENANT_ID } from "../secrets/secrets.ts";
 import { convPaths, friendConvId, instancePaths, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { dataPath, parseJson, writeFileAtomic, writeJson } from "../core/state.ts";
-import { convDb, removeConvDir } from "../core/convdb.ts";
+import { convDb, peekConvDb, removeConvDir } from "../core/convdb.ts";
 import { isZone, systemZone } from "../core/timezone.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
@@ -399,7 +399,7 @@ interface FriendRow {
   paused_until: number | null;
   disclosed_at: string | null;
 }
-const friend = (ctx: Who): FriendRow | undefined => convDb(ctx.convId).get<FriendRow>("SELECT paused_until, disclosed_at FROM friend WHERE id = 1");
+const friend = (ctx: Who): FriendRow | undefined => peekConvDb(ctx.convId)?.get<FriendRow>("SELECT paused_until, disclosed_at FROM friend WHERE id = 1");
 // disclosed_at: when she had her first reply (the first-contact hint is given until then); paused_until: her cooldown (cooldown.ts keeps it in memory; this is for `npm run doctor`, a separate process)
 export const wasDisclosed = (ctx: Who): boolean => !!friend(ctx)?.disclosed_at;
 export const markDisclosed = (ctx: Who): void =>

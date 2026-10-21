@@ -4,6 +4,7 @@ import { dirname, join, relative } from "node:path";
 import { convDbAt } from "./convdb.ts";
 import { isConvId, layout, layout3, type ConvId } from "./convpaths.ts";
 import type { Db } from "./db.ts";
+import { writeFileAtomic } from "./state.ts";
 
 // Layout version 4: the small per-conversation files of layout 3 are imported into the conversation's own assistant.db, once (docs/ARCHITECTURE.md "assistant.db"; the tables: core/convdb.ts).
 //
@@ -111,6 +112,7 @@ interface Counted {
   rows: number; // rows written
   expect: number; // rows the file should have produced (the check before the commit)
   note?: string;
+  lost?: { n: number; label: string }[]; // approvals of a late pending.json that were NOT restored: surfaced to the owner and the doctor (pending_lost)
 }
 
 const parseJson = (text: string): unknown => {
@@ -125,7 +127,7 @@ const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const int = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const flag = (v: unknown): number | null => (typeof v === "boolean" ? (v ? 1 : 0) : null);
 const present = (db: Db, table: string): boolean => db.num(`SELECT COUNT(*) FROM ${table}`) > 0;
-const kept = (what: string): Counted => ({ rows: 0, expect: 0, note: `the database already holds ${what}; the file is only backed up` });
+const kept = (what: string, lost?: Counted["lost"]): Counted => ({ ...(lost?.length ? { lost } : {}), rows: 0, expect: 0, note: `the database already holds ${what}; the file is only backed up` });
 
 // (the bounds the stores keep: modules/seenmail SEEN_MAX, heartbeat/notices MAX_HELD, modules/voice/voicenote NOTES_PER_CONVERSATION, approvals/pending MAX_BLOCKED; spelled as numbers here so the importer needs none of them)
 const SEEN_MAX = 2000;
@@ -158,6 +160,7 @@ function importFile(db: Db, it: ConvImportItem, text: string): Counted {
       return { rows: 1, expect: 1 };
     }
     case "heldPosts": {
+      const late = db.get("SELECT 1 FROM legacy_imports WHERE name = ?", it.name) !== undefined; // an earlier import of this name: this is a late file, and only then is a post that is held already not repeated
       const held = (Array.isArray(j.held) ? j.held : []).filter((h): h is Record<string, unknown> => isObj(h) && typeof h.text === "string").slice(-MAX_HELD);
       let rows = 0;
       let expect = held.length;
@@ -167,7 +170,7 @@ function importFile(db: Db, it: ConvImportItem, text: string): Counted {
         expect++;
       }
       for (const h of held) {
-        if (db.get("SELECT 1 FROM held_posts WHERE text = ?", h.text as string)) { expect--; continue; } // (a late file: not repeated)
+        if (late && db.get("SELECT 1 FROM held_posts WHERE text = ?", h.text as string)) { expect--; continue; } // (a late file: not repeated)
         db.run("INSERT INTO held_posts (text, why, notice, needs_you, at, day, same_day) VALUES (?, ?, ?, ?, ?, ?, ?)", h.text as string, h.why === "cap" ? "cap" : "quiet", flag(h.notice), flag(h.needsYou), int(h.at), str(h.day), flag(h.sameDay));
         rows++;
       }
@@ -185,13 +188,17 @@ function importFile(db: Db, it: ConvImportItem, text: string): Counted {
       return { rows, expect };
     }
     case "pending": {
-      if (present(db, "pending_items") || (db.get<{ next: number }>("SELECT next FROM pending_state WHERE id = 1")?.next ?? 1) > 1) return kept("an approval inbox");
       const seen = new Set<number>();
       const items = (Array.isArray(j.items) ? j.items : []).filter((p): p is Record<string, unknown> => {
         if (!isObj(p) || typeof p.n !== "number" || typeof p.tool !== "string" || !isObj(p.input) || seen.has(p.n)) return false;
         seen.add(p.n);
         return true;
       });
+      if (present(db, "pending_items") || (db.get<{ next: number }>("SELECT next FROM pending_state WHERE id = 1")?.next ?? 1) > 1) {
+        const lost = items.map((p) => ({ n: p.n as number, label: (str(p.label) ?? "").slice(0, 120) }));
+        for (const l of lost) db.run("INSERT INTO pending_lost (n, label, why, at) VALUES (?, ?, 'late-file', ?)", l.n, l.label, new Date().toISOString());
+        return kept("an approval inbox", lost);
+      }
       const expired = (Array.isArray(j.expired) ? j.expired : []).filter((d): d is Record<string, unknown> => isObj(d) && typeof d.n === "number");
       const blocked = (Array.isArray(j.blocked) ? j.blocked : []).filter((b): b is Record<string, unknown> => isObj(b) && typeof b.key === "string" && typeof b.until === "number");
       db.run("INSERT INTO pending_state (id, next) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET next = excluded.next", typeof j.next === "number" && j.next >= 1 ? j.next : 1);
@@ -301,6 +308,7 @@ export function importConvLegacy(root: string, o: ConvImportOptions = {}): ConvI
   const now = (o.now ?? (() => new Date()))();
   const backup = o.backupDir ?? join(L.instance.migrationBackup, now.toISOString().replace(/[:.]/g, "-"));
   const touched = new Set<ConvId>();
+  const lostLines: string[] = [];
   for (const it of items) {
     const db = convDbAt(L.root, it.conv);
     const bytes = readFileSync(it.path);
@@ -329,9 +337,11 @@ export function importConvLegacy(root: string, o: ConvImportOptions = {}): ConvI
     res.files++;
     res.rows += counted.rows;
     touched.add(it.conv);
+    for (const l of counted.lost ?? []) lostLines.push(`${it.conv === "owner" ? "your chat" : it.conv} #${l.n}${l.label ? ` ${l.label}` : ""}`);
     log(`migrate: ${it.name} -> ${it.conv}/assistant.db: ${counted.rows} row(s)${counted.note ? ` (${counted.note})` : ""}`);
     if (o.crashAfter !== undefined && res.files >= o.crashAfter) throw new Error("simulated crash");
   }
+  if (lostLines.length) recordLostApprovals(root, lostLines);
   res.conversations = touched.size;
   res.backup = relative(L.root, backup);
   return res;
@@ -352,4 +362,16 @@ export function forgetConvInBackups(root: string, conv: ConvId): number {
     }
   }
   return n;
+}
+
+/** Approvals of a late pending.json that could not be restored: told to the owner once (migrate.ts lateNotice, from instance/migration-late.json) and listed by the doctor (the pending_lost table). */
+function recordLostApprovals(root: string, lines: readonly string[]): void {
+  const file = layout(root).instance.migrationLate;
+  let prior: { files?: string[]; lost?: string[]; told?: boolean } = {};
+  try {
+    prior = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    /* the first time */
+  }
+  writeFileAtomic(file, JSON.stringify({ files: prior.told ? [] : (prior.files ?? []), lost: [...(prior.told ? [] : (prior.lost ?? [])), ...lines] }));
 }
