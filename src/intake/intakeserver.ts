@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { settings } from "../core/settings.ts";
 import { audit } from "../core/audit.ts";
 import { LINK_CODE, LinkStore, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
@@ -36,11 +37,13 @@ const DEFAULT_LIMITS: Limits = { perIpPerMinute: 60, globalPerMinute: 300, badCo
 const BAD_WINDOW = 15 * 60_000;
 
 // Hits per key in a sliding window, in memory.
-class Window {
+export class Window {
   private readonly hits = new Map<string, number[]>();
   private readonly ms: number;
-  constructor(ms: number) {
+  private readonly maxKeys: number;
+  constructor(ms: number, maxKeys = 10_000) {
     this.ms = ms;
+    this.maxKeys = maxKeys;
   }
   count(key: string, now: number): number {
     const fresh = (this.hits.get(key) ?? []).filter((t) => now - t < this.ms);
@@ -49,12 +52,34 @@ class Window {
     return fresh.length;
   }
   add(key: string, now: number): void {
-    if (this.hits.size > 10_000) this.hits.clear(); // a flood of addresses cannot grow it without bound (the global limit still holds)
-    this.hits.set(key, [...(this.hits.get(key) ?? []), now]);
+    const mine = this.hits.get(key) ?? [];
+    this.hits.delete(key); // (re-inserted last: the map's order is least recently hit first)
+    this.hits.set(key, [...mine, now]);
+    // A flood of addresses cannot grow it without bound, and it costs only the quietest keys their history: clearing everything would hand a flooder a clean slate for every address, his own included.
+    for (const old of this.hits.keys()) {
+      if (this.hits.size <= this.maxKeys) break;
+      this.hits.delete(old);
+    }
+  }
+  get size(): number {
+    return this.hits.size;
   }
 }
 
+// Behind a tunnel every request comes from the loopback address, so the visitor is what the tunnel says: by default the LAST X-Forwarded-For entry (the one the tunnel itself added; the
+// ones before it are the visitor's to forge); a tunnel that sets its own header instead (Cloudflare Tunnel: cf-connecting-ip) is named by INTAKE_CLIENT_IP_HEADER, and then that one
+// header's value is used (the tunnel overwrites it). A direct, non-loopback peer is itself. A loopback peer with no such header (no tunnel, or one that does not set it) is "127.0.0.1".
+export function clientIpOf(peer: string | undefined, headers: IncomingMessage["headers"], header: string): string {
+  const p = peer ?? "?";
+  if (p !== "127.0.0.1" && p !== "::1" && p !== "::ffff:127.0.0.1") return p;
+  const raw = headers[header.toLowerCase()];
+  const v = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+  const named = header.toLowerCase() === "x-forwarded-for" ? v?.split(",").pop() : v;
+  return named?.trim().slice(0, 64) || p;
+}
+
 export interface IntakeDeps {
+  clientIpHeader?: string; // which request header carries the visitor's address behind a tunnel (default: settings.intake.clientIpHeader)
   links: LinkStore;
   writer: { for(tenant: string): Put };
   oauth?: OAuthFlows; // the sign-in purposes ("Connect Google", "Connect Notion"): their flows in progress; absent: those purposes are not offered
@@ -133,12 +158,8 @@ export class IntakeServer {
     return want.length === got.length && timingSafeEqual(want, got);
   }
 
-  // Behind a tunnel every request comes from the loopback address; the last X-Forwarded-For entry is the one the tunnel itself added.
   private clientIp(req: IncomingMessage): string {
-    const peer = req.socket.remoteAddress ?? "?";
-    if (peer !== "127.0.0.1" && peer !== "::1" && peer !== "::ffff:127.0.0.1") return peer;
-    const xff = req.headers["x-forwarded-for"];
-    return (typeof xff === "string" ? xff.split(",").pop()?.trim() : "") || peer;
+    return clientIpOf(req.socket.remoteAddress, req.headers, this.deps.clientIpHeader ?? settings.intake.clientIpHeader);
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {

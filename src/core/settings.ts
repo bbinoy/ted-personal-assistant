@@ -228,6 +228,8 @@ export function loadSettings(env: Env) {
       port: num(env, "INTAKE_PORT", 8787, 1024, 65_535), // the page listens on 127.0.0.1 and nowhere else
       allowHttpLoopback: oneOf(env, "INTAKE_ALLOW_HTTP_LOOPBACK", "off", ["on", "off"] as const) === "on", // tests only: lets INTAKE_BASE_URL be an http://127.0.0.1 address
       linkMinutes: num(env, "INTAKE_LINK_MINUTES", 15, 1, 60), // how long a setup link works (once)
+      // The request header that carries the visitor's address behind a tunnel, for the page's rate limits: x-forwarded-for (its last entry) unless the tunnel sets another, like cf-connecting-ip for Cloudflare Tunnel.
+      clientIpHeader: (env.INTAKE_CLIENT_IP_HEADER?.trim().toLowerCase() || "x-forwarded-for").replace(/[^a-z0-9-]/g, "") || "x-forwarded-for",
       dir: join(dataDir, "state/intake"), // the open links (hashed) and what was stored (lengths only)
     },
     // Google for friends (src/modules/google/googlemcp.ts, src/intake/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend (every friend has the `google` capability once the OAuth client is set) connects her own Google
