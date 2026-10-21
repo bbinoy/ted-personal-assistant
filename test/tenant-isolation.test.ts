@@ -114,15 +114,16 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   writeFileSync(join(I.openbao, "tls", "key.pem"), "private");
   mkdirSync(I.dir, { recursive: true });
   writeFileSync(I.registrations, "{}");
-  writeFileSync(I.cost, "{}");
+  mkdirSync(dirname(I.db), { recursive: true });
+  writeFileSync(I.db, "x"); // (the database file itself is as closed as any other file of instance/)
   mkdirSync(O.dir, { recursive: true });
   assert.equal(isReadableData(logPaths().audit), true);
   writeFileSync(O.messages, "{}\n");
   assert.equal(isReadableData(O.messages), true, "the owner's own history");
-  assert.equal(isReadableData(I.cost), false, "an allow-list: instance/ is closed unless named");
+  assert.equal(isReadableData(I.db), false, "an allow-list: instance/ is closed unless named");
   assert.equal(isReadableData(join(NOTES_DIR, "context-secret.md")), true);
   // every store the old deny-list missed (names and account ids, friends' voice audio, deleted notes, raw group ids, the search indexes), in instance/ and in her own folder
-  const closed = [I.tenants, I.intakeProblems, I.capNotices, I.groupCost, O.search, O.pending, O.session, O.heldPosts, O.voiceSources, join(O.voices, "ref.wav"), join(O.notesBackup, "2026-01-01", "note.md")];
+  const closed = [I.tenants, I.db, `${I.db}-wal`, `${I.db}-shm`, O.search, O.pending, O.session, O.heldPosts, O.voiceSources, join(O.voices, "ref.wav"), join(O.notesBackup, "2026-01-01", "note.md")];
   for (const leak of closed) {
     mkdirSync(dirname(leak), { recursive: true });
     if (!existsSync(leak)) writeFileSync(leak, "x"); // (tenants.json is the real registry)
@@ -260,7 +261,7 @@ test("a tenant's run: her key in the environment, her cost on her ledger, her se
   assert.equal(r.text, "hi Ann");
   assert.equal((seen.options!.env as Record<string, string>).ANTHROPIC_API_KEY, KEY);
   assert.equal((seen.options!.env as Record<string, string>).CLAUDE_CODE_OAUTH_TOKEN, undefined);
-  assert.equal(spentToday(ann.costFile), 0.05);
+  assert.equal(spentToday(ann.ledger), 0.05);
   assert.equal(spentToday(), before, "the instance's daily guard did not move");
   assert.equal(JSON.parse(readFileSync(ann.sessionFile, "utf8")).sessionId, "sess-ann");
   assert.equal(existsSync(convPaths(OWNER_CONV).session), false);

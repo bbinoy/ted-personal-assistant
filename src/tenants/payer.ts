@@ -1,5 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { budgetSpent, groupOverBudget, instanceKeyOverBudget, recordCost, recordGroupCost, recordKeyCost, tenantOverBudget } from "../core/budget.ts";
+import { budgetSpent, groupOverBudget, instanceKeyOverBudget, recordSpend, tenantOverBudget } from "../core/budget.ts";
+import { groupConvId, OWNER_CONV } from "../core/convpaths.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { cooldownUntil, coolingDown, noteSuccess, observeRateLimit, skipForCooldown } from "../core/cooldown.ts";
 import { reportKeyProblem } from "./keynotice.ts";
@@ -10,8 +11,8 @@ import { tenantById, tenantContext } from "./tenants.ts";
 
 // WHO PAYS for a model call and MAY IT RUN NOW: one answer for every call, whoever started it (a chat turn, a wake-up, the gate, the dream, the mail check and its
 // handler, compaction, a notice, the log summary, the approval judge).
-//   login      the instance's own Claude login (the owner's, and the groups'): the instance's day budget (instance/cost.json) and the shared cooldown of its usage limit
-//   instance   the instance key (TENANT_ANTHROPIC_API_KEY), on behalf of a friend: her own cost file and her own daily ceiling; the key's refusal (a limit, an empty balance,
+//   login      the instance's own Claude login (the owner's, and the groups'): the instance's day budget (the spend ledger, instance.db) and the shared cooldown of its usage limit
+//   instance   the instance key (TENANT_ANTHROPIC_API_KEY), on behalf of a friend: her own spend rows and her own daily ceiling; the key's refusal (a limit, an empty balance,
 //              an expired key) is the KEY's, so its cooldown is shared by every friend (INSTANCE_KEY_COOLDOWN) and the owner hears of it once (keynotice.ts)
 // A Payer is a value to pass along: it carries the key only into the environment of the call (envFor), never into a log or an audit line.
 
@@ -19,7 +20,7 @@ export interface InstancePayer {
   readonly kind: "instance";
   readonly id: string; // the friend it is spent for: her ledger, her budget
   readonly apiKey: string; // only into the environment of a call (envFor); never logged or audited
-  readonly costFile: string;
+  readonly ledger: string;
 }
 export interface LoginPayer {
   readonly kind: "login";
@@ -48,14 +49,11 @@ export const envFor = (p: Payer, base: Record<string, string | undefined>): Reco
 // ---- the bookkeeping of a call, the same for every payer ----
 
 export const observe = (p: Payer, m: SDKMessage | { type: string }): void => observeRateLimit(m as SDKMessage, cooldownKeyOf(p)); // a rejected limit's reset time
-export function charge(p: Payer, usd: number): void { // failures cost money too
-  if (p.kind === "instance") {
-    recordCost(usd, p.costFile); // her own ledger...
-    recordKeyCost(usd); // ...and the key's, which every tenant spends
-  } else {
-    recordCost(usd);
-    if (p.group) recordGroupCost(p.group, usd);
-  }
+// One row in the spend ledger (budget.ts) says it all: whose conversation, which payer, what kind of run (chat, look, dream, gate, helper...). A friend's row counts toward her own day and the
+// instance key's, a group's toward its own day and the owner's login, the owner's toward the owner's: the sums are the ceilings.
+export function charge(p: Payer, usd: number, kind = "run"): void { // failures cost money too
+  if (p.kind === "instance") recordSpend({ usd, conv: p.ledger, payer: "key", kind });
+  else recordSpend({ usd, conv: p.group ? groupConvId(p.group) : OWNER_CONV, payer: "login", kind });
 }
 export const succeeded = (p: Payer): void => noteSuccess(cooldownKeyOf(p)); // a call went through: the limit is over
 export const cooldownOf = (p: Payer, now: number = Date.now()): number | undefined => cooldownUntil(cooldownKeyOf(p), now);
@@ -102,10 +100,10 @@ export function mayRun(conv: Pick<Conversation, "kind" | "tenantId"> & { groupId
     return { refused: "no-key" };
   }
   if (coolingDown(now, INSTANCE_KEY_COOLDOWN)) return { refused: "cooldown", until: cooldownUntil(INSTANCE_KEY_COOLDOWN, now) };
-  if (tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd)) return { refused: "budget", limit: ctx.dailyBudgetUsd };
+  if (tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd)) return { refused: "budget", limit: ctx.dailyBudgetUsd };
   if ((o.keySpent ?? instanceKeyOverBudget)()) { // the key's whole day, whatever each friend's own ceiling says
     reportInstanceCap(settings.instanceKeyDailyUsd, now); // the owner hears once a day, whichever job ran into it
     return { refused: "instance-budget", limit: settings.instanceKeyDailyUsd };
   }
-  return { kind: "instance", id: ctx.id, apiKey, costFile: ctx.costFile };
+  return { kind: "instance", id: ctx.id, apiKey, ledger: ctx.ledger };
 }

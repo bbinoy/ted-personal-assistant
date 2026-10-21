@@ -295,7 +295,7 @@
         "key": "tenant:<bea>",
         "apiKey": "<instance-key>",
         "keyTag": "f8707298",
-        "costFile": "<data>/conversations/friend-<bea>/cost.json",
+        "ledger": "friend-<bea>",
         "logFile": "<data>/conversations/friend-<bea>/messages.jsonl",
         "overBudget": "[fn]"
       }

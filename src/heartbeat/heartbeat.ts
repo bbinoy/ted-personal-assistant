@@ -1,12 +1,11 @@
 import { isPaused } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
-import { writeJson } from "../core/state.ts";
-import { instancePaths } from "../core/convpaths.ts";
+import { kvSet } from "../core/instancedb.ts";
 
 // The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (every conversation's look, the dream). What a conversation does on a tick is the
 // heartbeat run (src/heartbeat/look.ts, started from wake.ts): there is no separate mail check; the run reads the mail itself when it is due.
 
-const OWNER_LIVENESS = instancePaths().heartbeat; // last tick, for `npm run doctor`
+export const HEARTBEAT_KEY = "heartbeat"; // the kv row of the last tick, for `npm run doctor`
 
 interface HeartbeatHooks {
   onTick: () => void; // tick-driven jobs (wake-ups, dream): independent of each other, never awaited
@@ -32,7 +31,7 @@ export function startHeartbeat(hooks: HeartbeatHooks, env: { setTimeout?: (f: ()
     } catch (e) {
       console.error("heartbeat: tick jobs failed to start:", (e as Error).message);
     }
-    if (!isPaused()) writeJson(OWNER_LIVENESS, { lastTickAt: new Date().toISOString() }); // proof of life, so `doctor` sees the heartbeat ticking
+    if (!isPaused()) kvSet(HEARTBEAT_KEY, { lastTickAt: new Date().toISOString() }); // proof of life, so `doctor` sees the heartbeat ticking
   };
 
   (env.setTimeout ?? setTimeout)(tick, 20_000); // first tick shortly after start

@@ -6,7 +6,7 @@ import { FILE as OWNER_LOG, type Summarize } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
-import { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } from "../core/convpaths.ts";
+import { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { OWNER_SESSION_FILE } from "../core/ownerkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { dataPath, parseJson, readJson, writeFileAtomic, writeJson } from "../core/state.ts";
@@ -135,7 +135,7 @@ export interface TenantContext {
   backupDir: string;
   sessionFile: string;
   logFile: string;
-  costFile: string;
+  ledger: ConvId; // her spend rows in instance.db are those with this convId (core/budget.ts)
   configFile: string;
   metaFile: string;
   role: Role;
@@ -156,12 +156,12 @@ export interface Paths {
   notesDir: string;
   logFile: string;
   sessionFile: string;
-  costFile: string;
+  ledger: ConvId; // whose spend rows count as hers: the owner's day, or the friend's own (core/budget.ts)
 }
 export const pathsOf = (rec: Pick<TenantRecord, "id">): Paths =>
   rec.id === OWNER_ID
-    ? { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: instancePaths().cost }
-    : (({ dir, notes, messages, session, cost }) => ({ root: dir, notesDir: notes, logFile: messages, sessionFile: session, costFile: cost }))(convPaths(friendConvId(rec.id)));
+    ? { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, ledger: OWNER_CONV }
+    : (({ dir, notes, messages, session }) => ({ root: dir, notesDir: notes, logFile: messages, sessionFile: session, ledger: friendConvId(rec.id) }))(convPaths(friendConvId(rec.id)));
 
 export function tenantContext(rec: TenantRecord): TenantContext {
   const p = convPaths(friendConvId(rec.id));
@@ -186,7 +186,7 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     backupDir: p.notesBackup,
     sessionFile: paths.sessionFile,
     logFile: paths.logFile,
-    costFile: paths.costFile,
+    ledger: paths.ledger,
     configFile,
     metaFile: p.meta,
     role: rec.role,

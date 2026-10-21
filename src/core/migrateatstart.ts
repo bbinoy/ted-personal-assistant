@@ -3,6 +3,7 @@
 import { settings } from "./settings.ts";
 import { layoutState, refusal } from "./migrate.ts";
 import { migrateSafely } from "./migrateservices.ts";
+import { instanceDb } from "./instancedb.ts";
 
 const s = layoutState(settings.dataDir);
 if (s.state === "newer") {
@@ -14,5 +15,11 @@ try {
   migrateSafely(settings.dataDir, { agentLabel: settings.launchdLabel, mode: "agent", log: (line) => console.log(line) });
 } catch (e) {
   process.stderr.write(`migrate: the data folder could not be moved to the new layout (${(e as Error).message}); nothing is lost, and the next start continues from the stored plan.\n`);
+  process.exit(1);
+}
+try {
+  instanceDb(); // instance.db (spend, payments...): opened here so a damaged ledger stops the start with its own message, not in the middle of a run (core/db.ts LedgerCorruptError)
+} catch (e) {
+  process.stderr.write(`${(e as Error).message}\n`);
   process.exit(1);
 }

@@ -1,17 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Size-bounded files: the heartbeat rows, the payment ledger (a financial record: archived by year, never deleted), and a log a child holds open.
+// Size-bounded files (a log a child holds open) and the tables that replaced the rotated ones: the heartbeat rows (age-pruned), the payment ledger (a financial record: never rotated or deleted).
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "rotation-test-"));
 
 const { settings } = await import("../src/core/settings.ts");
-const { instancePaths } = await import("../src/core/convpaths.ts");
+const { scratchDb } = await import("./scratch.ts");
 const { rotateIfOver, copyTruncateIfOver } = await import("../src/core/rotate.ts");
 const rows = await import("../src/heartbeat/rows.ts");
-const { Ledger, MAX_BYTES: LEDGER_MAX, capProblem } = await import("../src/modules/browse/payments.ts");
+const { Ledger, capProblem } = await import("../src/modules/browse/payments.ts");
 
 const dir = mkdtempSync(join(tmpdir(), "rot-files-"));
 
@@ -38,57 +38,50 @@ test("copyTruncateIfOver: the original is cut to nothing (a child's append-mode 
   assert.equal(copyTruncateIfOver(join(dir, "missing.log"), 100, 2), false);
 });
 
-test("heartbeat rows: rotated by size, and the report still reads every generation in order", () => {
-  const file = join(instancePaths().dir, "hb-rotation.jsonl");
-  const row = (i: number) => ({ at: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: i, delegations: 0, outcome: "silent" as const, pad: "p".repeat(100_000) });
-  for (let i = 0; i < 100; i++) rows.appendRow(row(i) as never, file);
-  assert.equal(existsSync(`${file}.1`), true);
-  assert.equal(existsSync(`${file}.3`), false);
-  const read = rows.readRows(file);
-  assert.ok(read.length < 100 && read.length >= 20, "the oldest generation was dropped");
-  assert.deepEqual(read.map((r) => r.archived), read.map((r) => r.archived).slice().sort((a, b) => a - b), "oldest first across generations");
-  assert.equal(read.at(-1)!.archived, 99);
-  assert.equal(rows.readRows(`${file}`).length, read.length);
-  const current = readFileSync(file, "utf8").trim().split("\n");
-  assert.equal(JSON.parse(current.at(-1)!).archived, 99, "the newest row is always in the CURRENT file (rotation happens before the append)");
+test("heartbeat rows: a table, oldest first, no size rotation; the report window and the age prune read it", () => {
+  const base = Date.UTC(2026, 0, 1);
+  const row = (i: number) => ({ at: new Date(base + i * 86_400_000).toISOString(), night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: i, delegations: 0, outcome: "silent" as const });
+  for (let i = 0; i < 100; i++) rows.appendRow(row(i));
+  const all = rows.readRows();
+  assert.equal(all.length, 100, "nothing is rotated away by size");
+  assert.deepEqual(all.map((r) => r.archived), [...all.map((r) => r.archived)].sort((a, b) => a - b), "oldest first");
+  assert.equal(all.at(-1)!.archived, 99);
+  assert.equal(rows.readRows(7, base + 99.5 * 86_400_000).length, 7, "the last 7 days");
+  assert.equal(rows.lastLookAt(), row(99).at);
+  assert.equal(rows.pruneLooks(30, base + 99.5 * 86_400_000), 70, "retention drops what is older than the window");
+  assert.equal(rows.readRows().length, 30);
 });
 
-test("payment ledger: rotation archives the year, never deletes, and the caps and the duplicate check give the same answers before and after", () => {
-  const file = join(instancePaths().dir, "payments-rot-test.jsonl");
-  const l = new Ledger(file);
+test("payment ledger: no rotation, nothing is ever deleted by volume, and the caps and the duplicate check read the same however many rows there are", () => {
+  const l = new Ledger(scratchDb("payments-rot-test"));
   const now = new Date();
   const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
-  const fat = "m".repeat(LEDGER_MAX / 2);
+  const fat = "m".repeat(200_000);
   l.add({ id: "old00001", merchant: `old-${fat}`, totalMinor: 9000, currency: "EUR", last4: "1111", cartHash: "h-old", status: "confirmed" }, days(400));
   l.add({ id: "open0001", merchant: "shop", totalMinor: 700, currency: "EUR", last4: "1111", cartHash: "h-open", status: "clicked" }, days(10));
-  const before = (): [number, boolean] => [l.spentToday("EUR", now), !!l.duplicate("shop", "h-today", now)];
   l.add({ id: "today001", merchant: "shop", totalMinor: 2500, currency: "EUR", last4: "1111", cartHash: "h-today", status: "confirmed" }, now);
-  assert.deepEqual(before(), [2500, true]);
-  const archivesBefore = existsSync(join(instancePaths().dir, `payments-rot-test-2025.jsonl`));
-  assert.equal(archivesBefore, false);
-  l.add({ id: "pad00001", merchant: `pad-${fat}`, totalMinor: 1, currency: "EUR", last4: "1111", cartHash: "h-pad", status: "failed" }, now); // crosses the size
-  const archive = readdirArchive();
-  assert.equal(archive.length, 1, "one archive");
-  assert.match(archive[0]!, /payments-rot-test-\d{4}\.jsonl$/);
-  const archived = readFileSync(join(instancePaths().dir, archive[0]!), "utf8");
-  assert.match(archived, /old00001/, "the old payment is kept in the archive");
-  assert.deepEqual(before(), [2500, true], "today's cap and the duplicate window read the same after the rotation");
+  for (let i = 0; i < 300; i++) l.add({ id: `pad${String(i).padStart(5, "0")}`, merchant: `pad-${fat.slice(0, 5000)}`, totalMinor: 1, currency: "EUR", last4: "1111", cartHash: `h-pad-${i}`, status: "failed" }, now);
+  assert.deepEqual([l.spentToday("EUR", now), !!l.duplicate("shop", "h-today", now)], [2500, true]);
   assert.equal(capProblem(1000, { purchaseMinor: 5000, dayMinor: 3000 } as never, l.spentToday("EUR", now)) !== undefined, true, "the daily cap still counts today's payment");
-  assert.equal(l.rows().some((r) => r.id === "old00001"), false, "the current file holds only what the caps can still need");
-  assert.equal(l.setStatus("open0001", "unconfirmed", now), true, "an open payment survives the rotation, so its status can still change");
+  assert.equal(l.rows().some((r) => r.id === "old00001"), true, "the old payment is still a row of the ledger");
+  assert.equal(l.history("old00001").length, 1);
+  assert.equal(l.setStatus("open0001", "unconfirmed", now), true);
   assert.equal(l.rows().find((r) => r.id === "open0001")?.status, "unconfirmed");
+  assert.equal(l.history("open0001").map((r) => r.status).join(), "clicked,unconfirmed", "every status change is a row of its own");
 });
 
-function readdirArchive(): string[] {
-  return readdirSync(instancePaths().dir).filter((n) => /^payments-rot-test-\d{4}.*\.jsonl$/.test(n));
-}
-
-test("/status: the last look is found even when the current rows file is empty (it reads the rotated generations too)", async () => {
-  const { lastOwnerLook, ROWS_FILE } = await import("../src/conversation/ownercommands.ts");
-  const { readText } = await import("../src/core/state.ts");
-  const line = JSON.stringify({ at: "2026-10-14T12:00:00.000Z", night: false, outcome: "silent" });
-  writeFileSync(`${ROWS_FILE}.1`, `${line}\n`);
-  writeFileSync(ROWS_FILE, "");
-  const text = [`${ROWS_FILE}.2`, `${ROWS_FILE}.1`, ROWS_FILE].map((f) => readText(f) ?? "").join("\n");
-  assert.deepEqual(lastOwnerLook(text), { at: new Date("2026-10-14T12:00:00.000Z"), outcome: "silent" });
+test("payment ledger: prunePayments is off unless asked (0 years), never under 2 years, and spares open and unconfirmed payments", async () => {
+  const { prunePayments } = await import("../src/modules/browse/payments.ts");
+  const { instanceDb } = await import("../src/core/instancedb.ts");
+  const l = new Ledger();
+  const now = new Date();
+  const years = (n: number) => new Date(now.getTime() - n * 365 * 86_400_000);
+  const base = { merchant: "m", totalMinor: 100, currency: "EUR", last4: "1111" };
+  l.add({ ...base, id: "settled1", cartHash: "a", status: "confirmed" }, years(3));
+  l.add({ ...base, id: "unconf01", cartHash: "b", status: "unconfirmed" }, years(3));
+  l.add({ ...base, id: "recent01", cartHash: "c", status: "confirmed" }, years(1));
+  assert.equal(prunePayments(0, now), 0, "the default keeps everything");
+  assert.equal(prunePayments(1, now), 1, "a policy of less than two years is two years: the 3-year-old settled payment goes, the 1-year-old stays");
+  const ids = new Set(instanceDb().all<{ id: string }>("SELECT id FROM payments").map((r) => r.id));
+  assert.deepEqual([ids.has("settled1"), ids.has("unconf01"), ids.has("recent01")], [false, true, true]);
 });

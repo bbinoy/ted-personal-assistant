@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
-import { HEARTBEAT_LOG } from "../src/heartbeat/rows.ts";
-import { commandReply, lastOwnerLook, parseCommand, ROWS_FILE, statusText } from "../src/conversation/ownercommands.ts";
+import { appendRow, type HeartbeatRow } from "../src/heartbeat/rows.ts";
+import { instanceDb } from "../src/core/instancedb.ts";
+import { commandReply, lastOwnerLook, parseCommand, statusText } from "../src/conversation/ownercommands.ts";
 import { isPaused, pauseText } from "../src/core/pause.ts";
 import { dataPath, readText, writeText } from "../src/core/state.ts";
 import { RunStopped, stopRuns, withCeiling } from "../src/run/ceiling.ts";
@@ -94,12 +95,14 @@ test("/status: a phone-sized summary", () => {
   assert.match(real!, /Budget today/);
 });
 
-test("the last look comes from the heartbeat's own rows (the owner's), newest first, torn lines skipped", () => {
-  assert.equal(ROWS_FILE, HEARTBEAT_LOG);
-  const rows = [{ at: "2026-10-14T10:00:00.000Z", kind: "owner", outcome: "posted" }, { at: "2026-10-14T11:00:00.000Z", kind: "group", outcome: "failed" }, { at: "2026-10-14T12:00:00.000Z", outcome: "silent" }].map((r) => JSON.stringify(r)).join("\n");
-  assert.deepEqual(lastOwnerLook(`${rows}\n{"at":`), { at: new Date("2026-10-14T12:00:00.000Z"), outcome: "silent" });
-  assert.deepEqual(lastOwnerLook(rows.split("\n").slice(0, 2).join("\n")), { at: new Date("2026-10-14T10:00:00.000Z"), outcome: "posted" });
-  assert.equal(lastOwnerLook(undefined), undefined);
+test("the last look comes from the heartbeat's own rows (the owner's), newest first", () => {
+  assert.equal(lastOwnerLook(), undefined, "no look yet");
+  for (const r of [{ at: "2026-10-14T10:00:00.000Z", kind: "owner", outcome: "posted" }, { at: "2026-10-14T11:00:00.000Z", kind: "group", outcome: "failed" }, { at: "2026-10-14T12:00:00.000Z", outcome: "silent" }] as const) {
+    appendRow({ night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: 0, delegations: 0, ...r } as HeartbeatRow);
+  }
+  assert.deepEqual(lastOwnerLook(), { at: new Date("2026-10-14T12:00:00.000Z"), outcome: "silent" }, "a row with no kind is the owner's");
+  instanceDb().run("DELETE FROM looks WHERE at = ?", "2026-10-14T12:00:00.000Z");
+  assert.deepEqual(lastOwnerLook(), { at: new Date("2026-10-14T10:00:00.000Z"), outcome: "posted" }, "the group's later look is not the owner's");
 });
 
 test("/stop also drops the messages still waiting for their turn, and says Stopped. for that alone", () => {

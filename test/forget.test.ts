@@ -13,7 +13,7 @@ const { convPaths, conversationsDir, groupConvId, friendConvId, instancePaths } 
 const { groupDir, recordGroup } = await import("../src/conversation/groupstore.ts");
 const { forgetGroup, forgetFriend, resolveGroup } = await import("../src/conversation/forget.ts");
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
-const { recordGroupCost, groupSpentToday } = await import("../src/core/budget.ts");
+const { recordCost, groupSpentToday } = await import("../src/core/budget.ts");
 const { markCapNotice, capNoticeDue, markNoticeAt, lastNoticeAt } = await import("../src/core/capnotice.ts");
 const { addPending, openItems } = await import("../src/approvals/pending.ts");
 const T = await import("../src/tenants/tenants.ts");
@@ -35,7 +35,7 @@ function group(id: string, name: string, tag: string) {
   writeFileSync(join(attachments, `${tag}.aac`), "audio");
   holdVoiceNote(id, { ts: NOW, id: `${tag}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
   addPending(id, { tool: "t", input: { a: tag }, label: "l", question: "q?", footer: "f", source: "group" }, NOW);
-  recordGroupCost(id, 1.25);
+  recordCost(1.25, groupConvId(id), "chat");
   markCapNotice(`group:${groupConvId(id)}`);
   markCapNotice(`group-budget:${groupConvId(id)}`);
   markNoticeAt(`warn:${groupConvId(id)}`);
@@ -137,7 +137,7 @@ test("npm run forget: usage, a group by folder name or name, the owner and odd i
   writeFileSync(join(dir, "conversations", conv, "meta.json"), JSON.stringify({ id: "Zm9yZ2V0LUU=", name: "Eve group" }));
   writeFileSync(join(dir, "conversations", conv, "notes", "a.md"), "x");
   mkdirSync(join(dir, "instance"), { recursive: true });
-  writeFileSync(join(dir, "instance", "layout-version"), "2\n");
+  writeFileSync(join(dir, "instance", "layout-version"), "3\n");
   assert.equal(run([], dir).status, 1);
   assert.match(run(["group"], dir).stdout, /usage: npm run forget/);
   const byName = run(["group", "eve group"], dir);

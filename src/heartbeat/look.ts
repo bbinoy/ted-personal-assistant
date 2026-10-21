@@ -22,7 +22,7 @@ import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { flushPending } from "../approvals/pendingflow.ts";
-import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
+import { appendRow, type HeartbeatRow } from "./rows.ts";
 import { observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
 
@@ -50,7 +50,6 @@ export interface HeartbeatDeps {
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
   notesChangedAt: (dir: string) => number;
-  rowsFile?: string; // tests
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -110,7 +109,6 @@ export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: numb
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
   const history = new Map<string, LookHistory>(); // per conversation, in memory (a restart starts fresh)
-  const file = deps.rowsFile ?? HEARTBEAT_LOG;
 
   // One look of one conversation. Returns what happened (for the log and tests).
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
@@ -201,7 +199,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
     audit("wake", outcome, onLogin(conv) ? "background" : "group"); // (a friend's rows carry no words: permissions.ts)
-    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
+    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome });
     recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { layout } from "./convpaths.ts";
-import { layoutState, migrate, reconcile, stragglers, type MigrateOptions, type MigrateResult } from "./migrate.ts";
+import { importLeftovers, layoutState, migrate, reconcile, stragglers, type MigrateOptions, type MigrateResult } from "./migrate.ts";
 import { writeFileAtomic } from "./state.ts";
 
 // Moving the data while something still runs on the OLD layout loses writes: the old agent, and above all the old intake page (a separate launchd job, KeepAlive) that writes
@@ -104,7 +104,7 @@ export function migrateSafely(root: string, o: SafeOptions): MigrateResult {
     stopped.push(o.agentLabel);
     for (const p of svc.agentPids()) try { process.kill(p, "SIGTERM"); } catch { /* gone */ }
   }
-  const r = state.state === "unmigrated" ? migrate(root, o, o.wait) : (reconcile(root, o, o.wait), { already: true, moved: 0, orphans: [] } as MigrateResult);
+  const r = state.state === "unmigrated" ? migrate(root, o, o.wait) : (reconcile(root, o, o.wait), importLeftovers(root, o, o.wait), { already: true, moved: 0, orphans: [] } as MigrateResult);
   for (const label of stopped) svc.start(label); // (only after the stamp; a failed migration leaves them stopped, and says so)
   return r;
 }

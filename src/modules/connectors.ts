@@ -1,6 +1,5 @@
 import { loaded, registered } from "./index.ts";
-import { readJson, writeJson } from "../core/state.ts";
-import { instancePaths } from "../core/convpaths.ts";
+import { kvGet, kvSet } from "../core/instancedb.ts";
 import { settings } from "../core/settings.ts";
 
 // Which connectors the last run could actually see. Notion and Google Calendar come through the
@@ -13,7 +12,7 @@ import { settings } from "../core/settings.ts";
 // what the owner calls it (`label`) and what is lost without it (`skipped`) is reported while it is down. Adding a connector module adds it here, to the prompts, the brief
 // and the doctor, with no edit in this file.
 
-const FILE = instancePaths().connectors;
+const KEY = "connectors"; // (the kv row of instance.db)
 
 // A connector's `key` -> whether the last run saw it; `at` is when.
 export type Connectors = { at: string } & { [key: string]: boolean | string | undefined };
@@ -43,8 +42,8 @@ export function detect(tools: readonly string[], servers?: readonly ServerStatus
   return { at: at.toISOString(), ...Object.fromEntries(seen) };
 }
 
-export const recordConnectors = (tools: readonly string[], servers?: readonly ServerStatus[]) => writeJson(FILE, detect(tools, servers));
-export const readConnectors = (): Connectors | undefined => readJson<Connectors | undefined>(FILE, undefined);
+export const recordConnectors = (tools: readonly string[], servers?: readonly ServerStatus[]) => kvSet(KEY, detect(tools, servers));
+export const readConnectors = (): Connectors | undefined => kvGet<Connectors | undefined>(KEY, undefined);
 
 // Did the last run see this connector? Undefined: no run has recorded it yet.
 export const connected = (c: Connectors | undefined, key: string): boolean | undefined => (typeof c?.[key] === "boolean" ? (c[key] as boolean) : undefined);

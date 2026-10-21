@@ -22,7 +22,7 @@ export interface TenantRun {
   key: string; // her conversation's key ("tenant:<id>"): where send, voice and the browse questions go
   apiKey: string; // the instance key (TENANT_ANTHROPIC_API_KEY): only into the environment of this run (payer.ts envFor), nowhere else, never logged or audited
   keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after it changed
-  costFile: string;
+  ledger: string;
   logFile: string; // her history: what search_logs reads
   overBudget: () => boolean; // her own ledger against her own ceiling (the browse run asks)
 }
@@ -55,7 +55,7 @@ export function describeTenants(): string[] {
     const ctx = tenantContext(rec);
     const c = cooldownUntil(INSTANCE_KEY_COOLDOWN); // (the key is cooling down: for every friend alike)
     const connections = connectionSummary(rec);
-    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
+    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.ledger).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
   }
   return lines;
 }

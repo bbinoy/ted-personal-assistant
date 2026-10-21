@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// The notices that repeat after an interval (the shared key's problem, a group's error notice) are remembered in state/cap-notices.json, so a restart does not repeat them.
+// The notices that repeat after an interval (the shared key's problem, a group's error notice) are remembered in the notices table of instance.db, so a restart does not repeat them.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "noticepersist-"));
 
 const { settings } = await import("../src/core/settings.ts");
-const { instancePaths } = await import("../src/core/convpaths.ts");
+const { instanceDb } = await import("../src/core/instancedb.ts");
 const { createKeyNotices } = await import("../src/tenants/keynotice.ts");
 const { capNoticeDue, markCapNotice, lastNoticeAt, markNoticeAt } = await import("../src/core/capnotice.ts");
 
@@ -30,7 +30,7 @@ test("key notice: a 'restart' (a new instance) within the interval stays quiet; 
   assert.equal(wording.report("refused", t0), true);
 });
 
-test("interval stamps and the once-a-day marks share the file without erasing each other, and old stamps are dropped", () => {
+test("interval stamps and the once-a-day marks share the table without erasing each other, and old stamps are dropped", () => {
   const now = Date.now();
   markNoticeAt("warn:g1", now - 2 * 86_400_000);
   markNoticeAt("warn:g2", now);
@@ -41,5 +41,5 @@ test("interval stamps and the once-a-day marks share the file without erasing ea
   assert.equal(lastNoticeAt("warn:g2"), now, "a day mark leaves the stamps");
   markNoticeAt("warn:g3", now);
   assert.equal(capNoticeDue("group:x", now), false, "a stamp leaves the day marks");
-  assert.match(readFileSync(instancePaths().capNotices, "utf8"), /warn:g3/);
+  assert.equal(instanceDb().get("SELECT 1 AS x FROM notices WHERE key = ?", "warn:g3")?.x, 1, "the stamp is a row of the notices table");
 });

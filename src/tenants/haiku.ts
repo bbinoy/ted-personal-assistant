@@ -76,7 +76,7 @@ export async function oneShot(o: OneShot): Promise<OneShotResult> {
       o.onMessage?.(m);
       if (m.type === "assistant" && m.error) lastError = m.error;
       if (m.type !== "result") continue;
-      charge(o.payer, m.total_cost_usd);
+      charge(o.payer, m.total_cost_usd, o.gate ?? "helper");
       const refused = failure(lastError, m.subtype, o.payer);
       if (isApiRefusal(refused)) throw refused;
       const ok = m.subtype === "success" && !m.is_error;

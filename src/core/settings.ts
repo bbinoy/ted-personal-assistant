@@ -245,6 +245,7 @@ export function loadSettings(env: Env) {
     // ours, in code and in the card's currency, independent of the card issuer's own limit. 0 turns card payments off.
     cardCapPurchase: num(env, "CARD_CAP_PURCHASE", 25, 0, 10_000), // the most one payment may be
     cardCapDay: num(env, "CARD_CAP_DAY", 50, 0, 100_000), // the most paid in one local day (clicked, confirmed and unconfirmed payments count)
+    paymentsKeepYears: num(env, "PAYMENTS_KEEP_YEARS", 0, 0, 100), // 0 (default): the payment ledger is kept for ever. N >= 2: settled payments older than N years may be pruned by the retention job (payments.ts prunePayments); never fewer than 2
     browseMaxPayments: num(env, "BROWSE_MAX_PAYMENTS", 1, 0, 3), // card payments one browse run may start
     // OpenBao, the secret store (src/secrets/openbao.ts, docs/SETUP.md): the saved profile, the card and later tokens and keys. None of these is a secret;
     // the app's token is in the macOS Keychain, never in .env.

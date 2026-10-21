@@ -1,12 +1,14 @@
-import { copyFileSync, existsSync, statSync } from "node:fs";
-import { appendLine, dataPath, readText, writeFileAtomic } from "../../core/state.ts";
-import { instancePaths } from "../../core/convpaths.ts";
+import { instanceDb } from "../../core/instancedb.ts";
+import type { Db } from "../../core/db.ts";
 import { localDay } from "../../core/pause.ts";
 
-// The payment ledger: an append-only file (instance/payments.jsonl, 0600) with one row per status change of a card payment. It holds NO card
+// The payment ledger: the `payments` table of instance.db with one row per status change of a card payment, append-only. It holds NO card
 // data: the merchant, the amount, the last four digits, a hash of the cart and the status. It is what makes a payment happen once (a
 // second try for the same cart is refused), what the daily cap is summed from, and what is left to read after a crash.
 // The audit log gets the same facts (browseguard.ts), but it rotates; the caps need a ledger that does not.
+// It is a financial record and is NEVER deleted by the assistant: every row ever written is here (layout 2's payments.jsonl and its yearly archives were imported whole). The only way rows leave
+// is prunePayments, an explicit policy for payments older than two years that is OFF unless PAYMENTS_KEEP_YEARS is set (core/settings.ts). Each row is committed durably (synchronous=FULL):
+// a payment that was clicked is on disk before the page is told to go on.
 
 export type PayStatus = "approved" | "clicked" | "confirmed" | "failed" | "unconfirmed" | "cleared";
 export interface PayRow {
@@ -22,86 +24,91 @@ export interface PayRow {
 // A payment that was clicked may have taken money, whatever the page said afterwards.
 const SPENT: ReadonlySet<PayStatus> = new Set(["clicked", "confirmed", "unconfirmed"]);
 export const DUPLICATE_HOURS = 24;
+const SPENT_SQL = "('clicked','confirmed','unconfirmed')";
 
-// The ledger is a financial record: it is NEVER deleted. Past MAX_BYTES the file is copied whole to payments-<year>.jsonl (the year of its first row; -2, -3 if that name is
-// taken) and the current file is replaced, atomically, by only the rows the caps and the duplicate check can still need: every payment whose latest row is from the last
-// two days (the local day of the cap and the 24 hours of the duplicate window, with a day to spare for the time zone) and every payment still open (approved or clicked: its
-// status will change, and setStatus must find it). The caps and the duplicate check read the current file only, so across a rotation they see exactly what they saw before.
-// The copy comes first: a crash between the two steps leaves a complete current file and an archive, never a gap.
-export const MAX_BYTES = 1024 * 1024;
-const KEEP_MS = 2 * 24 * 3_600_000;
-const OPEN: ReadonlySet<PayStatus> = new Set(["approved", "clicked"]);
+interface DbPayRow {
+  id: string; ts: string; merchant: string; total_minor: number; currency: string; last4: string; cart_hash: string; status: PayStatus;
+}
+const toRow = (r: DbPayRow): PayRow => ({ id: r.id, ts: r.ts, merchant: r.merchant, totalMinor: r.total_minor, currency: r.currency, last4: r.last4, cartHash: r.cart_hash, status: r.status });
+const LATEST = "SELECT id, ts, merchant, total_minor, currency, last4, cart_hash, status FROM payments_latest";
 
 export class Ledger {
-  readonly file: string;
-  constructor(file = instancePaths().payments) {
-    this.file = file;
+  readonly db: () => Db;
+  /** `db`: the database whose payments table this is (default: instance.db of the data folder; a test gives its own). */
+  constructor(db?: Db) {
+    this.db = db ? () => db : instanceDb;
   }
 
-  // One entry per payment: its latest row, oldest payment first. A damaged line is skipped.
+  // One entry per payment: its latest row, oldest payment first.
   rows(): PayRow[] {
-    const last = new Map<string, PayRow>();
-    for (const line of (readText(this.file) ?? "").split("\n")) {
-      if (!line) continue;
-      try {
-        const r = JSON.parse(line) as PayRow;
-        if (typeof r?.id === "string" && typeof r.totalMinor === "number") last.set(r.id, r);
-      } catch {
-        /* skip */
-      }
-    }
-    return [...last.values()];
+    return this.db().all<DbPayRow>(`${LATEST} ORDER BY first_seq`).map(toRow);
   }
 
   add(row: Omit<PayRow, "ts">, now = new Date()): void {
-    appendLine(this.file, JSON.stringify({ ...row, ts: now.toISOString() }));
-    this.rotate(now);
-  }
-
-  // The archive a rotation made, or undefined when the file is small. Never throws: a ledger that cannot be rotated is still a ledger.
-  rotate(now = new Date()): string | undefined {
-    try {
-      const path = dataPath(this.file);
-      if (statSync(path).size <= MAX_BYTES) return undefined;
-      const text = readText(this.file) ?? "";
-      const rows = this.rows();
-      const year = /"ts":"(\d{4})/.exec(text)?.[1] ?? String(now.getFullYear());
-      const base = path.replace(/\.jsonl$/, "");
-      let archive = `${base}-${year}.jsonl`;
-      for (let n = 2; existsSync(archive); n++) archive = `${base}-${year}-${n}.jsonl`;
-      copyFileSync(path, archive);
-      const keep = rows.filter((r) => OPEN.has(r.status) || now.getTime() - new Date(r.ts).getTime() < KEEP_MS);
-      writeFileAtomic(path, keep.map((r) => JSON.stringify(r) + "\n").join(""));
-      return archive;
-    } catch {
-      return undefined;
-    }
+    const db = this.db();
+    db.tx(() => db.run(
+      "INSERT INTO payments (id, ts, merchant, total_minor, currency, last4, cart_hash, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      row.id, now.toISOString(), row.merchant, row.totalMinor, row.currency, row.last4, row.cartHash, row.status,
+    ), { durable: true });
   }
 
   // A new status for a payment that is in the ledger. False when there is no such payment.
   setStatus(id: string, status: PayStatus, now = new Date()): boolean {
-    const r = this.rows().find((x) => x.id === id);
-    if (!r) return false;
-    this.add({ ...r, status }, now);
-    return true;
+    const db = this.db();
+    return db.tx(() => {
+      const r = db.get<DbPayRow>(`${LATEST} WHERE id = ?`, id);
+      if (!r) return false;
+      this.add({ ...toRow(r), status }, now);
+      return true;
+    }, { durable: true });
   }
 
   // A payment whose click has no result (the run ended or the process died) is unconfirmed. Called at start-up and before a run.
   recover(now = new Date()): number {
-    let n = 0;
-    for (const r of this.rows()) if (r.status === "clicked") (this.setStatus(r.id, "unconfirmed", now), n++);
-    return n;
+    const db = this.db();
+    return db.tx(() => {
+      let n = 0;
+      for (const r of db.all<DbPayRow>(`${LATEST} WHERE status = 'clicked'`)) (this.setStatus(r.id, "unconfirmed", now), n++);
+      return n;
+    }, { durable: true });
   }
 
-  // The amount paid in this currency on the local day of `now`, in minor units.
+  // The amount paid in this currency on the local day of `now`, in minor units. (Rows of the last three days are looked at, then the local day decides: a time zone moves the day by hours.)
   spentToday(currency: string, now = new Date()): number {
-    return this.rows().filter((r) => SPENT.has(r.status) && r.currency === currency && localDay(new Date(r.ts)) === localDay(now)).reduce((a, r) => a + r.totalMinor, 0);
+    const since = new Date(now.getTime() - 3 * 86_400_000).toISOString();
+    return this.db()
+      .all<DbPayRow>(`${LATEST} WHERE status IN ${SPENT_SQL} AND currency = ? AND ts >= ?`, currency, since)
+      .filter((r) => localDay(new Date(r.ts)) === localDay(now))
+      .reduce((a, r) => a + r.total_minor, 0);
   }
 
   // The payment for the same cart at the same merchant in the last day that may have gone through, if any.
   duplicate(merchant: string, cartHash: string, now = new Date()): PayRow | undefined {
-    return this.rows().find((r) => SPENT.has(r.status) && r.merchant === merchant && r.cartHash === cartHash && now.getTime() - new Date(r.ts).getTime() < DUPLICATE_HOURS * 3_600_000);
+    const since = new Date(now.getTime() - DUPLICATE_HOURS * 3_600_000).toISOString();
+    const r = this.db().get<DbPayRow>(`${LATEST} WHERE status IN ${SPENT_SQL} AND merchant = ? AND cart_hash = ? AND ts > ? ORDER BY first_seq LIMIT 1`, merchant, cartHash, since);
+    return r ? toRow(r) : undefined;
   }
+
+  /** Every row of every status change, oldest first (the audit trail behind `rows()`'s latest-only view). */
+  history(id?: string): PayRow[] {
+    return (id === undefined ? this.db().all<DbPayRow>("SELECT * FROM payments ORDER BY seq") : this.db().all<DbPayRow>("SELECT * FROM payments WHERE id = ? ORDER BY seq", id)).map(toRow);
+  }
+}
+
+// The one policy that ever deletes payment rows, and only when the owner asks for it with PAYMENTS_KEEP_YEARS (default: keep everything): whole payments whose LATEST status is settled
+// (confirmed, failed or cleared) and whose every row is older than `years` (never fewer than two). Open or unconfirmed payments are never touched. Returns how many rows went.
+export function prunePayments(years: number, now = new Date()): number {
+  if (!Number.isFinite(years) || years <= 0) return 0;
+  const cutoff = new Date(now.getTime() - Math.max(2, years) * 365 * 86_400_000).toISOString();
+  return instanceDb().tx(
+    () =>
+      instanceDb().run(
+        `DELETE FROM payments WHERE id IN (SELECT id FROM payments_latest WHERE status IN ('confirmed','failed','cleared') AND ts < ?)
+         AND id NOT IN (SELECT id FROM payments WHERE ts >= ?)`,
+        cutoff, cutoff,
+      ).changes,
+    { durable: true },
+  );
 }
 
 // Pure. Why this amount may not be paid under the caps (in minor units of the card's currency), or undefined. A cap of 0 forbids payments.

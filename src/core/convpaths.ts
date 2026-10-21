@@ -3,9 +3,9 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { dataDirOf } from "./paths.ts";
 
 // THE one place that knows where anything lives under the data root. Every reader and writer asks here; test/convpaths.test.ts greps src/ and scripts/ for the file names
-// and folders below spelled out anywhere else, so a new store cannot scatter again. The layout (layout version 2; docs/ARCHITECTURE.md "Where the data lives"):
+// and folders below spelled out anywhere else, so a new store cannot scatter again. The layout (layout version 3; docs/ARCHITECTURE.md "Where the data lives"):
 //
-//   <data>/instance/                 process-wide: the friends list, registrations, intake links and marks, cost ledgers, heartbeat rows, connectors, the card switch...
+//   <data>/instance/                 process-wide: the friends list, registrations, intake links, the card switch... and instance.db (SQLite: spend, notices, heartbeat looks, payments, intake marks, kv)
 //   <data>/conversations/<convId>/   ONE folder per conversation, the same shape for the owner, each friend and each group (ConvPaths below)
 //   <data>/logs/                     audit.jsonl, agent.log, signal-daemon.log and launchd's stderr files, nothing else
 //   <data>/state/                    only software installed with absolute paths baked in (OpenBao, the Qwen voice's Python environment): not moved, see InstancePaths.installed
@@ -18,7 +18,8 @@ import { dataDirOf } from "./paths.ts";
 
 export type ConvId = string;
 export const OWNER_CONV: ConvId = "owner";
-export const LAYOUT_VERSION = 2;
+export const LAYOUT_VERSION = 3;
+export const MOVES_VERSION = 2; // the version the file moves (core/migrate.ts planMigration) end at; version 3 adds the import into instance.db (core/dbimport.ts)
 
 const TENANT_ID = /^[a-z][a-z0-9_-]{0,31}$/; // (the same pattern as secrets.ts TENANT_ID, which this file may not import)
 const CONV_ID = /^(?:owner|friend-[a-z][a-z0-9_-]{0,31}|group-[0-9a-f]{16})$/;
@@ -76,7 +77,6 @@ export interface ConvPaths {
   voiceSources: string; // the voice notes received here (src/modules/voice/voicenote.ts)
   tenantJson: string; // a friend's typed overrides
   meta: string; // a friend's bookkeeping (first greeting, notice times), a group's id and name
-  cost: string; // what a friend spent today on the instance key
 }
 
 export interface InstancePaths {
@@ -88,22 +88,12 @@ export interface InstancePaths {
   agentPid: string; // the running agent's pid (so a migration knows it must not run under it)
   migrationBackup: string; // byte-identical copies of the files the migration REWRITES (not the ones it moves), under a timestamped folder
   migrationLock: string;
+  db: string; // instance.db: SQLite, WAL (core/db.ts, core/instancedb.ts): spend, cap notices, heartbeat looks, payments, intake marks, kv (heartbeat tick, connectors, tools seen)
   tenants: string; // the friends list (the registry)
   registrations: string;
   intakeDir: string;
-  intakeStatus: string;
-  intakeProblems: string;
-  capNotices: string;
-  cost: string; // the owner's day (the guard for background work)
-  keyCost: string; // all friends together on the instance key
-  groupCost: string; // per group (keyed by convId)
-  heartbeat: string; // last tick, for `npm run doctor`
-  heartbeatRows: string;
-  connectors: string;
-  toolsSeen: string;
   notionClient: string;
   notionClientLock: string;
-  payments: string;
   cardDisabled: string;
   paused: string;
   shore: string;
@@ -150,22 +140,12 @@ export function layout(root: string): Layout {
       migrationLate: join(inst, "migration-late.json"),
       agentPid: join(inst, "agent.pid"),
       migrationLock: join(inst, "migration.lock"),
+      db: join(inst, "instance.db"),
       tenants: join(inst, "tenants.json"),
       registrations: join(inst, "registrations.json"),
       intakeDir: join(inst, "intake"),
-      intakeStatus: join(inst, "intake-status.json"),
-      intakeProblems: join(inst, "intake-problems.json"),
-      capNotices: join(inst, "cap-notices.json"),
-      cost: join(inst, "cost.json"),
-      keyCost: join(inst, "key-cost.json"),
-      groupCost: join(inst, "group-cost.json"),
-      heartbeat: join(inst, "heartbeat.json"),
-      heartbeatRows: join(inst, "heartbeat.jsonl"),
-      connectors: join(inst, "connectors.json"),
-      toolsSeen: join(inst, "tools-seen.json"),
       notionClient: join(inst, "notion-client.json"),
       notionClientLock: join(inst, "notion-client.lock"),
-      payments: join(inst, "payments.jsonl"),
       cardDisabled: join(inst, "card.disabled"),
       paused: join(inst, "paused"),
       shore: join(inst, "shore"),
@@ -201,7 +181,6 @@ export function layout(root: string): Layout {
         voiceSources: join(dir, "voices", "sources.json"),
         tenantJson: join(dir, "tenant.json"),
         meta: join(dir, "meta.json"),
-        cost: join(dir, "cost.json"),
       };
     },
   };
@@ -226,6 +205,50 @@ export const logPaths = (): LogPaths => here().logs;
 export const conversationsDir = (): string => here().conversations;
 export const convPaths = (conv: ConvRef): ConvPaths => here().conv(conv);
 export const convDir = (conv: ConvRef): string => here().conv(conv).dir;
+
+// ---- the process-wide files of layout version 2 that instance.db replaced (layout version 3): ONLY for the migration (src/core/migrate.ts, core/dbimport.ts) ----
+//
+//   instance/   cost.json (the owner's day: login spend, notifiedDay) key-cost.json (all friends on the instance key) group-cost.json (per group, keyed by convId) cap-notices.json
+//               heartbeat.json (liveness) heartbeat.jsonl(.1 .2) (the looks) connectors.json tools-seen.json payments.jsonl and payments-<year>[-n].jsonl (archives)
+//               intake-status.json intake-problems.json      conversations/<convId>/cost.json (a friend's day on the key)
+
+export interface Layout2 {
+  cost: string;
+  keyCost: string;
+  groupCost: string;
+  capNotices: string;
+  heartbeat: string;
+  heartbeatRows: string;
+  connectors: string;
+  toolsSeen: string;
+  payments: string;
+  intakeStatus: string;
+  intakeProblems: string;
+  friendCost: (c: ConvRef) => string;
+  /** The names (not paths) of the payment ledger's yearly archives, and of a file's rotated generations, are told apart by these patterns (inside instance/). */
+  paymentArchive: RegExp;
+}
+
+export function layout2(root: string): Layout2 {
+  const r = resolve(root);
+  const inst = join(r, "instance");
+  const conversations = join(r, "conversations");
+  return {
+    cost: join(inst, "cost.json"),
+    keyCost: join(inst, "key-cost.json"),
+    groupCost: join(inst, "group-cost.json"),
+    capNotices: join(inst, "cap-notices.json"),
+    heartbeat: join(inst, "heartbeat.json"),
+    heartbeatRows: join(inst, "heartbeat.jsonl"),
+    connectors: join(inst, "connectors.json"),
+    toolsSeen: join(inst, "tools-seen.json"),
+    payments: join(inst, "payments.jsonl"),
+    intakeStatus: join(inst, "intake-status.json"),
+    intakeProblems: join(inst, "intake-problems.json"),
+    friendCost: (c) => join(conversations, idOf(c), "cost.json"),
+    paymentArchive: /^payments-\d{4}(?:-\d+)?\.jsonl$/,
+  };
+}
 
 // ---- the layout before version 2: ONLY for the migration (src/core/migrate.ts), so that this file stays the one that spells a path out ----
 //
@@ -267,6 +290,7 @@ export function legacyLayout(root: string): LegacyLayout {
   const L = layout(r);
   const o = L.conv(OWNER_CONV);
   const i = L.instance;
+  const v2 = layout2(r);
   const withSide = (from: string, to: string) => ["", "-journal", "-wal", "-shm"].map((x) => ({ from: from + x, to: to + x }));
   const s = (name: string) => join(state, name);
   return {
@@ -293,19 +317,19 @@ export function legacyLayout(root: string): LegacyLayout {
       { from: s("tenants.json"), to: i.tenants },
       { from: s("registrations.json"), to: i.registrations },
       { from: s("intake"), to: i.intakeDir },
-      { from: s("intake-status.json"), to: i.intakeStatus },
-      { from: s("intake-problems.json"), to: i.intakeProblems },
-      { from: s("cap-notices.json"), to: i.capNotices, rekey: "cap-notices" },
-      { from: s("cost.json"), to: i.cost },
-      { from: s("key-cost.json"), to: i.keyCost },
-      { from: s("group-cost.json"), to: i.groupCost, rekey: "group-cost" },
-      { from: s("heartbeat.json"), to: i.heartbeat },
-      { from: s("heartbeat.jsonl"), to: i.heartbeatRows },
-      { from: s("connectors.json"), to: i.connectors },
-      { from: s("tools-seen.json"), to: i.toolsSeen },
+      { from: s("intake-status.json"), to: v2.intakeStatus },
+      { from: s("intake-problems.json"), to: v2.intakeProblems },
+      { from: s("cap-notices.json"), to: v2.capNotices, rekey: "cap-notices" },
+      { from: s("cost.json"), to: v2.cost },
+      { from: s("key-cost.json"), to: v2.keyCost },
+      { from: s("group-cost.json"), to: v2.groupCost, rekey: "group-cost" },
+      { from: s("heartbeat.json"), to: v2.heartbeat },
+      { from: s("heartbeat.jsonl"), to: v2.heartbeatRows },
+      { from: s("connectors.json"), to: v2.connectors },
+      { from: s("tools-seen.json"), to: v2.toolsSeen },
       { from: s("notion-client.json"), to: i.notionClient },
       { from: s("notion-client.lock"), to: i.notionClientLock },
-      { from: s("payments.jsonl"), to: i.payments },
+      { from: s("payments.jsonl"), to: v2.payments },
       { from: s("card.disabled"), to: i.cardDisabled },
       { from: s("paused"), to: i.paused },
       { from: s("shore"), to: i.shore },

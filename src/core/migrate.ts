@@ -3,10 +3,11 @@ import { execFileSync } from "node:child_process";
 import { closeSync, copyFileSync, cpSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import {
-  convIdOfKey, friendConvId, groupConvId, hashOf, isConvId, LAYOUT_VERSION, layout, legacyLayout, tenantIdOfConv, type ConvId,
+  convIdOfKey, friendConvId, groupConvId, hashOf, isConvId, LAYOUT_VERSION, layout, legacyLayout, MOVES_VERSION, tenantIdOfConv, type ConvId,
 } from "./convpaths.ts";
 import { isInside } from "./contain.ts";
 import { writeFileAtomic } from "./state.ts";
+import { hasLegacyFiles as hasLegacy, importLegacy, type ImportResult } from "./dbimport.ts";
 
 // The move from the old layout (state/, memory/, tenants/, logs/ by kind of file) to layout version 2 (instance/, conversations/<convId>/, logs/): core/convpaths.ts describes both.
 //
@@ -38,7 +39,7 @@ export interface Op {
   done?: true;
 }
 export interface Plan {
-  version: typeof LAYOUT_VERSION;
+  version: typeof MOVES_VERSION;
   createdAt: string;
   root: string;
   ops: Op[];
@@ -205,7 +206,7 @@ export function planMigration(root: string, fs: FsView = realFs, now: Date = new
     if (p === old.groupsDir || claimed.has(p)) continue;
     orphan(p, "an unknown entry of memory/");
   }
-  return { version: LAYOUT_VERSION, createdAt: now.toISOString(), root: L.root, ops, backup: join(L.instance.migrationBackup, now.toISOString().replace(/[:.]/g, "-")) };
+  return { version: MOVES_VERSION, createdAt: now.toISOString(), root: L.root, ops, backup: join(L.instance.migrationBackup, now.toISOString().replace(/[:.]/g, "-")) };
 }
 
 /** Pure: the plan as lines for `npm run migrate -- --dry-run`. */
@@ -249,7 +250,7 @@ export const MIGRATE_HINT = "run `npm run migrate` (it moves the data into the n
 /** The sentence a tool that will not migrate gives instead (null when it may go on). */
 export function refusal(s: LayoutState): string | null {
   if (s.state === "newer") return `This data folder is in a newer layout (version ${s.version}) than this code understands (${LAYOUT_VERSION}): update the code; it will not touch the data.`;
-  if (s.state === "unmigrated") return `This data folder is in the old layout (state/, memory/, tenants/): ${MIGRATE_HINT}.`;
+  if (s.state === "unmigrated") return `This data folder is in the old layout (state/, memory/, tenants/; or layout 2, whose small files instance.db now holds): ${MIGRATE_HINT}.`;
   return null;
 }
 
@@ -262,6 +263,7 @@ export interface MigrateOptions {
   crashAfter?: number; // tests: throw after this many steps have been recorded, as a crash would
   late?: boolean; // after the stamp: a conflict is set aside, never a reason to stop the agent
   forceCopy?: boolean; // tests: take the cross-device path (copy, verify, delete) for every move
+  movesOnly?: boolean; // tests: stop at layout 2 (the files moved, the stamp 2), before the import into instance.db: the state a crash between the two leaves, and what the move tests look at
 }
 export interface MigrateResult {
   already: boolean;
@@ -620,7 +622,7 @@ function takeLock(root: string, wait = 0): () => void {
 function loadPlan(root: string): Plan | undefined {
   try {
     const p = JSON.parse(readFileSync(layout(root).instance.migrationPlan, "utf8")) as Plan;
-    return p && p.version === LAYOUT_VERSION && Array.isArray(p.ops) ? p : undefined;
+    return p && p.version === MOVES_VERSION && Array.isArray(p.ops) ? p : undefined;
   } catch {
     return undefined;
   }
@@ -655,11 +657,21 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
   if (readVersion(root) !== undefined) {
     const v = readVersion(root)!;
     if (v > LAYOUT_VERSION) throw new Error(refusal({ state: "newer", version: v })!);
-    if (v === LAYOUT_VERSION) return { already: true, moved: 0, orphans: [] };
+    if (v === LAYOUT_VERSION || (o.movesOnly && v === MOVES_VERSION)) {
+      if (v === LAYOUT_VERSION) importLeftovers(root, o, wait); // (files an old version wrote late and reconcile moved into instance/)
+      return { already: true, moved: 0, orphans: [] };
+    }
   }
   const release = takeLock(root, wait);
   try {
-    if (readVersion(root) === LAYOUT_VERSION) return { already: true, moved: 0, orphans: [] };
+    if (readVersion(root) === LAYOUT_VERSION || (o.movesOnly && readVersion(root) === MOVES_VERSION)) return { already: true, moved: 0, orphans: [] };
+    if (readVersion(root) === MOVES_VERSION) { // layout 2 (the files are where they belong): only the import into instance.db is left
+      const r = importLegacy(L.root, { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}), ...(o.crashAfter !== undefined ? { crashAfter: o.crashAfter } : {}) });
+      mkdirSync(L.instance.dir, { recursive: true, mode: 0o700 });
+      writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST
+      (o.log ?? (() => {}))(`migrate: data folder is in layout version ${LAYOUT_VERSION}: ${r.files} file(s) imported into instance/instance.db${r.backup ? `; originals kept in ${r.backup}/` : ""}`);
+      return { already: false, moved: r.files, orphans: [] };
+    }
     const fs = o.fs ?? realFs;
     let plan = loadPlan(L.root);
     const resumed = plan !== undefined;
@@ -700,12 +712,31 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
       plan.completedAt = nowOf(o).toISOString();
       savePlan(L.root, plan);
     }
-    writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST: until it exists, the next start continues from the plan
+    writeFileAtomic(L.instance.layoutVersion, `${MOVES_VERSION}\n`); // LAST of the moves: until it exists, the next start continues from the plan
     if (plan.ops.length > 0) {
       const rewrote = plan.ops.some((x) => x.kind === "rekey" || x.kind === "split-sources");
-      log(`migrate: data folder is in layout version ${LAYOUT_VERSION}: ${plan.ops.length} step(s)${aside.length ? `, ${aside.length} set aside in instance/migration-orphans/ (listed above)` : ""}${rewrote ? `; originals of the files it rewrote are kept in ${relative(L.root, plan.backup)}/` : ""}; instance/migration-plan.json lists every move`);
+      log(`migrate: data folder is in layout version ${MOVES_VERSION}: ${plan.ops.length} step(s)${aside.length ? `, ${aside.length} set aside in instance/migration-orphans/ (listed above)` : ""}${rewrote ? `; originals of the files it rewrote are kept in ${relative(L.root, plan.backup)}/` : ""}; instance/migration-plan.json lists every move`);
     }
+    if (o.movesOnly) return { already: false, moved: done, orphans: aside, plan };
+    const imported = importLegacy(L.root, { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}), ...(o.crashAfter !== undefined ? { crashAfter: o.crashAfter } : {}) }); // layout 3: the small files into instance.db
+    writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST: until it exists, the next start continues (a stamp of 2 means only the import is left)
+    if (imported.files > 0) log(`migrate: ${imported.files} file(s) imported into instance/instance.db (${imported.rows} row(s)); originals kept in ${imported.backup}/`);
     return { already: false, moved: done, orphans: aside, plan };
+  } finally {
+    release();
+  }
+}
+
+/**
+ * Layout-2 files that appeared in instance/ of a folder that is already in layout 3 (reconcile moved an old version's late files there): imported like the first time. Takes the lock; no-op when
+ * there are none. Returns what it imported.
+ */
+export function importLeftovers(root: string, o: MigrateOptions = {}, wait = 30_000): ImportResult | undefined {
+  if (!hasLegacy(root)) return undefined;
+  const release = takeLock(root, wait);
+  try {
+    const r = importLegacy(layout(root).root, { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}) });
+    return r;
   } finally {
     release();
   }

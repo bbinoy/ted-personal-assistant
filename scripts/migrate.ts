@@ -5,6 +5,7 @@
 import { settings } from "../src/core/settings.ts";
 import { describePlan, layoutState, planMigration, readVersion, refusal, stragglers } from "../src/core/migrate.ts";
 import { migrateSafely } from "../src/core/migrateservices.ts";
+import { describeImport } from "../src/core/dbimport.ts";
 import { LAYOUT_VERSION } from "../src/core/convpaths.ts";
 
 const args = process.argv.slice(2);
@@ -22,7 +23,10 @@ if (state.state === "newer") {
 say(`data folder: ${root}`);
 say(`layout version: ${readVersion(root) ?? "none (old layout, or a new folder)"}; this code writes ${LAYOUT_VERSION}`);
 if (args.includes("--dry-run")) {
-  for (const l of describePlan(state.state === "current" ? { ...planMigration(root), ops: stragglers(root) } : planMigration(root))) say(l);
+  const plan = state.state === "current" || readVersion(root) === 2 ? { ...planMigration(root), ops: stragglers(root) } : planMigration(root);
+  const imports = describeImport(root, plan.ops.map((o) => o.to)); // layout 3: the small files that go into instance/instance.db
+  for (const l of plan.ops.length === 0 && imports.length > 0 ? [] : describePlan(plan)) say(l);
+  for (const l of imports) say(l);
   say("Dry run: nothing was moved.");
   process.exit(0);
 }
