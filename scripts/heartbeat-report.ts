@@ -1,6 +1,6 @@
 import "../src/core/requirelayout.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
-import { readRows } from "../src/heartbeat/rows.ts";
+import { readRows } from "../src/core/looks.ts";
 
 // npm run heartbeat-report [days]: what the owner's heartbeat run did (looks, messages by day and night, held ones, dollars, the next looks it chose), from
 // the looks table of instance.db. Counts only: it holds no words.
