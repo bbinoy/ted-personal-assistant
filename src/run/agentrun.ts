@@ -1,5 +1,5 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { gated } from "../core/rungate.ts";
+import { gated, parked, type RunKind } from "../core/rungate.ts";
 import { audit, type Source } from "../core/audit.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
@@ -64,6 +64,7 @@ export interface RunOptions {
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
+  gate?: RunKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
   stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's session file
   signal?: AbortSignal; // an unattended run is called off from outside (a chat message overtook the heartbeat look, look.ts): while waiting for a place (rungate.ts) it never starts, once running the query is aborted
   maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else the chat or background one
@@ -91,8 +92,11 @@ const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: num
 
 // The browse sub-run (browse.ts calls this through the entry tool): a fresh run with the browser, under the guard. A group's run is the same
 // as the owner's; only `approve` differs (the group's own approver).
-export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation"> = {}): RunOptions {
+export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> = {}): RunOptions {
   return {
+    gate: "helper", // (a child of a run that holds a place: queuing for a second one could deadlock the looks that browse, and make a chat turn wait behind them)
+    signal: parent.signal, // called off with its parent (a look overtaken by a message, a ceiling)
+    stopScope: parent.stopScope, // and by "/stop" in the parent's conversation
     source: PROFILES.browse.source,
     systemPrompt: browseSystem(undefined, guard.vision, guard.profileKeys(), guard.cardInfo()),
     maxTurns: PROFILES.browse.maxTurns,
@@ -108,7 +112,7 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
 }
 
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
-export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
+export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
 
 // The built-in tools of a run (everything else is an MCP tool), from the rows of the builtin module (modules/builtin.ts), one list for every run: a group or a
 // tenant has the rows its capability set holds (its own notes, search, skills, and never opening a page);
@@ -118,7 +122,7 @@ function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): s
   return builtinModule.rows.filter((r) => (tools ? tools.has(r.tool) && !isOwnerOnly(r.tool) : !!r.offeredTo?.includes(source))).map((r) => r.tool);
 }
 
-export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined): Options {
+export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined, signal?: AbortSignal): Options { // signal: the run's own abort signal, when the caller has it (its browse child is called off with it)
   // After a successful tool call: announce a note change on the phone (chat), and report the
   // call to whoever asked (the brief captures what it sent).
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
@@ -180,7 +184,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // Whether this run read a note a background look inferred (read_note tells us): the approval judge then does not take a wake-up's task as the person's word (permissions.ts).
   let readInferred = false;
   const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { inferred?: boolean }) => void (n.inferred && (readInferred = true)) };
-  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation }) };
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, stopScope: opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionFile : undefined) }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -228,7 +232,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, inferredNoteRead: () => readInferred, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
@@ -300,13 +304,14 @@ export async function runAgent(prompt: string, approve: Approve, opts: RunOption
   opts.signal?.addEventListener("abort", callOff, { once: true });
   let started = false;
   const forget = opts.stopScope ? onStop(opts.stopScope, (e) => void (started || wait.abort(e))) : () => {};
-  return gated("look", () => {
+  return gated(opts.gate ?? "look", () => {
     started = true;
+    forget(); // from here on the ceiling answers "/stop" itself
     return underCeiling(opts.source, (c) => {
       const off = () => c.controller.abort();
       if (wait.signal.aborted) off();
       wait.signal.addEventListener("abort", off, { once: true });
-      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), opts, resume), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
+      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
     }, opts.maxMinutes, opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionFile : undefined));
   }, wait.signal).finally(() => (forget(), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
     if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);

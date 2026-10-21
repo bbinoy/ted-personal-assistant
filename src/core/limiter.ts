@@ -45,6 +45,18 @@ export class Limiter {
     }
   }
 
+  // A job that holds a place gives it up while `wait` runs (a look parked on an approval for the owner, maybe for hours) and takes one again afterwards, over the limit if it
+  // must (urgent: it was running already, and what it waits for has just come).
+  async park<T>(wait: () => Promise<T>): Promise<T> {
+    this.#running--;
+    this.#pump();
+    try {
+      return await wait();
+    } finally {
+      this.#running++;
+    }
+  }
+
   #wait(priority: number, signal?: AbortSignal): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const off = () => {

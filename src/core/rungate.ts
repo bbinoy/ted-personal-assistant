@@ -12,5 +12,8 @@ export type RunKind = keyof typeof RUN;
 
 export const runGate = new Limiter(() => settings.maxConcurrentRuns);
 
+// `wait` (an approval waiting for the owner) without holding the place the caller has: other looks and dreams run meanwhile; the place is taken again when it ends.
+export const parked = <T>(wait: () => Promise<T>): Promise<T> => runGate.park(wait);
+
 // `job` with a place of the given kind. `signal`: called off while still waiting for a place (a look a chat message has overtaken).
 export const gated = <T>(kind: RunKind, job: () => Promise<T>, signal?: AbortSignal): Promise<T> => runGate.run(job, { ...RUN[kind], signal });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
+import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { archiveGate, archivedBy } from "../src/modules/archivecap.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
 
@@ -91,5 +92,18 @@ test("a friend's Google: removing INBOX with modify_gmail_message_labels counts 
     const tool = `${GG}modify_gmail_message_labels`;
     const out = await sequence(tool, (n) => ({ message_id: `cap-gg-${n}`, remove_label_ids: ["INBOX"] }), "group", new Set([tool]));
     assert.equal(out.filter((o) => /archive cap reached/i.test(o.message ?? "")).length, 2, "the third and fourth are refused by the cap");
+  });
+});
+
+test("seen mail: ids an archive the run cap refused named are forgotten, so the next look raises them again; the others commit", async () => {
+  const file = `state/seen-forget-${Math.random().toString(36).slice(2)}.json`;
+  await withCap(1, {}, async () => {
+    const seen = createSeenMail(file);
+    assert.deepEqual(seen.unseen(["a", "b", "c"]), ["a", "b", "c"]);
+    const can = makeCanUseTool(async () => ({ approved: true }), "background", undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never, seenMail: seen });
+    assert.equal(((await can(`${MB}archive_conversation`, { conversationId: "a" }, opts)) as Out).behavior, "allow");
+    assert.equal(((await can(`${MB}archive_conversation`, { conversationIds: ["b", "c"] }, opts)) as Out).behavior, "deny", "past the cap");
+    seen.commit();
+    assert.deepEqual(createSeenMail(file).unseen(["a", "b", "c"]), ["b", "c"], "the refused ones come back");
   });
 });

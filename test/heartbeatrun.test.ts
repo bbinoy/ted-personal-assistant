@@ -10,6 +10,7 @@ import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { HEARTBEAT_LOG, readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
 import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
+import { createSeenMail, seenFileOf } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readText } from "../src/core/state.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
@@ -24,7 +25,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => (rmSync(dataPath(HEARTBEAT_LOG), { force: true }), rmSync(dataPath(heldFileOf(owner())), { force: true })); // (the rows, and what quiet hours held)
 
-interface Answer { hold?: Promise<unknown>; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
+interface Answer { mail?: string[]; hold?: Promise<unknown>; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -57,6 +58,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       if (a.hold) await Promise.race([a.hold, new Promise((_, no) => extra.signal?.addEventListener("abort", () => no(new Error("aborted")), { once: true }))]); // a run that goes on until it is called off
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
+      if (a.mail) extra.seenMail?.unseen(a.mail);
       for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
       return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30, ...(a.urgent ? { urgent: true } : {}) } };
     },
@@ -334,7 +336,7 @@ test("a look is called off when a message overtakes it: no post, no run left, th
 });
 
 test("a look that has only read, when news came meanwhile, drops its message-only post as stale; one that acted still posts", async () => {
-  for (const [calls, outcome, posted] of [[[], "silent", 0], [["mcp__mailbird__archive_conversation"], "posted", 1]] as const) {
+  for (const [calls, outcome, posted] of [[[], "silent", 0], [["mcp__mailbird__list_conversations", "mcp__seenmail__seen_mail"], "silent", 0], [["mcp__mailbird__archive_conversation"], "posted", 1]] as const) {
     const l = leaseRig();
     const { w, conv, seen } = rig(() => ({ message: "Eve is waiting.", calls: [...calls] }), { pipeline: { lease: (c: unknown, a: () => void, p: () => boolean) => ((l.lease.news = true), l.pipeline.lease(c, a, p)) } });
     assert.equal(await w.look(conv, DAY), outcome);
@@ -413,4 +415,13 @@ test("looks that fail again and again: ONE owner notice with the cause and the f
   } finally {
     ownerNotices.sendTo(undefined);
   }
+});
+
+test("a post dropped as stale does not mark the mail it reported as seen: the next look raises it again", async () => {
+  const l = leaseRig();
+  const id = `stale-${Math.random().toString(36).slice(2)}`;
+  const { w, conv, seen } = rig(() => ({ message: "Eve is waiting.", mail: [id], calls: ["mcp__seenmail__seen_mail"] }), { pipeline: { lease: (c: unknown, a: () => void, p: () => boolean) => ((l.lease.news = true), l.pipeline.lease(c, a, p)) } });
+  assert.equal(await w.look(conv, DAY), "silent");
+  assert.deepEqual(seen.posted, []);
+  assert.deepEqual(createSeenMail(seenFileOf(conv)).unseen([id]), [id], "not committed");
 });

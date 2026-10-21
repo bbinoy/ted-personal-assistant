@@ -4,7 +4,7 @@ import { sleep } from "./util.ts";
 import { Limiter } from "../src/core/limiter.ts";
 import { gated, runGate } from "../src/core/rungate.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
-import { runAgent } from "../src/run/agentrun.ts";
+import { browseRunOptions, runAgent } from "../src/run/agentrun.ts";
 import { RunStopped, stopRuns } from "../src/run/ceiling.ts";
 import { WarmPool } from "../src/run/agentwarm.ts";
 
@@ -133,4 +133,65 @@ test("/stop reaches a look that still waits for a place in the run gate, and the
   } finally {
     s.maxConcurrentRuns = was;
   }
+});
+
+// ---- the run gate seen from runAgent: a browse child never queues, a look parked on an approval gives its place away ----
+const okResult = { type: "result", subtype: "success", is_error: false, result: "hi", total_cost_usd: 0, session_id: "s", duration_ms: 1, duration_api_ms: 1, num_turns: 1, usage: {} } as never;
+const quick = (() => (async function* () { yield okResult; })()) as never;
+const base = { source: "handler", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as const;
+
+test("a browse child (gate: helper) never queues for a place, even when every place is held by looks that wait for it", async () => {
+  const was = settings.maxConcurrentRuns;
+  s.maxConcurrentRuns = 2;
+  try {
+    const looks = [0, 1].map(() => gated("look", () => runAgent("p", async () => ({ approved: true }), { ...base, gate: "helper" } as never, { query: quick }))); // a look that browses: its child runs under the place the look holds
+    assert.deepEqual((await Promise.all(looks)).map((r) => r.text), ["hi", "hi"]);
+    const free: (() => void)[] = [];
+    const blockers = [0, 1].map(() => gated("look", () => new Promise<void>((r) => free.push(r)))); // all places taken
+    assert.equal(runGate.full, true);
+    assert.equal((await runAgent("p", async () => ({ approved: true }), { ...base, gate: "helper" } as never, { query: quick })).text, "hi", "a chat turn's browse child does not wait behind looks");
+    assert.equal(runGate.queued, 0);
+    free.forEach((r) => r());
+    await Promise.all(blockers);
+  } finally {
+    s.maxConcurrentRuns = was;
+  }
+});
+
+test("a look parked on an approval gives its place to others meanwhile and takes one again when the answer comes", async () => {
+  const was = settings.maxConcurrentRuns;
+  s.maxConcurrentRuns = 1;
+  try {
+    let answer!: () => void;
+    const approve = () => new Promise<{ approved: boolean }>((r) => (answer = () => r({ approved: true })));
+    const q = ((p: { options: { canUseTool: (t: string, i: object, o: object) => Promise<unknown> } }) => (async function* () {
+      await p.options.canUseTool("mcp__x__do", {}, { signal: new AbortController().signal });
+      yield okResult;
+    })()) as never;
+    const look = runAgent("p", approve as never, base as never, { query: q });
+    await sleep(20);
+    assert.equal(runGate.running, 0, "parked: the place is free");
+    assert.equal(await gated("look", async () => "another look ran"), "another look ran");
+    answer();
+    assert.equal((await look).text, "hi");
+    assert.equal(runGate.running, 0);
+  } finally {
+    s.maxConcurrentRuns = was;
+  }
+});
+
+test("the browse child is called off with its parent: the parent's signal and \"/stop\" in the parent's conversation reach it", async () => {
+  const guard = { vision: false, profileKeys: () => [], cardInfo: () => undefined } as never;
+  const parent = new AbortController();
+  const o = browseRunOptions(guard, undefined, { signal: parent.signal, stopScope: "chat-scope" });
+  assert.deepEqual([o.gate, o.signal, o.stopScope], ["helper", parent.signal, "chat-scope"]);
+  const hung = (() => (async function* () { await new Promise(() => {}); })()) as never;
+  const byStop = runAgent("p", async () => ({ approved: true }), { ...base, gate: "helper", stopScope: "chat-scope" } as never, { query: hung });
+  await sleep(5);
+  assert.equal(stopRuns("chat-scope"), 1);
+  await assert.rejects(byStop, RunStopped);
+  const bySignal = runAgent("p", async () => ({ approved: true }), { ...base, gate: "helper", signal: parent.signal } as never, { query: (({ options }: { options: { abortController: AbortController } }) => (async function* () { await new Promise((_, no) => options.abortController.signal.addEventListener("abort", () => no(new Error("aborted")))); })()) as never });
+  await sleep(5);
+  parent.abort();
+  await assert.rejects(bySignal, /aborted/);
 });

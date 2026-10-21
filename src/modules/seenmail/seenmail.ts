@@ -46,6 +46,7 @@ export interface SeenMail {
   aged: () => number; // how many mails this look marked seen as backlog
   commit: () => void; // the look ended well: the pending ids are seen from now on
   discard: () => void; // it did not
+  forget: (ids: readonly string[]) => void; // these pending ids were NOT worked through (the archive cap refused them): they come back at the next look
   pending: () => number;
 }
 
@@ -80,6 +81,9 @@ export function createSeenMail(file: string, max: number = SEEN_MAX, backlogDays
       backlog.clear();
     },
     discard: () => (pending.clear(), backlog.clear()),
+    forget(ids) {
+      for (const id of ids) pending.delete(String(id).trim().slice(0, MAX_ID_CHARS));
+    },
     pending: () => pending.size,
   };
 }

@@ -102,7 +102,7 @@ async function chatTurn(conv: Conversation, inputs: RunInputs, build: TurnBuilde
   const o = { ...runOptionsFor(conv, inputs), seenAt, onFirstOutput };
   const context = unseen(conv.sessionFile, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
   const input = userInput(context ? `${context}\n\n${prompt}` : prompt, pictures, documents);
-  const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume), abortController } }));
+  const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume, abortController.signal), abortController } }));
   if (context) markShown(conv.sessionFile, chatResume(conv.sessionFile).resume, context); // the turn went through: the session has it now
   return reply;
 }
