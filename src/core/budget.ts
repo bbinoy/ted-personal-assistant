@@ -1,6 +1,7 @@
 import { takeCapNotice } from "./capnotice.ts";
 import { localDay } from "./pause.ts";
 import { settings } from "./settings.ts";
+import { groupConvId, instancePaths } from "./convpaths.ts";
 import { readJson, writeJson } from "./state.ts";
 
 // A runaway guard, not an accounting system. Costs are the SDK's own estimates (notional on a
@@ -8,7 +9,7 @@ import { readJson, writeJson } from "./state.ts";
 // stops until tomorrow. Chat stays available: you are in control of that.
 // Synchronous on purpose (see state.ts): concurrent recordCost calls can never lose an update.
 
-const FILE = "state/cost.json";
+const FILE = instancePaths().cost;
 
 interface Cost {
   day: string;
@@ -38,8 +39,8 @@ export function spentToday(file: string = FILE): number {
 // ---- the two aggregate ceilings ----
 // Per group (a group runs on the owner's login, so a noisy one would otherwise spend the owner's whole day and stop her brief) and across all tenants (each has her own ceiling, but
 // together they spend one key): a ledger each, written by payer.ts charge(), read by payer.ts mayRun() and by group.ts before a group's run.
-const GROUP_FILE = "state/group-cost.json";
-const KEY_FILE = "state/key-cost.json";
+const GROUP_FILE = instancePaths().groupCost; // keyed by the group's convId, never its raw id
+const KEY_FILE = instancePaths().keyCost;
 interface GroupCost {
   day: string;
   usd: Record<string, number>;
@@ -52,10 +53,11 @@ const groupDay = (): GroupCost => {
 export function recordGroupCost(groupId: string, usd: number): void {
   if (!(usd > 0)) return;
   const c = groupDay();
-  c.usd[groupId] = (c.usd[groupId] ?? 0) + usd;
+  const key = groupConvId(groupId);
+  c.usd[key] = (c.usd[key] ?? 0) + usd;
   writeJson(GROUP_FILE, c);
 }
-export const groupSpentToday = (groupId: string): number => groupDay().usd[groupId] ?? 0;
+export const groupSpentToday = (groupId: string): number => groupDay().usd[groupConvId(groupId)] ?? 0;
 export const groupOverBudget = (groupId: string): boolean => groupSpentToday(groupId) >= settings.groupDailyBudgetUsd;
 export const recordKeyCost = (usd: number): void => recordCost(usd, KEY_FILE);
 export const instanceKeyOverBudget = (): boolean => spentToday(KEY_FILE) >= settings.instanceKeyDailyUsd;
@@ -78,5 +80,14 @@ export const budgetSpent = (): boolean => today().usd >= settings.dailyBudgetUsd
 
 // A group: one short line per group per day, when someone addressed it and the budget turned the answer away (group.ts). Returns whether to say it now.
 export const GROUP_BUDGET_TEXT = `I've used up my budget for today, so I can't answer until tomorrow. ${settings.owner} can raise it if it is urgent.`;
-// (kept in state/cap-notices.json like the other once-a-day notices, so a restart does not say it twice)
-export const groupBudgetDue = (groupId: string, now: Date = new Date()): boolean => takeCapNotice(`group-budget:${groupId}`, now.getTime());
+// (kept in instance/cap-notices.json like the other once-a-day notices, so a restart does not say it twice)
+export const groupBudgetDue = (groupId: string, now: Date = new Date()): boolean => takeCapNotice(`group-budget:${groupConvId(groupId)}`, now.getTime());
+
+// A forgotten group: its day's spend goes from the ledger. True when it had an entry.
+export function forgetGroupCost(conv: string): boolean {
+  const c = readJson<GroupCost | undefined>(GROUP_FILE, undefined);
+  if (!c || !Object.hasOwn(c.usd, conv)) return false;
+  delete c.usd[conv];
+  writeJson(GROUP_FILE, c);
+  return true;
+}

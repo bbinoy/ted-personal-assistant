@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFileAtomic } from "../../core/state.ts";
 import { join } from "node:path";
-import { settings } from "../../core/settings.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 
 // Which wind directions are onshore, side-on or offshore at a launch point, from OpenStreetMap water outlines: for each of 16 directions, how many
 // metres of open water the wind has crossed before it reaches the spot. Pure geometry; the model compares it with the forecast direction.
@@ -110,7 +110,7 @@ export function featuresFrom(elements: readonly OsmElement[]): { features: Ring[
   return { features, coast };
 }
 
-const cacheFile = (lat: number, lon: number) => join(settings.stateDir, "shore", `${lat.toFixed(4)}_${lon.toFixed(4)}.json`);
+const cacheFile = (lat: number, lon: number) => join(instancePaths().shore, `${lat.toFixed(4)}_${lon.toFixed(4)}.json`);
 
 // The public servers are shared and often at capacity: two of them, one try each, and the answer is kept for good.
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
@@ -133,7 +133,7 @@ export async function shoreExposure(lat: number, lon: number, io: { fetch: typeo
     elements = await fetchElements(lat, lon, io);
     if (!elements) return { error: "the map service did not answer (it limits requests); try again in a few minutes" };
     try {
-      mkdirSync(join(settings.stateDir, "shore"), { recursive: true });
+      mkdirSync(instancePaths().shore, { recursive: true });
       writeFileAtomic(file, JSON.stringify(elements));
     } catch { /* the cache is a convenience */ }
   }

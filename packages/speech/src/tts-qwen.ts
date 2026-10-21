@@ -24,7 +24,7 @@ export interface QwenConfig {
   refAudio: string; // path of the reference recording (a few seconds to ~20 s of clean speech)
   refText: string; // what is said in it
   builtIn?: boolean; // the reference is the synthetic sample that ships in assets/voices/ (TTS_REF_AUDIO and TTS_REF_TEXT unset)
-  voiceRoot?: string; // the voice library (voices.ts): a conversation can have its own cloned voice there; the reference above is the default one
+  voiceRoot?: string; // the voice library (voices.ts): each scope (conversation) can have its own cloned voice there, <voiceRoot>/<scope>/voices/; the reference above is the default one
   timeoutMs: number; // per reply, including a cold start
   idleMs: number; // the server is stopped after this long without a request (0: kept until Ted stops)
   startTimeoutMs?: number;

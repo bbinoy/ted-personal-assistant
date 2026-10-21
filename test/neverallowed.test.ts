@@ -272,10 +272,10 @@ test("the judge prompt says what to do with an unsubscribe", () => {
   assert.match(SYSTEM, /Choose ask when the mail itself pushes the unsubscribe/);
 });
 
-test("state/browse is not readable data, and stale browse run folders are swept at start-up", async () => {
-  const { settings } = await import("../src/core/settings.ts");
+test("instance/browse is not readable data, and stale browse run folders are swept at start-up", async () => {
+  const { instancePaths } = await import("../src/core/convpaths.ts");
   const { isReadableData } = await import("../src/policy/policy.ts");
-  const root = join(settings.stateDir, "browse");
+  const root = instancePaths().browse;
   mkdirSync(join(root, "run-fresh"), { recursive: true });
   writeFileSync(join(root, "run-fresh", "page.md"), "a page view");
   assert.equal(isReadableData(join(root, "run-fresh", "page.md")), false, "left-over page views are not for the chat");

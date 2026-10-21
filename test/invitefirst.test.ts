@@ -20,7 +20,7 @@ const aci = (n: number) => `cccccccc-0000-4000-8000-${String(n).padStart(12, "0"
 
 beforeEach(() => {
   on.tenants = true;
-  rmSync(join(settings.dataDir, Reg.FILE), { force: true });
+  rmSync(Reg.FILE, { force: true });
 });
 
 const door = () => {

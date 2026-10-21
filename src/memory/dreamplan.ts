@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_NOTE_CHARS, NOTES_DIR, parseNote, type Category } from "./notes.ts";
 import { preset } from "../core/preset.ts";
+import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { settings } from "../core/settings.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
@@ -28,7 +29,7 @@ export interface Scope {
   maxNotes: number;
 }
 
-export const OWNER_SCOPE: Scope = { notesDir: NOTES_DIR, backupsDir: join(settings.stateDir, "notes-backup"), categories: DREAM_CATEGORIES, index: true, maxNotes: settings.memoryMaxNotes };
+export const OWNER_SCOPE: Scope = { notesDir: NOTES_DIR, backupsDir: convPaths(OWNER_CONV).notesBackup, categories: DREAM_CATEGORIES, index: true, maxNotes: settings.memoryMaxNotes };
 
 interface Op {
   op: "write" | "delete";

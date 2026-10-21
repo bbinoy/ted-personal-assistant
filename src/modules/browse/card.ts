@@ -4,6 +4,7 @@ import { Ledger } from "./payments.ts";
 import { inTenant, ProfileError } from "./profile.ts";
 import { CARD_TENANTS, SecretsError, type TenantSecrets } from "../../secrets/secrets.ts";
 import { dataPath, readText, writeText } from "../../core/state.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 import { LIMITS } from "../../core/sanitize.ts";
 import { settings } from "../../core/settings.ts";
 
@@ -91,7 +92,7 @@ export class CardStore {
 // a spoofed or injected message can never re-enable it.
 export class KillSwitch {
   private readonly file: string;
-  constructor(file = "state/card.disabled") {
+  constructor(file = instancePaths().cardDisabled) {
     this.file = file;
   }
   // Why card use is off, or undefined when it is on.

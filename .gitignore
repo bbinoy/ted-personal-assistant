@@ -5,6 +5,8 @@
 *.log
 logs/
 /memory/
+/instance/
+/conversations/
 node_modules
 state/
 dist/

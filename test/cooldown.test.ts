@@ -9,6 +9,7 @@ import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { recordMessage, type Kind } from "../src/core/messages.ts";
 import { settings } from "../src/core/settings.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
+import { scratchLog } from "./scratch.ts";
 
 (settings as unknown as Record<string, unknown>).briefBackstopHour = 24;
 const T0 = new Date(2026, 9, 14, 9, 0, 0);
@@ -76,7 +77,7 @@ function rig() {
   const notesDir = join(dir, "notes");
   mkdirSync(notesDir);
   writeFileSync(join(notesDir, "scheduling-fact.md"), "Post a fun fact every morning.");
-  const conv: Conversation = { ...group("idle-group-0123456789abcdef"), logFile: `logs/idle-group-${Math.random().toString(36).slice(2)}.jsonl`, notesDir };
+  const conv: Conversation = { ...group("idle-group-0123456789abcdef"), logFile: scratchLog(`idle-group-${Math.random().toString(36).slice(2)}.jsonl`), notesDir };
   let now = T0;
   let runs = 0;
   const pipeline = {

@@ -24,7 +24,7 @@ const { tenant } = await import("../src/conversation/conversationmodel.ts");
 T.ensureOwner({ number: "+15555550114" });
 let n = 0;
 const friend = () => T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name: `Friend${n}` })!;
-const registryFile = join(settings.dataDir, T.REGISTRY);
+const registryFile = T.REGISTRY;
 const her = (id: string) => capabilitiesOf({ kind: "tenant", tenantId: id });
 const ownerOnly = new Set<string>(T.OWNER_ONLY);
 

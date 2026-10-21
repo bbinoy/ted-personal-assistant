@@ -1,10 +1,11 @@
 import { rotateIfOver } from "../core/rotate.ts";
 import { appendLine, dataPath, readText } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 
-// The heartbeat run's own record: one row per look of any conversation in state/heartbeat.jsonl, counts and flags only. NEVER a message's words, a sender, a subject or a
+// The heartbeat run's own record: one row per look of any conversation in instance/heartbeat.jsonl, counts and flags only. NEVER a message's words, a sender, a subject or a
 // friend's name or id: what was said is in the conversation's log, and `npm run heartbeat-report` needs only these numbers.
 
-export const HEARTBEAT_LOG = "state/heartbeat.jsonl";
+export const HEARTBEAT_LOG = instancePaths().heartbeatRows;
 
 export interface HeartbeatRow {
   at: string; // ISO: when the look began

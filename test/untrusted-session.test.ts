@@ -8,6 +8,7 @@ import { readJson } from "../src/core/state.ts";
 import { settings } from "../src/core/settings.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
 import type { ChatSession } from "../src/run/session.ts";
+import { scratch } from "./scratch.ts";
 
 // The untrusted-input flag of a chat session: kept in the session file, so a resumed session that holds a hostile mail is still told to the judge.
 
@@ -21,7 +22,7 @@ const fake = (decision: Verdict["decision"] = "auto", reason = "test") => {
 };
 const setAuto = (mode: "auto" | "off") => void ((settings as { autoApprove: string }).autoApprove = mode);
 
-const FILE = "state/provenance-taint.json";
+const FILE = scratch("provenance-taint.json");
 const turnEnd = async (sessionId: string) => {
   async function* stream() {
     yield { type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.01, result: "ok" } as never;

@@ -1,6 +1,6 @@
 // Import this FIRST (for its side effects).
 //  - owner-only files: everything the harness creates is mode 600/700 (the audit log holds senders and subjects)
-//  - logs go to logs/agent.log; startup secures state/, logs/, memory/
+//  - logs go to logs/agent.log; startup secures instance/, conversations/, logs/
 //  - every console line gets a local timestamp, is redacted, and is appended to a rotating file
 //  - crashes and unhandled rejections are written to that same file before the process exits
 process.umask(0o077);
@@ -9,12 +9,13 @@ import { appendFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { trimLogInPlace } from "./logtrim.ts";
 import { redact } from "./redact.ts";
 import { dataPath, secureDataDirs } from "./state.ts";
+import { logPaths } from "./convpaths.ts";
 
-const FILE = dataPath("logs/agent.log");
+const FILE = dataPath(logPaths().agent);
 const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP = 3;
 
-// Before anything reads a file: create and tighten state/, logs/ and memory/ (owner-only, whatever made the files).
+// Before anything reads a file: create and tighten instance/, conversations/ and logs/ (owner-only, whatever made the files).
 secureDataDirs();
 
 let writes = 0;
@@ -30,7 +31,7 @@ function rotateIfNeeded() {
 }
 rotateIfNeeded();
 // launchd's raw stderr files (the agent's, and the intake page's: scripts/intake.ts imports this file first too) are never rotated by anyone else: over 5 MB at start, keep the last 1 MB.
-const trimmedStderr = ["launchd-stderr.log", "intake-launchd-stderr.log"].map((f) => trimLogInPlace(dataPath(`logs/${f}`), MAX_BYTES, 1024 * 1024)).reduce((a, b) => a + b, 0);
+const trimmedStderr = [logPaths().launchdStderr, logPaths().intakeLaunchdStderr].map((f) => trimLogInPlace(dataPath(f), MAX_BYTES, 1024 * 1024)).reduce((a, b) => a + b, 0);
 
 const pad = (n: number, w = 2) => String(n).padStart(w, "0");
 function stamp(d = new Date()) {

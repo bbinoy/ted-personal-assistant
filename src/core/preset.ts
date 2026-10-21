@@ -101,7 +101,7 @@ export const PROMPTS = {
   noMail: [],
   reactions: ["who"],
   skills: ["mail", "mailSkill"],
-  chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed", "categories"],
+  chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "ownerDir", "selfTimed", "categories"],
   voice: ["own", "group"],
   summary: [],
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "selfTimed", "sources", "reactions", "send"],

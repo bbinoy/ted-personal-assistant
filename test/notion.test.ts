@@ -10,6 +10,7 @@ import type { NotionHub } from "../src/modules/notion/notionmcp.ts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { startFakeNotion } from "./fakenotion.ts";
 import type { FakeBao } from "./fakebao.ts";
+import { instancePaths } from "../src/core/convpaths.ts";
 
 // Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, src/modules/notion/module.ts, the shared src/intake/oauth.ts and src/intake/mcpproxy.ts) against FAKES: a fake Notion OAuth server
 // with discovery, dynamic registration and ROTATING refresh tokens, a fake hosted MCP endpoint that answers only a live bearer, and a fake OpenBao. Nothing talks to Notion.
@@ -99,7 +100,7 @@ const store = (): import("../src/intake/notionoauth.ts").GrantStore => ({
 });
 const provider = () => N.notionProvider({ mcpUrl: () => fake.mcpUrl });
 const flows = (base = "http://127.0.0.1:9") => new OAuthFlows({ providers: [provider(), googleProvider(() => ({ clientId: "g", clientSecret: "s", authUrl: "https://g.example/auth", tokenUrl: "https://g.example/token", scopes: ["a"] }))], baseUrl: () => base });
-const freshClientFile = () => rmSync(join(dataDir, "state/notion-client.json"), { force: true });
+const freshClientFile = () => rmSync(instancePaths().notionClient, { force: true });
 
 let codeN = 0;
 // The whole sign-in without the page: link -> consent address -> (the browser leg) -> state -> code exchange -> her item, like the callback does it.
@@ -140,7 +141,7 @@ test("notion: the instance registers ONE public client (dynamic registration) an
   assert.equal(a.url.searchParams.get("client_id"), b.url.searchParams.get("client_id"));
   assert.ok(N.clientRegistered("http://127.0.0.1:9"));
   // the registration is remembered on disk (an id is no secret; the intake page, with a write-only OpenBao token, must be able to read it)
-  assert.ok(existsSync(join(dataDir, "state/notion-client.json")));
+  assert.ok(existsSync(instancePaths().notionClient));
   // two processes at the same moment: the lock makes one registration
   freshClientFile();
   const count = fake.registrations.length;

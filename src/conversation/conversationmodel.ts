@@ -1,7 +1,5 @@
-import { join } from "node:path";
 import { noticeFor } from "../tenants/errors.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
-import { GROUPS_DIR, groupKey, groupLogFile, groupNotesDir } from "./groupstore.ts";
 import type { GroupMessage } from "./group.ts";
 import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
@@ -9,6 +7,7 @@ import { type Picture } from "../run/image.ts";
 import { type Document } from "./document.ts";
 import { OWNER_SESSION_FILE, tenantKey } from "../core/ownerkey.ts";
 import { settings } from "../core/settings.ts";
+import { convPaths, friendConvId, groupConvId, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { type Timing } from "../core/timing.ts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-assistant/messenger";
@@ -18,6 +17,7 @@ import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Qu
 export interface Conversation {
   readonly kind: "owner" | "group" | "tenant";
   readonly key: string; // queue key
+  readonly convId: ConvId; // its folder: conversations/<convId>/ (core/convpaths.ts); for a group not its id
   readonly groupId?: string; // the group; unset: the owner's chat or a tenant's
   readonly tenantId?: string; // a tenant's chat (tenants.ts): her id
   readonly target?: Target; // where this conversation's messages go (the messenger's opaque target): the group id, directTarget(account id) for a tenant; unset: the owner's chat
@@ -39,6 +39,7 @@ export interface Conversation {
 const OWNER_CONVERSATION: Conversation = Object.freeze({
   kind: "owner",
   key: "owner",
+  convId: OWNER_CONV,
   direct: true,
   source: "chat",
   logFile: OWNER_LOG,
@@ -56,18 +57,21 @@ const OWNER_CONVERSATION: Conversation = Object.freeze({
 
 export const owner = (): Conversation => OWNER_CONVERSATION;
 
-// Not the group's folder itself: groupDir() creates it, and a Conversation is only data.
-export const group = (groupId: string): Conversation =>
-  Object.freeze({
+// Not the group's folder itself: groupDir() (groupstore.ts) creates it, and a Conversation is only data.
+export const group = (groupId: string): Conversation => {
+  const convId = groupConvId(groupId);
+  const p = convPaths(convId);
+  return Object.freeze({
     kind: "group",
     key: groupId,
+    convId,
     groupId,
     target: groupId,
     direct: false,
     source: "group",
-    logFile: groupLogFile(groupId),
-    notesDir: groupNotesDir(groupId),
-    sessionFile: join(GROUPS_DIR, groupKey(groupId), "session.json"),
+    logFile: p.messages,
+    notesDir: p.notes,
+    sessionFile: p.session,
     gate: true,
     approvals: false,
     vouch: true,
@@ -77,6 +81,7 @@ export const group = (groupId: string): Conversation =>
     noticeEveryMs: settings.groupNoticeMinutes * 60_000, // a failure is reported at most this often per group
     notice: noticeFor("group"), // nobody there should be sent to a terminal
   });
+};
 
 // A tenant's private chat (tenants.ts): the group isolation machinery with one person in it. Her own folder (notes, history, session, ledger), her own
 // queue and warm process, answered always like the owner's chat; never the owner's data (source "group"). Unknown id: throws, a Conversation is only made for someone registered.
@@ -87,6 +92,7 @@ export const tenant = (id: string): Conversation => {
   return Object.freeze({
     kind: "tenant",
     key: tenantKey(id),
+    convId: friendConvId(id),
     tenantId: id,
     target: ctx.target,
     direct: true,

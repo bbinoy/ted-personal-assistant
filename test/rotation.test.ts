@@ -8,6 +8,7 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "rotation-test-"));
 
 const { settings } = await import("../src/core/settings.ts");
+const { instancePaths } = await import("../src/core/convpaths.ts");
 const { rotateIfOver, copyTruncateIfOver } = await import("../src/core/rotate.ts");
 const rows = await import("../src/heartbeat/rows.ts");
 const { Ledger, MAX_BYTES: LEDGER_MAX, capProblem } = await import("../src/modules/browse/payments.ts");
@@ -38,22 +39,22 @@ test("copyTruncateIfOver: the original is cut to nothing (a child's append-mode 
 });
 
 test("heartbeat rows: rotated by size, and the report still reads every generation in order", () => {
-  const file = "state/hb-rotation.jsonl";
+  const file = join(instancePaths().dir, "hb-rotation.jsonl");
   const row = (i: number) => ({ at: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: i, delegations: 0, outcome: "silent" as const, pad: "p".repeat(100_000) });
   for (let i = 0; i < 100; i++) rows.appendRow(row(i) as never, file);
-  assert.equal(existsSync(join(settings.stateDir, "hb-rotation.jsonl.1")), true);
-  assert.equal(existsSync(join(settings.stateDir, "hb-rotation.jsonl.3")), false);
+  assert.equal(existsSync(`${file}.1`), true);
+  assert.equal(existsSync(`${file}.3`), false);
   const read = rows.readRows(file);
   assert.ok(read.length < 100 && read.length >= 20, "the oldest generation was dropped");
   assert.deepEqual(read.map((r) => r.archived), read.map((r) => r.archived).slice().sort((a, b) => a - b), "oldest first across generations");
   assert.equal(read.at(-1)!.archived, 99);
   assert.equal(rows.readRows(`${file}`).length, read.length);
-  const current = readFileSync(join(settings.stateDir, "hb-rotation.jsonl"), "utf8").trim().split("\n");
+  const current = readFileSync(file, "utf8").trim().split("\n");
   assert.equal(JSON.parse(current.at(-1)!).archived, 99, "the newest row is always in the CURRENT file (rotation happens before the append)");
 });
 
 test("payment ledger: rotation archives the year, never deletes, and the caps and the duplicate check give the same answers before and after", () => {
-  const file = "state/payments-rot-test.jsonl";
+  const file = join(instancePaths().dir, "payments-rot-test.jsonl");
   const l = new Ledger(file);
   const now = new Date();
   const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
@@ -63,13 +64,13 @@ test("payment ledger: rotation archives the year, never deletes, and the caps an
   const before = (): [number, boolean] => [l.spentToday("EUR", now), !!l.duplicate("shop", "h-today", now)];
   l.add({ id: "today001", merchant: "shop", totalMinor: 2500, currency: "EUR", last4: "1111", cartHash: "h-today", status: "confirmed" }, now);
   assert.deepEqual(before(), [2500, true]);
-  const archivesBefore = existsSync(join(settings.stateDir, `payments-rot-test-2025.jsonl`));
+  const archivesBefore = existsSync(join(instancePaths().dir, `payments-rot-test-2025.jsonl`));
   assert.equal(archivesBefore, false);
   l.add({ id: "pad00001", merchant: `pad-${fat}`, totalMinor: 1, currency: "EUR", last4: "1111", cartHash: "h-pad", status: "failed" }, now); // crosses the size
   const archive = readdirArchive();
   assert.equal(archive.length, 1, "one archive");
   assert.match(archive[0]!, /payments-rot-test-\d{4}\.jsonl$/);
-  const archived = readFileSync(join(settings.stateDir, archive[0]!), "utf8");
+  const archived = readFileSync(join(instancePaths().dir, archive[0]!), "utf8");
   assert.match(archived, /old00001/, "the old payment is kept in the archive");
   assert.deepEqual(before(), [2500, true], "today's cap and the duplicate window read the same after the rotation");
   assert.equal(capProblem(1000, { purchaseMinor: 5000, dayMinor: 3000 } as never, l.spentToday("EUR", now)) !== undefined, true, "the daily cap still counts today's payment");
@@ -79,15 +80,15 @@ test("payment ledger: rotation archives the year, never deletes, and the caps an
 });
 
 function readdirArchive(): string[] {
-  return readdirSync(settings.stateDir).filter((n) => /^payments-rot-test-\d{4}.*\.jsonl$/.test(n));
+  return readdirSync(instancePaths().dir).filter((n) => /^payments-rot-test-\d{4}.*\.jsonl$/.test(n));
 }
 
 test("/status: the last look is found even when the current rows file is empty (it reads the rotated generations too)", async () => {
   const { lastOwnerLook, ROWS_FILE } = await import("../src/conversation/ownercommands.ts");
   const { readText } = await import("../src/core/state.ts");
   const line = JSON.stringify({ at: "2026-10-14T12:00:00.000Z", night: false, outcome: "silent" });
-  writeFileSync(join(settings.stateDir, "heartbeat.jsonl.1"), `${line}\n`);
-  writeFileSync(join(settings.stateDir, "heartbeat.jsonl"), "");
+  writeFileSync(`${ROWS_FILE}.1`, `${line}\n`);
+  writeFileSync(ROWS_FILE, "");
   const text = [`${ROWS_FILE}.2`, `${ROWS_FILE}.1`, ROWS_FILE].map((f) => readText(f) ?? "").join("\n");
   assert.deepEqual(lastOwnerLook(text), { at: new Date("2026-10-14T12:00:00.000Z"), outcome: "silent" });
 });

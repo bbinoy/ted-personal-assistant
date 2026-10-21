@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, statSync } from "node:fs";
 import { appendLine, dataPath, readText, writeFileAtomic } from "../../core/state.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 import { localDay } from "../../core/pause.ts";
 
 // The payment ledger: an append-only file (state/payments.jsonl, 0600) with one row per status change of a card payment. It holds NO card
@@ -33,7 +34,7 @@ const OPEN: ReadonlySet<PayStatus> = new Set(["approved", "clicked"]);
 
 export class Ledger {
   readonly file: string;
-  constructor(file = "state/payments.jsonl") {
+  constructor(file = instancePaths().payments) {
     this.file = file;
   }
 

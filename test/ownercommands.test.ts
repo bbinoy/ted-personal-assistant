@@ -6,11 +6,12 @@ import { commandReply, lastOwnerLook, parseCommand, ROWS_FILE, statusText } from
 import { isPaused, pauseText } from "../src/core/pause.ts";
 import { dataPath, readText, writeText } from "../src/core/state.ts";
 import { RunStopped, stopRuns, withCeiling } from "../src/run/ceiling.ts";
+import { convPaths, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
-const ownerConv = { kind: "owner", key: "owner", sessionFile: "state/session.json" } as const;
+const ownerConv = { kind: "owner", key: "owner", sessionFile: convPaths(OWNER_CONV).session } as const;
 const friendConv = { kind: "tenant", key: "tenant:x", sessionFile: "x/session.json" } as const;
-const clear = () => rmSync(dataPath("state/paused"), { force: true });
+const clear = () => rmSync(dataPath(instancePaths().paused), { force: true });
 
 test("parseCommand: exactly the commands, nothing inside a sentence", () => {
   assert.deepEqual(parseCommand("/stop", NOW), { kind: "stop" });
@@ -39,20 +40,20 @@ test("parseCommand /pause: a span, a clock time (today's or tomorrow's), a day, 
 test("/pause writes the pause switch (a time inside), /resume removes it, and the switch honours the time", () => {
   clear();
   const made: string[] = [];
-  const reply = commandReply(ownerConv, "/pause 2h", { now: () => NOW, setPause: (c) => (made.push(c), writeText("state/paused", c)) });
+  const reply = commandReply(ownerConv, "/pause 2h", { now: () => NOW, setPause: (c) => (made.push(c), writeText(instancePaths().paused, c)) });
   assert.match(reply!, /^Paused until 16:30\./);
   assert.equal(isPaused(NOW), true);
   assert.equal(isPaused(new Date(NOW.getTime() + 119 * 60_000)), true);
   assert.equal(isPaused(new Date(NOW.getTime() + 121 * 60_000)), false, "the time has come: running again");
   assert.match(pauseText(NOW) ?? "", /^paused until /);
   assert.equal(commandReply(ownerConv, "/resume"), "Resumed.");
-  assert.equal(readText("state/paused"), undefined);
+  assert.equal(readText(instancePaths().paused), undefined);
   assert.equal(isPaused(NOW), false);
   commandReply(ownerConv, "/pause", { now: () => NOW });
-  assert.equal(readText("state/paused"), "", "bare /pause: until /resume");
+  assert.equal(readText(instancePaths().paused), "", "bare /pause: until /resume");
   assert.equal(isPaused(new Date(2030, 0, 1)), true);
   clear();
-  writeText("state/paused", "2026-10-20");
+  writeText(instancePaths().paused, "2026-10-20");
   assert.equal(isPaused(NOW), true, "a day inside still works as before");
   assert.equal(isPaused(new Date(2026, 9, 20, 8)), false);
   clear();
@@ -63,7 +64,7 @@ test("pause, resume and status are the owner's; a friend can only stop her own r
   assert.equal(commandReply(friendConv, "/pause 2h"), undefined);
   assert.equal(commandReply(friendConv, "/status"), undefined);
   assert.equal(commandReply(friendConv, "/resume"), undefined);
-  assert.equal(readText("state/paused"), undefined);
+  assert.equal(readText(instancePaths().paused), undefined);
   let stopped = "";
   assert.equal(commandReply(friendConv, "stop!", { stop: (s) => ((stopped = s), 1) }), "Stopped.");
   assert.equal(stopped, "x/session.json");
@@ -74,15 +75,15 @@ test("pause, resume and status are the owner's; a friend can only stop her own r
 
 test("/stop aborts the conversation's running turn at once, with RunStopped; other runs and later ones are untouched", async () => {
   let signal: AbortSignal | undefined;
-  const running = withCeiling(60_000, (c) => ((signal = c.signal), new Promise<string>(() => {})), "state/session.json");
+  const running = withCeiling(60_000, (c) => ((signal = c.signal), new Promise<string>(() => {})), convPaths(OWNER_CONV).session);
   const other = withCeiling(60_000, (c) => new Promise<string>((r) => c.signal.addEventListener("abort", () => r("aborted"))), "other/session.json");
   other.catch(() => {});
-  assert.equal(stopRuns("state/session.json"), 1);
+  assert.equal(stopRuns(convPaths(OWNER_CONV).session), 1);
   await assert.rejects(running, RunStopped);
   assert.equal(signal?.aborted, true, "the query's abort signal fired");
-  assert.equal(stopRuns("state/session.json"), 0, "nothing left to stop");
+  assert.equal(stopRuns(convPaths(OWNER_CONV).session), 0, "nothing left to stop");
   assert.equal(stopRuns("other/session.json"), 1);
-  assert.equal(await withCeiling(60_000, async () => "fine", "state/session.json"), "fine", "the next turn runs normally");
+  assert.equal(await withCeiling(60_000, async () => "fine", convPaths(OWNER_CONV).session), "fine", "the next turn runs normally");
 });
 
 test("/status: a phone-sized summary", () => {

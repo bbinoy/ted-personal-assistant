@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Scope } from "../memory/dreamplan.ts";
@@ -7,25 +6,24 @@ import { matchLines } from "../core/logsearch.ts";
 import { MAX_NOTE_CHARS, type Note } from "../memory/notes.ts";
 import { preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
+import { convPaths, conversationsDir, groupConvId, isConvId } from "../core/convpaths.ts";
 import { moveAside, readText, writeFileAtomic } from "../core/state.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
 // Everything a group has: its own notes (what members asked the assistant to remember there) and its own
-// message history, in the same formats as the owner's, but in separate places that nothing private reads
-// or writes. A group is told apart by a short hash of its id:
-//   memory/groups/<key>/notes/    the group's notes, one fact per file
-//   memory/groups/<key>/backup/   snapshots of those notes made by the group's dream
-//   memory/groups/<key>/meta.json the group's id and name
-//   memory/groups/<key>/session.json the group's resumed SDK session (like state/session.json for the owner)
-//   logs/group-<key>.jsonl        everything written in the group and the assistant's replies, size-bounded
-// The owner's chat can read all of it (read-only); nothing flows the other way.
+// message history, in the same formats as the owner's, but in a conversation folder that nothing private reads
+// or writes. A group is told apart by a short hash of its id (convpaths.ts groupConvId); its folder is conversations/group-<hash>/:
+//   notes/        the group's notes, one fact per file
+//   notes-backup/ snapshots of those notes made by the group's dream
+//   meta.json     the group's id and name
+//   session.json  the group's resumed SDK session (like the owner's)
+//   messages.jsonl everything written in the group and the assistant's replies, size-bounded
+// The owner's chat cannot read it (policy.ts: only conversations/owner/); she searches a group's history with search_logs (a fixed tool), and nothing flows the other way.
 
-export const GROUPS_DIR = join(settings.memoryDir, "groups");
 const GROUP_CATEGORIES = preset().notes.group;
 
-export const groupKey = (groupId: string): string => createHash("sha256").update(groupId).digest("hex").slice(0, 12);
-export const groupLogFile = (groupId: string): string => `logs/group-${groupKey(groupId)}.jsonl`;
+export const groupLogFile = (groupId: string): string => convPaths(groupConvId(groupId)).messages;
 
 // meta.json of a group; one that does not parse is moved aside (state.ts) and the group goes on with defaults, instead of throwing on every message of that group.
 function readMeta(meta: string): { id?: string; name?: string } | undefined {
@@ -43,14 +41,15 @@ function readMeta(meta: string): { id?: string; name?: string } | undefined {
 // The group's folder (made on first use); the name is kept up to date in meta.json.
 const named = new Map<string, string>(); // group id -> the name written in meta.json, so it is not re-read per message
 export function groupDir(groupId: string, name?: string): string {
-  const dir = join(GROUPS_DIR, groupKey(groupId));
-  if (named.has(groupId) && (!name || named.get(groupId) === name) && existsSync(join(dir, "notes"))) return dir;
-  mkdirSync(join(dir, "notes"), { recursive: true, mode: 0o700 });
-  const meta = join(dir, "meta.json");
+  const p = convPaths(groupConvId(groupId));
+  const dir = p.dir;
+  if (named.has(groupId) && (!name || named.get(groupId) === name) && existsSync(p.notes)) return dir;
+  mkdirSync(p.notes, { recursive: true, mode: 0o700 });
+  const meta = p.meta;
   const known = readMeta(meta);
-  // The folder is named by a 48-bit hash of the id. A different group that hashes to the same folder (someone who grinds ids) must never
+  // The folder is named by a 64-bit hash of the id. A different group that hashes to the same folder (someone who grinds ids) must never
   // share the first group's notes, history and session: refuse it instead.
-  if (known?.id !== undefined && known.id !== groupId) throw new Error(`group folder ${groupKey(groupId)} belongs to another group; refusing to share it`);
+  if (known?.id !== undefined && known.id !== groupId) throw new Error(`group folder ${groupConvId(groupId)} belongs to another group; refusing to share it`);
   const final = name || known?.name || "";
   if (!known || known.name !== final) writeFileAtomic(meta, JSON.stringify({ id: groupId, name: final }));
   named.set(groupId, final);
@@ -58,22 +57,25 @@ export function groupDir(groupId: string, name?: string): string {
 }
 
 export const groupScope = (groupId: string): Scope => {
-  const dir = groupDir(groupId);
-  return { notesDir: join(dir, "notes"), backupsDir: join(dir, "backup"), categories: GROUP_CATEGORIES, index: true, maxNotes: settings.memoryMaxNotes };
+  groupDir(groupId); // (the folder is made first)
+  const p = convPaths(groupConvId(groupId));
+  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: GROUP_CATEGORIES, index: true, maxNotes: settings.memoryMaxNotes };
 };
 
 interface KnownGroup {
   id: string;
   name: string;
   dir: string;
+  convId: string;
 }
 
 export function listGroups(): KnownGroup[] {
   try {
-    return readdirSync(GROUPS_DIR)
-      .map((key) => ({ key, dir: join(GROUPS_DIR, key) }))
-      .filter(({ dir }) => existsSync(join(dir, "meta.json")))
-      .map(({ dir }) => ({ ...(JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as { id: string; name: string }), dir }));
+    return readdirSync(conversationsDir())
+      .filter((c) => isConvId(c) && c.startsWith("group-"))
+      .map((convId) => ({ convId, dir: convPaths(convId).dir, meta: convPaths(convId).meta }))
+      .filter(({ meta }) => existsSync(meta))
+      .map(({ convId, dir, meta }) => ({ ...(JSON.parse(readFileSync(meta, "utf8")) as { id: string; name: string }), dir, convId }));
   } catch {
     return [];
   }
@@ -123,7 +125,7 @@ export function searchHistoryFile(file: string, args: { query?: string; sinceHou
 // The group's notes are the SDK's auto-memory, written with the file tools inside this folder (policy.ts).
 // There is no write-time check on them: containment is the only gate. What is read back is bounded where it
 // is read (groupNotesBlock, the dream).
-export const groupNotesDir = (groupId: string): string => join(GROUPS_DIR, groupKey(groupId), "notes");
+export const groupNotesDir = (groupId: string): string => convPaths(groupConvId(groupId)).notes;
 
 
 // Pure: the group's notes as fenced data for the group's prompt.

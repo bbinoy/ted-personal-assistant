@@ -1,5 +1,6 @@
 import { audit } from "../core/audit.ts";
 import { readJson, writeJson } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 import { ASSISTANT, OWNER } from "../core/settings.ts";
 import { ACI, addTenant, type TenantRecord } from "./tenants.ts";
 
@@ -11,7 +12,7 @@ import { ACI, addTenant, type TenantRecord } from "./tenants.ts";
 // Limits, in code: one open request per sender; at most MAX_OPEN open at once (beyond: silent drop); at most PER_HOUR new requests an hour in all; a request expires after
 // 7 days (its held text goes with it) and its sender may ask again after COOLDOWN; a declined sender is silent for good until `npm run tenants -- forget <id>`.
 
-export const FILE = "state/registrations.json";
+export const FILE = instancePaths().registrations;
 export const MAX_OPEN = 10;
 export const EXPIRES_MS = 7 * 24 * 3600_000;
 export const COOLDOWN_MS = 24 * 3600_000;

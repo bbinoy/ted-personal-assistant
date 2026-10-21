@@ -18,6 +18,7 @@ import { heldFileOf, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 import { clearPending, openItems } from "../src/approvals/pending.ts";
 import { queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
+import { scratchLog } from "./scratch.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.briefBackstopHour = 24; // the brief is the brief tests' (test/tasks.test.ts); here the owner's look is all that runs
@@ -32,7 +33,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
   mkdirSync(join(dir, "n"));
-  const conv: Conversation = { ...owner(), logFile: `logs/hb-owner-${Math.random().toString(36).slice(2)}.jsonl`, notesDir: join(dir, "n") };
+  const conv: Conversation = { ...owner(), logFile: scratchLog(`hb-owner-${Math.random().toString(36).slice(2)}.jsonl`), notesDir: join(dir, "n") };
   const seen = { runs: [] as string[], prompts: [] as string[], provenance: [] as (RunProvenance | undefined)[], posted: [] as string[], recorded: [] as [string, string][] };
   let now = DAY;
   let sends = 0; // what the run sent with the send tool while it worked (the real tool is the pipeline's sendWhile)

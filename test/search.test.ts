@@ -9,6 +9,7 @@ import { dataPath } from "../src/core/state.ts";
 import { bm25Ranker, nearFactor, parseQuery, searchConversation, snippet, type Ranker, type Scope } from "../src/memory/search.ts";
 import { SearchIndex } from "../src/memory/searchindex.ts";
 import { fold, stem, stems } from "../src/memory/searchtext.ts";
+import { scratchLog } from "./scratch.ts";
 
 // Ranked search over one conversation's log and notes: the real log writer, the real index (SQLite FTS5), temporary folders.
 
@@ -18,7 +19,7 @@ function rig(name = "a") {
   const dir = mkdtempSync(join(tmpdir(), "search-"));
   const notesDir = join(dir, "notes");
   mkdirSync(notesDir);
-  const logFile = `logs/search-${name}-${++n}.jsonl`;
+  const logFile = scratchLog(`search-${name}-${++n}.jsonl`);
   const scope: Scope = { logFile, notesDir, indexPath: join(dir, "search.sqlite") };
   let ts = 1_700_000_000_000;
   const say = (kind: Parameters<typeof recordMessage>[0], text: string, extra: { by?: string; of?: number; day?: string; ts?: number } = {}) => {

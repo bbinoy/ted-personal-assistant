@@ -7,6 +7,7 @@ import { localDay } from "../core/pause.ts";
 import { NAMES, SKIPPED, type Connector } from "../modules/connectors.ts";
 import { categoriesFor, PLUGIN, preset, render, type PromptKey, type Value } from "../core/preset.ts";
 import { ASSISTANT, OWNER, settings } from "../core/settings.ts";
+import { convPaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
 
 // System prompts. The WORDS are the assistant preset's (assistants/<name>/persona/*.md, loaded by preset.ts): who the assistant is,
 // how it talks, what each kind of run is told. This file is the other half: it fills in what only code knows (the owner's name, which
@@ -95,9 +96,8 @@ export function chatSystem(now = new Date(), mail: boolean = settings.mail): str
       send: `${SEND_RULE}${voiceRule("owner", capabilitiesOf({ kind: "owner" }))}`,
       channel: settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`,
       mailNote: mail ? mailNote() : "",
-      logsDir: settings.logsDir,
-      stateDir: settings.stateDir,
-      memoryDir: settings.memoryDir,
+      logsDir: logPaths().dir,
+      ownerDir: convPaths(OWNER_CONV).dir,
       selfTimed: SELF_TIMED,
       categories: categoriesFor("owner").join(", "),
     }),

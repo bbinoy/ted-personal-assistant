@@ -5,6 +5,7 @@ import { spentToday } from "../core/budget.ts";
 import { pauseText } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
 import { dataPath, readText, writeText } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 import { clockIn, systemZone, timeIn } from "../core/timezone.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { clearQuiet, quietText, setQuiet } from "./quiet.ts";
@@ -84,7 +85,7 @@ export function parseCommand(text: string, now: Date = new Date(), zone: string 
 }
 
 // The owner's last look, from the heartbeat's own rows (heartbeat/rows.ts keeps the file; the conversation folder may not import it, test/ownercommands.test.ts checks the name is the same).
-export const ROWS_FILE = "state/heartbeat.jsonl";
+export const ROWS_FILE = instancePaths().heartbeatRows;
 export function lastOwnerLook(text: string | undefined): { at: Date; outcome: string } | undefined {
   for (const line of (text ?? "").trimEnd().split("\n").reverse().slice(0, 200)) {
     try {
@@ -141,8 +142,8 @@ const real: CommandDeps = {
   now: () => new Date(),
   stop: stopRuns,
   dropQueued: () => 0,
-  setPause: (content) => writeText("state/paused", content),
-  clearPause: () => rmSync(dataPath("state/paused"), { force: true }),
+  setPause: (content) => writeText(instancePaths().paused, content),
+  clearPause: () => rmSync(dataPath(instancePaths().paused), { force: true }),
   setQuiet,
   clearQuiet,
   facts: (conv, now) => {

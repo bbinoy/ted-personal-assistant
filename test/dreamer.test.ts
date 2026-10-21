@@ -15,6 +15,7 @@ import { dreamSystem } from "../src/run/persona.ts";
 import { preset } from "../src/core/preset.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readJson, writeJson } from "../src/core/state.ts";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 // The ONE dreamer (dream.ts createDreamer): the owner's chat and every group go through the same gates (the `dream` capability, the day guard, the preset's
 // minimum of new lines), the same run and the same audit row; only the data differs (dreamscope.ts).
@@ -22,8 +23,8 @@ import { dataPath, readJson, writeJson } from "../src/core/state.ts";
 const NOW = new Date("2026-10-14T07:00:00");
 const G = (n: number) => `R3JvdXA${n}R3JvdXAxR3JvdXAx`;
 const reset = () => {
-  rmSync(dataPath("state/dream.json"), { force: true });
-  rmSync(dataPath("logs/messages.jsonl"), { force: true });
+  rmSync(dataPath(convPaths(OWNER_CONV).dream), { force: true });
+  rmSync(dataPath(convPaths(OWNER_CONV).messages), { force: true });
   rmSync(NOTES_DIR, { recursive: true, force: true });
   mkdirSync(NOTES_DIR, { recursive: true });
 };
@@ -104,10 +105,10 @@ test("state files: the owner's stays in state/dream.json, a group's in its folde
   rmSync(groupDir(g), { recursive: true, force: true });
   rmSync(dataPath(groupLogFile(g)), { force: true });
   groupDir(g, "Old state");
-  assert.equal(dreamStateFile(owner()), "state/dream.json");
+  assert.equal(dreamStateFile(owner()), convPaths(OWNER_CONV).dream);
   assert.equal(dreamStateFile({ kind: "group", groupId: g }), join(groupDir(g), "dream.json"));
   // what the old dreamers had written: a day that is over and the time the last run started
-  writeJson("state/dream.json", { day: "2026-10-13", lastRunAt: "2026-10-13T21:00:00.000Z" });
+  writeJson(convPaths(OWNER_CONV).dream, { day: "2026-10-13", lastRunAt: "2026-10-13T21:00:00.000Z" });
   writeFileSync(join(groupDir(g), "dream.json"), JSON.stringify({ day: "2026-10-13", lastRunAt: "2026-10-13T21:00:00.000Z" }));
   recordMessage("owner", 5, "old line before the last dream", new Date("2026-10-13T20:00:00Z")); // before lastRunAt: already covered
   for (let n = 0; n < 5; n++) say(n, groupLogFile(g)); // all at 20:00Z, before lastRunAt
@@ -120,7 +121,7 @@ test("state files: the owner's stays in state/dream.json, a group's in its folde
   assert.equal(c.calls.length, 1);
   assert.match(c.calls[0]!, /a new thing after the last dream/);
   assert.doesNotMatch(c.calls[0]!, /old line before/);
-  assert.equal(readJson<{ lastRunAt?: string }>("state/dream.json", {}).lastRunAt, NOW.toISOString());
+  assert.equal(readJson<{ lastRunAt?: string }>(convPaths(OWNER_CONV).dream, {}).lastRunAt, NOW.toISOString());
 });
 
 test("one prompt: the same template for the owner, a friend and a group, with their categories from the preset", () => {

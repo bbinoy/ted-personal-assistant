@@ -15,6 +15,7 @@ import { hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/modules/skills.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
 import { readJson } from "../src/core/state.ts";
+import { instancePaths } from "../src/core/convpaths.ts";
 
 // MAIL_PROVIDER: mailbird is the default and behaves exactly as before (test/default-prompts.test.ts pins its prompts); none is chat only.
 
@@ -64,7 +65,7 @@ test("heartbeat tick without mail: the jobs start and the liveness line is writt
       timers[1]!();
       await new Promise((r) => setTimeout(r, 20));
       assert.deepEqual(ran, ["jobs", "jobs"], "the tick jobs still start");
-      const beat = readJson<{ lastTickAt?: string }>("state/heartbeat.json", {});
+      const beat = readJson<{ lastTickAt?: string }>(instancePaths().heartbeat, {});
       assert.ok(beat.lastTickAt && Date.now() - Date.parse(beat.lastTickAt) < 5000, "doctor sees the heartbeat ticking");
       void hb;
     } finally {

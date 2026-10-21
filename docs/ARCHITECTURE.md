@@ -610,7 +610,8 @@ The bottom of the app: every tunable (`settings.ts`), the state and log files, t
 src/core/settings.ts   every tunable, validated at startup (pure loader, tested)
 src/core/paths.ts      the repo root and the folders under it (plugin, assets, assistants), and the default data dir: the only file that locates itself (tested)
 src/core/preset.ts     the assistant preset: loader, validation and templates (assistants/<name>/preset.json and persona/*.md)
-src/core/state.ts      atomic, synchronous access to state/, logs/ and memory/ (tested)
+src/core/convpaths.ts  THE one place that builds a path under the data folder: instance/, conversations/<convId>/, logs/ (grep-tested)
+src/core/state.ts      atomic, synchronous access to files under the data folder, by the absolute path convpaths.ts gave (tested)
 src/core/audit.ts      append-only audit log and its reader
 src/core/log.ts        redacting, rotating agent.log; owner-only permissions
 src/core/logtrim.ts    cuts launchd-stderr.log down in place at start (pure part tested)

@@ -17,9 +17,9 @@ const aci = (n: number, prefix = "cccccccc") => `${prefix}-0000-4000-8000-${Stri
 const NOW = Date.now();
 const DAY = 24 * 3600_000;
 const CANARY = "CANARY-HELD-TEXT-5521";
-const file = () => readFileSync(join(settings.dataDir, Reg.FILE), "utf8");
+const file = () => readFileSync(Reg.FILE, "utf8");
 
-beforeEach(() => rmSync(join(settings.dataDir, Reg.FILE), { force: true }));
+beforeEach(() => rmSync(Reg.FILE, { force: true }));
 
 test("a stranger's name is cleaned to a short plain label; her words are held (the last three, cut) and never in the pending list or the audit row", () => {
   const first = Reg.register({ aci: aci(1), name: "  Mal<script>\n\"ice\"  ".padEnd(80, "x"), text: CANARY, timestamp: 1 }, NOW);

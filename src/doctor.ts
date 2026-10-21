@@ -32,6 +32,7 @@ import { disconnected, readConnectors, reportable } from "./modules/connectors.t
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
 import { dataPath, readJson, readText } from "./core/state.ts";
+import { convPaths, conversationsDir, instancePaths, logPaths, OWNER_CONV } from "./core/convpaths.ts";
 
 type Line = DoctorLine;
 
@@ -184,7 +185,7 @@ export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
 export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number; broken?: string | undefined } = {}): void {
   const on = o.on ?? settings.tenants;
   const broken = "broken" in o ? o.broken : registryProblem();
-  if (broken !== undefined) line(false, "friends list", `state/tenants.json can't be read (${broken}); friends are paused, the owner is unaffected. It is kept as is: repair or move it, then restart`);
+  if (broken !== undefined) line(false, "friends list", `tenants.json in the instance folder can't be read (${broken}); friends are paused, the owner is unaffected. It is kept as is: repair or move it, then restart`);
   if (!on) return line(true, "tenants: off", "TENANTS=off: one person, as always");
   const now = o.now ?? Date.now();
   const key = "key" in o ? o.key : settings.tenantApiKey;
@@ -268,13 +269,13 @@ export async function doctor() {
   const gaps = missingSetup(readNotes(), disconnected(conn), settings.mail);
   line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
 
-  for (const [name, dir] of [["state", settings.stateDir], ["logs", settings.logsDir], ["memory", settings.memoryDir]] as const) {
+  for (const [name, dir] of [["instance", instancePaths().dir], ["conversations", conversationsDir()], ["logs", logPaths().dir]] as const) {
     if (!existsSync(dir)) continue;
     const loose = readdirSync(dir).filter((f) => (statSync(`${dir}/${f}`).mode & 0o077) !== 0 && statSync(`${dir}/${f}`).isFile());
     line((statSync(dir).mode & 0o077) === 0, `${name}/ directory is owner-only`, (statSync(dir).mode & 0o077) === 0 ? "" : `fix: chmod 700 ${dir}`);
     line(loose.length === 0 ? true : "warn", `${name}/ files are owner-only`, loose.length ? `group/world-readable: ${loose.join(", ")}` : "");
   }
-  line(true, "memory/notes/", `${readNotes().length} active note(s)`); // the count only, never the notes
+  line(true, "the owner's notes", `${readNotes().length} active note(s)`); // the count only, never the notes
 
   const voice = voiceReady(settings.whisperModel);
   line(voice.ok ? true : "warn", "voice messages", voice.ok ? "transcribed locally with whisper.cpp" : `not available, missing: ${voice.missing.join("; ")}`);
@@ -285,7 +286,7 @@ export async function doctor() {
   const where = settings.tts.provider === "elevenlabs" ? "ElevenLabs (spoken text is sent to elevenlabs.io)" : settings.tts.provider === "http" ? `your own server at ${new URL(settings.tts.http.url).host} (spoken text is sent there)` : settings.tts.provider === "qwen" ? (qwen!.ok ? `local cloned voice (Qwen3-TTS ${settings.tts.qwen.model.split("/").pop()}; reference: ${qwenReference(settings.tts.qwen)}); fallback: ${settings.tts.fallback}` : `Qwen voice not ready (${qwen!.missing.join(", ")}); ${tts.ok ? "Kokoro speaks instead" : "no fallback"}`) : `local Kokoro, voice ${settings.tts.kokoro.voice}`;
   line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
 
-  const dream = readJson<{ lastRunAt?: string }>("state/dream.json", {});
+  const dream = readJson<{ lastRunAt?: string }>(convPaths(OWNER_CONV).dream, {});
   line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (DREAM_HOUR); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
 
   browseCheck(line, settings.browse, browseStatus());
@@ -294,7 +295,7 @@ export async function doctor() {
   tenantCheck(line);
   servicesCheck(line);
 
-  const beat = readJson<{ lastTickAt?: string }>("state/heartbeat.json", {});
+  const beat = readJson<{ lastTickAt?: string }>(instancePaths().heartbeat, {});
   const ageMin = beat.lastTickAt ? (Date.now() - Date.parse(beat.lastTickAt)) / 60_000 : Infinity;
   line(
     ageMin <= 2 * settings.heartbeatMinutes + 1 ? true : "warn",
@@ -305,12 +306,12 @@ export async function doctor() {
 
   const spent = spentToday();
   line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)${spent < settings.dailyBudgetUsd ? "" : `: background work is paused until midnight; to change it set DAILY_BUDGET_USD in .env and restart`}`);
-  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${pauseText() ?? "paused"} (${dataPath("state/paused")}); to resume say /resume in your chat or delete that file` : "");
+  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${pauseText() ?? "paused"} (${dataPath(instancePaths().paused)}); to resume say /resume in your chat or delete that file` : "");
   const cardOff = killSwitch.off();
   const unconfirmed = new Ledger().rows().filter((r) => r.status === "unconfirmed").length;
   line(unconfirmed ? "warn" : true, "card payments", `${cardOff ? `OFF (${cardOff}); switch on: npm run card -- enable` : "not switched off (npm run card -- list shows the card, if one is saved)"}${unconfirmed ? `; ${unconfirmed} payment(s) unconfirmed: npm run card -- payments` : ""}`);
-  const logFile = dataPath("logs/agent.log");
-  const recentErrors = existsSync(logFile) ? errorLinesSince(readText("logs/agent.log") ?? "", statSync(logFile).mtimeMs, Date.now() - 3600_000) : 0; // (log lines have a time but no date: logwindow.ts)
+  const logFile = dataPath(logPaths().agent);
+  const recentErrors = existsSync(logFile) ? errorLinesSince(readText(logFile) ?? "", statSync(logFile).mtimeMs, Date.now() - 3600_000) : 0; // (log lines have a time but no date: logwindow.ts)
   line(recentErrors === 0 ? true : "warn", "no errors in the log in the last hour", recentErrors ? `${recentErrors} error line(s) in logs/agent.log; look at them with: grep " ERR " ${logFile} | tail -n 20` : "");
 
   console.log(bad === 0 ? "\nAll required checks passed." : `\n${bad} check(s) failed.`);

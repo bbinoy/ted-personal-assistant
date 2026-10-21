@@ -1,5 +1,6 @@
 import { loaded, registered } from "./index.ts";
 import { readJson, writeJson } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 import { settings } from "../core/settings.ts";
 
 // Which connectors the last run could actually see. Notion and Google Calendar come through the
@@ -12,7 +13,7 @@ import { settings } from "../core/settings.ts";
 // what the owner calls it (`label`) and what is lost without it (`skipped`) is reported while it is down. Adding a connector module adds it here, to the prompts, the brief
 // and the doctor, with no edit in this file.
 
-const FILE = "state/connectors.json";
+const FILE = instancePaths().connectors;
 
 // A connector's `key` -> whether the last run saw it; `at` is when.
 export type Connectors = { at: string } & { [key: string]: boolean | string | undefined };

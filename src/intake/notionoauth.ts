@@ -7,6 +7,7 @@ import type { Data } from "../secrets/openbao.ts";
 import { appBao, NOTION_ITEM, TenantSecrets } from "../secrets/secrets.ts";
 import { settings } from "../core/settings.ts";
 import { dataPath, readJson, writeJson } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 
 // Notion for friends, the sign-in half (the calls to the hosted server are notionmcp.ts). Notion runs a hosted MCP server (settings.notion.mcpUrl, by default
 // https://mcp.notion.com/mcp) that gives a person access by HER OWN workspace permissions after a one-click OAuth consent. As a client of it, this instance:
@@ -43,8 +44,8 @@ export interface ClientRecord {
   token_endpoint: string;
   registered_at: string;
 }
-export const CLIENT_FILE = "state/notion-client.json";
-const LOCK_DIR = "state/notion-client.lock";
+export const CLIENT_FILE = instancePaths().notionClient;
+const LOCK_DIR = instancePaths().notionClientLock;
 
 const NOT_NOW = "Notion's sign-in could not be set up right now. Nothing was saved; try the same link again in a moment.";
 

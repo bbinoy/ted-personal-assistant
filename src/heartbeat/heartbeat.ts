@@ -1,11 +1,12 @@
 import { isPaused } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
 import { writeJson } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 
 // The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (every conversation's look, the dream). What a conversation does on a tick is the
 // heartbeat run (src/heartbeat/look.ts, started from wake.ts): there is no separate mail check; the run reads the mail itself when it is due.
 
-const OWNER_LIVENESS = "state/heartbeat.json"; // last tick, for `npm run doctor`
+const OWNER_LIVENESS = instancePaths().heartbeat; // last tick, for `npm run doctor`
 
 interface HeartbeatHooks {
   onTick: () => void; // tick-driven jobs (wake-ups, dream): independent of each other, never awaited

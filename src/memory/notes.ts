@@ -6,9 +6,10 @@ import { LIMITS } from "../core/sanitize.ts";
 import { preset } from "../core/preset.ts";
 import { localDay } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
+import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { writeFileAtomic } from "../core/state.ts";
 
-// Owner notes: the SDK's own auto-memory, in memory/notes/. The chat agent keeps them as small
+// Owner notes: the SDK's own auto-memory, in conversations/owner/notes/. The chat agent keeps them as small
 // markdown files (one fact each) plus an index, MEMORY.md, that the SDK loads into every chat
 // turn, reading a note when it needs it. This module is the other half: how the UNATTENDED runs
 // (the heartbeat run and its expert) read the same notes the same way, an index in the prompt and a
@@ -20,7 +21,7 @@ import { writeFileAtomic } from "../core/state.ts";
 // chat, so a mislabelled note fails closed. A note may carry `expires: YYYY-MM-DD` in its
 // front matter; after that day it is no longer shown.
 
-export const NOTES_DIR = join(settings.memoryDir, "notes");
+export const NOTES_DIR = convPaths(OWNER_CONV).notes;
 
 // The categories are the assistant preset's (assistants/<name>/preset.json "notes"): which kinds of note this assistant keeps.
 export const CATEGORIES: readonly string[] = preset().notes.categories;
