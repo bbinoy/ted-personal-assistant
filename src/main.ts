@@ -1,19 +1,16 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
-import { capNoticesTo } from "./core/capnotice.ts";
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
-import { approveIn, setApprovers } from "./approvals/permissions.ts";
+import { approveIn } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./conversation/guards.ts";
 import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./conversation/group.ts";
-import { keyNotices } from "./tenants/keynotice.ts";
-import { noticeOwner, ownerNotices } from "./heartbeat/notices.ts";
 import { groupDir, recordGroup } from "./conversation/groupstore.ts";
 import { logTail } from "./conversation/gate.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
@@ -36,7 +33,7 @@ import { Limiter } from "./core/limiter.ts";
 import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
 import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
-import { tenantHooks } from "./tenants/tenanttools.ts";
+import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
@@ -71,7 +68,13 @@ const out = createOutbound(messenger, (kind, ts, text, target) => record(target,
 // Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her unattended
 // runs (the heartbeat run: only an explicit yes / no or a reply to the question answers those, whatever else she types meanwhile is a chat message), a group in the group
 // (any member may answer), a tenant in her own chat. approvals.ts scopes every question to its conversation, so an answer from another one (the admin's included) never applies.
-setApprovers(createApprovers(out));
+// This is the one place the modules' hooks are set (wiring.ts; it stops the start if one is missing): those modules are used by runs that have no pipeline in reach.
+wire({
+  approvers: createApprovers(out),
+  notifyOwner: (text) => void out.replyPlain(text, "notice"), // the shared-key notice, the daily cap line, the budget and failing-looks notices
+  sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
+  dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
+});
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
@@ -114,12 +117,7 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 // Several people on one instance (TENANTS=on, src/tenants/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
 // Needs a messenger other people can write to: with Signal that is the assistant's own account (in Note to Self there is nobody else to talk to).
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
-keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one notice for the owner about the shared instance key (keynotice.ts), from every kind of run
-capNoticesTo((text) => noticeOwner(text, new Date(), { sameDay: true })); // the owner's one line a day when friends' shared daily limit is reached (capnotice.ts)
-ownerNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the budget is spent, looks keep failing (heartbeat/notices.ts)
 const tenantRunner = createTenantRunner({});
-tenantHooks.sendFirst = messenger.sendFirst?.bind(messenger); // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
-tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
 const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
