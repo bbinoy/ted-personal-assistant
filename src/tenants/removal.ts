@@ -3,10 +3,8 @@ import { join } from "node:path";
 import { removeScope, scopeRoot } from "@ted-assistant/speech/tts";
 import { audit } from "../core/audit.ts";
 import { isInside } from "../core/contain.ts";
-import { pendingFileOf } from "../approvals/pending.ts";
 import { dataPath } from "../core/state.ts";
 import { forgetTenantConnections } from "../intake/intakelinks.ts";
-import { forgetConversation } from "../modules/voice/voicenote.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 import { tenantKey } from "../core/ownerkey.ts";
 import { settings } from "../core/settings.ts";
@@ -30,6 +28,10 @@ export interface RemovalDeps {
   drop?: (id: string) => void;
   voiceRoot?: string;
   attachmentsDir?: string;
+  // Wired from above (conversation/tenantremoval.ts: tenants may not import the voice module or the approvals): the voice-note index of a conversation key (returns the attachment ids
+  // it held) and the file of its pending approvals (state/pending-<hash>.json).
+  forgetNotes?: (key: string) => string[];
+  pendingFile?: (key: string) => string;
   // The secret store: each is tried in order until one works (the app's token, then the admin's root). Returns how many items went; throws when refused.
   secrets?: readonly ((id: string) => Promise<number>)[];
 }
@@ -58,7 +60,7 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
   });
   let attachments: string[] = [];
   step("her voice-note index", () => {
-    attachments = forgetConversation(key);
+    attachments = d.forgetNotes?.(key) ?? [];
     return attachments.length;
   });
   const dir = d.attachmentsDir ?? settings.signalAttachmentsDir;
@@ -72,7 +74,8 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
     return n;
   });
   step("her pending approvals", () => {
-    const file = dataPath(pendingFileOf(key)); // state/pending-<hash of her key>.json: outside her folder
+    if (!d.pendingFile) return false;
+    const file = dataPath(d.pendingFile(key)); // state/pending-<hash of her key>.json: outside her folder
     const had = existsSync(file);
     rmSync(file, { force: true });
     return had;

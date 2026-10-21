@@ -10,7 +10,8 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "removal-test-"));
 
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { removeTenant, adminCommand } = await import("../src/tenants/removal.ts");
+const { adminCommand } = await import("../src/tenants/removal.ts");
+const { removeFriend: removeTenant } = await import("../src/conversation/tenantremoval.ts");
 const { saveVoice, scopeRoot } = await import("@ted-assistant/speech/tts");
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { recordDone, markNeedsReconnect, readDone, connectionState } = await import("../src/intake/intakelinks.ts");

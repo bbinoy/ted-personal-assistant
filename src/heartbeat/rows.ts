@@ -1,4 +1,5 @@
-import { appendLine, readText } from "../core/state.ts";
+import { rotateIfOver } from "../core/rotate.ts";
+import { appendLine, dataPath, readText } from "../core/state.ts";
 
 // The heartbeat run's own record: one row per look of any conversation in state/heartbeat.jsonl, counts and flags only. NEVER a message's words, a sender, a subject or a
 // friend's name or id: what was said is in the conversation's log, and `npm run heartbeat-report` needs only these numbers.
@@ -19,12 +20,19 @@ export interface HeartbeatRow {
   outcome: "posted" | "silent" | "failed" | "preempted"; // preempted: a message to the conversation overtook the look and it was called off (conversation.ts lease)
 }
 
-export const appendRow = (row: HeartbeatRow, file: string = HEARTBEAT_LOG): void => appendLine(file, JSON.stringify(row));
+// Size-bounded like logs/audit.jsonl: past MAX_BYTES the file becomes <file>.1 (and that .2); the third generation is dropped. The report reads all of them.
+export const MAX_BYTES = 2 * 1024 * 1024;
+export const GENERATIONS = 2;
+export function appendRow(row: HeartbeatRow, file: string = HEARTBEAT_LOG): void {
+  appendLine(file, JSON.stringify(row));
+  rotateIfOver(dataPath(file), MAX_BYTES, GENERATIONS);
+}
 
-// Every readable row, oldest first; a torn or foreign line is skipped.
+// Every readable row (the rotated generations too), oldest first; a torn or foreign line is skipped.
 export function readRows(file: string = HEARTBEAT_LOG): HeartbeatRow[] {
   const out: HeartbeatRow[] = [];
-  for (const line of (readText(file) ?? "").split("\n")) {
+  const text = [`${file}.${GENERATIONS}`, `${file}.1`, file].map((f) => readText(f) ?? "").join("\n");
+  for (const line of text.split("\n")) {
     try {
       const r = JSON.parse(line) as HeartbeatRow;
       if (typeof r.at === "string" && Number.isFinite(Date.parse(r.at))) out.push(r);

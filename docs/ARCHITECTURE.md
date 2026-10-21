@@ -444,6 +444,7 @@ People other than the owner: the tenant records and their capability set, how an
 
 ```
 src/tenants/tenants.ts      tenants: the registry of people, capabilities, her folder and limits
+src/tenants/removal.ts      removing a friend: all of her data, idempotent, reports what went (the voice and approval pieces are wired in conversation/tenantremoval.ts)
 src/tenants/capabilityset.ts what a person has: everything for the owner, everything but OWNER_ONLY for a friend, less what is not set up, switched off or turned off by her (derived, never stored)
 src/tenants/tenantroute.ts  who is this sender? The door for everybody who is not the owner
 src/tenants/registration.ts open registration: requests from strangers (held, bounded, expiring), declined senders, people the owner wrote to first
@@ -518,6 +519,7 @@ src/conversation/groupstore.ts         a group's own notes folder and history, i
 src/conversation/gate.ts               the participation gate for an untagged group message: prompt, strict parsing
 src/conversation/ledger.ts             the wake/action ledger in the log: look state, when a look is due, the clamped next look
 src/conversation/tenantrun.ts          a tenant's turn around the run: the gates that need no model, in code
+src/conversation/tenantremoval.ts      removeFriend: tenants/removal.ts with her voice-note index and pending approvals wired in
 src/conversation/dream.ts              the nightly dream, one dreamer for every conversation: prompts, the model run, the daily run
 src/conversation/messenger.ts          the app's one meeting point with its chat platform (MESSENGER): load it by name, its options, the instance in use
 src/conversation/outbound.ts           sending (one message, however long), echo guard, retry of a failed send
@@ -611,6 +613,7 @@ src/core/state.ts      atomic, synchronous access to state/, logs/ and memory/ (
 src/core/audit.ts      append-only audit log and its reader
 src/core/log.ts        redacting, rotating agent.log; owner-only permissions
 src/core/logtrim.ts    cuts launchd-stderr.log down in place at start (pure part tested)
+src/core/rotate.ts     size-based rotation: rename (rotateIfOver) and copy-truncate for a file a child holds open
 src/core/logsearch.ts  the `search_logs` tool's plain-text search over the logs folder
 src/core/logwindow.ts  dates for `agent.log` lines (they carry only a time), rebuilt from the file's time: the doctor's "errors in the last hour"
 src/core/redact.ts     keeps phone numbers and credentials out of logs
@@ -630,7 +633,7 @@ src/core/pause.ts      the pause switch and local-day helper
 src/core/limiter.ts    at most N jobs at once, the rest wait by priority (voice notes transcribed; the run gate); a waiting job can be called off, an urgent one never waits
 src/core/rungate.ts    THE gate of model runs: MAX_CONCURRENT_RUNS places; chat and small helper calls never queue, looks then dreams do
 src/core/budget.ts     daily spend guard
-src/core/capnotice.ts  spend-cap notices: each at most once a local day (state/cap-notices.json)
+src/core/capnotice.ts  spend-cap notices: each at most once a local day, and the time of the last interval-throttled notice (state/cap-notices.json)
 src/core/cooldown.ts   shared usage-limit cooldown for background model calls
 src/core/warmslot.ts   the slot that holds one warm model process (the owner's, the latest group's and the gate's), and the fallback to a cold start
 src/core/ownerkey.ts   the key of the owner's chat and sourceOfKey (policy source from a conversation key)

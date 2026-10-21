@@ -6,7 +6,7 @@ import { loadMessengerInUse } from "../src/conversation/messenger.ts";
 import { approve, decline, describePending, forget, invitePerson } from "../src/tenants/registration.ts";
 import { describeTenants } from "../src/tenants/tenanttools.ts";
 import { ensureOwner, setAdmin, setTimeZone } from "../src/tenants/tenants.ts";
-import { removeTenant } from "../src/tenants/removal.ts";
+import { removeFriend } from "../src/conversation/tenantremoval.ts";
 import { appBao, deleteTenantItems } from "../src/secrets/secrets.ts";
 import { Admin, layoutOf } from "../src/secrets/openbaoadmin.ts";
 import { macKeychain } from "../src/secrets/keychain.ts";
@@ -68,7 +68,7 @@ if (cmd === "list") {
   // exact command is printed. Safe to run again.
   const cfg = settings.openbao;
   const admin = new Admin({ layout: layoutOf(cfg.dir), addr: cfg.addr, mount: cfg.mount, role: cfg.role, tenant: "owner", prefix: cfg.keychainPrefix, keychain: macKeychain });
-  const r = await removeTenant(arg, { secrets: [(t) => deleteTenantItems(appBao(), t), (t) => admin.forgetTenant(t)] });
+  const r = await removeFriend(arg, { secrets: [(t) => deleteTenantItems(appBao(), t), (t) => admin.forgetTenant(t)] });
   if (!r) {
     say("Not a friend's id.");
     process.exit(1);
