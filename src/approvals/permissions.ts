@@ -1,6 +1,6 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { audit, wordless, type Source } from "../core/audit.ts";
-import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
+import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { objectLines } from "./describe.ts";
@@ -124,6 +124,7 @@ export interface JudgeSetup {
   untrusted?: boolean;
   taint?: Taint;
   conversation?: string;
+  inferredNoteRead?: () => boolean; // this run has read (read_note) a note a background look inferred (origin: inferred): such a note is untrusted text, so a wake-up is not judged
   // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
   // subagent's), and the type of a subagent by its id (for the audit log).
   expertBriefs?: () => readonly string[];
@@ -236,7 +237,13 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
-    if (settings.autoApprove !== "off" && provenance && !g?.payment && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
+    // Two floors in code on top of isJudgeable, for what third-party text may have steered: a send to someone the person's words and the thread do not account for, in a run that
+    // has read untrusted mail or pages; and a wake-up in a run that has read an inferred note. Either way the owner is asked.
+    const outside = view && isUntrusted() && MAIL_OUT.has(entryFor(tool)?.view ?? "") ? recipientsOutside(view, input, provenance) : [];
+    if (outside.length) log(tool, "judge-floor", source, { reason: "untrusted-recipient", recipients: outside.length });
+    const doubtful = provenance?.kind === "derived" && provenance.by === "gate" && !!setup.inferredNoteRead?.();
+    if (doubtful) log(tool, "judge-floor", source, { reason: "inferred-note-read" });
+    if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && !doubtful && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;
@@ -302,7 +309,9 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       behavior: "deny",
       message: d.feedback
         ? `${OWNER} did NOT approve this call, and its question is closed. They replied: ${JSON.stringify(d.feedback)}. Nothing was executed. Make a new proposal now, in this turn, with the arguments changed as that reply asks (call the tool again; a fresh question is asked), if you still want to act; do not repeat the original unchanged, and do not ask ${OWNER} in chat what they just told you.`
-        : `${OWNER} declined, or did not answer in time. Do not retry.`,
+        : d.expired
+          ? `${OWNER} did not answer in time. Nothing was done. Do not retry it now; mention it in your next message to ${OWNER} if it still matters.`
+          : `${OWNER} declined. Do not retry.`,
     };
   };
 }

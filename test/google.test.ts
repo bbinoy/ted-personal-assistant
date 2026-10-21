@@ -314,7 +314,7 @@ function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = 
 
 test("google: reads run free; a send, a draft and a label go to the judge and, unless it passes them, to HER chat; the floor refuses what no verdict may allow", async () => {
   const ctx = friend(["google", "mail", "calendar"]);
-  scopeOf(`tenant:${ctx.id}`).say("write to Carl that Thursday works");
+  scopeOf(`tenant:${ctx.id}`).say("write to Carl (carl@example.org) that Thursday works"); // (the address is hers: in a run that has read mail a send to an address nobody wrote always asks, autojudge.ts recipientsOutside)
   // reads
   let r = rig(ctx);
   assert.equal((await r.run("search_gmail_messages", { query: "in:inbox" })).behavior, "allow");

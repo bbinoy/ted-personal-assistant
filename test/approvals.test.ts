@@ -12,15 +12,35 @@ const ask = (background: boolean, ts = 500) => {
 };
 const never = { judge: async () => assert.fail("the judge must not be called"), recent: () => [] };
 
-test("background approval: the only open one takes an exact yes / no without a judge call", async () => {
-  const d = ask(true);
+test("background approval: a bare yes / no never answers it; a quoted reply does, without a judge call", async () => {
+  const d = ask(true, 500);
   await settle();
-  assert.deepEqual(await answer("Yes!", () => {}, undefined, never), { outcome: "approved" });
+  assert.deepEqual(await answer("ok", () => {}, undefined, never), { outcome: "none" }); // an "ok" typed for something else
+  assert.deepEqual(await answer("Yes!", () => {}, undefined, never), { outcome: "none" });
+  assert.deepEqual(await answer("no", () => {}, undefined, never), { outcome: "none" });
+  assert.deepEqual(await answer("yes", () => {}, { timestamp: 9999 }, never), { outcome: "none" }); // a quote of some other message
+  assert.deepEqual(await answer("Yes!", () => {}, { timestamp: 500 }, never), { outcome: "approved" });
   assert.deepEqual(await d, { approved: true });
-  const n = ask(true);
+  const n = ask(true, 501);
   await settle();
-  assert.deepEqual(await answer("no", () => {}, undefined, never), { outcome: "declined" });
+  assert.deepEqual(await answer("no", () => {}, { timestamp: 501 }, never), { outcome: "declined" });
   assert.deepEqual(await n, { approved: false });
+});
+
+test("background approval: even the judge cannot answer it from a message that quotes nothing of it", async () => {
+  const bg = ask(true, 520);
+  const chat = ask(false, 521);
+  await settle();
+  const offered: string[][] = [];
+  const judge = async (_t: string, views: readonly { id: string; question: string }[]) => (offered.push(views.map((v) => v.id)), { target: "A1", outcome: "approve" as const });
+  // one chat question is open besides the background one: a plain yes is for the chat one
+  assert.deepEqual(await answer("sure", () => {}, undefined, never), { outcome: "approved" });
+  assert.deepEqual(await chat, { approved: true });
+  // only the background one is left: a longer message is read by the judge, which picks it, and that is not an answer
+  assert.deepEqual(await answer("sure, sounds good, thanks", () => {}, undefined, { judge: judge as never, recent: () => [] }), { outcome: "none" });
+  assert.deepEqual(offered, [["A1"]]);
+  assert.equal(answerReaction("👍", 520), "approved");
+  assert.deepEqual(await bg, { approved: true });
 });
 
 test("background approval: a reaction on the approval message still answers it", async () => {
@@ -70,7 +90,26 @@ test("timeouts per kind; the message has no header or footer", async (t) => {
   assert.equal(bgDone, false);
   t.mock.timers.tick(1);
   assert.deepEqual(await bg, { approved: false, expired: true });
-  assert.equal(sent.length, 2); // nothing extra sent on expiry
+  assert.equal(sent.length, 3); // a chat question expires silently; a background one says so, once, with the code's label
+  assert.equal(sent[2], "⏳ Didn't hear back, so I left it: Create event 1402. Say 'do it' if you still want it.");
+});
+
+test("a late yes to a question that timed out is told so, and runs nothing", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const d = askTs(false, 1601);
+  for (let k = 0; k < 6; k++) await Promise.resolve(); // (mock timers: settle() would wait on a real timer)
+  t.mock.timers.tick(15 * 60_000);
+  assert.deepEqual(await d, { approved: false, expired: true });
+  const r = await answer("yes", () => {}, { timestamp: 1601 }, never);
+  assert.equal(r.outcome, "clarify");
+  assert.match(r.reply!, /timed out.*nothing was done.*ask me again/);
+  const open = askTs(false, 1602); // another question is open: the late yes still does not touch it
+  for (let k = 0; k < 6; k++) await Promise.resolve(); // (mock timers: settle() would wait on a real timer)
+  const r2 = await answer("yes", () => {}, { timestamp: 1601 }, { judge: async () => ({ target: "A1", outcome: "other" }), recent: () => [] });
+  assert.equal(r2.outcome, "clarify");
+  assert.match(r2.reply!, /timed out/);
+  assert.equal(answerReaction("👎", 1602), "declined");
+  assert.deepEqual(await open, { approved: false });
 });
 
 test("aborting a chat turn declines only its own approval", async () => {

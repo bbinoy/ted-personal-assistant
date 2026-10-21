@@ -19,6 +19,7 @@ export interface NotesScope {
   write: readonly string[]; // the categories it may write (none: no write_note)
   maxNotes: number;
   zone?: string; // the conversation's time zone: the day an `expires:` is compared with
+  onRead?: (note: { file: string; inferred?: boolean }) => void; // told which note the run read (its provenance), for the approval judge's note floor (permissions.ts)
 }
 
 export function createNotesServer(scope: NotesScope, source: Source) {
@@ -33,6 +34,7 @@ export function createNotesServer(scope: NotesScope, source: Source) {
         async ({ file }) => {
           const r = readNote(file, scope.dir, scope.categories, new Date(), scope.zone);
           audit("memory_read", r.ok ? "read" : "not-read", source);
+          if (r.ok) scope.onRead?.({ file: r.note.file, inferred: r.note.inferred });
           return r.ok ? reply(`${r.note.inferred ? "(Inferred: saved by one of your background looks, not confirmed by the owner.)\n" : ""}${fence("note", r.note.text)}`) : reply(r.error, true);
         },
       ),
