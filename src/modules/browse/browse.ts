@@ -205,7 +205,7 @@ export function sweepStaleRuns(now = Date.now(), root = join(settings.stateDir, 
   return removed;
 }
 
-type BrowseOptions = { resolver?: Resolver; now?: number; status?: BrowseStatus; vision?: VisionMode; probe?: Probe; proxy?: Pick<EgressProxy, "port" | "close"> | null; slots?: Slots; waitMs?: number; profile?: Profile | null; card?: CardAccess | null; frames?: FrameProbe };
+type BrowseOptions = { resolver?: Resolver; now?: number; status?: BrowseStatus; vision?: VisionMode; probe?: Probe; proxy?: Pick<EgressProxy, "port" | "close"> | null; startProxy?: typeof startEgressProxy; slots?: Slots; waitMs?: number; profile?: Profile | null; card?: CardAccess | null; frames?: FrameProbe };
 
 export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptions = {}): Promise<string> {
   const task = clean1(rawTask, 2000);
@@ -231,7 +231,13 @@ export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptio
       return again;
     }
     // This run's own egress proxy (browseproxy.ts): every connection of its browser is resolved and checked there; closed with the run.
-    proxy = o.proxy === undefined ? await startEgressProxy({ resolve: o.resolver, onRefuse: (host, why) => log("browse_step", "egress-refused", "browse", { host: host.slice(0, 100), why }) }) : (o.proxy ?? undefined);
+    try {
+      proxy = o.proxy === undefined ? await (o.startProxy ?? startEgressProxy)({ resolve: o.resolver, onRefuse: (host, why) => log("browse_step", "egress-refused", "browse", { host: host.slice(0, 100), why }) }) : (o.proxy ?? undefined);
+    } catch (e) { // no filter, no browser
+      const msg = "Browsing is not available: its network filter could not start.";
+      log("browse_run", "refused", "browse", { mode: ctx.mode, reason: `egress proxy: ${clean1((e as Error).message, 80)}` });
+      return msg;
+    }
     return await runBrowse(ctx, task, log, o, proxy?.port);
   } finally {
     await proxy?.close();

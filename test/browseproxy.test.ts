@@ -153,15 +153,15 @@ test("the proxy closes with the run: its port stops answering", async () => {
   await assert.rejects(new Promise((ok, fail) => connect(p.port, "127.0.0.1").on("connect", ok).on("error", fail)));
 });
 
-test("the browser is started through the proxy with loopback NOT bypassed; without a proxy nothing is added", () => {
+test("the browser is started through the proxy with loopback NOT bypassed and no non-proxied UDP", () => {
   const st = { ok: true as const, cli: "/x/cli.js", exe: "/x/chrome" };
   const dir = mkdtempSync(join(tmpdir(), "bproxy-"));
   const withProxy = browserServer(st, dir, "ua", { mode: "off", proxyPort: 4321, cdpPort: 9222 });
   assert.equal(withProxy.type, "stdio");
   const cfg = JSON.parse(readFileSync(join(dir, "browser-config.json"), "utf8"));
-  assert.deepEqual(cfg.browser.launchOptions.args, ["--proxy-server=http://127.0.0.1:4321", "--proxy-bypass-list=<-loopback>", "--remote-debugging-port=9222"]);
-  browserServer(st, dir, "ua", { mode: "off" });
-  assert.equal(JSON.parse(readFileSync(join(dir, "browser-config.json"), "utf8")).browser.launchOptions, undefined);
+  assert.deepEqual(cfg.browser.launchOptions.args, ["--proxy-server=http://127.0.0.1:4321", "--proxy-bypass-list=<-loopback>", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic", "--remote-debugging-port=9222"]);
+  browserServer(st, dir, "ua", { mode: "off", unproxiedForTest: true });
+  assert.equal(JSON.parse(readFileSync(join(dir, "browser-config.json"), "utf8")).browser.launchOptions.args.includes("--proxy-server=http://127.0.0.1:4321"), false);
 });
 
 // ---- defense in depth in the guard ----
@@ -190,4 +190,36 @@ test("guard: a page that loaded on a name resolving inside is withheld on the ne
   assert.equal(g.url, "");
   const nav = await g.decide(`${B}navigate`, { url: "https://public.test/other" });
   assert.notEqual(nav.kind, "deny");
+});
+
+test("fail closed: the browser's launch is refused without a proxy port", () => {
+  const st = { ok: true as const, cli: "/x/cli.js", exe: "/x/chrome" };
+  const dir = mkdtempSync(join(tmpdir(), "bproxy-"));
+  assert.throws(() => browserServer(st, dir, "ua", { mode: "off" }), /egress proxy is missing/);
+  assert.throws(() => browserServer(st, dir, "ua"), /egress proxy is missing/);
+});
+
+test("proxy: a keep-alive client that sends two plain http requests one after the other gets both answered (the second on a fresh connection, the first was closed)", async () => {
+  const r = await rig();
+  try {
+    const one = (c: Socket, path: string) =>
+      new Promise<string>((ok) => {
+        let buf = "";
+        const on = (d: Buffer) => ((buf += d), buf.includes(`plain:public.test${path}`) && (c.off("data", on), ok(buf)));
+        c.on("data", on);
+        c.on("close", () => ok(buf));
+        c.write(`GET http://public.test${path} HTTP/1.1\r\nHost: public.test\r\nProxy-Connection: keep-alive\r\n\r\n`);
+      });
+    let c = connect(r.proxy.port, "127.0.0.1");
+    assert.match(await one(c, "/1"), /plain:public\.test\/1/);
+    await new Promise((ok) => setTimeout(ok, 50));
+    if (c.destroyed || !c.writable) c = connect(r.proxy.port, "127.0.0.1"); // closed by the proxy: the browser reconnects
+    assert.match(await one(c, "/2"), /plain:public\.test\/2/);
+    c.destroy();
+    // headers over the cap are refused, not forwarded
+    const big = await r.via(`GET http://public.test/ HTTP/1.1\r\nHost: public.test\r\nX-Big: ${"a".repeat(8000)}\r\nX-Big2: ${"b".repeat(8000)}\r\n\r\n`);
+    assert.match(big.head, /431|400/);
+  } finally {
+    await r.close();
+  }
 });

@@ -8,14 +8,6 @@ import { REBINDING_HOST } from "../../policy/webaddress.ts";
 
 // ---- addresses ----
 
-// Private, loopback, link-local, CGNAT and reserved IPv4 ranges (kept for the name-level checks; `isPublicAddress` below is the one the network layer uses).
-export function isPrivateIPv4(host: string): boolean {
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!m) return false;
-  const [a, b] = [Number(m[1]), Number(m[2])];
-  return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19));
-}
-
 // The 16 bytes of an IPv6 address (zone id cut, a dotted IPv4 tail allowed), or undefined when it is not one.
 function ipv6Bytes(raw: string): number[] | undefined {
   let s = raw.toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");

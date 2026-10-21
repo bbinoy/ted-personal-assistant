@@ -540,14 +540,14 @@ test("browser server: a plain desktop Chrome user agent of the same version, an 
   assert.equal(desktopUserAgent("x", () => "no version here"), undefined);
   assert.equal(desktopUserAgent("x", () => { throw new Error("nope"); }), undefined);
   const dir = mkdtempSync(join(tmpdir(), "bs-"));
-  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1") as { args: string[] };
+  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "off", unproxiedForTest: true }) as { args: string[] };
   assert.equal(cfg.args[cfg.args.indexOf("--user-agent") + 1], "UA/1");
   for (const f of ["--headless", "--isolated", "--block-service-workers", "--blocked-origins", "--config"]) assert.ok(cfg.args.includes(f), f);
   assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "omit");
   const conf = JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8"));
   assert.equal(conf.browser.contextOptions.locale, settings.browseLocale);
   assert.ok(conf.browser.contextOptions.timezoneId);
-  assert.ok(!(browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, undefined) as { args: string[] }).args.includes("--user-agent"));
+  assert.ok(!(browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, undefined, { mode: "off", unproxiedForTest: true }) as { args: string[] }).args.includes("--user-agent"));
 });
 
 // ---- the search form (the case that asked needlessly): judged, not hard-coded ----

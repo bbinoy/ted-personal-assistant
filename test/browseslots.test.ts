@@ -86,3 +86,12 @@ test("browse: a failing run gives its slot back, and its proxy is closed with it
   assert.deepEqual(closed, [1]);
   assert.match(await browse({ mode: "group", groupId: "g", key: "g", run: async () => ({ text: "", structured: { status: "done", answer: "fine", sources: [] } }) }, "look up opening hours", { status: READY, slots, proxy: proxy() }), /fine/);
 });
+
+test("browse: a proxy that cannot start refuses the run (no filter, no browser) and gives the slot back", async () => {
+  const slots = new Slots(() => 1);
+  let ran = false;
+  const out = await browse({ mode: "group", groupId: "g", key: "g", run: async () => ((ran = true), { text: "" }) }, "look up opening hours", { status: READY, slots, startProxy: async () => Promise.reject(new Error("EADDRINUSE")) });
+  assert.match(out, /network filter could not start/);
+  assert.equal(ran, false);
+  assert.equal(slots.size, 0);
+});

@@ -22,6 +22,7 @@ export interface ProxyOptions {
 }
 
 const MAX_REFUSED = 50;
+const MAX_HEADER_BYTES = 8_192; // the request headers forwarded upstream
 const HOP = new Set(["connection", "proxy-connection", "proxy-authorization", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade"]);
 
 // Pure. host and port of a CONNECT target ("example.com:443", "[2001:db8::1]:443").
@@ -112,14 +113,17 @@ export async function startEgressProxy(o: ProxyOptions = {}): Promise<EgressProx
     if ("status" in r) return void res.writeHead(r.status).end();
     // Written as bytes on the checked connection (no http client: it would follow the environment's proxy settings). One request per connection, then it closes.
     const headers = Object.entries(req.headers).filter(([k]) => !HOP.has(k) && !k.startsWith("proxy-")).map(([k, v]) => `${k}: ${[v].flat().join(", ")}\r\n`).join("");
+    if (headers.length > MAX_HEADER_BYTES) return (r.sock.destroy(), void res.writeHead(431).end());
     const up = r.sock;
     sockets.add(up);
     up.on("close", () => sockets.delete(up));
-    up.on("error", () => req.socket.destroy());
-    req.socket.on("close", () => up.destroy());
+    const client = req.socket;
+    // One request per connection: the upstream says "connection: close", so when it ends the pipe ends the client connection too (the browser reconnects for its next request).
+    up.on("error", () => client.destroy());
+    client.on("close", () => up.destroy());
     up.write(`${req.method} ${u.pathname}${u.search} HTTP/1.1\r\n${headers}connection: close\r\n\r\n`);
     req.pipe(up, { end: false });
-    up.pipe(req.socket);
+    up.pipe(client);
   });
 
   await new Promise<void>((ok, fail) => (server.once("error", fail), server.listen(0, "127.0.0.1", ok)));
