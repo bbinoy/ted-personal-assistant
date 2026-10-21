@@ -8,6 +8,7 @@ import { clearDeclined, declinedAgo, declinedLine, declinedMinutes, noteDeclined
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
 import { mailSlot, registered } from "../modules/index.ts";
+import { archivedBy } from "../modules/archivecap.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
@@ -124,6 +125,7 @@ export interface JudgeSetup {
   untrusted?: boolean;
   taint?: Taint;
   conversation?: string;
+  seenMail?: { forget: (ids: readonly string[]) => void }; // the look's seen-mail tracker: mail an archive the run cap refused named is not worked through, so it is not marked seen
   inferredNoteRead?: () => boolean; // this run has read (read_note) a note a background look inferred (origin: inferred): such a note is untrusted text, so a wake-up is not judged
   // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
   // subagent's), and the type of a subagent by its id (for the audit log).
@@ -174,6 +176,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     // A limit about the run, not the call (the archive cap): a module's gate may refuse a call the manifest would let through.
     if (base !== "deny") {
       const limit = runGates.map((gate) => gate(tool, input)).find((m) => m !== undefined);
+      if (limit !== undefined) setup.seenMail?.forget(archivedBy(tool, input) ?? []); // (the cap refused these: the next look takes them)
       if (limit !== undefined) {
         log(tool, "deny-run-cap", source, idsOf(input));
         return { behavior: "deny", message: limit };

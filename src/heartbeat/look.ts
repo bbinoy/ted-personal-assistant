@@ -13,6 +13,7 @@ import { mailSlot } from "../modules/index.ts";
 import { preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
 import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
+import { isReadTool } from "../policy/policy.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
@@ -127,6 +128,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const looker = lookerOf(conv);
     const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour, looker.zone);
     let toolCalls = 0;
+    let acted = 0; // tool calls that are not reads (listing the inbox or asking seen_mail is looking, not acting)
     let archived = 0;
     let delegations = 0;
     const seenMail = createSeenMail(seenFileOf(conv)); // the ids the run is told are new count as seen only if this look ends well
@@ -153,6 +155,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             onDelegate: () => void delegations++,
             onToolSuccess: (tool) => {
               toolCalls++;
+              if (!isReadTool(tool) && tool !== "mcp__seenmail__seen_mail") acted++;
               if (entryFor(tool)?.action === "archive") archived++;
             },
           }),
@@ -168,7 +171,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const calledOff = overtaken.signal.aborted || failure instanceof RunStopped; // a message overtook it, or the owner said /stop: not a failure
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : calledOff ? "preempted" : "failed";
-    const stale = !!lease?.news() && toolCalls === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
+    const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
     countPosts(conv, sent, now); // (what the run sent while it worked counts toward the day's cap)
     if (answer?.message && !stale) {
       const message = answer.message;
@@ -183,7 +186,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (outcome === "preempted") h.preempted++;
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     if (outcome !== "preempted") observeLook(conv, outcome, failure, now);
-    if (outcome === "failed" || outcome === "preempted") seenMail.discard();
+    if (outcome === "failed" || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
