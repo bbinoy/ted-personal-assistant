@@ -1,0 +1,90 @@
+import { test, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// The two aggregate ceilings (budget.ts): one group's own day on the owner's login, and all tenants' day together on the instance key. Each has its own refusal reason.
+process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "spendcaps-test-"));
+
+const { settings } = await import("../src/core/settings.ts");
+const T = await import("../src/tenants/tenants.ts");
+const { charge, isRefusal, LOGIN, loginFor, mayRun } = await import("../src/tenants/payer.ts");
+const { groupSpentToday, spentToday, instanceKeyOverBudget } = await import("../src/core/budget.ts");
+const { resetCooldown } = await import("../src/core/cooldown.ts");
+const { keyNotices } = await import("../src/tenants/keynotice.ts");
+
+const on = settings as unknown as Record<string, unknown>;
+const KEY = "instance-key-for-the-spend-tests";
+let n = 0;
+function friend(name: string) {
+  const rec = T.addTenant({ aci: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, name })!;
+  T.provision(rec);
+  T.setStatus(rec.id, "active");
+  return T.tenantById(rec.id)!;
+}
+const inst = (rec: { id: string }, costFile: string) => ({ kind: "instance", id: rec.id, apiKey: KEY, costFile }) as const;
+
+beforeEach(() => {
+  on.tenants = true;
+  resetCooldown();
+  keyNotices.reset();
+});
+
+test("defaults: a group's day is a quarter of the owner's, the key's day is its own setting", () => {
+  assert.equal(settings.groupDailyBudgetUsd, settings.dailyBudgetUsd * 0.25);
+  assert.equal(typeof settings.instanceKeyDailyUsd, "number");
+});
+
+test("a noisy group is refused at its own ceiling, chat or not, while the owner and other groups still run", () => {
+  on.groupDailyBudgetUsd = 5;
+  const noisy = { kind: "group", groupId: "group-noisy" } as const;
+  const quiet = { kind: "group", groupId: "group-quiet" } as const;
+  assert.deepEqual(mayRun(noisy, "chat", { chat: true }), loginFor("group-noisy"), "under its ceiling: the login, remembered as that group's");
+  const before = spentToday();
+  charge(loginFor("group-noisy"), 4);
+  assert.ok(!isRefusal(mayRun(noisy, "chat", { chat: true })));
+  charge(loginFor("group-noisy"), 1.5);
+  assert.equal(groupSpentToday("group-noisy"), 5.5);
+  assert.equal(spentToday() - before, 5.5, "and it is also the owner's day, as before");
+  assert.deepEqual(mayRun(noisy, "chat", { chat: true }), { refused: "group-budget", limit: 5 });
+  assert.deepEqual(mayRun(noisy, "heartbeat"), { refused: "group-budget", limit: 5 });
+  assert.ok(!isRefusal(mayRun(quiet, "chat", { chat: true })), "another group is not held back");
+  assert.deepEqual(mayRun({ kind: "owner" }, "chat", { chat: true }), LOGIN, "nor is the owner");
+  assert.ok(!isRefusal(mayRun({ kind: "owner" }, "brief")), "nor her brief (the group spent 5.5 of 20)");
+});
+
+test("charging with no group leaves every group ledger alone", () => {
+  const g = groupSpentToday("group-other");
+  charge(LOGIN, 1);
+  assert.equal(groupSpentToday("group-other"), g);
+});
+
+test("all tenants together stop at INSTANCE_KEY_DAILY_USD even when each is under her own ceiling, with a reason of its own", () => {
+  on.tenantApiKey = KEY;
+  on.instanceKeyDailyUsd = 3;
+  const ann = friend("Ann");
+  const bo = friend("Bo");
+  const ctxA = T.tenantContext(ann);
+  const ctxB = T.tenantContext(bo);
+  assert.ok(!isRefusal(mayRun({ kind: "tenant", tenantId: ann.id }, "chat", { chat: true })));
+  charge(inst(ann, ctxA.costFile), 1.2);
+  charge(inst(bo, ctxB.costFile), 1.9);
+  assert.equal(instanceKeyOverBudget(), true);
+  const r = mayRun({ kind: "tenant", tenantId: ann.id }, "chat", { chat: true });
+  assert.deepEqual(r, { refused: "instance-budget", limit: 3 });
+  assert.deepEqual(mayRun({ kind: "tenant", tenantId: bo.id }, "chat", { chat: true }), { refused: "instance-budget", limit: 3 });
+  assert.ok(ctxA.dailyBudgetUsd > 1.2, "she is far from her own ceiling: it is the aggregate that refused");
+  assert.ok(!isRefusal(mayRun({ kind: "owner" }, "chat", { chat: true })), "the owner's login is another account");
+  assert.ok(!isRefusal(mayRun({ kind: "group", groupId: "g" }, "chat", { chat: true })));
+  assert.deepEqual(mayRun({ kind: "tenant", tenantId: ann.id }, "chat", { chat: true, keySpent: () => false }), { kind: "instance", id: ann.id, apiKey: KEY, costFile: ctxA.costFile }, "the seam");
+});
+
+test("her own ceiling is still checked first and keeps its own reason", () => {
+  on.tenantApiKey = KEY;
+  on.instanceKeyDailyUsd = 1000;
+  const cy = friend("Cy");
+  const ctx = T.tenantContext(cy);
+  charge(inst(cy, ctx.costFile), ctx.dailyBudgetUsd + 0.5);
+  assert.deepEqual(mayRun({ kind: "tenant", tenantId: cy.id }, "chat", { chat: true }), { refused: "budget", limit: ctx.dailyBudgetUsd });
+});

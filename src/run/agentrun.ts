@@ -2,7 +2,7 @@ import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "
 import { audit, type Source } from "../core/audit.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
-import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "../tenants/payer.ts";
+import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
 import { browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "../modules/browse/browseguard.ts";
 import { hiddenBrowserTools } from "../modules/browse/browserules.ts";
@@ -80,7 +80,7 @@ export interface RunOptions {
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
-const payerOf = (opts: Pick<RunOptions, "tenant">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, costFile: opts.tenant.costFile } : LOGIN);
+const payerOf = (opts: Pick<RunOptions, "tenant" | "source" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, costFile: opts.tenant.costFile } : loginFor(opts.source === "group" ? (opts.groupId ?? opts.memory?.groupId) : undefined));
 
 // Context size of one model call: everything it was sent.
 const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) =>

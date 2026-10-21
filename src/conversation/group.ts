@@ -1,5 +1,5 @@
 import { clockLine } from "../core/brief.ts";
-import { budgetSpent } from "../core/budget.ts";
+import { budgetSpent, groupOverBudget } from "../core/budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { prepare, runConversation } from "../run/agent.ts";
@@ -208,7 +208,7 @@ export function createGroupBrain(brain: Brain) {
     // behind an earlier turn.
     const gone = () => !!st.gone?.has(m.timestamp);
     const answer = async (batch: Batch<GroupMessage>, showTyping: () => void): Promise<void> => {
-      if (isPaused(now) || budgetSpent()) return;
+      if (isPaused(now) || budgetSpent() || groupOverBudget(m.groupId)) return; // (the owner's day, or this group's own: a noisy group must not spend the owner's)
       const asked = pending();
       if (asked) showTyping();
       let delay = 0;
