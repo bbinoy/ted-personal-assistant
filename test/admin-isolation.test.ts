@@ -65,7 +65,7 @@ test("the admin's file tools: Read, Write and Edit reach none of a tenant's file
   // her own folder is as it always was
   assert.equal(classify("Write", { file_path: join(NOTES_DIR, "context-new.md") }, "chat"), "allow");
   assert.equal(classify("Read", { file_path: ownerNotes }, "chat"), "allow");
-  assert.equal(classify("Read", { file_path: join(settings.stateDir, "tenants.json") }, "chat"), "allow", "the registry holds ids and status, no words");
+  assert.equal(classify("Read", { file_path: join(settings.stateDir, "tenants.json") }, "chat"), "deny", "the registry holds every friend's name and account id");
 });
 
 test("no run of the instance has Glob, Grep or Bash (they could list and read any folder): the built-in file tools are Read, Write and Edit, each confined by path", () => {
