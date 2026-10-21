@@ -88,6 +88,9 @@ const REACT_NO = new Set(["👎", "❌"]);
 
 // A reaction counts only if it is on an open "Approve?" message itself; it answers that one. A card payment is the exception: a 👍 never
 // approves it ("needs_text": the question stays open and the owner is told to type yes); a 👎 declines it like any other.
+// Is a question of this conversation open (asked, not answered)? A heartbeat look parked on one is not called off by a message: that message may be its answer (conversation.ts lease).
+export const hasOpen = (scope: string): boolean => [...open.values()].some((o) => o.scope === scope && !o.done);
+
 export function answerReaction(emoji: string, targetTimestamp: number, scope: string, by?: string): "approved" | "declined" | "ignored" | "needs_text" {
   const current = open.get(slot(scope, targetTimestamp));
   if (!current || current.done || current.scope !== scope) return "ignored";

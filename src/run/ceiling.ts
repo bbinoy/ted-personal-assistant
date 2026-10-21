@@ -28,6 +28,12 @@ export function stopRuns(scope: string): number {
   return stops.length;
 }
 
+// Be told when "/stop" names this scope (a run that is not under its ceiling yet, e.g. still waiting for a place in the run gate). Returns how to stop listening.
+export function onStop(scope: string, stop: (e: Error) => void): () => void {
+  (live.get(scope) ?? live.set(scope, new Set()).get(scope)!).add(stop);
+  return () => void live.get(scope)?.delete(stop);
+}
+
 export interface Ceiling {
   readonly controller: AbortController;
   readonly signal: AbortSignal;

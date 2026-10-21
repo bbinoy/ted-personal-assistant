@@ -120,9 +120,10 @@ test("group warm: built from that group's own options only, exactly like a norma
   }
 });
 
-test("group warm: one process for the latest group; another group replaces it; each group only ever gets its own", async () => {
-  const was = settings.warm;
+test("group warm: GROUP_WARM_SLOTS (1 here) processes for the latest groups; another group replaces the oldest; each group only ever gets its own", async () => {
+  const was = [settings.warm, settings.groupWarmSlots] as const;
   (settings as { warm: boolean }).warm = true;
+  (settings as { groupWarmSlots: number }).groupWarmSlots = 1;
   try {
     const rig = startRig();
     const a = group(gid());
@@ -144,7 +145,8 @@ test("group warm: one process for the latest group; another group replaces it; e
     assert.deepEqual(rig.used, ["warm2"]);
     assert.deepEqual(log, ["cold"]);
   } finally {
-    (settings as { warm: boolean }).warm = was;
+    (settings as { warm: boolean }).warm = was[0];
+    (settings as { groupWarmSlots: number }).groupWarmSlots = was[1];
   }
 });
 

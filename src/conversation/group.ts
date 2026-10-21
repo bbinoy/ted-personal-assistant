@@ -142,7 +142,13 @@ const stickyMs = () => settings.groupStickyMinutes * 60_000;
 export function createGroupBrain(brain: Brain) {
   const { pipeline } = brain;
   type Asked = { line: string; said: string; quote: Quote; incoming?: Quote; voice: boolean; picture?: Picture; document?: Document; at: number; edit?: { before?: string } };
-  const state = new Map<string, { addressed?: Asked; lastSpoke?: number; running?: boolean; runStart?: number; runEnd?: number; gone?: Set<number> }>(); // gone: timestamps of messages their author deleted
+  const state = new Map<string, { addressed?: Asked; lastSpoke?: number; running?: boolean; runStart?: number; runEnd?: number; gone?: Set<number>; at?: number }>(); // gone: timestamps of messages their author deleted; at: when a message last came (for the pruning below)
+  // Every group that ever sends a message gets an entry; one that has been quiet for a day (and runs nothing) is forgotten: everything in it is only about the last minutes.
+  const STATE_IDLE_MS = 24 * 3_600_000;
+  function pruneState(nowMs: number): void {
+    if (state.size < 32) return;
+    for (const [key, st] of state) if (!st.running && nowMs - (st.at ?? 0) > STATE_IDLE_MS) state.delete(key);
+  }
   const warm = brain.warm ?? (brain.run ? undefined : (conv: Conversation, afterTurn: boolean) => {
     prepare(conv, { style: styleLines(new Date()) }, { keep: !afterTurn });
     prepareGate(); // the gate's spare belongs to no group, so it is not tied to this one
@@ -150,6 +156,7 @@ export function createGroupBrain(brain: Brain) {
 
   return async function onMessage(m: GroupMessage, now = new Date()): Promise<void> {
     const conv = group(m.groupId);
+    pruneState(Date.now());
     // Cleaned again here (idempotent) so a caller that skipped the door in conversation.ts still records clean text.
     const line = m.reaction ? `${speaker(m)} reacted ${oneLine("reaction", m.reaction.emoji, 16)} to: ${defuseSpeakers(clean("reaction", m.reaction.on, { max: LIMITS.preview }))}` : `${speaker(m)}: ${defuseSpeakers(clean("group message", m.text, { max: LIMITS.logLine }))}`;
     // A message its author took back: a marker in the log, a pending address of it forgotten, nothing said, nothing run.
@@ -179,9 +186,11 @@ export function createGroupBrain(brain: Brain) {
     if (!direct && settings.groupParticipation === "tagged") return;
     const st = state.get(m.groupId) ?? {};
     state.set(m.groupId, st);
-    // A group worth answering just got a message: make sure its warm process is the kept one. Not while its own turn runs
+    st.at = Date.now();
+    // A group that is being spoken to: make sure its warm process is the kept one. Only for a message that addresses us (a positive gate verdict does the same, below): warming on
+    // every message of every busy group made two active groups evict each other's process for nothing. Not while its own turn runs
     // (the session is about to change; the end of that turn prepares it), nor when nothing will be answered.
-    if (!st.running && !isPaused(now) && !budgetSpent()) warm?.(conv, false);
+    if (direct && !st.running && !isPaused(now) && !budgetSpent()) warm?.(conv, false);
     // The message that addressed us goes to the model whole (a long message too); the 600-character line is for the log and the gate's view.
     const asked = m.reaction ? line : `${speaker(m)}: ${defuseSpeakers(clean("group message", m.text, { max: LIMITS.message }))}`;
     const said = m.reaction ? `${speaker(m)} reacted ${oneLine("reaction", m.reaction.emoji, 16)}` : asked; // (what the member said, for the approval judge: a reaction is not the text of the message it is on)
@@ -191,9 +200,9 @@ export function createGroupBrain(brain: Brain) {
       if (st.addressed && now.getTime() - st.addressed.at > stickyMs()) st.addressed = undefined;
       return st.addressed;
     };
-    // The gate is asked the moment an untagged message arrives, in parallel with the settling pause, so the two overlap
-    // instead of adding up. The promise never rejects. Its result is used only if this message still ends the burst; a newer
-    // message is judged again with its own tail and this verdict is dropped.
+    // The gate is asked ONCE per burst, when it has settled (answer below): a message that a newer one takes over never starts a call of its own, so a burst of ten costs one.
+    // The promise never rejects. Its result is used only if this message still ends the burst; a message that arrives while the gate is in flight
+    // is judged again with its own tail and this verdict is dropped.
     const judge = () => {
       const looked = new Date();
       const gate = brain.gate ?? askGate;
@@ -202,8 +211,6 @@ export function createGroupBrain(brain: Brain) {
         (e: unknown) => ({ ok: false as const, e }),
       );
     };
-    // Nothing to judge when the burst will not be answered anyway (paused, over budget) or a queued run already takes this message in.
-    const early = !pending() && !isPaused(now) && !budgetSpent() && !pipeline.burstQueued(conv) ? judge() : undefined;
     // What happens once the burst has settled. `showTyping` is called the moment it is decided to answer: right away when
     // addressed, when the gate says act otherwise (never when it says no), so "typing…" covers the gate's delay and any wait
     // behind an earlier turn.
@@ -222,8 +229,9 @@ export function createGroupBrain(brain: Brain) {
       let hint: string | undefined;
       if (!asked) {
         const waitingSince = Date.now();
-        let r = await ((!gone() && early) || judge()); // judge(): the address lapsed since the message arrived, so there is no early verdict
-        if (gone()) r = await judge(); // deleted meanwhile: the verdict was about a message that no longer counts
+        if (gone()) return; // deleted while it settled: it no longer counts, and the gate is not paid for it
+        let r = await judge();
+        if (gone()) r = await judge(); // deleted while the gate looked: the verdict was about a message that no longer counts
         batch.timing.set("gateWait", Date.now() - waitingSince);
         if (batch.stale()) return; // someone wrote meanwhile: that message is judged on its own
         if (!r.ok) {
@@ -240,6 +248,7 @@ export function createGroupBrain(brain: Brain) {
         if (v.reaction && m.author) pipeline.react(conv, v.reaction, { author: m.author, timestamp: m.timestamp }); // quick and cheap: no run
         if (!v.act) return;
         showTyping();
+        if (!st.running) warm?.(conv, false); // a group the gate chose to answer is worth a warm process (see the top of this function)
         delay = v.delaySeconds;
         hint = v.instructions;
         if (delay) {

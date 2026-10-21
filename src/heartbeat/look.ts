@@ -18,6 +18,8 @@ import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
+import { RunStopped } from "../run/ceiling.ts";
+import { hasOpen } from "../approvals/approvals.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 import { countPosts, observeLook, postNotice, submitPost } from "./notices.ts";
 
@@ -35,10 +37,12 @@ export interface RunExtra {
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
+  signal?: AbortSignal; // the look is called off (a message overtook it): the run stops, or never starts if it still waits for a place (rungate.ts)
 }
 
 export interface HeartbeatDeps {
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy"> & Partial<Pick<Pipeline, "lease">>;
+  awaitingApproval?: (conv: Conversation) => boolean; // is a question of the look open in the chat (default approvals.ts hasOpen): a message then does not call the look off
   run: (conv: Conversation, payer: Payer, prompt: string, extra: RunExtra) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // agent.ts runHeartbeat
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
@@ -86,8 +90,23 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
 export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string): string =>
   [clockLine(now, zone), instruction, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].join("\n\n");
 
+// How a conversation's recent looks ended, for the starvation guard below.
+export interface LookHistory {
+  preempted: number; // consecutive looks that ended preempted, up to now
+  completedAt?: number; // ms: when the last look that was not preempted began
+}
+
+// May a message call the running look off? Not if that would starve it: a conversation that chats steadily would otherwise preempt every look, and triage (the mail, the brief) would
+// never finish while each aborted look still costs money. So a look is preemptible only while (a) fewer than 2 looks in a row ended preempted and (b) the last look that was not
+// preempted is younger than 2x the look interval (30 minutes at least). Otherwise it runs to completion (the message is still news: a read-only look's post is dropped as stale).
+export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: number): boolean {
+  if (h.preempted >= 2) return false;
+  return h.completedAt === undefined || nowMs - h.completedAt < Math.max(2 * intervalMinutes, 30) * 60_000;
+}
+
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
+  const history = new Map<string, LookHistory>(); // per conversation, in memory (a restart starts fresh)
   const file = deps.rowsFile ?? HEARTBEAT_LOG;
 
   // One look of one conversation. Returns what happened (for the log and tests).
@@ -95,8 +114,9 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged })) return "not-due";
     if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
-    // One run at a time per conversation: while a turn of it is settling, queued or running (the owner has just written and is being answered), the look waits. Nothing is
-    // recorded and nothing is dropped: it is still due, and the next tick (a few minutes) looks again.
+    // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
+    // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
+    // a message to the conversation OVERTAKES it: the look is called off unless it waits on an approval, and a closing message-only post is dropped when news came meanwhile.
     if (pipeline.busy(conv)) return "busy";
     // A look is a model run on someone's account (a friend's: the instance key, billed to her): paused, in a cooldown or past the day's budget means no run, nothing recorded, and the next tick looks again.
     const access = deps.may(conv, "heartbeat look");
@@ -114,6 +134,14 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
+    const overtaken = new AbortController();
+    const h = history.get(conv.key) ?? { preempted: 0 };
+    history.set(conv.key, h);
+    const callOff = () => {
+      if (preemptible(h, now.getTime(), settings.heartbeatDayMinutes)) overtaken.abort();
+      else console.log(`heartbeat: a message came while the ${conv.kind} look ran; it is not called off (${h.preempted} preempted in a row, or the last full look is old)`);
+    };
+    const lease = pipeline.lease?.(conv, callOff, () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
     try {
       reply = await pipeline.sendWhile(
         conv,
@@ -121,6 +149,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
+            signal: overtaken.signal,
             onDelegate: () => void delegations++,
             onToolSuccess: (tool) => {
               toolCalls++;
@@ -131,13 +160,17 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       );
     } catch (e) {
       failure = e;
-      console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
+      if (!overtaken.signal.aborted && !(e instanceof RunStopped)) console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
+    } finally {
+      lease?.end();
     }
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
-    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : "failed";
+    const calledOff = overtaken.signal.aborted || failure instanceof RunStopped; // a message overtook it, or the owner said /stop: not a failure
+    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : calledOff ? "preempted" : "failed";
+    const stale = !!lease?.news() && toolCalls === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
     countPosts(conv, sent, now); // (what the run sent while it worked counts toward the day's cap)
-    if (answer?.message) {
+    if (answer?.message && !stale) {
       const message = answer.message;
       // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
       if (submitPost(conv, message, answer.urgent, now) === "held") pipeline.record(conv, "action", Date.now(), `[heartbeat] held for later (quiet hours or the day's limit): ${message.slice(0, 300)}`);
@@ -147,8 +180,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
         outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
       }
     }
-    observeLook(conv, outcome, failure, now);
-    if (outcome === "failed") seenMail.discard();
+    if (outcome === "preempted") h.preempted++;
+    else (h.preempted = 0, (h.completedAt = now.getTime()));
+    if (outcome !== "preempted") observeLook(conv, outcome, failure, now);
+    if (outcome === "failed" || outcome === "preempted") seenMail.discard();
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);

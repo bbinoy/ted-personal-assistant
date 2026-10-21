@@ -1,4 +1,5 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { gated } from "../core/rungate.ts";
 import { audit, type Source } from "../core/audit.ts";
 import { withCeiling } from "./ceiling.ts";
 import { failure, isApiRefusal } from "../tenants/errors.ts";
@@ -65,7 +66,8 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
     if (planSession(saved, new Date(), chatPlanOpts(mode)) !== "resume then compact") return;
     console.log(`${source}: context is ${saved.lastContextTokens} tokens, compacting (${mode})`);
     // Bounded in time like every run (ceiling.ts): it runs inside the conversation's queue, and a hung one would block it.
-    await withCeiling(settings.compactMaxMinutes * 60_000, async (c) => {
+    // It runs inside the conversation's queue, where a message may be waiting, so it never waits for a place in the run gate (rungate.ts) but takes one; the quiet one is started only when a place is free (wake.ts).
+    await gated("chat", () => withCeiling(settings.compactMaxMinutes * 60_000, async (c) => {
       let boundary: { pre_tokens: number; post_tokens?: number } | undefined;
       let lastError: string | undefined;
       for await (const message of query({ prompt: "/compact", options: { ...compactOptions(saved.sessionId, source, notesDir, payer), abortController: c.controller } })) {
@@ -88,7 +90,7 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
         return;
       }
       throw new Error("compaction stream ended without a result");
-    });
+    }));
   } catch (e) {
     console.error(`${source}: compaction failed:`, (e as Error).message);
     audit("chat_session", "compact-failed", source);

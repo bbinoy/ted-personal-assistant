@@ -1,4 +1,5 @@
 import { query, type Options, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { gated } from "../core/rungate.ts";
 import { failure, isApiRefusal } from "./errors.ts";
 import { charge, envFor, observe, succeeded, type Payer } from "./payer.ts";
 
@@ -40,6 +41,7 @@ export interface OneShot {
   // itself, so that oneShot closes it too.
   spare?: (prompt: string, cold: () => Query, track: (q: Query) => Query) => Promise<AsyncIterable<SDKMessage>>;
   onMessage?: (m: SDKMessage) => void; // every message of the stream (the gate's timing)
+  gate?: "helper" | "dream"; // its place in the run gate (rungate.ts): a helper (default) is a small call somebody waits on and never queues; a dream waits behind looks
 }
 
 export interface OneShotResult {
@@ -84,8 +86,10 @@ export async function oneShot(o: OneShot): Promise<OneShotResult> {
     return { ok: false, text: "", subtype: "no_result", error: new Error("no result") };
   }
   try {
-    if (!o.timeoutMs) return await read();
-    return (await withTimeout(read(), o.timeoutMs)) ?? { ok: false, text: "", subtype: "timeout", timedOut: true, error: new Error("timed out") };
+    return await gated(o.gate ?? "helper", async () => {
+      if (!o.timeoutMs) return read();
+      return (await withTimeout(read(), o.timeoutMs)) ?? { ok: false, text: "", subtype: "timeout", timedOut: true, error: new Error("timed out") };
+    });
   } finally {
     for (const q of started) (q as { close?: () => void }).close?.(); // the answer is in, it failed, or it timed out
   }

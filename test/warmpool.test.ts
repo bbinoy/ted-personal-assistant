@@ -59,7 +59,7 @@ const turn = (conv: any, log: string[], apiKey?: string) => {
 };
 
 test("warm pool: one process per kind of room, the owner's untouched by groups and tenants; a full kind replaces its least recently used", async () => {
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     const [a, b, c] = [person("A"), person("B"), person("C")].map((x) => tenant(x.id));
     const g1 = group(`pool-${++n}-aaaaaaaaaaaaaaaa`);
@@ -67,7 +67,7 @@ test("warm pool: one process per kind of room, the owner's untouched by groups a
     for (const conv of [owner(), g1, a!, b!]) prepare(conv, r.start);
     await tick();
     assert.deepEqual(pool.holders().sort(), [owner().key, g1.key, a!.key, b!.key].sort());
-    prepare(g2, r.start); // another group spoke last: at most one group process
+    prepare(g2, r.start); // another group spoke last: at most GROUP_WARM_SLOTS (here 1) group processes
     await tick();
     assert.equal(pool.has(g1), false);
     assert.equal(pool.has(g2), true);
@@ -83,7 +83,7 @@ test("warm pool: one process per kind of room, the owner's untouched by groups a
 });
 
 test("warm pool: a process serves only its own conversation, once, and is built from that conversation's options", async () => {
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     const a = tenant(person("A").id);
     const b = tenant(person("B").id);
@@ -114,7 +114,7 @@ test("warm pool: a process serves only its own conversation, once, and is built 
 });
 
 test("warm pool: a process built before something changed is not used: the session, her key", async () => {
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     const a = tenant(person("A").id);
     const b = tenant(person("B").id);
@@ -146,7 +146,7 @@ test("warm pool: WARM=off and TENANT_WARM_MAX=0 start nothing; dropping a tenant
     assert.equal(r.started.length, 1, "the owner's does not depend on it");
     pool.drop(owner().key);
   });
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     prepare(a, r.start);
     await tick();

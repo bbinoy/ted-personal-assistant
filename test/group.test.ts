@@ -490,21 +490,36 @@ test("groups: in tagged-only mode an unaddressed picture is not even opened", as
 
 const verdict = (act: boolean, over: object = {}) => ({ act, delaySeconds: 0, nextCheckMinutes: 30, ...over });
 
-test("groups: the gate is asked when an untagged message arrives, while the settling pause is still running", async () => {
-  const order: string[] = [];
-  const settle = defer<void>();
+test("groups: a burst of untagged messages costs ONE gate call, made when it has settled, on the settled burst", async () => {
+  const g = gid();
+  const settle: (() => void)[] = [];
+  let asked = 0;
   const r = rig({
-    wait: () => (order.push("settle started"), settle.promise),
-    gate: async () => (order.push("gate asked"), verdict(true)),
-    run: async () => (order.push("run"), "Howdy!"),
+    wait: () => new Promise<void>((go) => settle.push(go)),
+    gate: async () => (asked++, verdict(true)),
+    run: async () => "Howdy!",
   });
-  const done = r.on(mk({ groupId: gid(), addressedToMe: false }));
+  const burst = [1, 2, 3].map((n) => r.on(mk({ groupId: g, addressedToMe: false, timestamp: n, text: `m${n}` })));
   await tick();
-  assert.ok(order.includes("gate asked") && order.includes("settle started") && !order.includes("run")); // the gate did not wait for the pause to end
-  settle.resolve();
-  await done;
-  assert.deepEqual(order.filter((x) => x !== "settle started"), ["gate asked", "run"]);
+  assert.equal(asked, 0, "nothing is judged while the burst is still settling");
+  settle.forEach((go) => go());
+  await Promise.all(burst);
+  assert.equal(asked, 1, "the three messages were one burst");
   assert.equal(r.sent.length, 1);
+});
+
+test("groups: an unaddressed message warms the group only after a positive verdict; an addressed one at once", async () => {
+  const warmed: string[] = [] as string[];
+  const quiet = rig({ warm: (_c: unknown, after: boolean) => void warmed.push(`quiet ${after}`), gate: async () => verdict(false) });
+  await quiet.on(mk({ groupId: gid(), addressedToMe: false }));
+  assert.deepEqual(warmed, [] as string[], "the gate said no: no process was started for it");
+  const yes = rig({ warm: (_c: unknown, after: boolean) => void warmed.push(`yes ${after}`), gate: async () => verdict(true) });
+  await yes.on(mk({ groupId: gid(), addressedToMe: false }));
+  assert.deepEqual(warmed, ["yes false", "yes true"], "warmed on the verdict, and again after the turn");
+  warmed.length = 0;
+  const direct = rig({ warm: (_c: unknown, after: boolean) => void warmed.push(`direct ${after}`) });
+  await direct.on(mk({ groupId: gid() }));
+  assert.deepEqual(warmed, ["direct false", "direct true"]);
 });
 
 test("groups: a message that arrives while the gate is in flight takes over: the old verdict is discarded, one burst is one turn", async () => {

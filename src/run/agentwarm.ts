@@ -15,7 +15,7 @@ import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 // next process is started in the background, so the next message only waits for the model. It is used only if nothing it
 // was built from has changed (session, prompt, memory index, a tenant's key), and only while fresh; otherwise a normal start.
 // One mechanism (SpareSlot, warmslot.ts), one keyed pool (WarmPool: the key is the conversation's key), one idle setting (WARM_IDLE_MINUTES), one
-// switch (WARM): the owner's chat, the group that spoke last and the few tenants most recently active, plus the gate's Haiku spare (gate.ts).
+// switch (WARM): the owner's chat, the few groups and tenants most recently active (GROUP_WARM_SLOTS, TENANT_WARM_MAX), plus the gate's Haiku spare (gate.ts).
 // A process is built from its conversation's own options only (a group's: its notes folder, session, memory server, no connectors; a tenant's: also
 // her key, which is in no other conversation's environment) and is handed to nobody else; the owner's has the owner's connectors and is never
 // handed to a group or a tenant. Options (system prompt, tools, MCP servers, output schema) are fixed when a process starts, which is why a slot
@@ -26,9 +26,9 @@ const slotOptions = { maxAgeMs: idleMs(), idleMs }; // fresh while not idle-expi
 type Kind = Conversation["kind"];
 type Who = Pick<Conversation, "key" | "kind">;
 
-// How many processes of a kind are kept: the owner's one, the latest group's one, the TENANT_WARM_MAX most recently active tenants' (0: none).
+// How many processes of a kind are kept: the owner's one, the GROUP_WARM_SLOTS most recently active groups', the TENANT_WARM_MAX most recently active tenants' (0: none).
 // A conversation of a kind that is full replaces the least recently used one of that kind, which is closed.
-const capacity = (kind: Kind): number => (kind === "tenant" ? settings.tenantWarmMax : 1);
+const capacity = (kind: Kind): number => (kind === "tenant" ? settings.tenantWarmMax : kind === "group" ? settings.groupWarmSlots : 1);
 
 export class WarmPool {
   readonly #slots = new Map<string, { kind: Kind; slot: SpareSlot<WarmQuery> }>(); // least recently used first

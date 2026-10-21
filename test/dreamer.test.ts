@@ -155,3 +155,16 @@ test("undo: a conversation that is dreamt can undo its dream with its own memory
   assert.match(r.content[0]!.text, /Restored 1 notes/);
   assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f !== "MEMORY.md"), ["context-old.md"]);
 });
+
+test("one dreamer: a conversation someone is talking to is skipped for now, its day stays open, and it is dreamt once it is quiet", async () => {
+  reset();
+  recordMessage("owner", 5, "Anna is my sister and her birthday is on 3 March", new Date("2026-10-13T20:00:00Z"));
+  const c = counting();
+  let busy = true;
+  const d = createDreamer({ conversations: () => dreamConversations(["owner"]), run: c.run, busy: () => busy });
+  await d.run(NOW);
+  assert.equal(c.calls.length, 0, "a turn is running: the notes are not tidied under it");
+  busy = false;
+  await d.run(NOW);
+  assert.equal(c.calls.length, 1, "the day was not used up by the skip");
+});

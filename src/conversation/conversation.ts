@@ -61,6 +61,24 @@ export function createPipeline(deps: PipelineDeps) {
   // would work from a log the turn is still changing and could contradict what the turn says. It is only delayed: the free tick looks again.
   const busy = (conv: Conversation): boolean => tails.has(conv.key) || !!bursts.get(conv.key)?.pending.length;
 
+  // The LEASE of an unattended look (heartbeat/look.ts): a look runs outside the queue (it may wait hours on an approval), so what keeps it from fighting a chat turn over the same
+  // mail is this. A look is only started while the conversation is not busy (above); once it runs, a message that arrives for the conversation OVERTAKES it: the look is called
+  // off, unless it is parked on an approval (the owner's answer is what it waits for; it goes on), and either way it is told there was news, so its closing message-only post
+  // (which may contradict what chat now does) is dropped as stale. Only a look that is running has an entry, so nothing outlives it.
+  const looks = new Map<string, { news: boolean; abort: () => void; parked: () => boolean }>();
+  function lease(conv: Conversation, abort: () => void, parked: () => boolean = () => false): { news: () => boolean; end: () => void } {
+    const mine = { news: false, abort, parked };
+    looks.set(conv.key, mine);
+    return { news: () => mine.news, end: () => void (looks.get(conv.key) === mine && looks.delete(conv.key)) };
+  }
+  // `written`: a message someone wrote (it may call the look off); a bare reaction only makes it news. (The look's own guard, look.ts preemptible, may still decline to abort.)
+  function overtake(conv: Conversation, written = true): void {
+    const mine = looks.get(conv.key);
+    if (!mine) return;
+    mine.news = true;
+    if (written && !mine.parked()) mine.abort();
+  }
+
   // Burst handling, the same for every conversation: after each message wait a short settling pause; a newer message
   // restarts it and takes over, so a burst is ONE turn. Messages that arrive while that turn is queued join it; ones that
   // arrive while a run is in progress wait in the queue and make the next turn. Messages are kept here, in the order they came.
@@ -82,21 +100,27 @@ export function createPipeline(deps: PipelineDeps) {
     await wait(Math.min(deps.settleMs ? deps.settleMs() : settings.settleSeconds * 1000, left));
     if (st.epoch !== mine || st.queued || !st.pending.length) return; // a newer message took over, or a queued run will take this one too
     timing.mark("settle");
-    await settled({
-      stale: () => st.epoch !== mine,
-      timing,
-      run: (job) => {
-        st.queued = true;
-        const queuedAt = now();
-        return enqueue(conv, async () => {
-          timing.set("queue", now() - queuedAt);
-          st.queued = false;
-          st.firstAt = undefined;
-          const items = st.pending.splice(0) as T[];
-          if (items.length) await job(items);
-        });
-      },
-    });
+    try {
+      await settled({
+        stale: () => st.epoch !== mine,
+        timing,
+        run: (job) => {
+          st.queued = true;
+          const queuedAt = now();
+          return enqueue(conv, async () => {
+            timing.set("queue", now() - queuedAt);
+            st.queued = false;
+            st.firstAt = undefined;
+            const items = st.pending.splice(0) as T[];
+            if (items.length) await job(items);
+          });
+        },
+      });
+    } finally {
+      // Drained: this burst's last message has been settled and its turn is over (or nobody answered it: a group message the gate let pass). Nothing is waiting, so the entry goes
+      // (it would otherwise stay for ever, with the unanswered messages in it, and keep `busy` true). A newer message has bumped the epoch and keeps the entry for its own burst.
+      if (st.epoch === mine && !st.queued && bursts.get(conv.key) === st) bursts.delete(conv.key);
+    }
   }
 
   // A run is already queued for the current burst, so a message arriving now joins it (no verdict of its own is needed).
@@ -245,6 +269,7 @@ export function createPipeline(deps: PipelineDeps) {
   async function warn(conv: Conversation, e: unknown, quote?: Quote): Promise<boolean> {
     if (now() - (lastNotice.get(conv.key) ?? 0) < conv.noticeEveryMs) return false;
     lastNotice.set(conv.key, now());
+    if (lastNotice.size > 50) for (const [key, at] of lastNotice) if (now() - at > 24 * 3_600_000) lastNotice.delete(key); // (only the last few minutes of an entry matter)
     return out.reply(conv.notice(e), { quote: conv.groupId ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
   }
 
@@ -423,6 +448,7 @@ export function createPipeline(deps: PipelineDeps) {
       // like the owner's. Only this group's approvals can be answered; an edit and a caption never answer.
       if (await approvalAnswer(conv, m, author)) return;
       forgetDeclined(conv.key);
+      if (m.addressedToMe) overtake(conv); // (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
       return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: line, picture: m.picture, document: m.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, voice: m.voice });
     }
     return ownerTurn(conv, m, line, arrived);
@@ -492,6 +518,7 @@ export function createPipeline(deps: PipelineDeps) {
     scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
     if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
     forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
+    overtake(conv); // a look of this conversation that is running gives way to the turn
     await burst(conv, m, async (b) => {
       const typing = holdTyping(conv, b.timing); // the owner is always answered: show it now, even while an earlier turn still runs
       try {
@@ -524,6 +551,7 @@ export function createPipeline(deps: PipelineDeps) {
     const outcome = deps.approvals.answerReaction(r.emoji, r.targetTimestamp, conv.key, r.from || r.fromUuid);
     if (outcome === "needs_text") return void (await out.reply(TYPED_YES_NEEDED, { plain: true })); // a payment is not approved by a reaction
     if (outcome !== "ignored") return void console.log(`approval ${outcome} (by reaction)`);
+    overtake(conv, false); // an emoji is news for the look but never calls it off
     await enqueue(conv, async () => {
       console.log(`owner reacted ${r.emoji}`);
       const on = findMessage(r.targetTimestamp, conv.logFile);
@@ -570,7 +598,7 @@ export function createPipeline(deps: PipelineDeps) {
   }
 
   // `react`: a quick reaction of our own, no run needed (the gate chose it).
-  return { handleIncoming, enqueue, busy, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
+  return { handleIncoming, enqueue, busy, lease, burst, burstQueued, wait, holdTyping, runTurn, sendWhile, record, canSpeak, react: reactTo, warn, dropPending };
 }
 
 export type Pipeline = ReturnType<typeof createPipeline>;

@@ -105,7 +105,7 @@ export type Runner = (prompt: string, system?: string) => Promise<unknown>;
 // The model that proposes the changes: no tools, one JSON answer, on whoever pays (payer.ts: the login for the owner's and a group's dream, the instance key and her
 // cost file for a friend's). A refusal of the API is thrown (errors.ts), any other failure too.
 export const runnerFor = (payer: Payer = LOGIN): Runner => async (prompt, system = dreamSystem({ subject: OWNER, kind: "owner", categories: preset().notes.dream })) => {
-  const r = await oneShot({ system, prompt, payer, schema: SCHEMA, model: settings.model, options: { maxTurns: 3, maxBudgetUsd: 0.6 } });
+  const r = await oneShot({ system, prompt, payer, schema: SCHEMA, model: settings.model, gate: "dream", options: { maxTurns: 3, maxBudgetUsd: 0.6 } });
   if (!r.ok) throw r.error ?? new Error("the dream run failed");
   return r.output;
 };
@@ -165,6 +165,7 @@ export interface DreamerDeps {
   promptOf?: (conv: Conversation, now: Date, notes: readonly NoteFile[], lines: readonly string[]) => { prompt: string; system: string }; // default: the preset's one dream prompt
   payer?: (conv: Conversation, now: Date) => Payer | Refusal; // who pays and may it run (default payer.ts mayRun)
   key?: () => string | undefined; // where a friend's instance key comes from (default settings.tenantApiKey; tests)
+  busy?: (conv: Conversation) => boolean; // a turn of it is settling, queued or running (pipeline.busy): the conversation is skipped for now (its day stays open, the hourly retry comes back)
   run?: (payer: Payer, conv: Conversation) => Runner; // the model (default runnerFor(payer); tests)
 }
 
@@ -182,6 +183,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
   // One conversation. Returns whether it was dreamt (the nightly cap on groups counts these).
   async function one(conv: Conversation, now: Date): Promise<boolean> {
     if (!allows(conv, "dream")) return false; // its record: active, with the capability; the instance's DREAM switch
+    if (deps.busy?.(conv)) return false; // someone is talking to it: the dream is for the quiet, and does not tidy notes under a turn that is using them
     const stateFile = dreamStateFile(conv);
     const today = localDay(now);
     const state = readJson<DreamState>(stateFile, {});
