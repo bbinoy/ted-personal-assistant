@@ -30,7 +30,7 @@ $EDITOR .env                          # at least SIGNAL_OWNER_NUMBER; set OWNER_
 # 3. Mail: make sure `claude mcp list` shows your mailbird server as connected
 #    (the agent reads its connection details from the same entry in ~/.claude.json)
 
-# 5. Check everything, then run it for real
+# 4. Check everything, then run it for real
 npm run doctor
 npm run install:launchd               # installs a launchd job; the agent starts now and at login
 ```
@@ -99,7 +99,7 @@ The skills are `daily-brief` (the brief's structure), `mailbird` (triage and dra
 
 ## Browser (forms and bookings)
 
-On by default (`BROWSE=on`). `npm install` fetches the pinned `@playwright/mcp` and runs `npm run setup:browse`, which downloads a headless Chromium (about 100 MB) into `state/browse/browsers`, not anywhere global; delete that folder to remove it. If the download failed (offline, `BROWSE_SKIP_INSTALL=1`), run `npm run setup:browse` yourself; until then the browse tool answers "not set up" and `npm run doctor` says what is missing. The browser presents itself as the plain desktop Chrome of the same version (not "HeadlessChrome"), with the language `BROWSE_LOCALE` (default `en-GB`) and this machine's time zone; nothing else is disguised, and sites that block automated browsers (SNCF Connect, Rail Europe, bahn.de, Trainline's search) stay blocked. `BROWSE_BROWSER_PATH` points it at a Chromium or Chrome you already have. `BROWSE=off` removes the tool from every run. A real-world check that costs a few cents: `npm run browse:smoke` (example.com, the httpbin pizza form up to but not including its submit button; `-- submit` shows the approval text a commit step produces, declined; `-- big` a large page). See [SAFETY](SAFETY.md) for what it can and cannot do.
+On by default (`BROWSE=on`). `npm install` fetches the pinned `@playwright/mcp` but does not download the browser (about 100 MB) unless `BROWSE_INSTALL=1` (or `BROWSE=on`) is set in the environment of the install; it only prints a hint. `npm run setup:browse` downloads a headless Chromium into `state/browse/browsers`, not anywhere global; delete that folder to remove it. Until you have run it (or if the download failed, e.g. offline) the browse tool answers "not set up" and `npm run doctor` says what is missing. The browser presents itself as the plain desktop Chrome of the same version (not "HeadlessChrome"), with the language `BROWSE_LOCALE` (default `en-GB`) and this machine's time zone; nothing else is disguised, and sites that block automated browsers (SNCF Connect, Rail Europe, bahn.de, Trainline's search) stay blocked. `BROWSE_BROWSER_PATH` points it at a Chromium or Chrome you already have. `BROWSE=off` removes the tool from every run. A real-world check that costs a few cents: `npm run browse:smoke` (example.com, the httpbin pizza form up to but not including its submit button; `-- submit` shows the approval text a commit step produces, declined; `-- big` a large page). See [SAFETY](SAFETY.md) for what it can and cannot do.
 
 ## The secret store (OpenBao)
 
