@@ -9,7 +9,8 @@ import { forgetNote } from "../src/memory/notes.ts";
 import { writeInferredNote } from "../src/memory/inferred.ts";
 import { dreamOver, readNoteFiles } from "../src/conversation/dream.ts";
 import { classifySendError, createOutbound } from "../src/conversation/outbound.ts";
-import { replayPrompt, replayUnanswered, unansweredSince } from "../src/conversation/replay.ts";
+import { actedSince, replayPrompt, replayUnanswered, SORRY, unansweredSince } from "../src/conversation/replay.ts";
+import type { AuditEntry } from "../src/core/audit.ts";
 import type { Sent } from "../src/core/messages.ts";
 import { FakeMessenger } from "@ted-assistant/messenger/testing";
 
@@ -240,7 +241,7 @@ test("replayPrompt says the messages are late, in order", () => {
 
 test("replayUnanswered: one queued turn per chat with unanswered lines, none for the rest", async () => {
   const turns: { conv: string; prompt: string }[] = [];
-  const convs = [{ key: "owner", kind: "owner" }, { key: "t1", kind: "tenant", tenantId: "t1" }, { key: "t2", kind: "tenant", tenantId: "t2" }] as never[];
+  const convs = [{ key: "owner", kind: "owner", source: "chat" }, { key: "t1", kind: "tenant", tenantId: "t1", source: "group" }, { key: "t2", kind: "tenant", tenantId: "t2", source: "group" }] as never[];
   const logs: Record<string, Sent[]> = { owner: [line(5, "owner", "where is my 3pm?", { by: "+1555" })], t1: [line(5, "owner", "hi"), line(4, "chat", "hello")], t2: [] };
   const pipeline = {
     enqueue: (_c: never, job: () => Promise<unknown>) => job(),
@@ -260,6 +261,8 @@ test("replayUnanswered: one queued turn per chat with unanswered lines, none for
       conversations: () => convs,
       now: () => NOW,
       read: (c) => logs[(c as { key: string }).key]!,
+      audit: () => [],
+      tell: async () => assert.fail("nothing acted: the request is re-run, not apologised for"),
       run: async (c, prompt) => (turns.push({ conv: (c as { key: string }).key, prompt }), { text: "ok" }),
     });
     await new Promise((r) => setImmediate(r));
@@ -270,4 +273,42 @@ test("replayUnanswered: one queued turn per chat with unanswered lines, none for
   assert.equal(turns.length, 1);
   assert.equal(turns[0]!.conv, "owner");
   assert.match(turns[0]!.prompt, /where is my 3pm\?/);
+});
+
+const row = (minAgo: number, tool: string, decision: string, source: AuditEntry["source"] = "chat"): AuditEntry => ({ ts: new Date(NOW - minAgo * 60_000).toISOString(), source, tool, decision });
+
+test("actedSince: writes that went through count; reads, denials, old rows and other sources do not", () => {
+  const since = NOW - 10 * 60_000;
+  assert.equal(actedSince([row(5, "mcp__calendar__create_event", "allow")], "chat", since), true);
+  assert.equal(actedSince([row(5, "mcp__x__send", "ask-approved")], "chat", since), true);
+  assert.equal(actedSince([row(5, "mcp__x__send", "ask-declined"), row(5, "mcp__x__send", "deny-policy")], "chat", since), false);
+  assert.equal(actedSince([row(20, "mcp__calendar__create_event", "allow")], "chat", since), false, "before the oldest unanswered line");
+  assert.equal(actedSince([row(5, "mcp__calendar__create_event", "allow", "group")], "chat", since), false);
+  assert.equal(actedSince([row(5, "Read", "allow")], "chat", since), false, "a read is not a side effect");
+});
+
+test("replayUnanswered: if the run acted before it died, the request is NOT re-run; one short line is sent instead", async () => {
+  const told: string[] = [];
+  let ran = 0;
+  const silence = console.log;
+  console.log = () => {};
+  let n: number;
+  try {
+    n = replayUnanswered({
+      pipeline: { enqueue: (_c: never, job: () => Promise<unknown>) => (ran++, job()), runTurn: async () => (ran++, { spoke: true }) } as never,
+      conversations: () => [{ key: "owner", kind: "owner", source: "chat" }] as never[],
+      now: () => NOW,
+      read: () => [line(5, "owner", "put dinner in my calendar")],
+      audit: () => [row(4, "mcp__calendar__create_event", "allow")],
+      tell: async (_c, text) => void told.push(text),
+      run: async () => (ran++, { text: "" }),
+    });
+    await new Promise((r) => setImmediate(r));
+  } finally {
+    console.log = silence;
+  }
+  assert.equal(n, 1);
+  assert.equal(ran, 0, "nothing was run again");
+  assert.deepEqual(told, [SORRY]);
+  assert.match(replayPrompt([line(5, "owner", "x")]), /check whether it was already done/);
 });

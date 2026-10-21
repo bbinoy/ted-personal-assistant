@@ -1,3 +1,5 @@
+import { readAudit, type AuditEntry, type Source } from "../core/audit.ts";
+import { isReadTool } from "../policy/policy.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
 import { LIMITS } from "../core/sanitize.ts";
@@ -42,8 +44,20 @@ export function unansweredSince(log: readonly Sent[], now: number, maxAgeMs: num
 // The prompt of the replayed turn: the words as they were logged, and why they are late.
 export function replayPrompt(lines: readonly Sent[]): string {
   const said = lines.map((m) => `[${m.at}] ${m.text.slice(0, LIMITS.body)}`).join("\n\n");
-  return `${lines.length === 1 ? "This message arrived" : `These ${lines.length} messages arrived, oldest first,`} shortly before the assistant restarted and ${lines.length === 1 ? "was" : "were"} never answered. Answer ${lines.length === 1 ? "it" : "them"} now, together if there are several. Say briefly that you are answering late. If what follows shows the request is stale or already done, say that instead of repeating it.\n\n${said}`;
+  return `${lines.length === 1 ? "This message arrived" : `These ${lines.length} messages arrived, oldest first,`} shortly before the assistant restarted and ${lines.length === 1 ? "was" : "were"} never answered. Answer ${lines.length === 1 ? "it" : "them"} now, together if there are several. Say briefly that you are answering late. Before you act, check whether it was already done (the calendar, the mail, your notes): the restart may have come after part of it. If what follows shows the request is stale or already done, say that instead of repeating it.\n\n${said}`;
 }
+
+// A tool call that changed something (the permission check logs "allow" for what needs no approval, and the owner's yes as "ask-approved"; a read does not count).
+const BUILTIN_READS = new Set(["Read", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite"]); // (the SDK's own tools that change nothing)
+const DID = new Set(["allow", "auto-approved", "ask-approved", "ask-approved-modified", "covered-by-approval"]);
+export const SORRY = "I restarted while working on your last message. Some of it may already be done; tell me if you want me to pick it up again.";
+
+// Pure: did a run of this source act (not just read) since `sinceMs`? The audit rows carry the source (chat: the owner's; group: a group's or a friend's), not the conversation, so for a
+// friend this is "anyone's friend-or-group run", which can only make replay hold back more often. If so, re-running the request could do its side effects twice.
+export function actedSince(rows: readonly AuditEntry[], source: Source, sinceMs: number): boolean {
+  return rows.some((e) => e.source === source && DID.has(e.decision) && Date.parse(e.ts) >= sinceMs && !isReadTool(e.tool) && !BUILTIN_READS.has(e.tool));
+}
+const auditRows = (source: Source, sinceMs: number): AuditEntry[] => readAudit((e) => e.source === source && Date.parse(e.ts) >= sinceMs);
 
 // The private chats worth looking at: the owner's, and each friend's when TENANTS is on (her own gates still apply in her run).
 export function directConversations(): Conversation[] {
@@ -56,6 +70,8 @@ export interface ReplayDeps {
   conversations?: () => Conversation[];
   now?: () => number;
   read?: (conv: Conversation) => readonly Sent[]; // (tests) default: the conversation's log
+  tell: (conv: Conversation, text: string) => Promise<unknown>; // one short line to the chat (logged as an answer, so the next start does not repeat it)
+  audit?: (source: Source, sinceMs: number) => readonly AuditEntry[]; // (tests) default: logs/audit.jsonl
 }
 
 // Queues one turn per private chat that has unanswered lines. Returns how many chats were replayed. Never throws and never waits for the turns.
@@ -68,6 +84,14 @@ export function replayUnanswered(deps: ReplayDeps): number {
       if (!lines.length) continue;
       const last = lines.at(-1)!;
       console.log(`replay: ${lines.length} unanswered message(s) in ${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""} from before the restart`);
+      // The run may have acted (a calendar event, archived mail, a note) before it died: running the request again could do it twice. Then say so instead.
+      const since = Date.parse(lines[0]!.at);
+      if (actedSince((deps.audit ?? auditRows)(conv.source, since), conv.source, since)) {
+        console.log(`replay: ${conv.kind} had acted since its oldest unanswered message; not re-running it`);
+        void deps.tell(conv, SORRY).catch((e) => console.error("replay: failed:", (e as Error).message));
+        n++;
+        continue;
+      }
       const prompt = replayPrompt(lines);
       void deps.pipeline
         .enqueue(conv, () =>

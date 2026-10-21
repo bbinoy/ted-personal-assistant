@@ -225,7 +225,17 @@ function normalise(x: unknown): TenantRecord | undefined {
 }
 
 // Everybody: the owner (once seeded) and every tenant.
-export const people = (): TenantRecord[] => registry().map(normalise).filter((r): r is TenantRecord => !!r);
+// An unreadable registry fails closed for the FRIENDS only: the owner is still known (from the seed `ensureOwner` was given: her settings, not the file), so she is routed and served;
+// no tenant is. Nothing is written over the file.
+export const people = (): TenantRecord[] => {
+  const all = registry().map(normalise).filter((r): r is TenantRecord => !!r);
+  return cached?.corrupt !== undefined && ownerSeed && !all.some((r) => r.id === OWNER_ID) ? [ownerFrom(ownerSeed, new Date(0))] : all;
+};
+let ownerSeed: { number: string; aci?: string } | undefined; // (set by ensureOwner at start)
+const ownerFrom = (s: { number: string; aci?: string }, now: Date): TenantRecord => ({ id: OWNER_ID, name: settings.owner, acis: s.aci && ACI.test(s.aci) ? [s.aci] : [], ...(s.number ? { number: s.number } : {}), role: "admin", status: "active", credential: "login", created: now.toISOString() });
+// Why the friends list is unusable (the parse error), or undefined when it is fine. For the start-up notice and `npm run doctor`.
+export const registryProblem = (): string | undefined => (registry(), cached?.corrupt);
+export const REGISTRY_NOTICE = `The friends list (${REGISTRY}) can't be read, so friends are paused. It's kept as is; repair or move it, then restart.`;
 
 // `allows`, `tenantById` and every routing question read the registry, on every message and every tick. The file is read and parsed again only when it changed (its
 // stat: size, modification time in ns, inode: a write is a rename to a new file, also another process's, `npm run tenants`) and not after this process's own
@@ -283,10 +293,10 @@ export const tenantByTarget = (target: Target): TenantRecord | undefined => tena
 // The owner's record, made on first start from SIGNAL_OWNER_NUMBER (and SIGNAL_OWNER_ACI when set): admin, every capability, the existing files.
 // Idempotent; an existing record is kept as it is (what was learned or changed stays).
 export function ensureOwner(seed: { number: string; aci?: string }, now = new Date()): TenantRecord {
-  const have = people().find((r) => r.id === OWNER_ID);
+  ownerSeed = seed;
+  const have = people().find((r) => r.id === OWNER_ID); // unreadable registry: the stand-in made from the seed, and nothing is saved over the file
   if (have) return have;
-  const acis = seed.aci && ACI.test(seed.aci) ? [seed.aci] : [];
-  const rec: TenantRecord = { id: OWNER_ID, name: settings.owner, acis, ...(seed.number ? { number: seed.number } : {}), role: "admin", status: "active", credential: "login", created: now.toISOString() };
+  const rec = ownerFrom(seed, now);
   save([rec, ...people()]);
   return rec;
 }
@@ -304,7 +314,7 @@ export function resolveSender(who: { number?: string; aci?: string }): TenantRec
 // The owner's first message carries her account id: the pair (number, account id) is written to the record once, and logged. Never through chat or
 // the model; later messages are matched by the account id. Nothing is learned when the record has an id already or the id belongs to someone else.
 export function learnOwnerAci(who: { number: string; aci?: string }): boolean {
-  if (!who.aci || !ACI.test(who.aci)) return false;
+  if (!who.aci || !ACI.test(who.aci) || registryProblem() !== undefined) return false; // (nothing is written to an unreadable registry)
   const rec = people().find((r) => r.id === OWNER_ID);
   if (!rec || rec.acis.length || !rec.number || rec.number !== who.number || people().some((r) => hasAci(r, who.aci!))) return false;
   update(OWNER_ID, (r) => ({ ...r, acis: [who.aci!] }));

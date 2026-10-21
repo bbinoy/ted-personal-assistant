@@ -36,7 +36,7 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { tenantHooks } from "./tenants/tenanttools.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { ensureOwner, learnOwnerAci, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
@@ -212,7 +212,8 @@ await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
 warmChat();
-replayUnanswered({ pipeline, run: runChat }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
+if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
+replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
