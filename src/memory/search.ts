@@ -1,5 +1,9 @@
 import { foldEdits, withoutDeleted, type Kind, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
+import { dataPath } from "../core/state.ts";
+import { FILE } from "../core/messages.ts";
+import { clockIn, dayIn, systemZone, timeIn } from "../core/timezone.ts";
+import { NOTES_DIR } from "./notes.ts";
 import { authorLabels, orExpr, phraseExpr, SearchIndex, speakerOf, type Doc, type Filters } from "./searchindex.ts";
 import { fold, queryStems, sentences, stem, stems } from "./searchtext.ts";
 
@@ -21,7 +25,7 @@ export interface SearchArgs {
   query?: string;
   alsoTry?: readonly string[];
   who?: string;
-  since?: string; // YYYY-MM-DD or ISO, UTC
+  since?: string; // YYYY-MM-DD or YYYY-MM-DDTHH:MM in the conversation's time zone (or with an explicit Z / offset)
   until?: string; // a bare date includes that whole day
   sinceHours?: number;
   limit?: number;
@@ -103,12 +107,27 @@ const recency = (t: number, now: number) => 1 + 0.3 * 0.5 ** (Math.max(0, now - 
 
 // ---- dates ----
 
-function when(text: string | undefined, end: boolean): number | undefined | "bad" {
+// The instant a wall-clock time has in `zone` (the offset is looked up twice, so a clock change between the guess and the answer is right too).
+function localMs(y: number, mo: number, d: number, h: number, mi: number, zone: string): number {
+  const wall = Date.UTC(y, mo - 1, d, h, mi);
+  let guess = wall;
+  for (let i = 0; i < 2; i++) {
+    const c = clockIn(new Date(guess), zone);
+    guess += wall - Date.UTC(c.year, c.month - 1, c.day, c.hour, c.minute);
+  }
+  return guess;
+}
+
+function when(text: string | undefined, end: boolean, zone: string): number | undefined | "bad" {
   if (!text?.trim()) return undefined;
   const t = text.trim();
-  const bare = /^\d{4}-\d{2}-\d{2}$/.test(t);
-  const ms = Date.parse(bare ? `${t}T00:00:00Z` : /(Z|[+-]\d\d:?\d\d)$/.test(t) ? t : `${t}Z`);
-  return Number.isFinite(ms) ? (bare && end ? ms + 86_400_000 - 1 : ms) : "bad";
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?$/.exec(t);
+  if (m) {
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    return m[4] === undefined ? localMs(y, mo, d + (end ? 1 : 0), 0, 0, zone) - (end ? 1 : 0) : localMs(y, mo, d, Number(m[4]), Number(m[5]), zone);
+  }
+  const ms = /(Z|[+-]\d\d:?\d\d)$/.test(t) ? Date.parse(t) : NaN;
+  return Number.isFinite(ms) ? ms : "bad";
 }
 
 // ---- results ----
@@ -190,13 +209,13 @@ function resolve(idx: SearchIndex, cands: readonly Doc[]): Map<number, Doc & { l
   return out;
 }
 
-function run(idx: SearchIndex, args: SearchArgs, scope: Scope, now: number, ranker: Ranker): Found {
-  const from = args.sinceHours && args.sinceHours > 0 ? now - args.sinceHours * 3_600_000 : when(args.since, false);
-  const to = when(args.until, true);
-  if (from === "bad" || to === "bad") return { hits: [], total: 0, searched: 0, error: "since and until must be dates like 2026-10-01 (UTC)." };
+async function run(idx: SearchIndex, args: SearchArgs, scope: Scope, now: number, ranker: Ranker, zone: string): Promise<Found> {
+  const from = args.sinceHours && args.sinceHours > 0 ? now - args.sinceHours * 3_600_000 : when(args.since, false, zone);
+  const to = when(args.until, true, zone);
+  if (from === "bad" || to === "bad") return { hits: [], total: 0, searched: 0, error: "since and until must be dates like 2026-10-01." };
   const f: Filters = { sources: ["m", "n"], from, to, who: args.who };
-  idx.syncLog(scope.logFile);
-  idx.syncNotes(scope.notesDir, new Date(now).toISOString().slice(0, 10));
+  await idx.syncLog(scope.logFile);
+  await idx.syncNotes(scope.notesDir, dayIn(new Date(now), zone));
   const limit = Math.max(1, Math.min(MAX_LIMIT, Math.floor(args.limit ?? DEFAULT_LIMIT)));
   const q = parseQuery(args.query, args.alsoTry);
   const searched = idx.stats().n;
@@ -243,10 +262,10 @@ function run(idx: SearchIndex, args: SearchArgs, scope: Scope, now: number, rank
   return { hits, total: hits.length, searched };
 }
 
-const stamp = (ms: number) => `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")}Z`;
+const stamp = (ms: number, zone: string) => `${dayIn(new Date(ms), zone)} ${timeIn(new Date(ms), zone)}`;
 
 /** The answer as text for the model: best first, within `maxChars`, with the number left over. */
-export function renderFound(found: Found, args: SearchArgs): string {
+export function renderFound(found: Found, args: SearchArgs, zone: string = systemZone()): string {
   if (found.error) return found.error;
   const limit = Math.max(1, Math.min(MAX_LIMIT, Math.floor(args.limit ?? DEFAULT_LIMIT)));
   const cap = Math.max(500, Math.min(MAX_CHARS, Math.floor(args.maxChars ?? DEFAULT_CHARS)));
@@ -258,30 +277,59 @@ export function renderFound(found: Found, args: SearchArgs): string {
   let used = 0;
   const latestFirst = !(args.query ?? "").trim() && !args.alsoTry?.length;
   for (const h of found.hits.slice(0, limit)) {
-    const line = `${latestFirst ? "" : `${lines.length + 1}. `}[${h.ref.startsWith("note:") ? `${h.ref}, saved ${stamp(h.at).slice(0, 10)}` : `${h.ref} ${stamp(h.at)}`}] ${h.author === "note" ? "" : `${h.author}: `}${h.text}`;
+    const line = `${latestFirst ? "" : `${lines.length + 1}. `}[${h.ref.startsWith("note:") ? `${h.ref}, saved ${stamp(h.at, zone).slice(0, 10)}` : `${h.ref} ${stamp(h.at, zone)}`}] ${h.author === "note" ? "" : `${h.author}: `}${h.text}`;
     if (lines.length && used + line.length > cap) break;
     lines.push(line);
     used += line.length + 1;
   }
   const more = found.total - lines.length;
-  return `${found.total} match${found.total === 1 ? "" : "es"}, ${latestFirst ? "the latest, newest last" : "best first"} (times UTC):\n${(latestFirst ? lines.reverse() : lines).join("\n")}${more > 0 ? `\n${more} more not shown: narrow it with who, since, until or a more exact query, or raise limit.` : ""}`;
+  return `${found.total} match${found.total === 1 ? "" : "es"}, ${latestFirst ? "the latest, newest last" : "best first"} (times in ${zone}):\n${(latestFirst ? lines.reverse() : lines).join("\n")}${more > 0 ? `\n${more} more not shown: narrow it with who, since, until or a more exact query, or raise limit.` : ""}`;
 }
 
-/** Searches one conversation. Never throws for a bad index: a file that does not work is rebuilt once, and then the error is reported as text. */
-export function searchConversation(scope: Scope, args: SearchArgs, opts: { now?: number; ranker?: Ranker } = {}): string {
+// One search or build at a time per index file (two connections writing the same file would lock each other out); later ones wait their turn.
+const turns = new Map<string, Promise<unknown>>();
+function inTurn<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const run = (turns.get(key) ?? Promise.resolve()).then(work);
+  const tail = run.catch(() => undefined);
+  turns.set(key, tail);
+  void tail.then(() => { if (turns.get(key) === tail) turns.delete(key); });
+  return run;
+}
+
+/** Searches one conversation, in the conversation's time zone. The index is built or brought up to date first, in slices that leave the event loop free. Never throws for a bad index: a file that does not work is rebuilt once, and then the error is reported as text. */
+export function searchConversation(scope: Scope, args: SearchArgs, opts: { now?: number; ranker?: Ranker; zone?: string } = {}): Promise<string> {
   const now = opts.now ?? Date.now();
   const ranker = opts.ranker ?? bm25Ranker;
-  const attempt = (): Found => {
+  const zone = opts.zone ?? systemZone();
+  const attempt = async (): Promise<Found> => {
     const idx = SearchIndex.open(scope.indexPath);
-    try { return run(idx, args, scope, now, ranker); } finally { idx.close(); }
+    try { return await run(idx, args, scope, now, ranker, zone); } finally { idx.close(); }
   };
-  let found: Found;
-  try {
-    found = attempt();
-  } catch {
-    SearchIndex.remove(scope.indexPath); // damaged under us (a torn write, a full disk, another version): start over once
-    try { found = attempt(); } catch { return "The search index could not be built; try again later."; }
-  }
-  return renderFound(found, args);
+  return inTurn(scope.indexPath, async () => {
+    let found: Found;
+    try {
+      found = await attempt();
+    } catch {
+      SearchIndex.remove(scope.indexPath); // damaged under us (a torn write, a full disk, another version): start over once
+      try { found = await attempt(); } catch { return "The search index could not be built; try again later."; }
+    }
+    return renderFound(found, args, zone);
+  });
 }
 
+/** Brings a conversation's index up to date without searching (the owner's, shortly after start-up, so the first real search is quick). */
+export function warmSearchIndex(scope: Scope, zone: string = systemZone()): Promise<void> {
+  return inTurn(scope.indexPath, async () => {
+    const attempt = async () => {
+      const idx = SearchIndex.open(scope.indexPath);
+      try {
+        await idx.syncLog(scope.logFile);
+        await idx.syncNotes(scope.notesDir, dayIn(new Date(), zone));
+      } finally { idx.close(); }
+    };
+    try { await attempt(); } catch { SearchIndex.remove(scope.indexPath); await attempt(); }
+  });
+}
+
+/** The owner's conversation: messages.jsonl, memory/notes, state/search.sqlite. */
+export const ownerSearchScope = (): Scope => ({ logFile: FILE, notesDir: NOTES_DIR, indexPath: dataPath("state/search.sqlite") });
