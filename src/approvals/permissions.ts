@@ -21,7 +21,7 @@ export type Approve = (
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal,
-  o?: { typedYes?: boolean },
+  o?: { typedYes?: boolean; queueable?: boolean }, // queueable: a background run's plain call (no guard step) may be parked in the approval inbox instead of waiting (approvalask.ts)
 ) => Promise<Decision>;
 
 // A conversation nobody can be asked in (not set up, a person who is gone).
@@ -280,7 +280,12 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
-    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, g?.payment ? { typedYes: true } : undefined);
+    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, g?.payment ? { typedYes: true } : { queueable: !g });
+    if (d.queued) {
+      // Parked for the owner's yes: the run is not held up and the call is NOT remembered as done (it has not run). The same call again gets the same number.
+      log(tool, "ask-queued", source, { n: d.queued.n });
+      return { behavior: "deny", message: d.queued.message };
+    }
     if (d.superseded) {
       log(tool, "ask-superseded", source);
       return { behavior: "deny", message: "That question was closed because a newer question about the same action was asked. Nothing was executed; wait for the answer to the newer one." };

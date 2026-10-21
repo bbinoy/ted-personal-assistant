@@ -205,6 +205,7 @@ export function loadSettings(env: Env) {
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
     backgroundApprovalTimeoutMinutes: num(env, "BACKGROUND_APPROVAL_TIMEOUT_MINUTES", 120, 1, 2880),
+    pendingActionDays: num(env, "PENDING_ACTION_DAYS", 3, 1, 30), // an unattended run's call that needed approval waits this long in the approval inbox (approvals/pending.ts); then it is dropped with one line
 
     // The longest one model run may take on the wall clock (src/run/ceiling.ts), so a hung turn cannot block its conversation until a
     // restart. Chat: the owner's chat and every group. Background: the heartbeat run and its expert; the time a background run

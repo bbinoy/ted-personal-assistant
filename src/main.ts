@@ -35,6 +35,11 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
+import { setPendingRuntime } from "./approvals/pendingflow.ts";
+import { runPending } from "./run/pendingrun.ts";
+import { submitPost } from "./heartbeat/notices.ts";
+import { mayRun } from "./tenants/payer.ts";
+import { OWNER_KEY, isTenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
@@ -74,6 +79,14 @@ wire({
   notifyOwner: (text) => void out.replyPlain(text, "notice"), // the shared-key notice, the daily cap line, the budget and failing-looks notices
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
+});
+// The approval inbox (approvals/pendingflow.ts): what an unattended run needed a yes for is asked as one numbered message in that conversation, held in quiet hours (notices.ts), and
+// an approved call is run exactly as recorded in a small follow-up run (run/pendingrun.ts). The conversation is found from the key the item was parked under.
+const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
+setPendingRuntime({
+  send: (scope, text) => out.reply(text, { plain: true, kind: "approval", ...(scope === OWNER_KEY ? {} : { target: convOf(scope).target }) }),
+  hold: (scope, text, urgent, now) => submitPost(convOf(scope), text, urgent, now) === "held",
+  execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
 });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));

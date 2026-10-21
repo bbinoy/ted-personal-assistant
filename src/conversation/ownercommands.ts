@@ -1,5 +1,6 @@
 import { rmSync } from "node:fs";
 import { openCount } from "../approvals/approvals.ts";
+import { clearText, listText } from "../approvals/pendingflow.ts";
 import { spentToday } from "../core/budget.ts";
 import { pauseText } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
@@ -10,13 +11,14 @@ import { stopRuns } from "../run/ceiling.ts";
 import type { Conversation } from "./conversationmodel.ts";
 
 // The owner's hands on the machine, handled in code before any model sees the message (like /card, conversation.ts): "/stop" (or "stop!") aborts the conversation's running turn,
-// "/pause 2h" / "/pause until 18:00" / "/pause" / "/resume" write and remove the pause switch (core/pause.ts), "/status" answers in a phone-sized summary. The message must be EXACTLY
+// "/pause 2h" / "/pause until 18:00" / "/pause" / "/resume" write and remove the pause switch (core/pause.ts), "/status" answers in a phone-sized summary, "/approvals" lists what unattended runs parked for a yes ("/approvals clear" drops it all). The message must be EXACTLY
 // the command, so a sentence that merely contains the word is a message like any other. /stop works in the owner's chat and a friend's own chat; pause and status are the owner's only.
 
 export type Command =
   | { kind: "stop" }
   | { kind: "resume" }
   | { kind: "status" }
+  | { kind: "approvals"; clear: boolean } // the approval inbox: what unattended runs parked for a yes (approvals/pendingflow.ts)
   | { kind: "pause"; until: string; text: string } // until: what goes into the pause file ("" = until /resume; an ISO time; a YYYY-MM-DD day); text: how it is said back
   | { kind: "pause-usage" };
 
@@ -29,6 +31,8 @@ export function parseCommand(text: string, now: Date = new Date(), zone: string 
   if (t === "/stop" || t === "stop!") return { kind: "stop" };
   if (t === "/resume") return { kind: "resume" };
   if (t === "/status") return { kind: "status" };
+  if (t === "/approvals") return { kind: "approvals", clear: false };
+  if (t === "/approvals clear") return { kind: "approvals", clear: true };
   if (t === "/pause") return { kind: "pause", until: "", text: "Paused until you say /resume." };
   if (!t.startsWith("/pause ")) return undefined;
   const arg = t.slice("/pause ".length);
@@ -100,8 +104,10 @@ export interface CommandDeps {
   setPause: (content: string) => void;
   clearPause: () => void;
   facts: (conv: Conversation, now: Date) => StatusFacts;
+  approvals: (scope: string, clear: boolean) => string; // the approval inbox of this conversation: the list, or dropping it all
 }
 const real: CommandDeps = {
+  approvals: (scope, clear) => (clear ? clearText(scope) : listText(scope)),
   now: () => new Date(),
   stop: stopRuns,
   dropQueued: () => 0,
@@ -129,6 +135,7 @@ export function commandReply(conv: Pick<Conversation, "kind" | "key" | "sessionF
     if (conv.kind === "group") return undefined; // (a group has its own door; a command there is just a message)
     return d.stop(conv.sessionFile) + d.dropQueued() > 0 ? "Stopped." : "Nothing is running right now.";
   }
+  if (cmd.kind === "approvals") return conv.kind === "group" ? undefined : d.approvals(conv.key, cmd.clear); // the owner's own items in her chat, a friend's in hers; a group has no inbox
   if (conv.kind !== "owner") return undefined; // pause and status are the owner's
   switch (cmd.kind) {
     case "resume":

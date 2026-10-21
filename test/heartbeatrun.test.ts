@@ -16,6 +16,8 @@ import { dataPath, readText } from "../src/core/state.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
 import { heldFileOf, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
+import { clearPending, openItems } from "../src/approvals/pending.ts";
+import { queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.briefBackstopHour = 24; // the brief is the brief tests' (test/tasks.test.ts); here the owner's look is all that runs
@@ -25,7 +27,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => (rmSync(dataPath(HEARTBEAT_LOG), { force: true }), rmSync(dataPath(heldFileOf(owner())), { force: true })); // (the rows, and what quiet hours held)
 
-interface Answer { mail?: string[]; hold?: Promise<unknown>; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
+interface Answer { mail?: string[]; hold?: Promise<unknown>; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; during?: () => void }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -55,6 +57,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       seen.provenance.push(extra.provenance);
       const a = answer();
       sends = a.sends ?? 0;
+      a.during?.();
       if (a.hold) await Promise.race([a.hold, new Promise((_, no) => extra.signal?.addEventListener("abort", () => no(new Error("aborted")), { once: true }))]); // a run that goes on until it is called off
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
@@ -135,6 +138,21 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.deepEqual(rows[0], { at: DAY.toISOString(), kind: "owner", night: false, message: true, sent: 0, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
   assert.doesNotMatch(readText(HEARTBEAT_LOG)!, /Eve|Friday|waits/, "the row carries no words");
   assert.ok(seen.recorded.some(([k, t]) => k === "action" && /\[heartbeat\] look: 3 tool call\(s\), 2 mail archived, message sent/.test(t)), "the log gets a counted summary line");
+});
+
+test("owner's look: what the run needed a yes for is parked while it works and asked as ONE numbered message when the look ends", async () => {
+  clearPending("owner");
+  const sent: string[] = [];
+  setPendingRuntime({ send: async (_s, t) => (sent.push(t), 77), hold: () => false, execute: async () => ({ ran: true, line: "ok" }), now: () => DAY });
+  const park = (to: string) => queueCall("owner", { tool: "mcp__gmail__reply", input: { to }, label: `Reply to ${to}`, question: "Send it?", footer: "", source: "background" }, DAY);
+  const { w, conv } = rig(() => ({ message: "[[silent]]", during: () => (park("a@example.com"), park("b@example.com"), assert.equal(sent.length, 0, "nothing is asked while the run works")) }));
+  await w.look(conv, DAY);
+  const batch = sent.filter((t) => t.startsWith("📬"));
+  assert.equal(batch.length, 1);
+  assert.match(batch[0]!, /^📬 2 things are waiting for your approval:\n1\. Reply to a@example\.com Send it\?\n2\. Reply to b@example\.com/);
+  assert.equal(openItems("owner").length, 2, "they wait for the answer");
+  setPendingRuntime(undefined);
+  clearPending("owner");
 });
 
 test("owner's look: while a chat turn of the conversation is settling, queued or running the look waits, records nothing, and runs on the next tick", async () => {
