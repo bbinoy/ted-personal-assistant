@@ -3,6 +3,7 @@ import { addrs, nativeView } from "../../policy/mailview.ts";
 import type { DraftView } from "../mailbird/proposals.ts";
 import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
 import { settings } from "../../core/settings.ts";
+import { archiveGate } from "../archivecap.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "../types.ts";
 
 // The Gmail connector (MAIL_PROVIDER=gmail): claude.ai's own Gmail connector, inherited from the owner's Claude login like Notion. Its rules that a row cannot
@@ -90,6 +91,7 @@ export const gmailModule: ToolModule = {
   },
   untrustedPrefix: GMAIL_PREFIX,
   floor: {
+    perRun: archiveGate, // at most ARCHIVE_MAX_PER_RUN archives per run (archivecap.ts)
     // Gmail's rules a row cannot say: attachment content, raw MIME, label renames (gmailrules.ts). They hold whichever provider is
     // active: they only restrict, so the connector's tools stay as refused as before if it is ever seen under another provider.
     verdict: (tool, input) => (isInboxArchive(tool, input) && !active() ? "deny" : gmailVerdict(tool, input)), // an archive is the Gmail provider's: under another provider the connector stays refused

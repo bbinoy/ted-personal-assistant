@@ -184,6 +184,8 @@ export function loadSettings(env: Env) {
     // run on JUDGE_MODEL: sonnet, opus, haiku or a full model id. It is the safety net and it writes to the owner, so it does not run on the smallest model by default.
     judgeModel: env.JUDGE_MODEL?.trim() || "sonnet",
     heartbeatDayMinutes: rhythm.heartbeat.dayMinutes,
+    // The most messages or conversations one run (one look, one chat turn) may archive, for every mail provider (src/modules/archivecap.ts); the rest waits for the next look.
+    archiveMaxPerRun: num(env, "ARCHIVE_MAX_PER_RUN", 25, 1, 500),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),

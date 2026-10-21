@@ -100,6 +100,9 @@ export interface ModuleFloor {
   // policy.ts classify, one step of the fold: a hard rule for this module's tools that a row cannot say (attachment content, a Gmail archive under another provider). It may only
   // restrict: "ask" or "deny", never "allow" (the verdict is the minimum of deny < ask < allow over the manifest and every floor).
   verdict?: (tool: string, input: Record<string, unknown>, source: Source) => Exclude<FloorVerdict, "allow"> | undefined;
+  // permissions.ts, once per run: makes the run's own gate (it may keep a count). Asked before every call that is not already denied; a message is a refusal, said to the model
+  // as it is. For a limit that is about the run, not the call (the archive cap, archivecap.ts); it only restricts.
+  perRun?: () => (tool: string, input: Record<string, unknown>) => string | undefined;
   // permissions.ts, when classify denied the call: what to record and tell the model instead of the plain "blocked by policy".
   onDeny?: (tool: string, input: Record<string, unknown>) => Denial | undefined;
   // autojudge.ts isJudgeable: actions that are never judged (always asked), and a per-action veto on the call's own arguments (false: not judged).

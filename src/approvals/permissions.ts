@@ -7,7 +7,7 @@ import { objectLines } from "./describe.ts";
 import { clearDeclined, declinedAgo, declinedLine, declinedMinutes, noteDeclined } from "./declined.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
-import { mailSlot } from "../modules/index.ts";
+import { mailSlot, registered } from "../modules/index.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
@@ -145,6 +145,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
   const log = baseLog; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
+  const runGates = registered().flatMap((m) => (m.floor?.perRun ? [m.floor.perRun()] : [])); // the modules' limits for THIS run (the archive cap)
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
   return async (tool, input, o) => {
     try {
@@ -169,6 +170,14 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return { behavior: "deny", message: g.reason ?? `${tool} is blocked and cannot be used.` };
     }
     const base = classify(tool, input, source, memoryDir, tools);
+    // A limit about the run, not the call (the archive cap): a module's gate may refuse a call the manifest would let through.
+    if (base !== "deny") {
+      const limit = runGates.map((gate) => gate(tool, input)).find((m) => m !== undefined);
+      if (limit !== undefined) {
+        log(tool, "deny-run-cap", source, idsOf(input));
+        return { behavior: "deny", message: limit };
+      }
+    }
     const verdict = g?.kind === "allow" && base !== "deny" ? "allow" : g?.kind === "ask" && base !== "deny" ? "ask" : base;
     // The call as it must run: what the guard narrowed, or built only now (a card typed by code after the yes), else the model's own.
     const final = async (): Promise<{ input: Record<string, unknown> } | { deny: string }> => {
