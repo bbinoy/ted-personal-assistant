@@ -27,7 +27,7 @@ import { listTenants, OWNER_ID, pausedUntil, people, tenantContext } from "./ten
 import { Ledger } from "./modules/browse/payments.ts";
 import { messengerDoctor } from "./conversation/messenger.ts";
 import { settings } from "./core/settings.ts";
-import { disconnected, NAMES, readConnectors } from "./modules/connectors.ts";
+import { disconnected, readConnectors, reportable } from "./modules/connectors.ts";
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
 import { dataPath, readJson, readText } from "./core/state.ts";
@@ -259,7 +259,8 @@ export async function doctor() {
   }
   const conn = readConnectors();
   if (conn) {
-    for (const k of ["notion", "calendar"] as const) line(conn[k] ? true : "warn", `${NAMES[k]} connector`, conn[k] ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors)`);
+    // Every connector module the owner uses (src/modules: Notion, Calendar, Drive and Docs once unhidden, ...); the mail provider's own is the mail check above.
+    for (const r of reportable().filter((x) => !x.mail)) line(conn[r.key] !== false ? true : "warn", `${r.label} connector`, conn[r.key] !== false ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors); without it: ${r.skipped}`);
   }
   const gaps = missingSetup(readNotes(), disconnected(conn), settings.mail);
   line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");

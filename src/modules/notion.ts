@@ -25,7 +25,7 @@ export const NOTION_UPDATE_TITLE = { icon: "📝", title: "Change Notion page", 
 
 export const notionModule: ToolModule = {
   name: "notion",
-  connection: { kind: "connector", key: "notion", server: /\bnotion\b/i, prefix: NOTION },
+  connection: { kind: "connector", key: "notion", label: "Notion", skipped: "tasks and meeting prep pages", server: /\bnotion\b/i, prefix: NOTION },
   rows: [...notionRows(NOTION), ...rowsOf(NOTION, "notion", "notion")("read", OWNER_READS)],
   free: ["read"],
   titles: { [`${NOTION}notion-update-page`]: NOTION_UPDATE_TITLE },

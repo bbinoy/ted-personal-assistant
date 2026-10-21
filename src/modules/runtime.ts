@@ -1,7 +1,7 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { createBrowseServer } from "./browse/browse.ts";
 import { browseStatus, browserServer } from "./browse/browseserver.ts";
-import { readConnectors } from "./connectors.ts";
+import { connected, readConnectors } from "./connectors.ts";
 import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "./memory/dreamscope.ts";
 import { googleHub, googleProxy, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
@@ -24,7 +24,7 @@ import { createVoiceServer } from "./voice/voicetool.ts";
 import { createWeatherServer } from "./weather/weathertools.ts";
 import { loaded, mailModule } from "./index.ts";
 import { setGmailReaders } from "./gmail/module.ts";
-import { GOOGLE_PREFIX } from "./google/module.ts";
+import { GOOGLE_PREFIX, GOOGLE_TOOLS } from "./google/module.ts";
 import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notion/module.ts";
 import { setDraftReader } from "./mailbird/module.ts";
 import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types.ts";
@@ -33,62 +33,75 @@ import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types
 // of the application; what they start, and the mail clients they talk to, is here, and only the places that start things import this file: agentrun.ts
 // (the run's servers), main.ts and cli.ts (the mail client), doctor.ts (the checks).
 
-// ---- the MCP servers ----
+// ---- the code of each module ----
 
-// By the `name` of a module's in-process or external connection. The module says WHEN a run has the server (`when`); this builds it.
-export const SERVERS: Readonly<Record<string, ServerFactory>> = {
-  send: (ctx) => createSendServer(ctx.key ?? OWNER_KEY), // (no key: the owner's heartbeat run, policy source "background", the only unattended run with a conversation of its own on the login)
-  weather: () => createWeatherServer(),
-  draw: (ctx) => createDrawServer(ctx.key!),
-  voice: (ctx) => createVoiceServer(ctx.key!),
-  memory: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }),
-  notes: (ctx) => createNotesServer(ctx.notesRead!, ctx.source),
-  status: () => createStatusServer(),
-  seenmail: (ctx) => createSeenMailServer(ctx.seenMail!),
-  browse: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }),
-  // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
-  browser: (ctx) => {
-    const status = browseStatus();
-    if (!status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
-    return browserServer(status, ctx.guard!.outDir, undefined, { mode: ctx.guard!.vision, cdpPort: ctx.guard!.cdpPort });
-  },
-  intake: (ctx) => createIntakeServer(ctx.tenant!),
-  // A friend's Google tools: her own server process, started by this process with her token (googlemcp.ts), forwarded to the run through a proxy that has no command line and no environment.
-  google: (ctx) => googleProxy(ctx.tenant!.id, (name) => ctx.offers(GOOGLE_PREFIX + name)),
-  // A friend's Notion tools: Notion's hosted server, called by this process with her token (notionmcp.ts), through the same kind of proxy: no header for the CLI to carry.
-  notion: (ctx) =>
-    notionProxy(
-      ctx.tenant!.id,
-      (name) => ctx.offers(NOTION_FRIEND_PREFIX + name),
-      NOTION_FRIEND_TOOLS.map((t) => t.slice(NOTION_FRIEND_PREFIX.length)),
-    ),
-  tenants: () => createTenantAdminServer(),
-};
-
-// ---- what runs between runs ----
+// What a module's code does that its declaration may not (it would pull the application into every file that reads the module list): the server it builds for a run, and what
+// runs between runs. ONE record per module, by the module's `name` (not its connection's: the module `notionhosted` serves the server `notion`), so adding a module that starts a
+// server is one entry here. test/modules.test.ts proves that every module that names a server has one here and that nothing here belongs to no module.
+export interface ModuleRuntime {
+  server?: ServerFactory; // for a module with an in-process or external connection: the module says WHEN a run has the server (`when`); this builds it
+  lifecycle?: ModuleLifecycle; // a server that outlives a run (below)
+}
 
 // A server that outlives a run (a friend's Google process with her token in a private folder, her Notion connection) is stopped by the application, not left to the
 // idle timer: `start` once when the application starts (clearing what a process that died left behind), `stop` when it exits, `drop` for one person who is suspended or
-// removed. By the same `name` as SERVERS; a module whose servers keep nothing between runs has no entry.
+// removed. A module whose servers keep nothing between runs has no lifecycle.
 export interface ModuleLifecycle {
   start?: () => void;
   stop: () => void;
   drop: (tenantId: string) => void;
 }
-export const LIFECYCLE: Readonly<Record<string, ModuleLifecycle>> = {
-  google: {
-    start: () => {
-      const n = sweepStaleCredentialDirs();
-      if (n) console.log(`google: removed ${n} credentials folder(s) a stopped process left behind`);
+
+export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
+  send: { server: (ctx) => createSendServer(ctx.key ?? OWNER_KEY) }, // (no key: the owner's heartbeat run, policy source "background", the only unattended run with a conversation of its own on the login)
+  weather: { server: () => createWeatherServer() },
+  draw: { server: (ctx) => createDrawServer(ctx.key!) },
+  voice: { server: (ctx) => createVoiceServer(ctx.key!) },
+  memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }) },
+  notes: { server: (ctx) => createNotesServer(ctx.notesRead!, ctx.source) },
+  status: { server: () => createStatusServer() },
+  seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
+  browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }) },
+  // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
+  browser: {
+    server: (ctx) => {
+      const status = browseStatus();
+      if (!status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
+      return browserServer(status, ctx.guard!.outDir, undefined, { mode: ctx.guard!.vision, cdpPort: ctx.guard!.cdpPort });
     },
-    stop: () => googleHub.closeAll(),
-    drop: (id) => googleHub.drop(id),
   },
-  notion: { stop: () => notionHub.closeAll(), drop: (id) => notionHub.drop(id) },
+  intake: { server: (ctx) => createIntakeServer(ctx.tenant!) },
+  // A friend's Google tools: her own server process, started by this process with her token (googlemcp.ts), forwarded to the run through a proxy that has no command line and no environment.
+  google: {
+    server: (ctx) => googleProxy(ctx.tenant!.id, (name) => ctx.offers(GOOGLE_PREFIX + name), undefined, GOOGLE_TOOLS),
+    lifecycle: {
+      start: () => {
+        const n = sweepStaleCredentialDirs();
+        if (n) console.log(`google: removed ${n} credentials folder(s) a stopped process left behind`);
+      },
+      stop: () => googleHub.closeAll(),
+      drop: (id) => googleHub.drop(id),
+    },
+  },
+  // A friend's Notion tools: Notion's hosted server, called by this process with her token (notionmcp.ts), through the same kind of proxy: no header for the CLI to carry.
+  notionhosted: {
+    server: (ctx) =>
+      notionProxy(
+        ctx.tenant!.id,
+        (name) => ctx.offers(NOTION_FRIEND_PREFIX + name),
+        NOTION_FRIEND_TOOLS.map((t) => t.slice(NOTION_FRIEND_PREFIX.length)),
+      ),
+    lifecycle: { stop: () => notionHub.closeAll(), drop: (id) => notionHub.drop(id) },
+  },
+  tenants: { server: () => createTenantAdminServer() },
 };
-export const startAll = (): void => void Object.values(LIFECYCLE).forEach((l) => l.start?.());
-export const stopAll = (): void => void Object.values(LIFECYCLE).forEach((l) => l.stop());
-export const dropAll = (tenantId: string): void => void Object.values(LIFECYCLE).forEach((l) => l.drop(tenantId));
+
+// ---- what runs between runs ----
+
+const lifecycles = (): ModuleLifecycle[] => Object.values(RUNTIME).flatMap((r) => (r.lifecycle ? [r.lifecycle] : []));
+export const startAll = (): void => void lifecycles().forEach((l) => l.start?.());
+export const stopAll = (): void => void lifecycles().forEach((l) => l.stop());
+export const dropAll = (tenantId: string): void => void lifecycles().forEach((l) => l.drop(tenantId));
 
 // The MCP servers of a run, by the name the run knows them under: every loaded module's in-process or external server for this conversation, in module order.
 // The browse sub-run has only the servers marked `forBrowse` (the browser); every other run has all the others. A connector is not here: it comes with the login.
@@ -97,8 +110,8 @@ export function serversFor(ctx: RunContext): Record<string, McpServerConfig> {
   for (const m of loaded()) {
     const c = m.connection;
     if ((c.kind !== "in-process" && c.kind !== "external") || !!c.forBrowse !== ctx.browsing || !c.when(ctx)) continue;
-    const make = SERVERS[c.name];
-    if (!make) throw new Error(`module ${m.name}: no server is built under the name ${c.name}`);
+    const make = RUNTIME[m.name]?.server;
+    if (!make) throw new Error(`module ${m.name}: no server is built for it in runtime.ts (RUNTIME.${m.name}.server)`);
     servers[c.name] = make(ctx);
   }
   return servers;
@@ -169,7 +182,7 @@ export const MAIL: Readonly<Record<string, MailRuntime>> = {
     },
     // The approval of a send reads the draft (or the message being replied to) back through the connector (gmail.ts).
     start: () => setGmailReaders(gmailReaders()),
-    check: (line) => gmailChecks(line, { self: settings.mailSelfAddress, connector: readConnectors()?.gmail, briefEmail: settings.briefEmail }),
+    check: (line) => gmailChecks(line, { self: settings.mailSelfAddress, connector: connected(readConnectors(), "gmail"), briefEmail: settings.briefEmail }),
   },
 };
 

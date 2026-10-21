@@ -46,6 +46,9 @@ const rows = [
     ...gc("calendar-write", "manage_event", only), // create, update, delete and rsvp by its `action`; only create and update without guests are ever judged (below)
 ];
 
+// The tool names a friend's run is shown for her Google when her connection needs her again (googlemcp.ts placeholders): the module's rows, without the prefix.
+export const GOOGLE_TOOLS: readonly string[] = rows.map((r) => r.tool.slice(GOOGLE_PREFIX.length));
+
 export const googleModule: ToolModule = {
   name: "google",
   // Her server exists for a friend's run whose capability set offers any of its tools; the owner's run never has it (his are the connectors), nor does a group's.

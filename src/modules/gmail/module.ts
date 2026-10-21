@@ -65,7 +65,7 @@ export const named = (_input: Record<string, unknown>, view?: { to: string[] }) 
 export const gmailModule: ToolModule = {
   name: "gmail",
   slot: "mail",
-  connection: { kind: "connector", key: "gmail", server: /^gmail$/i, prefix: GMAIL_PREFIX },
+  connection: { kind: "connector", key: "gmail", label: "Gmail", skipped: "the mail pass, drafts and the brief by email", server: /^gmail$/i, prefix: GMAIL_PREFIX },
   rows: [
     ...gm("read", "search_threads get_thread get_message get_draft list_drafts list_labels"),
     ...gm("draft", "create_draft update_draft", { view: "gmDraft" }),

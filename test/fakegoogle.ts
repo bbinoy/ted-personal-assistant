@@ -105,6 +105,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const a = (req.params.arguments ?? {}) as Record<string, any>;
   log({ tool: req.params.name, args: req.params.name === "_probe" ? undefined : a });
+  // FAKE_GOOGLE_REVOKED: a file; while it exists Google has withdrawn the grant (the real server cannot refresh the token and says so as an error result).
+  if (process.env.FAKE_GOOGLE_REVOKED && existsSync(process.env.FAKE_GOOGLE_REVOKED) && req.params.name !== "_probe") return { ...ok("RefreshError: invalid_grant: Token has been expired or revoked."), isError: true };
   return call(req.params.name, a);
 });
 await server.connect(new StdioServerTransport());
