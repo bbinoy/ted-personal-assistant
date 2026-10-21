@@ -175,7 +175,7 @@ test("pay: a hosted payment page opened by its address (not reached from the sho
 test("pay: the card is typed only on https, with a fresh snapshot, in an empty enabled field of the right kind, and in order", async () => {
   const deny = async (r: Rig, input: Record<string, unknown>, re: RegExp) => assert.match(((await step(r, "type", input)).res as Denied).message, re);
   const http = await rig();
-  await open(http, "http://shop.test/checkout");
+  open(http, "http://shop.test/checkout");
   http.g.shape(`${B}snapshot`, {}, page("http://shop.test/checkout"));
   await deny(http, { target: "e4", text: "{{card:number}}" }, /only typed on https/);
   const stale = await rig();

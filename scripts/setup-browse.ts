@@ -1,6 +1,7 @@
 // Downloads the headless Chromium that the browse tool uses (src/modules/browse/browse.ts), into state/browse/browsers inside the data folder:
-// nothing global, and deleting that folder removes it. Runs after `npm install` (never fails the install) and as `npm run setup:browse`.
-// Skipped with BROWSE=off or BROWSE_SKIP_INSTALL=1. About 100 MB.
+// nothing global, and deleting that folder removes it. About 100 MB, so opt-in: `npm run setup:browse` always downloads it; after `npm install`
+// (--quiet, never fails the install) it downloads only with BROWSE=on or BROWSE_INSTALL=1 set, else prints a one-line hint.
+// Skipped with BROWSE=off or BROWSE_SKIP_INSTALL=1.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -15,6 +16,10 @@ const browsers = join(dataDir, "state", "browse", "browsers");
 
 if (process.env.BROWSE === "off" || process.env.BROWSE_SKIP_INSTALL === "1" || (process.env.CI && process.argv.includes("--quiet"))) {
   say("browse: skipped (BROWSE=off or BROWSE_SKIP_INSTALL=1)");
+  process.exit(0);
+}
+if (quiet && process.env.BROWSE !== "on" && process.env.BROWSE_INSTALL !== "1") {
+  console.log("browse: the browser tool needs a headless Chromium (~100 MB): run `npm run setup:browse` (or set BROWSE_INSTALL=1 before npm install)");
   process.exit(0);
 }
 try {

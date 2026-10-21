@@ -1,0 +1,5 @@
+#!/bin/sh
+# Refuses a commit that contains credentials, phone numbers, personal paths or emails (scripts/check-secrets.ts; it prints file:line and the
+# rule, never the text). It scans the whole working tree, which is fast and also covers the staged files.
+# Enable once per clone: npm run setup:hooks
+exec node "$(dirname "$0")/../scripts/check-secrets.ts"

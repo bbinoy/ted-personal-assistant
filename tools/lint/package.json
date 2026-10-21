@@ -1,0 +1,12 @@
+{
+  "name": "ted-lint",
+  "private": true,
+  "type": "module",
+  "description": "ESLint for the repository, in its own folder: typescript-eslint needs the JavaScript TypeScript API (6.x), which the compiler the repository builds with (7.x, native) does not ship. Nothing here is part of the app; `npm run lint` installs and runs it.",
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}

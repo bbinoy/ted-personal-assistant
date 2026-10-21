@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { group, owner, type Conversation } from "../src/conversation/conversation.ts";
-import { clampLook, parseAnswer, HEARTBEAT_SCHEMA } from "../src/run/rules.ts";
+import { clampLook, parseHeartbeatAnswer, HEARTBEAT_SCHEMA } from "../src/run/rules.ts";
 import { lastLookText, lookInstruction, lookPrompt } from "../src/heartbeat/look.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { HEARTBEAT_LOG, readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
@@ -81,12 +81,12 @@ test("the next look is clamped to 10..120 minutes, whatever the model says, and 
 });
 
 test("the answer: a message or [[silent]]; anything that does not follow the format is silent", () => {
-  assert.deepEqual(parseAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15 });
-  assert.deepEqual(parseAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 120 });
-  for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say"]) assert.equal(parseAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
-  assert.equal(parseAnswer({ message: null, nextCheckMinutes: 30 }, "").message, undefined);
-  assert.equal(parseAnswer(undefined, "I looked at the mail and thought about it").message, undefined, "free text is never posted");
-  assert.equal(parseAnswer(undefined, "").nextCheckMinutes, 30);
+  assert.deepEqual(parseHeartbeatAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15 });
+  assert.deepEqual(parseHeartbeatAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 120 });
+  for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say"]) assert.equal(parseHeartbeatAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
+  assert.equal(parseHeartbeatAnswer({ message: null, nextCheckMinutes: 30 }, "").message, undefined);
+  assert.equal(parseHeartbeatAnswer(undefined, "I looked at the mail and thought about it").message, undefined, "free text is never posted");
+  assert.equal(parseHeartbeatAnswer(undefined, "").nextCheckMinutes, 30);
 });
 
 test("the instruction: the clock, the zone, the last look, the quiet window and the brief rules as text; no gate vocabulary", () => {

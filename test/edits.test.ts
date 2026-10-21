@@ -28,7 +28,7 @@ function hold() {
   let release!: () => void;
   let gate: Promise<void> | undefined;
   return {
-    on: () => (gate = new Promise<void>((r) => (release = r))),
+    on: () => void (gate = new Promise<void>((r) => (release = r))),
     off: () => (release(), (gate = undefined)),
     wait: async () => void (await gate),
   };

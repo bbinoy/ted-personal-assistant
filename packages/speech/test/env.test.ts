@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toolEnv, withoutSecrets } from "../src/internal/exec.ts";
+import { withoutSecrets } from "@ted-assistant/messenger/env";
+import { toolEnv } from "../src/internal/exec.ts";
 
 test("helper processes get no credentials: keys, tokens, secrets, passwords and agent sockets are dropped, the rest is kept", () => {
   const env = withoutSecrets({ PATH: "/bin", HOME: "/h", LANG: "C", ANTHROPIC_API_KEY: "a", CLAUDE_CODE_OAUTH_TOKEN: "b", ELEVENLABS_API_KEY: "c", TTS_HTTP_TOKEN: "d", AWS_SECRET_ACCESS_KEY: "e", DB_PASSWORD: "f", SSH_AUTH_SOCK: "/s", HF_TOKEN: "g" });

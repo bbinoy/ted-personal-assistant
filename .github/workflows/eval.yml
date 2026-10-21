@@ -1,0 +1,25 @@
+name: eval
+# Manual only: real model calls that cost money. Scores the approval-question validator and the question writer on the labelled set in
+# scripts/approval-eval-check.ts and fails below the threshold.
+on:
+  workflow_dispatch:
+    inputs:
+      min_pass:
+        description: "Minimum score, 0 to 1"
+        default: "0.9"
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        env:
+          BROWSE_SKIP_INSTALL: "1"
+      - run: npm run eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_MIN_PASS: ${{ inputs.min_pass }}
