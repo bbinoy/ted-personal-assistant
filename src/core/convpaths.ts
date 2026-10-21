@@ -96,6 +96,7 @@ export interface InstancePaths {
   notionClientLock: string;
   cardDisabled: string;
   paused: string;
+  retention: string; // when each retention rule last ran and what it freed (core/retention.ts)
   shore: string;
   browse: string;
   browsers: string; // the downloaded Chromium (npm run setup:browse), inside browse
@@ -148,6 +149,7 @@ export function layout(root: string): Layout {
       notionClientLock: join(inst, "notion-client.lock"),
       cardDisabled: join(inst, "card.disabled"),
       paused: join(inst, "paused"),
+      retention: join(inst, "retention.json"),
       shore: join(inst, "shore"),
       browse: join(inst, "browse"),
       browsers: join(inst, "browse", "browsers"),
