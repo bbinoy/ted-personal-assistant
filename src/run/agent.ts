@@ -65,7 +65,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     ? { source: p.source, systemPrompt: texts.run, skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd }
     : (() => {
         const mine = runOptionsFor(conv, { ...(payer.kind === "instance" ? { apiKey: payer.apiKey } : {}), now });
-        return { ...mine, sessionFile: undefined, memory: undefined, seenAt: undefined, groupId: conv.groupId, tools: unattendedTools(mine.tools ?? new Set()), systemPrompt: texts.run, maxTurns: p.maxTurns, maxBudgetUsd: Math.min(p.maxBudgetUsd, mine.maxBudgetUsd), conversation: conv.key };
+        return { ...mine, sessionConv: undefined, memory: undefined, seenAt: undefined, groupId: conv.groupId, tools: unattendedTools(mine.tools ?? new Set()), systemPrompt: texts.run, maxTurns: p.maxTurns, maxBudgetUsd: Math.min(p.maxBudgetUsd, mine.maxBudgetUsd), conversation: conv.key };
       })();
   return {
     ...base,
@@ -75,7 +75,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
     signal: extra.signal,
-    stopScope: conv.sessionFile, // "/stop" in this conversation reaches its look too
+    stopScope: conv.convId, // "/stop" in this conversation reaches its look too
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
   };
@@ -97,13 +97,13 @@ export async function runConversation(conv: Conversation, inputs: RunInputs, bui
 }
 
 async function chatTurn(conv: Conversation, inputs: RunInputs, build: TurnBuilder, onFirstOutput?: () => void, io: { query?: typeof query } = {}): Promise<AgentReply> {
-  const r = chatResume(conv.sessionFile);
+  const r = chatResume(conv.convId);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const o = { ...runOptionsFor(conv, inputs), seenAt, onFirstOutput };
-  const context = unseen(conv.sessionFile, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
+  const context = unseen(conv.convId, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
   const input = userInput(context ? `${context}\n\n${prompt}` : prompt, pictures, documents);
   const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume, abortController.signal), abortController } }));
-  if (context) markShown(conv.sessionFile, chatResume(conv.sessionFile).resume, context); // the turn went through: the session has it now
+  if (context) markShown(conv.convId, chatResume(conv.convId).resume, context); // the turn went through: the session has it now
   return reply;
 }
 
@@ -113,7 +113,7 @@ export function prepare(conv: Conversation, inputs: RunInputs, opts: { refresh?:
   if (opts.refresh && !pool.wants(conv)) return;
   if (!settings.warm) return;
   if (opts.keep && pool.has(conv)) return void pool.touch(conv);
-  warmUp(conv, runOptionsFor(conv, inputs), chatResume(conv.sessionFile), opts.start, opts.refresh);
+  warmUp(conv, runOptionsFor(conv, inputs), chatResume(conv.convId), opts.start, opts.refresh);
 }
 
 // A tenant who was suspended or removed: her process is closed.

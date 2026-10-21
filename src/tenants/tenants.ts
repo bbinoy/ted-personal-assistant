@@ -1,15 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "../core/audit.ts";
-import { isInside } from "../core/contain.ts";
 import { FILE as OWNER_LOG, type Summarize } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
-import { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
-import { OWNER_SESSION_FILE } from "../core/ownerkey.ts";
+import { convPaths, friendConvId, instancePaths, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { OWNER, settings } from "../core/settings.ts";
-import { dataPath, parseJson, readJson, writeFileAtomic, writeJson } from "../core/state.ts";
+import { dataPath, parseJson, writeFileAtomic, writeJson } from "../core/state.ts";
+import { convDb, removeConvDir } from "../core/convdb.ts";
 import { isZone, systemZone } from "../core/timezone.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
@@ -19,9 +18,7 @@ import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 //   notes/         her notes (the SDK's auto-memory); the only place her file tools reach
 //   notes-backup/  snapshots of her notes
 //   messages.jsonl everything said in her chat, size-bounded (no summary model: that would run on the owner's login)
-//   session.json   her resumed SDK session
-//   cost.json      what she spent today on the instance key
-//   meta.json      small bookkeeping (first greeting done, notice times)
+//   assistant.db   her small mutable state (core/convdb.ts): her resumed SDK session, first greeting done, notice times, cooldown, held posts, approvals, voice notes
 // Of conversations/ the owner's chat may read only conversations/owner/ (policy.ts): the owner does not read a friend's
 // notes or history through the assistant. The host's admin can, of course: the files are on the owner's Mac (docs/SAFETY.md).
 // The registry instance/tenants.json holds ONE record per person, the owner included (role admin, every capability, her folder is the owner's: pathsOf):
@@ -133,11 +130,10 @@ export interface TenantContext {
   dir: string;
   notesDir: string;
   backupDir: string;
-  sessionFile: string;
   logFile: string;
   ledger: ConvId; // her spend rows in instance.db are those with this convId (core/budget.ts)
   configFile: string;
-  metaFile: string;
+  convId: ConvId; // her folder and her assistant.db (core/convdb.ts)
   role: Role;
   credential: Credential;
   config: TenantConfig;
@@ -148,20 +144,18 @@ export interface TenantContext {
   persona?: string;
 }
 
-const dirOf = (id: string): string => convPaths(friendConvId(id)).dir; // (throws "not a tenant id")
 
 // Where a person's files are: the owner's are her conversation folder (conversations/owner/) and the instance's own ledger; a friend's are in hers.
 export interface Paths {
   root: string;
   notesDir: string;
   logFile: string;
-  sessionFile: string;
   ledger: ConvId; // whose spend rows count as hers: the owner's day, or the friend's own (core/budget.ts)
 }
 export const pathsOf = (rec: Pick<TenantRecord, "id">): Paths =>
   rec.id === OWNER_ID
-    ? { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, ledger: OWNER_CONV }
-    : (({ dir, notes, messages, session }) => ({ root: dir, notesDir: notes, logFile: messages, sessionFile: session, ledger: friendConvId(rec.id) }))(convPaths(friendConvId(rec.id)));
+    ? { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, ledger: OWNER_CONV }
+    : (({ dir, notes, messages }) => ({ root: dir, notesDir: notes, logFile: messages, ledger: friendConvId(rec.id) }))(convPaths(friendConvId(rec.id)));
 
 export function tenantContext(rec: TenantRecord): TenantContext {
   const p = convPaths(friendConvId(rec.id));
@@ -184,11 +178,10 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     dir,
     notesDir: paths.notesDir,
     backupDir: p.notesBackup,
-    sessionFile: paths.sessionFile,
     logFile: paths.logFile,
     ledger: paths.ledger,
     configFile,
-    metaFile: p.meta,
+    convId: friendConvId(rec.id),
     role: rec.role,
     credential: rec.credential,
     config,
@@ -373,8 +366,7 @@ export function deleteTenant(id: string, o: { drop?: (id: string) => void } = {}
   if (!tenantById(id)) return false;
   save(people().filter((t) => t.id !== id)); // first: from this moment she is nobody
   o.drop?.(id);
-  const dir = dirOf(id);
-  if (isInside(dir, conversationsDir())) rmSync(dir, { recursive: true, force: true });
+  removeConvDir(friendConvId(id)); // (its assistant.db connection is closed first)
   console.log(`tenants: ${id} deleted`);
   return true;
 }
@@ -399,31 +391,35 @@ export function setTimeZone(id: string, zone: string | undefined): TenantRecord 
   return rec;
 }
 
-// ---- first greeting, notice times: small files in her folder ----
+// ---- first greeting, notice times, cooldown: the `friend` and `friend_notices` tables of her assistant.db ----
 
-interface Meta {
-  disclosedAt?: string; // when she had her first reply (the first-contact hint is given until then; the name is from when it was a fixed disclosure)
-  noticeAt?: Record<string, string>;
-  pausedUntil?: number; // her cooldown (cooldown.ts keeps it in memory; this is for `npm run doctor`, a separate process)
+type Who = Pick<TenantContext, "convId">;
+interface FriendRow {
+  paused_until: number | null;
+  disclosed_at: string | null;
 }
-const meta = (ctx: Pick<TenantContext, "metaFile">): Meta => readJson<Meta>(ctx.metaFile, {});
-export const wasDisclosed = (ctx: Pick<TenantContext, "metaFile">): boolean => !!meta(ctx).disclosedAt;
-export const markDisclosed = (ctx: Pick<TenantContext, "metaFile">): void => writeJson(ctx.metaFile, { ...meta(ctx), disclosedAt: new Date().toISOString() });
-export const pausedUntil = (ctx: Pick<TenantContext, "metaFile">, now = Date.now()): number | undefined => {
-  const u = meta(ctx).pausedUntil;
+const friend = (ctx: Who): FriendRow | undefined => convDb(ctx.convId).get<FriendRow>("SELECT paused_until, disclosed_at FROM friend WHERE id = 1");
+// disclosed_at: when she had her first reply (the first-contact hint is given until then); paused_until: her cooldown (cooldown.ts keeps it in memory; this is for `npm run doctor`, a separate process)
+export const wasDisclosed = (ctx: Who): boolean => !!friend(ctx)?.disclosed_at;
+export const markDisclosed = (ctx: Who): void =>
+  void convDb(ctx.convId).run("INSERT INTO friend (id, disclosed_at) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET disclosed_at = excluded.disclosed_at", new Date().toISOString());
+export const pausedUntil = (ctx: Who, now = Date.now()): number | undefined => {
+  const u = friend(ctx)?.paused_until;
   return typeof u === "number" && u > now ? u : undefined;
 };
-export function setPaused(ctx: Pick<TenantContext, "metaFile">, until: number | undefined): void {
-  const { pausedUntil: _old, ...rest } = meta(ctx);
-  if (until !== undefined || _old !== undefined) writeJson(ctx.metaFile, until !== undefined ? { ...rest, pausedUntil: until } : rest);
+export function setPaused(ctx: Who, until: number | undefined): void {
+  const was = friend(ctx)?.paused_until;
+  if (until !== undefined || (was !== null && was !== undefined)) convDb(ctx.convId).run("INSERT INTO friend (id, paused_until) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET paused_until = excluded.paused_until", until ?? null);
 }
 // A fixed notice (not set up, budget, cooldown) at most every TENANT_NOTICE_MINUTES: true when it may be sent now (and is marked).
-export function mayNotice(ctx: Pick<TenantContext, "metaFile">, kind: string, now = Date.now()): boolean {
-  const m = meta(ctx);
-  const last = Date.parse(m.noticeAt?.[kind] ?? "");
-  if (Number.isFinite(last) && now - last < settings.tenantNoticeMinutes * 60_000) return false;
-  writeJson(ctx.metaFile, { ...m, noticeAt: { ...m.noticeAt, [kind]: new Date(now).toISOString() } });
-  return true;
+export function mayNotice(ctx: Who, kind: string, now = Date.now()): boolean {
+  const db = convDb(ctx.convId);
+  return db.tx(() => {
+    const last = Date.parse(db.get<{ at: string }>("SELECT at FROM friend_notices WHERE kind = ?", kind)?.at ?? "");
+    if (Number.isFinite(last) && now - last < settings.tenantNoticeMinutes * 60_000) return false;
+    db.run("INSERT INTO friend_notices (kind, at) VALUES (?, ?) ON CONFLICT (kind) DO UPDATE SET at = excluded.at", kind, new Date(now).toISOString());
+    return true;
+  });
 }
 
 // Her history is bounded like every log, but never summarised by a model: that call would run on the owner's login, over her words.

@@ -274,7 +274,7 @@ const wakeups = createWakeups({
   stagger: startupStagger,
   vouch,
   run: (conv, payer, prompt, extra) => runHeartbeat(conv, payer, prompt, approveIn(conv.key, { background: true }), extra),
-  compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactConversation(conv, "quiet") },
+  compact: { due: (conv) => compactDue(conv.convId), run: (conv) => compactConversation(conv, "quiet") },
 });
 
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the

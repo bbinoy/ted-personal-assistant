@@ -3,13 +3,18 @@ import { execFileSync } from "node:child_process";
 import { closeSync, copyFileSync, cpSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import {
-  convIdOfKey, friendConvId, groupConvId, hashOf, isConvId, LAYOUT_VERSION, layout, legacyLayout, MOVES_VERSION, tenantIdOfConv, type ConvId,
+  convIdOfKey, friendConvId, groupConvId, hashOf, INSTANCE_DB_VERSION, isConvId, LAYOUT_VERSION, layout, layout3, legacyLayout, MOVES_VERSION, tenantIdOfConv, type ConvId,
 } from "./convpaths.ts";
 import { isInside } from "./contain.ts";
 import { writeFileAtomic } from "./state.ts";
-import { hasLegacyFiles as hasLegacy, importLegacy, type ImportResult } from "./dbimport.ts";
+import { hasLegacyFiles as hasInstanceLegacy, importLegacy, type ImportResult } from "./dbimport.ts";
+import { hasConvLegacyFiles, importConvLegacy, type ConvImportResult } from "./convimport.ts";
 
-// The move from the old layout (state/, memory/, tenants/, logs/ by kind of file) to layout version 2 (instance/, conversations/<convId>/, logs/): core/convpaths.ts describes both.
+const hasLegacy = (root: string): boolean => hasInstanceLegacy(root) || hasConvLegacyFiles(root);
+
+// The move from the old layout (state/, memory/, tenants/, logs/ by kind of file) to layout version 2 (instance/, conversations/<convId>/, logs/): core/convpaths.ts describes both. Two imports follow, each with
+// its own stamp: layout 3 (the process-wide files into instance.db: core/dbimport.ts) and layout 4 (each conversation's small files into its assistant.db: core/convimport.ts). A crash between them leaves the
+// stamp of the last finished one, and the next start continues with the next.
 //
 //   planMigration(root, fs)   PURE (given a view of the files): the whole list of moves, computed before anything is touched. Written to instance/migration-plan.json.
 //   migrate(root)             does the moves with renameSync (copy, fsync, verify, delete across devices), records each one in the plan, writes instance/layout-version LAST.
@@ -158,12 +163,12 @@ export function planMigration(root: string, fs: FsView = realFs, now: Date = new
     if (conv) move(from, `${L.conv(conv).messages}${m[2] ?? ""}`);
     else orphan(from, "a group history whose group folder has no id");
   }
-  if (fs.exists(old.pendingOwner)) move(old.pendingOwner, L.conv("owner").pending);
+  if (fs.exists(old.pendingOwner)) move(old.pendingOwner, layout3(root).conv("owner").pending);
   for (const e of fs.list(old.state)) {
     const m = /^pending-([0-9a-f]{16})\.json$/.exec(e.name);
     if (!m) continue;
     const conv = hashToConv.get(m[1]!);
-    if (conv) move(join(old.state, e.name), L.conv(conv).pending);
+    if (conv) move(join(old.state, e.name), layout3(root).conv(conv).pending);
     else orphan(join(old.state, e.name), "pending approvals of a conversation that is not here");
   }
   // 5. voices: the owner's library at the top of state/voice, each other conversation's under groups/<hash>/; the default reference clip stays where it is
@@ -250,7 +255,7 @@ export const MIGRATE_HINT = "run `npm run migrate` (it moves the data into the n
 /** The sentence a tool that will not migrate gives instead (null when it may go on). */
 export function refusal(s: LayoutState): string | null {
   if (s.state === "newer") return `This data folder is in a newer layout (version ${s.version}) than this code understands (${LAYOUT_VERSION}): update the code; it will not touch the data.`;
-  if (s.state === "unmigrated") return `This data folder is in the old layout (state/, memory/, tenants/; or layout 2, whose small files instance.db now holds): ${MIGRATE_HINT}.`;
+  if (s.state === "unmigrated") return `This data folder is in the old layout (state/, memory/, tenants/; or layout 2 or 3, whose small files instance.db and each conversation's assistant.db now hold): ${MIGRATE_HINT}.`;
   return null;
 }
 
@@ -532,7 +537,7 @@ class Mover {
       else rest.quotes![k] = q;
     }
     for (const [c, data] of by) {
-      const target = layout(this.root).conv(c).voiceSources;
+      const target = layout3(this.root).conv(c).voiceSources;
       const text = JSON.stringify(data);
       if (exists(target) && readFileSync(target, "utf8") !== text) {
         rest.notes![c] = data.notes; // that conversation has sources already (other content): these are set aside whole (notes and quotes), not merged
@@ -658,18 +663,19 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
     const v = readVersion(root)!;
     if (v > LAYOUT_VERSION) throw new Error(refusal({ state: "newer", version: v })!);
     if (v === LAYOUT_VERSION || (o.movesOnly && v === MOVES_VERSION)) {
-      if (v === LAYOUT_VERSION) importLeftovers(root, o, wait); // (files an old version wrote late and reconcile moved into instance/)
+      if (v === LAYOUT_VERSION) importLeftovers(root, o, wait); // (files an old version wrote late and reconcile moved into instance/ or into a conversation's folder)
       return { already: true, moved: 0, orphans: [] };
     }
   }
   const release = takeLock(root, wait);
   try {
     if (readVersion(root) === LAYOUT_VERSION || (o.movesOnly && readVersion(root) === MOVES_VERSION)) return { already: true, moved: 0, orphans: [] };
-    if (readVersion(root) === MOVES_VERSION) { // layout 2 (the files are where they belong): only the import into instance.db is left
-      const r = importLegacy(L.root, { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}), ...(o.crashAfter !== undefined ? { crashAfter: o.crashAfter } : {}) });
-      mkdirSync(L.instance.dir, { recursive: true, mode: 0o700 });
-      writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST
-      (o.log ?? (() => {}))(`migrate: data folder is in layout version ${LAYOUT_VERSION}: ${r.files} file(s) imported into instance/instance.db${r.backup ? `; originals kept in ${r.backup}/` : ""}`);
+    if (readVersion(root) === MOVES_VERSION) { // layout 2 (the files are where they belong): the imports are left
+      const r = importAll(L.root, o);
+      return { already: false, moved: r.files, orphans: [] };
+    }
+    if (readVersion(root) === INSTANCE_DB_VERSION) { // layout 3 (instance.db is filled): only the conversations' files are left
+      const r = importAll(L.root, o);
       return { already: false, moved: r.files, orphans: [] };
     }
     const fs = o.fs ?? realFs;
@@ -718,24 +724,44 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
       log(`migrate: data folder is in layout version ${MOVES_VERSION}: ${plan.ops.length} step(s)${aside.length ? `, ${aside.length} set aside in instance/migration-orphans/ (listed above)` : ""}${rewrote ? `; originals of the files it rewrote are kept in ${relative(L.root, plan.backup)}/` : ""}; instance/migration-plan.json lists every move`);
     }
     if (o.movesOnly) return { already: false, moved: done, orphans: aside, plan };
-    const imported = importLegacy(L.root, { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}), ...(o.crashAfter !== undefined ? { crashAfter: o.crashAfter } : {}) }); // layout 3: the small files into instance.db
-    writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST: until it exists, the next start continues (a stamp of 2 means only the import is left)
-    if (imported.files > 0) log(`migrate: ${imported.files} file(s) imported into instance/instance.db (${imported.rows} row(s)); originals kept in ${imported.backup}/`);
+    importAll(L.root, o); // layouts 3 and 4: the small files into instance.db, then each conversation's into its assistant.db
     return { already: false, moved: done, orphans: aside, plan };
   } finally {
     release();
   }
 }
 
+/** Layouts 3 and 4: the process-wide files into instance.db (stamp 3), then each conversation's into its own assistant.db (stamp 4, LAST). Either part is skipped when there is nothing in it. */
+function importAll(root: string, o: MigrateOptions): { files: number } {
+  const L = layout(root);
+  const log = o.log ?? (() => {});
+  const opts = { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}), ...(o.crashAfter !== undefined ? { crashAfter: o.crashAfter } : {}) };
+  let files = 0;
+  if (readVersion(root) !== INSTANCE_DB_VERSION) {
+    const imported = importLegacy(root, opts); // layout 3: the process-wide small files into instance.db
+    writeFileAtomic(L.instance.layoutVersion, `${INSTANCE_DB_VERSION}\n`); // (until it exists, the next start continues with this part; a stamp of 2 means it is still left)
+    files += imported.files;
+    if (imported.files > 0) log(`migrate: ${imported.files} file(s) imported into instance/instance.db (${imported.rows} row(s)); originals kept in ${imported.backup}/`);
+  }
+  const conv: ConvImportResult = importConvLegacy(root, opts); // layout 4: each conversation's small files into its assistant.db
+  mkdirSync(L.instance.dir, { recursive: true, mode: 0o700 });
+  writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST: until it exists, the next start continues (a stamp of 3 means only the conversations' files are left)
+  files += conv.files;
+  log(`migrate: data folder is in layout version ${LAYOUT_VERSION}${conv.files > 0 ? `: ${conv.files} file(s) imported into ${conv.conversations} conversation database(s) (${conv.rows} row(s)); originals kept in ${conv.backup}/` : ""}`);
+  return { files };
+}
+
 /**
- * Layout-2 files that appeared in instance/ of a folder that is already in layout 3 (reconcile moved an old version's late files there): imported like the first time. Takes the lock; no-op when
+ * Layout-2 and layout-3 files that appeared in instance/ or in a conversation's folder of a folder that is already in layout 3 (reconcile moved an old version's late files there): imported like the first time. Takes the lock; no-op when
  * there are none. Returns what it imported.
  */
 export function importLeftovers(root: string, o: MigrateOptions = {}, wait = 30_000): ImportResult | undefined {
   if (!hasLegacy(root)) return undefined;
   const release = takeLock(root, wait);
   try {
-    const r = importLegacy(layout(root).root, { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}) });
+    const opts = { ...(o.now ? { now: o.now } : {}), ...(o.log ? { log: o.log } : {}) };
+    const r = importLegacy(layout(root).root, opts);
+    if (hasConvLegacyFiles(root)) importConvLegacy(layout(root).root, opts); // (an older process wrote a conversation's file after the move)
     return r;
   } finally {
     release();

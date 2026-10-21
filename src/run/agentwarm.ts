@@ -109,10 +109,10 @@ export async function runWarmOrCold(conv: Who, o: RunOptions, r: Resume, input: 
         return q;
       };
       return consume(warm ? firstWarm(onWarm, () => cold(c.controller), (e) => console.error(`${label}: warm process failed, starting normally:`, e.message)) : cold(c.controller), o, r.previousCost);
-    }, undefined, o.sessionFile);
+    }, undefined, o.sessionConv);
   } catch (e) {
     if ((e instanceof RunTimeout || e instanceof RunStopped) && slot?.holder === conv.key) slot.drop(); // after an abort the conversation gets no spare built meanwhile
-    if (o.sessionFile) forgetUnresumable(o.sessionFile, e, o.source);
+    if (o.sessionConv) forgetUnresumable(o.sessionConv, e, o.source);
     throw e;
   }
 }

@@ -30,12 +30,13 @@ const { buildOptions } = await import("../src/run/agentrun.ts");
 const CANARY = "CANARY-ANN-4242";
 const rec = T.addTenant({ aci: "00000000-0000-4000-8000-000000000001", name: "Ann" })!;
 const ann = T.tenantContext(rec);
+const annDb = convPaths(ann.convId).db; // her assistant.db: a private file of hers like the rest
 const ownerNotes = join(NOTES_DIR, "context-own.md");
 mkdirSync(NOTES_DIR, { recursive: true });
 writeFileSync(ownerNotes, "the owner's own note");
 for (const [dir, file] of [[ann.notesDir, "people-eve.md"], [ann.dir, "tenant.json"], [ann.dir, "meta.json"], [ann.dir, "cost.json"]] as const) writeFileSync(join(dir, file), `{"text":"${CANARY}"}`);
 writeFileSync(ann.logFile, `{"ts":1,"kind":"owner","text":"${CANARY}"}\n`);
-writeFileSync(ann.sessionFile, `{"id":"${CANARY}"}`);
+writeFileSync(annDb, `{"id":"${CANARY}"}`);
 const bao = instancePaths().openbao;
 mkdirSync(join(bao, "tls"), { recursive: true });
 writeFileSync(join(bao, "tls", "key.pem"), "private");
@@ -50,7 +51,7 @@ symlinkSync(ann.notesDir, join(convPaths(OWNER_CONV).dir, "to-ann-notes"));
 symlinkSync(bao, join(instancePaths().installed, "to-bao"));
 
 const HERS = [
-  join(ann.notesDir, "people-eve.md"), ann.logFile, ann.sessionFile, join(ann.dir, "tenant.json"), join(ann.dir, "meta.json"), join(ann.dir, "cost.json"),
+  join(ann.notesDir, "people-eve.md"), ann.logFile, annDb, join(ann.dir, "tenant.json"), join(ann.dir, "meta.json"), join(ann.dir, "cost.json"),
   ann.dir, ann.notesDir, conversationsDir(), join(conversationsDir(), "tenants.json"),
   join(NOTES_DIR, "..", "..", friendConvId(ann.id), "notes", "people-eve.md"), // out of the notes with ..
   join(NOTES_DIR, "to-ann", "tenant.json"), join(NOTES_DIR, "to-ann", "notes", "people-eve.md"), join(convPaths(OWNER_CONV).dir, "to-ann-notes", "people-eve.md"), // through a link
@@ -79,7 +80,7 @@ test("no run of the instance has Glob, Grep or Bash (they could list and read an
     ["NotebookEdit", { notebook_path: join(ann.notesDir, "x.ipynb") }],
   ];
   // not offered to the model at all (agentrun.ts builtinTools), and a group's or a tenant's classify refuses them outright
-  const ownerOpts = { systemPrompt: "x", sessionFile: convPaths(OWNER_CONV).session, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { systemPrompt: "x", sessionConv: OWNER_CONV, maxTurns: 3, maxBudgetUsd: 1 };
   const runs = [
     buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source: "chat", memory: { dir: NOTES_DIR } }, undefined),
     ...(["background", "handler", "radar", "dream", "heartbeat"] as const).map((source) => buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source }, undefined)),

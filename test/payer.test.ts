@@ -18,6 +18,7 @@ const { coolingDown, noteRateLimit, resetCooldown } = await import("../src/core/
 const { recordCost, spentToday } = await import("../src/core/budget.ts");
 const { keyNotices } = await import("../src/tenants/keynotice.ts");
 const { compactConversation } = await import("../src/run/chatsession.ts");
+const { readSession, writeSession } = await import("../src/run/sessionstore.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 const { recentIn } = await import("../src/approvals/recentchat.ts");
 const { tenantKey } = await import("../src/core/ownerkey.ts");
@@ -86,19 +87,18 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
 
 test("a friend's urgent compaction waits while she is blocked (her day's budget spent): no model call, nothing marked", async () => {
   const anna = friend("Anna2");
-  const conv = { ...her(anna), sessionFile: T.tenantContext(anna).sessionFile, source: "group", notesDir: T.tenantContext(anna).notesDir } as const;
-  const file = T.tenantContext(anna).sessionFile;
-  const { writeFileSync, mkdirSync } = await import("node:fs");
+  const conv = { ...her(anna), convId: T.tenantContext(anna).convId, source: "group", notesDir: T.tenantContext(anna).notesDir } as const;
+  const { mkdirSync } = await import("node:fs");
   mkdirSync(T.tenantContext(anna).dir, { recursive: true });
-  const stale = JSON.stringify({ sessionId: "s", costUsd: 0, lastContextTokens: 10_000_000, baseTokens: 1, lastTurnAt: new Date().toISOString() });
-  writeFileSync(file, stale);
+  const stale = { sessionId: "s", costUsd: 0, lastContextTokens: 10_000_000, baseTokens: 1, lastTurnAt: new Date().toISOString() };
+  writeSession(conv.convId, stale);
   recordCost(100, T.tenantContext(anna).ledger); // her day is spent
   const err = console.error;
   const log = console.log;
   console.error = console.log = () => {};
   try {
     await compactConversation(conv, "urgent", { key: () => KEY });
-    assert.equal(readFileSync(file, "utf8"), stale, "blocked: not even attempted (no failure marker, no model call)");
+    assert.deepEqual(readSession(conv.convId), stale, "blocked: not even attempted (no failure marker, no model call)");
   } finally {
     console.error = err;
     console.log = log;

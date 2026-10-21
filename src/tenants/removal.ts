@@ -1,9 +1,10 @@
-import { existsSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { audit } from "../core/audit.ts";
 import { forgetNotices } from "../core/capnotice.ts";
 import { isInside } from "../core/contain.ts";
-import { convPaths, conversationsDir, friendConvId } from "../core/convpaths.ts";
+import { removeConvDir } from "../core/convdb.ts";
+import { friendConvId } from "../core/convpaths.ts";
 import { forgetTenantConnections } from "../intake/intakelinks.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 import { tenantKey } from "../core/ownerkey.ts";
@@ -73,9 +74,7 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
   });
   if (tenantById(id)) out.registry = deleteTenant(id, d.drop ? { drop: d.drop } : {}); // (her registry entry first: from that moment she is nobody; then her whole folder)
   step("her conversation folder", () => {
-    const dir = convPaths(conv).dir;
-    const had = existsSync(dir);
-    if (isInside(dir, conversationsDir())) rmSync(dir, { recursive: true, force: true }); // (also when the registry entry was gone already)
+    const had = removeConvDir(conv); // (also when the registry entry was gone already; its assistant.db connection is closed first)
     return had && !out.registry;
   });
   step("her saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));

@@ -129,7 +129,7 @@ export interface CommandDeps {
   setQuiet: (conv: QuietConv, until: string) => void;
   clearQuiet: (conv: QuietConv) => void;
 }
-type QuietConv = Pick<Conversation, "kind" | "key" | "sessionFile"> & { readonly tenantId?: string };
+type QuietConv = Pick<Conversation, "kind" | "key" | "convId"> & { readonly tenantId?: string };
 const real: CommandDeps = {
   approvals: (scope, clear) => (clear ? clearText(scope) : listText(scope)),
   now: () => new Date(),
@@ -168,7 +168,7 @@ export function commandReply(conv: QuietConv, text: string, deps: Partial<Comman
   if (!cmd) return undefined;
   if (cmd.kind === "stop") {
     if (conv.kind === "group") return undefined; // (a group has its own door; a command there is just a message)
-    return d.stop(conv.sessionFile) + d.dropQueued() > 0 ? "Stopped." : "Nothing is running right now.";
+    return d.stop(conv.convId) + d.dropQueued() > 0 ? "Stopped." : "Nothing is running right now.";
   }
   if (cmd.kind === "approvals") return conv.kind === "group" ? undefined : d.approvals(conv.key, cmd.clear); // the owner's own items in her chat, a friend's in hers; a group has no inbox
   if (cmd.kind === "quiet" || cmd.kind === "unquiet" || cmd.kind === "quiet-usage") return quietReply(conv, cmd, d);

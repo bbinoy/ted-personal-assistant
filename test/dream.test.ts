@@ -1,3 +1,4 @@
+import { convDb } from "../src/core/convdb.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -120,13 +121,13 @@ test("dream: only the owner's words and reactions ground a note; the assistant's
 
 test("dream: runs once a day, only if the owner said something, and applies its changes silently", async () => {
   seed([]);
-  rmSync(dataPath(convPaths(OWNER_CONV).dream), { force: true });
+  convDb(OWNER_CONV).run("DELETE FROM dream");
   rmSync(dataPath(convPaths(OWNER_CONV).messages), { force: true });
     let calls = 0;
   const dreamer = createDreamer({ run: () => async () => (calls++, { ops: [write({ evidence: "Anna is my sister and her birthday is on 3 March" })] }) });
   await dreamer.run(now); // nothing said yet
   assert.equal(calls, 0);
-  rmSync(dataPath(convPaths(OWNER_CONV).dream), { force: true });
+  convDb(OWNER_CONV).run("DELETE FROM dream");
   recordMessage("owner", 5, OWNER_SAID, new Date("2026-10-13T20:00:00Z"));
   await dreamer.run(now);
   assert.equal(calls, 1);

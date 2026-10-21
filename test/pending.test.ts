@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import * as approvals from "../src/approvals/approvals.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
 import { createApprovers } from "../src/approvals/approvers.ts";
-import { addPending, openItems, pendingFileOf, splitExpired, sweepExpired, takeExpired, type Pending } from "../src/approvals/pending.ts";
+import { addPending, openItems, splitExpired, sweepExpired, takeExpired, type Pending } from "../src/approvals/pending.ts";
 import { ANSWER_HINT, compactFooter, expiryLine, renderBatch, renderList } from "../src/approvals/pendingbatch.ts";
 import { exactGuard, outcomeOf, pendingPrompt } from "../src/approvals/pendingexec.ts";
 import { answerPending, clearText, flushPending, idle, listText, queueCall, setPendingRuntime, type PendingRuntime } from "../src/approvals/pendingflow.ts";
@@ -17,7 +17,8 @@ import { readAudit } from "../src/core/audit.ts";
 import { commandReply, parseCommand } from "../src/conversation/ownercommands.ts";
 import { runPending } from "../src/run/pendingrun.ts";
 import { owner } from "../src/conversation/conversation.ts";
-import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { convIdOfKey, convPaths, groupConvId, OWNER_CONV } from "../src/core/convpaths.ts";
+import { closeConvDb, convDb } from "../src/core/convdb.ts";
 
 // The approval inbox: what an unattended run needed a yes for is parked (never waited on), asked as one numbered batch, answered by number in code, and run EXACTLY as recorded.
 // Fake values only.
@@ -126,20 +127,21 @@ test("expiryLine and renderList are short and use code labels only", () => {
 
 // ---- the state ----
 
-test("pending actions persist in an atomic file, keep stable numbers that are never reused, and park the same call once", () => {
+test("pending actions persist in the conversation's database, keep stable numbers that are never reused, and park the same call once", () => {
   const scope = scopeName();
   const a = addPending(scope, { tool: SEND, input: { a: 1, b: 2 }, label: "one", question: "q", footer: "", source: "background" }, 1000);
   const b = addPending(scope, { tool: SEND, input: { b: 2, a: 1 }, label: "one", question: "q", footer: "", source: "background" }, 2000); // the same call, key order aside
   const c = addPending(scope, { tool: SEND, input: { a: 3 }, label: "three", question: "q", footer: "", source: "background" }, 3000);
   assert.deepEqual([a, b, c], [{ n: 1, duplicate: false }, { n: 1, duplicate: true }, { n: 2, duplicate: false }]);
-  // a restart: nothing but the file is kept
-  const onDisk = JSON.parse(readFileSync(dataPath(pendingFileOf(scope)), "utf8")) as { next: number; items: Pending[] };
-  assert.equal(onDisk.items.length, 2);
+  // a restart: nothing but the database is kept (the connection is closed, the file opened again)
+  closeConvDb(convIdOfKey(scope));
+  assert.equal(convDb(convIdOfKey(scope)).num("SELECT COUNT(*) FROM pending_items"), 2);
+  assert.equal(convDb(convIdOfKey(scope)).num("SELECT next FROM pending_state"), 3);
   assert.deepEqual(openItems(scope).map((p) => [p.n, p.tool, p.input]), [[1, SEND, { a: 1, b: 2 }], [2, SEND, { a: 3 }]]);
   clearText(scope);
   const d = addPending(scope, { tool: SEND, input: { a: 1, b: 2 }, label: "again", question: "q", footer: "", source: "background" }, 4000);
   assert.deepEqual(d, { n: 3, duplicate: false }, "a number is never reused");
-  assert.notEqual(pendingFileOf("owner"), pendingFileOf(scope));
+  assert.notEqual(convPaths(convIdOfKey("owner")).db, convPaths(convIdOfKey(scope)).db, "one database per conversation");
 });
 
 test("splitExpired is pure; an expired item is dropped and told once, never silently", async () => {
@@ -454,13 +456,13 @@ test("/approvals lists the open items with numbers, ages and the hint; '/approva
   assert.deepEqual(parseCommand("  /Approvals   CLEAR "), { kind: "approvals", clear: true });
   assert.equal(parseCommand("/approvals now"), undefined);
   assert.equal(parseCommand("show /approvals"), undefined);
-  const conv = { kind: "tenant", key: r.scope, sessionFile: "x/session.json" } as const;
+  const conv = { kind: "tenant", key: r.scope, convId: "friend-x" } as const;
   const listed = commandReply(conv, "/approvals")!;
   assert.match(listed, /^Waiting for your approval \(2\):\n1\. Rebecca \(1 min\)/);
   assert.match(listed, /\n2\. Bob /);
   assert.ok(listed.includes(ANSWER_HINT));
   assert.deepEqual(openItems(r.scope).every((p) => p.sent), true, "listed items are not asked again in a batch");
-  assert.equal(commandReply({ kind: "group", key: "g1", sessionFile: "g" }, "/approvals"), undefined);
+  assert.equal(commandReply({ kind: "group", key: "g1", convId: groupConvId("g1") }, "/approvals"), undefined);
   assert.equal(commandReply(conv, "/approvals clear"), "Dropped 2 waiting actions (#1, #2). Nothing was run. Counted as a no, so they are not proposed again for now.");
   assert.deepEqual(openItems(r.scope), []);
   assert.equal(commandReply(conv, "/approvals clear"), "Nothing was waiting.");
@@ -470,7 +472,7 @@ test("/approvals lists the open items with numbers, ages and the hint; '/approva
 
 test("/approvals is the owner's own in her chat (owner key) and works through the injected dependency", () => {
   const seen: [string, boolean][] = [];
-  const conv = { kind: "owner", key: "owner", sessionFile: convPaths(OWNER_CONV).session } as const;
+  const conv = { kind: "owner", key: "owner", convId: OWNER_CONV } as const;
   assert.equal(commandReply(conv, "/approvals", { approvals: (s, c) => (seen.push([s, c]), "listed") }), "listed");
   assert.equal(commandReply(conv, "/approvals clear", { approvals: (s, c) => (seen.push([s, c]), "cleared") }), "cleared");
   assert.deepEqual(seen, [["owner", false], ["owner", true]]);

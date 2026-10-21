@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { ROOT } from "../src/core/paths.ts";
-import { groupConvId, layout, LAYOUT_VERSION, MOVES_VERSION } from "../src/core/convpaths.ts";
+import { groupConvId, layout, layout3, LAYOUT_VERSION, MOVES_VERSION } from "../src/core/convpaths.ts";
 import {
   describePlan, layoutState, markOwnerTold, migrate, ownerNotice, planMigration, readVersion, refusal, REORGANISED_TEXT, rekeyCapNotices, rekeyGroupCost, sameTree, type FsView, type Plan,
 } from "../src/core/migrate.ts";
@@ -260,14 +260,14 @@ test("a process-wide target that exists with other content is never overwritten:
   mkdirSync(L.conv("owner").dir, { recursive: true });
   mkdirSync(L.instance.dir, { recursive: true });
   writeFileSync(L.instance.registrations, '{"new":"code wrote this"}'); // other content
-  writeFileSync(L.conv("owner").dream, '{"day":"d"}'); // identical to the old one
+  writeFileSync(layout3(root).conv("owner").dream, '{"day":"d"}'); // identical to the old one
   mkdirSync(L.conv("owner").notes, { recursive: true }); // the empty skeleton start-up makes
   const log: string[] = [];
   moves(root, { log: (l) => log.push(l) });
   assert.equal(readFileSync(L.instance.registrations, "utf8"), '{"new":"code wrote this"}', "not overwritten");
   assert.equal(readFileSync(join(L.instance.migrationOrphans, "state/registrations.json"), "utf8"), "{}", "the old one is kept apart");
   assert.ok(log.some((l) => l.includes("state/registrations.json") && l.includes("exists with other content")));
-  assert.equal(readFileSync(L.conv("owner").dream, "utf8"), '{"day":"d"}');
+  assert.equal(readFileSync(layout3(root).conv("owner").dream, "utf8"), '{"day":"d"}');
   assert.equal(existsSync(join(root, "state/dream.json")), false, "the duplicate is gone after a verified compare");
   assert.equal(existsSync(join(L.conv("owner").notes, "style-x.md")), true, "the skeleton gave way to the notes");
 });

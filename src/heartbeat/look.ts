@@ -17,7 +17,7 @@ import { isReadTool } from "../policy/policy.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
-import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
+import { createSeenMail, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
@@ -131,7 +131,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let acted = 0; // tool calls that are not reads (listing the inbox or asking seen_mail is looking, not acting)
     let archived = 0;
     let delegations = 0;
-    const seenMail = createSeenMail(seenFileOf(conv)); // the ids the run is told are new count as seen only if this look ends well
+    const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;

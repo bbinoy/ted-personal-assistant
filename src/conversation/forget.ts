@@ -1,9 +1,8 @@
-import { existsSync, rmSync } from "node:fs";
 import { audit } from "../core/audit.ts";
 import { forgetSpend } from "../core/budget.ts";
 import { forgetNotices } from "../core/capnotice.ts";
-import { isInside } from "../core/contain.ts";
-import { convPaths, conversationsDir, isConvId, type ConvId } from "../core/convpaths.ts";
+import { removeConvDir } from "../core/convdb.ts";
+import { isConvId, type ConvId } from "../core/convpaths.ts";
 import { settings } from "../core/settings.ts";
 import { macKeychain } from "../secrets/keychain.ts";
 import { Admin, layoutOf } from "../secrets/openbaoadmin.ts";
@@ -60,10 +59,7 @@ export function forgetGroup(ref: string, d: GroupForgetDeps = {}): GroupRemoval 
     return attachments.length;
   });
   step("its folder (notes, history, session, pending approvals, voices)", () => {
-    const dir = convPaths(conv).dir;
-    const had = existsSync(dir);
-    if (isInside(dir, conversationsDir())) rmSync(dir, { recursive: true, force: true });
-    return had;
+    return removeConvDir(conv); // (its assistant.db connection is closed first)
   });
   step("its saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));
   step("its day's spend", () => forgetSpend(conv));

@@ -948,7 +948,7 @@ test("owner chat: /stop aborts the running turn at once, says Stopped. and no 's
   const { withCeiling } = await import("../src/run/ceiling.ts");
   const { isPaused } = await import("../src/core/pause.ts");
   let prompts = 0;
-  const { r, pipeline } = rig({ run: async () => (prompts++, withCeiling(60_000, () => new Promise<string>(() => {}), owner().sessionFile)) });
+  const { r, pipeline } = rig({ run: async () => (prompts++, withCeiling(60_000, () => new Promise<string>(() => {}), owner().convId)) });
   const turn = pipeline.handleIncoming(owner(), msg({ text: "write me a long report", timestamp: 300 }));
   await tick();
   assert.equal(prompts, 1, "the turn is running");

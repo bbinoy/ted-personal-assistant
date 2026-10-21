@@ -10,7 +10,8 @@ import { isPaused } from "../core/pause.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
 import { runGate } from "../core/rungate.ts";
-import { noticeBudget, releaseHeld } from "./notices.ts";
+import { noticeBudget, noticeDamaged, releaseHeld } from "./notices.ts";
+import { closeIdleConvDbs } from "../core/convdb.ts";
 import { flushPending } from "../approvals/pendingflow.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
@@ -104,6 +105,8 @@ export function createWakeups(deps: WakeDeps) {
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
     if (spent()) noticeBudget(now); // the owner's one notice of the day: background work stops until midnight (budget.ts overBudget says whether it is the first)
+    noticeDamaged(now); // a conversation whose assistant.db was set aside: the owner is told once a day until a person looks (core/convdb.ts)
+    closeIdleConvDbs(now.getTime()); // connections nobody used for a while (a store reopens one at its next use)
     const convs: Conversation[] = [owner()]; // (each conversation asks mayRun: the instance's day budget is the owner's and the groups', a friend's is her own)
     if (settings.wakeups && deps.groupChats) {
       const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();

@@ -51,8 +51,8 @@ test("layout: every conversation has the same files in one folder; instance and 
     assert.ok(!Object.values(L.conv(id)).some((p) => p.includes(GROUP_ID)));
   }
   assert.deepEqual(Object.fromEntries(names("owner")), {
-    dir: "", messages: "messages.jsonl", notes: "notes", notesBackup: "notes-backup", session: "session.json", dream: "dream.json", heldPosts: "held-posts.json", seenMail: "seen-mail.json",
-    quiet: "quiet.json", pending: "pending.json", search: "search.sqlite", voices: "voices", voiceSources: "voices/sources.json", tenantJson: "tenant.json", meta: "meta.json",
+    dir: "", db: "assistant.db", dbDamaged: "assistant.db.damaged", messages: "messages.jsonl", notes: "notes", notesBackup: "notes-backup", search: "search.sqlite", voices: "voices",
+    tenantJson: "tenant.json", meta: "meta.json",
   });
   for (const [k, v] of Object.entries(L.instance)) if (!["installed", "openbao", "ttsQwen"].includes(k)) assert.ok(v === L.instance.dir || v.startsWith(L.instance.dir + sep), `${k} is in instance/`);
   assert.deepEqual([L.instance.installed, L.instance.openbao, L.instance.ttsQwen], ["/data/state", "/data/state/openbao", "/data/state/tts-qwen"], "installed software keeps its folder: its paths are baked into its config and plist");
@@ -68,7 +68,7 @@ test("bound accessors follow the data root the settings registered; convOfPath n
   useDataRoot("/somewhere/data");
   try {
     assert.equal(convDir("owner"), "/somewhere/data/conversations/owner");
-    assert.equal(convPaths("friend-anna").session, "/somewhere/data/conversations/friend-anna/session.json");
+    assert.equal(convPaths("friend-anna").db, "/somewhere/data/conversations/friend-anna/assistant.db");
     assert.equal(instancePaths().tenants, "/somewhere/data/instance/tenants.json");
     assert.equal(logPaths().audit, "/somewhere/data/logs/audit.jsonl");
     assert.equal(convOfPath("/somewhere/data/conversations/friend-anna/notes/x.md"), "friend-anna");
@@ -141,7 +141,7 @@ const walk = (dir: string, out: string[] = []): string[] => {
 
 // The folders and the per-conversation and instance file names. A literal that IS one of them, or ends with "/<one of them>", or starts with a folder of the layout, is a path being built by hand.
 const NAMES = [
-  "messages.jsonl", "session.json", "dream.json", "held-posts.json", "seen-mail.json", "quiet.json", "pending.json", "search.sqlite", "notes-backup", "tenant.json", "meta.json", "cost.json",
+  "messages.jsonl", "session.json", "dream.json", "held-posts.json", "seen-mail.json", "quiet.json", "pending.json", "assistant.db", "assistant.db.damaged", "search.sqlite", "notes-backup", "tenant.json", "meta.json", "cost.json",
   "tenants.json", "registrations.json", "intake-status.json", "intake-problems.json", "cap-notices.json", "key-cost.json", "group-cost.json", "heartbeat.json", "heartbeat.jsonl",
   "connectors.json", "tools-seen.json", "instance.db", "notion-client.json", "notion-client.lock", "payments.jsonl", "card.disabled", "layout-version", "migration-plan.json", "migration-orphans",
   "retention.json", "audit.jsonl", "agent.log", "signal-daemon.log", "launchd-stderr.log", "intake-launchd-stderr.log",
