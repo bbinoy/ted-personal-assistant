@@ -200,15 +200,8 @@ export function damagedConvs(root?: string): (Damage & { conv: ConvId })[] {
 export const clearDamage = (c: ConvRef): void => rmSync(convPaths(c).dbDamaged, { force: true });
 
 function attempt(p: ConvPaths, conv: ConvId): Db {
-  const db = openDb(p.db, { migrations: CONV_SCHEMA, rebuildable: false, label: `${conv}'s assistant.db` });
-  try {
-    const verdict = db.check(); // (a few tables: cheap; a page SQLite cannot read shows here, not at the first query in the middle of a turn)
-    if (verdict !== "ok") throw Object.assign(new Error(`quick_check: ${verdict}`), { errcode: 11 });
-    return db;
-  } catch (e) {
-    db.close();
-    throw e;
-  }
+  // verify: the full integrity check once per open (a few small tables: cheap); a page SQLite cannot read shows here, not at the first query in the middle of a turn
+  return openDb(p.db, { migrations: CONV_SCHEMA, rebuildable: false, verify: true, label: `${conv}'s assistant.db` });
 }
 
 function openFor(p: ConvPaths, conv: ConvId): Db {

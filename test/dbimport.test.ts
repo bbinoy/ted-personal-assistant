@@ -87,7 +87,7 @@ test("migrate from layout 2: every file imported in one transaction, counts veri
   const pays = db.all<{ id: string; status: string }>("SELECT id, status FROM payments ORDER BY seq").map((p) => `${p.id}:${p.status}`);
   assert.deepEqual(pays, ["a0000001:approved", "a0000001:clicked", "a0000001:confirmed", "a0000002:failed", "b0000001:confirmed", "b0000002:approved", "b0000002:clicked", "c0000001:confirmed"]);
   const ledger = new Ledger(db);
-  assert.deepEqual(ledger.rows().map((p) => `${p.id}:${p.status}`), ["a0000001:confirmed", "a0000002:failed", "b0000001:confirmed", "b0000002:clicked", "c0000001:confirmed"], "latest status per payment, oldest payment first");
+  assert.deepEqual(ledger.allRows().map((p) => `${p.id}:${p.status}`), ["a0000001:confirmed", "a0000002:failed", "b0000001:confirmed", "b0000002:clicked", "c0000001:confirmed"], "latest status per payment, oldest payment first");
   assert.equal(ledger.recover(new Date("2026-10-21T09:00:00.000Z")), 1, "the open payment is recovered as before");
   assert.equal(ledger.history("a0000001").length, 3);
 

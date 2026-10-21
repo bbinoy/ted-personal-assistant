@@ -5,7 +5,7 @@ import { spentToday } from "../core/budget.ts";
 import { pauseText } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
 import { dataPath, writeText } from "../core/state.ts";
-import { instanceDb } from "../core/instancedb.ts";
+import { instanceDb, ledgerDamage } from "../core/instancedb.ts";
 import { instancePaths } from "../core/convpaths.ts";
 import { clockIn, systemZone, timeIn } from "../core/timezone.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -87,7 +87,12 @@ export function parseCommand(text: string, now: Date = new Date(), zone: string 
 
 // The owner's last look, from the heartbeat's own rows (the `looks` table of instance.db; heartbeat/rows.ts writes it, the conversation folder reads it through the database).
 export function lastOwnerLook(): { at: Date; outcome: string } | undefined {
-  const r = instanceDb().get<{ at: string; outcome: string }>("SELECT at, outcome FROM looks WHERE kind = 'owner' ORDER BY id DESC LIMIT 1");
+  let r: { at: string; outcome: string } | undefined;
+  try {
+    r = instanceDb().get<{ at: string; outcome: string }>("SELECT at, outcome FROM looks WHERE kind = 'owner' ORDER BY id DESC LIMIT 1");
+  } catch {
+    return undefined; // (a damaged or busy database: /status says so separately)
+  }
   return r && Number.isFinite(Date.parse(r.at)) ? { at: new Date(r.at), outcome: r.outcome } : undefined;
 }
 
@@ -100,6 +105,7 @@ export interface StatusFacts {
   approvals: number;
   down: readonly string[]; // connectors down in the last run
   zone?: string;
+  damaged?: boolean; // the ledger database is damaged: the agent runs degraded (core/instancedb.ts)
 }
 
 // Pure: the "/status" answer, a few short lines.
@@ -107,7 +113,7 @@ export function statusText(f: StatusFacts): string {
   return [
     f.pause ? `Paused: ${f.pause}.` : "Running (not paused).",
     ...(f.quiet ? [`Quiet: ${f.quiet} (held items go out in the digest).`] : []),
-    `Budget today: $${f.spentUsd.toFixed(2)} of $${f.limitUsd}${f.spentUsd >= f.limitUsd ? " (reached, background work is paused)" : ""}.`,
+    f.damaged ? "Ledger damaged (instance/instance.db): background work and payments are off, chat works. See `npm run doctor`." : `Budget today: $${f.spentUsd.toFixed(2)} of $${f.limitUsd}${f.spentUsd >= f.limitUsd ? " (reached, background work is paused)" : ""}.`,
     f.lastLook ? `Last look: ${timeIn(f.lastLook.at, f.zone)} (${f.lastLook.outcome}).` : "Last look: none yet.",
     `Open approvals: ${f.approvals}.`,
     f.down.length ? `Connectors down: ${f.down.join(", ")}. See \`npm run doctor\`.` : "Connectors: none down.",
@@ -147,6 +153,7 @@ const real: CommandDeps = {
       limitUsd: settings.dailyBudgetUsd,
       approvals: openCount(conv.key) + waitingCount(conv.key), // (the questions open in the chat, and the calls parked in the approval inbox)
       lastLook: lastOwnerLook(),
+      ...(ledgerDamage() ? { damaged: true } : {}),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };
   },

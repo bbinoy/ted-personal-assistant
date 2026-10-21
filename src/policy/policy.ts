@@ -57,7 +57,7 @@ const NOTE_FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
 // said or what the assistant did: readableData() below (conversations/owner/notes/ incl. MEMORY.md; conversations/owner/messages.jsonl; logs/audit.jsonl, agent.log, signal-daemon.log).
 // EVERYTHING ELSE under the data folder is unreadable by default (the rest of conversations/owner/ too: its session, notes-backup, search index, pending approvals), so a new store is private the
 // day it is written. (It used to be the other way round, a deny-list, and it missed friends' voice-note snippets and cloned reference audio, the friends list with every friend's name
-// and ACI, intake-problems.json, notes-backup/ with notes deleted by forget_note, and raw group ids in cap-notices.json and group-cost.json, and every group's folder.)
+// and ACI, the intake table of instance.db, notes-backup/ with notes deleted by forget_note, and a database file with every friend's marks and spend, and every group's folder.)
 // Reading the logs by SEARCH (search_logs, a tool with its own fixed folder) is not affected. Symlinks are resolved first, so a link cannot lead out of
 // an allowed entry. The repo, .env and the rest of the disk stay out of reach.
 // hiddenData is the second lock, kept on top of the allow-list: every other conversation's folder (a friend's and a group's notes, history, sessions: the owner reads none of them through the

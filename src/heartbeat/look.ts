@@ -33,7 +33,7 @@ import { gateSink } from "../modules/send/send.ts";
 // (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge -> phone path, with `standing` provenance (the fixed instruction below is what the
 // judge reads as the reason for the run; no message of anyone's led there) and the conversation's own approver (a question is asked in the chat that triggered it).
 // It answers with a message or [[silent]] and the minutes until its next look.
-// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in instance/heartbeat.jsonl (counts, never words).
+// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
 export interface RunExtra {
   onToolSuccess?: (tool: string, input: unknown) => void;

@@ -336,3 +336,20 @@ export function importConvLegacy(root: string, o: ConvImportOptions = {}): ConvI
   res.backup = relative(L.root, backup);
   return res;
 }
+
+/**
+ * A forgotten conversation (a friend, a group): the import left copies of its files in instance/migration-backup/<time>/conversations/<convId>/ (its session pointer, held posts, approvals, voice notes: her
+ * words). They go with her. Returns how many backups held a folder of hers. (Every backup path carries only its own convId: no other conversation's data is in that folder.)
+ */
+export function forgetConvInBackups(root: string, conv: ConvId): number {
+  const L = layout(root);
+  let n = 0;
+  for (const stamp of listDir(L.instance.migrationBackup)) {
+    const own = join(L.instance.migrationBackup, stamp, "conversations", conv);
+    if (exists(own)) {
+      rmSync(own, { recursive: true, force: true });
+      n++;
+    }
+  }
+  return n;
+}

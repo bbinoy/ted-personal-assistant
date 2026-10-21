@@ -2,7 +2,8 @@ import { audit } from "../core/audit.ts";
 import { forgetSpend } from "../core/budget.ts";
 import { forgetNotices } from "../core/capnotice.ts";
 import { removeConvDir } from "../core/convdb.ts";
-import { isConvId, type ConvId } from "../core/convpaths.ts";
+import { dataRoot, isConvId, type ConvId } from "../core/convpaths.ts";
+import { forgetConvInBackups } from "../core/convimport.ts";
 import { settings } from "../core/settings.ts";
 import { macKeychain } from "../secrets/keychain.ts";
 import { Admin, layoutOf } from "../secrets/openbaoadmin.ts";
@@ -62,6 +63,7 @@ export function forgetGroup(ref: string, d: GroupForgetDeps = {}): GroupRemoval 
     return removeConvDir(conv); // (its assistant.db connection is closed first)
   });
   step("its saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));
+  step("its files in the assistant.db import's backups", () => forgetConvInBackups(dataRoot(), conv) > 0);
   step("its day's spend", () => forgetSpend(conv));
   step("its notice marks", () => forgetNotices((k) => k === `group:${conv}` || k === `group-budget:${conv}` || k === `warn:${conv}`));
   step("its name in memory", () => (found.id ? (forgetGroupCache(found.id), d.drop?.(found.id), false) : false));
