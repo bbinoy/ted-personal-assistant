@@ -16,7 +16,7 @@ const fresh = (): string => mkdtempSync(join(tmpdir(), "migrate-"));
 const tree = (root: string): Record<string, string> => {
   const t = snapshot(root);
   delete t["instance/migration-plan.json"];
-  return t;
+  return Object.fromEntries(Object.entries(t).map(([k, v]) => [k.replace(/^instance\/migration-backup\/[^/]+\//, "instance/migration-backup/T/"), v])); // (the backup folder is named by the time)
 };
 const old = (): string => {
   const root = fresh();
@@ -267,6 +267,56 @@ test("a target that exists with other content is never overwritten: the source i
   assert.equal(readFileSync(L.conv("owner").dream, "utf8"), '{"day":"d"}');
   assert.equal(existsSync(join(root, "state/dream.json")), false, "the duplicate is gone after a verified compare");
   assert.equal(existsSync(join(L.conv("owner").notes, "style-x.md")), true, "the skeleton gave way to the notes");
+});
+
+test("what the migration REWRITES is copied first, byte for byte, into instance/migration-backup/<time>/ and kept; what it moves by rename needs no copy", () => {
+  const root = old();
+  const before = snapshot(root);
+  const log: string[] = [];
+  migrate(root, { log: (l) => log.push(l) });
+  const L = layout(root);
+  const stamps = readdirSync(L.instance.migrationBackup);
+  assert.equal(stamps.length, 1);
+  const kept = snapshot(join(L.instance.migrationBackup, stamps[0]!));
+  for (const f of ["state/group-cost.json", "state/cap-notices.json", "state/voice/sources.json"]) assert.equal(kept[f], before[f], `${f} is kept byte-identical`);
+  assert.deepEqual(Object.keys(kept).filter((k) => !k.endsWith("/")).sort(), ["state/cap-notices.json", "state/group-cost.json", "state/voice/sources.json"], "only the rewritten ones");
+  assert.ok(log.some((l) => l.includes("layout version 2") && l.includes(`instance/migration-backup/${stamps[0]}/`) && l.includes("migration-plan.json")), "the one-line summary names the folder and the plan");
+  const plan = JSON.parse(readFileSync(L.instance.migrationPlan, "utf8")) as Plan;
+  assert.equal(plan.backup, join(L.instance.migrationBackup, stamps[0]!));
+  // a crash after the rewrite, then a resume: the same single backup folder, still the originals
+  const r2 = old();
+  assert.throws(() => migrate(r2, { crashAfter: 50 }), /simulated crash/);
+  migrate(r2);
+  const s2 = readdirSync(layout(r2).instance.migrationBackup);
+  assert.equal(s2.length, 1);
+  assert.equal(snapshot(join(layout(r2).instance.migrationBackup, s2[0]!))["state/group-cost.json"], before["state/group-cost.json"]);
+  // nothing to rewrite, no backup folder, no mention
+  const plain = fresh();
+  buildOld(plain);
+  rmSync(join(plain, "state/group-cost.json"));
+  rmSync(join(plain, "state/cap-notices.json"));
+  rmSync(join(plain, "state/voice/sources.json"));
+  const log3: string[] = [];
+  migrate(plain, { log: (l) => log3.push(l) });
+  assert.equal(existsSync(layout(plain).instance.migrationBackup), false);
+  assert.ok(!log3.some((l) => l.includes("migration-backup")));
+});
+
+test("npm run doctor still runs on an old data folder: the layout line fails with what to do, the checks that need the new layout are skipped, nothing is moved", () => {
+  const root = old();
+  const before = snapshot(root);
+  const r = run(["src/cli.ts", "doctor"], root);
+  assert.equal(r.status, 1, "a failed check");
+  assert.match(r.stdout, /FAIL\s+data layout\s+\(old data layout: start the agent once or run `npm run migrate`; `npm run migrate -- --dry-run` shows the plan/);
+  for (const skipped of ["the owner's notes", "nightly dream", "heartbeat is ticking", "daily spend guard", "not paused", "setup notes"]) assert.doesNotMatch(r.stdout, new RegExp(skipped), skipped);
+  assert.match(r.stdout, /Node 24\+/);
+  const files = (t: Record<string, string>) => Object.fromEntries(Object.entries(t).filter(([k]) => !k.endsWith("/")));
+  assert.deepEqual(files(snapshot(root)), files(before), "doctor moved nothing");
+  assert.equal(run(["src/cli.ts", "report"], root).status, 1, "report still refuses");
+  migrate(root);
+  const ok = run(["src/cli.ts", "doctor"], root);
+  assert.match(ok.stdout, /ok\s+data layout\s+\(version 2/);
+  assert.match(ok.stdout, /the owner's notes/);
 });
 
 test("a source that cannot be copied faithfully is left where it is", () => {

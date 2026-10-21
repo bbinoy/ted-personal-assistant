@@ -84,6 +84,7 @@ export interface InstancePaths {
   layoutVersion: string;
   migrationPlan: string;
   migrationOrphans: string;
+  migrationBackup: string; // byte-identical copies of the files the migration REWRITES (not the ones it moves), under a timestamped folder
   migrationLock: string;
   tenants: string; // the friends list (the registry)
   registrations: string;
@@ -143,6 +144,7 @@ export function layout(root: string): Layout {
       layoutVersion: join(inst, "layout-version"),
       migrationPlan: join(inst, "migration-plan.json"),
       migrationOrphans: join(inst, "migration-orphans"),
+      migrationBackup: join(inst, "migration-backup"),
       migrationLock: join(inst, "migration.lock"),
       tenants: join(inst, "tenants.json"),
       registrations: join(inst, "registrations.json"),

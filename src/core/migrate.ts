@@ -38,6 +38,7 @@ export interface Plan {
   createdAt: string;
   root: string;
   ops: Op[];
+  backup: string; // where the originals of what is REWRITTEN (not moved) are copied first: instance/migration-backup/<time>/<old path>
   completedAt?: string;
   ownerTold?: boolean; // the owner has been told once, in her chat, that storage was reorganised
 }
@@ -186,7 +187,7 @@ export function planMigration(root: string, fs: FsView = realFs, now: Date = new
     if (p === old.groupsDir || claimed.has(p)) continue;
     orphan(p, "an unknown entry of memory/");
   }
-  return { version: LAYOUT_VERSION, createdAt: now.toISOString(), root: L.root, ops };
+  return { version: LAYOUT_VERSION, createdAt: now.toISOString(), root: L.root, ops, backup: join(L.instance.migrationBackup, now.toISOString().replace(/[:.]/g, "-")) };
 }
 
 /** Pure: the plan as lines for `npm run migrate -- --dry-run`. */
@@ -354,9 +355,24 @@ class Mover {
   orphans: string[] = [];
   readonly root: string;
   readonly o: MigrateOptions;
-  constructor(root: string, o: MigrateOptions) {
+  readonly backupDir: string;
+  backedUp = 0;
+  constructor(root: string, o: MigrateOptions, backupDir: string) {
     this.root = root;
     this.o = o;
+    this.backupDir = backupDir;
+  }
+
+  /** Before a file is rewritten: its original, byte for byte, fsynced, in the backup folder (kept for good). A move by rename needs no copy. */
+  private backup(from: string): void {
+    const to = join(this.backupDir, relative(this.root, from));
+    if (!exists(from) || exists(to)) return; // (an earlier, interrupted run copied it already)
+    mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
+    copyFileSync(from, to);
+    fsyncPath(to);
+    fsyncPath(dirname(to));
+    if (!sameTree(from, to)) throw new Error(`the backup of ${from} did not verify`);
+    this.backedUp++;
   }
   private log = (l: string) => (this.o.log ?? (() => {}))(l);
 
@@ -396,6 +412,7 @@ class Mover {
   private readTransformWrite(op: Op, f: (v: unknown) => unknown): void {
     const { from, to } = op;
     if (!exists(from)) return;
+    this.backup(from);
     let value: unknown;
     try {
       value = JSON.parse(readFileSync(from, "utf8"));
@@ -420,6 +437,7 @@ class Mover {
   private split(op: Op): void {
     const from = op.from;
     if (!exists(from)) return;
+    this.backup(from);
     let src: SourcesFile;
     try {
       src = JSON.parse(readFileSync(from, "utf8")) as SourcesFile;
@@ -535,7 +553,7 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
     }
     const log = o.log ?? (() => {});
     if (plan.ops.length > 0) log(`migrate: ${resumed ? "continuing" : "starting"}: ${plan.ops.filter((x) => !x.done).length} of ${plan.ops.length} step(s) to do (instance/migration-plan.json)`);
-    const mover = new Mover(L.root, o);
+    const mover = new Mover(L.root, o, plan.backup ?? join(L.instance.migrationBackup, "unknown"));
     let done = 0;
     for (const op of plan.ops) {
       if (op.done) continue;
@@ -553,8 +571,9 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
     }
     writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST: until it exists, the next start continues from the plan
     if (plan.ops.length > 0) {
+      const rewrote = plan.ops.some((x) => x.kind === "rekey" || x.kind === "split-sources");
       const aside = new Set([...plan.ops.filter((x) => x.kind === "orphan").map((x) => x.from), ...mover.orphans]).size;
-      log(`migrate: data folder is in layout version ${LAYOUT_VERSION}: ${plan.ops.length} step(s)${aside ? `, ${aside} set aside in instance/migration-orphans/ (listed above)` : ""}`);
+      log(`migrate: data folder is in layout version ${LAYOUT_VERSION}: ${plan.ops.length} step(s)${aside ? `, ${aside} set aside in instance/migration-orphans/ (listed above)` : ""}${rewrote ? `; originals of the files it rewrote are kept in ${relative(L.root, plan.backup)}/` : ""}; instance/migration-plan.json lists every move`);
     }
     return { already: false, moved: done, orphans: mover.orphans, plan };
   } finally {
