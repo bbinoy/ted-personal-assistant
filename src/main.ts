@@ -117,7 +117,7 @@ keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one not
 capNoticesTo((text) => void out.replyPlain(text, "notice")); // the owner's one line a day when friends' shared daily limit is reached (capnotice.ts)
 const tenantRunner = createTenantRunner({});
 tenantHooks.sendFirst = messenger.sendFirst?.bind(messenger); // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
-tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts LIFECYCLE: her Google server, her Notion) stop
+tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
 const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message

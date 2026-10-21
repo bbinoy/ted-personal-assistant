@@ -1,6 +1,7 @@
 import { nativeView } from "../../policy/mailview.ts";
 import type { DraftView } from "./proposals.ts";
 import { DELETE_CONFIRM } from "../../policy/neverallowed.ts";
+import { archiveGate } from "../archivecap.ts";
 import { rowsOf, type MailSlot, type ToolModule } from "../types.ts";
 
 // Mailbird, the owner's desktop mail client, through its local MCP server (a user-scope entry of the owner's Claude settings): the default mail provider
@@ -23,7 +24,8 @@ const mail: MailSlot = {
   },
   readBack: async (kind, input) => {
     const id = Number(input.messageId);
-    return kind === "mbSend" && draftReader && Number.isFinite(id) ? draftReader(id).catch(() => undefined) : undefined;
+    // An unreadable draft refuses the send (permissions.ts), so the reason is logged here: the owner sees "could not be read back", the log says why.
+    return kind === "mbSend" && draftReader && Number.isFinite(id) ? draftReader(id).catch((e) => (console.error(`mailbird: draft ${id} could not be read back: ${(e as Error)?.message?.slice(0, 200)}`), undefined)) : undefined;
   },
   views: {
     mbSend: (_i, draft) => draft && { action: "send", ...draft }, // a send of an existing draft has no content in its input: it is shown from the draft as read back, or not at all
@@ -69,6 +71,7 @@ export const mailbirdModule: ToolModule = {
   titles: { [`${MB}discard_draft`]: { icon: "🗑️", title: "Delete draft", labels: { messageId: "Draft (message id)" } }, [`${MB}send_message_now`]: { icon: "✉️", title: "Send email now" }, [`${MB}forward_conversation`]: { icon: "✉️", title: "Forward email" } },
   untrustedPrefix: MB, // (mail is written by third parties: every read is untrusted by default)
   floor: {
+    perRun: archiveGate, // at most ARCHIVE_MAX_PER_RUN archives per run (archivecap.ts)
     judgeVeto: { send: (_input, view) => !!view && view.to.length > 0 }, // a mail nobody can be named for is not judged
     judgeNever: ["move"],
     creates: (name) => ["create_draft", "reply_to_conversation", "reply_all_to_conversation", "forward_conversation"].includes(name), // they save a draft; its id is in the result

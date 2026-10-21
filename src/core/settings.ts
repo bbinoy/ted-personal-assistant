@@ -184,6 +184,10 @@ export function loadSettings(env: Env) {
     // run on JUDGE_MODEL: sonnet, opus, haiku or a full model id. It is the safety net and it writes to the owner, so it does not run on the smallest model by default.
     judgeModel: env.JUDGE_MODEL?.trim() || "sonnet",
     heartbeatDayMinutes: rhythm.heartbeat.dayMinutes,
+    // The most messages or conversations one run (one look, one chat turn) may archive, for every mail provider (src/modules/archivecap.ts); the rest waits for the next look.
+    // The most characters of ONE tool result the model reads (toolclean.ts, in the PostToolUse path of every tool, MCP results included); the rest is cut with a hint to narrow the query.
+    toolOutputMaxChars: num(env, "TOOL_OUTPUT_MAX_CHARS", 60_000, 1000, 1_000_000),
+    archiveMaxPerRun: num(env, "ARCHIVE_MAX_PER_RUN", 25, 1, 500),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),

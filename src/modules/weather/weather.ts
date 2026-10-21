@@ -4,8 +4,18 @@ import { shoreExposure } from "./shore.ts";
 // The weather tools' bodies: data in, compact text out (weathertools.ts registers them). Units, local time, daylight and compass names are code;
 // whether a day is good is the model's judgment (the surf-conditions skill), so there are no verdicts and no scores here.
 // Open-Meteo is free for non-commercial use without a key; a hosted or multi-tenant deployment needs its own agreement.
-export interface WeatherIo { fetch: typeof fetch; now: () => Date }
-const real: WeatherIo = { fetch: (...a) => fetch(...a), now: () => new Date() };
+export interface WeatherIo { fetch: typeof fetch; now: () => Date; sleep?: (ms: number) => Promise<void> }
+const real: WeatherIo = { fetch: (...a) => fetch(...a), now: () => new Date(), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
+
+const RETRY_AFTER_MAX_MS = 10_000; // a service asking for a longer pause than this gets "busy, try again in a minute" instead of a stalled tool call
+// Pure: how long to wait before the next try after a 429 or a 5xx: the service's Retry-After (seconds, or an HTTP date) when it sends one, else a growing pause; never more than the bound.
+export function retryDelayMs(retryAfter: string | null | undefined, attempt: number, now = Date.now()): number {
+  const backoff = 1500 * (attempt + 1);
+  if (!retryAfter) return backoff;
+  const secs = Number(retryAfter);
+  const ms = Number.isFinite(secs) ? secs * 1000 : Date.parse(retryAfter) - now;
+  return Number.isFinite(ms) ? Math.min(Math.max(ms, 0), RETRY_AFTER_MAX_MS) : backoff;
+}
 
 const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
 export const compass = (deg: number | null | undefined): string => (deg == null ? "-" : `${COMPASS[Math.round(deg / 22.5) % 16]} ${Math.round(deg)}`);
@@ -20,8 +30,10 @@ async function getJson(url: string, io: WeatherIo): Promise<{ ok: true; data: Js
     try {
       const res = await io.fetch(url, { signal: AbortSignal.timeout(20_000), headers: { "User-Agent": "ted-personal-assistant" } });
       const text = await res.text();
-      if (res.status >= 500 || !text) {
-        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+      if (res.status >= 500 || res.status === 429 || !text) {
+        const wait = retryDelayMs(res.headers.get("retry-after"), i, io.now().getTime());
+        if (res.status === 429 && wait >= RETRY_AFTER_MAX_MS) return { ok: false, error: "weather service busy (rate limited), try again in a minute" };
+        await (io.sleep ?? real.sleep!)(wait);
         continue;
       }
       const data = JSON.parse(text) as Json;
