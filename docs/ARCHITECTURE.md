@@ -301,6 +301,7 @@ packages/messenger/  @ted-assistant/messenger (published, built): the Messenger 
 packages/signal/     @ted-assistant/signal: signal-cli JSON-RPC client, daemon start, the Messenger adapter (entry point /messenger), a workspace package with its own README and tests
 packages/speech/     @ted-assistant/speech (private): text to speech (Qwen3-TTS, Kokoro, optional ElevenLabs / HTTP), speech to text (whisper.cpp), voice libraries and reference clips, the Python scripts and docs/remote-tts.md; entry points /tts and /voice
 src/modules/         the tool modules, one file per tool or one folder per feature with module.ts and its code (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
+src/modules/archivecap.ts    the archive cap: at most ARCHIVE_MAX_PER_RUN archives per run, a module floor gate (permissions.ts asks it)
 src/modules/connectors.ts    which connectors (Notion, Calendar, mail) the last run could see
 src/cli.ts           report / restore / doctor
 src/doctor.ts        `npm run doctor`
