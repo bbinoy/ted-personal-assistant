@@ -36,8 +36,8 @@ test("the cap is on the whole result: many strings share the budget in reading o
   const r = cleanToolOutput("mcp__x__list", result, 500)!;
   const o = r.output as typeof result;
   assert.equal(o.content[0]!.text, big, "the first is whole");
-  assert.equal(o.content[1]!.text.length, 200, "the second takes what is left");
-  assert.match(o.content[3]!.text, /^\n\[\.\.\. 400 characters cut/, "the third is empty but for the note");
+  assert.equal(o.content[1]!.text!.length, 200, "the second takes what is left");
+  assert.match(o.content[3]!.text!, /^\n\[\.\.\. 400 characters cut/, "the third is empty but for the note");
   assert.equal((o.content[2] as { data: string }).data.length, 5000, "an image is left alone");
   assert.equal(o.meta.data.length, 9000, "so is a data field");
 });

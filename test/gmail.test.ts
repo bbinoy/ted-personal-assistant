@@ -278,5 +278,12 @@ test("skills and doctor: the gmail skill is offered instead of the Mailbird ones
   assert.deepEqual(addrs(SELF), [SELF]);
 });
 
+test("the relay hides every other connector, derived from the module registry (none named in gmail.ts)", async () => {
+  const { otherConnectors } = await import("../src/modules/gmail/gmail.ts");
+  const hidden = otherConnectors();
+  for (const server of ["mcp__claude_ai_Notion", "mcp__claude_ai_Google_Calendar", "mcp__claude_ai_Google_Drive", "mcp__mailbird"]) assert.ok(hidden.includes(server), server);
+  assert.ok(!hidden.some((h) => h.startsWith("mcp__claude_ai_Gmail")), "never Gmail itself");
+});
+
 // ---- batching: one relay run per tick ----
 
