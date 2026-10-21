@@ -35,6 +35,7 @@ export function createRegistrar(deps: {
       background: true,
       question: questionFor(r),
       minutes: LAPSE_MINUTES,
+      quietExpiry: true, // it lapses without a line in the chat: the request stays open and is asked again at the next start
     })
       .then((d) => {
         asking.delete(r.aci);

@@ -68,7 +68,7 @@ interface Open {
 const slot = (scope: string, ts: number) => `${scope}:${ts}`;
 const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
-const closed = new Map<string, string>(); // recently ended approvals (scope and timestamp -> label): a quoted reply to one must not land on another
+const closed = new Map<string, { label: string; expired: boolean }>(); // recently ended approvals (scope and timestamp -> label, and whether nobody answered in time): a quoted reply to one must not land on another
 
 // "15 min", "2 h", "1 h 30 min".
 export function formatWait(minutes: number): string {
@@ -117,11 +117,16 @@ export interface Ctx {
 }
 export async function answer(text: string, onJudging: () => void, quote: { timestamp: number } | undefined, deps: AnswerDeps = {}, ctx: Ctx): Promise<Answer> {
   const mine = [...open.values()].filter((o) => o.scope === ctx.scope && !o.done);
+  // A plain yes that quotes a question which has ended (timed out, answered): nothing is run from it. Said so, not passed on as a chat message.
+  if (mine.length === 0 && quote && quote.timestamp !== 0 && closed.has(slot(ctx.scope, quote.timestamp)) && YES.has(normalise(text))) return { outcome: "clarify", reply: endedReply(ctx.scope, quote.timestamp) };
   if (mine.length === 0) return { outcome: "none" };
   return read(text, onJudging, quote, deps, ctx, mine);
 }
 
 const ENDED = "That question has already ended. Reply to one that is still open, or react to it.";
+// A late yes: nothing is run from it, the owner is told why and that asking again is all it takes.
+const TIMED_OUT = "That question timed out before you answered, so nothing was done. Just ask me again if you still want it.";
+const endedReply = (scope: string, ts: number) => (closed.get(slot(scope, ts))?.expired ? TIMED_OUT : `${ENDED} Or just ask me again.`);
 const WHICH = "Which one do you mean? Reply to the question itself, or react to it.";
 
 // Code decides only two things: an exact plain yes / no that unambiguously targets the one
@@ -135,7 +140,12 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const t = normalise(text);
   const found = quote && quote.timestamp !== 0 ? open.get(slot(ctx.scope, quote.timestamp)) : undefined;
   const quoted = found?.scope === ctx.scope ? found : undefined;
-  const direct = quoted && !quoted.done ? quoted : live.length === 1 && !quote ? live[0] : undefined;
+  // A background approval (a wake-up's, a stranger's registration) is answered only by a reply that quotes it or a reaction on it: an unquoted "ok" is about something
+  // else, so it never reaches one, neither on the fast path nor through the judge (SAFETY.md).
+  const eligible = live.filter((o) => !o.background || o === quoted);
+  const direct = quoted && !quoted.done ? quoted : eligible.length === 1 && !quote ? eligible[0] : undefined;
+  // A plain yes / no with nothing it can answer (only background questions are open and it quotes none) is a chat message for something else: no judge call for it.
+  if (eligible.length === 0 && (YES.has(t) || NO.has(t))) return { outcome: "none" };
   // A card payment: the fast path approves only a typed yes (not 👍, ok, sure, and not a transcript of a voice message); any other yes is asked for again.
   const typedOk = (o: Open) => !o.typedYes || (isTypedYes(text) && !ctx.voice);
   if (direct && (YES.has(t) || NO.has(t) || (direct.typedYes && isTypedYes(text)))) {
@@ -174,7 +184,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
     let replaced = 0;
     for (const p of parts) {
       const o = ids.get(p.target);
-      if (!o || o.done || o.typedYes && p.outcome !== "decline") continue; // "yes to both" is no typed yes to a payment, and no reply replaces one
+      if (!o || o.done || (o.background && o !== quoted) || o.typedYes && p.outcome !== "decline") continue; // (a background question is answered only by a quote of it) // "yes to both" is no typed yes to a payment, and no reply replaces one
       if (p.outcome === "other") {
         supersede(o);
         replaced++;
@@ -193,7 +203,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
     // Not approved, and not silent for the agent: every open chat approval returns the owner's words as feedback, so the agent
     // decides itself whether to ask again, rephrase or drop the action (permissions.ts caps the re-asks). Background ones stay open.
     record("failed");
-    const chat = live.filter((o) => !o.background && !o.done);
+    const chat = eligible.filter((o) => !o.background && !o.done);
     for (const o of chat) o.resolve({ approved: false, feedback: text, failure: "the owner's reply could not be read as a yes or no" });
     return chat.length ? { outcome: "feedback" } : { outcome: "none" };
   }
@@ -205,6 +215,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   }
   const current = ids.get(j.target);
   if (!current || current.done) return { outcome: "none" }; // resolved or expired while the judge thought
+  if (current.background && current !== quoted) return record("unrelated"), { outcome: "none" }; // the judge may read a background question but never answers it from a message that quotes nothing of it
   // A payment resolves only through the direct paths (the sole open approval, or a reply that quotes it), never because the answer model chose it as the target of a message
   // that quotes nothing: "YES" meant for the calendar question must not pay when the model picks the payment. Ask which one is meant.
   if (current.typedYes && current !== direct) {
@@ -243,7 +254,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   // other: a condition, a change, a delay, a question...
   if (quote && !quoted && closed.has(slot(ctx.scope, quote.timestamp))) {
     record("clarify", current); // it quotes a question that has ended: that says nothing about this open one
-    return { outcome: "clarify", reply: ENDED };
+    return { outcome: "clarify", reply: endedReply(ctx.scope, quote.timestamp) };
   }
   if (current.typedYes) {
     record("clarify", current);
@@ -261,7 +272,7 @@ export function request(
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal | undefined,
-  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number },
+  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number; quietExpiry?: boolean },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
@@ -274,7 +285,7 @@ export function request(
       if (entry.done) return;
       entry.done = true;
       if (entry.ts) {
-        closed.set(slot(opts.scope, entry.ts), label);
+        closed.set(slot(opts.scope, entry.ts), { label, expired: !!d.expired });
         if (closed.size > 50) closed.delete(closed.keys().next().value!);
       }
       clearTimeout(timer);
@@ -287,10 +298,11 @@ export function request(
     };
     const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, typedYes: !!opts.typedYes };
     const onAbort = () => finish({ approved: false });
-    const timer = setTimeout(
-      () => finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`),
-      minutes * 60_000,
-    );
+    const timer = setTimeout(() => {
+      finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`);
+      // A background question nobody answered is not silent (a registration says so itself: it is asked again, "do it" would mean nothing there): one line in that conversation, with the code's label (never model text). A chat question is not: the owner is in that conversation.
+      if (background && !opts.quietExpiry && entry.ts) send(`⏳ Didn't hear back, so I left it: ${label}. Say 'do it' if you still want it.`).catch(() => {});
+    }, minutes * 60_000);
     signal?.addEventListener("abort", onAbort);
     console.log(`approval requested${background ? " (background)" : ""}: ${named}`);
     // At most one open question per conversation for one action: a newer question about the same call closes the older one (declined.ts sameCall).
