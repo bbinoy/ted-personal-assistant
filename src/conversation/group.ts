@@ -4,7 +4,8 @@ import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { prepare, runConversation } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { AuthError, RateLimitError } from "../tenants/errors.ts";
+import { AuthError, FixedNotice, RateLimitError } from "../tenants/errors.ts";
+import { GROUP_CAP_TEXT, groupCapped } from "../core/capnotice.ts";
 import { askGate, prepareGate, styleLines, type Gate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
 import { groupContext } from "./groupstore.ts";
@@ -208,7 +209,7 @@ export function createGroupBrain(brain: Brain) {
     // behind an earlier turn.
     const gone = () => !!st.gone?.has(m.timestamp);
     const answer = async (batch: Batch<GroupMessage>, showTyping: () => void): Promise<void> => {
-      if (isPaused(now) || budgetSpent() || groupOverBudget(m.groupId)) return; // (the owner's day, or this group's own: a noisy group must not spend the owner's)
+      if (isPaused(now) || budgetSpent() || (await groupCapped(groupOverBudget(m.groupId), !!pending(), m.groupId, () => pipeline.warn(conv, new FixedNotice(GROUP_CAP_TEXT))))) return; // (the owner's day, or this group's own: a noisy group must not spend the owner's; an address is told once a day)
       const asked = pending();
       if (asked) showTyping();
       let delay = 0;

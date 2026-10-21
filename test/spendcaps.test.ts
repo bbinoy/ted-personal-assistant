@@ -88,3 +88,54 @@ test("her own ceiling is still checked first and keeps its own reason", () => {
   charge(inst(cy, ctx.costFile), ctx.dailyBudgetUsd + 0.5);
   assert.deepEqual(mayRun({ kind: "tenant", tenantId: cy.id }, "chat", { chat: true }), { refused: "budget", limit: ctx.dailyBudgetUsd });
 });
+
+// ---- who is told, once a day (capnotice.ts) ----
+
+const { createTenantRunner } = await import("../src/conversation/tenantrun.ts");
+const { tenant: tenantConv, group: groupConv } = await import("../src/conversation/conversationmodel.ts");
+const { capNoticesTo, FRIEND_CAP_TEXT, GROUP_CAP_TEXT, groupCapped, ownerCapText, capNoticeDue } = await import("../src/core/capnotice.ts");
+const { FixedNotice, noticeFor } = await import("../src/tenants/errors.ts");
+
+test("key ceiling: the friend gets one fixed line a day, the owner one line a day with the limit and no friend's name, both again the next day", async () => {
+  on.tenantApiKey = KEY;
+  on.instanceKeyDailyUsd = 0.5;
+  const told: string[] = [];
+  capNoticesTo((t) => void told.push(t));
+  const ann = friend("Ann-Cap");
+  const bo = friend("Bo-Cap");
+  charge(inst(ann, T.tenantContext(ann).costFile), 0.6);
+  let clock = Date.now();
+  const runner = createTenantRunner({ apiKey: () => KEY, now: () => clock, ask: async () => assert.fail("no model call") });
+  const say = async (rec: { id: string }) => (await runner.run(tenantConv(rec.id), "hi")).text;
+  assert.equal(await say(ann), FRIEND_CAP_TEXT);
+  assert.equal(await say(ann), "[[silent]]", "not again today");
+  assert.equal(await say(bo), FRIEND_CAP_TEXT, "each friend is told once");
+  assert.deepEqual(told, [ownerCapText(0.5)], "the owner once, however many friends and runs");
+  assert.ok(!/Ann|Bo/.test(told[0]!));
+  clock += 25 * 3600_000;
+  assert.equal(await say(ann), FRIEND_CAP_TEXT, "the next day");
+  assert.equal(told.length, 2);
+  capNoticesTo(undefined);
+});
+
+test("group ceiling: an addressed message gets one short line a day in the group; an unaddressed one none; a line that could not be posted is tried again", async () => {
+  const posted: string[] = [];
+  const say = (ok = true) => async () => (ok && posted.push(GROUP_CAP_TEXT), ok);
+  assert.equal(await groupCapped(false, true, "g-day", say()), false, "under the ceiling: nothing");
+  assert.equal(await groupCapped(true, false, "g-day", say()), true, "over, not addressed: refused, silent");
+  assert.equal(posted.length, 0);
+  assert.equal(await groupCapped(true, true, "g-day", say(false)), true);
+  assert.equal(capNoticeDue("group:g-day"), true, "not delivered, not marked");
+  assert.equal(await groupCapped(true, true, "g-day", say()), true);
+  assert.equal(await groupCapped(true, true, "g-day", say()), true);
+  assert.equal(posted.length, 1, "once");
+  assert.equal(await groupCapped(true, true, "g-other", say()), true, "another group has its own");
+  assert.equal(posted.length, 2);
+  assert.equal(await groupCapped(true, true, "g-day", say(), Date.now() + 25 * 3600_000), true);
+  assert.equal(posted.length, 3, "the next day");
+});
+
+test("a fixed notice is shown as it is, for any audience", () => {
+  assert.equal(noticeFor("group")(new FixedNotice(GROUP_CAP_TEXT)), GROUP_CAP_TEXT);
+  assert.equal(groupConv("g").notice(new FixedNotice("x")), "x");
+});

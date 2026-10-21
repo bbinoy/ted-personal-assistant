@@ -3,6 +3,7 @@ import { tenant } from "./conversationmodel.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
 import type { Picture } from "../run/image.ts";
 import type { Document } from "./document.ts";
+import { FRIEND_CAP_TEXT, takeCapNotice } from "../core/capnotice.ts";
 import { InstanceKeyError } from "../tenants/errors.ts";
 import { cooldownOf, isRefusal, mayRun } from "../tenants/payer.ts";
 import { mayNotice, markDisclosed, setPaused, tenantById, tenantContext, type TenantContext } from "../tenants/tenants.ts";
@@ -44,6 +45,7 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     if (isRefusal(payer)) {
       if (payer.refused === "cooldown") return notice(ctx, "cooldown", `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${hhmm(payer.until!)}.`);
       if (payer.refused === "budget") return notice(ctx, "budget", `You've reached your daily limit of ${ctx.dailyBudgetUsd}, so I'm resting until tomorrow.`);
+      if (payer.refused === "instance-budget") return { text: takeCapNotice(`friend:${ctx.id}`, now()) ? FRIEND_CAP_TEXT : SILENT }; // all friends' shared day is spent: told once a day (capnotice.ts), the owner too (mayRun)
       if (payer.refused === "no-key") return notice(ctx, "setup", notSetUpReply()); // (the admin heard of it in mayRun)
       return { text: SILENT }; // suspended or removed
     }

@@ -3,6 +3,7 @@ import { budgetSpent, groupOverBudget, instanceKeyOverBudget, recordCost, record
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { cooldownUntil, coolingDown, noteSuccess, observeRateLimit, skipForCooldown } from "../core/cooldown.ts";
 import { reportKeyProblem } from "./keynotice.ts";
+import { reportInstanceCap } from "../core/capnotice.ts";
 import { isPaused } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
 import { tenantById, tenantContext } from "./tenants.ts";
@@ -102,6 +103,9 @@ export function mayRun(conv: Pick<Conversation, "kind" | "tenantId"> & { groupId
   }
   if (coolingDown(now, INSTANCE_KEY_COOLDOWN)) return { refused: "cooldown", until: cooldownUntil(INSTANCE_KEY_COOLDOWN, now) };
   if (tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd)) return { refused: "budget", limit: ctx.dailyBudgetUsd };
-  if ((o.keySpent ?? instanceKeyOverBudget)()) return { refused: "instance-budget", limit: settings.instanceKeyDailyUsd }; // the key's whole day, whatever each friend's own ceiling says
+  if ((o.keySpent ?? instanceKeyOverBudget)()) { // the key's whole day, whatever each friend's own ceiling says
+    reportInstanceCap(settings.instanceKeyDailyUsd, now); // the owner hears once a day, whichever job ran into it
+    return { refused: "instance-budget", limit: settings.instanceKeyDailyUsd };
+  }
   return { kind: "instance", id: ctx.id, apiKey, costFile: ctx.costFile };
 }
