@@ -1,6 +1,7 @@
 import { renameSync, statSync } from "node:fs";
 import { redactSecrets } from "./redact.ts";
 import { appendLine, dataPath, readText } from "./state.ts";
+import { logPaths } from "./convpaths.ts";
 
 // One append-only log for everything the agent does or observes.
 //   source: who acted (a chat turn, a heartbeat run, the dream, the heartbeat itself)
@@ -28,7 +29,7 @@ export function wordless(meta: Record<string, unknown> | undefined): Record<stri
   return Object.fromEntries(Object.entries(meta).map(([k, v]) => (WORDS.includes(k) && v !== undefined ? [`${k}Chars`, (typeof v === "string" ? v : JSON.stringify(v) ?? "").length] : [k, v])));
 }
 
-const FILE = "logs/audit.jsonl";
+const FILE = logPaths().audit;
 const MAX_BYTES = 20 * 1024 * 1024;
 let appends = 0;
 

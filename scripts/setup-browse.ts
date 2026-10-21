@@ -1,4 +1,4 @@
-// Downloads the headless Chromium that the browse tool uses (src/modules/browse/browse.ts), into state/browse/browsers inside the data folder:
+// Downloads the headless Chromium that the browse tool uses (src/modules/browse/browse.ts), into instance/browse/browsers inside the data folder:
 // nothing global, and deleting that folder removes it. About 100 MB, so opt-in: `npm run setup:browse` always downloads it; after `npm install`
 // (--quiet, never fails the install) it downloads only with BROWSE=on or BROWSE_INSTALL=1 set, else prints a one-line hint.
 // Skipped with BROWSE=off or BROWSE_SKIP_INSTALL=1.
@@ -7,12 +7,13 @@ import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { ROOT } from "../src/core/paths.ts";
+import { layout } from "../src/core/convpaths.ts";
 
 const quiet = process.argv.includes("--quiet");
 const say = (m: string) => (quiet ? undefined : console.log(m));
 const root = ROOT;
 const dataDir = process.env.HARNESS_DATA_DIR ? resolve(process.env.HARNESS_DATA_DIR) : root;
-const browsers = join(dataDir, "state", "browse", "browsers");
+const browsers = layout(dataDir).instance.browsers;
 
 if (process.env.BROWSE === "off" || process.env.BROWSE_SKIP_INSTALL === "1" || (process.env.CI && process.argv.includes("--quiet"))) {
   say("browse: skipped (BROWSE=off or BROWSE_SKIP_INSTALL=1)");

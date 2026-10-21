@@ -1,7 +1,7 @@
 import { localDay } from "../core/pause.ts";
 import type { HeartbeatRow } from "./rows.ts";
 
-// `npm run heartbeat-report [days]`: what the heartbeat run did for every conversation, from its rows (state/heartbeat.jsonl): counts and dollars, never words or names.
+// `npm run heartbeat-report [days]`: what the heartbeat run did for every conversation, from its rows (instance/heartbeat.jsonl): counts and dollars, never words or names.
 
 const BUCKETS: readonly (readonly [string, number, number])[] = [["10-14 min", 10, 14], ["15-29 min", 15, 29], ["30-59 min", 30, 59], ["60-120 min", 60, 120]];
 const usd = (n: number) => `$${n.toFixed(2)}`;

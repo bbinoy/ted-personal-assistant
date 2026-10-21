@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { audit } from "../src/core/audit.ts";
 import { redact, redactSecrets } from "../src/core/redact.ts";
 import { readText } from "../src/core/state.ts";
+import { layout, logPaths } from "../src/core/convpaths.ts";
 
 // Fake credentials are assembled here so that no real-looking token sits in the source (npm run check:secrets).
 const body = (n: number) => "a1B2c3D4e5".repeat(Math.ceil(n / 10)).slice(0, n);
@@ -39,7 +40,7 @@ test("redact: more kinds of credential are masked, and a JSON line stays JSON", 
 test("audit: a credential in an error message is masked, a sender and subject stay readable", () => {
   const token = body(24);
   audit("test_redaction", "failed", "chat", { error: `request failed: Bearer ${token}`, from: "Anna <anna@example.com>", subject: "Call +15555550105 back" });
-  const last = (readText("logs/audit.jsonl") ?? "").trim().split("\n").filter((l) => l.includes('"test_redaction"')).at(-1)!; // other test files write to the same log at the same time
+  const last = (readText(logPaths().audit) ?? "").trim().split("\n").filter((l) => l.includes('"test_redaction"')).at(-1)!; // other test files write to the same log at the same time
   const e = JSON.parse(last) as { meta: { error: string; from: string; subject: string } };
   assert.ok(!last.includes(token));
   assert.equal(e.meta.error, "request failed: Bearer ***");
@@ -58,7 +59,7 @@ test("log.ts: warnings and info are redacted and written to the log file too, an
       console.log(loop);
       console.error("TTS_HTTP_TOKEN=" + ${JSON.stringify(body(16))});`;
     execFileSync(process.execPath, ["--conditions=workspace-source", "--input-type=module", "-e", script], { env: { PATH: process.env.PATH, HARNESS_DATA_DIR: dir } });
-    const text = readFileSync(join(dir, "logs/agent.log"), "utf8");
+    const text = readFileSync(layout(dir).logs.agent, "utf8");
     assert.match(text, /WARN read receipt failed: Bearer \*\*\* for \+\*\*\*05/);
     assert.match(text, /info line key=ok/);
     assert.match(text, /\[object Object\]/);

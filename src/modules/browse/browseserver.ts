@@ -5,15 +5,16 @@ import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { BLOCKED_ORIGINS, type VisionMode } from "./browserules.ts";
 import { settings } from "../../core/settings.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 
 // Is browsing set up, and how the browser server is started (the browse sub-task: browse.ts; its guard: browseguard.ts).
 
 // ---- is browsing set up? ----
 
 // The pinned server. `npm install` brings it (a dependency, exact version); `npm run setup:browse` downloads the browser into
-// state/browse/browsers (not a global location). Doctor and the tool report what is missing, in words.
+// instance/browse/browsers (not a global location). Doctor and the tool report what is missing, in words.
 export const PLAYWRIGHT_MCP_VERSION = "0.0.83";
-const BROWSERS = () => join(settings.stateDir, "browse", "browsers");
+const BROWSERS = () => instancePaths().browsers;
 
 function serverCli(): string | undefined {
   try {

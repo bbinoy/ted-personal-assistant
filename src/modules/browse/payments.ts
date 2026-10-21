@@ -1,8 +1,9 @@
 import { copyFileSync, existsSync, statSync } from "node:fs";
 import { appendLine, dataPath, readText, writeFileAtomic } from "../../core/state.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 import { localDay } from "../../core/pause.ts";
 
-// The payment ledger: an append-only file (state/payments.jsonl, 0600) with one row per status change of a card payment. It holds NO card
+// The payment ledger: an append-only file (instance/payments.jsonl, 0600) with one row per status change of a card payment. It holds NO card
 // data: the merchant, the amount, the last four digits, a hash of the cart and the status. It is what makes a payment happen once (a
 // second try for the same cart is refused), what the daily cap is summed from, and what is left to read after a crash.
 // The audit log gets the same facts (browseguard.ts), but it rotates; the caps need a ledger that does not.
@@ -33,7 +34,7 @@ const OPEN: ReadonlySet<PayStatus> = new Set(["approved", "clicked"]);
 
 export class Ledger {
   readonly file: string;
-  constructor(file = "state/payments.jsonl") {
+  constructor(file = instancePaths().payments) {
     this.file = file;
   }
 

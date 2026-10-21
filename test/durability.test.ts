@@ -13,6 +13,7 @@ import { actedSince, replayPrompt, replayUnanswered, SORRY, unansweredSince } fr
 import type { AuditEntry } from "../src/core/audit.ts";
 import type { Sent } from "../src/core/messages.ts";
 import { FakeMessenger } from "@ted-assistant/messenger/testing";
+import { scratch } from "./scratch.ts";
 
 // Persistence and delivery durability: atomic fsynced writes, a corrupt file kept not erased, a dream that does not overwrite a note edited meanwhile,
 // a send that is retried, and a start that answers what a restart lost.
@@ -20,21 +21,21 @@ import { FakeMessenger } from "@ted-assistant/messenger/testing";
 // ---- state ----
 
 test("state: a write leaves no temp file, is owner-only", () => {
-  writeText("state/durable-a.json", "one");
-  writeText("state/durable-a.json", "two");
-  assert.equal(readFileSync(dataPath("state/durable-a.json"), "utf8"), "two");
-  assert.equal(statSync(dataPath("state/durable-a.json")).mode & 0o777, 0o600);
-  assert.deepEqual(readdirSync(join(dataPath("state/durable-a.json"), "..")).filter((f) => f.endsWith(".tmp")), []);
+  writeText(scratch("durable-a.json"), "one");
+  writeText(scratch("durable-a.json"), "two");
+  assert.equal(readFileSync(dataPath(scratch("durable-a.json")), "utf8"), "two");
+  assert.equal(statSync(dataPath(scratch("durable-a.json"))).mode & 0o777, 0o600);
+  assert.deepEqual(readdirSync(join(dataPath(scratch("durable-a.json")), "..")).filter((f) => f.endsWith(".tmp")), []);
 });
 
 test("state: a corrupt JSON file is moved aside (not lost) and the fallback returned", () => {
-  const path = dataPath("state/durable-b.json");
-  writeText("state/durable-b.json", "{ not json");
+  const path = dataPath(scratch("durable-b.json"));
+  writeText(scratch("durable-b.json"), "{ not json");
   const errors: string[] = [];
   const orig = console.error;
   console.error = (...a: unknown[]) => void errors.push(a.join(" "));
   try {
-    assert.deepEqual(readJson("state/durable-b.json", { fresh: true }), { fresh: true });
+    assert.deepEqual(readJson(scratch("durable-b.json"), { fresh: true }), { fresh: true });
   } finally {
     console.error = orig;
   }
@@ -43,8 +44,8 @@ test("state: a corrupt JSON file is moved aside (not lost) and the fallback retu
   assert.equal(kept.length, 1);
   assert.equal(readFileSync(join(path, "..", kept[0]!), "utf8"), "{ not json", "kept for a human, byte for byte");
   assert.match(errors.join("\n"), /durable-b\.json is unreadable.*moved aside/);
-  writeJson("state/durable-b.json", { ok: 1 });
-  assert.deepEqual(readJson("state/durable-b.json", {}), { ok: 1 });
+  writeJson(scratch("durable-b.json"), { ok: 1 });
+  assert.deepEqual(readJson(scratch("durable-b.json"), {}), { ok: 1 });
 });
 
 // ---- notes ----

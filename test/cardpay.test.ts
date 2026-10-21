@@ -16,6 +16,8 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { dataPath } from "../src/core/state.ts";
+import { logPaths } from "../src/core/convpaths.ts";
+import { scratch } from "./scratch.ts";
 
 // Obviously fake: the public test card number, a made-up security code, a local fake checkout (`shop.test`, a hosted page on stripe.com) that exists
 // only as page text in these tests. No real merchant, card or money.
@@ -36,8 +38,8 @@ const newStore = async (card: CardRecord = CARD) => {
   return fakeCardStore(card);
 };
 const newAccess = async (o: { card?: CardRecord; caps?: CardAccess["caps"]; kill?: KillSwitch; ledger?: Ledger } = {}) => {
-  const kill = o.kill ?? new KillSwitch(`state/card-test-${unique()}.disabled`);
-  const ledger = o.ledger ?? new Ledger(`state/payments-test-${unique()}.jsonl`);
+  const kill = o.kill ?? new KillSwitch(scratch(`card-test-${unique()}.disabled`));
+  const ledger = o.ledger ?? new Ledger(scratch(`payments-test-${unique()}.jsonl`));
   const access = await openCardAccess({ store: await newStore(o.card), kill, ledger, caps: o.caps ?? { purchaseMinor: 2500 * 10, dayMinor: 5000 * 10 } });
   return { access: access!, kill, ledger };
 };
@@ -78,7 +80,7 @@ interface Rig {
   canUse: ReturnType<typeof makeCanUseTool>;
 }
 const rig = async (o: { access?: CardAccess; mode?: "owner" | "group"; frames?: FrameProbe; task?: string } = {}): Promise<Rig & { access: CardAccess; kill: KillSwitch; ledger: Ledger }> => {
-  const made = o.access ? { access: o.access, kill: new KillSwitch(`state/card-test-${unique()}.disabled`), ledger: o.access.ledger } : await newAccess();
+  const made = o.access ? { access: o.access, kill: new KillSwitch(scratch(`card-test-${unique()}.disabled`)), ledger: o.access.ledger } : await newAccess();
   const g = new BrowseGuard({ mode: o.mode ?? "owner", task: o.task ?? "buy the 10:00 train ticket Zurich to Bern", outDir: join(tmpdir(), "nope"), resolver: publicDns, card: made.access, frames: o.frames });
   const asked: Rig["asked"] = [];
   const answer = { approved: true };
@@ -263,7 +265,7 @@ test("caps: a payment above the cap for one payment, one that would pass the dai
   const r3 = await rig({ access: ok.access });
   await toPsp(r3);
   assert.equal((await typeNumber(r3)).res.behavior, "allow", "20 + 45 is within 65; an unconfirmed payment counted as spent");
-  assert.equal(await openCardAccess({ store: await newStore(), kill: new KillSwitch(`state/card-test-${unique()}.disabled`), caps: { purchaseMinor: 0, dayMinor: 5000 } }), undefined, "a cap of 0 gives the run no card");
+  assert.equal(await openCardAccess({ store: await newStore(), kill: new KillSwitch(scratch(`card-test-${unique()}.disabled`)), caps: { purchaseMinor: 0, dayMinor: 5000 } }), undefined, "a cap of 0 gives the run no card");
   assert.equal(r1.asked.length + r2.asked.length, 0);
 });
 
@@ -399,7 +401,7 @@ test("while a card is typed the keyboard cannot submit it, and nothing is typed 
 // ---- the kill switch ----
 
 test("kill switch: at the question, after the yes, and at the click; a run that starts with it on gets no card at all", async () => {
-  const k1 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k1 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   const a1 = await newAccess({ kill: k1 });
   const r1 = await rig({ access: a1.access });
   await toPsp(r1);
@@ -407,7 +409,7 @@ test("kill switch: at the question, after the yes, and at the click; a run that 
   assert.match(((await typeNumber(r1)).res as Denied).message, /Card payments are switched off/);
   assert.equal(r1.asked.length, 0);
   // switched off while the owner was deciding
-  const k2 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k2 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   const a2 = await newAccess({ kill: k2 });
   const r2 = await rig({ access: a2.access });
   await toPsp(r2);
@@ -419,7 +421,7 @@ test("kill switch: at the question, after the yes, and at the click; a run that 
   assert.match(res.message, /Nothing was typed/);
   assert.equal(r2.g.pay.typed.size, 0);
   // switched off between the typing and the click
-  const k3 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k3 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   const a3 = await newAccess({ kill: k3 });
   const r3 = await rig({ access: a3.access });
   await fullPay(r3);
@@ -428,9 +430,9 @@ test("kill switch: at the question, after the yes, and at the click; a run that 
   assert.match((click.res as Denied).message, /Nothing was clicked: card payments are switched off/);
   assert.equal(r3.g.pay.attempted, false);
   // with it on at the start, the run has no card and says nothing of one
-  const k4 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k4 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   k4.turnOff("test");
-  assert.equal(await openCardAccess({ store: await newStore(), kill: k4, ledger: new Ledger(`state/payments-test-${unique()}.jsonl`) }), undefined);
+  assert.equal(await openCardAccess({ store: await newStore(), kill: k4, ledger: new Ledger(scratch(`payments-test-${unique()}.jsonl`)) }), undefined);
   k1.turnOn(); k2.turnOn(); k3.turnOn(); k4.turnOn();
 });
 
@@ -501,7 +503,7 @@ test("nothing leaks: no result, question, approval call, audit row, ledger row o
   assert.ok(![PAN, PAN_SPACED, EXPIRY].some((v) => said.answer.includes(v)) && said.answer.includes("[card]"));
   assert.ok(!(r.g.finishPayment() ?? "").includes(PAN));
   // the audit log and the ledger
-  const audit = readFileSync(dataPath("logs/audit.jsonl"), "utf8");
+  const audit = readFileSync(dataPath(logPaths().audit), "utf8");
   for (const secret of [PAN, PAN_SPACED, "4242-4242", EXPIRY, `"${CVC}"`, `fill('${CVC}')`, "Fakename"]) assert.ok(!audit.includes(secret), `the audit log holds ${secret}`);
   assert.ok(!audit.match(/(^|[^\d])0731([^\d]|$)/m), "no security code in the audit log");
   const ledger = readFileSync(dataPath(r.ledger.file), "utf8");

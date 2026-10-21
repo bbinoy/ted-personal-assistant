@@ -1,12 +1,11 @@
-import { createHash } from "node:crypto";
 import type { Source } from "../core/audit.ts";
-import { OWNER_KEY } from "../core/ownerkey.ts";
+import { convIdOfKey, convPaths } from "../core/convpaths.ts";
 import { settings } from "../core/settings.ts";
 import { readJson, writeJson } from "../core/state.ts";
 import { callKey } from "./permissions.ts";
 
 // The approval inbox's STATE: the calls an unattended run wanted to make that need the owner's yes, parked instead of blocking the run (pendingflow.ts says how they are asked,
-// answered and run). One small atomic file per conversation (state/pending-<owner|hash of the key>.json, written with writeJson = writeFileAtomic), so a restart loses nothing.
+// answered and run). One small atomic file per conversation (pending.json in the conversation's folder, written with writeJson = writeFileAtomic), so a restart loses nothing.
 // A pending action is the EXACT call (tool name and arguments as the run made them), the code-rendered label and footer, the model's one-line question and where it came from;
 // it is never rebuilt from words. Numbers (#N) are per conversation, only ever count up and are never reused, so "2" in an old message cannot mean a newer item.
 
@@ -52,7 +51,7 @@ interface PendingFile {
 
 const MAX_ITEMS = 40; // a flood is refused, not queued without end
 
-export const pendingFileOf = (scope: string): string => `state/pending-${scope === OWNER_KEY ? "owner" : createHash("sha256").update(scope).digest("hex").slice(0, 16)}.json`;
+export const pendingFileOf = (scope: string): string => convPaths(convIdOfKey(scope)).pending;
 
 function load(scope: string): PendingFile {
   const raw = readJson<Partial<PendingFile>>(pendingFileOf(scope), {});

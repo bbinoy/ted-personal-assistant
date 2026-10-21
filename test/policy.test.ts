@@ -191,3 +191,34 @@ test("search_logs: chat only", () => {
   assert.equal(classify("mcp__memory__search_logs", { query: "x" }, "chat"), "allow");
   for (const source of ["handler", "radar", "heartbeat"] as const) assert.equal(classify("mcp__memory__search_logs", { query: "x" }, source), "deny", source);
 });
+
+test("layout 2: the owner's chat reads only conversations/owner/{notes,messages.jsonl} and the three background logs; a group's or friend's file tools reach only their own notes folder", async () => {
+  const { convPaths, conversationsDir, friendConvId, groupConvId, instancePaths, logPaths, OWNER_CONV } = await import("../src/core/convpaths.ts");
+  const { isReadableData, readableData } = await import("../src/policy/policy.ts");
+  const { join } = await import("node:path");
+  const O = convPaths(OWNER_CONV);
+  assert.deepEqual(readableData(), [O.notes, O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon], "the allow-list, exactly");
+  const group = convPaths(groupConvId("policy-group"));
+  const friend = convPaths(friendConvId("zed-1"));
+  const other = convPaths(groupConvId("another-group"));
+  const touch = (p: string) => (mkdirSync(join(p, ".."), { recursive: true }), writeFileSync(p, "x"));
+  const everything = [O.notes + "/MEMORY.md", O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon, O.session, O.pending, O.search, O.dream, O.notesBackup + "/s/n.md", O.voiceSources, O.heldPosts,
+    group.messages, group.notes + "/a.md", group.session, friend.messages, friend.notes + "/a.md", friend.tenantJson, other.notes + "/a.md",
+    instancePaths().tenants, instancePaths().cost, instancePaths().heartbeatRows, instancePaths().openbao + "/config.hcl", logPaths().launchdStderr, join(conversationsDir(), "stray.txt")];
+  for (const p of everything) touch(p);
+  const readable = new Set([O.notes + "/MEMORY.md", O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon]);
+  for (const p of everything) {
+    assert.equal(isReadableData(p), readable.has(p), p);
+    assert.equal(classify("Read", { file_path: p }, "chat") === "allow", readable.has(p), `Read ${p}`);
+    assert.equal(classify("Write", { file_path: p }, "chat") === "allow", p.startsWith(O.notes + "/"), `Write ${p}`); // the owner may write only her own notes
+  }
+  // a group and a friend: their own notes folder and nothing else, not their own session either, not the owner's, not each other's, not a way out with ..
+  for (const [src, mine, tools] of [["group", group, undefined], ["group", friend, new Set(["Read", "Write", "Edit"])]] as const) {
+    for (const tool of ["Read", "Write", "Edit"]) {
+      assert.equal(classify(tool, { file_path: `${mine.notes}/new.md` }, src, mine.notes, tools), "allow", `${tool} own note`);
+      for (const p of [mine.session, mine.messages, O.notes + "/MEMORY.md", O.messages, other.notes + "/a.md", instancePaths().tenants, `${mine.notes}/../session.json`, `${mine.notes}/../../owner/notes/MEMORY.md`, `${mine.dir}/notes-backup/x.md`]) {
+        assert.equal(classify(tool, { file_path: p }, src, mine.notes, tools), "deny", `${tool} ${p}`);
+      }
+    }
+  }
+});

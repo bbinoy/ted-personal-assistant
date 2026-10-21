@@ -21,7 +21,7 @@ Contract: implement `Messenger` from `packages/messenger/src/index.ts` and expor
 
 | Messenger | Telegram Bot API |
 |---|---|
-| `start()` | `getMe` (verify token, learn bot id and username), then long-poll loop `getUpdates` (timeout 30-50 s, `allowed_updates`: `message`, `edited_message`, `message_reaction`; offset persisted under `state/`). Never use webhooks together with polling (`deleteWebhook` first). |
+| `start()` | `getMe` (verify token, learn bot id and username), then long-poll loop `getUpdates` (timeout 30-50 s, `allowed_updates`: `message`, `edited_message`, `message_reaction`; offset persisted under `instance/`). Never use webhooks together with polling (`deleteWebhook` first). |
 | `stop()` | abort the in-flight poll, persist the offset |
 | `onClose` | fires when polling fails past the retry budget or on `stop()`; HTTP 401 means the token is revoked; HTTP 409 means a second poller is running |
 | `onMessage` | `message` updates: text, `voice` (OGG/Opus) -> `audio`, `photo` (largest size) -> `image`, `document` -> `file`, `reply_to_message` -> `quote` and `quotedAudio`, `entities` mentions -> `@name` text and `addressedToMe`; `edited_message` -> `edited` |
@@ -31,7 +31,7 @@ Contract: implement `Messenger` from `packages/messenger/src/index.ts` and expor
 | `react(target, message, emoji)` | `setMessageReaction` (bots may use only Telegram's allowed reaction emoji list; map or skip others; never throws) |
 | `typing(target, on)` | `sendChatAction` `typing` (lasts ~5 s: repeat while on; `on = false` just stops repeating) |
 | `markRead` | not supported (capability false) |
-| `groups()` | the Bot API cannot list a bot's groups: keep the chats seen in updates (`my_chat_member` / messages) under `state/`, enrich with `getChat` and `getChatAdministrators` / `getChatMemberCount` |
+| `groups()` | the Bot API cannot list a bot's groups: keep the chats seen in updates (`my_chat_member` / messages) under `instance/`, enrich with `getChat` and `getChatAdministrators` / `getChatMemberCount` |
 | `attachmentFile(ref)` | `getFile` then download from `https://api.telegram.org/file/bot<token>/<file_path>` into the attachments folder (Bot API downloads are limited to 20 MB; uploads to 50 MB) |
 | `readLongText` | not needed: Telegram delivers long text whole; return `undefined` |
 | `self` | the bot's username from `getMe` |

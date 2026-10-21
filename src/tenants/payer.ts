@@ -10,7 +10,7 @@ import { tenantById, tenantContext } from "./tenants.ts";
 
 // WHO PAYS for a model call and MAY IT RUN NOW: one answer for every call, whoever started it (a chat turn, a wake-up, the gate, the dream, the mail check and its
 // handler, compaction, a notice, the log summary, the approval judge).
-//   login      the instance's own Claude login (the owner's, and the groups'): the instance's day budget (state/cost.json) and the shared cooldown of its usage limit
+//   login      the instance's own Claude login (the owner's, and the groups'): the instance's day budget (instance/cost.json) and the shared cooldown of its usage limit
 //   instance   the instance key (TENANT_ANTHROPIC_API_KEY), on behalf of a friend: her own cost file and her own daily ceiling; the key's refusal (a limit, an empty balance,
 //              an expired key) is the KEY's, so its cooldown is shared by every friend (INSTANCE_KEY_COOLDOWN) and the owner hears of it once (keynotice.ts)
 // A Payer is a value to pass along: it carries the key only into the environment of the call (envFor), never into a log or an audit line.

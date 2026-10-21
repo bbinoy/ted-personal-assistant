@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { scratchLog } from "./scratch.ts";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 // seen_mail (src/modules/seenmail/seenmail.ts): the mail a conversation's heartbeat run has worked through, as a bounded log of ids kept per conversation. The ids a call returns are pending
 // until the look ends well; the run and its expert share the pending set; nothing about the mailbox or the provider is known to code.
@@ -67,7 +69,7 @@ test("the log is bounded: the newest SEEN_MAX ids stay, the oldest are forgotten
 test("per conversation: the owner's log, each friend's in her own folder; one never shows the other", () => {
   const rec = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c1", name: "Ana" })!;
   const rec2 = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c2", name: "Bo" })!;
-  assert.equal(seenFileOf(owner()), "state/seen-mail.json");
+  assert.equal(seenFileOf(owner()), convPaths(OWNER_CONV).seenMail);
   assert.equal(seenFileOf(tenant(rec.id)), join(T.tenantContext(rec).dir, "seen-mail.json"));
   assert.notEqual(seenFileOf(tenant(rec.id)), seenFileOf(tenant(rec2.id)));
   assert.ok(seenFileOf(group("seen-group-0123456789abcd")).endsWith("seen-mail.json"));
@@ -106,7 +108,7 @@ test("the heartbeat run is given the tracker only where there is mail, and the e
 // ---- the look commits or discards ----
 
 function look(run: () => Promise<{ text: string; structured?: unknown }>) {
-  const conv = { ...owner(), logFile: `logs/seen-look-${Math.random().toString(36).slice(2)}.jsonl` };
+  const conv = { ...owner(), logFile: scratchLog(`seen-look-${Math.random().toString(36).slice(2)}.jsonl`) };
   const f = seenFileOf(conv);
   const pipeline = {
     enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(),

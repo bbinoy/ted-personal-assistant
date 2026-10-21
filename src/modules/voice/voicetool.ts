@@ -14,9 +14,10 @@ import { oneLine } from "../../core/sanitize.ts";
 import { settings } from "../../core/settings.ts";
 import { OWNER_KEY, sourceOfKey } from "../../core/ownerkey.ts";
 import { listGroups } from "../../conversation/groupstore.ts";
+import { convIdOfKey, groupConvId } from "../../core/convpaths.ts";
 
 // The voice tool: the cloned voice of a conversation (Qwen only). Each conversation has its own library and active voice (voices.ts):
-// the owner's chat in state/voice, each group in its own folder, so a voice made in a group is only ever used in that group.
+// every conversation in its own folder (conversations/<convId>/voices), so a voice made in a group is only ever used in that group.
 // A voice is built from a voice note that was RECEIVED IN THIS CONVERSATION (voicenote.ts): the model names it by its id from the
 // conversation's own list (default: the message it is answering, or the voice note that message replies to). Code checks that the id is one of
 // this conversation's recent notes, that the file is still there, and has the messenger resolve the id to its file; a path is never taken from anyone.
@@ -53,7 +54,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
   const scope = group ? "group" : "owner";
   const why = d.problem();
   if (why) return why;
-  const root = scopeRoot(d.voiceRoot, key);
+  const root = scopeRoot(d.voiceRoot, convIdOfKey(key));
   const who = askingIn(key) ?? { owner: !group };
   const now = d.now();
   const refuse = (text: string, reason: string) => (audit("voice", "refused", source, { action: a.action, reason, scope }), text);
@@ -107,14 +108,14 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
     const wanted = (a.group ?? "").trim().toLowerCase();
     const found = d.groups().find((g) => g.name.trim().toLowerCase() === wanted);
     if (!found) return refuse(`No group named "${label(a.group)}". Known: ${d.groups().map((g) => g.name).join(", ") || "none"}.`, "unknown-group");
-    setActiveVoice(scopeRoot(d.voiceRoot, found.id), DEFAULT_VOICE);
+    setActiveVoice(scopeRoot(d.voiceRoot, groupConvId(found.id)), DEFAULT_VOICE);
     audit("voice", "reset-group", source, { scope: "group" });
     return `${found.name} speaks in the default voice again. Confirm in one line.`;
   }
 
   // use: make a voice from a voice note of this conversation and switch to it
   const saved = listVoices(root);
-  if (saved.length >= maxVoices(key)) return refuse(`The library holds ${saved.length} voices already; delete one first (list shows them).`, "full");
+  if (saved.length >= maxVoices(convIdOfKey(key))) return refuse(`The library holds ${saved.length} voices already; delete one first (list shows them).`, "full");
   let note: VoiceNote | undefined;
   if (a.source !== undefined) {
     if (!/^\d{8,16}$/.test(a.source.trim())) return refuse("source must be an id from the sources list.", "bad-source");
@@ -146,7 +147,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
   } else for (let i = 2; (name === DEFAULT_VOICE || listVoices(root).some((v) => v.name === name)) && i < 50; i++) name = `${base.slice(0, 29)}-${i}`;
   const requester = who.author ?? (group ? undefined : "owner");
   try {
-    saveVoice(root, name, { wav: ref.wav, text: ref.text, meta: { created: new Date(now).toISOString(), source: isFile ? "audio file" : "voice note", seconds: ref.seconds, ...(requester ? { by: requester } : {}), ...(who.authorName ? { byName: label(who.authorName) } : {}), from: note.by, ...(note.byName ? { fromName: label(note.byName) } : {}) } }, maxVoices(key));
+    saveVoice(root, name, { wav: ref.wav, text: ref.text, meta: { created: new Date(now).toISOString(), source: isFile ? "audio file" : "voice note", seconds: ref.seconds, ...(requester ? { by: requester } : {}), ...(who.authorName ? { byName: label(who.authorName) } : {}), from: note.by, ...(note.byName ? { fromName: label(note.byName) } : {}) } }, maxVoices(convIdOfKey(key)));
     setActiveVoice(root, name);
   } catch (e) {
     return refuse((e as Error).message, "save");

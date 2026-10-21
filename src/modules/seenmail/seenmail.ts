@@ -1,18 +1,17 @@
-import { dirname, join } from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit } from "../../core/audit.ts";
 import type { Conversation } from "../../conversation/conversationmodel.ts";
 import { settings } from "../../core/settings.ts";
 import { readJson, readText, writeJson } from "../../core/state.ts";
-import { tenantById, tenantContext } from "../../tenants/tenants.ts";
+import { convIdOf, convPaths } from "../../core/convpaths.ts";
 
 // "Mail since your last look" is not a time window but a memory of ids: the mail the conversation's heartbeat run has already worked through. The run lists the inbox with
 // its own mail tool (whatever the provider: Mailbird, Gmail, a friend's Google) and asks the `seen_mail` tool which of those ids it has not looked at yet. Code knows no
 // mailbox and no provider here: an id is a string exactly as the mail tool returned it.
 //   * The ids a call returns as new are PENDING: they join the conversation's seen log only when the look ends well (commit). A look that failed or was cut short leaves
 //     them unseen, so the mail is worked through by the next look; an offline gap is worked off over successive looks, not lost.
-//   * The log is bounded (the last SEEN_MAX ids) and belongs to ONE conversation: the owner's, a friend's in her folder.
+//   * The log is bounded (the last SEEN_MAX ids) and belongs to ONE conversation: it is in that conversation's folder.
 //   * The run and the expert it calls share one pending set (they share the run's tool servers).
 //   * The FIRST look (no log yet) does not triage the whole backlog: mail the run says arrived more than MAIL_BACKLOG_DAYS ago (`received`, as the mail tool gave it) is marked seen
 //     without being returned, and the tool says so once, so the owner hears of it in the first message (isBacklog).
@@ -22,11 +21,7 @@ export const SEEN_MAX = 2000;
 export const MAX_IDS_PER_CALL = 500;
 const MAX_ID_CHARS = 200;
 
-export const seenFileOf = (conv: Pick<Conversation, "tenantId" | "kind" | "sessionFile">): string => {
-  if (conv.kind === "owner") return "state/seen-mail.json";
-  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-  return join(rec ? tenantContext(rec).dir : dirname(conv.sessionFile), "seen-mail.json");
-};
+export const seenFileOf = (conv: Pick<Conversation, "kind"> & { readonly tenantId?: string; readonly groupId?: string; readonly convId?: string }): string => convPaths(convIdOf(conv)).seenMail;
 
 interface Log {
   ids: string[]; // oldest first

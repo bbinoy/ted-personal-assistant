@@ -1,24 +1,17 @@
-import { dirname, join } from "node:path";
 import { rmSync } from "node:fs";
 import { dataPath, readText, writeText } from "../core/state.ts";
 import { timeIn } from "../core/timezone.ts";
-import { tenantById, tenantContext } from "../tenants/tenants.ts";
+import { convIdOf, convPaths } from "../core/convpaths.ts";
 import type { Conversation } from "./conversationmodel.ts";
 
 // "/quiet": a conversation's own do-not-disturb, set in its chat (ownercommands.ts). While it lasts, unprompted posts and system notices are HELD exactly as in quiet hours (heartbeat/notices.ts:
 // they go out in the digest when it ends; urgent still goes through), but chat, approvals the owner asked for in chat and the heartbeat's own work carry on, unlike /pause (core/pause.ts), which
-// stops unattended work. One small file per conversation, next to its other bookkeeping: "" = until /unquiet, an ISO time = until then (a time nobody can read is NOT quiet: fail open, a
+// stops unattended work. One small file per conversation, in its folder (convpaths.ts): "" = until /unquiet, an ISO time = until then (a time nobody can read is NOT quiet: fail open, a
 // missed post is worse than a dropped switch here, and nothing but a post is held).
 
-type Where = Pick<Conversation, "kind" | "sessionFile"> & { readonly tenantId?: string };
+type Where = Pick<Conversation, "kind"> & { readonly tenantId?: string; readonly groupId?: string; readonly convId?: string };
 
-// state/<name> for the owner, the friend's own folder (or the session file's) for the rest.
-export function siblingFile(conv: Where, name: string): string {
-  if (conv.kind === "owner") return `state/${name}`;
-  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-  return join(rec ? tenantContext(rec).dir : dirname(conv.sessionFile), name);
-}
-export const quietFileOf = (conv: Where): string => siblingFile(conv, "quiet.json");
+export const quietFileOf = (conv: Where): string => convPaths(convIdOf(conv)).quiet;
 
 export const setQuiet = (conv: Where, until: string): void => writeText(quietFileOf(conv), until);
 export const clearQuiet = (conv: Where): void => rmSync(dataPath(quietFileOf(conv)), { force: true });

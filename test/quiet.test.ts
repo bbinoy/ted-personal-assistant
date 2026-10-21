@@ -8,6 +8,7 @@ import { settings } from "../src/core/settings.ts";
 import { dataPath, readText } from "../src/core/state.ts";
 import { isPaused } from "../src/core/pause.ts";
 import { heldFileOf, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
+import { convPaths, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
@@ -17,13 +18,13 @@ s.digestMinutes = [12 * 60 + 30, 18 * 60 + 30];
 s.digestMaxItems = 8;
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
-const ownerConv = { kind: "owner", key: "owner", sessionFile: "state/session.json" } as const;
+const ownerConv = { kind: "owner", key: "owner", sessionFile: convPaths(OWNER_CONV).session } as const;
 const friendConv = { kind: "tenant", key: "tenant:x", sessionFile: "x/session.json" } as const;
 const groupConv = { kind: "group", key: "g", sessionFile: "g/s.json" } as const;
 const clean = () => {
   rmSync(dataPath(quietFileOf(ownerConv)), { force: true });
   rmSync(dataPath(heldFileOf(owner())), { force: true });
-  rmSync(dataPath("state/paused"), { force: true });
+  rmSync(dataPath(instancePaths().paused), { force: true });
 };
 const Z = "UTC";
 

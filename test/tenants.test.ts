@@ -25,6 +25,7 @@ const { tenant } = await import("../src/conversation/conversationmodel.ts");
 const { looksLikeApiKey } = await import("../src/secrets/secrets.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
+const { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } = await import("../src/core/convpaths.ts");
 const { FILE: OWNER_LOG } = await import("../src/core/messages.ts");
 const { OWNER_SESSION_FILE } = await import("../src/core/ownerkey.ts");
 const { acceptOwner } = await import("../src/conversation/guards.ts");
@@ -69,16 +70,17 @@ test("an approved friend is provisioned as the tenant: owner-only folders, notes
   assert.equal(rec.role, "member");
   assert.ok(!("capabilities" in rec), "her capabilities are derived (capabilities.ts), never stored");
   assert.equal(rec.credential, "instance-key");
-  assert.ok(!readFileSync(join(settings.dataDir, T.REGISTRY), "utf8").match(/sk-ant|"key"/));
+  assert.ok(!readFileSync(T.REGISTRY, "utf8").match(/sk-ant|"key"/));
   assert.equal(T.tenantByAci(rec.acis[0]!.toUpperCase())?.id, rec.id, "the account id is matched without regard to case");
   assert.equal(ctx.target, `to:${rec.acis[0]}`);
-  assert.ok(ctx.dir.startsWith(settings.tenantsDir) && !ctx.dir.startsWith(settings.memoryDir) && !ctx.dir.startsWith(settings.logsDir) && !ctx.dir.startsWith(settings.stateDir));
+  assert.equal(ctx.dir, convPaths(friendConvId(rec.id)).dir);
+  assert.ok(ctx.dir.startsWith(conversationsDir()) && !ctx.dir.startsWith(convPaths(OWNER_CONV).dir) && !ctx.dir.startsWith(settings.logsDir) && !ctx.dir.startsWith(instancePaths().dir));
   assert.equal(tenant(rec.id).direct, true);
 });
 
 test("a hand-edited registry cannot make a bad id, or an unknown role load; an old record gets the safe defaults", () => {
   const rec = join_("Bo");
-  const file = join(settings.dataDir, T.REGISTRY);
+  const file = T.REGISTRY;
   const reg = JSON.parse(readFileSync(file, "utf8"));
   reg.tenants.push(
     { id: "../escape", name: "x", acis: [ACI_C], status: "active", created: "now" },
@@ -298,14 +300,14 @@ test("registry: the owner is seeded from the number as an admin with every capab
   assert.ok(!("capabilities" in rec), "the owner has every capability by being the owner (capabilities.ts), not by a stored list");
   assert.deepEqual([...capabilitiesOfRecord(rec)].filter((c) => c !== "intake").sort(), T.CAPABILITIES.filter((c) => c !== "intake").sort());
   const paths = T.pathsOf(rec);
-  assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: "state/cost.json" }, "no file moved");
+  assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: instancePaths().cost }, "the owner's own folder");
   assert.equal(T.ensureOwner({ number: "+15555550105", aci: ACI_A }).number, OWNER_NUMBER, "seeding twice changes nothing");
   assert.equal(T.people().filter((r) => r.id === "owner").length, 1);
   assert.ok(!T.listTenants().some((r) => r.id === "owner"), "the owner is not a tenant: invites, suspension and removal never reach her");
   assert.equal(T.setStatus("owner", "suspended"), undefined);
   const friend = join_("Fred");
   assert.equal(T.people().find((r) => r.id === "owner")!.role, "admin", "a new tenant changes nobody's role");
-  assert.deepEqual([friend.role, T.pathsOf(friend).root.startsWith(settings.tenantsDir)], ["member", true]);
+  assert.deepEqual([friend.role, T.pathsOf(friend).root.startsWith(conversationsDir())], ["member", true]);
 });
 
 test("guard: the owner is whoever resolves to the admin record: by number first, by account id once it is learned; a tenant never is", () => {
@@ -404,7 +406,7 @@ test("the per-tenant key plumbing is gone: no set-key, forget-key, KeyStore, int
 
 test("registry cache: read again only when the file changed (stat), at once after this process's own write, and a change by another process is seen", () => {
   const rec = join_("Cache");
-  const path = join(settings.dataDir, T.REGISTRY);
+  const path = T.REGISTRY;
   assert.equal(T.tenantById(rec.id)!.name, "Cache");
   // unchanged file: the cached parse serves, whatever is asked
   const reads = T.registryReads();

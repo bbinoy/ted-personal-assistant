@@ -6,7 +6,8 @@ import { ledgerEntries } from "../core/messages.ts";
 import { readJson, writeJson } from "../core/state.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
 import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
-import { isQuiet, siblingFile } from "../conversation/quiet.ts";
+import { isQuiet } from "../conversation/quiet.ts";
+import { convIdOf, convPaths } from "../core/convpaths.ts";
 import { askLines, type LineWriter } from "./digestlines.ts";
 import { digestDue, digestText, oneLine, planDigest } from "./digest.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -115,8 +116,8 @@ interface HoldState {
   held: Held[];
 }
 
-// Next to the conversation's other bookkeeping, like seen-mail.json (seenmail.ts).
-export const heldFileOf = (conv: Pick<Conversation, "tenantId" | "kind" | "sessionFile">): string => siblingFile(conv, "held-posts.json");
+// In the conversation's folder, like its seen-mail.json (seenmail.ts).
+export const heldFileOf = (conv: Pick<Conversation, "kind"> & { readonly tenantId?: string; readonly groupId?: string; readonly convId?: string }): string => convPaths(convIdOf(conv)).heldPosts;
 
 const MAX_HELD = 30; // a flood is dropped oldest first: this is a morning digest, not an archive
 function load(conv: Conversation, now: Date, zone: string): HoldState {

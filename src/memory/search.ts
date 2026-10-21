@@ -1,6 +1,7 @@
 import { foldEdits, withoutDeleted, type Kind, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
 import { dataPath } from "../core/state.ts";
+import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { FILE } from "../core/messages.ts";
 import { clockIn, dayIn, systemZone, timeIn } from "../core/timezone.ts";
 import { NOTES_DIR } from "./notes.ts";
@@ -16,7 +17,7 @@ import { fold, queryStems, sentences, stem, stems } from "./searchtext.ts";
 //   Deleted messages are left out and an edited one shows its newest text (the messages.ts functions, not a second reading of the rules).
 
 export interface Scope {
-  logFile: string; // as messages.ts takes it: "logs/messages.jsonl", a group's "logs/group-<key>.jsonl", a friend's absolute path
+  logFile: string; // as messages.ts takes it: an absolute path (convpaths.ts messages)
   notesDir: string;
   indexPath: string; // this conversation's index (a cache; deleted and rebuilt when wrong)
 }
@@ -331,5 +332,5 @@ export function warmSearchIndex(scope: Scope, zone: string = systemZone()): Prom
   });
 }
 
-/** The owner's conversation: messages.jsonl, memory/notes, state/search.sqlite. */
-export const ownerSearchScope = (): Scope => ({ logFile: FILE, notesDir: NOTES_DIR, indexPath: dataPath("state/search.sqlite") });
+/** The owner's conversation: its folder's messages.jsonl, notes/ and search.sqlite. */
+export const ownerSearchScope = (): Scope => ({ logFile: FILE, notesDir: NOTES_DIR, indexPath: convPaths(OWNER_CONV).search });

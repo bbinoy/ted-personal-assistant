@@ -3,12 +3,10 @@ import { appendFileSync, chmodSync, closeSync, fsyncSync, mkdirSync, openSync, r
 import { dirname, isAbsolute, join } from "node:path";
 import { isInside } from "./contain.ts";
 import { settings } from "./settings.ts";
+import { convPaths, conversationsDir, instancePaths, logPaths, OWNER_CONV } from "./convpaths.ts";
 
-// Everything the agent keeps lives in small files under the data root, in three owner-only
-// folders. Paths are always "<folder>/<name>", so the folder is explicit at every call site:
-//   state/   bookkeeping the model never reads (seen.json, cost.json, session.json, paused...)
-//   logs/    agent.log, audit.jsonl, signal-daemon.log, launchd-stderr.log
-//   memory/  what the model reads: notes/ (semantic memory, the SDK auto-memory; status-* notes are the assistant's own records)
+// Everything the agent keeps lives in small files under the data root, in owner-only folders: instance/ (process-wide), conversations/<id>/ (one per conversation), logs/.
+// WHERE each file is is core/convpaths.ts and nowhere else: this module reads and writes the absolute path that module gave.
 //
 // All access is synchronous on purpose. The files are tiny, and a synchronous
 // read-modify-write cannot be interleaved with anything else in Node's event loop, so
@@ -16,15 +14,10 @@ import { settings } from "./settings.ts";
 // renamed into place (then the folder is fsynced), so a crash or power cut leaves the old version or the new one, never a torn or empty file.
 // A file that does not parse is never silently replaced by defaults: it is moved aside as <name>.corrupt-<time> (readJson) or, for the tenant registry, left alone and saving refused.
 
-// A typo or a ".." must fail loudly, not write outside the three folders.
-const REL = /^(state|logs|memory)\/(?!\.)[\w.-]+$/;
-
-// A group keeps its session pointer in its own folder (memory/groups/<key>/session.json): an absolute path is
-// accepted when it is strictly inside the data root (".." and symlinks resolved), nowhere else.
-export function dataPath(rel: string): string {
-  if (isAbsolute(rel) && isInside(rel, settings.dataDir)) return rel;
-  if (!REL.test(rel)) throw new Error(`state: "${rel}" is not a path like "state/seen.json"`);
-  return join(settings.dataDir, rel);
+// A typo or a ".." must fail loudly, not write outside the data root: only an absolute path strictly inside it (".." and symlinks resolved) is accepted.
+export function dataPath(path: string): string {
+  if (isAbsolute(path) && isInside(path, settings.dataDir)) return path;
+  throw new Error(`state: "${path}" is not a path inside the data folder (build it with core/convpaths.ts)`);
 }
 
 function ensureDir(path: string) {
@@ -127,11 +120,12 @@ export function openLog(rel: string): number {
   return openSync(path, "a", 0o600);
 }
 
-// Run at every start: create the three folders and tighten them (700) and their files (600).
+// Run at every start: create the folders and tighten them (700) and their files (600).
 // Files made by others (launchd's stderr file, an older version of the agent) may have been
 // created with looser permissions.
 export function secureDataDirs(): void {
-  for (const dir of [settings.stateDir, settings.logsDir, settings.memoryDir, join(settings.memoryDir, "notes")]) {
+  const owner = convPaths(OWNER_CONV);
+  for (const dir of [instancePaths().dir, conversationsDir(), logPaths().dir, owner.dir, owner.notes]) {
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       chmodSync(dir, 0o700);

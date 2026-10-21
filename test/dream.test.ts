@@ -8,6 +8,7 @@ import { MAX_NOTE_CHARS, NOTES_DIR, parseNote } from "../src/memory/notes.ts";
 import { dataPath } from "../src/core/state.ts";
 import type { Sent } from "../src/core/messages.ts";
 import { recordMessage } from "../src/core/messages.ts";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 const now = new Date("2026-10-14T07:00:00");
 const today = "2026-10-14";
@@ -119,13 +120,13 @@ test("dream: only the owner's words and reactions ground a note; the assistant's
 
 test("dream: runs once a day, only if the owner said something, and applies its changes silently", async () => {
   seed([]);
-  rmSync(dataPath("state/dream.json"), { force: true });
-  rmSync(dataPath("logs/messages.jsonl"), { force: true });
+  rmSync(dataPath(convPaths(OWNER_CONV).dream), { force: true });
+  rmSync(dataPath(convPaths(OWNER_CONV).messages), { force: true });
     let calls = 0;
   const dreamer = createDreamer({ run: () => async () => (calls++, { ops: [write({ evidence: "Anna is my sister and her birthday is on 3 March" })] }) });
   await dreamer.run(now); // nothing said yet
   assert.equal(calls, 0);
-  rmSync(dataPath("state/dream.json"), { force: true });
+  rmSync(dataPath(convPaths(OWNER_CONV).dream), { force: true });
   recordMessage("owner", 5, OWNER_SAID, new Date("2026-10-13T20:00:00Z"));
   await dreamer.run(now);
   assert.equal(calls, 1);

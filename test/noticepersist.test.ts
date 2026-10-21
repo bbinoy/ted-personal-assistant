@@ -8,6 +8,7 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "noticepersist-"));
 
 const { settings } = await import("../src/core/settings.ts");
+const { instancePaths } = await import("../src/core/convpaths.ts");
 const { createKeyNotices } = await import("../src/tenants/keynotice.ts");
 const { capNoticeDue, markCapNotice, lastNoticeAt, markNoticeAt } = await import("../src/core/capnotice.ts");
 
@@ -40,5 +41,5 @@ test("interval stamps and the once-a-day marks share the file without erasing ea
   assert.equal(lastNoticeAt("warn:g2"), now, "a day mark leaves the stamps");
   markNoticeAt("warn:g3", now);
   assert.equal(capNoticeDue("group:x", now), false, "a stamp leaves the day marks");
-  assert.match(readFileSync(join(settings.stateDir, "cap-notices.json"), "utf8"), /warn:g3/);
+  assert.match(readFileSync(instancePaths().capNotices, "utf8"), /warn:g3/);
 });

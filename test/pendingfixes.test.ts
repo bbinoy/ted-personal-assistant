@@ -10,6 +10,7 @@ import { audit, readAudit, wordless } from "../src/core/audit.ts";
 import { settings } from "../src/core/settings.ts";
 import { commandReply } from "../src/conversation/ownercommands.ts";
 import { LIMITS } from "../src/core/sanitize.ts";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 // The approval inbox, second pass: only what was shown can be answered in bulk, an approved item the run gate refused is not lost, a friend's words stay out of the admin's audit log, a call that
 // was done is not parked again, and an expiry does not re-ask on every look. Fake values only.
@@ -153,9 +154,9 @@ test("a call executed from the inbox is not parked again, and the permission lay
 test("/status counts the calls parked in the inbox as open approvals", () => {
   const scope = "owner";
   rig({}, scope);
-  const before = /Open approvals: (\d+)/.exec(commandReply({ kind: "owner", key: scope, sessionFile: "state/session.json" }, "/status")!)![1]!;
+  const before = /Open approvals: (\d+)/.exec(commandReply({ kind: "owner", key: scope, sessionFile: convPaths(OWNER_CONV).session }, "/status")!)![1]!;
   park(scope, `status${seq}@example.com`);
-  const after = /Open approvals: (\d+)/.exec(commandReply({ kind: "owner", key: scope, sessionFile: "state/session.json" }, "/status")!)![1]!;
+  const after = /Open approvals: (\d+)/.exec(commandReply({ kind: "owner", key: scope, sessionFile: convPaths(OWNER_CONV).session }, "/status")!)![1]!;
   assert.equal(Number(after), Number(before) + 1);
 });
 

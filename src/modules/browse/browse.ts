@@ -18,6 +18,7 @@ import { OWNER_KEY } from "../../core/ownerkey.ts";
 import { clip, cleanText, LIMITS } from "../../core/sanitize.ts";
 import { adoptShots, newShotsDir } from "../send/shots.ts";
 import { OWNER, settings } from "../../core/settings.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 
 // The browse sub-task. The owner's chat, a background job or a group asks `browse(task)`; a SEPARATE run (policy source "browse")
 // does the browsing with a headless browser (@playwright/mcp) and nothing else: no mail, calendar, notes or memory tools. It reads
@@ -178,11 +179,11 @@ export function startRefusal(ctx: Pick<BrowseContext, "mode" | "spent">, now = D
   return undefined;
 }
 
-// A run that never ended (a crash, a kill) leaves its page views (state/browse/run-*) and its screenshots (state/browse/shots/run-*) on disk. Swept at start-up:
-// folders older than an hour go (no run lasts that long). Page views are untrusted text and the assistant's own chat could read state/, so they must not pile up
-// (policy.ts also hides state/browse from it).
+// A run that never ended (a crash, a kill) leaves its page views (instance/browse/run-*) and its screenshots (instance/browse/shots/run-*) on disk. Swept at start-up:
+// folders older than an hour go (no run lasts that long). Page views are untrusted text and the assistant's own chat could read the data folder, so they must not pile up
+// (policy.ts also hides instance/ from it).
 export const STALE_RUN_MS = 60 * 60_000;
-export function sweepStaleRuns(now = Date.now(), root = join(settings.stateDir, "browse")): number {
+export function sweepStaleRuns(now = Date.now(), root = instancePaths().browse): number {
   let removed = 0;
   for (const dir of [root, join(root, "shots")]) {
     let names: string[] = [];
@@ -246,8 +247,8 @@ export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptio
 }
 
 async function runBrowse(ctx: BrowseContext, task: string, log: typeof audit, o: BrowseOptions, proxyPort: number | undefined): Promise<string> {
-  mkdirSync(join(settings.stateDir, "browse"), { recursive: true });
-  const outDir = mkdtempSync(join(settings.stateDir, "browse", "run-"));
+  mkdirSync(instancePaths().browse, { recursive: true });
+  const outDir = mkdtempSync(join(instancePaths().browse, "run-"));
   const vision = o.vision ?? settings.browseVision;
   // The owner's payment card goes to the owner's chat run only, like the profile: not a group, not a wake-up. It is a handle (last four, a way to
   // open the card after a typed yes), not the card. A store that cannot be read, a kill switch that is on or a cap of 0 mean no card.

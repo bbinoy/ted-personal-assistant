@@ -1,9 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { writeFileAtomic } from "../../core/state.ts";
-import { join } from "node:path";
-import { settings } from "../../core/settings.ts";
+import { convIdOfKey, convPaths, type ConvId } from "../../core/convpaths.ts";
 
-// The voice notes received in each conversation (the owner's chat, and each group on its own), so the voice tool can build a cloned voice from
+// The voice notes received in each conversation (the owner's chat, each friend and each group on its own: voices/sources.json in the conversation's folder), so the voice tool can build a cloned voice from
 // one of them. Audio FILES that contain speech (an MP3 someone sent) are kept in the same list, marked kind "file". Only the attachment id is kept (signal-cli's file name; the file is found by joining it to the attachments folder, voice.ts
 // does the same for transcription), the sender, the time and a short snippet of the transcript for the model to recognise it by.
 // The audio itself is not copied. Bounded: the last NOTES_PER_CONVERSATION notes of a conversation, none older than MAX_AGE_MS (a note
@@ -24,57 +23,59 @@ export interface VoiceNote {
   seconds?: number; // file: its length
 }
 
-interface Store {
-  notes: Record<string, VoiceNote[]>; // by conversation key (OWNER_KEY or a group id)
-  quotes: Record<string, Record<string, number>>; // by conversation: a message's timestamp -> the voice note it replies to
+// One file per conversation, so nothing is shared across conversations: a lookup cannot cross them because it never reads another one's file.
+export interface Store {
+  notes: VoiceNote[];
+  quotes: Record<string, number>; // a message's timestamp -> the voice note it replies to
 }
 
-const fileOf = () => join(settings.stateDir, "voice", "sources.json");
-let cache: Store | undefined;
-const load = (): Store => {
-  if (cache) return cache;
+const fileOf = (conv: ConvId): string => convPaths(conv).voiceSources;
+const cache = new Map<ConvId, Store>(); // (a handful of conversations; each file is small)
+const load = (key: string): Store => {
+  const conv = convIdOfKey(key);
+  const hit = cache.get(conv);
+  if (hit) return hit;
+  let s: Store = { notes: [], quotes: {} };
   try {
-    cache = JSON.parse(readFileSync(fileOf(), "utf8")) as Store;
-    cache.notes ??= {};
-    cache.quotes ??= {};
+    const raw = JSON.parse(readFileSync(fileOf(conv), "utf8")) as Partial<Store>;
+    s = { notes: Array.isArray(raw.notes) ? raw.notes : [], quotes: raw.quotes && typeof raw.quotes === "object" ? raw.quotes : {} };
   } catch {
-    cache = { notes: {}, quotes: {} };
+    // none yet, or damaged: start empty
   }
-  return cache;
+  cache.set(conv, s);
+  return s;
 };
-const save = (): void => {
+const save = (key: string): void => {
   try {
-    const f = fileOf();
-    writeFileAtomic(f, JSON.stringify(cache));
+    const conv = convIdOfKey(key);
+    writeFileAtomic(fileOf(conv), JSON.stringify(cache.get(conv)));
   } catch {
     // a note not remembered across a restart is only a note to send again
   }
 };
 
-/** Tests: forget everything held in memory (the file is read again). */
-export const resetVoiceNotes = (): void => void (cache = undefined);
+/** Tests: forget everything held in memory (the files are read again). */
+export const resetVoiceNotes = (): void => void cache.clear();
 
 /** A voice note arrived in conversation `key`. */
 export function holdVoiceNote(key: string, n: VoiceNote, now = Date.now()): void {
-  const s = load();
-  const list = (s.notes[key] ??= []).filter((x) => x.ts !== n.ts && now - x.ts < MAX_AGE_MS);
-  list.push(n);
-  s.notes[key] = list.slice(-NOTES_PER_CONVERSATION);
-  save();
+  const s = load(key);
+  s.notes = [...s.notes.filter((x) => x.ts !== n.ts && now - x.ts < MAX_AGE_MS), n].slice(-NOTES_PER_CONVERSATION);
+  save(key);
 }
 
 /** A message in conversation `key` replies to a voice note. */
 export function holdQuote(key: string, messageTs: number, quotedTs: number): void {
-  const q = ((load().quotes[key] ??= {}));
+  const q = load(key).quotes;
   q[String(messageTs)] = quotedTs;
   const keys = Object.keys(q);
   if (keys.length > NOTES_PER_CONVERSATION * 2) for (const k of keys.slice(0, keys.length - NOTES_PER_CONVERSATION * 2)) delete q[k];
-  save();
+  save(key);
 }
 
 /** The voice notes of a conversation that are still in the look-back, newest first. */
 export function voiceNotes(key: string, now = Date.now()): VoiceNote[] {
-  return (load().notes[key] ?? []).filter((x) => now - x.ts < MAX_AGE_MS).sort((a, b) => b.ts - a.ts);
+  return load(key).notes.filter((x) => now - x.ts < MAX_AGE_MS).sort((a, b) => b.ts - a.ts);
 }
 
 /** One voice note of THIS conversation by its id (timestamp), if it is in the look-back. */
@@ -82,7 +83,7 @@ export const voiceNote = (key: string, ts: number, now = Date.now()): VoiceNote 
 
 /** The voice note a message replies to, if it is one received in this conversation. */
 export function quotedVoiceNote(key: string, messageTs: number, now = Date.now()): VoiceNote | undefined {
-  const q = load().quotes[key]?.[String(messageTs)];
+  const q = load(key).quotes[String(messageTs)];
   return q === undefined ? undefined : voiceNote(key, q, now);
 }
 
@@ -104,13 +105,16 @@ export function rememberSender(key: string, id: string | undefined, name: string
 export const setAsking = (key: string, a: Asking | undefined): void => void (a ? asking.set(key, { ...a, authorName: a.authorName ?? (a.author ? names.get(`${key}|${a.author}`) : undefined) }) : asking.delete(key));
 export const askingIn = (key: string): Asking | undefined => asking.get(key);
 
-/** A removed friend (or group): everything held for conversation `key`. Returns the attachment ids of its notes, so their files can go too. Idempotent. */
-export function forgetConversation(key: string): string[] {
-  const s = load();
-  const ids = (s.notes[key] ?? []).map((n) => n.id);
-  if (!(key in s.notes) && !(key in s.quotes)) return ids;
-  delete s.notes[key];
-  delete s.quotes[key];
-  save();
+/** A removed friend (or group): everything held for conversation `key`. Returns the attachment ids of its notes, so their files can go too. Idempotent (the folder goes with the conversation; this is for the part that is read before it is deleted). */
+export const forgetConversation = (key: string): string[] => forgetConvId(convIdOfKey(key));
+/** The same by the conversation's folder name (a group's raw id is not known to the one who forgets it). */
+export function forgetConvId(conv: ConvId): string[] {
+  let ids: string[] = [];
+  try {
+    const raw = JSON.parse(readFileSync(fileOf(conv), "utf8")) as Partial<Store>;
+    ids = (Array.isArray(raw.notes) ? raw.notes : []).map((n) => n.id).filter((i): i is string => typeof i === "string");
+  } catch { /* none, or damaged: nothing to name */ }
+  cache.delete(conv);
+  rmSync(fileOf(conv), { force: true });
   return ids;
 }

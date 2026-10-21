@@ -1,17 +1,18 @@
 import { audit } from "../core/audit.ts";
 import { readJson, writeJson } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 import { ASSISTANT, OWNER } from "../core/settings.ts";
 import { ACI, addTenant, type TenantRecord } from "./tenants.ts";
 
 // Open registration with the admin's approval. Anybody may write to the assistant; a stranger costs nothing and sees nothing: she gets ONE fixed line (tenantroute.ts),
 // and the owner is asked in her own chat (approvals/registerask.ts) whether this person may become a friend. Until the owner says yes nothing she wrote reaches a model or
-// the owner's eyes: her messages are held here (the last few, cut, in state/registrations.json, which no run can read: policy.ts) and replayed as her first turn only after
+// the owner's eyes: her messages are held here (the last few, cut, in instance/registrations.json, which no run can read: policy.ts) and replayed as her first turn only after
 // the yes. What the owner is shown is her sanitised profile name and a short id, nothing she typed.
-//   state/registrations.json   open requests (with the held messages), declined people, people the owner wrote to first and who may simply answer (E2: `invited`)
+//   instance/registrations.json   open requests (with the held messages), declined people, people the owner wrote to first and who may simply answer (E2: `invited`)
 // Limits, in code: one open request per sender; at most MAX_OPEN open at once (beyond: silent drop); at most PER_HOUR new requests an hour in all; a request expires after
 // 7 days (its held text goes with it) and its sender may ask again after COOLDOWN; a declined sender is silent for good until `npm run tenants -- forget <id>`.
 
-export const FILE = "state/registrations.json";
+export const FILE = instancePaths().registrations;
 export const MAX_OPEN = 10;
 export const EXPIRES_MS = 7 * 24 * 3600_000;
 export const COOLDOWN_MS = 24 * 3600_000;

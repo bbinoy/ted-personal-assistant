@@ -13,6 +13,7 @@ const T = await import("../src/tenants/tenants.ts");
 const { adminCommand } = await import("../src/tenants/removal.ts");
 const { removeFriend: removeTenant } = await import("../src/conversation/tenantremoval.ts");
 const { saveVoice, scopeRoot } = await import("@ted-assistant/speech/tts");
+const { conversationsDir, friendConvId } = await import("../src/core/convpaths.ts");
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { recordDone, markNeedsReconnect, readDone, connectionState } = await import("../src/intake/intakelinks.ts");
 const { deleteTenantItems } = await import("../src/secrets/secrets.ts");
@@ -23,13 +24,13 @@ const { OpenBao } = await import("../src/secrets/openbao.ts");
 
 (settings as { tenants: boolean }).tenants = true;
 const ACI = (n: number) => `${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`;
-const voiceRoot = join(settings.stateDir, "voice");
+const voiceRoot = conversationsDir();
 const attachmentsDir = mkdtempSync(join(tmpdir(), "att-"));
 
 function friend(name: string, n: number) {
   const rec = T.addTenant({ aci: ACI(n), name })!;
   const key = tenantKey(rec.id);
-  saveVoice(scopeRoot(voiceRoot, key), "her-voice", { wav: new Uint8Array([1, 2]), text: "hi", meta: { created: "x", source: "voice note", seconds: 3 } }, 5);
+  saveVoice(scopeRoot(voiceRoot, friendConvId(rec.id)), "her-voice", { wav: new Uint8Array([1, 2]), text: "hi", meta: { created: "x", source: "voice note", seconds: 3 } }, 5);
   writeFileSync(join(attachmentsDir, `${rec.id}-note.aac`), "audio");
   holdVoiceNote(key, { ts: Date.now(), id: `${rec.id}-note.aac`, size: 5, by: ACI(n), snippet: "secret words" });
   recordDone(rec.id, "google", [{ name: "token", chars: 3 }]);
@@ -38,25 +39,25 @@ function friend(name: string, n: number) {
   return { rec, key };
 }
 
-test("removal: her voices, voice-note index and audio, intake marks and registry entry all go; another friend's stay", async () => {
+test("removal: her folder (voices, pending approvals), voice-note index and audio, intake marks and registry entry all go; another friend's stay", async () => {
   resetVoiceNotes();
   const gone = friend("Gina", 1);
   const stay = friend("Hal", 2);
   const items: string[] = [];
-  const r = await removeTenant(gone.rec.id, { voiceRoot, attachmentsDir, secrets: [async (id) => (items.push(id), 2)] });
+  const r = await removeTenant(gone.rec.id, { attachmentsDir, secrets: [async (id) => (items.push(id), 2)] });
   assert.ok(r?.registry);
   assert.deepEqual(items, [gone.rec.id]);
   assert.equal(r?.manual, undefined);
-  assert.equal(existsSync(scopeRoot(voiceRoot, gone.key)), false, "her cloned voices");
+  assert.equal(existsSync(scopeRoot(voiceRoot, friendConvId(gone.rec.id))), false, "her cloned voices");
   assert.equal(voiceNotes(gone.key).length, 0, "her voice-note snippets");
   assert.equal(existsSync(join(attachmentsDir, `${gone.rec.id}-note.aac`)), false, "the audio signal-cli saved");
   assert.equal(existsSync(dataPath(pendingFileOf(gone.key))), false, "her pending approvals");
   assert.equal(readDone(gone.rec.id, "google"), undefined);
   assert.equal(connectionState(gone.rec.id, "notion").state, "none");
   assert.equal(T.tenantById(gone.rec.id), undefined);
-  assert.ok(r?.removed.some((x) => /voices/.test(x)) && r.removed.some((x) => /secret-store items \(2\)/.test(x)));
+  assert.ok(r?.removed.some((x) => /voice-note index/.test(x)) && r.removed.some((x) => /secret-store items \(2\)/.test(x)));
   // the other friend is untouched
-  assert.ok(existsSync(scopeRoot(voiceRoot, stay.key)));
+  assert.ok(existsSync(scopeRoot(voiceRoot, friendConvId(stay.rec.id))));
   assert.equal(voiceNotes(stay.key).length, 1);
   assert.ok(existsSync(join(attachmentsDir, `${stay.rec.id}-note.aac`)));
   assert.ok(readDone(stay.rec.id, "google"));
@@ -69,16 +70,16 @@ test("removal: idempotent, the owner and odd ids refused, a refusing secret stor
   const refuse = async () => {
     throw new Error("403");
   };
-  const first = await removeTenant(f.rec.id, { voiceRoot, attachmentsDir, secrets: [refuse] });
+  const first = await removeTenant(f.rec.id, { attachmentsDir, secrets: [refuse] });
   assert.ok(first?.registry);
   assert.equal(first?.manual?.includes(adminCommand(f.rec.id)), true);
-  assert.equal(existsSync(scopeRoot(voiceRoot, f.key)), false, "the rest still happened");
+  assert.equal(existsSync(scopeRoot(voiceRoot, friendConvId(f.rec.id))), false, "the rest still happened");
   // again, now the second source (the admin's root) works: the leftover is removed, nothing else is claimed
-  const again = await removeTenant(f.rec.id, { voiceRoot, attachmentsDir, secrets: [refuse, async () => 1] });
+  const again = await removeTenant(f.rec.id, { attachmentsDir, secrets: [refuse, async () => 1] });
   assert.equal(again?.registry, false);
   assert.equal(again?.manual, undefined);
   assert.deepEqual(again?.removed, ["her secret-store items (1)"]);
-  assert.deepEqual((await removeTenant(f.rec.id, { voiceRoot, attachmentsDir }))?.removed, []);
+  assert.deepEqual((await removeTenant(f.rec.id, { attachmentsDir }))?.removed, []);
   assert.equal(await removeTenant("owner"), undefined);
   assert.equal(await removeTenant("../x"), undefined);
 });

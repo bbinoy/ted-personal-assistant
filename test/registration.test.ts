@@ -29,7 +29,7 @@ const never = { judge: async () => assert.fail("the judge must not be called"), 
 
 beforeEach(() => {
   on.tenants = true;
-  rmSync(join(settings.dataDir, Reg.FILE), { force: true });
+  rmSync(Reg.FILE, { force: true });
 });
 
 // The door and the registrar, wired like main.ts, with a fake chat.
@@ -66,7 +66,7 @@ test("a stranger gets one fixed line; the owner is asked with a sanitised name a
   assert.equal(rec.status, "active", "an approved friend is active at once: no age or region question");
   assert.equal(rec.role, "member");
   assert.deepEqual(joined, [{ id: rec.id, held: [`${CANARY} hello`] }], "what she wrote while she waited is her first turn");
-  assert.ok(!readFileSync(join(settings.dataDir, Reg.FILE), "utf8").includes(CANARY), "the held text is deleted once she is in");
+  assert.ok(!readFileSync(Reg.FILE, "utf8").includes(CANARY), "the held text is deleted once she is in");
   assert.deepEqual(Reg.openRequests(), []);
 });
 
@@ -79,7 +79,7 @@ test("no: silent, remembered as declined, nothing replayed, the held text delete
   assert.equal(T.tenantByAci(aci(2)), undefined);
   assert.deepEqual(joined, []);
   assert.equal(toStranger.length, 1, "only the holding line, nothing about the no");
-  assert.ok(!readFileSync(join(settings.dataDir, Reg.FILE), "utf8").includes(CANARY));
+  assert.ok(!readFileSync(Reg.FILE, "utf8").includes(CANARY));
   assert.deepEqual(R.admitStranger({ fromUuid: aci(2), text: "please?" }, io, (NOW + 2_000)), { kind: "ignore", why: "declined" });
   assert.equal(toStranger.length, 1);
   assert.equal(toOwner.length, 1, "no second question");
@@ -134,7 +134,7 @@ test("limits: at most ten open requests (beyond: silent), a few new ones an hour
   // expiry: the first three are older than a week; their text is gone, they cool down, then may ask again
   const week = (NOW + 5_000) + Reg.EXPIRES_MS + 10;
   assert.ok(Reg.openRequests(week).every((r) => r.at + Reg.EXPIRES_MS > week));
-  assert.ok(!readFileSync(join(settings.dataDir, Reg.FILE), "utf8").includes(CANARY), "an expired request's held text is deleted");
+  assert.ok(!readFileSync(Reg.FILE, "utf8").includes(CANARY), "an expired request's held text is deleted");
   assert.deepEqual(R.admitStranger({ fromUuid: aci(11), text: "back" }, io, week + 1000), { kind: "ignore", why: "cooling down" });
   assert.equal(R.admitStranger({ fromUuid: aci(11), name: "P1", text: "back" }, io, week + DAY + 10_000).kind, "request");
 });

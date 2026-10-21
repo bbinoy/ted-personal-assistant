@@ -1,9 +1,10 @@
 import type { Source } from "../core/audit.ts";
 import { realpathSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { isInside, realish } from "../core/contain.ts";
 import { isNotePath } from "../memory/notes.ts";
 import { settings } from "../core/settings.ts";
+import { convPaths, conversationsDir, instancePaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { groupTools } from "./capabilities.ts";
 import { loaded, registered } from "../modules/index.ts";
 import type { Denial, HideConfig, ToolModule } from "../modules/types.ts";
@@ -46,33 +47,39 @@ export function denial(tool: string, input: Record<string, unknown>): Denial | u
 export { isReadTool };
 
 // The owner's memory is the SDK's auto-memory: the chat agent keeps small notes in
-// memory/notes/ with the built-in Read, Write and Edit tools, plus our forget_note. Those tools
+// conversations/owner/notes/ with the built-in Read, Write and Edit tools, plus our forget_note. Those tools
 // are allowed for chat ONLY on a path inside that folder (anywhere else is denied), and every
 // change is announced on the phone with how to undo it (agent.ts), so a note planted by
 // something the agent read is seen at once. Nothing unattended may touch them. Checked before
 // any allow list, so adding them to one can never open them up.
 const NOTE_FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
 // The owner's chat may READ (never write) a SHORT ALLOW-LIST of the assistant's own data with the built-in Read, so the owner can ask what a voice message
-// said or what the assistant did: readableData() below (memory/notes/ incl. MEMORY.md; logs/messages.jsonl, audit.jsonl, agent.log, signal-daemon.log).
-// EVERYTHING ELSE under logs/, state/ and memory/ is unreadable by default, so a new store is private the day it is written. (It used to be the other way
-// round, a deny-list, and it missed state/voice/ with friends' voice-note snippets and cloned reference audio, state/tenants.json with every friend's name
-// and ACI, intake-problems.json, notes-backup/ with notes deleted by forget_note, and raw group ids in cap-notices.json and group-cost.json, memory/groups/.)
+// said or what the assistant did: readableData() below (conversations/owner/notes/ incl. MEMORY.md; conversations/owner/messages.jsonl; logs/audit.jsonl, agent.log, signal-daemon.log).
+// EVERYTHING ELSE under the data folder is unreadable by default (the rest of conversations/owner/ too: its session, notes-backup, search index, pending approvals), so a new store is private the
+// day it is written. (It used to be the other way round, a deny-list, and it missed friends' voice-note snippets and cloned reference audio, the friends list with every friend's name
+// and ACI, intake-problems.json, notes-backup/ with notes deleted by forget_note, and raw group ids in cap-notices.json and group-cost.json, and every group's folder.)
 // Reading the logs by SEARCH (search_logs, a tool with its own fixed folder) is not affected. Symlinks are resolved first, so a link cannot lead out of
 // an allowed entry. The repo, .env and the rest of the disk stay out of reach.
-// hiddenData is the second lock, kept on top of the allow-list: the tenants' folders (their notes, history, sessions: the owner reads none of them through the
-// assistant, which is what keeps one person's chat from becoming another's, tenants.ts), the secret store's folder (config, TLS key, audit log) and the files that
-// hold pending registrations, intake tickets, and the browse worker's page views. Those stay unreadable even if someone widens the allow-list. The host's admin is
-// not blind: these are files on the owner's Mac (docs/SAFETY.md), the lock is for the assistant, not against the machine's owner.
-const hiddenData = (): string[] => [settings.tenantsDir, join(settings.stateDir, "openbao"), join(settings.stateDir, "registrations.json"), settings.intake.dir, join(settings.stateDir, "intake-status.json"), join(settings.stateDir, "intake-problems.json"), join(settings.stateDir, "browse")];
+// hiddenData is the second lock, kept on top of the allow-list: every other conversation's folder (a friend's and a group's notes, history, sessions: the owner reads none of them through the
+// assistant, which is what keeps one person's chat from becoming another's, tenants.ts), the whole instance/ folder (the friends list, pending registrations, intake tickets, the browse
+// worker's page views, the cost ledgers) and the installed software's folder (the secret store's config, TLS key and audit log). Those stay unreadable even if someone widens the allow-list.
+// The host's admin is not blind: these are files on the owner's Mac (docs/SAFETY.md), the lock is for the assistant, not against the machine's owner.
+const hiddenData = (): string[] => [instancePaths().dir, instancePaths().installed];
+// Is this real path in a conversation folder that is not the owner's? (Judged by the first folder under conversations/, so a folder that does not exist yet is covered too.)
+const inOtherConversation = (real: string): boolean =>
+  [conversationsDir(), realish(conversationsDir())].some((root) => {
+    const rel = relative(root, real);
+    return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel) && rel.split(sep)[0] !== OWNER_CONV;
+  });
 // A folder (anything inside it) or a single file, exactly.
-export const readableData = (): string[] => [join(settings.memoryDir, "notes"), ...["messages.jsonl", "audit.jsonl", "agent.log", "signal-daemon.log"].map((f) => join(settings.logsDir, f))];
+export const readableData = (): string[] => [convPaths(OWNER_CONV).notes, convPaths(OWNER_CONV).messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon];
 const inside = (real: string, dir: string): boolean => real === dir || real.startsWith(dir + sep);
 
 export function isReadableData(path: unknown, allowed: readonly string[] = readableData()): path is string {
   if (typeof path !== "string" || path === "" || path.includes("\0")) return false;
   try {
     const real = realpathSync(resolve(path));
-    if (hiddenData().some((h) => inside(real, resolve(h)) || inside(real, realish(h)))) return false;
+    if (hiddenData().some((h) => inside(real, resolve(h)) || inside(real, realish(h))) || inOtherConversation(real)) return false;
     return allowed.some((d) => inside(real, realish(d)));
   } catch {
     return false; // missing file or folder

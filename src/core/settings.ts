@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { dataDirOf, PLUGIN_DIR, VOICES_DIR } from "./paths.ts";
+import { layout, useDataRoot } from "./convpaths.ts";
 import { presetFor } from "./preset.ts";
 import { isSafeUrl, type TtsProviderConfig } from "@ted-assistant/speech/tts";
 
@@ -129,7 +130,7 @@ function ttsProvider(env: Env, kokoro: { dir: string; voice: string; speed: numb
     return { provider, fallback, kokoro, http: { url, token: env.TTS_HTTP_TOKEN?.trim() || undefined, voice: env.TTS_HTTP_VOICE?.trim() || undefined, referenceId: env.TTS_HTTP_REFERENCE_ID?.trim() || undefined, timeoutMs } };
   }
   if (provider === "qwen") {
-    // The reference recording and its text are yours and stay outside the repo (state/ is ignored). TTS_REF_TEXT is the words
+    // The reference recording and its text are yours and stay outside the repo (the data folders are ignored by version control). TTS_REF_TEXT is the words
     // themselves or the path of a text file; a missing file or text is reported by `npm run doctor`, and Ted then speaks with Kokoro.
     const path = (v: string | undefined) => (v?.trim() ? resolve(dataDir, v.trim().replace(/^~(?=\/)/, env.HOME ?? "")) : "");
     const textRaw = env.TTS_REF_TEXT?.trim() ?? "";
@@ -143,12 +144,12 @@ function ttsProvider(env: Env, kokoro: { dir: string; voice: string; speed: numb
     return {
       provider, fallback, kokoro,
       qwen: {
-        dir: path(env.TTS_QWEN_DIR) || join(dataDir, "state/tts-qwen"),
+        dir: path(env.TTS_QWEN_DIR) || layout(dataDir).instance.ttsQwen,
         model: env.TTS_QWEN_MODEL?.trim() || "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
         refAudio: builtIn ? join(sampleDir, "default.wav") : path(env.TTS_REF_AUDIO),
         refText: builtIn ? (() => { try { return readFileSync(join(sampleDir, "default.txt"), "utf8").trim(); } catch { return ""; } })() : isFile ? readFileSync(textFile, "utf8").trim() : textRaw,
         builtIn,
-        voiceRoot: join(dataDir, "state/voice"), // the voice library (a cloned voice per conversation, voices.ts); the reference above is its default voice
+        voiceRoot: layout(dataDir).conversations, // the folder of the conversations: each has its own voices/ library (voices.ts scopeRoot); the reference above is the default voice
         timeoutMs,
         idleMs,
       },
@@ -179,8 +180,7 @@ export function loadSettings(env: Env) {
   // The owner's own address (Gmail only): the one place the brief may be emailed to. Checked by shape here, used by code in gmailrules.ts.
   const mailSelf = (env.MAIL_SELF_ADDRESS ?? "").trim().toLowerCase();
   if (mailSelf && !/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(mailSelf)) throw new Error("MAIL_SELF_ADDRESS must be a plain email address (no name, no angle brackets)");
-  // The data root holds three folders: state/ (bookkeeping), logs/ and memory/ (what the
-  // model reads). Overridable so tests never touch the real data.
+  // The data root holds instance/ (process-wide), conversations/<id>/ (one folder per conversation) and logs/ (core/convpaths.ts). Overridable so tests never touch the real data.
   const dataDir = dataDirOf(env);
   return {
     // Who the agent works for and what it is called. Neutral defaults keep the repo impersonal.
@@ -251,8 +251,8 @@ export function loadSettings(env: Env) {
     openbao: {
       addr: env.OPENBAO_ADDR?.trim() || "https://127.0.0.1:8200", // loopback only (checked by the client)
       mount: env.OPENBAO_MOUNT?.trim() || "ted", // the KV v2 mount; items are at <mount>/tenants/<id>/...
-      dir: resolve(dataDir, env.OPENBAO_HOME?.trim() || "state/openbao"), // binary, config, data, audit log and certificate (0700, ignored by git)
-      caCert: resolve(dataDir, env.OPENBAO_CACERT?.trim() || join(env.OPENBAO_HOME?.trim() || "state/openbao", "tls/cert.pem")), // the pinned certificate
+      dir: env.OPENBAO_HOME?.trim() ? resolve(dataDir, env.OPENBAO_HOME.trim()) : layout(dataDir).instance.openbao, // binary, config, data, audit log and certificate (0700, not versioned); it stays under state/ (convpaths.ts: installed)
+      caCert: resolve(dataDir, env.OPENBAO_CACERT?.trim() || join(env.OPENBAO_HOME?.trim() ? resolve(dataDir, env.OPENBAO_HOME.trim()) : layout(dataDir).instance.openbao, "tls/cert.pem")), // the pinned certificate
       role: env.OPENBAO_ROLE?.trim() || "ted-owner", // the policy and token role of the owner's tenant
       keychainPrefix: env.OPENBAO_KEYCHAIN_PREFIX?.trim() || "ted-openbao", // names of this Mac's Keychain items for the token and the unseal shares
       timeoutMs: num(env, "OPENBAO_TIMEOUT_SECONDS", 5, 1, 60) * 1000,
@@ -267,7 +267,7 @@ export function loadSettings(env: Env) {
       linkMinutes: num(env, "INTAKE_LINK_MINUTES", 15, 1, 60), // how long a setup link works (once)
       // The request header that carries the visitor's address behind a tunnel, for the page's rate limits: x-forwarded-for (its last entry) unless the tunnel sets another, like cf-connecting-ip for Cloudflare Tunnel.
       clientIpHeader: (env.INTAKE_CLIENT_IP_HEADER?.trim().toLowerCase() || "x-forwarded-for").replace(/[^a-z0-9-]/g, "") || "x-forwarded-for",
-      dir: join(dataDir, "state/intake"), // the open links (hashed) and what was stored (lengths only)
+      dir: layout(dataDir).instance.intakeDir, // the open links (hashed) and what was stored (lengths only)
     },
     // Google for friends (src/modules/google/googlemcp.ts, src/intake/googleoauth.ts, docs/SETUP.md "Google for friends"): a friend (every friend has the `google` capability once the OAuth client is set) connects her own Google
     // account on the intake page (OAuth, offline) and her mail and calendar tools are served by a pinned third-party MCP server that THIS process starts for her, with
@@ -291,7 +291,7 @@ export function loadSettings(env: Env) {
     },
     // Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, docs/SETUP.md "Notion for friends"): a friend (every friend has the `notion` capability once INTAKE_BASE_URL is set) connects her own Notion on the
     // intake page (OAuth with PKCE against Notion's hosted MCP server) and her Notion tools are that hosted server, called by THIS process with her token through the
-    // same credentialed proxy as Google. Nothing to set up but the tunnel: the instance registers itself once (RFC 7591) and remembers the client in state/notion-client.json.
+    // same credentialed proxy as Google. Nothing to set up but the tunnel: the instance registers itself once (RFC 7591) and remembers the client in instance/notion-client.json.
     notion: {
       mcpUrl: env.NOTION_MCP_URL?.trim() || "https://mcp.notion.com/mcp", // tests point this at a fake
       refreshMarginSeconds: num(env, "NOTION_REFRESH_MARGIN_SECONDS", 300, 0, 3600), // an access token this close to its end is renewed first
@@ -417,14 +417,12 @@ export function loadSettings(env: Env) {
     pluginDir: PLUGIN_DIR,
 
     dataDir,
-    stateDir: join(dataDir, "state"), // bookkeeping the model never reads
-    logsDir: join(dataDir, "logs"), // agent.log, audit.jsonl, daemon and launchd output
-    memoryDir: join(dataDir, "memory"), // what the model reads: notes/ (the SDK auto-memory) 
-    tenantsDir: join(dataDir, "tenants"), // one folder per tenant (notes, history, session, cost, tenant.json): outside logs/, state/ and memory/, so the owner's chat does not read it (policy.ts)
+    logsDir: layout(dataDir).logs.dir, // audit.jsonl, agent.log, signal-daemon.log and launchd's stderr files; where everything else lives is core/convpaths.ts
   } as const;
 }
 
 export const settings = loadSettings(process.env);
+useDataRoot(settings.dataDir); // (core/convpaths.ts builds every path under the same root)
 // The speech keys and the tenants' instance key were read into `settings` above. Nothing the agent starts (Claude Code and its MCP servers, ffmpeg, signal-cli)
 // needs them, and they are inherited by every child process unless dropped here (the owner's runs never see the tenants' key).
 for (const name of ["ELEVENLABS_API_KEY", "TTS_HTTP_TOKEN", "TENANT_ANTHROPIC_API_KEY", "GOOGLE_OAUTH_CLIENT_SECRET"]) delete process.env[name];

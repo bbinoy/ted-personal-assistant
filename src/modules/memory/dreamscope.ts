@@ -1,9 +1,9 @@
-import { join } from "node:path";
 import type { Conversation } from "../../conversation/conversationmodel.ts";
 import { OWNER_SCOPE, type Scope } from "../../memory/dreamplan.ts";
 import { groupDir, groupScope } from "../../conversation/groupstore.ts";
 import { preset } from "../../core/preset.ts";
 import { settings } from "../../core/settings.ts";
+import { convIdOf, convPaths } from "../../core/convpaths.ts";
 import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 // WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it, the note categories it has (the preset's notes.dream for the owner,
@@ -21,11 +21,9 @@ export function dreamScope(conv: Who): Scope {
   return { notesDir: ctx.notesDir, backupsDir: ctx.backupDir, categories: preset().notes.tenant, index: true, maxNotes: settings.memoryMaxNotes };
 }
 
-// The conversation's own state file: the owner's in state/, a group's and a friend's in their folder (where they have always been).
+// The conversation's own state file, in its folder.
 export function dreamStateFile(conv: Who): string {
-  if (conv.kind === "owner") return "state/dream.json";
-  if (conv.kind === "group") return join(groupDir(conv.groupId!), "dream.json");
-  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-  if (!rec) throw new Error("not a tenant");
-  return join(tenantContext(rec).dir, "dream.json");
+  if (conv.kind === "group") groupDir(conv.groupId!); // (the folder is made first)
+  if (conv.kind === "tenant" && !(conv.tenantId && tenantById(conv.tenantId))) throw new Error("not a tenant");
+  return convPaths(convIdOf(conv)).dream;
 }

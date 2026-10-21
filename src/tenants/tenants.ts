@@ -6,30 +6,32 @@ import { FILE as OWNER_LOG, type Summarize } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
+import { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } from "../core/convpaths.ts";
 import { OWNER_SESSION_FILE } from "../core/ownerkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { dataPath, parseJson, readJson, writeFileAtomic, writeJson } from "../core/state.ts";
 import { isZone, systemZone } from "../core/timezone.ts";
 import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 
-// Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (the folders and files the
-// instance has always had, unchanged); a friend is a tenant with a folder of her own:
-//   tenants/<id>/tenant.json    her typed overrides (TenantConfig)
-//   tenants/<id>/notes/         her notes (the SDK's auto-memory); the only place her file tools reach
-//   tenants/<id>/backup/        snapshots of her notes
-//   tenants/<id>/messages.jsonl everything said in her chat, size-bounded (no summary model: that would run on the owner's login)
-//   tenants/<id>/session.json   her resumed SDK session
-//   tenants/<id>/cost.json      what she spent today on the instance key
-//   tenants/<id>/meta.json      small bookkeeping (first greeting done, notice times)
-// The folder is outside logs/, state/ and memory/, which are what the owner's chat may read (policy.ts): the owner does not read a friend's
+// Tenants: the people other than the owner who use this instance. The owner is the tenant "owner" (her conversation folder is conversations/owner/); a friend is a tenant with a
+// conversation folder of her own, conversations/friend-<id>/ (core/convpaths.ts, the same shape for everyone):
+//   tenant.json    her typed overrides (TenantConfig)
+//   notes/         her notes (the SDK's auto-memory); the only place her file tools reach
+//   notes-backup/  snapshots of her notes
+//   messages.jsonl everything said in her chat, size-bounded (no summary model: that would run on the owner's login)
+//   session.json   her resumed SDK session
+//   cost.json      what she spent today on the instance key
+//   meta.json      small bookkeeping (first greeting done, notice times)
+// Of conversations/ the owner's chat may read only conversations/owner/ (policy.ts): the owner does not read a friend's
 // notes or history through the assistant. The host's admin can, of course: the files are on the owner's Mac (docs/SAFETY.md).
-// The registry state/tenants.json holds ONE record per person, the owner included (role admin, every capability, the files above unchanged: pathsOf):
+// The registry instance/tenants.json holds ONE record per person, the owner included (role admin, every capability, her folder is the owner's: pathsOf):
 // id, name, sender account ids (ACI), role, status and the credential source, never a key. Tenants run on the instance key
 // (settings.tenantApiKey, from TENANT_ANTHROPIC_API_KEY), the owner on the login.
 // Everything is files, read and written synchronously (state.ts); SQLite is for later.
 
 export const OWNER_ID = "owner";
-export const REGISTRY = "state/tenants.json";
+export const REGISTRY = instancePaths().tenants;
+const REGISTRY_LABEL = "the friends list (tenants.json in the instance folder)"; // (what a message or a log line calls it: never the data folder's absolute path)
 
 export type TenantStatus = "active" | "suspended";
 export const STATUSES: readonly TenantStatus[] = ["active", "suspended"];
@@ -146,12 +148,9 @@ export interface TenantContext {
   persona?: string;
 }
 
-const dirOf = (id: string): string => {
-  if (!TENANT_ID.test(id) || id === OWNER_ID) throw new Error("not a tenant id");
-  return join(settings.tenantsDir, id);
-};
+const dirOf = (id: string): string => convPaths(friendConvId(id)).dir; // (throws "not a tenant id")
 
-// Where a person's files are: the owner's are the places the instance has always used (nothing is moved); a friend's are in her folder.
+// Where a person's files are: the owner's are her conversation folder (conversations/owner/) and the instance's own ledger; a friend's are in hers.
 export interface Paths {
   root: string;
   notesDir: string;
@@ -161,13 +160,14 @@ export interface Paths {
 }
 export const pathsOf = (rec: Pick<TenantRecord, "id">): Paths =>
   rec.id === OWNER_ID
-    ? { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: "state/cost.json" }
-    : { root: dirOf(rec.id), notesDir: join(dirOf(rec.id), "notes"), logFile: join(dirOf(rec.id), "messages.jsonl"), sessionFile: join(dirOf(rec.id), "session.json"), costFile: join(dirOf(rec.id), "cost.json") };
+    ? { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: instancePaths().cost }
+    : (({ dir, notes, messages, session, cost }) => ({ root: dir, notesDir: notes, logFile: messages, sessionFile: session, costFile: cost }))(convPaths(friendConvId(rec.id)));
 
 export function tenantContext(rec: TenantRecord): TenantContext {
-  const dir = dirOf(rec.id);
+  const p = convPaths(friendConvId(rec.id));
+  const dir = p.dir;
   const paths = pathsOf(rec);
-  const configFile = join(dir, "tenant.json");
+  const configFile = p.tenantJson;
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(configFile, "utf8"));
@@ -183,12 +183,12 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     target: directTarget(rec.acis[0] ?? ""),
     dir,
     notesDir: paths.notesDir,
-    backupDir: join(dir, "backup"),
+    backupDir: p.notesBackup,
     sessionFile: paths.sessionFile,
     logFile: paths.logFile,
     costFile: paths.costFile,
     configFile,
-    metaFile: join(dir, "meta.json"),
+    metaFile: p.meta,
     role: rec.role,
     credential: rec.credential,
     config,
@@ -235,7 +235,7 @@ let ownerSeed: { number: string; aci?: string } | undefined; // (set by ensureOw
 const ownerFrom = (s: { number: string; aci?: string }, now: Date): TenantRecord => ({ id: OWNER_ID, name: settings.owner, acis: s.aci && ACI.test(s.aci) ? [s.aci] : [], ...(s.number ? { number: s.number } : {}), role: "admin", status: "active", credential: "login", created: now.toISOString() });
 // Why the friends list is unusable (the parse error), or undefined when it is fine. For the start-up notice and `npm run doctor`.
 export const registryProblem = (): string | undefined => (registry(), cached?.corrupt);
-export const REGISTRY_NOTICE = `The friends list (${REGISTRY}) can't be read, so friends are paused. It's kept as is; repair or move it, then restart.`;
+export const REGISTRY_NOTICE = `The friends list (tenants.json in the instance folder) can't be read, so friends are paused. It's kept as is; repair or move it, then restart.`;
 
 // `allows`, `tenantById` and every routing question read the registry, on every message and every tick. The file is read and parsed again only when it changed (its
 // stat: size, modification time in ns, inode: a write is a rename to a new file, also another process's, `npm run tenants`) and not after this process's own
@@ -257,14 +257,14 @@ function registry(): unknown[] {
   // An unreadable registry is NOT an empty one: nobody is routed (fail closed) and `save` refuses, so the next change cannot erase every tenant from defaults. The file is left in place for a human.
   const r = parseJson<Partial<Registry>>(REGISTRY);
   const corrupt = "corrupt" in r ? r.corrupt : undefined;
-  if (corrupt !== undefined) console.error(`tenants: ${REGISTRY} is unreadable (${corrupt}); no one is routed and nothing will be saved until it is repaired or removed`);
+  if (corrupt !== undefined) console.error(`tenants: ${REGISTRY_LABEL} is unreadable (${corrupt}); no one is routed and nothing will be saved until it is repaired or removed`);
   const tenants = (("value" in r ? r.value?.tenants : undefined) ?? []) as unknown[];
   cached = sig ? { sig, tenants, ...(corrupt !== undefined ? { corrupt } : {}) } : undefined;
   return tenants;
 }
 function refuseIfUnreadable(): void {
   registry(); // (re)reads when the file changed
-  if (cached?.corrupt !== undefined) throw new Error(`tenants: ${REGISTRY} exists but cannot be read (${cached.corrupt}); refusing to overwrite it. Repair or move the file, then try again.`);
+  if (cached?.corrupt !== undefined) throw new Error(`tenants: ${REGISTRY_LABEL} exists but cannot be read (${cached.corrupt}); refusing to overwrite it. Repair or move the file, then try again.`);
 }
 // The tenants: everybody but the owner. What the invitations, routing, suspension and removal work on; none of it can reach the owner's record.
 export const listTenants = (): TenantRecord[] => people().filter((r) => r.id !== OWNER_ID);
@@ -319,7 +319,7 @@ export function learnOwnerAci(who: { number: string; aci?: string }): boolean {
   if (!rec || rec.acis.length || !rec.number || rec.number !== who.number || people().some((r) => hasAci(r, who.aci!))) return false;
   update(OWNER_ID, (r) => ({ ...r, acis: [who.aci!] }));
   audit("owner_aci", "learned", "chat");
-  console.log(`tenants: the owner's Signal account id (${who.aci.slice(0, 8)}...) was learned from the first message from her number and recorded once (state/tenants.json)`);
+  console.log(`tenants: the owner's Signal account id (${who.aci.slice(0, 8)}...) was learned from the first message from her number and recorded once (tenants.json in the instance folder)`);
   return true;
 }
 
@@ -367,14 +367,14 @@ export function addTenant(who: { aci: string; name?: string }, now = Date.now())
 
 export const setStatus = (id: string, status: TenantStatus): TenantRecord | undefined => (id === OWNER_ID ? undefined : update(id, (r) => ({ ...r, status })));
 
-// Remove a tenant and her data: the registry entry and her folder (notes, history, session, cost). True: she was a tenant.
+// Remove a tenant and her data: the registry entry and her conversation folder (notes, history, session, cost, voices). True: she was a tenant.
 // What the host already holds elsewhere (the SDK's own transcript of her sessions under ~/.claude, backups of the Mac) is not reached: docs/SAFETY.md.
 export function deleteTenant(id: string, o: { drop?: (id: string) => void } = {}): boolean {
   if (!tenantById(id)) return false;
   save(people().filter((t) => t.id !== id)); // first: from this moment she is nobody
   o.drop?.(id);
   const dir = dirOf(id);
-  if (isInside(dir, settings.tenantsDir)) rmSync(dir, { recursive: true, force: true });
+  if (isInside(dir, conversationsDir())) rmSync(dir, { recursive: true, force: true });
   console.log(`tenants: ${id} deleted`);
   return true;
 }

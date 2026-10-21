@@ -42,7 +42,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   async function speak(conv: Conversation, words: string): Promise<boolean> {
     let file: string | undefined;
     try {
-      file = await deps.speech.synth(words, conv.key); // the voice active in THIS conversation
+      file = await deps.speech.synth(words, conv.convId); // the voice active in THIS conversation (its library: voices/ in its folder)
       await out.sendVoice(file, words, conv.target);
       return true;
     } catch (e) {
@@ -147,12 +147,12 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // Tell the conversation what went wrong (the usage limit, an expired login, "something broke"), at most once per conv.noticeEveryMs
   // (always in the owner's chat, every few minutes in a group). The one place both turns that fail and a gate that cannot decide use.
   async function warn(conv: Conversation, e: unknown, quote?: Quote): Promise<boolean> {
-    // (kept in state/cap-notices.json across restarts; with a clock injected, as tests do, in memory only)
+    // (kept in instance/cap-notices.json across restarts, keyed by the conversation's folder name, never a raw group id; with a clock injected, as tests do, in memory only)
     const persist = deps.now === undefined && conv.noticeEveryMs > 0;
-    const last = lastNotice.get(conv.key) ?? (persist ? lastNoticeAt(`warn:${conv.key}`) : undefined) ?? 0;
+    const last = lastNotice.get(conv.key) ?? (persist ? lastNoticeAt(`warn:${conv.convId}`) : undefined) ?? 0;
     if (now() - last < conv.noticeEveryMs) return false;
     lastNotice.set(conv.key, now());
-    if (persist) markNoticeAt(`warn:${conv.key}`, now());
+    if (persist) markNoticeAt(`warn:${conv.convId}`, now());
     if (lastNotice.size > 50) for (const [key, at] of lastNotice) if (now() - at > 24 * 3_600_000) lastNotice.delete(key); // (only the last few minutes of an entry matter)
     return out.reply(conv.notice(e), { quote: conv.groupId ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
   }

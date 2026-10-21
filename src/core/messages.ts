@@ -2,6 +2,7 @@ import { skipForCooldown } from "./cooldown.ts";
 import { statSync } from "node:fs";
 import { appendLine, dataPath, readText, writeText } from "./state.ts";
 import { settings } from "./settings.ts";
+import { convPaths, OWNER_CONV } from "./convpaths.ts";
 import { LIMITS } from "./sanitize.ts";
 
 // Every message the assistant sends on Signal, with its Signal timestamp: one append-only file.
@@ -14,7 +15,7 @@ import { LIMITS } from "./sanitize.ts";
 // summary itself is rewritten each time, so the file never grows past the limit. The owner's own
 
 
-export const FILE = "logs/messages.jsonl"; // the owner's chat; a group has its own log, same format (groupstore.ts)
+export const FILE = convPaths(OWNER_CONV).messages; // the owner's chat; a group and a friend have their own, same format (convpaths.ts)
 const KEEP_AFTER_COMPACTION = 0.7; // compact down to this share of the limit, so it does not run on every message
 
 // What was said: the assistant's own messages (chat, notice, approval, draft, brief, other), the OWNER's messages

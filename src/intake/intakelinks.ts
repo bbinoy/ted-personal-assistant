@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PURPOSES, purposeAvailable } from "./intakepurposes.ts";
 import { settings } from "../core/settings.ts";
 import { readJson, writeJson } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 import type { Capability } from "../tenants/tenants.ts";
 
 // The setup links of the intake page (intakeserver.ts): a single-use code in a URL, minted by the chat tool or the local CLI, redeemed by the page.
@@ -141,7 +142,7 @@ export const linkUrl = (base: string, code: string): string => `${base.replace(/
 
 // ---- what was stored, for the model: names and lengths, never a value ----
 
-export const STATUS_FILE = "state/intake-status.json";
+export const STATUS_FILE = instancePaths().intakeStatus;
 export interface Done {
   at: string; // ISO time
   stored: { name: string; chars: number }[];
@@ -150,7 +151,7 @@ type StatusFile = Record<string, Record<string, Done>>; // tenant -> purpose -> 
 
 // Written by the process that uses a connection (the agent) when a service no longer accepts it: her permission expired, was withdrawn or was never complete. She is
 // told in the chat to reconnect; the admin's list and the doctor show it. It is cleared by connecting again (a newer completed form than this mark).
-export const PROBLEMS_FILE = "state/intake-problems.json";
+export const PROBLEMS_FILE = instancePaths().intakeProblems;
 type ProblemFile = Record<string, Record<string, string>>; // tenant -> purpose -> ISO time
 
 export function markNeedsReconnect(tenant: string, purpose: string, now = new Date()): void {

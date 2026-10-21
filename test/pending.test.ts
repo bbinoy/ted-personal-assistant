@@ -17,6 +17,7 @@ import { readAudit } from "../src/core/audit.ts";
 import { commandReply, parseCommand } from "../src/conversation/ownercommands.ts";
 import { runPending } from "../src/run/pendingrun.ts";
 import { owner } from "../src/conversation/conversation.ts";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 // The approval inbox: what an unattended run needed a yes for is parked (never waited on), asked as one numbered batch, answered by number in code, and run EXACTLY as recorded.
 // Fake values only.
@@ -469,7 +470,7 @@ test("/approvals lists the open items with numbers, ages and the hint; '/approva
 
 test("/approvals is the owner's own in her chat (owner key) and works through the injected dependency", () => {
   const seen: [string, boolean][] = [];
-  const conv = { kind: "owner", key: "owner", sessionFile: "state/session.json" } as const;
+  const conv = { kind: "owner", key: "owner", sessionFile: convPaths(OWNER_CONV).session } as const;
   assert.equal(commandReply(conv, "/approvals", { approvals: (s, c) => (seen.push([s, c]), "listed") }), "listed");
   assert.equal(commandReply(conv, "/approvals clear", { approvals: (s, c) => (seen.push([s, c]), "cleared") }), "cleared");
   assert.deepEqual(seen, [["owner", false], ["owner", true]]);

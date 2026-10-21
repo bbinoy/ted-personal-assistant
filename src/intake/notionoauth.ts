@@ -7,6 +7,7 @@ import type { Data } from "../secrets/openbao.ts";
 import { appBao, NOTION_ITEM, TenantSecrets } from "../secrets/secrets.ts";
 import { settings } from "../core/settings.ts";
 import { dataPath, readJson, writeJson } from "../core/state.ts";
+import { instancePaths } from "../core/convpaths.ts";
 
 // Notion for friends, the sign-in half (the calls to the hosted server are notionmcp.ts). Notion runs a hosted MCP server (settings.notion.mcpUrl, by default
 // https://mcp.notion.com/mcp) that gives a person access by HER OWN workspace permissions after a one-click OAuth consent. As a client of it, this instance:
@@ -14,7 +15,7 @@ import { dataPath, readJson, writeJson } from "../core/state.ts";
 //   1. DISCOVERS the server's OAuth endpoints: the MCP server's /.well-known/oauth-protected-resource names its authorization server, whose
 //      /.well-known/oauth-authorization-server lists the authorization, token and registration endpoints (RFC 9728 / 8414).
 //   2. REGISTERS ONE CLIENT for the whole instance, once (RFC 7591 dynamic registration, a public client: no secret), with the redirect address
-//      <INTAKE_BASE_URL>/oauth/notion/callback. Its id is remembered in state/notion-client.json (an id is not a secret; the intake page, which has only a write-only
+//      <INTAKE_BASE_URL>/oauth/notion/callback. Its id is remembered in instance/notion-client.json (an id is not a secret; the intake page, which has only a write-only
 //      OpenBao token, must be able to read it). It is never registered again per person or per session: registering again orphans refresh tokens. Only a changed redirect
 //      address (a new tunnel address) makes a new registration, and grants made under the old client keep refreshing, because each grant stores the client id it was issued to.
 //   3. Runs the authorisation-code flow with PKCE (S256) that every service shares (oauth.ts), and stores her grant under tenants/<id>/notion/oauth.
@@ -34,7 +35,7 @@ export interface Endpoints {
   registration: string;
 }
 
-// What is remembered of the one registration (state/notion-client.json).
+// What is remembered of the one registration (instance/notion-client.json).
 export interface ClientRecord {
   client_id: string;
   redirect_uri: string;
@@ -43,8 +44,8 @@ export interface ClientRecord {
   token_endpoint: string;
   registered_at: string;
 }
-export const CLIENT_FILE = "state/notion-client.json";
-const LOCK_DIR = "state/notion-client.lock";
+export const CLIENT_FILE = instancePaths().notionClient;
+const LOCK_DIR = instancePaths().notionClientLock;
 
 const NOT_NOW = "Notion's sign-in could not be set up right now. Nothing was saved; try the same link again in a moment.";
 
