@@ -10,17 +10,31 @@ import { instanceDb } from "./instancedb.ts";
 // `due` asks, `mark` records: a notice that could not be delivered (a group's own notice throttle) is not marked, so the next message tries again.
 // A row is (key, day, last_at): `day` for the once-a-day notices, `last_at` for the ones throttled by an interval (below); a key uses one of them.
 
+// A notice must never take a run down: while the ledger database cannot be used (damaged, busy, full) a notice is "not due" and a mark is dropped, so nobody is told twice and nothing throws.
+const quiet = <T>(f: () => T, fallback: T): T => {
+  try {
+    return f();
+  } catch {
+    return fallback;
+  }
+};
+
 // The notices that repeat after an INTERVAL (the shared key's problem every few hours, a group's error notice every few minutes): the time of the last
 // one, so a restart does not send it again. Entries older than a day are dropped when one is written (no interval is longer).
-export const lastNoticeAt = (key: string): number | undefined => instanceDb().get<{ last_at: number | null }>("SELECT last_at FROM notices WHERE key = ?", key)?.last_at ?? undefined;
+export const lastNoticeAt = (key: string): number | undefined => quiet(() => instanceDb().get<{ last_at: number | null }>("SELECT last_at FROM notices WHERE key = ?", key)?.last_at ?? undefined, undefined);
 export function markNoticeAt(key: string, now = Date.now()): void {
+  quiet(() => {
   const db = instanceDb();
   db.tx(() => {
     db.run("DELETE FROM notices WHERE day IS NULL AND last_at IS NOT NULL AND last_at < ?", now - 24 * 3_600_000);
     db.run("INSERT INTO notices (key, last_at) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET last_at = excluded.last_at", key, now);
   });
+  }, undefined);
 }
 export function clearNoticeAt(prefix: string): void {
+  quiet(() => clearNoticeAtNow(prefix), undefined);
+}
+function clearNoticeAtNow(prefix: string): void {
   const db = instanceDb();
   const like = `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   db.tx(() => {
@@ -43,12 +57,15 @@ export function forgetNotices(match: (key: string) => boolean): number {
     return n;
   });
 }
-export const capNoticeDue = (key: string, now = Date.now()): boolean => instanceDb().get<{ day: string | null }>("SELECT day FROM notices WHERE key = ?", key)?.day !== localDay(new Date(now));
+export const capNoticeDue = (key: string, now = Date.now()): boolean => quiet(() => instanceDb().get<{ day: string | null }>("SELECT day FROM notices WHERE key = ?", key)?.day !== localDay(new Date(now)), false);
 export function markCapNotice(key: string, now = Date.now()): void {
-  instanceDb().run("INSERT INTO notices (key, day) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET day = excluded.day", key, localDay(new Date(now)));
+  quiet(() => instanceDb().run("INSERT INTO notices (key, day) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET day = excluded.day", key, localDay(new Date(now))), undefined);
 }
 // Due now, and marked: for a notice that is delivered by the caller's own return value (a friend's reply).
 export function takeCapNotice(key: string, now = Date.now()): boolean {
+  return quiet(() => takeNow(key, now), false);
+}
+function takeNow(key: string, now: number): boolean {
   const db = instanceDb();
   return db.tx(() => {
     if (!capNoticeDue(key, now)) return false;

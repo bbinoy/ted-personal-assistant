@@ -221,7 +221,7 @@ export const qwenReference = (q: { builtIn?: boolean; refAudio: string }): strin
 
 export const requiredSkills = (mail: boolean, provider: string = settings.mailProvider): string[] => ownerSkills(mail, provider, { required: true });
 
-// What the heartbeat line says: the last tick, and the heartbeat run's last look (instance/heartbeat.jsonl).
+// What the heartbeat line says: the last tick, and the heartbeat run's last look (the looks table of instance.db).
 export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, lastLookAt: string | undefined, localTime: (iso: string) => string): string =>
   beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago; last look ${lastLookAt ? localTime(lastLookAt) : "none yet"}` : "no tick recorded yet";
 
@@ -229,9 +229,9 @@ export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, l
 export function dbCheck(line: Line, path: string = instancePaths().db): boolean {
   try {
     const db = openInstanceDbAt(path);
-    const verdict = db.check();
+    const verdict = db.check(true);
     const count = (t: string) => db.num(`SELECT COUNT(*) FROM ${t}`);
-    line(verdict === "ok" && db.journalMode === "wal", "instance database", `${db.journalMode} mode, schema ${db.version}, quick_check ${verdict}; ${count("spend")} spend, ${count("payments")} payment, ${count("looks")} look row(s)${verdict === "ok" ? "" : "; restore it from a backup (docs/SETUP.md)"}`);
+    line(verdict === "ok" && db.journalMode === "wal", "instance database", `${db.journalMode} mode, schema ${db.version}, integrity_check ${verdict}; ${count("spend")} spend, ${count("payments")} payment, ${count("looks")} look row(s)${verdict === "ok" ? "" : "; restore it from a backup (docs/SETUP.md)"}`);
     return verdict === "ok";
   } catch (e) {
     line(false, "instance database", (e as Error).message);

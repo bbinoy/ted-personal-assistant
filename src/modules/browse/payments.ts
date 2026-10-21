@@ -24,6 +24,7 @@ export interface PayRow {
 // A payment that was clicked may have taken money, whatever the page said afterwards.
 const SPENT: ReadonlySet<PayStatus> = new Set(["clicked", "confirmed", "unconfirmed"]);
 export const DUPLICATE_HOURS = 24;
+const KEEP_MS = 2 * 24 * 3_600_000; // (rows() looks back this far: the local day of the cap and the 24 hours of the duplicate window, with a day to spare for the time zone)
 const SPENT_SQL = "('clicked','confirmed','unconfirmed')";
 
 interface DbPayRow {
@@ -39,9 +40,14 @@ export class Ledger {
     this.db = db ? () => db : instanceDb;
   }
 
-  // One entry per payment: its latest row, oldest payment first.
-  rows(): PayRow[] {
-    return this.db().all<DbPayRow>(`${LATEST} ORDER BY first_seq`).map(toRow);
+  // One entry per payment: its latest row, oldest payment first. What the file used to hold after its rotations, and what the callers (the duplicate listing, `npm run card -- payments`, the doctor's
+  // count of unconfirmed ones) were written against: payments whose latest row is from the last two days, and every payment still open or unconfirmed. `allRows()` is the whole ledger.
+  rows(now = new Date()): PayRow[] {
+    const since = new Date(now.getTime() - KEEP_MS).toISOString();
+    return this.db().all<DbPayRow>(`${LATEST} WHERE status IN ('approved','clicked','unconfirmed') OR ts >= ? ORDER BY first_ts, first_seq`, since).map(toRow);
+  }
+  allRows(): PayRow[] {
+    return this.db().all<DbPayRow>(`${LATEST} ORDER BY first_ts, first_seq`).map(toRow);
   }
 
   add(row: Omit<PayRow, "ts">, now = new Date()): void {
@@ -85,13 +91,13 @@ export class Ledger {
   // The payment for the same cart at the same merchant in the last day that may have gone through, if any.
   duplicate(merchant: string, cartHash: string, now = new Date()): PayRow | undefined {
     const since = new Date(now.getTime() - DUPLICATE_HOURS * 3_600_000).toISOString();
-    const r = this.db().get<DbPayRow>(`${LATEST} WHERE status IN ${SPENT_SQL} AND merchant = ? AND cart_hash = ? AND ts > ? ORDER BY first_seq LIMIT 1`, merchant, cartHash, since);
+    const r = this.db().get<DbPayRow>(`${LATEST} WHERE status IN ${SPENT_SQL} AND merchant = ? AND cart_hash = ? AND ts > ? ORDER BY first_ts, first_seq LIMIT 1`, merchant, cartHash, since);
     return r ? toRow(r) : undefined;
   }
 
   /** Every row of every status change, oldest first (the audit trail behind `rows()`'s latest-only view). */
   history(id?: string): PayRow[] {
-    return (id === undefined ? this.db().all<DbPayRow>("SELECT * FROM payments ORDER BY seq") : this.db().all<DbPayRow>("SELECT * FROM payments WHERE id = ? ORDER BY seq", id)).map(toRow);
+    return (id === undefined ? this.db().all<DbPayRow>("SELECT * FROM payments ORDER BY ts, seq") : this.db().all<DbPayRow>("SELECT * FROM payments WHERE id = ? ORDER BY ts, seq", id)).map(toRow);
   }
 }
 

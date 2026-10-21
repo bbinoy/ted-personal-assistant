@@ -9,6 +9,17 @@ import { CALLBACK, OAuthProblem, bindingCookie, bindingFrom, type OAuthFlows } f
 import { capabilitiesOfRecord } from "../tenants/capabilityset.ts";
 import { people, type Capability, type TenantRecord } from "../tenants/tenants.ts";
 
+// After the secret is stored and the link burnt: the status mark is a nicety. If the database is busy, full or damaged the secret is STILL saved (the page must not say "Nothing was saved" and
+// release the claim); the status is just not recorded, said in the log and the audit trail.
+export function noteDone(tenant: string, purpose: string, stored: Parameters<typeof recordDone>[2]): void {
+  try {
+    recordDone(tenant, purpose, stored);
+  } catch (e) {
+    console.error(`intake: saved ${purpose} for ${tenant}, but the status could not be recorded (${(e as Error).message})`);
+    audit("intake_store", "status-not-recorded", "background", { tenant, purpose });
+  }
+}
+
 // The intake page: a separate process (scripts/intake.ts), on 127.0.0.1 only, that is the one place a tenant types a secret. A tunnel the owner sets up
 // (docs/SETUP.md) puts it on the internet over https; this file knows nothing of that. Nothing secret goes through Signal, and the model never sees a
 // value: it asked for a single-use link (intaketools.ts), the page stored what was typed, and the model hears "stored (N characters)".
@@ -242,7 +253,7 @@ export class IntakeServer {
       await this.deps.writer.for(flow.tenant)(provider.store.kind, provider.store.name, { ...grant.data, at: new Date(this.now()).toISOString() });
       claim.burn();
       const stored = [{ name: `${provider.name.toLowerCase()} connection`, chars: grant.chars }];
-      recordDone(flow.tenant, id, stored);
+      noteDone(flow.tenant, id, stored);
       audit("intake_store", "stored", "background", { tenant: flow.tenant, purpose: id, items: stored });
       sendPage(res, 200, "Connected", `<h1>${esc(provider.name)} is connected${grant.account ? ` as ${esc(grant.account)}` : ""}</h1><p>${grant.account ? "If that is not your account, tell the person who runs the assistant. " : ""}You can close this page and go back to the chat.</p>`);
     } catch (e) {
@@ -286,7 +297,7 @@ export class IntakeServer {
     try {
       const stored = await purpose.store(who.tenant, values, this.deps.writer.for(who.tenant));
       claim.burn();
-      recordDone(who.tenant, who.purpose, stored);
+      noteDone(who.tenant, who.purpose, stored);
       audit("intake_store", "stored", "background", { tenant: who.tenant, purpose: who.purpose, items: stored });
       sendPage(res, 200, "Saved", `<h1>Saved</h1><ul>${stored.map((s) => `<li>${esc(s.name)} (${s.chars} characters)</li>`).join("")}</ul><p>You can close this page and go back to the chat.</p>`);
     } catch (e) {

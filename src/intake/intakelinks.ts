@@ -151,7 +151,11 @@ export interface Done {
 // Written by the process that uses a connection (the agent) when a service no longer accepts it: her permission expired, was withdrawn or was never complete. She is
 // told in the chat to reconnect; the admin's list and the doctor show it. It is cleared by connecting again (a newer completed form than this mark).
 export function markNeedsReconnect(tenant: string, purpose: string, now = new Date()): void {
-  instanceDb().run("INSERT INTO intake (tenant, purpose, problem_at) VALUES (?, ?, ?) ON CONFLICT (tenant, purpose) DO UPDATE SET problem_at = excluded.problem_at", tenant, purpose, now.toISOString());
+  try {
+    instanceDb().run("INSERT INTO intake (tenant, purpose, problem_at) VALUES (?, ?, ?) ON CONFLICT (tenant, purpose) DO UPDATE SET problem_at = excluded.problem_at", tenant, purpose, now.toISOString());
+  } catch (e) {
+    console.error(`intake: could not mark ${tenant}/${purpose} as needing a reconnect (${(e as Error).message})`);
+  }
 }
 
 interface IntakeRow {
@@ -159,7 +163,13 @@ interface IntakeRow {
   stored: string | null;
   problem_at: string | null;
 }
-const rowOf = (tenant: string, purpose: string): IntakeRow | undefined => instanceDb().get<IntakeRow>("SELECT done_at, stored, problem_at FROM intake WHERE tenant = ? AND purpose = ?", tenant, purpose);
+const rowOf = (tenant: string, purpose: string): IntakeRow | undefined => {
+  try {
+    return instanceDb().get<IntakeRow>("SELECT done_at, stored, problem_at FROM intake WHERE tenant = ? AND purpose = ?", tenant, purpose);
+  } catch {
+    return undefined; // (a damaged or busy database: no connection is claimed)
+  }
+};
 
 // Is her connection to a service there? Times only, never a token. "reconnect": it was made and no longer works.
 export function connectionState(tenant: string, purpose: string): { state: "connected" | "reconnect" | "none"; at?: string } {

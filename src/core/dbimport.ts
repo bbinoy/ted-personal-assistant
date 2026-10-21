@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { isConvId, layout, layout2, OWNER_CONV } from "./convpaths.ts";
 import type { Db } from "./db.ts";
@@ -61,8 +61,21 @@ export function importItems(root: string, willExist: readonly string[] = []): Im
   // payments: the archives by year and number, then the live file
   const instNames = new Set([...listDir(L.instance.dir), ...willExist.filter((p) => dirname(p) === L.instance.dir).map((p) => p.slice(L.instance.dir.length + 1))]);
   const archives = [...instNames].filter((n) => V2.paymentArchive.test(n)).map((n) => ({ n, m: /^payments-(\d{4})(?:-(\d+))?\.jsonl$/.exec(n)! })).sort((a, b) => Number(a.m[1]) - Number(b.m[1]) || Number(a.m[2] ?? 1) - Number(b.m[2] ?? 1));
-  for (const a of archives) out.push(item(join(L.instance.dir, a.n), "payments", "payments"));
-  if (has(V2.payments)) out.push(item(V2.payments, "payments", "payments"));
+  // (the ledger's files by the EARLIEST row inside each, not by name: an archive is named by the year of its first line, and payments-2025-2 can be newer than payments-2026)
+  const earliest = (p: string): string => {
+    let min = "\uffff";
+    try {
+      for (const line of readFileSync(p, "utf8").split("\n")) {
+        const r = line.trim() ? parseJson(line) : undefined;
+        if (isObj(r) && typeof r.id === "string" && typeof r.ts === "string" && r.ts < min) min = r.ts;
+      }
+    } catch {
+      /* not there yet (a dry run): by name */
+    }
+    return min;
+  };
+  const files = [...archives.map((a) => join(L.instance.dir, a.n)), ...(has(V2.payments) ? [V2.payments] : [])].map((p, i) => ({ p, at: earliest(p), i }));
+  for (const f of files.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.i - b.i))) out.push(item(f.p, "payments", "payments"));
   // heartbeat rows: .2 (oldest), .1, current
   for (const gen of [`${V2.heartbeatRows}.2`, `${V2.heartbeatRows}.1`, V2.heartbeatRows]) if (has(gen)) out.push(item(gen, "looks", "looks"));
   // spend: friends' days, groups', then the key's and the owner's totals (split by those)
@@ -288,7 +301,7 @@ export function importLegacy(root: string, o: ImportOptions = {}): ImportResult 
   for (const it of items) {
     const bytes = readFileSync(it.path);
     const hash = sha(bytes);
-    const mtime = statSync(it.path).mtimeMs;
+    const mtime = Math.floor(statSync(it.path).mtimeMs); // (an integer, like every `at` the ledger writes)
     const done = db.get<{ rows: number }>("SELECT rows FROM legacy_imports WHERE name = ? AND sha256 = ?", it.name, hash);
     const keep = join(backup, it.name);
     mkdirSync(dirname(keep), { recursive: true, mode: 0o700 });
@@ -317,4 +330,53 @@ export function importLegacy(root: string, o: ImportOptions = {}): ImportResult 
   }
   res.backup = relative(L.root, backup);
   return res;
+}
+
+// ---- forgetting a person: her traces in the import's own records ----
+
+const scrubKeys = (v: unknown, tenant: string, conv: string): unknown => {
+  if (Array.isArray(v)) return v.filter((k) => !(typeof k === "string" && (k === `friend:${tenant}` || k.includes(conv))));
+  if (!isObj(v)) return v;
+  const out: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v)) {
+    if (k === tenant || k === `friend:${tenant}` || k.includes(conv)) continue; // intake-status/-problems are keyed by tenant id, cap-notices' keys name the friend or her convId
+    out[k] = Array.isArray(x) || isObj(x) ? scrubKeys(x, tenant, conv) : x;
+  }
+  return out;
+};
+
+/**
+ * A removed friend: the layout-3 import left copies of the files it removed in instance/migration-backup/<time>/. Her own cost file there is deleted; the backups of intake-status.json,
+ * intake-problems.json and cap-notices.json (which name EVERY friend) are rewritten without her; the import's notes (legacy_imports) no longer name her folder. Returns how many backups were touched.
+ */
+export function forgetInBackups(root: string, tenantId: string, conv: string): number {
+  const L = layout(root);
+  const V2 = layout2(root);
+  let n = 0;
+  for (const stamp of listDir(L.instance.migrationBackup)) {
+    const base = join(L.instance.migrationBackup, stamp);
+    const own = dirname(join(base, relative(L.root, V2.friendCost(conv))));
+    if (exists(own)) {
+      rmSync(own, { recursive: true, force: true });
+      n++;
+    }
+    for (const f of [V2.intakeStatus, V2.intakeProblems, V2.capNotices].map((p) => join(base, relative(L.root, p)))) {
+      if (!exists(f)) continue;
+      try {
+        const before = readFileSync(f, "utf8");
+        const after = JSON.stringify(scrubKeys(JSON.parse(before), tenantId, conv));
+        if (after !== JSON.stringify(JSON.parse(before))) {
+          writeFileSync(f, after, { mode: 0o600 });
+          n++;
+        }
+      } catch {
+        /* not JSON: nothing in it names her in a way we can find */
+      }
+    }
+  }
+  if (exists(L.instance.db)) {
+    const db = openInstanceDbAt(L.instance.db);
+    db.run("UPDATE legacy_imports SET name = 'forgotten-' || rowid, backup = NULL WHERE name = ?", relative(L.root, V2.friendCost(conv)));
+  }
+  return n;
 }

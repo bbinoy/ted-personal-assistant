@@ -18,7 +18,20 @@ export interface HeartbeatRow {
   outcome: "posted" | "silent" | "failed" | "preempted"; // preempted: a message to the conversation overtook the look and it was called off (conversation.ts lease)
 }
 
+// Never throws: a look's record is a nicety, and the look's next wake-up must still be scheduled after it (look.ts). A number that is not finite (a cost the SDK did not report) is 0, said in the log.
+const finite = (x: number, what: string): number => {
+  if (Number.isFinite(x)) return x;
+  console.error(`heartbeat: ${what} was ${x}; recorded as 0`);
+  return 0;
+};
 export function appendRow(row: HeartbeatRow): void {
+  try {
+    insertRow({ ...row, costUsd: finite(row.costUsd, "a look's cost"), nextCheckMinutes: finite(row.nextCheckMinutes, "a look's next check"), toolCalls: finite(row.toolCalls, "tool calls"), archived: finite(row.archived, "archived"), delegations: finite(row.delegations, "delegations") });
+  } catch (e) {
+    console.error(`heartbeat: could not record the look (${(e as Error).message})`);
+  }
+}
+function insertRow(row: HeartbeatRow): void {
   const at = Date.parse(row.at);
   instanceDb().run(
     "INSERT INTO looks (at, at_ms, kind, night, message, sent, next_check_minutes, cost_usd, tool_calls, archived, delegations, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

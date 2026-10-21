@@ -30,6 +30,7 @@ export interface OpenOptions {
   rebuildable?: boolean;
   busyTimeoutMs?: number; // how long a second process waits for the writer (default 5000)
   label?: string; // what to call it in a message ("instance.db")
+  verify?: boolean; // run PRAGMA integrity_check once the schema is in place; anything but "ok" is corruption (a damaged page opens fine and only a check finds it)
 }
 
 /** A database that holds a ledger could not be opened because the file is damaged. Never swallowed into an empty database. */
@@ -264,6 +265,10 @@ function openOnce(path: string, o: OpenOptions): Db {
     pragmas(raw, busy);
     db = new Db(path, label, raw);
     migrateDb(db, o.migrations);
+    if (o.verify) {
+      const verdict = db.check(true); // the FULL check: quick_check does not compare an index with its table, and a damaged index silently skews every sum
+      if (verdict !== "ok") throw Object.assign(new Error(`integrity_check: ${verdict}`), { errcode: SQLITE_CORRUPT });
+    }
     return db;
   } catch (e) {
     try {
