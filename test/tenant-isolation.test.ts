@@ -116,7 +116,7 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   assert.equal(isReadableData(join(settings.stateDir, "cost.json")), false, "an allow-list: state/ is closed unless named");
   assert.equal(isReadableData(join(NOTES_DIR, "context-secret.md")), true);
   // every store the old deny-list missed (names and account ids, friends' voice audio, deleted notes, raw group ids, the search indexes)
-  for (const leak of ["tenants.json", "intake-problems.json", "cap-notices.json", "group-cost.json", "search.sqlite", join("voice", "sources.json"), join("voice", "groups", "abc", "ref.wav"), join("notes-backup", "2026-01-01", "note.md")]) {
+  for (const leak of ["tenants.json", "intake-problems.json", "cap-notices.json", "group-cost.json", "search.sqlite", "pending-owner.json", join("voice", "sources.json"), join("voice", "groups", "abc", "ref.wav"), join("notes-backup", "2026-01-01", "note.md")]) {
     mkdirSync(dirname(join(settings.stateDir, leak)), { recursive: true });
     if (!existsSync(join(settings.stateDir, leak))) writeFileSync(join(settings.stateDir, leak), "x"); // (tenants.json is the real registry)
     assert.equal(isReadableData(join(settings.stateDir, leak)), false, leak);

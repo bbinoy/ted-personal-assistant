@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { removeScope, scopeRoot } from "@ted-assistant/speech/tts";
 import { audit } from "../core/audit.ts";
 import { isInside } from "../core/contain.ts";
+import { pendingFileOf } from "../approvals/pending.ts";
+import { dataPath } from "../core/state.ts";
 import { forgetTenantConnections } from "../intake/intakelinks.ts";
 import { forgetConversation } from "../modules/voice/voicenote.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
@@ -12,7 +14,7 @@ import { deleteTenant, OWNER_ID, tenantById } from "./tenants.ts";
 
 // Removing a friend takes EVERYTHING of hers, not only her folder (tenants.ts deleteTenant): her cloned voices and their reference clips (state/voice/groups/
 // <hash of tenant:<id>>), her voice-note index (state/voice/sources.json) and the audio files signal-cli saved for those notes, her marks in
-// state/intake-status.json and intake-problems.json, and her items in the secret store (tenants/<id>/*). Idempotent: run again after a failure (or for a friend
+// state/intake-status.json and intake-problems.json, her pending approvals (state/pending-<hash>.json), and her items in the secret store (tenants/<id>/*). Idempotent: run again after a failure (or for a friend
 // whose registry entry is already gone) and it removes what is left. It reports what it removed; it never throws for one step failing, so the rest still happens.
 // Not reached, and said so in docs/SAFETY.md: attachments signal-cli saved for her other messages (the app's log keeps no attachment id for them), the SDK's own
 // transcripts under ~/.claude, backups of the Mac.
@@ -68,6 +70,12 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
       n++;
     }
     return n;
+  });
+  step("her pending approvals", () => {
+    const file = dataPath(pendingFileOf(key)); // state/pending-<hash of her key>.json: outside her folder
+    const had = existsSync(file);
+    rmSync(file, { force: true });
+    return had;
   });
   step("her connection marks", () => forgetTenantConnections(id));
   for (const secrets of d.secrets ?? []) {

@@ -15,6 +15,8 @@ const { saveVoice, scopeRoot } = await import("@ted-assistant/speech/tts");
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { recordDone, markNeedsReconnect, readDone, connectionState } = await import("../src/intake/intakelinks.ts");
 const { deleteTenantItems } = await import("../src/secrets/secrets.ts");
+const { pendingFileOf } = await import("../src/approvals/pending.ts");
+const { dataPath } = await import("../src/core/state.ts");
 const { tenantKey } = await import("../src/core/ownerkey.ts");
 const { OpenBao } = await import("../src/secrets/openbao.ts");
 
@@ -31,6 +33,7 @@ function friend(name: string, n: number) {
   holdVoiceNote(key, { ts: Date.now(), id: `${rec.id}-note.aac`, size: 5, by: ACI(n), snippet: "secret words" });
   recordDone(rec.id, "google", [{ name: "token", chars: 3 }]);
   markNeedsReconnect(rec.id, "notion");
+  writeFileSync(dataPath(pendingFileOf(key)), "{}");
   return { rec, key };
 }
 
@@ -46,6 +49,7 @@ test("removal: her voices, voice-note index and audio, intake marks and registry
   assert.equal(existsSync(scopeRoot(voiceRoot, gone.key)), false, "her cloned voices");
   assert.equal(voiceNotes(gone.key).length, 0, "her voice-note snippets");
   assert.equal(existsSync(join(attachmentsDir, `${gone.rec.id}-note.aac`)), false, "the audio signal-cli saved");
+  assert.equal(existsSync(dataPath(pendingFileOf(gone.key))), false, "her pending approvals");
   assert.equal(readDone(gone.rec.id, "google"), undefined);
   assert.equal(connectionState(gone.rec.id, "notion").state, "none");
   assert.equal(T.tenantById(gone.rec.id), undefined);
@@ -55,6 +59,7 @@ test("removal: her voices, voice-note index and audio, intake marks and registry
   assert.equal(voiceNotes(stay.key).length, 1);
   assert.ok(existsSync(join(attachmentsDir, `${stay.rec.id}-note.aac`)));
   assert.ok(readDone(stay.rec.id, "google"));
+  assert.ok(existsSync(dataPath(pendingFileOf(stay.key))));
   assert.ok(T.tenantById(stay.rec.id));
 });
 

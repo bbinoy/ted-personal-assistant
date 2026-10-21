@@ -21,6 +21,7 @@ import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/s
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
+import { flushPending } from "../approvals/pendingflow.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 import { observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
@@ -175,6 +176,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     } finally {
       lease?.end();
     }
+    // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
+    await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const calledOff = overtaken.signal.aborted || failure instanceof RunStopped; // a message overtook it, or the owner said /stop: not a failure

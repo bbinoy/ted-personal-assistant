@@ -4,7 +4,7 @@ import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
-import { approveIn } from "./approvals/permissions.ts";
+import { approveIn, renderDetails } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
@@ -16,6 +16,7 @@ import { logTail } from "./conversation/gate.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
+import { ownerSearchScope, warmSearchIndex } from "./memory/search.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
 import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
@@ -35,7 +36,12 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
+import { runPending } from "./run/pendingrun.ts";
+import { holdingNow } from "./heartbeat/notices.ts";
+import { mayRun } from "./tenants/payer.ts";
+import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
+import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
@@ -75,6 +81,15 @@ wire({
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });
+// The approval inbox (approvals/pendingflow.ts): what an unattended run needed a yes for is asked as one numbered message in that conversation, held in quiet hours (notices.ts), and
+// an approved call is run exactly as recorded in a small follow-up run (run/pendingrun.ts). The conversation is found from the key the item was parked under.
+const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
+setPendingRuntime({
+  send: (scope, text) => out.reply(text, { plain: true, kind: "approval", ...(scope === OWNER_KEY ? {} : { target: convOf(scope).target }) }),
+  holding: (scope, now) => holdingNow(convOf(scope), now),
+  details: (scope, item) => renderDetails(scope, item.tool, item.input),
+  execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
+});
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
@@ -83,8 +98,8 @@ const warmChat = () => prepare(owner(), { notify: say });
 // instead of starting that many whisper processes. One line for the owner's chat and every group.
 const transcribing = new Limiter(() => settings.transcribeConcurrency);
 
-// A voice message's words, from the local speech model; the transcript is logged (logs/voice.jsonl) to inspect a
-// mishearing. Throws a sentence the user can be told if it cannot be made out.
+// A voice message's words, from the local speech model; the transcript goes into the message log like any message (a
+// mishearing can be searched there). Throws a sentence the user can be told if it cannot be made out.
 async function transcript(m: IncomingMessage): Promise<string> {
   let heard = "";
   try {
@@ -216,12 +231,15 @@ console.log(`connected to ${messenger.name} (${messenger.summary}); accepting on
 warmChat();
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
+void recoverAtStart([OWNER_KEY, ...(settings.tenants ? listTenants().filter((r) => r.status === "active").map((r) => tenantKey(r.id)) : [])]); // an approved item whose run was cut short by the stop is told once (pendingflow.ts recoverStuck)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
+// The owner's search index (memory/search.ts) is brought up to date a little after start-up, in small slices that leave the event loop free, so the first real search_logs is quick.
+setTimeout(() => void warmSearchIndex(ownerSearchScope()).catch(() => {}), 20_000).unref();
 
 // One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, and the friends'
 // (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.

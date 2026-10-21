@@ -10,6 +10,7 @@ import { targetOf } from "../tenants/tenants.ts";
 //   a group            the group itself; any member may answer there
 //   "tenant:<id>"      that tenant's own chat, never the admin's: the admin's messages are another conversation and answer nothing here
 // A person who is gone (removed) cannot be asked anywhere: the question is not sent, and never falls back to the owner's chat.
+// An unattended run of the owner's or a friend's own chat PARKS what needs a yes in the approval inbox instead of waiting (pendingflow.ts); a group's unattended run still asks and waits (any member may answer there).
 // A card payment is asked in the owner's foreground chat only (the card is hers); a group and a tenant never pay.
 export function createApprovers(out: { reply(text: string, opts: { plain: true; kind: "approval"; target?: Target }): Promise<number> }, deps: { make?: typeof makeApprove; target?: (tenantId: string) => string | undefined } = {}): (key: string, o?: ApproverOptions) => Approve {
   const make = deps.make ?? makeApprove;
@@ -17,10 +18,10 @@ export function createApprovers(out: { reply(text: string, opts: { plain: true; 
   return (key, o = {}) => {
     const background = !!o.background;
     const send = (target?: Target) => (text: string) => out.reply(text, { plain: true, kind: "approval", ...(target ? { target } : {}) });
-    if (key === OWNER_KEY) return make(send(), { scope: key, source: background ? "background" : "chat", background, mayPay: true });
+    if (key === OWNER_KEY) return make(send(), { scope: key, source: background ? "background" : "chat", background, queue: background, mayPay: true });
     if (isTenantKey(key)) {
       const to = target(key.slice("tenant:".length));
-      return to ? make(send(to), { scope: key, source: "group", background }) : DENY_ALL;
+      return to ? make(send(to), { scope: key, source: "group", background, queue: background }) : DENY_ALL;
     }
     return make(send(key), { scope: key, source: "group", background });
   };
