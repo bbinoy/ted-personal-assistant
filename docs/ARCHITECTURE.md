@@ -605,6 +605,7 @@ src/core/timing.ts     the per-turn timing line (durations only)
 src/core/pause.ts      the pause switch and local-day helper
 src/core/limiter.ts    at most N voice notes transcribed at once, the rest wait
 src/core/budget.ts     daily spend guard
+src/core/capnotice.ts  spend-cap notices: each at most once a local day (state/cap-notices.json)
 src/core/cooldown.ts   shared usage-limit cooldown for background model calls
 src/core/warmslot.ts   the slot that holds one warm model process (the owner's, the latest group's and the gate's), and the fallback to a cold start
 src/core/ownerkey.ts   the key of the owner's chat and sourceOfKey (policy source from a conversation key)
