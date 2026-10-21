@@ -2,7 +2,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 // A tenant is a "group" run with one person in it and a folder of her own. What this pins: her file tools reach her notes and nothing else (not
@@ -113,9 +113,24 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   writeFileSync(join(settings.stateDir, "cost.json"), "{}");
   mkdirSync(settings.memoryDir, { recursive: true });
   assert.equal(isReadableData(join(settings.logsDir, "audit.jsonl")), true);
-  assert.equal(isReadableData(join(settings.stateDir, "cost.json")), true);
+  assert.equal(isReadableData(join(settings.stateDir, "cost.json")), false, "an allow-list: state/ is closed unless named");
   assert.equal(isReadableData(join(NOTES_DIR, "context-secret.md")), true);
-  assert.equal(isReadableData(join(settings.stateDir, "tenants.json")), true, "the registry: ids, account ids, status; no key, no words");
+  // every store the old deny-list missed (names and account ids, friends' voice audio, deleted notes, raw group ids, the search indexes)
+  for (const leak of ["tenants.json", "intake-problems.json", "cap-notices.json", "group-cost.json", "search.sqlite", "pending-owner.json", join("voice", "sources.json"), join("voice", "groups", "abc", "ref.wav"), join("notes-backup", "2026-01-01", "note.md")]) {
+    mkdirSync(dirname(join(settings.stateDir, leak)), { recursive: true });
+    if (!existsSync(join(settings.stateDir, leak))) writeFileSync(join(settings.stateDir, leak), "x"); // (tenants.json is the real registry)
+    assert.equal(isReadableData(join(settings.stateDir, leak)), false, leak);
+    assert.equal(classify("Read", { file_path: join(settings.stateDir, leak) }, "chat"), "deny", leak);
+  }
+  symlinkSync(join(settings.stateDir, "tenants.json"), join(NOTES_DIR, "link-out.md")); // a link from an ALLOWED folder to a closed file
+  assert.equal(isReadableData(join(NOTES_DIR, "link-out.md")), false, "a symlink out of the notes does not make the target readable");
+  mkdirSync(join(settings.memoryDir, "groups", "g1", "notes"), { recursive: true });
+  writeFileSync(join(settings.memoryDir, "groups", "g1", "notes", "a.md"), "x");
+  assert.equal(isReadableData(join(settings.memoryDir, "groups", "g1", "notes", "a.md")), false);
+  for (const f of ["messages.jsonl", "agent.log", "signal-daemon.log", "intake-launchd-stderr.log"]) {
+    writeFileSync(join(settings.logsDir, f), "x");
+    assert.equal(isReadableData(join(settings.logsDir, f)), f !== "intake-launchd-stderr.log", f);
+  }
   assert.equal(isReadableData(join(bea.notesDir, "context-secret.md")), false);
   assert.equal(isReadableData(bea.logFile), false);
   assert.equal(isReadableData(join(ann.dir, "meta.json")), false);

@@ -173,3 +173,16 @@ export function recordDone(tenant: string, purpose: string, stored: Done["stored
   const all = readJson<StatusFile>(STATUS_FILE, {});
   writeJson(STATUS_FILE, { ...all, [tenant]: { ...all[tenant], [purpose]: { at: now.toISOString(), stored } } });
 }
+
+// A removed friend: her marks in both files above (a key she owned is no longer a fact about anybody). True when she had any.
+export function forgetTenantConnections(tenant: string): boolean {
+  let had = false;
+  for (const file of [STATUS_FILE, PROBLEMS_FILE]) {
+    const all = readJson<Record<string, unknown>>(file, {});
+    if (!Object.hasOwn(all, tenant)) continue;
+    delete all[tenant];
+    writeJson(file, all);
+    had = true;
+  }
+  return had;
+}

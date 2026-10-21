@@ -29,8 +29,8 @@ function rotateIfNeeded() {
   } catch { /* no file yet */ }
 }
 rotateIfNeeded();
-// launchd's raw stderr file is never rotated by anyone else: over 5 MB at start, keep the last 1 MB.
-const trimmedStderr = trimLogInPlace(dataPath("logs/launchd-stderr.log"), MAX_BYTES, 1024 * 1024);
+// launchd's raw stderr files (the agent's, and the intake page's: scripts/intake.ts imports this file first too) are never rotated by anyone else: over 5 MB at start, keep the last 1 MB.
+const trimmedStderr = ["launchd-stderr.log", "intake-launchd-stderr.log"].map((f) => trimLogInPlace(dataPath(`logs/${f}`), MAX_BYTES, 1024 * 1024)).reduce((a, b) => a + b, 0);
 
 const pad = (n: number, w = 2) => String(n).padStart(w, "0");
 function stamp(d = new Date()) {
@@ -63,7 +63,7 @@ for (const level of ["log", "error", "warn", "info", "debug"] as const) {
   };
 }
 
-if (trimmedStderr) console.log(`logs/launchd-stderr.log was over ${MAX_BYTES / 1024 / 1024} MB: dropped the oldest ${Math.round(trimmedStderr / 1024)} KB`);
+if (trimmedStderr) console.log(`launchd's stderr log was over ${MAX_BYTES / 1024 / 1024} MB: dropped the oldest ${Math.round(trimmedStderr / 1024)} KB`);
 
 // Let launchd restart us, but leave a trace of why.
 process.on("uncaughtException", (e) => {

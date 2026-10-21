@@ -14,6 +14,7 @@ import { LIMITS } from "../core/sanitize.ts";
 import { type Timing } from "../core/timing.ts";
 import type { Quote } from "@ted-assistant/messenger";
 import { MAX_SPOKEN_CHARS } from "@ted-assistant/speech/tts";
+import { lastNoticeAt, markNoticeAt } from "../core/capnotice.ts";
 
 const SILENT = /^\s*\[\[silent\]\]\s*$/i;
 
@@ -146,8 +147,12 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // Tell the conversation what went wrong (the usage limit, an expired login, "something broke"), at most once per conv.noticeEveryMs
   // (always in the owner's chat, every few minutes in a group). The one place both turns that fail and a gate that cannot decide use.
   async function warn(conv: Conversation, e: unknown, quote?: Quote): Promise<boolean> {
-    if (now() - (lastNotice.get(conv.key) ?? 0) < conv.noticeEveryMs) return false;
+    // (kept in state/cap-notices.json across restarts; with a clock injected, as tests do, in memory only)
+    const persist = deps.now === undefined && conv.noticeEveryMs > 0;
+    const last = lastNotice.get(conv.key) ?? (persist ? lastNoticeAt(`warn:${conv.key}`) : undefined) ?? 0;
+    if (now() - last < conv.noticeEveryMs) return false;
     lastNotice.set(conv.key, now());
+    if (persist) markNoticeAt(`warn:${conv.key}`, now());
     if (lastNotice.size > 50) for (const [key, at] of lastNotice) if (now() - at > 24 * 3_600_000) lastNotice.delete(key); // (only the last few minutes of an entry matter)
     return out.reply(conv.notice(e), { quote: conv.groupId ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
   }

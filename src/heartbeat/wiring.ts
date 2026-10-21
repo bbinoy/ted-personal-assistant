@@ -2,6 +2,7 @@ import { capNoticesTo } from "../core/capnotice.ts";
 import { setApprovers } from "../approvals/permissions.ts";
 import { keyNotices } from "../tenants/keynotice.ts";
 import { noticeOwner, ownerNotices } from "./notices.ts";
+import { removeFriend } from "../conversation/tenantremoval.ts";
 import { tenantHooks } from "../tenants/tenanttools.ts";
 
 // Everything main.ts must hand to the modules that cannot import the messenger (or each other) themselves: the senders that reach the owner's chat, the approvers, and the
@@ -26,4 +27,5 @@ export function wire(ctx: AppContext): void {
   ownerNotices.sendTo(ctx.notifyOwner);
   tenantHooks.sendFirst = ctx.sendFirst;
   tenantHooks.drop = ctx.dropTenant;
+  tenantHooks.remove = removeFriend;
 }

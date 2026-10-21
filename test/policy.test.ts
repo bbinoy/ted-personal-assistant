@@ -170,6 +170,7 @@ test("data folders: chat may read them (never write), and links cannot lead out"
   writeFileSync(join(root, "secret.txt"), "x");
   symlinkSync(join(root, "secret.txt"), join(logs, "link.txt"));
   assert.equal(isReadableData(join(logs, "voice.jsonl"), [logs]), true);
+  assert.equal(isReadableData(join(logs, "voice.jsonl"), [join(logs, "other.log")]), false, "an allow-list entry names exactly what it allows");
   assert.equal(isReadableData(join(logs, "..", "secret.txt"), [logs]), false);
   assert.equal(isReadableData(join(logs, "link.txt"), [logs]), false);
   assert.equal(isReadableData(join(logs, "missing.log"), [logs]), false);
@@ -177,7 +178,7 @@ test("data folders: chat may read them (never write), and links cannot lead out"
 });
 
 test("data folders: Read is allowed in chat only, Write and Edit never", () => {
-  const log = `${settings.logsDir}/voice.jsonl`;
+  const log = `${settings.logsDir}/audit.jsonl`;
   mkdirSync(settings.logsDir, { recursive: true });
   writeFileSync(log, "");
   assert.equal(classify("Read", { file_path: log }, "chat"), "allow");

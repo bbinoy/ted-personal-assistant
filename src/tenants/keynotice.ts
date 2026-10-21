@@ -1,3 +1,4 @@
+import { clearNoticeAt, lastNoticeAt, markNoticeAt } from "../core/capnotice.ts";
 import { settings } from "../core/settings.ts";
 
 // ONE place that tells the owner about a problem with the shared instance key (TENANT_ANTHROPIC_API_KEY) that every friend's run depends on. It is called from where
@@ -23,15 +24,17 @@ export interface KeyNotices {
   reset(): void;
 }
 
-export function createKeyNotices(o: { everyMs?: () => number } = {}): KeyNotices {
+// `persist`: the time of the last notice is kept in state/cap-notices.json (capnotice.ts), so a restart does not repeat it; the shared instance is the persistent one.
+export function createKeyNotices(o: { everyMs?: () => number; persist?: boolean } = {}): KeyNotices {
   const every = o.everyMs ?? (() => settings.tenantKeyNoticeMinutes * 60_000);
   const last = new Map<KeyProblem, number>();
   let send: ((text: string) => void) | undefined;
   return {
     report(problem, now = Date.now()) {
-      const at = last.get(problem);
+      const at = last.get(problem) ?? (o.persist ? lastNoticeAt(`key:${problem}`) : undefined);
       if (at !== undefined && now - at < every()) return false;
       last.set(problem, now);
+      if (o.persist) markNoticeAt(`key:${problem}`, now);
       try {
         send?.(TEXT[problem]);
       } catch {
@@ -40,9 +43,9 @@ export function createKeyNotices(o: { everyMs?: () => number } = {}): KeyNotices
       return !!send;
     },
     sendTo: (s) => void (send = s),
-    reset: () => void last.clear(),
+    reset: () => void (last.clear(), o.persist && clearNoticeAt("key:")),
   };
 }
 
-export const keyNotices = createKeyNotices();
+export const keyNotices = createKeyNotices({ persist: true });
 export const reportKeyProblem = (problem: KeyProblem, now?: number): boolean => keyNotices.report(problem, now);

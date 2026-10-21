@@ -1,7 +1,8 @@
 import { loadMessenger, loadMessengerModule, type DoctorLine, type Messenger, type MessengerConfig } from "@ted-assistant/messenger";
 import type { SignalOptions } from "@ted-assistant/signal/messenger";
 import { settings } from "../core/settings.ts";
-import { openLog } from "../core/state.ts";
+import { copyTruncateIfOver } from "../core/rotate.ts";
+import { dataPath, LOG_MAX_BYTES, openLog } from "../core/state.ts";
 
 // The one place the app meets its chat platform: which one (MESSENGER, default signal), how it is configured, and the instance in use.
 // Everything else asks the messenger (packages/messenger); the platform package (packages/signal) is loaded by name and nothing here
@@ -14,6 +15,7 @@ const options = (): SignalOptions => ({ host: settings.signalHost, port: setting
 // The messenger of this run, made by main.ts. Modules that are built far from main (the voice tool reads attachments inside an MCP server)
 // find it here.
 let current: Messenger | undefined;
+let cutting: NodeJS.Timeout | undefined;
 
 /**
  * Loads the platform and remembers it as the one in use (not started yet: register the handlers first).
@@ -24,7 +26,12 @@ export async function loadMessengerInUse(who: { owner: MessengerConfig["owner"];
     ...who,
     options: options(),
     logger: console, // the app's console is the timestamped, redacting one from log.ts
-    openLog: (file) => openLog(`logs/${file}`),
+    openLog: (file) => {
+      const fd = openLog(`logs/${file}`);
+      // a long-running daemon keeps its log open for days: check hourly, cut by copy-truncate (state.ts openLog)
+      if (!cutting) cutting = setInterval(() => copyTruncateIfOver(dataPath(`logs/${file}`), LOG_MAX_BYTES, 2), 3_600_000).unref();
+      return fd;
+    },
   });
   return current;
 }

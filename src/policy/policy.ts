@@ -52,24 +52,28 @@ export { isReadTool };
 // something the agent read is seen at once. Nothing unattended may touch them. Checked before
 // any allow list, so adding them to one can never open them up.
 const NOTE_FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
-// The assistant's own data folders may be READ (never written) in chat, so the owner can ask what a
-// voice message said, what happened to a mail, or what the assistant knows: logs/, state/ and
-// memory/ (the notes, the last brief, recent pings). Symlinks are resolved first, so a link cannot
-// lead out of them. The repo, .env and the rest of the disk stay out of reach.
-// Not even for the owner's chat: the tenants' folders (their notes, history, sessions: the owner reads none of them through the assistant, which is
-// what keeps one person's chat from becoming another's, tenants.ts), the secret store's folder (config, TLS key, audit log) and the files that hold
-// pending registrations (strangers' held messages), intake tickets, and the browse worker's page views left on disk (state/browse: pages are untrusted text, and a chat that could read them would
-// hand them to the model). The tenants' folders are outside the three above anyway; this is the second lock. The host's admin is not blind:
-// these are files on the owner's Mac (docs/SAFETY.md), the lock is for the assistant, not against the machine's owner.
-const hiddenData = (): string[] => [settings.tenantsDir, join(settings.stateDir, "openbao"), join(settings.stateDir, "registrations.json"), settings.intake.dir, join(settings.stateDir, "intake-status.json"), join(settings.stateDir, "browse")];
+// The owner's chat may READ (never write) a SHORT ALLOW-LIST of the assistant's own data with the built-in Read, so the owner can ask what a voice message
+// said or what the assistant did: readableData() below (memory/notes/ incl. MEMORY.md; logs/messages.jsonl, audit.jsonl, agent.log, signal-daemon.log).
+// EVERYTHING ELSE under logs/, state/ and memory/ is unreadable by default, so a new store is private the day it is written. (It used to be the other way
+// round, a deny-list, and it missed state/voice/ with friends' voice-note snippets and cloned reference audio, state/tenants.json with every friend's name
+// and ACI, intake-problems.json, notes-backup/ with notes deleted by forget_note, and raw group ids in cap-notices.json and group-cost.json, memory/groups/.)
+// Reading the logs by SEARCH (search_logs, a tool with its own fixed folder) is not affected. Symlinks are resolved first, so a link cannot lead out of
+// an allowed entry. The repo, .env and the rest of the disk stay out of reach.
+// hiddenData is the second lock, kept on top of the allow-list: the tenants' folders (their notes, history, sessions: the owner reads none of them through the
+// assistant, which is what keeps one person's chat from becoming another's, tenants.ts), the secret store's folder (config, TLS key, audit log) and the files that
+// hold pending registrations, intake tickets, and the browse worker's page views. Those stay unreadable even if someone widens the allow-list. The host's admin is
+// not blind: these are files on the owner's Mac (docs/SAFETY.md), the lock is for the assistant, not against the machine's owner.
+const hiddenData = (): string[] => [settings.tenantsDir, join(settings.stateDir, "openbao"), join(settings.stateDir, "registrations.json"), settings.intake.dir, join(settings.stateDir, "intake-status.json"), join(settings.stateDir, "intake-problems.json"), join(settings.stateDir, "browse")];
+// A folder (anything inside it) or a single file, exactly.
+export const readableData = (): string[] => [join(settings.memoryDir, "notes"), ...["messages.jsonl", "audit.jsonl", "agent.log", "signal-daemon.log"].map((f) => join(settings.logsDir, f))];
 const inside = (real: string, dir: string): boolean => real === dir || real.startsWith(dir + sep);
 
-export function isReadableData(path: unknown, dirs: readonly string[] = [settings.logsDir, settings.stateDir, settings.memoryDir]): path is string {
+export function isReadableData(path: unknown, allowed: readonly string[] = readableData()): path is string {
   if (typeof path !== "string" || path === "" || path.includes("\0")) return false;
   try {
     const real = realpathSync(resolve(path));
     if (hiddenData().some((h) => inside(real, resolve(h)) || inside(real, realish(h)))) return false;
-    return dirs.some((d) => real.startsWith(realpathSync(d) + sep));
+    return allowed.some((d) => inside(real, realish(d)));
   } catch {
     return false; // missing file or folder
   }

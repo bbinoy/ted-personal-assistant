@@ -1,3 +1,4 @@
+import { rotateIfOver } from "./rotate.ts";
 import { appendFileSync, chmodSync, closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { isInside } from "./contain.ts";
@@ -116,9 +117,13 @@ export function appendLine(rel: string, line: string): void {
 }
 
 // A file descriptor opened for appending, for a child process to write its output to.
+// A log already over 5 MB is rotated first (two older generations kept, the rest dropped); the child holds the fd for its whole life, so a log that
+// grows meanwhile is cut by copy-truncate (rotate.ts copyTruncateIfOver, run by the caller on a timer). The fd is O_APPEND, which makes that safe.
+export const LOG_MAX_BYTES = 5 * 1024 * 1024;
 export function openLog(rel: string): number {
   const path = dataPath(rel);
   ensureDir(path);
+  rotateIfOver(path, LOG_MAX_BYTES, 2);
   return openSync(path, "a", 0o600);
 }
 
