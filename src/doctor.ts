@@ -6,7 +6,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { ROOT } from "./core/paths.ts";
 import { spentToday } from "./core/budget.ts";
-import { readRows } from "./heartbeat/rows.ts";
+import { readRows, type HeartbeatRow } from "./heartbeat/rows.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
 import { ownerSkills } from "./modules/skills.ts";
@@ -216,6 +216,35 @@ export const requiredSkills = (mail: boolean, provider: string = settings.mailPr
 export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, lastLookAt: string | undefined, localTime: (iso: string) => string): string =>
   beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago; last look ${lastLookAt ? localTime(lastLookAt) : "none yet"}` : "no tick recorded yet";
 
+// Can the laptop sleep under the assistant? A Mac on battery sleeps with the lid closed (and `caffeinate` only holds off IDLE sleep, not lid-close sleep): every sleep cuts the model
+// calls of the heartbeat off and the looks, the scheduled messages and the daily brief come late or not at all. A warning on battery only; on power the lid can still sleep it, which
+// is said. `pmset`: `pmset -g batt` and `pmset -g` as text, or undefined (tests; not a Mac). Nothing here changes a system setting.
+export function sleepCheck(line: Line, pmset: (args: string[]) => string | undefined = (args) => { try { return execFileSync("pmset", args, { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] }); } catch { return undefined; } }): void {
+  const batt = pmset(["-g", "batt"]);
+  if (batt === undefined) return; // not a Mac, or pmset is not there: nothing to say
+  const name = "laptop can sleep";
+  const disabled = /\bSleepDisabled\s+1\b/.test(pmset(["-g"]) ?? ""); // `sudo pmset -a disablesleep 1`
+  if (!/InternalBattery/.test(batt)) return line(true, name, "no battery (a desktop Mac): it sleeps only when idle sleep is on");
+  if (/'Battery Power'/.test(batt)) {
+    return line(disabled ? true : "warn", name, disabled ? "on battery power with sleep switched off (disablesleep 1): it keeps running with the lid closed, and drains the battery" : "on battery power: the Mac sleeps when the lid is closed (and caffeinate does not prevent that), so looks fail and scheduled messages come late. Plug it in; for a closed lid see docs/SETUP.md \"Keep it running\"");
+  }
+  line(true, name, disabled ? "on power, sleep switched off (disablesleep 1)" : "on power; closing the lid still sleeps it unless an external display is attached (clamshell mode) or sleep is switched off (docs/SETUP.md \"Keep it running\")");
+}
+
+export const FAILED_LOOKS_WARN = 3; // this many failed or timed-out looks in the window is a warning
+export const FAILED_LOOKS_HOURS = 6;
+
+// The heartbeat's own record says the looks are failing: counts from state/heartbeat.jsonl only, no words.
+export function failedLooksCheck(line: Line, rows: readonly HeartbeatRow[], now: Date = new Date()): void {
+  const since = now.getTime() - FAILED_LOOKS_HOURS * 3600_000;
+  const recent = rows.filter((r) => Date.parse(r.at) >= since);
+  const failed = recent.filter((r) => r.outcome === "failed" || r.outcome === "timeout");
+  const timeouts = failed.filter((r) => r.outcome === "timeout").length;
+  const what = `looks failing in the last ${FAILED_LOOKS_HOURS} hours`;
+  if (failed.length < FAILED_LOOKS_WARN) return line(true, what, `${failed.length} of ${recent.length} look(s) failed`);
+  line("warn", what, `${failed.length} of ${recent.length} look(s) failed or timed out${timeouts ? ` (${timeouts} timed out)` : ""}; likely causes: the Mac sleeping, no network, or the usage limit (npm run heartbeat-report; docs/SETUP.md "Keep it running")`);
+}
+
 // `npm run doctor`: is everything this agent depends on in place? Prints no secrets.
 export async function doctor() {
   const root = `${ROOT}/`;
@@ -297,6 +326,8 @@ export async function doctor() {
     "heartbeat is ticking",
     heartbeatDetail(beat, ageMin, readRows().at(-1)?.at, localTime),
   );
+  sleepCheck(line);
+  failedLooksCheck(line, readRows());
   line(true, "heartbeat run", `every conversation's look (owner, groups, friends with wake) at its chat and what it can read, on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
 
   const spent = spentToday();
