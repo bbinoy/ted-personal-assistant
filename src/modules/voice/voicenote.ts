@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { writeFileAtomic } from "../../core/state.ts";
+import { join } from "node:path";
 import { settings } from "../../core/settings.ts";
 
 // The voice notes received in each conversation (the owner's chat, and each group on its own), so the voice tool can build a cloned voice from
@@ -44,10 +45,7 @@ const load = (): Store => {
 const save = (): void => {
   try {
     const f = fileOf();
-    mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
-    const tmp = `${f}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify(cache), { mode: 0o600 });
-    renameSync(tmp, f);
+    writeFileAtomic(f, JSON.stringify(cache));
   } catch {
     // a note not remembered across a restart is only a note to send again
   }

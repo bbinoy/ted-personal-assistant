@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Scope } from "../memory/dreamplan.ts";
 import { compactIfNeeded, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "../core/messages.ts";
@@ -7,7 +7,7 @@ import { matchLines } from "../core/logsearch.ts";
 import { MAX_NOTE_CHARS, type Note } from "../memory/notes.ts";
 import { preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
-import { readText } from "../core/state.ts";
+import { moveAside, readText, writeFileAtomic } from "../core/state.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
@@ -27,6 +27,19 @@ const GROUP_CATEGORIES = preset().notes.group;
 export const groupKey = (groupId: string): string => createHash("sha256").update(groupId).digest("hex").slice(0, 12);
 export const groupLogFile = (groupId: string): string => `logs/group-${groupKey(groupId)}.jsonl`;
 
+// meta.json of a group; one that does not parse is moved aside (state.ts) and the group goes on with defaults, instead of throwing on every message of that group.
+function readMeta(meta: string): { id?: string; name?: string } | undefined {
+  if (!existsSync(meta)) return undefined;
+  try {
+    const m = JSON.parse(readFileSync(meta, "utf8"));
+    if (m && typeof m === "object" && !Array.isArray(m)) return m;
+    throw new Error("not an object");
+  } catch (e) {
+    console.error(`groups: ${meta} is unreadable (${(e as Error).message}); moved aside to ${moveAside(meta) ?? "(could not move it)"}, starting from defaults`);
+    return undefined;
+  }
+}
+
 // The group's folder (made on first use); the name is kept up to date in meta.json.
 const named = new Map<string, string>(); // group id -> the name written in meta.json, so it is not re-read per message
 export function groupDir(groupId: string, name?: string): string {
@@ -34,12 +47,12 @@ export function groupDir(groupId: string, name?: string): string {
   if (named.has(groupId) && (!name || named.get(groupId) === name) && existsSync(join(dir, "notes"))) return dir;
   mkdirSync(join(dir, "notes"), { recursive: true, mode: 0o700 });
   const meta = join(dir, "meta.json");
-  const known = existsSync(meta) ? (JSON.parse(readFileSync(meta, "utf8")) as { id?: string; name?: string }) : undefined;
+  const known = readMeta(meta);
   // The folder is named by a 48-bit hash of the id. A different group that hashes to the same folder (someone who grinds ids) must never
   // share the first group's notes, history and session: refuse it instead.
   if (known?.id !== undefined && known.id !== groupId) throw new Error(`group folder ${groupKey(groupId)} belongs to another group; refusing to share it`);
   const final = name || known?.name || "";
-  if (!known || known.name !== final) writeFileSync(meta, JSON.stringify({ id: groupId, name: final }), { mode: 0o600 });
+  if (!known || known.name !== final) writeFileAtomic(meta, JSON.stringify({ id: groupId, name: final }));
   named.set(groupId, final);
   return dir;
 }
