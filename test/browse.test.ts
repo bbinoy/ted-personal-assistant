@@ -476,15 +476,15 @@ test("results: status is one of three words, bad structure becomes failed, strin
 
 const READY: BrowseStatus = { ok: true, cli: "cli.js", exe: "chrome" };
 
-test("starting: not set up, off, one at a time are explained, not silent", async () => {
+test("starting: not set up, off, one at a time per conversation are explained, not silent", async () => {
   assert.match(startRefusal({ mode: "owner" }, Date.now(), { ok: false, reason: "the browser is not downloaded (run npm run setup:browse)" })!, /not set up: the browser is not downloaded/);
   assert.equal(startRefusal({ mode: "owner" }, Date.now(), READY), settings.browse ? undefined : "Browsing is switched off (BROWSE=off).");
   const never = (): Promise<never> => new Promise(() => {});
   void never;
   let release!: () => void;
   const gate = new Promise<void>((r) => (release = r));
-  const slow = browse({ mode: "owner", run: async () => (await gate, { text: "", structured: { status: "done", answer: "slept", sources: [] } }) }, "look up opening hours", { status: READY, resolver: publicDns });
-  assert.match(await browse({ mode: "owner", run: async () => ({ text: "" }) }, "look up opening hours", { status: READY }), /Another browser run is in progress/);
+  const slow = browse({ mode: "owner", key: "conv-a", run: async () => (await gate, { text: "", structured: { status: "done", answer: "slept", sources: [] } }) }, "look up opening hours", { status: READY, resolver: publicDns });
+  assert.match(await browse({ mode: "owner", key: "conv-a", run: async () => ({ text: "" }) }, "look up opening hours", { status: READY, waitMs: 0 }), /Another browser run is in progress/, "the same conversation does not run twice at once");
   release();
   assert.match(await slow, /slept/);
   const group = { mode: "group" as const, groupId: "g-rate", run: async () => ({ text: "", structured: { status: "done", answer: "fine", sources: [] } }) };
