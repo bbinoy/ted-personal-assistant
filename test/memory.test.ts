@@ -47,10 +47,12 @@ test("notes: a run sees only its categories, fenced as data, with caps", () => {
   assert.doesNotMatch(memoryFor(["triage", "people"]), /em dashes/);
   assert.equal(memoryFor(["context"]), "");
   assert.match(memoryFor(["style"]), /<owner_memory>[\s\S]*em dashes[\s\S]*<\/owner_memory>/);
-  const big = Array.from({ length: settings.memoryMaxNotes + 20 }, (_, i) => ({ file: `style-${i}.md`, category: "style" as const, text: "x".repeat(2000) }));
+  const big = Array.from({ length: settings.memoryMaxNotes + 20 }, (_, i) => ({ file: `style-${i}.md`, category: "style" as const, text: "x" }));
   const block = notesBlock(big, ["style"]);
   assert.equal(block.match(/\[style\]/g)!.length, settings.memoryMaxNotes, "capped by count");
-  assert.ok(!block.includes("x".repeat(MAX_NOTE_CHARS + 1)), "each note cut at the per-note limit");
+  const words = "word ".repeat(MAX_NOTE_CHARS); // varied text: the sanitiser collapses a run of one character
+  const one = notesBlock([{ file: "style-big.md", category: "style", text: words }], ["style"]);
+  assert.ok(one.includes(words.slice(0, MAX_NOTE_CHARS).trim()) && !one.includes(words.slice(0, MAX_NOTE_CHARS + 10)), "each note cut at the per-note limit");
 });
 
 test("notes: a closing tag in any case cannot escape the fence", () => {

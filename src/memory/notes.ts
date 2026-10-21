@@ -23,7 +23,9 @@ export const NOTES_DIR = join(settings.memoryDir, "notes");
 export const CATEGORIES: readonly string[] = preset().notes.categories;
 export type Category = string;
 
-export const MAX_NOTE_CHARS = 1200;
+export const MAX_NOTE_CHARS = 20_000; // a bound nobody should meet: it only stops one runaway file from filling a prompt
+export const MAX_NOTES_BLOCK_CHARS = 400_000; // all notes of one prompt together (about 100k tokens): the fence default of 100k would silently cut the later notes
+export const MAX_STATUS_CHARS = 1200; // a status note is a short record, not memory
 export const STATUS_PREFIX = "status-"; // the assistant's own records (statusnote.ts): not the owner's memory (no notice), not the dream's (neither shown to it nor snapshotted or undone with it)
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;
 
@@ -95,7 +97,7 @@ export function notesBlock(notes: readonly Note[], categories?: readonly Categor
     const text = n.text.replace(/\s*\n\s*/g, " ").slice(0, MAX_NOTE_CHARS);
     lines.push(`- [${n.category}] ${text}${n.expires ? ` (until ${n.expires})` : ""}`);
   }
-  return lines.length ? `${NOTE}\n${fence("owner_memory", lines.join("\n"))}` : "";
+  return lines.length ? `${NOTE}\n${fence("owner_memory", lines.join("\n"), MAX_NOTES_BLOCK_CHARS)}` : "";
 }
 
 // What a run sees: the notes of the given categories (every note of the folder when none are given), rendered.

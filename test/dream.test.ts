@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { conversationLines, createDreamer, describePlan } from "../src/conversation/dream.ts";
 import { applyPlan, undoLatest } from "../src/memory/dreamapply.ts";
 import { noteContent, planOps, type NoteFile } from "../src/memory/dreamplan.ts";
-import { NOTES_DIR, parseNote } from "../src/memory/notes.ts";
+import { MAX_NOTE_CHARS, NOTES_DIR, parseNote } from "../src/memory/notes.ts";
 import { dataPath } from "../src/core/state.ts";
 import type { Sent } from "../src/core/messages.ts";
 import { recordMessage } from "../src/core/messages.ts";
@@ -48,7 +48,7 @@ test("dream: setup and voice notes, odd names and bad input are never touched", 
   }
   assert.deepEqual(planOps(null, ctx()).actions, []);
   assert.deepEqual(planOps({ ops: "nope" }, ctx()).actions, []);
-  assert.equal(planOps({ ops: [write({ evidence, text: "x".repeat(1300) })] }, ctx()).actions.length, 0);
+  assert.equal(planOps({ ops: [write({ evidence, text: "x".repeat(MAX_NOTE_CHARS + 1) })] }, ctx()).actions.length, 0);
   assert.equal(planOps({ ops: [write({ evidence, expires: "2020-01-01" })] }, ctx()).actions.length, 0); // already past
 });
 

@@ -290,7 +290,7 @@ export function loadSettings(env: Env) {
 
     // What background runs may read of the owner's notes (chat reads them as files, on demand), and the
     // nightly "dream" that keeps them up to date (dream.ts).
-    memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 150, 10, 1000), // the one memory limit: how many notes a run reads (each is cut at MAX_NOTE_CHARS)
+    memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 2000, 10, 20000), // how many notes a run reads (each is cut at MAX_NOTE_CHARS); far above normal use, so it only guards against runaway growth
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
     dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
