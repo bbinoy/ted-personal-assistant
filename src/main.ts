@@ -4,7 +4,7 @@ import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
-import { approveIn } from "./approvals/permissions.ts";
+import { approveIn, renderDetails } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
@@ -36,7 +36,12 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
+import { runPending } from "./run/pendingrun.ts";
+import { holdingNow } from "./heartbeat/notices.ts";
+import { mayRun } from "./tenants/payer.ts";
+import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
+import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 
 applyCredentialMode();
@@ -75,6 +80,15 @@ wire({
   notifyOwner: (text) => void out.replyPlain(text, "notice"), // the shared-key notice, the daily cap line, the budget and failing-looks notices
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
+});
+// The approval inbox (approvals/pendingflow.ts): what an unattended run needed a yes for is asked as one numbered message in that conversation, held in quiet hours (notices.ts), and
+// an approved call is run exactly as recorded in a small follow-up run (run/pendingrun.ts). The conversation is found from the key the item was parked under.
+const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
+setPendingRuntime({
+  send: (scope, text) => out.reply(text, { plain: true, kind: "approval", ...(scope === OWNER_KEY ? {} : { target: convOf(scope).target }) }),
+  holding: (scope, now) => holdingNow(convOf(scope), now),
+  details: (scope, item) => renderDetails(scope, item.tool, item.input),
+  execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
 });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
@@ -217,6 +231,7 @@ console.log(`connected to ${messenger.name} (${messenger.summary}); accepting on
 warmChat();
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
+void recoverAtStart([OWNER_KEY, ...(settings.tenants ? listTenants().filter((r) => r.status === "active").map((r) => tenantKey(r.id)) : [])]); // an approved item whose run was cut short by the stop is told once (pendingflow.ts recoverStuck)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));

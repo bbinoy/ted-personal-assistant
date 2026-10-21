@@ -11,6 +11,7 @@ import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
 import { runGate } from "../core/rungate.ts";
 import { noticeBudget, releaseHeld } from "./notices.ts";
+import { flushPending } from "../approvals/pendingflow.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
@@ -127,6 +128,7 @@ export function createWakeups(deps: WakeDeps) {
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
         try {
+          await flushPending(conv.key, { ended: false }).catch((e) => console.error("wake: approval inbox:", (e as Error).message)); // parked approvals: asked once quiet hours end, expired ones told, a cut-short run noticed, even with no look
           await releaseHeld(pipeline, conv, clock()); // what quiet hours or the day's cap held back goes out now, as one message
           if (!started.has(conv.key)) {
             started.add(conv.key);

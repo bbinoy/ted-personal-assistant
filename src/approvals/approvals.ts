@@ -7,6 +7,7 @@ import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
 import { recentIn } from "./recentchat.ts";
 import { sameCall } from "./declined.ts";
+import { answerPending } from "./pendingflow.ts";
 import { isTypedYes, TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 
 // Human-in-the-loop approvals over Signal. Several questions may be open at once; each is
@@ -41,6 +42,7 @@ export interface Decision {
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
+  queued?: { n: number; message: string }; // an unattended run's call was parked in the approval inbox instead of waiting (pendingflow.ts): nothing was approved or declined, the run is told this and carries on
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
 
@@ -122,6 +124,9 @@ export interface Ctx {
   voice?: boolean;
 }
 export async function answer(text: string, onJudging: () => void, quote: { timestamp: number } | undefined, deps: AnswerDeps = {}, ctx: Ctx): Promise<Answer> {
+  // The approval inbox first (pendingflow.ts): a numbered answer ("1,3 yes", "all yes") or a reply to its batch. A bare unquoted yes is never one.
+  const parked = await answerPending(text, quote, ctx);
+  if (parked) return parked;
   const mine = [...open.values()].filter((o) => o.scope === ctx.scope && !o.done);
   // A plain yes that quotes a question which has ended (timed out, answered): nothing is run from it. Said so, not passed on as a chat message.
   if (mine.length === 0 && quote && quote.timestamp !== 0 && closed.has(slot(ctx.scope, quote.timestamp)) && YES.has(normalise(text))) return { outcome: "clarify", reply: endedReply(ctx.scope, quote.timestamp) };
