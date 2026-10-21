@@ -93,7 +93,9 @@ class SignalMessenger implements Messenger {
 
   async start(): Promise<void> {
     this.#stopping = false;
-    const logFd = this.#config.openLog?.("signal-daemon.log");
+    const open = this.#config.openLog;
+    const logFd = open ? () => open("signal-daemon.log") : undefined; // opened (and rotated by the app) only if we start a daemon; a reused one keeps its file
+
     const daemon = (this.#daemon = await ensureSignalDaemon({ ...this.#daemonOptions, logFd }));
     void daemon.exited.then(({ code, signal }) => this.#closed(`signal-cli exited (code=${code} signal=${signal})`));
     this.#client.onClose(({ error }) => this.#closed(`signal socket closed${error ? ` (${error.message})` : ""}`));
