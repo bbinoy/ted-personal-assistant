@@ -1,5 +1,5 @@
 import type { Source } from "../core/audit.ts";
-import { convDb } from "../core/convdb.ts";
+import { liveConvDb, peekConvDb } from "../core/convdb.ts";
 import { convIdOfKey } from "../core/convpaths.ts";
 import type { Db } from "../core/db.ts";
 import { settings } from "../core/settings.ts";
@@ -125,9 +125,13 @@ function save(db: Db, f: PendingFile): void {
   for (const b of f.blocked) db.run("INSERT INTO pending_blocked (key, n, at, until, kind) VALUES (?, ?, ?, ?, ?)", b.key, b.n, b.at, b.until, b.kind);
 }
 
-/** One change of one conversation's inbox, atomically: loaded, handed to fn to change, written back when it changed. A throw rolls everything back. */
-function edit<T>(scope: string, fn: (f: PendingFile) => T): T {
-  const db = convDb(convIdOfKey(scope));
+/**
+ * One change of one conversation's inbox, atomically: loaded, handed to fn to change, written back when it changed. A throw rolls everything back.
+ * `whenDamaged`: the answer when the conversation's database was found damaged (and replaced) meanwhile: a look or a follow-up run that started before must not write into the fresh one.
+ */
+function edit<T>(scope: string, fn: (f: PendingFile) => T, whenDamaged: T): T {
+  const db = liveConvDb(convIdOfKey(scope));
+  if (!db) return whenDamaged;
   return db.tx(() => {
     const f = load(db);
     const before = JSON.stringify(f);
@@ -136,7 +140,11 @@ function edit<T>(scope: string, fn: (f: PendingFile) => T): T {
     return r;
   });
 }
-const read = (scope: string): PendingFile => load(convDb(convIdOfKey(scope)));
+const EMPTY: PendingFile = { next: 1, items: [], expired: [], blocked: [] };
+const read = (scope: string): PendingFile => {
+  const db = peekConvDb(convIdOfKey(scope)); // (a read makes no database: a conversation without one has an empty inbox)
+  return db ? load(db) : { ...EMPTY, items: [], expired: [], blocked: [] };
+};
 
 // Pure: which items are older than `days` at `now`?
 export function splitExpired(items: readonly Pending[], now: number, days: number): { keep: Pending[]; dropped: Pending[] } {
@@ -156,18 +164,18 @@ export function sweepExpired(scope: string, now: number): Pending[] {
     f.blocked.push(...dropped.map((p): Blocked => ({ key: callKey(p.tool, p.input), n: p.n, at: now, until: now + 86_400_000, kind: "expired" }))); // (the next look does not ask the same thing again at once)
     f.blocked = f.blocked.filter((b) => b.until > now).slice(-MAX_BLOCKED);
     return dropped;
-  });
+  }, []);
 }
 export const takeExpired = (scope: string): Dropped[] =>
   edit(scope, (f) => {
     const out = f.expired;
     f.expired = [];
     return out;
-  });
+  }, []);
 
 // Put back what could not be told (the chat was down): the next flush says it.
 export function addExpired(scope: string, told: readonly Dropped[]): void {
-  edit(scope, (f) => void f.expired.push(...told));
+  edit(scope, (f) => void f.expired.push(...told), undefined);
 }
 
 export const openItems = (scope: string): Pending[] => read(scope).items;
@@ -184,13 +192,13 @@ export function addPending(scope: string, p: Omit<Pending, "n" | "createdAt" | "
     const n = f.next++;
     f.items.push({ ...p, n, scope, createdAt: now });
     return { n, duplicate: false };
-  });
+  }, { full: true as const }); // (a damaged database: nothing is parked; the caller treats it as a full inbox)
 }
 
 export function markSent(scope: string, ns: readonly number[], sent: NonNullable<Pending["sent"]>): void {
   edit(scope, (f) => {
     for (const p of f.items) if (ns.includes(p.n) && !p.sent) p.sent = sent;
-  });
+  }, undefined);
 }
 
 // Remove and return the items with these numbers (answered).
@@ -200,13 +208,13 @@ export function takeItems(scope: string, ns: readonly number[]): Pending[] {
     if (taken.length === 0) return [];
     f.items = f.items.filter((p) => !ns.includes(p.n));
     return taken;
-  });
+  }, []);
 }
 
 export function markDeferred(scope: string, ns: readonly number[]): void {
   edit(scope, (f) => {
     for (const p of f.items) if (ns.includes(p.n)) p.deferred = true;
-  });
+  }, undefined);
 }
 
 // Approved: kept in the inbox, marked as running, until finishItem. Returns the ones that were open (not already running).
@@ -218,20 +226,20 @@ export function markExecuting(scope: string, ns: readonly number[], at: number):
       delete p.interrupted;
     }
     return marked;
-  });
+  }, []);
 }
 // It ran: gone from the list, and remembered as done so the next look cannot park the same call again.
 export function recordDone(scope: string, tool: string, input: Record<string, unknown>, n: number, now: number): void {
   edit(scope, (f) => {
     f.blocked = [...f.blocked.filter((b) => b.until > now), { key: callKey(tool, input), n, at: now, until: now + 7 * 86_400_000, kind: "done" as const }].slice(-MAX_BLOCKED);
-  });
+  }, undefined);
 }
 
 // The run gate refused an approved item: it stays, approved, and the tick runs it when it can.
 export function setRetry(scope: string, n: number, told: boolean): void {
   edit(scope, (f) => {
     for (const p of f.items) if (p.n === n) (delete p.executing, (p.retry = { told }));
-  });
+  }, undefined);
 }
 
 export const finishItem = (scope: string, n: number): void => void takeItems(scope, [n]);
@@ -240,7 +248,7 @@ export const finishItem = (scope: string, n: number): void => void takeItems(sco
 export function interrupt(scope: string, ns: readonly number[]): void {
   edit(scope, (f) => {
     for (const p of f.items) if (ns.includes(p.n)) (delete p.executing, delete p.retry, (p.interrupted = true));
-  });
+  }, undefined);
 }
 
 export const clearPending = (scope: string): Pending[] => takeItems(scope, openItems(scope).filter((p) => !p.executing && !p.retry).map((p) => p.n)); // (one that is running is not taken back)

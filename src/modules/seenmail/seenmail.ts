@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit } from "../../core/audit.ts";
 import { settings } from "../../core/settings.ts";
-import { convDb } from "../../core/convdb.ts";
+import { liveConvDb, peekConvDb } from "../../core/convdb.ts";
 import type { Db } from "../../core/db.ts";
 import type { ConvId } from "../../core/convpaths.ts";
 
@@ -41,6 +41,7 @@ export interface SeenMail {
   // `received`: id -> the mail's date as the tool gave it; on the very first look the old ones are marked seen instead of returned (counted in `aged`).
   unseen: (ids: readonly string[], received?: Readonly<Record<string, string>>) => string[];
   aged: () => number; // how many mails this look marked seen as backlog
+  reset: () => boolean; // this look follows a RESET: the database that held the log was damaged and replaced, so every mail in the inbox is marked seen (never triaged again)
   commit: () => void; // the look ended well: the pending ids are seen from now on
   discard: () => void; // it did not
   forget: (ids: readonly string[]) => void; // these pending ids were NOT worked through (the archive cap refused them): they come back at the next look
@@ -50,25 +51,31 @@ export interface SeenMail {
 export function createSeenMail(conv: ConvId, max: number = SEEN_MAX, backlogDays: number = settings.mailBacklogDays, now: () => number = Date.now): SeenMail {
   const pending = new Set<string>();
   const backlog = new Set<string>();
-  const firstRun = convDb(conv).num("SELECT COUNT(*) FROM seen_mail") === 0; // no log yet: nothing was ever worked through
-  const known = (id: string): boolean => convDb(conv).get("SELECT 1 FROM seen_mail WHERE id = ?", id) !== undefined;
+  const firstRun = (peekConvDb(conv)?.num("SELECT COUNT(*) FROM seen_mail") ?? 0) === 0; // no log yet: nothing was ever worked through
+  const reset = peekConvDb(conv)?.get("SELECT 1 FROM reset WHERE id = 1") !== undefined; // the log was lost to a damaged database: "no log" does not mean "never looked"
+  let consulted = false;
+  const known = (id: string): boolean => peekConvDb(conv)?.get("SELECT 1 FROM seen_mail WHERE id = ?", id) !== undefined;
   return {
     unseen(ids, received) {
       const out: string[] = [];
+      consulted = true;
       for (const raw of ids.slice(0, MAX_IDS_PER_CALL)) {
         const id = String(raw).trim().slice(0, MAX_ID_CHARS);
         if (!id || known(id) || out.includes(id)) continue;
-        if (firstRun && (backlog.has(id) || isBacklog(received?.[raw] ?? received?.[id], now(), backlogDays))) backlog.add(id);
+        if (reset || (firstRun && (backlog.has(id) || isBacklog(received?.[raw] ?? received?.[id], now(), backlogDays)))) backlog.add(id); // after a reset EVERY listed id, dates given or not
         else out.push(id);
       }
       for (const id of out) pending.add(id);
       return out;
     },
     aged: () => backlog.size,
+    reset: () => reset,
     commit() {
-      if (pending.size === 0 && backlog.size === 0) return;
-      const db = convDb(conv);
+      if (pending.size === 0 && backlog.size === 0 && !(reset && consulted)) return;
+      const db = liveConvDb(conv);
+      if (!db) return void (pending.clear(), backlog.clear()); // the database was found damaged meanwhile (an idle connection was closed during a long look): nothing is written into the fresh one that replaced it
       db.tx(() => {
+        if (reset && consulted) db.run("DELETE FROM reset WHERE id = 1"); // the look that skipped the inbox ended well: the flag is spent
         // an id already in the log moves; the backlog goes to the OLD end (it is the oldest, so it is the first to age out of the bounded log), the pending ones to the newest
         for (const id of [...backlog].reverse()) {
           db.run("DELETE FROM seen_mail WHERE id = ?", id);
@@ -110,8 +117,9 @@ export function createSeenMailServer(seen: SeenMail) {
         async ({ ids, received }) => {
           const fresh = seen.unseen(ids, received);
           const aged = seen.aged();
+          const lost = seen.reset();
           audit("seen_mail", "checked", "background", { asked: ids.length, unseen: fresh.length, aged });
-          const note = aged > 0 ? `\n\nThis is your first look: ${aged} mail(s) older than ${settings.mailBacklogDays} days were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence.` : "";
+          const note = lost && aged > 0 ? `\n\nYou lost track of which mail was already handled (the notebook it was kept in was damaged), so the ${aged} mail(s) in the inbox now were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence: "I lost track of which mail I'd already handled, so I skipped what's in your inbox now; new mail from here on is handled as usual."` : aged > 0 ? `\n\nThis is your first look: ${aged} mail(s) older than ${settings.mailBacklogDays} days were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence.` : "";
           return reply((fresh.length ? `Not looked at yet (${fresh.length} of ${ids.length}):\n${fresh.join("\n")}` : `Nothing new: all ${ids.length} were looked at in earlier looks.`) + note);
         },
         { alwaysLoad: true },
