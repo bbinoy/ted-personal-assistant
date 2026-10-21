@@ -114,11 +114,11 @@ test("run options: what differs between the owner, a group and a tenant, and onl
   // owner -> group: persona, limits, notes folder and session, the group's isolation (no user settings, no connectors, its capabilities' tools and shared skills (not the owner's), strict MCP)
   assert.deepEqual(differing(c.owner, c.group), [
     "disallowedTools", "maxBudgetUsd", "maxTurns", "run.maxBudgetUsd", "run.maxTurns", "run.memory",
-    "run.sessionFile", "run.skills", "run.source", "run.systemPrompt", "run.tools", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append", "tools",
+    "run.sessionConv", "run.skills", "run.source", "run.systemPrompt", "run.tools", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append", "tools",
   ]);
   // group -> tenant: her limits, notes, session and persona, her ledger and key; the instance key reaches her environment and the owner's logins leave it
   assert.deepEqual(differing(c.group, c.tenant), [
-    "envChanged.ANTHROPIC_API_KEY", "envRemoved", "maxTurns", "run.maxTurns", "run.memory", "run.sessionFile", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
+    "envChanged.ANTHROPIC_API_KEY", "envRemoved", "maxTurns", "run.maxTurns", "run.memory", "run.sessionConv", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
   ]);
   // the invariants the table above must not hide
   assert.deepEqual([c.owner.envChanged, c.owner.envRemoved, c.group.envChanged, c.group.envRemoved], [{}, [], {}, []], "the owner's and a group's environment is the process's, untouched");

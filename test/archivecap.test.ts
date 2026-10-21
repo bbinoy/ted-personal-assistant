@@ -6,7 +6,7 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { archiveGate, archivedBy } from "../src/modules/archivecap.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
-import { scratch } from "./scratch.ts";
+import { groupConvId } from "../src/core/convpaths.ts";
 
 // The archive cap: at most ARCHIVE_MAX_PER_RUN archives per run, for every mail provider, each message of a batch counted.
 
@@ -97,7 +97,7 @@ test("a friend's Google: removing INBOX with modify_gmail_message_labels counts 
 });
 
 test("seen mail: ids an archive the run cap refused named are forgotten, so the next look raises them again; the others commit", async () => {
-  const file = scratch(`seen-forget-${Math.random().toString(36).slice(2)}.json`);
+  const file = groupConvId(`seen-forget-${Math.random().toString(36).slice(2)}`); // (a conversation of its own: its seen-mail log is a table of its assistant.db)
   await withCap(1, {}, async () => {
     const seen = createSeenMail(file);
     assert.deepEqual(seen.unseen(["a", "b", "c"]), ["a", "b", "c"]);

@@ -10,7 +10,7 @@ import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
 import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
-import { createSeenMail, seenFileOf } from "../src/modules/seenmail/seenmail.ts";
+import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath } from "../src/core/state.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
@@ -462,5 +462,5 @@ test("a post dropped as stale does not mark the mail it reported as seen: the ne
   const { w, conv, seen } = rig(() => ({ message: "Eve is waiting.", mail: [id], calls: ["mcp__seenmail__seen_mail"] }), { pipeline: { lease: (c: unknown, a: () => void, p: () => boolean) => ((l.lease.news = true), l.pipeline.lease(c, a, p)) } });
   assert.equal(await w.look(conv, DAY), "silent");
   assert.deepEqual(seen.posted, []);
-  assert.deepEqual(createSeenMail(seenFileOf(conv)).unseen([id]), [id], "not committed");
+  assert.deepEqual(createSeenMail(conv.convId).unseen([id]), [id], "not committed");
 });

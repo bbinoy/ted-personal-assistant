@@ -9,7 +9,7 @@ import { prepare, runConversation } from "../src/run/agent.ts";
 import { group, owner } from "../src/conversation/conversation.ts";
 import { createGroupBrain } from "../src/conversation/group.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
-import { writeJson } from "../src/core/state.ts";
+import { writeSession } from "../src/run/sessionstore.ts";
 
 const T0 = new Date(2026, 9, 14, 9, 0, 0);
 
@@ -157,7 +157,7 @@ test("group warm: a process built before the session moved on is not used", asyn
     const rig = startRig();
     const conv = group(gid());
     prepare(conv, { style: "" }, { start: rig.start, keep: true });
-    writeJson(conv.sessionFile, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
+    writeSession(conv.convId, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
     const log: string[] = [];
     await runConversation(conv, { style: "" }, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(log, ["cold"]);

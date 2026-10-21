@@ -1,3 +1,4 @@
+import { closeAllConvDbs } from "../src/core/convdb.ts";
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, truncateSync, writeFileSync } from "node:fs";
@@ -55,6 +56,7 @@ beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "voice-test-"));
   attachments = join(tmp, "att");
   mkdirSync(attachments);
+  closeAllConvDbs();
   rmSync(conversationsDir(), { recursive: true, force: true }); // notes are kept on disk: every test starts with none
   resetVoiceNotes();
   deps = mk();

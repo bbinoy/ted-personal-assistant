@@ -57,7 +57,7 @@ export function holdVoiceNote(key: string, n: VoiceNote, now = Date.now()): void
   const d = db(key);
   d.tx(() => {
     d.run("DELETE FROM voice_notes WHERE ts = ? OR ? - ts >= ?", n.ts, now, MAX_AGE_MS);
-    d.run(`INSERT INTO voice_notes (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, n.ts, n.id, n.size, n.by, n.byName ?? null, n.snippet, n.kind ?? null, n.name ?? null, n.seconds ?? null);
+    d.run(`INSERT INTO voice_notes (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, n.ts, n.id, n.size ?? 0, n.by ?? "", n.byName ?? null, n.snippet ?? "", n.kind ?? null, n.name ?? null, n.seconds ?? null);
     d.run("DELETE FROM voice_notes WHERE seq IN (SELECT seq FROM voice_notes ORDER BY seq DESC LIMIT -1 OFFSET ?)", NOTES_PER_CONVERSATION);
   });
 }

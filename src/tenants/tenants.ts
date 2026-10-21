@@ -25,7 +25,7 @@ import { directOf, directTarget, type Target } from "@ted-assistant/messenger";
 // The registry instance/tenants.json holds ONE record per person, the owner included (role admin, every capability, her folder is the owner's: pathsOf):
 // id, name, sender account ids (ACI), role, status and the credential source, never a key. Tenants run on the instance key
 // (settings.tenantApiKey, from TENANT_ANTHROPIC_API_KEY), the owner on the login.
-// Everything is files, read and written synchronously (state.ts); SQLite is for later.
+// The registry and tenant.json are files, read and written synchronously (state.ts); her small mutable state is her assistant.db (core/convdb.ts).
 
 export const OWNER_ID = "owner";
 export const REGISTRY = instancePaths().tenants;

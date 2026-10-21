@@ -1,3 +1,4 @@
+import { hasConvDb } from "../src/core/convdb.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -52,7 +53,7 @@ test("forget group: its folder, voice-note audio, spend and notice marks go; ano
   assert.equal(r.conv, groupConvId(GA));
   assert.equal(existsSync(a.dir), false, "its folder: notes, history, session, pending, voices");
   assert.equal(existsSync(join(attachments, "a.aac")), false, "the audio signal-cli saved for its voice note");
-  assert.equal(voiceNotes(GA, NOW).length, 0);
+  assert.equal(hasConvDb(groupConvId(GA)), false, "its database (voice-note index, session, approvals) went with the folder, closed first; a read would make a new empty one, so none is made here");
   assert.equal(groupSpentToday(GA), 0);
   assert.equal(capNoticeDue(`group:${groupConvId(GA)}`), true, "its notice mark is gone");
   assert.equal(lastNoticeAt(`warn:${groupConvId(GA)}`), undefined);
@@ -137,7 +138,7 @@ test("npm run forget: usage, a group by folder name or name, the owner and odd i
   writeFileSync(join(dir, "conversations", conv, "meta.json"), JSON.stringify({ id: "Zm9yZ2V0LUU=", name: "Eve group" }));
   writeFileSync(join(dir, "conversations", conv, "notes", "a.md"), "x");
   mkdirSync(join(dir, "instance"), { recursive: true });
-  writeFileSync(join(dir, "instance", "layout-version"), "3\n");
+  writeFileSync(join(dir, "instance", "layout-version"), "4\n");
   assert.equal(run([], dir).status, 1);
   assert.match(run(["group"], dir).stdout, /usage: npm run forget/);
   const byName = run(["group", "eve group"], dir);

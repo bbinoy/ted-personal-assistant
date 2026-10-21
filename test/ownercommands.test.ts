@@ -68,7 +68,7 @@ test("pause, resume and status are the owner's; a friend can only stop her own r
   assert.equal(readText(instancePaths().paused), undefined);
   let stopped = "";
   assert.equal(commandReply(friendConv, "stop!", { stop: (s) => ((stopped = s), 1) }), "Stopped.");
-  assert.equal(stopped, "x/session.json");
+  assert.equal(stopped, "friend-x");
   assert.equal(commandReply(ownerConv, "/stop", { stop: () => 0 }), "Nothing is running right now.");
   assert.equal(commandReply({ kind: "group", key: "g", convId: groupConvId("g") }, "/stop"), undefined, "a group has no commands");
   assert.match(commandReply(ownerConv, "/pause banana")!, /\/pause 2h/);

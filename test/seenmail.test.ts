@@ -10,7 +10,7 @@ import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 // until the look ends well; the run and its expert share the pending set; nothing about the mailbox or the provider is known to code.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "seenmail-test-"));
 
-const { createSeenMail, createSeenMailServer, isBacklog, seenFileOf, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
+const { createSeenMail, createSeenMailServer, isBacklog, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
 const { createHeartbeatLook } = await import("../src/heartbeat/look.ts");
 const { heartbeatOptions } = await import("../src/run/agent.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
@@ -19,13 +19,14 @@ const { LOGIN } = await import("../src/tenants/payer.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { settings } = await import("../src/core/settings.ts");
 const { instanceDb } = await import("../src/core/instancedb.ts");
-const { readJson } = await import("../src/core/state.ts");
+const { convDb } = await import("../src/core/convdb.ts");
+const { groupConvId } = await import("../src/core/convpaths.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 
 const dir = join(settings.dataDir, "seenmail-files");
 mkdirSync(dir, { recursive: true });
-const file = (n: string) => join(dir, `${n}.json`);
-const ids = (f: string): string[] => readJson<{ ids?: string[] }>(f, {}).ids ?? [];
+const file = (n: string) => groupConvId(`seenmail-${n}`); // (a conversation of its own per test: its log is a table of its own assistant.db)
+const ids = (f: string): string[] => convDb(f).all<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq").map((r) => r.id);
 
 test("the unseen subset: ids as the mail tool returned them, any provider; repeats and blanks are dropped; the committed log is remembered", () => {
   const f = file("a");
@@ -35,7 +36,7 @@ test("the unseen subset: ids as the mail tool returned them, any provider; repea
   seen.commit();
   assert.deepEqual(ids(f), ["c-1", "c-2", "18f3a", "c-3"]);
   assert.deepEqual(seen.unseen(["c-1", "c-3", "c-4"]), ["c-4"], "the next look is told only about what is new");
-  assert.deepEqual(createSeenMail(f).unseen(["c-2"]), [], "a restart keeps it: the log is a file");
+  assert.deepEqual(createSeenMail(f).unseen(["c-2"]), [], "a restart keeps it: the log is in the database");
 });
 
 test("pending versus committed: a failed or aborted look leaves its ids unseen, so an offline gap is worked off over successive looks", () => {
@@ -70,15 +71,14 @@ test("the log is bounded: the newest SEEN_MAX ids stay, the oldest are forgotten
 test("per conversation: the owner's log, each friend's in her own folder; one never shows the other", () => {
   const rec = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c1", name: "Ana" })!;
   const rec2 = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c2", name: "Bo" })!;
-  assert.equal(seenFileOf(owner()), convPaths(OWNER_CONV).seenMail);
-  assert.equal(seenFileOf(tenant(rec.id)), join(T.tenantContext(rec).dir, "seen-mail.json"));
-  assert.notEqual(seenFileOf(tenant(rec.id)), seenFileOf(tenant(rec2.id)));
-  assert.ok(seenFileOf(group("seen-group-0123456789abcd")).endsWith("seen-mail.json"));
-  const a = createSeenMail(seenFileOf(tenant(rec.id)));
+  assert.equal(owner().convId, OWNER_CONV);
+  assert.equal(tenant(rec.id).convId, T.tenantContext(rec).convId);
+  assert.notEqual(tenant(rec.id).convId, tenant(rec2.id).convId);
+  const a = createSeenMail(tenant(rec.id).convId);
   a.unseen(["same-id"]);
   a.commit();
-  assert.deepEqual(createSeenMail(seenFileOf(tenant(rec2.id))).unseen(["same-id"]), ["same-id"], "Bo has not seen what Ana has");
-  assert.deepEqual(createSeenMail(seenFileOf(tenant(rec.id))).unseen(["same-id"]), []);
+  assert.deepEqual(createSeenMail(tenant(rec2.id).convId).unseen(["same-id"]), ["same-id"], "Bo has not seen what Ana has");
+  assert.deepEqual(createSeenMail(tenant(rec.id).convId).unseen(["same-id"]), []);
 });
 
 test("the tool: reports the unseen ids, and the run and its expert share one pending set", async () => {
@@ -110,7 +110,7 @@ test("the heartbeat run is given the tracker only where there is mail, and the e
 
 function look(run: () => Promise<{ text: string; structured?: unknown }>) {
   const conv = { ...owner(), logFile: scratchLog(`seen-look-${Math.random().toString(36).slice(2)}.jsonl`) };
-  const f = seenFileOf(conv);
+  const f = conv.convId;
   const pipeline = {
     enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(),
     record: () => {},

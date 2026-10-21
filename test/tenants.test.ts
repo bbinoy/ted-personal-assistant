@@ -27,7 +27,6 @@ const { describeTenants } = await import("../src/tenants/tenanttools.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } = await import("../src/core/convpaths.ts");
 const { FILE: OWNER_LOG } = await import("../src/core/messages.ts");
-const { OWNER_SESSION_FILE } = await import("../src/core/ownerkey.ts");
 const { acceptOwner } = await import("../src/conversation/guards.ts");
 
 const on = settings as unknown as { tenants: boolean; tenantNoticeMinutes: number };
@@ -300,7 +299,7 @@ test("registry: the owner is seeded from the number as an admin with every capab
   assert.ok(!("capabilities" in rec), "the owner has every capability by being the owner (capabilities.ts), not by a stored list");
   assert.deepEqual([...capabilitiesOfRecord(rec)].filter((c) => c !== "intake").sort(), T.CAPABILITIES.filter((c) => c !== "intake").sort());
   const paths = T.pathsOf(rec);
-  assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, ledger: OWNER_CONV }, "the owner's own folder");
+  assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, ledger: OWNER_CONV }, "the owner's own folder");
   assert.equal(T.ensureOwner({ number: "+15555550105", aci: ACI_A }).number, OWNER_NUMBER, "seeding twice changes nothing");
   assert.equal(T.people().filter((r) => r.id === "owner").length, 1);
   assert.ok(!T.listTenants().some((r) => r.id === "owner"), "the owner is not a tenant: invites, suspension and removal never reach her");

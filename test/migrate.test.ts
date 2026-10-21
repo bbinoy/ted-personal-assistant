@@ -318,7 +318,7 @@ test("npm run doctor still runs on an old data folder: the layout line fails wit
   assert.equal(run(["src/cli.ts", "report"], root).status, 1, "report still refuses");
   migrate(root);
   const ok = run(["src/cli.ts", "doctor"], root);
-  assert.match(ok.stdout, /ok\s+data layout\s+\(version 3/);
+  assert.match(ok.stdout, /ok\s+data layout\s+\(version 4/);
   assert.match(ok.stdout, /the owner's notes/);
 });
 
@@ -381,13 +381,13 @@ test("refusal: the CLIs and the intake page stop on an old or a newer data folde
   assert.ok(Object.keys(filesOf(oldRoot)).length > 100 && sha(JSON.stringify(filesOf(oldRoot))) === sha(JSON.stringify(filesOf(old()))), "a refusing tool moved nothing");
   const newer = fresh();
   mkdirSync(join(newer, "instance"), { recursive: true });
-  writeFileSync(join(newer, "instance/layout-version"), "4\n");
+  writeFileSync(join(newer, "instance/layout-version"), "5\n");
   const rn = run(guard("src/core/requirelayout.ts"), newer);
   assert.equal(rn.status, 1);
-  assert.match(rn.stderr, /newer layout \(version 4\)/);
+  assert.match(rn.stderr, /newer layout \(version 5\)/);
   const rm = run(guard("src/core/migrateatstart.ts"), newer);
   assert.equal(rm.status, 1, "the agent does not start on a newer layout either");
-  assert.equal(readFileSync(join(newer, "instance/layout-version"), "utf8"), "4\n", "and leaves it alone");
+  assert.equal(readFileSync(join(newer, "instance/layout-version"), "utf8"), "5\n", "and leaves it alone");
   const ok = fresh();
   assert.equal(run(guard("src/core/requirelayout.ts"), ok).status, 0, "a new folder is fine");
   migrate(oldRoot);
@@ -400,7 +400,7 @@ test("the agent migrates before anything reads the data: importing the start-up 
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /migrate: starting/);
   assert.match(r.stdout, /layout version 2/);
-  assert.equal(readVersion(root), 3);
+  assert.equal(readVersion(root), 4);
   assert.equal(existsSync(join(root, "conversations/owner/notes/style-x.md")), true);
 });
 
@@ -420,6 +420,6 @@ test("npm run migrate -- --dry-run prints the plan and moves nothing", () => {
   const real = run(["scripts/migrate.ts"], root);
   assert.equal(real.status, 0, real.stderr);
   assert.match(real.stdout, /Done: \d+ step\(s\)/);
-  assert.equal(readVersion(root), 3);
+  assert.equal(readVersion(root), 4);
   assert.match(run(["scripts/migrate.ts"], root).stdout, /Already in the current layout/);
 });

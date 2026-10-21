@@ -6,7 +6,7 @@ import { allows } from "../src/policy/capabilities.ts";
 import { group as groupConversation, owner } from "../src/conversation/conversationmodel.ts";
 import { createDreamer, dreamConversations, dreamPrompt, type Runner } from "../src/conversation/dream.ts";
 import { dreamScope, dreamStateConv, readDream, writeDream } from "../src/modules/memory/dreamscope.ts";
-import { convDb } from "../src/core/convdb.ts";
+import { convDb, removeConvDir } from "../src/core/convdb.ts";
 import { groupDir, groupLogFile, groupNotesDir } from "../src/conversation/groupstore.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { createMemoryServer } from "../src/modules/memory/memory-tools.ts";
@@ -43,7 +43,7 @@ test("one dreamer: the owner and the groups, the group threshold and the nightly
   reset();
   const ids = [1, 2, 3, 4, 5, 6, 7].map(G);
   for (const [i, g] of ids.entries()) {
-    rmSync(groupDir(g), { recursive: true, force: true });
+    removeConvDir(groupConvId(g)); // (closes its assistant.db first)
     rmSync(dataPath(groupLogFile(g)), { force: true });
     groupDir(g, `Group ${i}`);
     for (let n = 0; n < (i === 6 ? 2 : 3); n++) say(n, groupLogFile(g)); // the last group said too little
@@ -78,7 +78,7 @@ test("one dreamer: the owner and the groups, the group threshold and the nightly
 test("the capability decides: a group is dreamt only while its capability set has `dream` (DREAM=off takes it from everybody)", async () => {
   reset();
   const g = G(8);
-  rmSync(groupDir(g), { recursive: true, force: true });
+  removeConvDir(groupConvId(g)); // (closes its assistant.db first)
   rmSync(dataPath(groupLogFile(g)), { force: true });
   groupDir(g, "Quiet hours");
   for (let n = 0; n < 4; n++) say(n, groupLogFile(g));
@@ -103,7 +103,7 @@ test("the capability decides: a group is dreamt only while its capability set ha
 test("dream state: the owner's and a group's are each in their own conversation's assistant.db; a record written by the old dreamers is honoured", async () => {
   reset();
   const g = G(9);
-  rmSync(groupDir(g), { recursive: true, force: true });
+  removeConvDir(groupConvId(g)); // (closes its assistant.db first)
   rmSync(dataPath(groupLogFile(g)), { force: true });
   groupDir(g, "Old state");
   assert.equal(dreamStateConv(owner()), OWNER_CONV);
@@ -144,7 +144,7 @@ test("one prompt: the same template for the owner, a friend and a group, with th
 test("undo: a conversation that is dreamt can undo its dream with its own memory server (a group here; a friend in tenantloops.test.ts)", async () => {
   reset();
   const g = G(3);
-  rmSync(groupDir(g), { recursive: true, force: true });
+  removeConvDir(groupConvId(g)); // (closes its assistant.db first)
   rmSync(dataPath(groupLogFile(g)), { force: true });
   groupDir(g, "Undo");
   writeFileSync(join(groupNotesDir(g), "context-old.md"), "---\nname: old\nexpires: 2026-10-01\n---\n\nPitch booked for 1 Oct.\n");

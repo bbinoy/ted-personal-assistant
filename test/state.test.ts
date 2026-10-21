@@ -52,8 +52,8 @@ test("state: the data folders are 700 and their files 600; paths outside the dat
   for (const d of [instancePaths().dir, conversationsDir(), logPaths().dir, convPaths(OWNER_CONV).dir]) assert.equal(statSync(d).mode & 0o777, 0o700, d);
   assert.equal(statSync(dataPath(note)).mode & 0o777, 0o600);
   assert.equal(readText(log), "xy\n");
-  // every conversation keeps its session pointer in its own folder: an absolute path is fine inside the data root, never outside
-  const session = convPaths("group-0123456789abcdef").session;
+  // every conversation keeps its files in its own folder: an absolute path is fine inside the data root, never outside
+  const session = convPaths("group-0123456789abcdef").tenantJson;
   writeJson(session, { a: 1 });
   assert.deepEqual(readJson(session, {}), { a: 1 });
   assert.throws(() => dataPath(join(settings.dataDir, "..", "elsewhere.json")), /not a path/);

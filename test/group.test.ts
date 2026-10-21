@@ -1,3 +1,4 @@
+import { removeConvDir } from "../src/core/convdb.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defer, tick } from "./util.ts";
@@ -358,7 +359,7 @@ const G1 = "R3JvdXAxR3JvdXAxR3JvdXAx";
 const G2 = "R3JvdXAyR3JvdXAyR3JvdXAy";
 const fresh = () => {
   for (const g of [G1, G2]) {
-    rmSync(groupDir(g), { recursive: true, force: true });
+    removeConvDir(groupConvId(g)); // (closes its assistant.db first)
     rmSync(dataPath(groupLogFile(g)), { force: true });
   }
 };

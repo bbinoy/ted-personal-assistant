@@ -2,7 +2,7 @@
   "owner": {
     "run": {
       "source": "chat",
-      "sessionFile": "<data>/conversations/owner/session.json",
+      "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
         "sha": "67d05d4c4e370691"
@@ -160,7 +160,7 @@
   "group": {
     "run": {
       "source": "group",
-      "sessionFile": "<data>/conversations/group-ff36ac23eadd0841/session.json",
+      "sessionConv": "group-ff36ac23eadd0841",
       "systemPrompt": {
         "key": "group.run.systemPrompt",
         "sha": "435b6d4e31d40d6d"
@@ -254,7 +254,7 @@
   "tenant": {
     "run": {
       "source": "group",
-      "sessionFile": "<data>/conversations/friend-<bea>/session.json",
+      "sessionConv": "friend-<bea>",
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
         "sha": "63775c6495add89f"

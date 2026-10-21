@@ -15,6 +15,8 @@ const INSTANCE_KEY = "sk-" + "ant-api03-INSTANCEINSTANCEINSTANCE"; // TENANT_ANT
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/core/settings.ts");
+const { convDb } = await import("../src/core/convdb.ts");
+const { readSession } = await import("../src/run/sessionstore.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
@@ -123,14 +125,14 @@ test("the owner's chat: no tenant's notes, history or secret store, but its own 
   assert.equal(isReadableData(I.db), false, "an allow-list: instance/ is closed unless named");
   assert.equal(isReadableData(join(NOTES_DIR, "context-secret.md")), true);
   // every store the old deny-list missed (names and account ids, friends' voice audio, deleted notes, raw group ids, the search indexes), in instance/ and in her own folder
-  const closed = [I.tenants, I.db, `${I.db}-wal`, `${I.db}-shm`, O.search, O.pending, O.session, O.heldPosts, O.voiceSources, join(O.voices, "ref.wav"), join(O.notesBackup, "2026-01-01", "note.md")];
+  const closed = [I.tenants, I.db, `${I.db}-wal`, `${I.db}-shm`, O.search, O.db, `${O.db}-wal`, join(O.voices, "ref.wav"), join(O.notesBackup, "2026-01-01", "note.md")];
   for (const leak of closed) {
     mkdirSync(dirname(leak), { recursive: true });
     if (!existsSync(leak)) writeFileSync(leak, "x"); // (tenants.json is the real registry)
     assert.equal(isReadableData(leak), false, leak);
     assert.equal(classify("Read", { file_path: leak }, "chat"), "deny", leak);
   }
-  rmSync(O.session, { force: true }); // (a later test asserts a tenant run leaves the owner's session alone)
+  convDb(OWNER_CONV).run("DELETE FROM session"); // (a later test asserts a tenant run leaves the owner's session alone)
   symlinkSync(I.tenants, join(NOTES_DIR, "link-out.md")); // a link from an ALLOWED folder to a closed file
   assert.equal(isReadableData(join(NOTES_DIR, "link-out.md")), false, "a symlink out of the notes does not make the target readable");
   const g1 = convPaths(groupConvId("g1"));
@@ -218,7 +220,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "send", "weather", "draw", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
   assert.equal((o.settings as { autoMemoryDirectory: string }).autoMemoryDirectory, ann.notesDir);
   // the owner's chat is as it was: the process environment, no key injected, and no tenant tools without TENANTS
-  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionFile: convPaths(OWNER_CONV).session, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
   const off = buildOptions(noop, ownerOpts, undefined);
   assert.equal(off.env!.ANTHROPIC_API_KEY, process.env.ANTHROPIC_API_KEY);
   assert.ok(!("tenants" in (off.mcpServers as object)));
@@ -263,15 +265,15 @@ test("a tenant's run: her key in the environment, her cost on her ledger, her se
   assert.equal((seen.options!.env as Record<string, string>).CLAUDE_CODE_OAUTH_TOKEN, undefined);
   assert.equal(spentToday(ann.ledger), 0.05);
   assert.equal(spentToday(), before, "the instance's daily guard did not move");
-  assert.equal(JSON.parse(readFileSync(ann.sessionFile, "utf8")).sessionId, "sess-ann");
-  assert.equal(existsSync(convPaths(OWNER_CONV).session), false);
+  assert.equal(readSession(ann.convId).sessionId, "sess-ann");
+  assert.deepEqual(readSession(OWNER_CONV), { costUsd: 0 }, "the owner's session record is untouched");
 });
 
 test("the instance key: read into settings, gone from the process environment, in a tenant run's env only, never in a log or an audit row", async () => {
   assert.equal(settings.tenantApiKey, INSTANCE_KEY);
   assert.equal(process.env.TENANT_ANTHROPIC_API_KEY, undefined, "no child process (Claude Code, MCP servers, the owner's runs) inherits it");
   const noop = async () => ({ approved: false });
-  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionFile: convPaths(OWNER_CONV).session, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
   const owners = buildOptions(noop, ownerOpts, undefined);
   assert.ok(!JSON.stringify(owners.env).includes(INSTANCE_KEY), "the owner's run never carries it");
   const logged: string[] = [];
