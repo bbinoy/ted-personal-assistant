@@ -204,6 +204,7 @@ export function loadSettings(env: Env) {
     browseMaxUsd: num(env, "BROWSE_MAX_USD", 1.5, 0.05, 50),
     browseMaxMinutes: num(env, "BROWSE_MAX_MINUTES", 10, 1, 120),
     browseMaxCommits: num(env, "BROWSE_MAX_COMMITS", 8, 0, 20),
+    browseMaxConcurrent: num(env, "BROWSE_MAX_CONCURRENT", 2, 1, 8), // browse runs at once (the owner and friends share them; one per conversation, the rest wait up to a minute)
     // Paying with the owner's dedicated debit card (src/modules/browse/card.ts, browseguard.ts): only the owner's chat run, only after a typed YES. These caps are
     // ours, in code and in the card's currency, independent of the card issuer's own limit. 0 turns card payments off.
     cardCapPurchase: num(env, "CARD_CAP_PURCHASE", 25, 0, 10_000), // the most one payment may be
