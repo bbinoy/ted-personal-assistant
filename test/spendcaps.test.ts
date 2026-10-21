@@ -23,7 +23,7 @@ function friend(name: string) {
   T.setStatus(rec.id, "active");
   return T.tenantById(rec.id)!;
 }
-const inst = (rec: { id: string }, costFile: string) => ({ kind: "instance", id: rec.id, apiKey: KEY, costFile }) as const;
+const inst = (rec: { id: string }, ledger: string) => ({ kind: "instance", id: rec.id, apiKey: KEY, ledger }) as const;
 
 beforeEach(() => {
   on.tenants = true;
@@ -68,8 +68,8 @@ test("all tenants together stop at INSTANCE_KEY_DAILY_USD even when each is unde
   const ctxA = T.tenantContext(ann);
   const ctxB = T.tenantContext(bo);
   assert.ok(!isRefusal(mayRun({ kind: "tenant", tenantId: ann.id }, "chat", { chat: true })));
-  charge(inst(ann, ctxA.costFile), 1.2);
-  charge(inst(bo, ctxB.costFile), 1.9);
+  charge(inst(ann, ctxA.ledger), 1.2);
+  charge(inst(bo, ctxB.ledger), 1.9);
   assert.equal(instanceKeyOverBudget(), true);
   const r = mayRun({ kind: "tenant", tenantId: ann.id }, "chat", { chat: true });
   assert.deepEqual(r, { refused: "instance-budget", limit: 3 });
@@ -77,7 +77,7 @@ test("all tenants together stop at INSTANCE_KEY_DAILY_USD even when each is unde
   assert.ok(ctxA.dailyBudgetUsd > 1.2, "she is far from her own ceiling: it is the aggregate that refused");
   assert.ok(!isRefusal(mayRun({ kind: "owner" }, "chat", { chat: true })), "the owner's login is another account");
   assert.ok(!isRefusal(mayRun({ kind: "group", groupId: "g" }, "chat", { chat: true })));
-  assert.deepEqual(mayRun({ kind: "tenant", tenantId: ann.id }, "chat", { chat: true, keySpent: () => false }), { kind: "instance", id: ann.id, apiKey: KEY, costFile: ctxA.costFile }, "the seam");
+  assert.deepEqual(mayRun({ kind: "tenant", tenantId: ann.id }, "chat", { chat: true, keySpent: () => false }), { kind: "instance", id: ann.id, apiKey: KEY, ledger: ctxA.ledger }, "the seam");
 });
 
 test("her own ceiling is still checked first and keeps its own reason", () => {
@@ -85,7 +85,7 @@ test("her own ceiling is still checked first and keeps its own reason", () => {
   on.instanceKeyDailyUsd = 1000;
   const cy = friend("Cy");
   const ctx = T.tenantContext(cy);
-  charge(inst(cy, ctx.costFile), ctx.dailyBudgetUsd + 0.5);
+  charge(inst(cy, ctx.ledger), ctx.dailyBudgetUsd + 0.5);
   assert.deepEqual(mayRun({ kind: "tenant", tenantId: cy.id }, "chat", { chat: true }), { refused: "budget", limit: ctx.dailyBudgetUsd });
 });
 
@@ -103,7 +103,7 @@ test("key ceiling: the friend gets one fixed line a day, the owner one line a da
   capNoticesTo((t) => void told.push(t));
   const ann = friend("Ann-Cap");
   const bo = friend("Bo-Cap");
-  charge(inst(ann, T.tenantContext(ann).costFile), 0.6);
+  charge(inst(ann, T.tenantContext(ann).ledger), 0.6);
   let clock = Date.now();
   const runner = createTenantRunner({ apiKey: () => KEY, now: () => clock, ask: async () => assert.fail("no model call") });
   const say = async (rec: { id: string }) => (await runner.run(tenantConv(rec.id), "hi")).text;

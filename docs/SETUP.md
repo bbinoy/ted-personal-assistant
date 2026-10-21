@@ -232,3 +232,13 @@ Off by default. A friend can connect her OWN Notion; her Notion tools are Notion
 - Quiet hours and caps: unprompted heartbeat messages are held in `QUIET_HOURS` (default from the assistant preset, 22:00-07:00) and delivered as ONE digest (needs you / FYI / system, no duplicates, newest first, at most `DIGEST_MAX_ITEMS`) when they end, plus at `DIGEST_TIMES` (default `12:30,18:30`) for what the cap held, unless the run marks one urgent; `MAX_UNPROMPTED_PER_DAY` (6) caps them per conversation per day. You are told once a day when `DAILY_BUDGET_USD` is reached, and once when background looks keep failing (each notice ends with the one step to fix it).
 
 Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Safety](SAFETY.md) · [Adapting](ADAPTING.md)
+
+## Backup
+
+All state is under the data folder (`HARNESS_DATA_DIR`). To back it up, either **stop the agent and the intake page and copy `instance/`** (and `conversations/`), or take a consistent copy of the database while they run with SQLite itself:
+
+```
+sqlite3 instance/instance.db ".backup /path/to/instance-backup.db"
+```
+
+Copying `instance.db` alone while the agent runs can miss what is still in `instance.db-wal`; copy all three files together, or use `.backup`. To restore, stop everything and put the file back as `instance/instance.db` (delete any stale `instance.db-wal` and `instance.db-shm` next to it). `npm run doctor` reports the database (WAL, schema version, quick check, row counts).

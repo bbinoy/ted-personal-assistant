@@ -75,7 +75,7 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
         observe(payer, message);
         if (message.type === "assistant" && message.error) lastError = message.error;
         if (message.type !== "result") continue;
-        charge(payer, message.total_cost_usd - saved.costUsd);
+        charge(payer, message.total_cost_usd - saved.costUsd, "compact");
         if (!boundary) {
           // A compaction that failed is reported like any other call on its payer (errors.ts failure: the cooldown, the owner's one notice about a refused instance key).
           const refused = failure(lastError, message.subtype, payer);

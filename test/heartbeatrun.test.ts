@@ -7,12 +7,13 @@ import { group, owner, type Conversation } from "../src/conversation/conversatio
 import { clampLook, parseHeartbeatAnswer, HEARTBEAT_SCHEMA } from "../src/run/rules.ts";
 import { lastLookText, lookInstruction, lookPrompt, preemptible } from "../src/heartbeat/look.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
-import { HEARTBEAT_LOG, readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
+import { readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
 import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { createSeenMail, seenFileOf } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
-import { dataPath, readText } from "../src/core/state.ts";
+import { dataPath } from "../src/core/state.ts";
+import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
 import { heldFileOf, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
@@ -26,7 +27,7 @@ const DAY = new Date(2026, 9, 14, 14, 0, 0); // a Wednesday, 14:00 local
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
 const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
-const reset = () => (rmSync(dataPath(HEARTBEAT_LOG), { force: true }), rmSync(dataPath(heldFileOf(owner())), { force: true })); // (the rows, and what quiet hours held)
+const reset = () => (instanceDb().run("DELETE FROM looks"), rmSync(dataPath(heldFileOf(owner())), { force: true })); // (the rows, and what quiet hours held)
 
 interface Answer { mail?: string[]; hold?: Promise<unknown>; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; during?: () => void }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
@@ -137,7 +138,7 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   const rows = readRows();
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], { at: DAY.toISOString(), kind: "owner", night: false, message: true, sent: 0, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
-  assert.doesNotMatch(readText(HEARTBEAT_LOG)!, /Eve|Friday|waits/, "the row carries no words");
+  assert.doesNotMatch(JSON.stringify(readRows()), /Eve|Friday|waits/, "the row carries no words");
   assert.ok(seen.recorded.some(([k, t]) => k === "action" && /\[heartbeat\] look: 3 tool call\(s\), 2 mail archived, message sent/.test(t)), "the log gets a counted summary line");
 });
 

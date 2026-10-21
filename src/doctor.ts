@@ -6,7 +6,9 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { ROOT } from "./core/paths.ts";
 import { spentToday } from "./core/budget.ts";
-import { readRows } from "./heartbeat/rows.ts";
+import { lastLookAt } from "./heartbeat/rows.ts";
+import { HEARTBEAT_KEY } from "./heartbeat/heartbeat.ts";
+import { kvGet, openInstanceDbAt } from "./core/instancedb.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
 import { ownerSkills } from "./modules/skills.ts";
@@ -198,7 +200,7 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
   line(true, "tenants", `${all.length} (${count("active")} active, ${count("suspended")} suspended); ${openRequests(now).length} registration request(s) waiting for your answer`);
   for (const rec of all) {
     const ctx = tenantContext(rec);
-    const spent = spentToday(ctx.costFile);
+    const spent = spentToday(ctx.ledger);
     const paused = pausedUntil(ctx, now);
     const problems = [
       spent >= ctx.dailyBudgetUsd ? "today's budget is spent" : "",
@@ -222,6 +224,20 @@ export const requiredSkills = (mail: boolean, provider: string = settings.mailPr
 // What the heartbeat line says: the last tick, and the heartbeat run's last look (instance/heartbeat.jsonl).
 export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, lastLookAt: string | undefined, localTime: (iso: string) => string): string =>
   beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago; last look ${lastLookAt ? localTime(lastLookAt) : "none yet"}` : "no tick recorded yet";
+
+// instance.db opens, is in WAL mode, has the schema this code knows, and passes SQLite's quick check; the row counts say whether the ledgers are there (never what is in them).
+export function dbCheck(line: Line, path: string = instancePaths().db): boolean {
+  try {
+    const db = openInstanceDbAt(path);
+    const verdict = db.check();
+    const count = (t: string) => db.num(`SELECT COUNT(*) FROM ${t}`);
+    line(verdict === "ok" && db.journalMode === "wal", "instance database", `${db.journalMode} mode, schema ${db.version}, quick_check ${verdict}; ${count("spend")} spend, ${count("payments")} payment, ${count("looks")} look row(s)${verdict === "ok" ? "" : "; restore it from a backup (docs/SETUP.md)"}`);
+    return verdict === "ok";
+  } catch (e) {
+    line(false, "instance database", (e as Error).message);
+    return false;
+  }
+}
 
 // `npm run doctor`: is everything this agent depends on in place? Prints no secrets.
 export async function doctor() {
@@ -266,7 +282,8 @@ export async function doctor() {
   }
   // On an old data folder doctor still runs (it is what one reaches for when things look wrong): the layout line fails and says what to do, and only the checks that read the new layout are skipped.
   const legacy = refusal(layoutState(settings.dataDir)) !== null;
-  const conn = legacy ? undefined : readConnectors();
+  const dbOk = !legacy && dbCheck(line); // (instance.db: spend, payments, looks, notices, intake marks, connectors; a damaged one skips the checks that read it)
+  const conn = dbOk ? readConnectors() : undefined;
   if (conn) {
     // Every connector module the owner uses (src/modules: Notion, Calendar, Drive and Docs once unhidden, ...); the mail provider's own is the mail check above.
     for (const r of reportable().filter((x) => !x.mail)) line(conn[r.key] !== false ? true : "warn", `${r.label} connector`, conn[r.key] !== false ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors); without it: ${r.skipped}`);
@@ -310,19 +327,19 @@ export async function doctor() {
 
   browseCheck(line, settings.browse, browseStatus());
   await openbaoCheck(line);
-  if (!legacy) {
+  if (dbOk) {
     await intakeCheck(line);
     tenantCheck(line);
   }
   servicesCheck(line);
 
-  if (!legacy) {
-  const beat = readJson<{ lastTickAt?: string }>(instancePaths().heartbeat, {});
+  if (dbOk) {
+  const beat = kvGet<{ lastTickAt?: string }>(HEARTBEAT_KEY, {});
   const ageMin = beat.lastTickAt ? (Date.now() - Date.parse(beat.lastTickAt)) / 60_000 : Infinity;
   line(
     ageMin <= 2 * settings.heartbeatMinutes + 1 ? true : "warn",
     "heartbeat is ticking",
-    heartbeatDetail(beat, ageMin, readRows().at(-1)?.at, localTime),
+    heartbeatDetail(beat, ageMin, lastLookAt(), localTime),
   );
   line(true, "heartbeat run", `every conversation's look (owner, groups, friends with wake) at its chat and what it can read, on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
 

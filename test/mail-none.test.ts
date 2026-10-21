@@ -7,15 +7,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
-import { startHeartbeat } from "../src/heartbeat/heartbeat.ts";
+import { HEARTBEAT_KEY, startHeartbeat } from "../src/heartbeat/heartbeat.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
 import { missingSetup, setupItems } from "../src/modules/index.ts";
 import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
 import { ownerSkills } from "../src/modules/skills.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
-import { readJson } from "../src/core/state.ts";
-import { instancePaths } from "../src/core/convpaths.ts";
+import { kvGet } from "../src/core/instancedb.ts";
 
 // MAIL_PROVIDER: mailbird is the default and behaves exactly as before (test/default-prompts.test.ts pins its prompts); none is chat only.
 
@@ -65,7 +64,7 @@ test("heartbeat tick without mail: the jobs start and the liveness line is writt
       timers[1]!();
       await new Promise((r) => setTimeout(r, 20));
       assert.deepEqual(ran, ["jobs", "jobs"], "the tick jobs still start");
-      const beat = readJson<{ lastTickAt?: string }>(instancePaths().heartbeat, {});
+      const beat = kvGet<{ lastTickAt?: string }>(HEARTBEAT_KEY, {});
       assert.ok(beat.lastTickAt && Date.now() - Date.parse(beat.lastTickAt) < 5000, "doctor sees the heartbeat ticking");
       void hb;
     } finally {

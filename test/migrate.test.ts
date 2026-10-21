@@ -5,12 +5,14 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { ROOT } from "../src/core/paths.ts";
-import { groupConvId, layout, LAYOUT_VERSION } from "../src/core/convpaths.ts";
+import { groupConvId, layout, LAYOUT_VERSION, MOVES_VERSION } from "../src/core/convpaths.ts";
 import {
   describePlan, layoutState, markOwnerTold, migrate, ownerNotice, planMigration, readVersion, refusal, REORGANISED_TEXT, rekeyCapNotices, rekeyGroupCost, sameTree, type FsView, type Plan,
 } from "../src/core/migrate.ts";
 import { buildOld, FRIENDS, GID_A, GID_B, hash16, key12, sha, snapshot, UNKNOWN_HASH } from "./oldlayout.ts";
 
+// The move tests look at layout 2 as the moves leave it: the stamp is 2 and the small files are still files (the import into instance.db is the next step: test/dbimport.test.ts).
+const moves = (root: string, o: Parameters<typeof migrate>[1] = {}, wait?: number) => migrate(root, { ...o, movesOnly: true }, wait);
 const fresh = (): string => mkdtempSync(join(tmpdir(), "migrate-"));
 // the tree without the plan file (it names the folder it ran in and the time)
 const tree = (root: string): Record<string, string> => {
@@ -105,10 +107,10 @@ test("migrate end to end: every file arrives with its content, the old places ar
   const root = old();
   const before = snapshot(root);
   const log: string[] = [];
-  const r = migrate(root, { log: (l) => log.push(l) });
+  const r = moves(root, { log: (l) => log.push(l) });
   assert.equal(r.already, false);
   const L = layout(root);
-  assert.equal(readVersion(root), LAYOUT_VERSION);
+  assert.equal(readVersion(root), MOVES_VERSION);
   const after = snapshot(root);
   const at = (rel2: string) => after[rel2];
   // content moved, byte for byte
@@ -203,27 +205,27 @@ test("a new, empty data folder is stamped at once and needs no plan", () => {
   assert.deepEqual(layoutState(root), { state: "fresh" });
   const r = migrate(root);
   assert.equal(r.moved, 0);
-  assert.equal(readVersion(root), 2);
+  assert.equal(readVersion(root), LAYOUT_VERSION);
   assert.equal(existsSync(layout(root).instance.migrationPlan), false);
   assert.equal(ownerNotice(root), undefined, "nothing was reorganised, nothing to tell");
 });
 
 test("crash anywhere, resume from the stored plan: the result is the same tree as an uninterrupted run", () => {
   const whole = old();
-  const full = migrate(whole);
+  const full = moves(whole);
   const expected = tree(whole);
   const steps = full.plan!.ops.length;
   assert.ok(steps > 50, `a rich fixture (${steps} steps)`);
   for (const k of [1, 2, 3, 7, 12, 20, 33, Math.floor(steps / 2), steps - 5, steps - 2, steps - 1]) {
     const root = old();
-    assert.throws(() => migrate(root, { crashAfter: k }), /simulated crash/);
+    assert.throws(() => moves(root, { crashAfter: k }), /simulated crash/);
     assert.equal(readVersion(root), undefined, `no version after a crash at ${k}`);
     assert.deepEqual(layoutState(root), { state: "unmigrated" });
     const left = refusal(layoutState(root));
     assert.match(left!, /old layout/);
     const stored = JSON.parse(readFileSync(layout(root).instance.migrationPlan, "utf8")) as Plan;
     assert.equal(stored.ops.filter((o) => o.done).length, k, "progress is recorded after each step");
-    const r = migrate(root);
+    const r = moves(root);
     assert.equal(r.moved, steps - k, `resumed at ${k}`);
     assert.deepEqual(tree(root), expected, `same tree after a crash at ${k}`);
   }
@@ -238,7 +240,7 @@ test("a crash between a move and its record is harmless: the step finds its targ
   mkdirSync(join(root, "instance"), { recursive: true });
   writeFileSync(op.to, readFileSync(op.from, "utf8")); // ...but this step happened (a copy is there; as after a rename whose record was lost, the source would be gone)
   rmSync(op.from);
-  const r = migrate(root);
+  const r = moves(root);
   assert.equal(r.already, false);
   assert.equal(existsSync(op.to), true);
   assert.equal(readVersion(root), 2);
@@ -246,9 +248,9 @@ test("a crash between a move and its record is harmless: the step finds its targ
 
 test("across devices: copy, fsync, verify, then delete, with the same result", () => {
   const a = old();
-  migrate(a);
+  moves(a);
   const b = old();
-  migrate(b, { forceCopy: true });
+  moves(b, { forceCopy: true });
   assert.deepEqual(tree(b), tree(a));
 });
 
@@ -261,7 +263,7 @@ test("a process-wide target that exists with other content is never overwritten:
   writeFileSync(L.conv("owner").dream, '{"day":"d"}'); // identical to the old one
   mkdirSync(L.conv("owner").notes, { recursive: true }); // the empty skeleton start-up makes
   const log: string[] = [];
-  migrate(root, { log: (l) => log.push(l) });
+  moves(root, { log: (l) => log.push(l) });
   assert.equal(readFileSync(L.instance.registrations, "utf8"), '{"new":"code wrote this"}', "not overwritten");
   assert.equal(readFileSync(join(L.instance.migrationOrphans, "state/registrations.json"), "utf8"), "{}", "the old one is kept apart");
   assert.ok(log.some((l) => l.includes("state/registrations.json") && l.includes("exists with other content")));
@@ -274,7 +276,7 @@ test("what the migration REWRITES is copied first, byte for byte, into instance/
   const root = old();
   const before = snapshot(root);
   const log: string[] = [];
-  migrate(root, { log: (l) => log.push(l) });
+  moves(root, { log: (l) => log.push(l) });
   const L = layout(root);
   const stamps = readdirSync(L.instance.migrationBackup);
   assert.equal(stamps.length, 1);
@@ -286,8 +288,8 @@ test("what the migration REWRITES is copied first, byte for byte, into instance/
   assert.equal(plan.backup, join(L.instance.migrationBackup, stamps[0]!));
   // a crash after the rewrite, then a resume: the same single backup folder, still the originals
   const r2 = old();
-  assert.throws(() => migrate(r2, { crashAfter: 50 }), /simulated crash/);
-  migrate(r2);
+  assert.throws(() => moves(r2, { crashAfter: 50 }), /simulated crash/);
+  moves(r2);
   const s2 = readdirSync(layout(r2).instance.migrationBackup);
   assert.equal(s2.length, 1);
   assert.equal(snapshot(join(layout(r2).instance.migrationBackup, s2[0]!))["state/group-cost.json"], before["state/group-cost.json"]);
@@ -298,7 +300,7 @@ test("what the migration REWRITES is copied first, byte for byte, into instance/
   rmSync(join(plain, "state/cap-notices.json"));
   rmSync(join(plain, "state/voice/sources.json"));
   const log3: string[] = [];
-  migrate(plain, { log: (l) => log3.push(l) });
+  moves(plain, { log: (l) => log3.push(l) });
   assert.equal(existsSync(layout(plain).instance.migrationBackup), false);
   assert.ok(!log3.some((l) => l.includes("migration-backup")));
 });
@@ -316,7 +318,7 @@ test("npm run doctor still runs on an old data folder: the layout line fails wit
   assert.equal(run(["src/cli.ts", "report"], root).status, 1, "report still refuses");
   migrate(root);
   const ok = run(["src/cli.ts", "doctor"], root);
-  assert.match(ok.stdout, /ok\s+data layout\s+\(version 2/);
+  assert.match(ok.stdout, /ok\s+data layout\s+\(version 3/);
   assert.match(ok.stdout, /the owner's notes/);
 });
 
@@ -379,13 +381,13 @@ test("refusal: the CLIs and the intake page stop on an old or a newer data folde
   assert.ok(Object.keys(filesOf(oldRoot)).length > 100 && sha(JSON.stringify(filesOf(oldRoot))) === sha(JSON.stringify(filesOf(old()))), "a refusing tool moved nothing");
   const newer = fresh();
   mkdirSync(join(newer, "instance"), { recursive: true });
-  writeFileSync(join(newer, "instance/layout-version"), "3\n");
+  writeFileSync(join(newer, "instance/layout-version"), "4\n");
   const rn = run(guard("src/core/requirelayout.ts"), newer);
   assert.equal(rn.status, 1);
-  assert.match(rn.stderr, /newer layout \(version 3\)/);
+  assert.match(rn.stderr, /newer layout \(version 4\)/);
   const rm = run(guard("src/core/migrateatstart.ts"), newer);
   assert.equal(rm.status, 1, "the agent does not start on a newer layout either");
-  assert.equal(readFileSync(join(newer, "instance/layout-version"), "utf8"), "3\n", "and leaves it alone");
+  assert.equal(readFileSync(join(newer, "instance/layout-version"), "utf8"), "4\n", "and leaves it alone");
   const ok = fresh();
   assert.equal(run(guard("src/core/requirelayout.ts"), ok).status, 0, "a new folder is fine");
   migrate(oldRoot);
@@ -398,7 +400,7 @@ test("the agent migrates before anything reads the data: importing the start-up 
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /migrate: starting/);
   assert.match(r.stdout, /layout version 2/);
-  assert.equal(readVersion(root), 2);
+  assert.equal(readVersion(root), 3);
   assert.equal(existsSync(join(root, "conversations/owner/notes/style-x.md")), true);
 });
 
@@ -411,11 +413,13 @@ test("npm run migrate -- --dry-run prints the plan and moves nothing", () => {
   assert.match(r.stdout, /ORPHAN\s+state\/mystery.txt\s+->\s+instance\/migration-orphans\/state\/mystery.txt/);
   assert.match(r.stdout, /rekey\s+state\/group-cost.json/);
   assert.match(r.stdout, /step\(s\):/);
+  assert.match(r.stdout, /import\s+instance\/cost.json\s+->\s+instance.db \(spend, notices\)/, "layout 3: the small files that go into instance.db are listed too");
+  assert.match(r.stdout, /import\s+instance\/payments.jsonl\s+->\s+instance.db \(payments\)/);
   assert.match(r.stdout, /Dry run: nothing was moved\./);
   assert.deepEqual(snapshot(root), before);
   const real = run(["scripts/migrate.ts"], root);
   assert.equal(real.status, 0, real.stderr);
   assert.match(real.stdout, /Done: \d+ step\(s\)/);
-  assert.equal(readVersion(root), 2);
+  assert.equal(readVersion(root), 3);
   assert.match(run(["scripts/migrate.ts"], root).stdout, /Already in the current layout/);
 });

@@ -245,6 +245,7 @@ export function loadSettings(env: Env) {
     // ours, in code and in the card's currency, independent of the card issuer's own limit. 0 turns card payments off.
     cardCapPurchase: num(env, "CARD_CAP_PURCHASE", 25, 0, 10_000), // the most one payment may be
     cardCapDay: num(env, "CARD_CAP_DAY", 50, 0, 100_000), // the most paid in one local day (clicked, confirmed and unconfirmed payments count)
+    paymentsKeepYears: num(env, "PAYMENTS_KEEP_YEARS", 0, 0, 100), // 0 (default): the payment ledger is kept for ever. N >= 2: settled payments older than N years may be pruned by the retention job (payments.ts prunePayments); never fewer than 2
     browseMaxPayments: num(env, "BROWSE_MAX_PAYMENTS", 1, 0, 3), // card payments one browse run may start
     // OpenBao, the secret store (src/secrets/openbao.ts, docs/SETUP.md): the saved profile, the card and later tokens and keys. None of these is a secret;
     // the app's token is in the macOS Keychain, never in .env.
@@ -341,6 +342,8 @@ export function loadSettings(env: Env) {
     notesBackupKeep: num(env, "NOTES_BACKUP_KEEP", 7, 1, 100), // dream snapshots kept per conversation
     openbaoLogMb: num(env, "OPENBAO_LOG_MB", 20, 1, 1000), // OpenBao's audit, server and keeper logs are rotated at this size (2 generations kept)
     openbaoBackupKeep: num(env, "OPENBAO_BACKUP_KEEP", 7, 1, 100), // raft snapshots kept
+    looksKeepDays: num(env, "LOOKS_KEEP_DAYS", 400, 7, 3650), // heartbeat look rows (instance.db) older than this are pruned by the retention job
+    spendKeepDays: num(env, "SPEND_KEEP_DAYS", 400, 2, 3650), // spend ledger rows of days older than this are pruned (the budgets look at today only)
     shoreCacheKeep: num(env, "SHORE_CACHE_KEEP", 50, 1, 10000), // cached shore outlines kept (newest by mtime)
     tmpSweepHours: num(env, "TMP_SWEEP_HOURS", 24, 1, 720), // temporary folders of picture, voice and Google work older than this are swept
     migrationReviewDays: num(env, "MIGRATION_REVIEW_DAYS", 30, 1, 3650), // doctor warns about migration-backup / migration-orphans older than this (never deleted automatically)

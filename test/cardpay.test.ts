@@ -17,7 +17,7 @@ import { fakeCardStore } from "./fakebao.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { dataPath } from "../src/core/state.ts";
 import { logPaths } from "../src/core/convpaths.ts";
-import { scratch } from "./scratch.ts";
+import { scratch, scratchDb } from "./scratch.ts";
 
 // Obviously fake: the public test card number, a made-up security code, a local fake checkout (`shop.test`, a hosted page on stripe.com) that exists
 // only as page text in these tests. No real merchant, card or money.
@@ -39,7 +39,7 @@ const newStore = async (card: CardRecord = CARD) => {
 };
 const newAccess = async (o: { card?: CardRecord; caps?: CardAccess["caps"]; kill?: KillSwitch; ledger?: Ledger } = {}) => {
   const kill = o.kill ?? new KillSwitch(scratch(`card-test-${unique()}.disabled`));
-  const ledger = o.ledger ?? new Ledger(scratch(`payments-test-${unique()}.jsonl`));
+  const ledger = o.ledger ?? new Ledger(scratchDb(`payments-test-${unique()}`));
   const access = await openCardAccess({ store: await newStore(o.card), kill, ledger, caps: o.caps ?? { purchaseMinor: 2500 * 10, dayMinor: 5000 * 10 } });
   return { access: access!, kill, ledger };
 };
@@ -432,7 +432,7 @@ test("kill switch: at the question, after the yes, and at the click; a run that 
   // with it on at the start, the run has no card and says nothing of one
   const k4 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   k4.turnOff("test");
-  assert.equal(await openCardAccess({ store: await newStore(), kill: k4, ledger: new Ledger(scratch(`payments-test-${unique()}.jsonl`)) }), undefined);
+  assert.equal(await openCardAccess({ store: await newStore(), kill: k4, ledger: new Ledger(scratchDb(`payments-test-${unique()}`)) }), undefined);
   k1.turnOn(); k2.turnOn(); k3.turnOn(); k4.turnOn();
 });
 
@@ -506,7 +506,7 @@ test("nothing leaks: no result, question, approval call, audit row, ledger row o
   const audit = readFileSync(dataPath(logPaths().audit), "utf8");
   for (const secret of [PAN, PAN_SPACED, "4242-4242", EXPIRY, `"${CVC}"`, `fill('${CVC}')`, "Fakename"]) assert.ok(!audit.includes(secret), `the audit log holds ${secret}`);
   assert.ok(!audit.match(/(^|[^\d])0731([^\d]|$)/m), "no security code in the audit log");
-  const ledger = readFileSync(dataPath(r.ledger.file), "utf8");
+  const ledger = JSON.stringify(r.ledger.history());
   assert.ok(!ledger.includes(PAN) && !ledger.includes(CVC) && !ledger.includes(EXPIRY));
   // what the audit does say
   const rows = readAudit((e) => e.tool.startsWith("card_"));

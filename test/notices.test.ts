@@ -5,7 +5,8 @@ import { owner } from "../src/conversation/conversationmodel.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readJson, writeJson } from "../src/core/state.ts";
 import { localDay } from "../src/core/pause.ts";
-import { GROUP_BUDGET_TEXT, groupBudgetDue } from "../src/core/budget.ts";
+import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
+import { instanceDb } from "../src/core/instancedb.ts";
 import { combine, createFailureTracker, heldFileOf, noticeBudget, noticeOwner, ownerNotices, planFlush, planPost, releaseHeld, stillTrue, submitPost, countPosts } from "../src/heartbeat/notices.ts";
 import { AuthError, causeOf, InstanceKeyError, noticeFor, RateLimitError } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
@@ -149,12 +150,13 @@ test("causeOf and the owner's failure messages: login, limit, timeout, connector
 });
 
 test("the budget notice: once a day, in the owner's chat, naming the limit and the setting", () => {
-  rmSync(dataPath(instancePaths().cost), { force: true });
+  instanceDb().run("DELETE FROM spend");
+  instanceDb().run("DELETE FROM notices");
   rmSync(dataPath(heldFileOf(owner())), { force: true });
   const told: string[] = [];
   ownerNotices.sendTo((t) => told.push(t));
   assert.equal(noticeBudget(DAY), false, "under budget: nothing");
-  writeJson(instancePaths().cost, { day: localDay(new Date()), usd: settings.dailyBudgetUsd + 1 });
+  recordCost(settings.dailyBudgetUsd + 1);
   assert.equal(noticeBudget(DAY), true);
   assert.equal(noticeBudget(DAY), false, "not again today");
   assert.deepEqual(told, [`Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. To lift it today, raise DAILY_BUDGET_USD in .env and restart.`]);
@@ -239,7 +241,7 @@ test("the send tool of an unattended look is held at 02:00 unless urgent; a chat
 
 test("the instance-cap notice to the owner respects quiet hours; a group's budget line survives a restart", async () => {
   reset();
-  rmSync(dataPath(instancePaths().capNotices), { force: true });
+  instanceDb().run("DELETE FROM notices");
   const told: string[] = [];
   ownerNotices.sendTo((t) => told.push(t));
   capNoticesTo((t) => noticeOwner(t, NIGHT, { sameDay: true }));
@@ -249,6 +251,6 @@ test("the instance-cap notice to the owner respects quiet hours; a group's budge
   capNoticesTo(undefined);
   ownerNotices.sendTo(undefined);
   assert.equal(groupBudgetDue("gx", DAY), true);
-  assert.ok(readJson<{ keys: string[] }>(instancePaths().capNotices, { keys: [] }).keys.includes(`group-budget:${groupConvId("gx")}`), "written to the state file under the group's folder name, not its id: a restart does not forget it");
+  assert.equal(instanceDb().get<{ day: string }>("SELECT day FROM notices WHERE key = ?", `group-budget:${groupConvId("gx")}`)?.day, localDay(DAY), "written to the notices table under the group's folder name, not its id: a restart does not forget it");
   assert.equal(groupBudgetDue("gx", DAY), false);
 });

@@ -95,7 +95,7 @@ export const sdkRelay: Relay = async (calls) => {
   try {
     for await (const m of query({ prompt: `Calls, as JSON:\n${JSON.stringify(calls)}`, options })) {
       if (m.type === "result") {
-        recordCost(m.total_cost_usd);
+        recordCost(m.total_cost_usd, undefined, "mail");
         break;
       }
     }

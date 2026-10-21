@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ROOT } from "../src/core/paths.ts";
-import { groupConvId, layout } from "../src/core/convpaths.ts";
+import { groupConvId, layout, layout2 } from "../src/core/convpaths.ts";
+import { openInstanceDbAt } from "../src/core/instancedb.ts";
 import { lateNotice, markLateTold, markOwnerTold, migrate, ownerNotice, planMigration, REORGANISED_TEXT, reconcile, stragglers, type Plan } from "../src/core/migrate.ts";
 import { migrateSafely, type Services } from "../src/core/migrateservices.ts";
 import { forgetGroup } from "../src/conversation/forget.ts";
@@ -80,12 +81,14 @@ test("an old process that keeps writing after the stamp: logs are merged in time
   const L = layout(root);
   migrate(root);
   assert.deepEqual(stragglers(root), []);
-  put(root, "state/payments.jsonl", '{"id":"p0","ts":"2020-01-01T00:00:00.000Z"}\n{"id":"p2","ts":"2030-01-01T00:00:00.000Z"}\n');
-  writeFileSync(L.instance.payments, '{"id":"p1","ts":"2025-01-01T00:00:00.000Z"}\n{"id":"p0","ts":"2020-01-01T00:00:00.000Z"}\n');
+  // (layout 3: the small files of instance/ were imported into instance.db and removed; an old version's late files come back through the old places, are moved or merged into instance/ as before, and are imported again)
+  const pay = (id: string, ts: string) => JSON.stringify({ id, ts, merchant: "m", totalMinor: 100, currency: "EUR", last4: "1111", cartHash: id, status: "confirmed" });
+  const V2 = layout2(root);
+  put(root, "state/payments.jsonl", `${pay("p0", "2020-01-01T00:00:00.000Z")}\n${pay("p2", "2030-01-01T00:00:00.000Z")}\n`);
+  writeFileSync(V2.payments, `${pay("p1", "2025-01-01T00:00:00.000Z")}\n${pay("p0", "2020-01-01T00:00:00.000Z")}\n`);
   put(root, "state/heartbeat.jsonl", '{"at":"2027-01-01T00:00:00.000Z","n":1}\n');
   put(root, "state/registrations.json", '{"late":"from the old intake page"}');
-  put(root, "state/intake-problems.json", '{"x":1}');
-  rmSync(L.instance.intakeProblems);
+  put(root, "state/intake-problems.json", '{"zed":{"calendar":"2031-01-01T00:00:00.000Z"}}');
   put(root, "state/mystery2.txt", "new unknown");
   put(root, "logs/messages.jsonl", '{"ts":2000000000000,"text":"late chat"}\n');
   assert.ok(stragglers(root).length >= 6, "doctor's check has something to show");
@@ -94,14 +97,16 @@ test("an old process that keeps writing after the stamp: logs are merged in time
   migrateSafely(root, { services: s, agentLabel: LABEL, mode: "agent", log: (l) => log.push(l) });
   assert.deepEqual(stragglers(root), [], "nothing is left in the old places");
   // merged: the union, identical lines once, in time order
-  assert.deepEqual(read(L.instance.payments).trim().split("\n").map((l) => JSON.parse(l).id), ["p0", "p1", "p2"]);
-  assert.equal(read(L.instance.heartbeatRows).trim().split("\n").length, 2, "the old row and the late one");
+  const db = openInstanceDbAt(L.instance.db);
+  assert.deepEqual(db.all<{ id: string }>("SELECT id FROM payments ORDER BY seq").map((r) => r.id), ["p0", "p1", "p2"]);
+  assert.equal(existsSync(V2.payments), false, "imported, and the file is gone");
+  assert.deepEqual(db.all<{ at: string }>("SELECT at FROM looks ORDER BY id").map((r) => r.at), ["2026-10-19T10:00:00.000Z", "2026-10-20T10:00:00.000Z", "2027-01-01T00:00:00.000Z"], "the two rows the migration imported (the rotated one first) and the late one");
   assert.match(read(L.conv("owner").messages), /hello/);
   assert.match(read(L.conv("owner").messages), /late chat/);
   // a conflicting file is set aside (the new layout's stays), a missing target is filled
   assert.equal(read(L.instance.registrations), "{}");
   assert.equal(read(join(L.instance.migrationOrphans, "state/registrations.json")), '{"late":"from the old intake page"}');
-  assert.equal(read(L.instance.intakeProblems), '{"x":1}');
+  assert.equal(db.get<{ problem_at: string }>("SELECT problem_at FROM intake WHERE tenant = 'zed' AND purpose = 'calendar'")?.problem_at, "2031-01-01T00:00:00.000Z", "a file the new layout lacked is moved into place and imported");
   assert.equal(read(join(L.instance.migrationOrphans, "state/mystery2.txt")), "new unknown");
   assert.ok(log.some((l) => l.includes("LATE FILES")) && log.some((l) => l.includes("late file state/registrations.json")));
   // the owner hears of it once, with the names
@@ -119,14 +124,14 @@ test("a plan finished before an old process wrote again (a rollback to old code,
   const L = layout(root);
   migrate(root);
   rmSync(L.instance.layoutVersion); // rolled back: the stamp is gone, the plan says everything is done
-  put(root, "state/payments.jsonl", '{"id":"after","ts":"2031-01-01T00:00:00.000Z"}\n');
+  put(root, "state/payments.jsonl", `${JSON.stringify({ id: "after", ts: "2031-01-01T00:00:00.000Z", merchant: "m", totalMinor: 5, currency: "EUR", last4: "1", cartHash: "c", status: "confirmed" })}\n`);
   put(root, "state/session.json", '{"sessionId":"written by old code"}');
   rmSync(L.conv("owner").session);
   const log: string[] = [];
   migrate(root, { log: (l) => log.push(l) });
   assert.deepEqual(stragglers(root), []);
   assert.equal(read(L.conv("owner").session), '{"sessionId":"written by old code"}');
-  assert.match(read(L.instance.payments), /after/);
+  assert.deepEqual(openInstanceDbAt(L.instance.db).all<{ id: string }>("SELECT id FROM payments").map((r) => r.id), ["after"], "moved into instance/ and imported into instance.db");
   assert.ok(log.some((l) => /more step/.test(l)));
   const plan = JSON.parse(read(L.instance.migrationPlan)) as Plan;
   assert.ok(plan.ops.every((o) => o.done));
@@ -138,7 +143,7 @@ test("payments archives are moved to instance/, never set aside", () => {
   const root = old();
   put(root, "state/payments-2025.jsonl", "a\n");
   put(root, "state/payments-2025-2.jsonl", "b\n");
-  migrate(root);
+  migrate(root, { movesOnly: true }); // (the moves; the import into instance.db is the next step, test/dbimport.test.ts)
   const L = layout(root);
   assert.equal(read(join(L.instance.dir, "payments-2025.jsonl")), "a\n");
   assert.equal(read(join(L.instance.dir, "payments-2025-2.jsonl")), "b\n");

@@ -204,7 +204,7 @@ test("layout 2: the owner's chat reads only conversations/owner/{notes,messages.
   const touch = (p: string) => (mkdirSync(join(p, ".."), { recursive: true }), writeFileSync(p, "x"));
   const everything = [O.notes + "/MEMORY.md", O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon, O.session, O.pending, O.search, O.dream, O.notesBackup + "/s/n.md", O.voiceSources, O.heldPosts,
     group.messages, group.notes + "/a.md", group.session, friend.messages, friend.notes + "/a.md", friend.tenantJson, other.notes + "/a.md",
-    instancePaths().tenants, instancePaths().cost, instancePaths().heartbeatRows, instancePaths().openbao + "/config.hcl", logPaths().launchdStderr, join(conversationsDir(), "stray.txt")];
+    instancePaths().tenants, instancePaths().db, `${instancePaths().db}-wal`, `${instancePaths().db}-shm`, instancePaths().openbao + "/config.hcl", logPaths().launchdStderr, join(conversationsDir(), "stray.txt")];
   for (const p of everything) touch(p);
   const readable = new Set([O.notes + "/MEMORY.md", O.messages, logPaths().audit, logPaths().agent, logPaths().signalDaemon]);
   for (const p of everything) {

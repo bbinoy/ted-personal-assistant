@@ -19,7 +19,7 @@ const { keyNotices, createKeyNotices } = await import("../src/tenants/keynotice.
 const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/core/cooldown.ts");
 const { failure, InstanceKeyError, RateLimitError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
-const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", costFile: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
+const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", ledger: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
 const { recordCost, spentToday, tenantOverBudget } = await import("../src/core/budget.ts");
 const { tenant } = await import("../src/conversation/conversationmodel.ts");
 const { looksLikeApiKey } = await import("../src/secrets/secrets.ts");
@@ -231,12 +231,12 @@ test("budget: her day is her own ledger against her own limit; the instance's le
   const rec = join_("Cy");
   const ctx = T.tenantContext(rec);
   const owner0 = spentToday();
-  recordCost(0.5, ctx.costFile);
-  assert.equal(spentToday(ctx.costFile), 0.5);
+  recordCost(0.5, ctx.ledger);
+  assert.equal(spentToday(ctx.ledger), 0.5);
   assert.equal(spentToday(), owner0);
-  assert.equal(tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd), false);
-  recordCost(ctx.dailyBudgetUsd, ctx.costFile);
-  assert.equal(tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd), true);
+  assert.equal(tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd), false);
+  recordCost(ctx.dailyBudgetUsd, ctx.ledger);
+  assert.equal(tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd), true);
   const { r, asked } = runner({ key: KEY_A });
   const out = await r.run(tenant(rec.id), "hi");
   assert.match(out.text, /daily limit/);
@@ -271,7 +271,7 @@ test("doctor: shows the instance key (set or not, never its value) and each tena
   lines.length = 0;
   const rec = join_("Doc");
   const ctx = T.tenantContext(rec);
-  recordCost(0.25, ctx.costFile);
+  recordCost(0.25, ctx.ledger);
   T.setPaused(ctx, Date.now() + 3600_000);
   assert.ok(looksLikeApiKey(KEY_A) && !looksLikeApiKey("sk-ant-short") && !looksLikeApiKey("hello"));
   tenantCheck(line, { on: true, key: KEY_A });
@@ -300,7 +300,7 @@ test("registry: the owner is seeded from the number as an admin with every capab
   assert.ok(!("capabilities" in rec), "the owner has every capability by being the owner (capabilities.ts), not by a stored list");
   assert.deepEqual([...capabilitiesOfRecord(rec)].filter((c) => c !== "intake").sort(), T.CAPABILITIES.filter((c) => c !== "intake").sort());
   const paths = T.pathsOf(rec);
-  assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, costFile: instancePaths().cost }, "the owner's own folder");
+  assert.deepEqual(paths, { root: settings.dataDir, notesDir: NOTES_DIR, logFile: OWNER_LOG, sessionFile: OWNER_SESSION_FILE, ledger: OWNER_CONV }, "the owner's own folder");
   assert.equal(T.ensureOwner({ number: "+15555550105", aci: ACI_A }).number, OWNER_NUMBER, "seeding twice changes nothing");
   assert.equal(T.people().filter((r) => r.id === "owner").length, 1);
   assert.ok(!T.listTenants().some((r) => r.id === "owner"), "the owner is not a tenant: invites, suspension and removal never reach her");

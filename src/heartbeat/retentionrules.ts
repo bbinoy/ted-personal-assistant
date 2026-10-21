@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { layout, isConvId, dataRoot, type Layout } from "../core/convpaths.ts";
 import { registerRetention, type RetentionResult, type RetentionRule } from "../core/retention.ts";
+import { registerDbRules } from "./dbretention.ts";
 import { copyTruncateIfOver } from "../core/rotate.ts";
 import { settings } from "../core/settings.ts";
 import { writeFileAtomic } from "../core/state.ts";
@@ -317,4 +318,5 @@ export function registerFileRules(): void {
     shoreRule(L, () => settings.shoreCacheKeep),
     tmpRule(() => tmpdir(), () => settings.tmpSweepHours),
   ]) registerRetention(r);
+  registerDbRules(); // the tables of instance.db (looks, spend, notices; payments only if PAYMENTS_KEEP_YEARS is set)
 }

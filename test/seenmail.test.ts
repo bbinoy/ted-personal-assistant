@@ -18,6 +18,7 @@ const { group, owner, tenant } = await import("../src/conversation/conversation.
 const { LOGIN } = await import("../src/tenants/payer.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { settings } = await import("../src/core/settings.ts");
+const { instanceDb } = await import("../src/core/instancedb.ts");
 const { readJson } = await import("../src/core/state.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 
@@ -116,13 +117,14 @@ function look(run: () => Promise<{ text: string; structured?: unknown }>) {
     busy: () => false, sendWhile: async (_c: unknown, r: () => Promise<unknown>) => r(),
     runTurn: async (_c: unknown, turn: { run: () => Promise<unknown> }) => (await turn.run(), { spoke: true }),
   };
-  const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (async (_c: unknown, _p: unknown, _prompt: string, extra: { seenMail: { unseen: (i: string[]) => string[] } }) => (extra.seenMail.unseen(["look-1", "look-2"]), run())) as never, may: () => LOGIN, why: () => "x", notesChangedAt: () => 0, rowsFile: join(dir, "rows.jsonl") });
+  const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (async (_c: unknown, _p: unknown, _prompt: string, extra: { seenMail: { unseen: (i: string[]) => string[] } }) => (extra.seenMail.unseen(["look-1", "look-2"]), run())) as never, may: () => LOGIN, why: () => "x", notesChangedAt: () => 0 });
   recordMessage("owner", Date.now(), "hi", new Date(), conv.logFile);
   return { hb, conv, f };
 }
 
 test("a look that ends well commits what it was told was new; a look that fails leaves it unseen", async () => {
   const quiet = { text: "", structured: { message: "[[silent]]", nextCheckMinutes: 30 } };
+  const looksBefore = instanceDb().num("SELECT COUNT(*) FROM looks");
   const err = console.error;
   console.error = () => {};
   try {
@@ -138,7 +140,7 @@ test("a look that ends well commits what it was told was new; a look that fails 
   } finally {
     console.error = err;
   }
-  assert.equal(readFileSync(join(dir, "rows.jsonl"), "utf8").trim().split("\n").length, 2);
+  assert.equal(instanceDb().num("SELECT COUNT(*) FROM looks") - looksBefore, 2, "two looks, two rows");
 });
 
 test("the first run does not triage the backlog: mail older than MAIL_BACKLOG_DAYS is marked seen unread, later runs are not affected", () => {

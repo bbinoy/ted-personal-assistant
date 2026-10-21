@@ -85,7 +85,7 @@ export interface RunOptions {
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
-const payerOf = (opts: Pick<RunOptions, "tenant" | "source" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, costFile: opts.tenant.costFile } : loginFor(opts.source === "group" ? (opts.groupId ?? opts.memory?.groupId) : undefined));
+const payerOf = (opts: Pick<RunOptions, "tenant" | "source" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, ledger: opts.tenant.ledger } : loginFor(opts.source === "group" ? (opts.groupId ?? opts.memory?.groupId) : undefined));
 
 // Context size of one model call: everything it was sent.
 const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) =>
@@ -267,7 +267,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
       writeJson(opts.sessionFile, next);
     }
-    charge(payer, message.total_cost_usd - previousCost); // failures cost money too (a friend's goes to her own ledger)
+    charge(payer, message.total_cost_usd - previousCost, opts.source); // failures cost money too (a friend's goes to her own ledger)
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
       return { text: message.result, costUsd: message.total_cost_usd - previousCost, structured: message.structured_output };

@@ -71,9 +71,9 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
       key: conv.key,
       apiKey,
       keyTag: createHash("sha256").update(apiKey).digest("hex").slice(0, 8),
-      costFile: ctx.costFile,
+      ledger: ctx.ledger,
       logFile: ctx.logFile,
-      overBudget: () => tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd),
+      overBudget: () => tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd),
     },
   };
 };

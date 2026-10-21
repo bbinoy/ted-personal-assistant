@@ -170,7 +170,7 @@ test("a second preset's note categories reach every run: chat, group, friend, he
       group: prompt(runOptionsFor(group("g1"), {})),
       friend: prompt(runOptionsFor(tenant(rec.id), { apiKey: "k" })),
       heartbeat: heartbeatOptions(owner(), LOGIN, {}),
-      friendHeartbeat: heartbeatOptions(tenant(rec.id), { kind: "instance", id: rec.id, apiKey: "k", costFile: "unused.json" }, {}),
+      friendHeartbeat: heartbeatOptions(tenant(rec.id), { kind: "instance", id: rec.id, apiKey: "k", ledger: "unused.json" }, {}),
       profiles: Object.fromEntries(["chat", "heartbeat", "group"].map((k) => [k, [PROFILES[k].maxTurns, PROFILES[k].maxBudgetUsd]])),
       scopes: Object.fromEntries(["owner", "group", "tenant"].map((k) => [k, dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories])),
       dream: ["owner", "group", "tenant"].map((k) => dreamSystem({ subject: "S", kind: k, categories: dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories })),

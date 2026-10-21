@@ -4,7 +4,8 @@ import { clearText, listText, waitingCount } from "../approvals/pendingflow.ts";
 import { spentToday } from "../core/budget.ts";
 import { pauseText } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
-import { dataPath, readText, writeText } from "../core/state.ts";
+import { dataPath, writeText } from "../core/state.ts";
+import { instanceDb } from "../core/instancedb.ts";
 import { instancePaths } from "../core/convpaths.ts";
 import { clockIn, systemZone, timeIn } from "../core/timezone.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -84,18 +85,10 @@ export function parseCommand(text: string, now: Date = new Date(), zone: string 
   return { kind: "pause-usage" };
 }
 
-// The owner's last look, from the heartbeat's own rows (heartbeat/rows.ts keeps the file; the conversation folder may not import it, test/ownercommands.test.ts checks the name is the same).
-export const ROWS_FILE = instancePaths().heartbeatRows;
-export function lastOwnerLook(text: string | undefined): { at: Date; outcome: string } | undefined {
-  for (const line of (text ?? "").trimEnd().split("\n").reverse().slice(0, 200)) {
-    try {
-      const r = JSON.parse(line) as { at?: unknown; kind?: string; outcome?: unknown };
-      if (typeof r.at === "string" && Number.isFinite(Date.parse(r.at)) && (r.kind ?? "owner") === "owner") return { at: new Date(r.at), outcome: String(r.outcome) };
-    } catch {
-      /* a torn line */
-    }
-  }
-  return undefined;
+// The owner's last look, from the heartbeat's own rows (the `looks` table of instance.db; heartbeat/rows.ts writes it, the conversation folder reads it through the database).
+export function lastOwnerLook(): { at: Date; outcome: string } | undefined {
+  const r = instanceDb().get<{ at: string; outcome: string }>("SELECT at, outcome FROM looks WHERE kind = 'owner' ORDER BY id DESC LIMIT 1");
+  return r && Number.isFinite(Date.parse(r.at)) ? { at: new Date(r.at), outcome: r.outcome } : undefined;
 }
 
 export interface StatusFacts {
@@ -153,7 +146,7 @@ const real: CommandDeps = {
       spentUsd: spentToday(),
       limitUsd: settings.dailyBudgetUsd,
       approvals: openCount(conv.key) + waitingCount(conv.key), // (the questions open in the chat, and the calls parked in the approval inbox)
-      lastLook: lastOwnerLook([`${ROWS_FILE}.2`, `${ROWS_FILE}.1`, ROWS_FILE].map((f) => readText(f) ?? "").join("\n")), // (the rotated generations too, heartbeat/rows.ts)
+      lastLook: lastOwnerLook(),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };
   },

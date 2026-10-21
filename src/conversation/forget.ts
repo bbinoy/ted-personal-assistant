@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { audit } from "../core/audit.ts";
-import { forgetGroupCost } from "../core/budget.ts";
+import { forgetSpend } from "../core/budget.ts";
 import { forgetNotices } from "../core/capnotice.ts";
 import { isInside } from "../core/contain.ts";
 import { convPaths, conversationsDir, isConvId, type ConvId } from "../core/convpaths.ts";
@@ -66,7 +66,7 @@ export function forgetGroup(ref: string, d: GroupForgetDeps = {}): GroupRemoval 
     return had;
   });
   step("its saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));
-  step("its day's spend", () => forgetGroupCost(conv));
+  step("its day's spend", () => forgetSpend(conv));
   step("its notice marks", () => forgetNotices((k) => k === `group:${conv}` || k === `group-budget:${conv}` || k === `warn:${conv}`));
   step("its name in memory", () => (found.id ? (forgetGroupCache(found.id), d.drop?.(found.id), false) : false));
   audit("group_forget", "removed", "chat", { conv, steps: out.removed.length });

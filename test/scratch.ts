@@ -4,3 +4,7 @@ import { instancePaths, logPaths } from "../src/core/convpaths.ts";
 
 export const scratch = (name: string): string => join(instancePaths().dir, name);
 export const scratchLog = (name: string): string => join(logPaths().dir, name);
+
+// A throwaway instance database of its own (same schema as instance.db) for a test that wants an empty ledger, e.g. new Ledger(scratchDb("payments-x")).
+import { openInstanceDbAt } from "../src/core/instancedb.ts";
+export const scratchDb = (name: string) => openInstanceDbAt(scratch(`${name}.db`));
