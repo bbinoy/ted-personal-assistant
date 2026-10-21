@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { FILE as OWNER_LOG, type Summarize } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
@@ -312,7 +312,7 @@ export function learnOwnerAci(who: { number: string; aci?: string }): boolean {
   const rec = people().find((r) => r.id === OWNER_ID);
   if (!rec || rec.acis.length || !rec.number || rec.number !== who.number || people().some((r) => hasAci(r, who.aci!))) return false;
   update(OWNER_ID, (r) => ({ ...r, acis: [who.aci!] }));
-  audit("owner_aci", "learned", "chat");
+  emitRecord("owner_aci", "learned", "chat");
   console.log(`tenants: the owner's Signal account id (${who.aci.slice(0, 8)}...) was learned from the first message from her number and recorded once (tenants.json in the instance folder)`);
   return true;
 }

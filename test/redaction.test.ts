@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { audit } from "../src/core/audit.ts";
+import { emitRecord } from "../src/core/events.ts";
 import { redact, redactSecrets } from "../src/core/redact.ts";
 import { readText } from "../src/core/state.ts";
 import { layout, logPaths } from "../src/core/convpaths.ts";
@@ -39,7 +39,7 @@ test("redact: more kinds of credential are masked, and a JSON line stays JSON", 
 
 test("audit: a credential in an error message is masked, a sender and subject stay readable", () => {
   const token = body(24);
-  audit("test_redaction", "failed", "chat", { error: `request failed: Bearer ${token}`, from: "Anna <anna@example.com>", subject: "Call +15555550105 back" });
+  emitRecord("test_redaction", "failed", "chat", { error: `request failed: Bearer ${token}`, from: "Anna <anna@example.com>", subject: "Call +15555550105 back" });
   const last = (readText(logPaths().audit) ?? "").trim().split("\n").filter((l) => l.includes('"test_redaction"')).at(-1)!; // other test files write to the same log at the same time
   const e = JSON.parse(last) as { meta: { error: string; from: string; subject: string } };
   assert.ok(!last.includes(token));

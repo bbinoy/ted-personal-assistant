@@ -1,7 +1,8 @@
 import { discardJudge, prepareJudge } from "./approvaljudge.ts";
 import { applyChanges, isModifiable, type Change } from "../policy/policy.ts";
 import { settings } from "../core/settings.ts";
-import { audit, wordless, type Source } from "../core/audit.ts";
+import type { Source } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
@@ -83,7 +84,8 @@ export function formatWait(minutes: number): string {
 }
 
 // A tenant's rows in the audit log (the admin's) carry no words (audit.ts wordless), and her questions stay out of the console log too.
-const rows = (scope: string, meta: Record<string, unknown>) => (isTenantKey(scope) ? wordless(meta) : meta);
+// An audit row of the approval path, in the conversation `scope`: a friend's carry no words (the event stream makes them wordless, core/events.ts).
+const row = (tool: string, decision: string, source: Source, scope: string, meta: Record<string, unknown>): void => emit({ type: "tool", tool, decision, source, conv: scope, meta });
 
 const REACT_YES = new Set(["👍", "✅"]);
 const REACT_NO = new Set(["👎", "❌"]);
@@ -98,11 +100,11 @@ export function answerReaction(emoji: string, targetTimestamp: number, scope: st
   if (!current || current.done || current.scope !== scope) return "ignored";
   const e = emoji.replace(/[︎️]/g, ""); // drop variation selectors
   if (current.typedYes && REACT_YES.has(e)) {
-    audit(current.call.tool, "answer-reaction-refused", current.source, rows(scope, { by, scope, question: current.shown }));
+    row(current.call.tool, "answer-reaction-refused", current.source, scope, { by, scope, question: current.shown });
     return "needs_text";
   }
   if (REACT_YES.has(e) || REACT_NO.has(e)) {
-    audit(current.call.tool, "answer-reaction", current.source, rows(scope, { by, scope, approved: REACT_YES.has(e), question: current.shown }));
+    row(current.call.tool, "answer-reaction", current.source, scope, { by, scope, approved: REACT_YES.has(e), question: current.shown });
     current.resolve({ approved: REACT_YES.has(e) });
     return REACT_YES.has(e) ? "approved" : "declined";
   }
@@ -160,9 +162,9 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   // A card payment: the fast path approves only a typed yes (not 👍, ok, sure, and not a transcript of a voice message); any other yes is asked for again.
   const typedOk = (o: Open) => !o.typedYes || (isTypedYes(text) && !ctx.voice);
   if (direct && (YES.has(t) || NO.has(t) || (direct.typedYes && isTypedYes(text)))) {
-    if (!NO.has(t) && !typedOk(direct)) return audit(direct.call.tool, "answer-refused", direct.source, rows(ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, question: direct.shown })), { outcome: "clarify", reply: TYPED_YES_NEEDED };
+    if (!NO.has(t) && !typedOk(direct)) return row(direct.call.tool, "answer-refused", direct.source, ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, question: direct.shown }), { outcome: "clarify", reply: TYPED_YES_NEEDED };
     const approved = !NO.has(t);
-    audit(direct.call.tool, "answer-fast", direct.source, rows(ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, approved, question: direct.shown }));
+    row(direct.call.tool, "answer-fast", direct.source, ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, approved, question: direct.shown });
     direct.resolve({ approved });
     return { outcome: approved ? "approved" : "declined" };
   }
@@ -180,7 +182,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const started = Date.now();
   const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? ((reply) => recentIn(ctx.scope, reply)))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(slot(ctx.scope, quote.timestamp)), voice: ctx.voice } : undefined);
   const stillOpen = () => live.filter((o) => !o.done);
-  const record = (what: string, o?: Open) => audit(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", rows(ctx.scope, { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started }));
+  const record = (what: string, o?: Open) => row(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", ctx.scope, { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started });
   // A reply that is neither yes nor no (a change, a condition, a question, "later") ends that approval: it is superseded by the owner's new instruction. The pending call
   // fails back to the agent with the owner's words, and the agent makes a fresh proposal in the same turn if it still wants to act, so no old approval stays open next to a new
   // question. A card payment is the exception (it stays open until a typed yes or a no: the caller handles it).

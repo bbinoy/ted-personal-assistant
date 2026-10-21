@@ -9,20 +9,22 @@ import { instanceDb, ledgerDamage } from "../core/instancedb.ts";
 import { instancePaths } from "../core/convpaths.ts";
 import { clockIn, systemZone, timeIn } from "../core/timezone.ts";
 import { zoneOf } from "../tenants/tenants.ts";
+import { todayText } from "../memory/journalread.ts";
 import { clearQuiet, quietText, setQuiet } from "./quiet.ts";
 import { disconnected, NAMES, readConnectors } from "../modules/connectors.ts";
 import { stopRuns } from "../run/ceiling.ts";
 import type { Conversation } from "./conversationmodel.ts";
 
 // The owner's hands on the machine, handled in code before any model sees the message (like /card, conversation.ts): "/stop" (or "stop!") aborts the conversation's running turn,
-// "/pause 2h" / "/pause until 18:00" / "/pause" / "/resume" write and remove the pause switch (core/pause.ts), "/status" answers in a phone-sized summary, "/quiet 2h" / "/quiet until 18:00" /
+// "/pause 2h" / "/pause until 18:00" / "/pause" / "/resume" write and remove the pause switch (core/pause.ts), "/status" answers in a phone-sized summary, "/today" what the assistant did today and why (the journal), "/quiet 2h" / "/quiet until 18:00" /
 // "/quiet" / "/unquiet" hold the conversation's unprompted posts and notices for the digest while chat and the heartbeat's work go on (quiet.ts). The message must be EXACTLY the command, so a
-// sentence that merely contains the word is a message like any other. "/approvals" lists what unattended runs parked for a yes ("/approvals clear" drops it all). /stop, /quiet and /approvals work in the owner's chat and a friend's own chat; pause and status are the owner's only.
+// sentence that merely contains the word is a message like any other. "/approvals" lists what unattended runs parked for a yes ("/approvals clear" drops it all). /stop, /quiet and /approvals work in the owner's chat and a friend's own chat; pause, status and today are the owner's only.
 
 export type Command =
   | { kind: "stop" }
   | { kind: "resume" }
   | { kind: "status" }
+  | { kind: "today" } // what the assistant did today and why, from the journal (memory/journalread.ts); code only
   | { kind: "approvals"; clear: boolean } // the approval inbox: what unattended runs parked for a yes (approvals/pendingflow.ts)
   | { kind: "pause"; until: string; text: string } // until: what goes into the pause file ("" = until /resume; an ISO time; a YYYY-MM-DD day); text: how it is said back
   | { kind: "pause-usage" }
@@ -70,6 +72,7 @@ export function parseCommand(text: string, now: Date = new Date(), zone: string 
   if (t === "/stop" || t === "stop!") return { kind: "stop" };
   if (t === "/resume") return { kind: "resume" };
   if (t === "/status") return { kind: "status" };
+  if (t === "/today") return { kind: "today" };
   if (t === "/approvals") return { kind: "approvals", clear: false };
   if (t === "/approvals clear") return { kind: "approvals", clear: true };
   const quiet = parseQuiet(t, now, zone);
@@ -85,7 +88,7 @@ export function parseCommand(text: string, now: Date = new Date(), zone: string 
   return { kind: "pause-usage" };
 }
 
-// The owner's last look, from the heartbeat's own rows (the `looks` table of instance.db; heartbeat/rows.ts writes it, the conversation folder reads it through the database).
+// The owner's last look, from the heartbeat's own rows (the `looks` table of instance.db; core/looks.ts writes it, the conversation folder reads it through the database).
 export function lastOwnerLook(): { at: Date; outcome: string } | undefined {
   let r: { at: string; outcome: string } | undefined;
   try {
@@ -131,12 +134,14 @@ export interface CommandDeps {
   setPause: (content: string) => void;
   clearPause: () => void;
   facts: (conv: Conversation, now: Date) => StatusFacts;
+  today: (conv: Conversation, now: Date) => string; // the day so far from the journal: counts by kind, the last few actions with why
   approvals: (scope: string, clear: boolean) => string; // the approval inbox of this conversation: the list, or dropping it all
   setQuiet: (conv: QuietConv, until: string) => void;
   clearQuiet: (conv: QuietConv) => void;
 }
 type QuietConv = Pick<Conversation, "kind" | "key" | "convId"> & { readonly tenantId?: string };
 const real: CommandDeps = {
+  today: (conv, now) => todayText(conv.logFile, { now: now.getTime(), zone: zoneOf(conv) }),
   approvals: (scope, clear) => (clear ? clearText(scope) : listText(scope)),
   now: () => new Date(),
   stop: stopRuns,
@@ -186,6 +191,8 @@ export function commandReply(conv: QuietConv, text: string, deps: Partial<Comman
       return "Resumed.";
     case "status":
       return statusText(d.facts(conv as Conversation, now));
+    case "today":
+      return d.today(conv as Conversation, now);
     case "pause":
       d.setPause(cmd.until);
       return cmd.text;

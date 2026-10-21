@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { writeFileAtomic } from "../../core/state.ts";
 import { join } from "node:path";
 import { z } from "zod";
-import { audit } from "../../core/audit.ts";
+import { emitRecord } from "../../core/events.ts";
 import { MAX_STATUS_CHARS, NOTES_DIR, STATUS_PREFIX } from "../../memory/notes.ts";
 import { localDay } from "../../core/pause.ts";
 
@@ -44,7 +44,7 @@ export function createStatusServer(dir: string = NOTES_DIR) {
         { name: z.string().describe("Lower-case words with dashes, like brief; the note is saved as status-<name>.md"), text: z.string().describe("The note: the date, the status and the few facts a later look needs") },
         async ({ name, text }) => {
           const r = writeStatusNote(name, text, new Date(), dir);
-          audit("status_note", r.ok ? "written" : "refused", "background", { name: String(name).slice(0, 40) });
+          emitRecord("status_note", r.ok ? "written" : "refused", "background", { name: String(name).slice(0, 40) });
           return r.ok ? reply(`Saved ${r.file}.`) : reply(r.error, true);
         },
       ),

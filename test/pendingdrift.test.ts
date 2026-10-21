@@ -4,7 +4,7 @@ import * as approvals from "../src/approvals/approvals.ts";
 import { openItems } from "../src/approvals/pending.ts";
 import { compactFooter, detailsHash } from "../src/approvals/pendingbatch.ts";
 import { flushPending, forgetRuns, idle, listText, queueCall, recoverStuck, setPendingRuntime, type PendingRuntime } from "../src/approvals/pendingflow.ts";
-import { audit } from "../src/core/audit.ts";
+import { emitRecord } from "../src/core/events.ts";
 import { makeCanUseTool, renderDetails } from "../src/approvals/permissions.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
 
@@ -93,7 +93,7 @@ test("a stuck item whose run did finish (the audit log says so) is simply done; 
   park(r.scope, "✉️ B\nTo: b@example.com\n\nhi", { to: "b@example.com" });
   await flushPending(r.scope, { ended: true });
   await say(r.scope, "all yes");
-  audit(SEND, "approval-queue-executed", "background", { n: 1, scope: r.scope, result: "ok" });
+  emitRecord(SEND, "approval-queue-executed", "background", { n: 1, scope: r.scope, result: "ok" });
   assert.deepEqual(recoverStuck(r.scope, new Set()), ["#2 may not have run (I restarted while doing it). Reply '#2 yes' to try again."]);
   assert.deepEqual(openItems(r.scope).map((p) => p.n), [2], "#1 finished");
   // the start of the next process tells it through the chat

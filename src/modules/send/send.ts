@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../../core/audit.ts";
+import { emitRecord } from "../../core/events.ts";
 import { isOneEmoji } from "../../core/reaction.ts";
 import { dropShots, loadShot } from "./shots.ts";
 import { setAsking, type Asking } from "../voice/voicenote.ts";
@@ -77,7 +77,7 @@ export async function sendNow(key: string, a: SendArgs): Promise<string> {
   } else {
     const r = loadShot(key, a.picture!);
     if ("problem" in r) {
-      audit("send", "refused", source, { kind: "picture", id: a.picture!.slice(0, 20), conversation: source });
+      emitRecord("send", "refused", source, { kind: "picture", id: a.picture!.slice(0, 20), conversation: source });
       return r.problem;
     }
     content = { kind: "picture", file: r.shot.file, caption: a.caption ?? "", id: r.shot.id, size: r.shot.size };
@@ -88,10 +88,10 @@ export async function sendNow(key: string, a: SendArgs): Promise<string> {
   }
   try {
     const told = await sink(content);
-    audit("send", "sent", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
+    emitRecord("send", "sent", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
     return told;
   } catch (e) {
-    audit("send", "failed", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
+    emitRecord("send", "failed", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
     console.error(`${source}: send ${content.kind} failed:`, (e as Error).message);
     return "Could not send it; carry on.";
   }

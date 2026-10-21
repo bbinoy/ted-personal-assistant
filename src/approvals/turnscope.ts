@@ -18,7 +18,7 @@ const KEEP = 3;
 export class TurnScope {
   readonly key: string;
   readonly member: boolean; // a group or a tenant: not the owner's chat
-  #recent: { text: string; reactedOn?: number }[] = []; // reactedOn: for a reaction, when the message it was on was sent (0: not in the log any more)
+  #recent: { text: string; at: number; reactedOn?: number }[] = []; // reactedOn: for a reaction, when the message it was on was sent (0: not in the log any more)
   #wroteAt = 0; // the person's newest message of any kind (an answer to a question included), when it arrived
   #said = "";
   #derived: Extract<RunProvenance, { kind: "derived" }> | undefined; // (a wake-up's gate-selected task: the person's standing instruction acted on later)
@@ -32,7 +32,7 @@ export class TurnScope {
   // `reactedOn`: for a reaction, when that message was sent. A reaction answers only the message it was on: once the person has written since, the judge is told so.
   say(text: string, assistantSaid?: string, reactedOn?: number): void {
     this.#derived = undefined;
-    this.#recent = [...this.#recent, { text, ...(reactedOn !== undefined ? { reactedOn } : {}) }].slice(-KEEP);
+    this.#recent = [...this.#recent, { text, at: Date.now(), ...(reactedOn !== undefined ? { reactedOn } : {}) }].slice(-KEEP);
     if (assistantSaid !== undefined) this.#said = assistantSaid.slice(0, LIMITS.quote);
   }
 
@@ -63,6 +63,9 @@ export class TurnScope {
     const on = m.reactedOn === 0 ? "an older message" : `a message from ${agoText(now - m.reactedOn)}`;
     return `${m.text} [a reaction answers only the message it was on: this one was on ${on}, and the owner has written since]`;
   }
+
+  // When the person's newest message of this turn arrived (ms), for the journal's "your message at 09:12" (approvals/journalrender.ts); undefined when there is none.
+  lastSaidAt = (): number | undefined => this.#recent.at(-1)?.at;
 
   read = (now = Date.now()): RunProvenance | undefined => {
     if (this.#derived) return this.#derived;

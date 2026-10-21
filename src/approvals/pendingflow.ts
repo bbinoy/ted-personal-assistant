@@ -1,4 +1,5 @@
-import { audit, readAudit, wordless, type Source } from "../core/audit.ts";
+import { readAudit, type Source } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
 import { settings } from "../core/settings.ts";
 import { argsForAudit } from "./auditargs.ts";
@@ -33,9 +34,8 @@ const running = new Set<string>(); // follow-up runs of THIS process: "scope#n"
 const busy = (p: Pending): boolean => !!p.executing || !!p.retry; // approved already: running now, or waiting for the run gate
 const openItems = (scope: string): Pending[] => allItems(scope).filter((p) => !busy(p)); // what a yes can still apply to
 
-// A friend's rows carry no words (audit.ts): the admin's audit log is not hers to put words in.
-const rows = (scope: string, meta: Record<string, unknown>) => (isTenantKey(scope) ? wordless(meta) : meta);
-const log = (p: Pick<Pending, "tool" | "scope" | "source">, decision: string, meta: Record<string, unknown> = {}): void => audit(p.tool, decision, p.source, rows(p.scope, meta));
+// A friend's rows carry no words (core/events.ts audit sink): the admin's audit log is not hers to put words in.
+const log = (p: Pick<Pending, "tool" | "scope" | "source">, decision: string, meta: Record<string, unknown> = {}): void => emit({ type: "tool", tool: p.tool, decision, source: p.source, conv: p.scope, meta });
 
 // ---- parking ----
 

@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { spentToday } from "../core/budget.ts";
 import { cooldownUntil } from "../core/cooldown.ts";
 import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
@@ -80,10 +80,10 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
           if (!send) return reply("This chat platform cannot write first to a person.", true);
           try {
             const { preapproved } = await invitePerson(recipient, send);
-            audit("tenant_invite", "sent", "chat");
+            emitRecord("tenant_invite", "sent", "chat");
             return reply(preapproved ? "The hello is sent. When she answers she is a friend, no further question." : "The hello is sent, but her account could not be recognised, so if she answers the owner is asked as for anyone else.");
           } catch (e) {
-            audit("tenant_invite", "failed", "chat");
+            emitRecord("tenant_invite", "failed", "chat");
             return reply(`The hello was not sent: ${(e as Error).message}`, true);
           }
         },
@@ -96,7 +96,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
           if (!found(id)) return reply("No such tenant.", true);
           setStatus(id, "suspended");
           (deps.drop ?? tenantHooks.drop)?.(id);
-          audit("tenant_status", "suspended", "chat", { tenant: id });
+          emitRecord("tenant_status", "suspended", "chat", { tenant: id });
           return reply(`${id} is suspended.`);
         },
       ),
@@ -104,7 +104,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
         const rec = found(id);
         if (!rec) return reply("No such tenant.", true);
         setStatus(id, "active");
-        audit("tenant_status", "resumed", "chat", { tenant: id });
+        emitRecord("tenant_status", "resumed", "chat", { tenant: id });
         return reply(`${id} can talk to me again.`);
       }),
       tool(
@@ -114,7 +114,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
         async ({ id }) => {
           if (!found(id)) return reply("No such tenant.", true);
           const r = await (deps.remove ?? tenantHooks.remove ?? removeTenant)(id, { drop: (t) => (deps.drop ?? tenantHooks.drop)?.(t), secrets: deps.secrets ?? [(t) => deleteTenantItems(appBao(), t)] });
-          audit("tenant_status", "deleted", "chat", { tenant: id });
+          emitRecord("tenant_status", "deleted", "chat", { tenant: id });
           return reply([`Deleted ${id} and her data${r?.removed.length ? `: ${r.removed.join(", ")}` : ""}.`, ...(r?.failed.length ? [`Not removed (ask again): ${r.failed.join(", ")}.`] : []), ...(r?.manual ? [r.manual] : [])].join(" "));
         },
       ),

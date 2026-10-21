@@ -1,4 +1,4 @@
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { DENY_ALL } from "../approvals/permissions.ts";
 import type { Pending } from "../approvals/pending.ts";
@@ -12,7 +12,7 @@ import { runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
 // permission layer is the exact guard (approvals/pendingexec.ts): the recorded tool with the recorded arguments is allowed, any other call that is not a read is denied.
 
 // The options: the heartbeat run's tools and limits, none of its notes, experts or output format, a short fixed system prompt and the guard.
-export function pendingOptions(conv: Conversation, payer: Payer, item: Pick<Pending, "tool" | "input" | "scope">, onRan: () => void): RunOptions {
+export function pendingOptions(conv: Conversation, payer: Payer, item: Pick<Pending, "tool" | "input" | "scope"> & { n?: number }, onRan: () => void): RunOptions {
   const base = heartbeatOptions(conv, payer, {});
   const guard = exactGuard(item, base.source);
   return {
@@ -39,7 +39,7 @@ export async function runPending(conv: Conversation, item: Pending, may: (conv: 
   try {
     reply = await (io.run ?? ((prompt, opts) => runAgent(prompt, DENY_ALL, opts)))(pendingPrompt(item, approverName(item.scope)), pendingOptions(conv, payer, item, () => void (ran = true)));
   } catch (e) {
-    audit(item.tool, "pending-run-error", "background", { error: (e as Error)?.name ?? "error" });
+    emitRecord(item.tool, "pending-run-error", "background", { error: (e as Error)?.name ?? "error" });
     if (!ran) return { ran: false, line: "the follow-up run failed" };
   }
   const o = outcomeOf(ran, reply?.text);

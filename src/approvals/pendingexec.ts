@@ -1,4 +1,5 @@
-import { audit, type Source } from "../core/audit.ts";
+import type { Source } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { fence } from "../core/fence.ts";
 import { clip, LIMITS } from "../core/sanitize.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
@@ -16,18 +17,18 @@ export interface ExactGuard extends CallGuard {
   matches(tool: string, input: unknown): boolean; // is this the approved call? (the run's onToolSuccess uses it to see that it really ran)
 }
 
-export function exactGuard(approved: { tool: string; input: Record<string, unknown> }, source: Source): ExactGuard {
+export function exactGuard(approved: { tool: string; input: Record<string, unknown>; n?: number }, source: Source): ExactGuard {
   const want = callKey(approved.tool, approved.input);
   const matches = (tool: string, input: unknown): boolean => tool === approved.tool && !!input && typeof input === "object" && callKey(tool, input as Record<string, unknown>) === want;
   return {
     matches,
     async decide(tool, input) {
       if (matches(tool, input)) {
-        audit(tool, "pending-allowed", source);
-        return { kind: "allow", done: true, input: structuredClone(approved.input) }; // (the recorded arguments themselves, whatever order the model wrote them in)
+        emitRecord(tool, "pending-allowed", source);
+        return { kind: "allow", done: true, input: structuredClone(approved.input), ...(approved.n !== undefined ? { approval: { n: approved.n } } : {}) }; // (the recorded arguments themselves, whatever order the model wrote them in)
       }
       if (isReadTool(tool)) return { kind: "defer" }; // looking something up (is the draft still there?) is as always
-      audit(tool, "pending-denied", source);
+      emitRecord(tool, "pending-denied", source);
       return { kind: "deny", reason: tool === approved.tool ? "Those are not the approved arguments, so this call is not allowed. Do not try other arguments; report FAILED." : "Only the one approved call may be made in this run; this is not it. Do not try anything else; report FAILED." };
     },
   };

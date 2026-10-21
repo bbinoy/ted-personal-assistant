@@ -131,6 +131,8 @@ function when(text: string | undefined, end: boolean, zone: string): number | un
   return Number.isFinite(ms) ? ms : "bad";
 }
 
+export { when as whenIn }; // (the journal reader takes since / until the same way: memory/journalread.ts)
+
 // ---- results ----
 
 export interface Hit {

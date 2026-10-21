@@ -32,9 +32,12 @@ const KEEP_AFTER_COMPACTION = 0.7; // compact down to this share of the limit, s
 // silent) and "wake" is the chosen next look (the last one is the state). They are not conversation: everything
 // that reads the log as conversation (chat context, dream, compaction summaries, recent lines, finding the message
 // a reaction was on) skips them; only search_logs and the gate itself see them.
-export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "edit" | "delete";
+// "journal" is the third ledger kind: one line per thing the assistant DID (an archive, a calendar change, a sent mail...) with why and how to undo it, written by the journal sink
+// (core/events.ts), read by the `journal` tool, /today and the daily brief. It carries a category (`cat`: archive, mail, calendar...). Not conversation, so everything above skips it; the
+// F10 search indexes it; compaction keeps it verbatim for JOURNAL_KEEP_DAYS and never folds it into the summary (compactIfNeeded).
+export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
 
-const LEDGER_KINDS: ReadonlySet<Kind> = new Set<Kind>(["action", "wake"]);
+const LEDGER_KINDS: ReadonlySet<Kind> = new Set<Kind>(["action", "wake", "journal"]);
 const isLedger = (kind: Kind) => LEDGER_KINDS.has(kind);
 
 export interface Sent {
@@ -44,12 +47,14 @@ export interface Sent {
   text: string;
   by?: string; // who wrote an inbound message (owner, member, edit): their number or account id
   of?: number; // edit, delete: the timestamp of the message it concerns
+  cat?: string; // journal: what kind of action (archive, mail, calendar, ...)
 }
 
 /** What a log line can carry besides its kind and text. */
 export interface Extra {
   by?: string;
   of?: number;
+  cat?: string;
 }
 
 interface Summary {
@@ -118,7 +123,7 @@ const compacting = new Set<string>(); // files being compacted: one run at a tim
 
 export function recordMessage(kind: Kind, ts: number, text: string, now = new Date(), file: string = FILE, extra: Extra = {}): void {
   if (!text.trim()) return;
-  appendLine(file, JSON.stringify({ ts, at: now.toISOString(), kind, text: text.slice(0, LIMITS.logEntry), ...(extra.by ? { by: extra.by } : {}), ...(extra.of ? { of: extra.of } : {}) } satisfies Sent));
+  appendLine(file, JSON.stringify({ ts, at: now.toISOString(), kind, text: text.slice(0, LIMITS.logEntry), ...(extra.by ? { by: extra.by } : {}), ...(extra.of ? { of: extra.of } : {}), ...(extra.cat ? { cat: extra.cat } : {}) } satisfies Sent));
 }
 
 // ---- edits and deletes ----
@@ -211,9 +216,9 @@ export const recentNotices = (now = new Date()) => noticeLines(readAll().sent, n
 
 // Pure: which of the lines (oldest first, a summary first of all) must go to get under the limit.
 // Returns how many leading lines to fold into the summary, or 0 when the file is small enough.
-export function planCompaction(lines: readonly string[], maxBytes: number): number {
+export function planCompaction(lines: readonly string[], maxBytes: number, reserved = 0): number {
   const size = (l: string) => Buffer.byteLength(l) + 1;
-  let total = lines.reduce((n, l) => n + size(l), 0);
+  let total = lines.reduce((n, l) => n + size(l), 0) + reserved; // (`reserved`: bytes that stay whatever is folded, the journal lines kept verbatim)
   if (total <= maxBytes) return 0;
   const target = maxBytes * KEEP_AFTER_COMPACTION;
   let drop = 0;
@@ -229,7 +234,24 @@ export function limitWords(text: string, words: number): string {
 
 // Fold the oldest messages into the summary when the file is over its limit. Safe to call often;
 // one run at a time. Messages sent while the summary is being written are kept.
-export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.messageLogMb * 1_000_000, file: string = FILE): Promise<boolean> {
+// Journal lines (what the assistant did) are not conversation, so no summary is written about them; they are kept VERBATIM instead, for `journalDays`, so "what did you do last
+// week?" still has its answer after a busy month folded the chat. Pure: of the lines, the journal lines young enough, newest first up to `maxBytes`, back in order.
+export function journalToKeep(dropped: readonly string[], journalDays: number, maxBytes: number, nowMs = Date.now()): string[] {
+  const young = dropped.filter((l) => {
+    const e = parse(l);
+    return e && !isSummary(e) && e.kind === "journal" && nowMs - Date.parse(e.at) < journalDays * 86_400_000;
+  });
+  let used = 0;
+  const keep: string[] = [];
+  for (const l of young.reverse()) {
+    used += Buffer.byteLength(l) + 1;
+    if (used > maxBytes) break;
+    keep.push(l);
+  }
+  return keep.reverse();
+}
+
+export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.messageLogMb * 1_000_000, file: string = FILE, journalDays = settings.journalKeepDays): Promise<boolean> {
   if (compacting.has(file)) return false;
   try {
     if (statSync(dataPath(file)).size <= maxBytes) return false; // the common case: nothing to read
@@ -237,22 +259,29 @@ export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.
     return false;
   }
   const lines = (readText(file) ?? "").split("\n").filter(Boolean);
-  const drop = planCompaction(lines, maxBytes);
+  // The journal lines to keep are chosen first and reserved in the plan, so the file lands at ~70% of the limit WITH them (not 100%, which would compact again on the next append).
+  const keepers = new Set(journalToKeep(lines, journalDays, maxBytes * 0.3));
+  const restAt = lines.flatMap((l, i) => (keepers.has(l) ? [] : [i])); // (by position: two identical lines are two lines)
+  const rest = restAt.map((i) => lines[i]!);
+  const reserved = lines.reduce((n, l) => n + (keepers.has(l) ? Buffer.byteLength(l) + 1 : 0), 0);
+  const drop = planCompaction(rest, maxBytes, reserved);
   if (drop === 0) return false;
   if (skipForCooldown("log summary")) return false; // usage limit: do not fold now (a failed summary would be replaced by a bare count for good)
   compacting.add(file);
   try {
-    const old = lines.slice(0, drop).map(parse).filter((e): e is Sent | Summary => !!e);
+    const old = rest.slice(0, drop).map(parse).filter((e): e is Sent | Summary => !!e);
     const previous = old.find(isSummary);
     const folded = old.filter((e): e is Sent => !isSummary(e) && !isLedger(e.kind)); // ledger lines are not worth a word in the summary
     let text: string;
-    try {
-      text = limitWords(await summarize(previous, folded), settings.summaryWords);
-    } catch (e) {
-      console.error("messages: could not summarize, keeping a count only:", (e as Error).message);
-      text = "older messages, no summary available";
-    }
-    const summary: Summary = {
+    if (folded.length === 0) text = previous?.text ?? ""; // nothing to say about (only ledger or old journal lines go): no model call
+    else
+      try {
+        text = limitWords(await summarize(previous, folded), settings.summaryWords);
+      } catch (e) {
+        console.error("messages: could not summarize, keeping a count only:", (e as Error).message);
+        text = "older messages, no summary available";
+      }
+    const summary: Summary | undefined = folded.length === 0 && !previous ? undefined : {
       kind: "summary",
       at: new Date().toISOString(),
       from: previous?.from ?? folded[0]?.at ?? new Date().toISOString(),
@@ -262,7 +291,10 @@ export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.
     };
     // Re-read: anything appended during the summary comes after the lines we folded.
     const now = (readText(file) ?? "").split("\n").filter(Boolean);
-    writeText(file, [JSON.stringify(summary), ...now.slice(drop)].join("\n") + "\n");
+    // The file again, in order: the summary, then every line that is not folded (the kept journal lines and the rest after the folded ones). Lines appended meanwhile come last.
+    const dropped = new Set(restAt.slice(0, drop));
+    const kept = lines.filter((_, i) => !dropped.has(i));
+    writeText(file, [...(summary ? [JSON.stringify(summary)] : []), ...kept, ...now.slice(lines.length)].join("\n") + "\n");
     return true;
   } finally {
     compacting.delete(file);

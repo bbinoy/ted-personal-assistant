@@ -8,7 +8,7 @@ import {
   type ClipTools,
 } from "@ted-assistant/speech/tts";
 import { z } from "zod";
-import { audit } from "../../core/audit.ts";
+import { emitRecord } from "../../core/events.ts";
 import { askingIn, quotedVoiceNote, voiceNote, voiceNotes, type VoiceNote } from "./voicenote.ts";
 import { oneLine } from "../../core/sanitize.ts";
 import { settings } from "../../core/settings.ts";
@@ -57,7 +57,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
   const root = scopeRoot(d.voiceRoot, convIdOfKey(key));
   const who = askingIn(key) ?? { owner: !group };
   const now = d.now();
-  const refuse = (text: string, reason: string) => (audit("voice", "refused", source, { action: a.action, reason, scope }), text);
+  const refuse = (text: string, reason: string) => (emitRecord("voice", "refused", source, { action: a.action, reason, scope }), text);
   const named = (raw: string | undefined): string => (raw?.trim().toLowerCase() === "normal" ? DEFAULT_VOICE : sanitizeVoiceName(raw ?? ""));
 
   if (a.action === "sources") {
@@ -85,7 +85,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
     } catch (e) {
       return refuse((e as Error).message, "unknown");
     }
-    audit("voice", "switched", source, { name, scope });
+    emitRecord("voice", "switched", source, { name, scope });
     return name === DEFAULT_VOICE ? "Back to the default voice for replies here. Confirm in one line." : `Now using the voice "${name}" for replies here. Confirm in one line (you may reply once in it).`;
   }
 
@@ -99,7 +99,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
     } catch (e) {
       return refuse((e as Error).message, "unknown");
     }
-    audit("voice", "deleted", source, { name, scope });
+    emitRecord("voice", "deleted", source, { name, scope });
     return `Deleted the voice "${name}"${activeVoice(root) === DEFAULT_VOICE ? "; the default voice is active" : ""}. Confirm in one line.`;
   }
 
@@ -109,7 +109,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
     const found = d.groups().find((g) => g.name.trim().toLowerCase() === wanted);
     if (!found) return refuse(`No group named "${label(a.group)}". Known: ${d.groups().map((g) => g.name).join(", ") || "none"}.`, "unknown-group");
     setActiveVoice(scopeRoot(d.voiceRoot, groupConvId(found.id)), DEFAULT_VOICE);
-    audit("voice", "reset-group", source, { scope: "group" });
+    emitRecord("voice", "reset-group", source, { scope: "group" });
     return `${found.name} speaks in the default voice again. Confirm in one line.`;
   }
 
@@ -152,7 +152,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
   } catch (e) {
     return refuse((e as Error).message, "save");
   }
-  audit("voice", "saved", source, { name, seconds: ref.seconds, bytes: ref.wav.length, scope });
+  emitRecord("voice", "saved", source, { name, seconds: ref.seconds, bytes: ref.wav.length, scope });
   const fromName = label(note.byName) || "the sender";
   const surprise = group && (!saved.length || (note.by !== requester));
   return [

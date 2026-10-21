@@ -14,7 +14,7 @@ const B = await import("../src/core/budget.ts");
 const N = await import("../src/core/capnotice.ts");
 const { localDay } = await import("../src/core/pause.ts");
 const I = await import("../src/intake/intakelinks.ts");
-const R = await import("../src/heartbeat/rows.ts");
+const R = await import("../src/core/looks.ts");
 const { dbCheck } = await import("../src/doctor.ts");
 
 const GROUP = "Zm9yLXRoZS1kYi10ZXN0";
@@ -175,7 +175,7 @@ test("the budget notice is once a day, and OVERBUDGET's first time uses the noti
 
 test("looks: appended with the same fields, read oldest first, no words; kv rows hold the tick, the connectors and the tools seen", () => {
   reset();
-  const row = (at: string, over: Partial<import("../src/heartbeat/rows.ts").HeartbeatRow> = {}) => ({ at, kind: "owner" as const, night: false, message: true, sent: 1, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" as const, ...over });
+  const row = (at: string, over: Partial<import("../src/core/looks.ts").HeartbeatRow> = {}) => ({ at, kind: "owner" as const, night: false, message: true, sent: 1, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" as const, ...over });
   R.appendRow(row("2026-10-14T10:00:00.000Z"));
   R.appendRow(row("2026-10-14T11:00:00.000Z", { kind: "group", outcome: "failed", message: false }));
   const { sent: _unused, ...noSent } = row("2026-10-14T12:00:00.000Z", { kind: "tenant", night: true });

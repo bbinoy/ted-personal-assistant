@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { baseUrlProblem, connectionState, INTAKE_LINK_TOOL, INTAKE_STATUS_TOOL, LinkStore, linkUrl, purposesFor, readDone } from "./intakelinks.ts";
 import { purposeOf } from "./intakepurposes.ts";
 import { settings } from "../core/settings.ts";
@@ -40,7 +40,7 @@ export function createIntakeServer(t: { id: string }, links: LinkStore = new Lin
           if (problem) return reply(problem[0]!.toUpperCase() + problem.slice(1) + ".", true);
           const code = links.mint({ tenant: t.id, purpose }, settings.intake.linkMinutes * 60_000);
           if (!code) return reply("Too many setup links are open at the moment; try again in a few minutes.", true);
-          audit("intake_link", "minted", "group", { tenant: t.id, purpose });
+          emitRecord("intake_link", "minted", "group", { tenant: t.id, purpose });
           return reply(`${linkUrl(settings.intake.baseUrl!, code)}\nSingle use, valid ${settings.intake.linkMinutes} minutes, only for "${purposeOf(purpose)!.title}". Send it to her in your reply as it is.`);
         },
         { alwaysLoad: true },

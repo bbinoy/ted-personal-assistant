@@ -1,5 +1,5 @@
 import { prunePayments } from "../modules/browse/payments.ts";
-import { pruneLooks } from "./rows.ts";
+import { pruneLooks } from "../core/looks.ts";
 import { pruneNotices } from "../core/capnotice.ts";
 import { pruneSpend } from "../core/budget.ts";
 import { instanceDb } from "../core/instancedb.ts";

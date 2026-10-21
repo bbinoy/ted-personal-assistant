@@ -1,4 +1,5 @@
-import { audit, type Source } from "../core/audit.ts";
+import type { Source } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { runJudge, withTimeout } from "./approvaljudge.ts";
 import type { JudgeIO } from "./judgespare.ts";
 import { factsOf, validateQuestion } from "./questionfacts.ts";
@@ -47,10 +48,10 @@ export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeou
     const wrong = text ? validateQuestion(text, facts) : "no usable question from the writer";
     if (text && !wrong) return { text, ms: Date.now() - started, by: "model" };
     failure = wrong!;
-    audit(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
+    emitRecord(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
   } catch (e) {
     failure = (e as Error).message;
-    audit(q.tool, "question-failed", q.source, { reason: failure, details: q.details });
+    emitRecord(q.tool, "question-failed", q.source, { reason: failure, details: q.details });
   }
   console.log(`question: not asked (${failure})`);
   return { failure, ms: Date.now() - started };

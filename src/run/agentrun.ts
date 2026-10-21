@@ -1,6 +1,9 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { gated, parked, type RunKind } from "../core/rungate.ts";
-import { audit, type Source } from "../core/audit.ts";
+import { type Source } from "../core/audit.ts";
+import { emitRecord, endRun } from "../core/events.ts";
+import { randomUUID } from "node:crypto";
+import { noteDone } from "../approvals/journalrender.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
 import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
@@ -124,12 +127,20 @@ function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): s
   return builtinModule.rows.filter((r) => (tools ? tools.has(r.tool) && !isOwnerOnly(r.tool) : !!r.offeredTo?.includes(source))).map((r) => r.tool);
 }
 
-export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined, signal?: AbortSignal): Options { // signal: the run's own abort signal, when the caller has it (its browse child is called off with it)
+export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined, signal?: AbortSignal, run: string = randomUUID()): Options { // signal: the run's own abort signal, when the caller has it (its browse child is called off with it)
   // After a successful tool call: announce a note change on the phone (chat), and report the
   // call to whoever asked (the brief captures what it sent).
+  // The notes this run has read so far, in order (read_note reports each; a chat turn reads its notes with the Read tool): the journal says "per your notes: ..." for what it does next (journalrender.ts whyOf).
+  const notesSeen: { file: string; inferred: boolean }[] = [];
+  const noteSeen = (file: string, inferred: boolean): void => {
+    const name = file.split("/").pop()!.replace(/\.md$/, "");
+    if (name && name !== "MEMORY" && !notesSeen.some((n) => n.file === name)) notesSeen.push({ file: name, inferred });
+  };
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
+    if (tool === "Read" && opts.memory?.dir && typeof input.file_path === "string" && input.file_path.startsWith(opts.memory.dir) && input.file_path.endsWith(".md")) noteSeen(input.file_path, false);
     if (opts.memory?.notify) noteWritten(tool, input);
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
+    void noteDone({ conv: conversation, run, source: opts.source, tool, input, response }); // the journal line of an action, with the why the permission layer recorded (core/events.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
   const delegation = opts.experts ? delegationHook(opts.experts.setup, opts.source, { onDelegate: opts.experts.onDelegate }) : undefined;
@@ -185,7 +196,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
   // Whether this run read a note a background look inferred (read_note tells us): the approval judge then does not take a wake-up's task as the person's word (permissions.ts).
   let readInferred = false;
-  const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { inferred?: boolean }) => void (n.inferred && (readInferred = true)) };
+  const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { file?: string; inferred?: boolean }) => void (n.inferred && (readInferred = true), n.file && noteSeen(n.file, !!n.inferred)) };
   const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, stopScope: opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined) }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
@@ -234,7 +245,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
@@ -288,7 +299,7 @@ export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promi
   } catch (e) {
     if (e instanceof RunTimeout) {
       console.error(`run: timed out after ${e.minutes} minutes (${source})`);
-      audit("run", "timeout", source, { minutes: e.minutes });
+      emitRecord("run", "timeout", source, { minutes: e.minutes });
     }
     throw e;
   }
@@ -305,6 +316,7 @@ export async function runAgent(prompt: string, approve: Approve, opts: RunOption
   if (opts.signal?.aborted) callOff();
   opts.signal?.addEventListener("abort", callOff, { once: true });
   let started = false;
+  const run = randomUUID(); // this run's id: what the journal kept for its calls is dropped when it ends
   const forget = opts.stopScope ? onStop(opts.stopScope, (e) => void (started || wait.abort(e))) : () => {};
   return gated(opts.gate ?? "look", () => {
     started = true;
@@ -313,9 +325,9 @@ export async function runAgent(prompt: string, approve: Approve, opts: RunOption
       const off = () => c.controller.abort();
       if (wait.signal.aborted) off();
       wait.signal.addEventListener("abort", off, { once: true });
-      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
+      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
     }, opts.maxMinutes, opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined));
-  }, wait.signal).finally(() => (forget(), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
+  }, wait.signal).finally(() => (forget(), endRun(run), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
     if (opts.sessionConv) forgetUnresumable(opts.sessionConv, e, opts.source);
     throw e;
   });

@@ -1,4 +1,4 @@
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { readJson, writeJson } from "../core/state.ts";
 import { instancePaths } from "../core/convpaths.ts";
 import { ASSISTANT, OWNER } from "../core/settings.ts";
@@ -100,7 +100,7 @@ export function register(who: { aci: string; name?: string; number?: string; tex
   if (s.requests.filter((r) => now - r.at < HOUR).length >= PER_HOUR) return { kind: "drop", why: "too many new requests this hour" };
   const request: Request = { aci, name: cleanName(who.name), ...(who.number && NUMBER.test(who.number) ? { number: who.number } : {}), at: now, held };
   write({ ...s, requests: [...s.requests, request] });
-  audit("tenant_register", "requested", "chat", { id: shortId(request) }); // (no words: not her name, not her text)
+  emitRecord("tenant_register", "requested", "chat", { id: shortId(request) }); // (no words: not her name, not her text)
   return { kind: "new", request };
 }
 
@@ -123,7 +123,7 @@ export function approve(id: string, now = Date.now()): { tenant: TenantRecord; h
   const tenant = addTenant({ aci, name: (r ?? decl[0]!).name }, now);
   if (!tenant) return undefined;
   write({ ...s, requests: s.requests.filter((x) => x.aci !== aci), declined: s.declined.filter((x) => x.aci !== aci) });
-  audit("tenant_register", "approved", "chat", { id: tenant.id });
+  emitRecord("tenant_register", "approved", "chat", { id: tenant.id });
   return { tenant, held: r?.held ?? [], request: r };
 }
 
@@ -134,7 +134,7 @@ export function decline(id: string, now = Date.now()): boolean {
   if (reqs.length !== 1) return false;
   const r = reqs[0]!;
   write({ ...s, requests: s.requests.filter((x) => x !== r), declined: [...s.declined, { aci: r.aci, name: r.name, at: now }].slice(-MAX_DECLINED) });
-  audit("tenant_register", "declined", "chat", { id: shortId(r) });
+  emitRecord("tenant_register", "declined", "chat", { id: shortId(r) });
   return true;
 }
 
@@ -191,6 +191,6 @@ export async function invitePerson(recipient: string, send: (recipient: string, 
   const number = NUMBER.test(to) ? to : undefined;
   if (!aci && !number) return { preapproved: false };
   markInvited({ aci, number }, now);
-  audit("tenant_register", "invited", "chat", { id: aci ? aci.slice(0, 8) : "number" });
+  emitRecord("tenant_register", "invited", "chat", { id: aci ? aci.slice(0, 8) : "number" });
   return { preapproved: true };
 }

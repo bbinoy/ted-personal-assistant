@@ -1,5 +1,6 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { audit, wordless, type Source } from "../core/audit.ts";
+import type { Source } from "../core/audit.ts";
+import { emit, type Why } from "../core/events.ts";
 import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
@@ -12,7 +13,9 @@ import { archivedBy } from "../modules/archivecap.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
+import { callKey } from "../core/callkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
+import { journalable, whyOf } from "./journalrender.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 
@@ -68,10 +71,7 @@ const MAX_FAILED_ASKS = 2;
 const failures = new Map<string, { n: number; at: number }>();
 // The judge's `fix` verdicts (a call held back for wrong arguments) per tool and run: at most this many, then the owner is asked (autojudge.ts).
 const MAX_FIXES = 2;
-// Keys sorted at every depth. (A JSON.stringify key-list replacer also filters NESTED keys, so two events that differ only
-// in start.dateTime had the same key and the second was refused as "already done".)
-const stable = (v: unknown): unknown => (Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, stable(x)])) : v);
-export const callKey = (tool: string, input: Record<string, unknown>) => `${tool} ${JSON.stringify(stable(input))}`;
+export { callKey }; // (core/callkey.ts: the journal pairs a decision with its success by the same key)
 // The state above is kept per conversation: the call's key behind the conversation it runs for.
 const scoped = (conversation: string, key: string) => `${conversation}\u0000${key}`;
 // Entries older than the window can never match again, so they are dropped as new ones come in (neither map can grow without end).
@@ -108,6 +108,7 @@ export interface GuardDecision {
   approved?: (question: string) => void; // ask: told the owner's question after they approve it (the guard keeps it for the rest of the run)
   allowed?: (by: "judge" | "owner") => void; // defer: told when this very call was let through by the judge's auto or by the owner's yes (the guard learns which site the run has been cleared for)
   skipped?: { reason: string; host: string }; // allow: the judge was skipped on purpose and code says why (a navigate to a site the run was already cleared for); recorded as judge-skipped
+  approval?: { n: number }; // allow: the call is the one the person approved as this number in the approval inbox (pendingexec.ts): the journal says "approval #3, you answered yes"
   resolve?: () => Promise<Record<string, unknown> | string>; // the call as it must run, built only now that it is allowed (the card is opened here, after the owner said yes); a string: the call is refused with that reason
 }
 export interface CallGuard {
@@ -126,7 +127,9 @@ export interface JudgeSetup {
   untrusted?: boolean;
   taint?: Taint;
   conversation?: string;
+  run?: string; // this run's id: the journal pairs a call's why with its success within the run only (agentrun.ts)
   seenMail?: { forget: (ids: readonly string[]) => void }; // the look's seen-mail tracker: mail an archive the run cap refused named is not worked through, so it is not marked seen
+  notesSeen?: () => readonly { file: string; inferred: boolean }[]; // the notes this run has read so far, in order, for the journal's "per your notes: ..."
   inferredNoteRead?: () => boolean; // this run has read (read_note) a note a background look inferred (origin: inferred): such a note is untrusted text, so a wake-up is not judged
   // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
   // subagent's), and the type of a subagent by its id (for the audit log).
@@ -168,8 +171,10 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     setup.taint?.mark();
   };
   const conversation = setup.conversation ?? OWNER_KEY;
-  const baseLog: typeof audit = tenant ? (tool, decision, src, meta) => audit(tool, decision, src, wordless(meta)) : audit;
-  const log = baseLog; // a tenant's rows carry no words: the audit log is the admin's (audit.ts)
+  // Every row goes through the event stream (core/events.ts); a tenant's rows carry no words there (the audit log is the admin's). `ev`: on the steps that let a call run, the call and why, which the journal keeps until it succeeds.
+  type Log = (tool: string, decision: string, src: Source, meta?: Record<string, unknown>, ev?: { call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why }) => void;
+  const baseLog: Log = (tool, decision, src, meta, ev) => emit({ type: "tool", tool, decision, source: src, conv: conversation, ...(setup.run ? { run: setup.run } : {}), friend: tenant, ...(meta ? { meta } : {}), ...ev });
+  const log = baseLog;
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
   const runGates = registered().flatMap((m) => (m.floor?.perRun ? [m.floor.perRun()] : [])); // the modules' limits for THIS run (the archive cap)
@@ -190,7 +195,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
   async function decide(tool: string, input: Record<string, unknown>, { signal, agentID }: { signal: AbortSignal; agentID?: string }): Promise<PermissionResult> {
     // A call of an expert subagent (the SDK gives its id): its audit rows say which agent type made it, and the judge reads the run's briefs for the experts next to the provenance.
     const agentType = agentID ? (setup.agentTypeOf?.(agentID) ?? "subagent") : undefined;
-    const log: typeof audit = agentType ? (t, decision, src, meta) => baseLog(t, decision, src, { ...meta, agent_type: agentType }) : baseLog;
+    const log: Log = agentType ? (t, decision, src, meta, ev) => baseLog(t, decision, src, { ...meta, agent_type: agentType }, ev) : baseLog;
     const g = guard ? await guard.decide(tool, input) : undefined;
     if (g?.kind === "deny") {
       log(tool, "deny-guard", source);
@@ -218,7 +223,8 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
       if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
-      log(tool, "allow", source, publicArgs(tool, input) ?? (isReadTool(tool) ? undefined : idsOf(input)));
+      const reads = isReadTool(tool);
+      log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: g?.approval ? undefined : setup.provenance?.(), approval: g?.approval, asked: g?.kind === "allow" && g.done === true }) });
       if (g?.done) remember(scoped(conversation, callKey(tool, input))); // a call the guard let through once-only (the approval inbox's) is done: asking for it again within the window is refused
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
@@ -283,7 +289,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         log(tool, "judge-ask", source, { reason: judged.reason, mode: settings.autoApprove, fix: why, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
       } else log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
       if (mayAutoApprove(settings.autoApprove, judged)) {
-        log(tool, "auto-approved", source, { reason: judged.reason }); // silent on purpose: logged, never announced (npm run report shows them)
+        log(tool, "auto-approved", source, { reason: judged.reason }, !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
         if (readsUntrusted(tool)) markUntrusted();
@@ -318,6 +324,8 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       tool,
       d.approved ? (d.updatedInput ? "ask-approved-modified" : "ask-approved") : d.feedback ? "ask-feedback" : "ask-declined",
       source,
+      undefined,
+      d.approved && !g?.resolve && journalable(tool) ? { call: { input, final: g?.input ?? (g?.redacted ? input : (d.updatedInput ?? input)) }, why: whyOf({ conv: conversation, step: "approved", notes: setup.notesSeen?.(), input, provenance }) } : undefined,
     );
     if (d.approved) clearDeclined(conversation, tool, input, Date.now(), g?.description);
     else if (!d.feedback && !d.expired && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a plain no (not a reply, not silence, not an aborted turn)

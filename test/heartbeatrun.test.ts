@@ -7,7 +7,8 @@ import { group, owner, type Conversation } from "../src/conversation/conversatio
 import { clampLook, parseHeartbeatAnswer, HEARTBEAT_SCHEMA } from "../src/run/rules.ts";
 import { lastLookText, lookInstruction, lookPrompt, preemptible } from "../src/heartbeat/look.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
-import { readRows, type HeartbeatRow } from "../src/heartbeat/rows.ts";
+import { readRows, type HeartbeatRow } from "../src/core/looks.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
@@ -139,7 +140,8 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], { at: DAY.toISOString(), kind: "owner", night: false, message: true, sent: 0, nextCheckMinutes: 45, costUsd: 0.02, toolCalls: 3, archived: 2, delegations: 0, outcome: "posted" });
   assert.doesNotMatch(JSON.stringify(readRows()), /Eve|Friday|waits/, "the row carries no words");
-  assert.ok(seen.recorded.some(([k, t]) => k === "action" && /\[heartbeat\] look: 3 tool call\(s\), 2 mail archived, message sent/.test(t)), "the log gets a counted summary line");
+  assert.ok(!seen.recorded.some(([k]) => k === "action"), "no coarse action line any more: what the look did is one journal line per action, written as each call succeeds (core/events.ts)");
+  assert.deepEqual(readAudit((e) => e.tool === "wake").map((e) => [e.decision, e.source]).at(-1), ["posted", "background"], "the audit row of the look comes from the same event as the metrics row");
 });
 
 test("owner's look: what the run needed a yes for is parked while it works and asked as ONE numbered message when the look ends", async () => {
@@ -188,11 +190,10 @@ test("owner's look: while a chat turn of the conversation is settling, queued or
   assert.deepEqual(seen.runs, ["owner"]);
 });
 
-test("owner's look: the delegations to experts are counted in the row and the log line; the expert's cost is in the run's cost", async () => {
+test("owner's look: the delegations to experts are counted in the row; the expert's cost is in the run's cost", async () => {
   const { w, conv, seen } = rig(() => ({ delegates: 2, calls: ["Agent", "mcp__claude_ai_Notion__notion-fetch", "Agent"] }));
   assert.equal(await w.look(conv, DAY), "silent", "the expert delivered itself; the run answered [[silent]]");
   assert.deepEqual(readRows().map((r) => [r.delegations, r.toolCalls, r.costUsd]), [[2, 3, 0.02]]);
-  assert.ok(seen.recorded.some(([k, t]) => k === "action" && /look: 3 tool call\(s\), 0 mail archived, 2 delegated, no message/.test(t)));
 });
 
 test("owner's look: a run that spoke with the send tool while it worked counts as having said something, even when its final answer is [[silent]]", async () => {
@@ -200,7 +201,6 @@ test("owner's look: a run that spoke with the send tool while it worked counts a
   assert.equal(await w.look(conv, DAY), "posted");
   assert.deepEqual(seen.posted, [], "the final answer had nothing to add: nothing is posted twice");
   assert.deepEqual(readRows().map((r) => [r.message, r.sent, r.outcome]), [[true, 2, "posted"]]);
-  assert.ok(seen.recorded.some(([k, t]) => k === "action" && /message sent/.test(t)));
 });
 
 test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, and at night the clamp holds too", async () => {
@@ -223,7 +223,8 @@ test("owner's look at night: the posts are HELD in code, an urgent one goes at o
   at(t2);
   assert.equal(await w.look(conv, t2), "silent");
   assert.deepEqual(seen.posted, []);
-  assert.ok(seen.recorded.some(([, t]) => /held for later/.test(t)), "the log says it was held, so the next look does not write it again");
+  const held = ledgerEntries().filter((e) => e.kind === "journal" && e.cat === "notice" && /Held a message for later: news #\d+/.test(e.text) && /quiet hours/.test(e.text));
+  assert.ok(held.length >= 2, "the journal says each post was held, with why");
   urgent = true;
   const t3 = min(NIGHT, 22);
   at(t3);
@@ -463,4 +464,16 @@ test("a post dropped as stale does not mark the mail it reported as seen: the ne
   assert.equal(await w.look(conv, DAY), "silent");
   assert.deepEqual(seen.posted, []);
   assert.deepEqual(createSeenMail(conv.convId).unseen([id]), [id], "not committed");
+});
+
+test("owner's look: browser steps leave no line of their own, so the look writes one short journal line; a look that only read writes none", async () => {
+  const { w, conv } = rig(() => ({ calls: ["mcp__browser__browser_click", "mcp__browser__browser_navigate"] }));
+  const before = ledgerEntries().filter((e) => e.kind === "journal").length;
+  await w.look(conv, DAY);
+  const lines = ledgerEntries().filter((e) => e.kind === "journal").slice(before);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0]!.text, /^Looked and took 2 steps that leave no line of their own/);
+  const reads = rig(() => ({ calls: ["mcp__mailbird__list_conversations"] }));
+  await reads.w.look(reads.conv, min(DAY, 60));
+  assert.equal(ledgerEntries().filter((e) => e.kind === "journal").length - before, 1, "reading is not acting");
 });

@@ -10,7 +10,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "rotation-test-"));
 const { settings } = await import("../src/core/settings.ts");
 const { scratchDb } = await import("./scratch.ts");
 const { rotateIfOver, copyTruncateIfOver } = await import("../src/core/rotate.ts");
-const rows = await import("../src/heartbeat/rows.ts");
+const rows = await import("../src/core/looks.ts");
 const { Ledger, capProblem } = await import("../src/modules/browse/payments.ts");
 
 const dir = mkdtempSync(join(tmpdir(), "rot-files-"));

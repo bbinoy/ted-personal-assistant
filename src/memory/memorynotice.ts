@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { isIndex, isNotePath, parseNote, STATUS_PREFIX } from "./notes.ts";
 import { splitReaction } from "../core/reaction.ts";
 
@@ -19,7 +19,7 @@ export function noteWritten(tool: string, input: Record<string, unknown>): void 
   if (file.startsWith(STATUS_PREFIX)) return; // the assistant's own records (a brief's state): not the owner's memory, no notice
   const written = String((tool === "Write" ? input.content : input.new_string) ?? "");
   const body = parseNote(file, written)?.text ?? written.trim();
-  audit("memory_note", tool === "Write" ? "written" : "edited", "chat");
+  emitRecord("memory_note", tool === "Write" ? "written" : "edited", "chat");
   // The note's own description says what it is; fall back to its first line.
   const described = /^description:\s*["']?(.+?)["']?\s*$/m.exec(written.split(/\n---\n/)[0] ?? "")?.[1];
   const gist = (described ?? body.split("\n")[0]!).slice(0, 160);

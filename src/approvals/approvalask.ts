@@ -1,10 +1,10 @@
-import { audit, wordless, type Source } from "../core/audit.ts";
+import type { Source } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
 import * as approvals from "./approvals.ts";
 import { callKey, type Approve } from "./permissions.ts";
 import { recentIn } from "./recentchat.ts";
 import { composeQuestion } from "./approvalmodel.ts";
 import { LIMITS } from "../core/sanitize.ts";
-import { isTenantKey } from "../core/ownerkey.ts";
 import { argsForAudit } from "./auditargs.ts";
 import { questionFooter } from "./questionfooter.ts";
 import { declinedAgo } from "./declined.ts";
@@ -29,7 +29,7 @@ export const sameArgs = (a: Record<string, unknown>, b: Record<string, unknown>)
 // `request` and `compose` are the real ones unless a test supplies its own.
 export function makeApprove(send: (text: string) => Promise<number>, o: { scope: string; source: Source; background?: boolean; queue?: boolean; mayPay?: boolean; request?: typeof approvals.request; compose?: typeof composeQuestion }): Approve {
   const { scope, source, background = false, queue = false, mayPay = false, request = approvals.request, compose = composeQuestion } = o;
-  const rows = (meta: Record<string, unknown>) => (isTenantKey(scope) ? wordless(meta) : meta); // a tenant's rows carry no words (audit.ts)
+  const row = (tool: string, decision: string, meta: Record<string, unknown>): void => emit({ type: "tool", tool, decision, source, conv: scope, meta }); // (a tenant's rows carry no words: core/events.ts)
   return async (description, call, abort, o) => {
     // A card payment is asked in the chat of the person whose card it is only, never in a group and never by an unattended run.
     if (o?.typedYes && (background || !mayPay)) return { approved: false, failure: "a card payment can only be approved in the owner's own chat" };
@@ -37,7 +37,7 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     const parkIt = background && queue && !!o?.queueable && !o?.typedYes;
     // A decline is final until the person asks again (declined.ts): a parked call the owner just said no to is not put to her again.
     if (parkIt && declinedAgo(scope, call.tool, call.input, Date.now()) !== undefined) {
-      audit(call.tool, "approval-queue-declined-before", source, rows({}));
+      row(call.tool, "approval-queue-declined-before", {});
       return { approved: false };
     }
     // One model call writes it, code validates it. No question means no ask and no card: the agent gets the failure as the tool result.
@@ -51,10 +51,10 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     }
     const question = o?.typedYes ? c.text : c.text + questionFooter(description) + (background ? BACKGROUND_HINT : "");
     const asked = structuredClone(call.input);
-    audit(call.tool, "approval-asked", source, rows({ args: argsForAudit(asked), question, details: description, writeMs: c.ms, by: c.by }));
+    row(call.tool, "approval-asked", { args: argsForAudit(asked), question, details: description, writeMs: c.ms, by: c.by });
     const d = await request(send, description, call, abort, { background, question, scope, source, typedYes: o?.typedYes });
     // Post-hoc, never blocking: is what will run what the question was written for?
-    audit(call.tool, "approval-outcome", source, rows({ approved: d.approved, modified: !!d.updatedInput, argsEqual: sameArgs(asked, d.updatedInput ?? call.input), ...(d.feedback ? { feedback: d.feedback.slice(0, LIMITS.line) } : {}), ...(d.updatedInput ? { executed: argsForAudit(d.updatedInput) } : {}) }));
+    row(call.tool, "approval-outcome", { approved: d.approved, modified: !!d.updatedInput, argsEqual: sameArgs(asked, d.updatedInput ?? call.input), ...(d.feedback ? { feedback: d.feedback.slice(0, LIMITS.line) } : {}), ...(d.updatedInput ? { executed: argsForAudit(d.updatedInput) } : {}) });
     return { ...d, question };
   };
 }
