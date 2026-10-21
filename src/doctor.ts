@@ -92,7 +92,7 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
   const keychain = o.keychain ?? macKeychain;
   const problem = baseUrlProblem(cfg);
   const hasToken = await keychain.get(keychainNames(o.prefix ?? settings.openbao.keychainPrefix).intake).then((t) => !!t, () => false);
-  if (!cfg.baseUrl) line(true, `${what}: off`, "INTAKE_BASE_URL is not set: friends are told setup links are not available yet (the owner can still use npm run intake -- link owner profile)");
+  if (!cfg.baseUrl) line(true, `${what}: off`, "INTAKE_BASE_URL is not set: friends are told setup links are not available yet (the owner sets her own details with npm run profile and npm run card)");
   else if (problem) return line(false, what, problem);
   else line(true, what, `links point to ${new URL(cfg.baseUrl).origin}`);
   if (!hasToken) return cfg.baseUrl ? line("warn", "intake write-only token", "this Mac's Keychain has none: npm run openbao -- setup") : undefined;
