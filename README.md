@@ -16,6 +16,7 @@
 - **Groups, where it decides when to speak.** Add Ted to a group and a small model judges each message: Ted always answers when addressed and otherwise joins in only when it fits. Each group has its own notes and history, and Ted brings none of your private data there.
 - **Smart memory and context.** Ted remembers relevant details about you, your preferences and recurring tasks. A nightly dream organises memory. Context is automatically populated with relevant tools, recent messages, memory, and compacted above a threshold.
 - **Smart about asking for permission.** A small model judge decides what is a safe action and when to ask you for confirmation, like sending an email.
+- **People who matter.** Tell Ted about friends and family (where they live, how close, how often you'd like to be in touch). When your calendar or mail shows you are travelling to where they live, Ted sends you one short message with who is there and how long since you last spoke, and offers a draft.
 - **Proactive.** Wakes up every 15min to check if anything needs acting on (via small model judge).
 - **Its own contact.** Give Ted its own Signal account (a name, a picture) and you chat with a contact instead of with yourself.
 - **Pre-configured as a helpful personal assistant.** Comes with skills out of the box to be a helpful personal assistant.
