@@ -216,9 +216,9 @@ export const recentNotices = (now = new Date()) => noticeLines(readAll().sent, n
 
 // Pure: which of the lines (oldest first, a summary first of all) must go to get under the limit.
 // Returns how many leading lines to fold into the summary, or 0 when the file is small enough.
-export function planCompaction(lines: readonly string[], maxBytes: number): number {
+export function planCompaction(lines: readonly string[], maxBytes: number, reserved = 0): number {
   const size = (l: string) => Buffer.byteLength(l) + 1;
-  let total = lines.reduce((n, l) => n + size(l), 0);
+  let total = lines.reduce((n, l) => n + size(l), 0) + reserved; // (`reserved`: bytes that stay whatever is folded, the journal lines kept verbatim)
   if (total <= maxBytes) return 0;
   const target = maxBytes * KEEP_AFTER_COMPACTION;
   let drop = 0;
@@ -235,7 +235,7 @@ export function limitWords(text: string, words: number): string {
 // Fold the oldest messages into the summary when the file is over its limit. Safe to call often;
 // one run at a time. Messages sent while the summary is being written are kept.
 // Journal lines (what the assistant did) are not conversation, so no summary is written about them; they are kept VERBATIM instead, for `journalDays`, so "what did you do last
-// week?" still has its answer after a busy month folded the chat. Pure: of the lines being dropped, the journal lines young enough, newest first up to `maxBytes`, back in order.
+// week?" still has its answer after a busy month folded the chat. Pure: of the lines, the journal lines young enough, newest first up to `maxBytes`, back in order.
 export function journalToKeep(dropped: readonly string[], journalDays: number, maxBytes: number, nowMs = Date.now()): string[] {
   const young = dropped.filter((l) => {
     const e = parse(l);
@@ -259,22 +259,29 @@ export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.
     return false;
   }
   const lines = (readText(file) ?? "").split("\n").filter(Boolean);
-  const drop = planCompaction(lines, maxBytes);
+  // The journal lines to keep are chosen first and reserved in the plan, so the file lands at ~70% of the limit WITH them (not 100%, which would compact again on the next append).
+  const keepers = new Set(journalToKeep(lines, journalDays, maxBytes * 0.3));
+  const restAt = lines.flatMap((l, i) => (keepers.has(l) ? [] : [i])); // (by position: two identical lines are two lines)
+  const rest = restAt.map((i) => lines[i]!);
+  const reserved = lines.reduce((n, l) => n + (keepers.has(l) ? Buffer.byteLength(l) + 1 : 0), 0);
+  const drop = planCompaction(rest, maxBytes, reserved);
   if (drop === 0) return false;
   if (skipForCooldown("log summary")) return false; // usage limit: do not fold now (a failed summary would be replaced by a bare count for good)
   compacting.add(file);
   try {
-    const old = lines.slice(0, drop).map(parse).filter((e): e is Sent | Summary => !!e);
+    const old = rest.slice(0, drop).map(parse).filter((e): e is Sent | Summary => !!e);
     const previous = old.find(isSummary);
     const folded = old.filter((e): e is Sent => !isSummary(e) && !isLedger(e.kind)); // ledger lines are not worth a word in the summary
     let text: string;
-    try {
-      text = limitWords(await summarize(previous, folded), settings.summaryWords);
-    } catch (e) {
-      console.error("messages: could not summarize, keeping a count only:", (e as Error).message);
-      text = "older messages, no summary available";
-    }
-    const summary: Summary = {
+    if (folded.length === 0) text = previous?.text ?? ""; // nothing to say about (only ledger or old journal lines go): no model call
+    else
+      try {
+        text = limitWords(await summarize(previous, folded), settings.summaryWords);
+      } catch (e) {
+        console.error("messages: could not summarize, keeping a count only:", (e as Error).message);
+        text = "older messages, no summary available";
+      }
+    const summary: Summary | undefined = folded.length === 0 && !previous ? undefined : {
       kind: "summary",
       at: new Date().toISOString(),
       from: previous?.from ?? folded[0]?.at ?? new Date().toISOString(),
@@ -284,8 +291,10 @@ export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.
     };
     // Re-read: anything appended during the summary comes after the lines we folded.
     const now = (readText(file) ?? "").split("\n").filter(Boolean);
-    const journal = journalToKeep(lines.slice(0, drop), journalDays, maxBytes * 0.3); // (the journal's share of the file is bounded, so it can never keep the log over its limit)
-    writeText(file, [JSON.stringify(summary), ...journal, ...now.slice(drop)].join("\n") + "\n");
+    // The file again, in order: the summary, then every line that is not folded (the kept journal lines and the rest after the folded ones). Lines appended meanwhile come last.
+    const dropped = new Set(restAt.slice(0, drop));
+    const kept = lines.filter((_, i) => !dropped.has(i));
+    writeText(file, [...(summary ? [JSON.stringify(summary)] : []), ...kept, ...now.slice(lines.length)].join("\n") + "\n");
     return true;
   } finally {
     compacting.delete(file);

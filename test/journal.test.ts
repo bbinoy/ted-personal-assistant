@@ -198,3 +198,29 @@ test("the journal tool: a conversation reads only its own journal, in its zone; 
   assert.match((await notes.instance._registeredTools.journal!.handler({ since: "2026-10-21", until: "2026-10-21" }, {})).content[0]!.text, /Archived “Hers”/);
   assert.ok(readAudit((e) => e.tool === "journal" && e.decision === "read").length >= 2);
 });
+
+test("compaction with heavy journal traffic does not thrash: the plan reserves the kept journal, so the file lands well under the limit and the summariser is called rarely", async () => {
+  const file = logOf();
+  const max = 6000;
+  let calls = 0;
+  const summarize = async () => (calls++, "summary");
+  const base = Date.now() - 86_400_000;
+  let appended = 0;
+  let biggest = 0;
+  for (let i = 0; i < 400; i++) {
+    appended++;
+    if (i % 3 === 0) recordMessage("owner", base + i, `chat message ${i} with a few words in it`, new Date(base + i), file);
+    else recordMessage("journal", base + i, `Archived “Newsletter ${i}”. Why: your message at 09:12; auto-approved by the safety check (routine). Undo: npm run restore c-${i}.`, new Date(base + i), file, { cat: "archive" });
+    await compactIfNeeded(summarize, max, file, 90);
+    biggest = Math.max(biggest, readFileSync(dataPath(file), "utf8").length);
+  }
+  assert.ok(biggest <= max, `never over the limit (${biggest})`);
+  assert.ok(calls <= appended / 8, `the summariser is called rarely (${calls} calls for ${appended} appends)`);
+  assert.ok(calls >= 1);
+  const noChat = logOf();
+  recordMessage("journal", base, "Archived “Only journal”. Why: x.", new Date(base), noChat, { cat: "archive" });
+  let more = 0;
+  for (let i = 0; i < 80; i++) recordMessage("journal", base + i + 1, `Archived “Another ${i}”. Why: ${"y".repeat(60)}.`, new Date(base + i), noChat, { cat: "archive" });
+  await compactIfNeeded(async () => (more++, "s"), 3000, noChat, 90);
+  assert.equal(more, 0, "nothing but journal lines go: no model call for nothing");
+});
