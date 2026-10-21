@@ -13,7 +13,7 @@ import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readText } from "../src/core/state.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
-import { RunTimeout } from "../src/run/ceiling.ts";
+import { RunAborted, RunTimeout } from "../src/run/ceiling.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -24,8 +24,8 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
 
-interface Answer { timeout?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
-function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean } = {}) {
+interface Answer { gate?: Promise<void>; hang?: boolean; timeout?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
+function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; stagger?: { concurrency: number; gapMs: number } } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
   mkdirSync(join(dir, "n"));
@@ -54,6 +54,8 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       seen.provenance.push(extra.provenance);
       const a = answer();
       sends = a.sends ?? 0;
+      if (a.gate) await a.gate;
+      if (a.hang) await new Promise<never>((_, reject) => extra.signal?.addEventListener("abort", () => reject(new RunAborted(String(extra.signal?.reason)))));
       if (a.timeout) throw new RunTimeout(10 * 60_000);
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
@@ -61,6 +63,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30 } };
     },
     notesChangedAt: () => 0,
+    stagger: o.stagger,
     now: () => now,
     guards: { paused: () => !!o.paused, budgetSpent: () => !!o.spent },
   });
@@ -246,6 +249,52 @@ test("a look that times out is a 'timeout' row, posts nothing, and is due again 
       assert.equal(await w.look(conv, min(DAY, 5)), "not-due", "not on the very next minute");
       assert.equal(await w.look(conv, min(DAY, 10)), outcome, "due again after the retry time");
     }
+  } finally {
+    console.error = err;
+  }
+});
+
+test("the Mac slept: a look in flight is stopped, ends as a failed row without a message, and is due again at the very next check", async () => {
+  const err = console.error;
+  console.error = () => {};
+  try {
+    const { w, conv, seen, wakeLine } = rig(() => ({ hang: true }));
+    const look = w.look(conv, DAY);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen.runs, ["owner"]);
+    assert.equal(w.slept(), 1, "one run was stopped");
+    assert.equal(await look, "failed");
+    assert.deepEqual(seen.posted, []);
+    assert.deepEqual(readRows().map((r) => [r.outcome, r.costUsd]), [["failed", 0]]);
+    assert.equal(Date.parse(wakeLine().next), DAY.getTime(), "due at once: the normal due-check restarts it, no 10-minute wait");
+    assert.equal(w.slept(), 0, "nothing in flight, nothing to stop");
+  } finally {
+    console.error = err;
+  }
+});
+
+test("after a sleep the looks start staggered: at most the cap at a time; those that only waited for a slot are dropped and every one is started again by the next tick", async () => {
+  const err = console.error;
+  console.error = () => {};
+  try {
+    const ids = ["hb-s1-0123456789abcdef01", "hb-s2-0123456789abcdef01", "hb-s3-0123456789abcdef01"];
+    for (const id of ids) {
+      mkdirSync(group(id).notesDir, { recursive: true });
+      writeFileSync(join(group(id).notesDir, "scheduling-fact.md"), "Every morning post a fun fact.");
+    }
+    let hang = true;
+    const { w, seen, at } = rig(() => ({ hang }), { groups: ids, stagger: { concurrency: 2, gapMs: 0 } });
+    at(DAY);
+    const tick = w.tick(DAY);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(seen.runs.length, 2, "four conversations are due, two start");
+    hang = false;
+    assert.equal(w.slept(), 2);
+    await tick;
+    assert.equal(seen.runs.length, 2, "the two that waited for a slot were dropped, not started on dead connections");
+    await w.tick(DAY);
+    await w.idle();
+    assert.equal(seen.runs.length, 6, "all four are due again and run");
   } finally {
     console.error = err;
   }

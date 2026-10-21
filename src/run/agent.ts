@@ -30,6 +30,7 @@ export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
+  signal?: AbortSignal; // the look can be stopped from outside (the Mac slept; wake.ts)
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
@@ -70,6 +71,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     model: p.model,
     maxMinutes: settings.heartbeatTimeoutMinutes, // short on purpose: a look that hangs frees its conversation and is retried on the next ticks (an expert it delegates to: expertMaxMinutes in all)
     expertMaxMinutes: settings.expertTimeoutMinutes,
+    signal: extra.signal,
     outputFormat: p.outputSchema,
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),

@@ -16,7 +16,7 @@ import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseAnswer } from "../run/rules.ts";
-import { RunTimeout } from "../run/ceiling.ts";
+import { RunAborted, RunTimeout } from "../run/ceiling.ts";
 import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
@@ -35,6 +35,7 @@ export interface RunExtra {
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
+  signal?: AbortSignal; // aborted when the Mac slept (abortAll): the run stops and the look is due again at once
 }
 
 export interface HeartbeatDeps {
@@ -88,6 +89,7 @@ export const lookPrompt = (now: Date, instruction: string, tail: readonly string
 
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
+  const inflight = new Set<AbortController>(); // the looks that are running now
   const file = deps.rowsFile ?? HEARTBEAT_LOG;
 
   // One look of one conversation. Returns what happened (for the log and tests).
@@ -114,6 +116,9 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const instruction = lookInstruction(now, st.wake?.looked, looker);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let timedOut = false;
+    let interrupted = false;
+    const stop = new AbortController();
+    inflight.add(stop);
     try {
       reply = await pipeline.sendWhile(
         conv,
@@ -121,6 +126,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
+            signal: stop.signal,
             onDelegate: () => void delegations++,
             onToolSuccess: (tool) => {
               toolCalls++;
@@ -131,7 +137,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       );
     } catch (e) {
       timedOut = e instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
-      console.error(`heartbeat: the ${conv.kind} run ${timedOut ? "timed out" : "failed"}:`, (e as Error).message);
+      interrupted = e instanceof RunAborted; // stopped from outside (abortAll): not a failure of the look
+      console.error(`heartbeat: the ${conv.kind} run ${timedOut ? "timed out" : interrupted ? "was stopped" : "failed"}:`, (e as Error).message);
+    } finally {
+      inflight.delete(stop);
     }
 
     const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
@@ -151,9 +160,17 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
     audit("wake", outcome, onLogin(conv) ? "background" : "group"); // (a friend's rows carry no words: permissions.ts)
     appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
-    recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
+    if (interrupted) recordWake(pipeline, conv, 0, now, (m) => Number(m)); // it was cut off, not decided: due again at the next due-check (no 10-minute minimum)
+    else recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }
 
-  return { look };
+  // Stops every look that is running (the Mac slept: their connections are dead). Each one ends as a failed row and is due again at once.
+  const abortAll = (reason: string): number => {
+    const n = inflight.size;
+    for (const c of inflight) c.abort(reason);
+    return n;
+  };
+
+  return { look, abortAll };
 }

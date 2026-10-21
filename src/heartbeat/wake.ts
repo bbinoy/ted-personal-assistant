@@ -9,6 +9,7 @@ import { ledgerEntries, logSignature } from "../core/messages.ts";
 import { isPaused } from "../core/pause.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
+import { createStagger, type StaggerOptions } from "./stagger.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
@@ -33,6 +34,7 @@ interface WakeDeps {
   tenantIds?: () => string[]; // active tenants (default: the registry)
   notesChangedAt?: (dir: string) => number;
   now?: () => Date;
+  stagger?: StaggerOptions; // tests; default: LOOK_CONCURRENCY at a time, LOOK_STAGGER_MS apart
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
 }
 
@@ -78,6 +80,8 @@ export function createWakeups(deps: WakeDeps) {
     return st;
   }
 
+  const stagger = createStagger(deps.stagger ?? { concurrency: settings.lookConcurrency, gapMs: settings.lookStaggerMs });
+  let epoch = 0; // raised when the Mac sleeps: looks that were only waiting for a slot are dropped (still due; the next tick starts them)
   const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed });
 
   // One conversation, one look. Returns what happened (for the log and tests).
@@ -113,8 +117,9 @@ export function createWakeups(deps: WakeDeps) {
         quietCompact(conv);
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
+        const mine = epoch;
         try {
-          await look(conv, clock());
+          await stagger.run(async () => (mine === epoch ? look(conv, clock()) : "restarted"));
         } catch (e) {
           console.error(`wake: ${conv.kind} look failed:`, (e as Error).message);
         } finally {
@@ -124,5 +129,12 @@ export function createWakeups(deps: WakeDeps) {
     );
   }
 
-  return { tick, look, idle };
+  // The Mac slept (heartbeat.ts): the connections of every look in flight are dead, so they are stopped, and those still waiting for a slot are dropped. All of them are
+  // still due and start again, staggered, on the next tick. Returns how many runs were stopped.
+  function slept(): number {
+    epoch++;
+    return heartbeat.abortAll("the Mac slept");
+  }
+
+  return { tick, look, idle, slept };
 }

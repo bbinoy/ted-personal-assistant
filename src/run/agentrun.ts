@@ -6,7 +6,7 @@ import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "../tenant
 import { browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "../modules/browse/browseguard.ts";
 import { hiddenBrowserTools } from "../modules/browse/browserules.ts";
-import { pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
+import { pausing, RunAborted, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
@@ -63,6 +63,7 @@ export interface RunOptions {
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
   maxMinutes?: number; // a wall-clock ceiling of its own (the browse run, a heartbeat look), else the chat or background one
+  signal?: AbortSignal; // the code that started the run can stop it (a heartbeat look when the Mac slept): the query is aborted and the run rejects with RunAborted
   expertMaxMinutes?: number; // a heartbeat look: when it delegates to an expert the whole ceiling becomes this many minutes (never less than maxMinutes)
   // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
   // read at every call (a warm process is built before the message that uses it arrives): a job passes `() => ({ kind: "standing", task })` with its fixed text, an
@@ -269,11 +270,15 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
 // The one place every run passes: chat, groups, wake-ups, brief, heartbeat run, the mail handler. On the ceiling the query is aborted, the
 // timeout is logged and audited, and the rejection takes the usual error path (a notice, rate-limited in groups; the queue moves on).
 // A chat run (the owner's chat and groups alike) and a background run have their own limits (settings.ts).
-export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number): Promise<T> {
+export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number, signal?: AbortSignal): Promise<T> {
   const chat = source === "chat" || source === "group";
   try {
-    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run);
+    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run, signal);
   } catch (e) {
+    if (e instanceof RunAborted) {
+      console.error(`run: ${e.message} (${source})`);
+      audit("run", "aborted", source, { reason: e.reason.slice(0, 60) });
+    }
     if (e instanceof RunTimeout) {
       console.error(`run: timed out after ${e.minutes} minutes (${source})`);
       audit("run", "timeout", source, { minutes: e.minutes });
@@ -290,7 +295,7 @@ export async function runAgent(prompt: string, approve: Approve, opts: RunOption
     const experts = opts.experts && opts.expertMaxMinutes ? { ...opts.experts, onDelegate: (d: Delegation) => (c.extend(opts.expertMaxMinutes! * 60_000), opts.experts!.onDelegate?.(d)) } : opts.experts;
     const o = experts === opts.experts ? opts : { ...opts, experts };
     return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), o, resume), abortController: c.controller } }), opts, previousCost);
-  }, opts.maxMinutes).catch((e) => {
+  }, opts.maxMinutes, opts.signal).catch((e) => {
     if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);
     throw e;
   });

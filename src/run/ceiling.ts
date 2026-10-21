@@ -12,6 +12,15 @@ export class RunTimeout extends Error {
   }
 }
 
+// The run was stopped from outside before its time (the Mac slept: the sockets of the model call are dead). Not a timeout: the caller restarts the work.
+export class RunAborted extends Error {
+  readonly reason: string;
+  constructor(reason: string) {
+    super(`run aborted: ${reason}`);
+    this.reason = reason;
+  }
+}
+
 export interface Ceiling {
   readonly controller: AbortController;
   readonly signal: AbortSignal;
@@ -19,7 +28,7 @@ export interface Ceiling {
   extend(totalMs: number): void; // the whole allowance becomes `totalMs` if that is more than it is now (an expert the heartbeat look delegates to gets more time); never shortens it
 }
 
-export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise<T>): Promise<T> {
+export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise<T>, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController();
   let total = maxMs;
   let left = maxMs;
@@ -55,6 +64,12 @@ export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise
     total = totalMs;
     if (running) arm();
   };
+  const stop = () => {
+    controller.abort();
+    fire(new RunAborted(String(signal?.reason ?? "stopped")));
+  };
+  if (signal?.aborted) stop();
+  else signal?.addEventListener("abort", stop, { once: true });
   arm();
   const running = run({ controller, signal: controller.signal, pause, extend });
   running.catch(() => {}); // after a timeout the abandoned run may still fail; that is not news
@@ -63,6 +78,7 @@ export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise
   } finally {
     finished = true;
     clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
   }
 }
 

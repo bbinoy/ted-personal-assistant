@@ -199,6 +199,10 @@ export function loadSettings(env: Env) {
     // on the next ticks. An expert the look delegates to may take longer: the look's whole allowance then becomes EXPERT_TIMEOUT_MINUTES. Approval waits are not counted (ceiling.ts).
     heartbeatTimeoutMinutes: num(env, "HEARTBEAT_TIMEOUT_MINUTES", 10, 1, 240),
     expertTimeoutMinutes: num(env, "EXPERT_TIMEOUT_MINUTES", 20, 1, 240),
+    // Looks of different conversations start staggered, not all at once (src/heartbeat/stagger.ts): at most LOOK_CONCURRENCY at the same time and LOOK_STAGGER_MS apart
+    // (a Mac that wakes from sleep used to start a dozen runs in the same second).
+    lookConcurrency: num(env, "LOOK_CONCURRENCY", 3, 1, 50),
+    lookStaggerMs: num(env, "LOOK_STAGGER_MS", 2000, 0, 60_000),
 
     // The browser sub-task (src/modules/browse/browse.ts): a separate run that opens pages, reads them and fills forms for the owner's chat, background
     // jobs and groups. Pages are untrusted; the run holds no mail, calendar or notes. A commit step (book, buy, send...) asks the owner,
