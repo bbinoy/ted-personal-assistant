@@ -44,8 +44,10 @@ import { isRefusal, mayRun } from "./tenants/payer.ts";
 import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
-import { markOwnerTold, ownerNotice } from "./core/migrate.ts";
+import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
+import { writeAgentPid } from "./core/migrateservices.ts";
 
+writeAgentPid(settings.dataDir); // so `npm run migrate` knows the agent is up
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
 ensureNotesDir(); // first run: conversations/owner/notes/, where the chat agent keeps its notes
@@ -235,6 +237,8 @@ warmChat();
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 const reorganised = ownerNotice(settings.dataDir); // the data folder was moved to the current layout at this start (or an earlier one whose notice could not be sent): she is told once
 if (reorganised) void say(reorganised).then(() => markOwnerTold(settings.dataDir)).catch(() => {});
+const late = lateNotice(settings.dataDir); // files an old version wrote after the move: merged or set aside (core/migrate.ts reconcile), named to her once
+if (late) void say(late).then(() => markLateTold(settings.dataDir)).catch(() => {});
 replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
 void recoverAtStart([OWNER_KEY, ...(settings.tenants ? listTenants().filter((r) => r.status === "active").map((r) => tenantKey(r.id)) : [])]); // an approved item whose run was cut short by the stop is told once (pendingflow.ts recoverStuck)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again

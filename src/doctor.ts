@@ -33,7 +33,7 @@ import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
 import { dataPath, readJson, readText } from "./core/state.ts";
 import { convPaths, conversationsDir, instancePaths, LAYOUT_VERSION, logPaths, OWNER_CONV } from "./core/convpaths.ts";
-import { layoutState, readVersion, refusal } from "./core/migrate.ts";
+import { layoutState, readVersion, refusal, stragglers } from "./core/migrate.ts";
 
 type Line = DoctorLine;
 
@@ -275,6 +275,10 @@ export async function doctor() {
   const layoutVersion = readVersion(settings.dataDir);
   if (legacy) line(false, "data layout", "old data layout: start the agent once or run `npm run migrate`; `npm run migrate -- --dry-run` shows the plan. Checks that need the new layout are skipped");
   else line(layoutVersion === LAYOUT_VERSION ? true : "warn", "data layout", layoutVersion === LAYOUT_VERSION ? `version ${layoutVersion}: instance/, conversations/<id>/, logs/` : "not stamped yet: the first start does it (or run npm run migrate)");
+  if (!legacy) {
+    const late = stragglers(settings.dataDir).map((o) => o.from.slice(settings.dataDir.length + 1));
+    if (late.length) line(false, "files in the old places", `${late.length} path(s) an older version wrote after the move (${late.slice(0, 5).join(", ")}); restart the agent: it merges the logs and sets the rest aside in instance/migration-orphans/`);
+  }
   for (const [name, dir] of [["instance", instancePaths().dir], ["conversations", conversationsDir()], ["logs", logPaths().dir]] as const) {
     if (legacy || !existsSync(dir)) continue;
     const loose = readdirSync(dir).filter((f) => (statSync(`${dir}/${f}`).mode & 0o077) !== 0 && statSync(`${dir}/${f}`).isFile());

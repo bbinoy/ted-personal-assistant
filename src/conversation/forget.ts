@@ -36,6 +36,7 @@ export interface GroupForgetDeps {
 /** A group by its folder name (group-<16 hex>) or by its name (exactly, any case). An error sentence when none or several. */
 export function resolveGroup(ref: string): { conv: ConvId; name?: string; id?: string } | { error: string } {
   const r = ref.trim();
+  if (r === "") return { error: "Give the group's folder name or its name." };
   const known = listGroups();
   if (isConvId(r) && r.startsWith("group-")) {
     const g = known.find((x) => x.convId === r);

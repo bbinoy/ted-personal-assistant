@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { closeSync, copyFileSync, cpSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import {
   convIdOfKey, friendConvId, groupConvId, hashOf, isConvId, LAYOUT_VERSION, layout, legacyLayout, tenantIdOfConv, type ConvId,
 } from "./convpaths.ts";
+import { isInside } from "./contain.ts";
 import { writeFileAtomic } from "./state.ts";
 
 // The move from the old layout (state/, memory/, tenants/, logs/ by kind of file) to layout version 2 (instance/, conversations/<convId>/, logs/): core/convpaths.ts describes both.
@@ -28,6 +30,8 @@ export interface Op {
   from: string;
   to: string; // for a split: the old file's orphan copy of what belongs to nobody (written only when there is such a remainder)
   rekey?: "group-cost" | "cap-notices";
+  cache?: true; // a cache folder: merged into one that exists, duplicates discarded, never a conflict
+  copying?: true; // a cross-device copy was started: a partial target is deleted and copied again on resume
   friends?: string[]; // split-sources: the friends (tenant ids) and groups (folder names) that exist, so a key is mapped only to a conversation that is there
   groups?: ConvId[];
   note?: string;
@@ -39,6 +43,7 @@ export interface Plan {
   root: string;
   ops: Op[];
   backup: string; // where the originals of what is REWRITTEN (not moved) are copied first: instance/migration-backup/<time>/<old path>
+  aside?: string[]; // old paths (relative to the data folder) that were set aside instead of moved
   completedAt?: string;
   ownerTold?: boolean; // the owner has been told once, in her chat, that storage was reorganised
 }
@@ -65,6 +70,7 @@ export const realFs: FsView = {
 const TENANT_ID = /^[a-z][a-z0-9_-]{0,31}$/;
 const SIDE = /^(?:\d+|corrupt-.+)$/; // the rotated generations (.1, .2) and the moved-aside copies (.corrupt-<time>) of a file travel with it
 const HASH16 = /^[0-9a-f]{16}$/;
+const APPEND = /^(?:messages|payments|heartbeat)\.jsonl(?:\.\d+)?$/; // append-only logs: two writers' lines are merged, not one set aside
 
 // ---- the plan ----
 
@@ -100,13 +106,19 @@ export function planMigration(root: string, fs: FsView = realFs, now: Date = new
   const groupConvs = new Set<ConvId>();
   const dupes: string[] = [];
   const groupsListed = fs.list(old.groupsDir);
+  const claims = new Map<ConvId, { name: string; own: boolean }[]>(); // convId -> the old folders that say they are that group's
   for (const e of groupsListed.filter((x) => x.dir).sort((a, b) => a.name.localeCompare(b.name))) {
     const meta = fs.readJson(old.groupMeta(e.name)) as { id?: unknown } | undefined;
     if (!meta || typeof meta.id !== "string" || meta.id === "") continue;
     const conv = groupConvId(meta.id);
-    if (groupConvs.has(conv)) { dupes.push(e.name); continue; } // two old folders for one group: the first keeps the name, the other is kept apart
+    claims.set(conv, [...(claims.get(conv) ?? []), { name: e.name, own: e.name === createHash("sha256").update(meta.id).digest("hex").slice(0, 12) }]);
+  }
+  for (const [conv, list] of claims) {
+    // two old folders for one group (one was made by someone grinding ids onto another's hash): the folder named by the group's own id wins, else the first; the others are kept apart
+    const keep = list.find((c) => c.own) ?? list[0]!;
     groupConvs.add(conv);
-    groupDirs.set(e.name, conv);
+    groupDirs.set(keep.name, conv);
+    for (const c of list) if (c !== keep) dupes.push(c.name);
   }
   const hashToConv = new Map<string, ConvId>(); // the 16 hex of an old pending file or voice folder -> the conversation it was of
   for (const c of groupConvs) hashToConv.set(c.slice("group-".length), c);
@@ -175,6 +187,9 @@ export function planMigration(root: string, fs: FsView = realFs, now: Date = new
       for (const e of fs.list(dirname(m.from))) if (e.name.startsWith(`${basename(m.from)}.`) && SIDE.test(e.name.slice(basename(m.from).length + 1))) move(join(dirname(m.from), e.name), `${m.to}${e.name.slice(basename(m.from).length)}`);
     } else moveWithSides(m.from, m.to);
   }
+  // a cache is merged into a folder the new code made first (npm run setup:browse puts the Chromium in instance/browse/browsers before the first start): never a conflict
+  for (const o of ops) if (o.kind === "move" && (o.to === L.instance.browse || o.to === L.instance.shore)) o.cache = true;
+  for (const e of fs.list(old.state)) if (!e.dir && /^payments-\d{4}(-\d+)?\.jsonl$/.test(e.name)) move(join(old.state, e.name), join(L.instance.dir, e.name), "an archive of the payment ledger"); // (never deleted, so never an orphan)
   // 7. what is left in state/ and memory/ and belongs to nobody we know: kept apart, listed, never dropped
   const stays = new Set(old.staysInState);
   for (const e of fs.list(old.state)) {
@@ -242,6 +257,7 @@ export interface MigrateOptions {
   log?: (line: string) => void;
   now?: () => Date;
   crashAfter?: number; // tests: throw after this many steps have been recorded, as a crash would
+  late?: boolean; // after the stamp: a conflict is set aside, never a reason to stop the agent
   forceCopy?: boolean; // tests: take the cross-device path (copy, verify, delete) for every move
 }
 export interface MigrateResult {
@@ -290,7 +306,7 @@ function fsyncTree(p: string): void {
 }
 
 /** Moves one thing. rename when it can; across devices copy, fsync, verify, then delete. Returns what happened. */
-function moveOne(from: string, to: string, forceCopy = false): "moved" | "copied" {
+function moveOne(from: string, to: string, forceCopy = false, beforeCopy?: () => void): "moved" | "copied" {
   mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
   try {
     if (forceCopy) throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
@@ -300,6 +316,7 @@ function moveOne(from: string, to: string, forceCopy = false): "moved" | "copied
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EXDEV") throw e;
   }
+  beforeCopy?.(); // (the plan records that a copy began: a crash leaves a partial target that a resume deletes and copies again)
   if (lstatSync(from).isDirectory()) cpSync(from, to, { recursive: true, errorOnExist: true, force: false });
   else copyFileSync(from, to);
   fsyncTree(to);
@@ -357,6 +374,8 @@ class Mover {
   readonly o: MigrateOptions;
   readonly backupDir: string;
   backedUp = 0;
+  save: (() => void) | undefined; // records the plan (a copy has begun)
+  merged: string[] = [];
   constructor(root: string, o: MigrateOptions, backupDir: string) {
     this.root = root;
     this.o = o;
@@ -380,7 +399,7 @@ class Mover {
   setAside(from: string, why: string): void {
     const to = orphanPath(this.root, from);
     moveOne(from, to, this.o.forceCopy);
-    this.orphans.push(from);
+    this.orphans.push(relative(this.root, from));
     this.log(`migrate: set aside ${relative(this.root, from)} -> ${relative(this.root, to)} (${why})`);
   }
 
@@ -393,20 +412,64 @@ class Mover {
   private move(op: Op): void {
     const { from, to } = op;
     if (!exists(from)) return; // done before (a resumed run), or never there
+    const began = () => {
+      op.copying = true;
+      this.save?.();
+    };
+    if (op.copying && exists(to)) rmSync(to, { recursive: true, force: true }); // a copy was begun and not finished: the partial target is not data, the source is
     if (op.kind === "orphan") {
       if (exists(to) && sameTree(from, to)) return void rmSync(from, { recursive: true, force: true }); // an earlier, interrupted copy that verifies
-      this.orphans.push(from);
+      this.orphans.push(relative(this.root, from));
       this.log(`migrate: set aside ${relative(this.root, from)} (${op.note ?? "orphan"})`);
-      moveOne(from, orphanPath(this.root, from), this.o.forceCopy);
+      moveOne(from, orphanPath(this.root, from), this.o.forceCopy, began);
       return;
     }
     if (exists(to)) {
+      if (op.cache) return this.mergeCache(from, to);
       const dirs = lstatSync(from).isDirectory() && lstatSync(to).isDirectory();
       if (dirs && emptyTree(to)) rmSync(to, { recursive: true, force: true }); // an empty skeleton made at start-up
       else if (sameTree(from, to)) return void rmSync(from, { recursive: true, force: true }); // the same content is there already: the source is a verified duplicate
-      else return this.setAside(from, `${relative(this.root, to)} exists with other content`);
+      else if (!dirs && APPEND.test(basename(to)) && lstatSync(from).isFile() && lstatSync(to).isFile()) return this.mergeLines(from, to); // a log two writers appended to: both keep their lines
+      else if (!this.o.late && isInside(to, layout(this.root).conversations)) {
+        throw new Error(`${relative(this.root, from)} and ${relative(this.root, to)} both exist with different content, and it is a conversation's data, so nothing is overwritten and the migration stops here. Keep the one that is right (move the other out of the way), then start again: it continues from instance/migration-plan.json.`);
+      } else return this.setAside(from, `${relative(this.root, to)} exists with other content`);
     }
-    moveOne(from, to, this.o.forceCopy);
+    moveOne(from, to, this.o.forceCopy, began);
+  }
+
+  // A cache (the downloaded browser, the shore outlines): what the new folder lacks is moved in, what it has already is discarded. Never a conflict.
+  private mergeCache(from: string, to: string): void {
+    if (lstatSync(from).isDirectory() && lstatSync(to).isDirectory()) {
+      for (const n of readdirSync(from)) {
+        if (!exists(join(to, n))) moveOne(join(from, n), join(to, n), this.o.forceCopy);
+        else this.mergeCache(join(from, n), join(to, n));
+      }
+    }
+    rmSync(from, { recursive: true, force: true });
+  }
+
+  // Two files of lines (a history, a ledger): the union, identical lines once, in time order where the lines say when (a line without a time keeps its neighbour's).
+  private mergeLines(from: string, to: string): void {
+    const lines = (p: string) => readFileSync(p, "utf8").split("\n").filter((l) => l !== "");
+    const all = [...new Set([...lines(to), ...lines(from)])];
+    const when = (l: string): number | undefined => {
+      try {
+        const o = JSON.parse(l) as { at?: unknown; ts?: unknown };
+        const t = typeof o.at === "string" ? Date.parse(o.at) : typeof o.ts === "number" ? o.ts : typeof o.ts === "string" ? Date.parse(o.ts) : NaN;
+        return Number.isFinite(t) ? t : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    let last = -Infinity;
+    const keyed = all.map((l, i) => ({ l, i, k: (last = when(l) ?? last) }));
+    const ordered = keyed.some((x) => when(x.l) !== undefined) ? keyed.sort((a, b) => a.k - b.k || a.i - b.i) : keyed;
+    const out = `${ordered.map((x) => x.l).join("\n")}\n`;
+    writeFileAtomic(to, out);
+    if (readFileSync(to, "utf8") !== out) throw new Error(`${to} did not verify`);
+    rmSync(from, { force: true });
+    this.merged.push(relative(this.root, from));
+    this.log(`migrate: merged the lines of ${relative(this.root, from)} into ${relative(this.root, to)}`);
   }
 
   private readTransformWrite(op: Op, f: (v: unknown) => unknown): void {
@@ -467,7 +530,8 @@ class Mover {
       const target = layout(this.root).conv(c).voiceSources;
       const text = JSON.stringify(data);
       if (exists(target) && readFileSync(target, "utf8") !== text) {
-        rest.notes![c] = data.notes; // that conversation has sources already (other content): these are set aside whole, not merged
+        rest.notes![c] = data.notes; // that conversation has sources already (other content): these are set aside whole (notes and quotes), not merged
+        rest.quotes![c] = data.quotes;
         continue;
       }
       writeFileAtomic(target, text);
@@ -476,7 +540,7 @@ class Mover {
     if (Object.keys(rest.notes!).length || Object.keys(rest.quotes!).length) {
       const aside = orphanPath(this.root, from);
       writeFileAtomic(aside, JSON.stringify(rest));
-      this.orphans.push(from);
+      this.orphans.push(relative(this.root, from));
       this.log(`migrate: voice-note sources of conversations that are not here set aside in ${relative(this.root, aside)}`);
     }
     rmSync(from, { force: true });
@@ -485,27 +549,68 @@ class Mover {
 
 // ---- the lock: one process migrates at a time ----
 
+const startOf = (pid: number): string => {
+  try {
+    return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
+};
+const LOCK_GRACE_MS = 10_000;
+
+/** Is this lock held by a process that is still the one that took it? A lock with no readable pid is a new one being made (alive) for 10 s; a pid that now has another start time was reused. */
+function lockHeld(lock: string): boolean {
+  let text: string;
+  try {
+    text = readFileSync(join(lock, "pid"), "utf8");
+  } catch {
+    try {
+      return Date.now() - statSync(lock).mtimeMs < LOCK_GRACE_MS;
+    } catch {
+      return false;
+    }
+  }
+  const [first, ...rest] = text.split("\n");
+  const pid = Number(first);
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
+  try {
+    process.kill(pid, 0);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EPERM") return false; // no such process
+  }
+  const recorded = rest.join("\n").trim();
+  const now = recorded ? startOf(pid) : "";
+  return !(recorded && now && recorded !== now); // alive, unless it started at another time than the one that took the lock
+}
+
 function takeLock(root: string, wait = 0): () => void {
   const lock = layout(root).instance.migrationLock;
   mkdirSync(dirname(lock), { recursive: true, mode: 0o700 });
   const until = Date.now() + wait;
+  const mine = `${lock}.${process.pid}.tmp`;
   for (;;) {
+    // made complete (with its pid) in a temp folder and renamed into place: the rename succeeds for one process only, and nobody ever sees a lock without its pid
+    rmSync(mine, { recursive: true, force: true });
+    mkdirSync(mine, { mode: 0o700 });
+    writeFileSync(join(mine, "pid"), `${process.pid}\n${startOf(process.pid)}`);
     try {
-      mkdirSync(lock, { mode: 0o700 });
-      writeFileSync(join(lock, "pid"), String(process.pid));
+      renameSync(mine, lock);
       return () => rmSync(lock, { recursive: true, force: true });
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      let alive = false;
-      try {
-        const pid = Number(readFileSync(join(lock, "pid"), "utf8"));
-        process.kill(pid, 0);
-        alive = pid !== process.pid;
-      } catch { /* no pid file or no such process: stale */ }
-      if (!alive) { rmSync(lock, { recursive: true, force: true }); continue; }
-      if (Date.now() >= until) throw new Error("another process is migrating the data folder right now; try again in a minute");
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+      rmSync(mine, { recursive: true, force: true });
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST" && code !== "ENOTEMPTY") throw e;
     }
+    if (!lockHeld(lock)) {
+      const gone = `${lock}.stale.${process.pid}`;
+      try {
+        renameSync(lock, gone); // (taken away whole: only one process can)
+        rmSync(gone, { recursive: true, force: true });
+      } catch { /* someone else did */ }
+      continue;
+    }
+    if (Date.now() >= until) throw new Error(`another process is migrating the data folder right now (lock: ${lock}); try again in a minute, or remove that folder if no migration is running`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
   }
 }
 
@@ -520,18 +625,22 @@ function loadPlan(root: string): Plan | undefined {
 const savePlan = (root: string, plan: Plan): void => writeFileAtomic(layout(root).instance.migrationPlan, `${JSON.stringify(plan, null, 1)}\n`);
 
 /** After the moves: the old folders that are empty now go (rmdir only: a folder with anything in it stays). */
-function sweepEmpty(root: string, plan: Plan): void {
+function sweepEmpty(root: string, ops: readonly Op[]): void {
   const keep = new Set([layout(root).root, layout(root).logs.dir]);
   const dirs = new Set<string>();
-  for (const o of plan.ops) {
+  for (const o of ops) {
     let p = o.from;
     while (p !== dirname(p) && !keep.has(p) && p.startsWith(layout(root).root + sep)) { dirs.add(p); p = dirname(p); }
   }
   for (const d of [...dirs].sort((a, b) => b.length - a.length)) try { rmdirSync(d); } catch { /* not empty, or not there */ }
 }
 
+const nowOf = (o: MigrateOptions): Date => (o.now ?? (() => new Date()))();
+const backupFolder = (root: string, now: Date): string => join(layout(root).instance.migrationBackup, now.toISOString().replace(/[:.]/g, "-"));
+
 /**
- * The whole migration. Safe to call at every start: a current layout returns at once; an interrupted one continues from its stored plan.
+ * The whole migration. Safe to call at every start: a current layout returns at once (but see `reconcile`); an interrupted one continues from its stored plan.
+ * When the plan is done the old layout is planned AGAIN, and whatever is there (something an old process wrote meanwhile, or a plan resumed after a rollback to old code) is moved too, until nothing is.
  * `wait`: how long to wait for another process that is migrating (ms).
  */
 export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): MigrateResult {
@@ -548,34 +657,94 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
     let plan = loadPlan(L.root);
     const resumed = plan !== undefined;
     if (!plan) {
-      plan = planMigration(L.root, fs, (o.now ?? (() => new Date()))());
+      plan = planMigration(L.root, fs, nowOf(o));
       if (plan.ops.length > 0) savePlan(L.root, plan);
     }
     const log = o.log ?? (() => {});
     if (plan.ops.length > 0) log(`migrate: ${resumed ? "continuing" : "starting"}: ${plan.ops.filter((x) => !x.done).length} of ${plan.ops.length} step(s) to do (instance/migration-plan.json)`);
-    const mover = new Mover(L.root, o, plan.backup ?? join(L.instance.migrationBackup, "unknown"));
+    const mover = new Mover(L.root, o, plan.backup ?? backupFolder(L.root, nowOf(o)));
+    mover.save = () => savePlan(L.root, plan!);
     let done = 0;
-    for (const op of plan.ops) {
-      if (op.done) continue;
-      mover.run(op);
-      op.done = true;
-      savePlan(L.root, plan);
-      done++;
-      if (o.crashAfter !== undefined && done >= o.crashAfter) throw new Error("simulated crash");
+    const runAll = (): void => {
+      for (const op of plan!.ops) {
+        if (op.done) continue;
+        mover.run(op);
+        delete op.copying;
+        op.done = true;
+        savePlan(L.root, plan!);
+        done++;
+        if (o.crashAfter !== undefined && done >= o.crashAfter) throw new Error("simulated crash");
+      }
+    };
+    runAll();
+    for (let round = 0; round < 5; round++) {
+      // whatever is in the old places NOW (written meanwhile by an old process, or left by a plan resumed after a rollback) is part of this migration too
+      const more = planMigration(L.root, fs, nowOf(o)).ops;
+      if (more.length === 0) break;
+      log(`migrate: ${more.length} more step(s): something was written to the old places meanwhile`);
+      plan.ops.push(...more.map((x, i) => ({ ...x, id: plan!.ops.length + i })));
+      runAll();
     }
-    sweepEmpty(L.root, plan);
+    sweepEmpty(L.root, plan.ops);
     mkdirSync(L.instance.dir, { recursive: true, mode: 0o700 });
+    const aside = [...new Set([...plan.ops.filter((x) => x.kind === "orphan").map((x) => relative(L.root, x.from)), ...mover.orphans])];
     if (plan.ops.length > 0) {
-      plan.completedAt = (o.now ?? (() => new Date()))().toISOString();
+      plan.aside = [...new Set([...(plan.aside ?? []), ...aside])];
+      plan.completedAt = nowOf(o).toISOString();
       savePlan(L.root, plan);
     }
     writeFileAtomic(L.instance.layoutVersion, `${LAYOUT_VERSION}\n`); // LAST: until it exists, the next start continues from the plan
     if (plan.ops.length > 0) {
       const rewrote = plan.ops.some((x) => x.kind === "rekey" || x.kind === "split-sources");
-      const aside = new Set([...plan.ops.filter((x) => x.kind === "orphan").map((x) => x.from), ...mover.orphans]).size;
-      log(`migrate: data folder is in layout version ${LAYOUT_VERSION}: ${plan.ops.length} step(s)${aside ? `, ${aside} set aside in instance/migration-orphans/ (listed above)` : ""}${rewrote ? `; originals of the files it rewrote are kept in ${relative(L.root, plan.backup)}/` : ""}; instance/migration-plan.json lists every move`);
+      log(`migrate: data folder is in layout version ${LAYOUT_VERSION}: ${plan.ops.length} step(s)${aside.length ? `, ${aside.length} set aside in instance/migration-orphans/ (listed above)` : ""}${rewrote ? `; originals of the files it rewrote are kept in ${relative(L.root, plan.backup)}/` : ""}; instance/migration-plan.json lists every move`);
     }
-    return { already: false, moved: done, orphans: mover.orphans, plan };
+    return { already: false, moved: done, orphans: aside, plan };
+  } finally {
+    release();
+  }
+}
+
+// ---- after the stamp: a straggler ----
+
+export interface LateResult {
+  files: string[]; // old paths (relative) found in the old places after the stamp
+}
+
+/** Old paths that exist again in the old places of a stamped folder (an old process still writing), as a plan. Empty when there are none. */
+export const stragglers = (root: string, fs: FsView = realFs): Op[] => (readVersion(root) === LAYOUT_VERSION ? planMigration(root, fs).ops : []);
+
+/**
+ * A stamped folder where something has appeared in the old places again (an old process was still running, a rollback to old code and forward again): an append-only log is MERGED into its target
+ * (identical lines once, in time order), anything else the new layout has already is set aside in instance/migration-orphans/ (a file the new layout lacks is simply moved into place). Each is
+ * logged loudly and listed in instance/migration-late.json, from which the owner is told once. Never stops the agent.
+ */
+export function reconcile(root: string, o: MigrateOptions = {}, wait = 30_000): LateResult {
+  const L = layout(root);
+  const files: string[] = [];
+  if (stragglers(root, o.fs).length === 0) return { files };
+  const release = takeLock(root, wait);
+  try {
+    const log = o.log ?? (() => {});
+    const ops = stragglers(root, o.fs);
+    if (ops.length === 0) return { files };
+    const mover = new Mover(L.root, { ...o, late: true }, backupFolder(L.root, nowOf(o)));
+    log(`migrate: LATE FILES: ${ops.length} path(s) in the old places of a migrated folder (an old version is still writing?): merging or setting them aside`);
+    for (const op of ops) {
+      const before = mover.orphans.length + mover.merged.length;
+      try {
+        mover.run(op);
+      } catch (e) {
+        log(`migrate: late file ${relative(L.root, op.from)} could not be handled (${(e as Error).message}); left where it is`);
+        continue;
+      }
+      files.push(relative(L.root, op.from));
+      log(`migrate: late file ${relative(L.root, op.from)} ${mover.orphans.length + mover.merged.length > before ? "handled (merged or set aside, see above)" : `moved to ${relative(L.root, op.to)}`}`);
+    }
+    sweepEmpty(L.root, ops);
+    let prior: { files: string[]; told?: boolean } = { files: [] };
+    try { prior = JSON.parse(readFileSync(L.instance.migrationLate, "utf8")); } catch { /* the first time */ }
+    writeFileAtomic(L.instance.migrationLate, JSON.stringify({ files: [...new Set([...(prior.told ? [] : prior.files), ...files])] }));
+    return { files };
   } finally {
     release();
   }
@@ -584,13 +753,31 @@ export function migrate(root: string, o: MigrateOptions = {}, wait = 30_000): Mi
 // ---- telling the owner once ----
 
 export const REORGANISED_TEXT = "I reorganised how I store my data on this Mac: one folder per conversation now, instead of files sorted by kind. Nothing was lost and there is nothing for you to do.";
+const asideText = (paths: readonly string[]): string => `I reorganised how I store my data on this Mac: one folder per conversation now, instead of files sorted by kind. ${paths.length} item(s) I could not place were set aside, not deleted, in the migration-orphans folder inside my instance folder: ${paths.slice(0, 8).join(", ")}${paths.length > 8 ? ", ..." : ""}. Everything else moved as it was.`;
 /** The one-time notice for the owner's chat (undefined when there is nothing to tell, or she has been told). Marking it told is separate: call `markOwnerTold` once it is sent. */
 export function ownerNotice(root: string): string | undefined {
   const plan = loadPlan(root);
-  return plan && plan.ops.length > 0 && !plan.ownerTold && readVersion(root) === LAYOUT_VERSION ? REORGANISED_TEXT : undefined;
+  if (!plan || plan.ops.length === 0 || plan.ownerTold || readVersion(root) !== LAYOUT_VERSION) return undefined;
+  return plan.aside?.length ? asideText(plan.aside) : REORGANISED_TEXT;
 }
 export function markOwnerTold(root: string): void {
   const plan = loadPlan(root);
   if (plan && !plan.ownerTold) savePlan(root, { ...plan, ownerTold: true });
 }
-
+/** Files an old version wrote after the move (reconcile), told once. */
+export function lateNotice(root: string): string | undefined {
+  try {
+    const l = JSON.parse(readFileSync(layout(root).instance.migrationLate, "utf8")) as { files?: string[]; told?: boolean };
+    if (l.told || !l.files?.length) return undefined;
+    return `An older version of me was still writing to the old storage places after they were moved. I merged the logs and put the rest in the migration-orphans folder inside my instance folder (or moved it into place where nothing was there): ${l.files.slice(0, 8).join(", ")}${l.files.length > 8 ? ", ..." : ""}. Nothing was deleted.`;
+  } catch {
+    return undefined;
+  }
+}
+export function markLateTold(root: string): void {
+  try {
+    const p = layout(root).instance.migrationLate;
+    const l = JSON.parse(readFileSync(p, "utf8")) as { files?: string[] };
+    writeFileAtomic(p, JSON.stringify({ ...l, told: true }));
+  } catch { /* none */ }
+}

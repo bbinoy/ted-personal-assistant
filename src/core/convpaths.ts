@@ -84,6 +84,8 @@ export interface InstancePaths {
   layoutVersion: string;
   migrationPlan: string;
   migrationOrphans: string;
+  migrationLate: string; // files an old version wrote after the move: merged or set aside, and told to the owner once
+  agentPid: string; // the running agent's pid (so a migration knows it must not run under it)
   migrationBackup: string; // byte-identical copies of the files the migration REWRITES (not the ones it moves), under a timestamped folder
   migrationLock: string;
   tenants: string; // the friends list (the registry)
@@ -145,6 +147,8 @@ export function layout(root: string): Layout {
       migrationPlan: join(inst, "migration-plan.json"),
       migrationOrphans: join(inst, "migration-orphans"),
       migrationBackup: join(inst, "migration-backup"),
+      migrationLate: join(inst, "migration-late.json"),
+      agentPid: join(inst, "agent.pid"),
       migrationLock: join(inst, "migration.lock"),
       tenants: join(inst, "tenants.json"),
       registrations: join(inst, "registrations.json"),

@@ -252,18 +252,19 @@ test("across devices: copy, fsync, verify, then delete, with the same result", (
   assert.deepEqual(tree(b), tree(a));
 });
 
-test("a target that exists with other content is never overwritten: the source is set aside; an identical one is a verified duplicate; an empty skeleton is replaced", () => {
+test("a process-wide target that exists with other content is never overwritten: the source is set aside; an identical one is a verified duplicate; an empty skeleton is replaced (a conversation's data stops the migration: migrate-safety.test.ts)", () => {
   const root = old();
   const L = layout(root);
   mkdirSync(L.conv("owner").dir, { recursive: true });
-  writeFileSync(L.conv("owner").session, '{"sessionId":"new-code-wrote-this"}'); // other content
+  mkdirSync(L.instance.dir, { recursive: true });
+  writeFileSync(L.instance.registrations, '{"new":"code wrote this"}'); // other content
   writeFileSync(L.conv("owner").dream, '{"day":"d"}'); // identical to the old one
   mkdirSync(L.conv("owner").notes, { recursive: true }); // the empty skeleton start-up makes
   const log: string[] = [];
   migrate(root, { log: (l) => log.push(l) });
-  assert.equal(readFileSync(L.conv("owner").session, "utf8"), '{"sessionId":"new-code-wrote-this"}', "not overwritten");
-  assert.equal(readFileSync(join(L.instance.migrationOrphans, "state/session.json"), "utf8"), '{"sessionId":"owner-s"}', "the old one is kept apart");
-  assert.ok(log.some((l) => l.includes("state/session.json") && l.includes("exists with other content")));
+  assert.equal(readFileSync(L.instance.registrations, "utf8"), '{"new":"code wrote this"}', "not overwritten");
+  assert.equal(readFileSync(join(L.instance.migrationOrphans, "state/registrations.json"), "utf8"), "{}", "the old one is kept apart");
+  assert.ok(log.some((l) => l.includes("state/registrations.json") && l.includes("exists with other content")));
   assert.equal(readFileSync(L.conv("owner").dream, "utf8"), '{"day":"d"}');
   assert.equal(existsSync(join(root, "state/dream.json")), false, "the duplicate is gone after a verified compare");
   assert.equal(existsSync(join(L.conv("owner").notes, "style-x.md")), true, "the skeleton gave way to the notes");
@@ -348,8 +349,8 @@ test("the owner is told once, in her chat, that storage was reorganised", () => 
   const root = old();
   assert.equal(ownerNotice(root), undefined, "not before it happened");
   migrate(root);
-  assert.equal(ownerNotice(root), REORGANISED_TEXT);
-  assert.equal(ownerNotice(root), REORGANISED_TEXT, "until it is marked as sent");
+  assert.match(ownerNotice(root)!, /set aside, not deleted/, "this fixture has orphans, so she is told what went aside");
+  assert.equal(ownerNotice(root), ownerNotice(root), "until it is marked as sent");
   markOwnerTold(root);
   assert.equal(ownerNotice(root), undefined);
   assert.doesNotMatch(REORGANISED_TEXT, /instance|conversations|\.json|\//, "no details: she does not need them");
