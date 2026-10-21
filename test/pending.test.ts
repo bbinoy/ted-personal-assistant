@@ -41,7 +41,7 @@ function rig(): Rig {
   let ts = 9000;
   const rt: PendingRuntime = {
     send: async (_s, text) => (r.sent.push({ text, ts: ++ts }), ts),
-    hold: (_s, text, urgent) => (r.night ? (r.held.push({ text, urgent }), true) : false),
+    holding: () => r.night,
     execute: async (_s, item) => (r.ran.push({ n: item.n, tool: item.tool, input: item.input }), r.result),
     now: () => r.now,
   };
@@ -236,20 +236,29 @@ test("one look's parked calls go out as ONE numbered message when the look ends;
   assert.match(r.sent[1]!.text, /^📬 1 thing is waiting for your approval:\n3\. Carol/);
 });
 
-test("quiet hours: the batch is held with the morning release; an urgent item goes now", async () => {
+test("quiet hours: the batch waits in the inbox and goes out as its own message, from the current items, when quiet ends; an urgent item breaks it", async () => {
   const r = rig();
   r.night = true;
   park(r, "Rebecca");
+  park(r, "Bob", { to: "bob@example.com" });
   assert.equal(await flushPending(r.scope, { ended: true }), "held");
   assert.equal(r.sent.length, 0);
-  assert.equal(r.held.length, 1);
-  assert.equal(r.held[0]!.urgent, false);
-  assert.match(r.held[0]!.text, /1\. Rebecca/);
-  assert.equal(await flushPending(r.scope, { ended: true }), "none", "held counts as asked: not repeated by the next look");
-  assert.equal(openItems(r.scope).length, 1, "it still waits, and /approvals shows it");
+  assert.equal(openItems(r.scope).every((p) => p.deferred && !p.sent), true);
+  // the owner writes meanwhile and settles one: nothing is dropped as stale, and the resolved one vanishes from the batch
+  assert.equal((await answerIn(r, "2 no")).outcome, "declined");
+  park(r, "Carol", { to: "carol@example.com" });
+  assert.equal(await flushPending(r.scope, { ended: false }), "held", "the tick at night: still held");
+  r.night = false;
+  assert.equal(await flushPending(r.scope, { ended: false }), "sent", "the tick after quiet: asked at once, however young");
+  assert.equal(r.sent.length, 1);
+  assert.match(r.sent[0]!.text, /^📬 2 things are waiting for your approval:\n1\. Rebecca [^\n]*\n   ↳ [^\n]*\n3\. Carol /);
+  assert.doesNotMatch(r.sent[0]!.text, /Bob/);
+  assert.deepEqual(openItems(r.scope).map((p) => p.sent?.ts), [r.sent[0]!.ts, r.sent[0]!.ts], "its timestamp is kept: a quote of it answers");
+  assert.equal((await answerIn(r, "yes", { timestamp: r.sent[0]!.ts })).outcome, "clarify", "two open items of that batch: which one?");
+  r.night = true;
   park(r, "Urgent one", { to: "x@example.com" }, { urgent: true });
-  await flushPending(r.scope, { ended: true });
-  assert.equal(r.held[1]!.urgent, true, "the hold API is told it is urgent (notices.ts lets it through)");
+  assert.equal(await flushPending(r.scope, { ended: true }), "sent", "urgent breaks the quiet");
+  assert.match(r.sent[1]!.text, /4\. Urgent one/);
 });
 
 // ---- answering ----

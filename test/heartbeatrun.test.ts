@@ -143,7 +143,7 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
 test("owner's look: what the run needed a yes for is parked while it works and asked as ONE numbered message when the look ends", async () => {
   clearPending("owner");
   const sent: string[] = [];
-  setPendingRuntime({ send: async (_s, t) => (sent.push(t), 77), hold: () => false, execute: async () => ({ ran: true, line: "ok" }), now: () => DAY });
+  setPendingRuntime({ send: async (_s, t) => (sent.push(t), 77), holding: () => false, execute: async () => ({ ran: true, line: "ok" }), now: () => DAY });
   const park = (to: string) => queueCall("owner", { tool: "mcp__gmail__reply", input: { to }, label: `Reply to ${to}`, question: "Send it?", footer: "", source: "background" }, DAY);
   const { w, conv } = rig(() => ({ message: "[[silent]]", during: () => (park("a@example.com"), park("b@example.com"), assert.equal(sent.length, 0, "nothing is asked while the run works")) }));
   await w.look(conv, DAY);
@@ -151,6 +151,25 @@ test("owner's look: what the run needed a yes for is parked while it works and a
   assert.equal(batch.length, 1);
   assert.match(batch[0]!, /^📬 2 things are waiting for your approval:\n1\. Reply to a@example\.com Send it\?\n2\. Reply to b@example\.com/);
   assert.equal(openItems("owner").length, 2, "they wait for the answer");
+  setPendingRuntime(undefined);
+  clearPending("owner");
+});
+
+test("the tick asks what quiet hours kept back and tells what expired, even when no look runs", async () => {
+  clearPending("owner");
+  const sent: string[] = [];
+  let quiet = true;
+  setPendingRuntime({ send: async (_s, t) => (sent.push(t), 78), holding: () => quiet, execute: async () => ({ ran: true, line: "ok" }), now: () => DAY });
+  queueCall("owner", { tool: "mcp__gmail__reply", input: { to: "a@example.com" }, label: "Reply to a", question: "Send it?", footer: "", source: "background" }, DAY);
+  queueCall("owner", { tool: "mcp__gmail__reply", input: { to: "old@example.com" }, label: "Reply to old", question: "Send it?", footer: "", source: "background" }, new Date(DAY.getTime() - 4 * 86_400_000));
+  const { w } = rig(() => ({ message: "[[silent]]" }), { busy: () => true });
+  await w.tick(DAY);
+  assert.deepEqual(sent, [], "quiet: nothing is asked, nothing is told");
+  quiet = false;
+  await w.tick(DAY);
+  assert.equal(sent.length, 2);
+  assert.match(sent[0]!, /^⏳ Dropped, not answered in 3 days: #\d+ Reply to old\./);
+  assert.match(sent[1]!, /^📬 1 thing is waiting for your approval:\n\d+\. Reply to a /);
   setPendingRuntime(undefined);
   clearPending("owner");
 });

@@ -22,6 +22,7 @@ export interface Pending {
   createdAt: number;
   urgent?: boolean; // the run marked it time-critical: sent at once, even in quiet hours (nothing sets it yet)
   detailsHash?: string; // the code-rendered details at asking time (pendingbatch.ts detailsHash): the follow-up run re-reads them and runs nothing if they differ (a draft edited meanwhile)
+  deferred?: true; // quiet hours (or /quiet) kept its batch back: it is asked, as its own message, as soon as they end (pendingflow.ts)
   executing?: { at: number }; // approved and its follow-up run started: kept until the run ends, so a crash in between is noticed (recoverStuck)
   interrupted?: true; // it was executing when the process stopped and no audit row says it finished: asked about again, never retried by itself
   sent?: { at: number; ts?: number; held?: true }; // asked in a batch: when, and the batch message's timestamp (absent when it was held for quiet hours and went out with the morning release)
@@ -113,6 +114,12 @@ export function takeItems(scope: string, ns: readonly number[]): Pending[] {
   f.items = f.items.filter((p) => !ns.includes(p.n));
   save(scope, f);
   return taken;
+}
+
+export function markDeferred(scope: string, ns: readonly number[]): void {
+  const f = load(scope);
+  for (const p of f.items) if (ns.includes(p.n)) p.deferred = true;
+  save(scope, f);
 }
 
 // Approved: kept in the file, marked as running, until finishItem. Returns the ones that were open (not already running).

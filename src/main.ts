@@ -37,7 +37,7 @@ import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
 import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
 import { runPending } from "./run/pendingrun.ts";
-import { submitPost } from "./heartbeat/notices.ts";
+import { holdingNow } from "./heartbeat/notices.ts";
 import { mayRun } from "./tenants/payer.ts";
 import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
@@ -85,7 +85,7 @@ wire({
 const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
 setPendingRuntime({
   send: (scope, text) => out.reply(text, { plain: true, kind: "approval", ...(scope === OWNER_KEY ? {} : { target: convOf(scope).target }) }),
-  hold: (scope, text, urgent, now) => submitPost(convOf(scope), text, urgent, now) === "held",
+  holding: (scope, now) => holdingNow(convOf(scope), now),
   details: (scope, item) => renderDetails(scope, item.tool, item.input),
   execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
 });

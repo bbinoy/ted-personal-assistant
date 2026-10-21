@@ -4,7 +4,7 @@ import { OWNER, settings } from "../core/settings.ts";
 import { noteDeclined } from "./declined.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView } from "./approvalprompt.ts";
-import { addExpired, addPending, clearPending, finishItem, interrupt, markExecuting, markSent, openItems as allItems, sweepExpired, takeExpired, takeItems, type Pending } from "./pending.ts";
+import { addExpired, addPending, clearPending, finishItem, interrupt, markDeferred, markExecuting, markSent, openItems as allItems, sweepExpired, takeExpired, takeItems, type Pending } from "./pending.ts";
 import { compactFooter, detailsHash, doneLine, expiryLine, failedLine, labelOf, queuedResult, renderBatch, renderList } from "./pendingbatch.ts";
 import { parseNumbered } from "./pendingparse.ts";
 import { recentIn } from "./recentchat.ts";
@@ -18,7 +18,7 @@ const BATCH_WAIT_MS = 5 * 60_000; // a parked call is asked at the latest this l
 
 export interface PendingRuntime {
   send(scope: string, text: string): Promise<number>; // the conversation's chat; resolves the sent message's timestamp
-  hold(scope: string, text: string, urgent: boolean, now: Date): boolean; // heartbeat/notices.ts submitPost: true = held (quiet hours, the day's cap) and delivered later with the rest
+  holding(scope: string, now: Date): boolean; // heartbeat/notices.ts holdingNow: is the conversation being left alone now (quiet hours, its /quiet)? The batch then waits in the inbox itself (never in the held posts: it must not go stale, be merged into a digest or count toward the day's cap)
   details?(scope: string, item: Pending): Promise<string | undefined>; // the call's code-rendered details read again now (permissions.ts renderDetails); compared with the hash taken at asking time
   execute(scope: string, item: Pending): Promise<{ ran: boolean; line: string }>; // the follow-up run of exactly this call (run/pendingrun.ts)
   now?: () => Date;
@@ -68,11 +68,10 @@ function arm(scope: string): void {
 
 // ---- asking ----
 
-// Deliver a text now or, in quiet hours / past the day's cap, via notices.ts's hold.
-async function deliver(scope: string, text: string, urgent: boolean, now: Date): Promise<{ held: boolean; ts?: number }> {
+// A plain line or message in the conversation's chat (the batch is held back by flushPending itself, in quiet hours).
+async function deliver(scope: string, text: string): Promise<number> {
   if (!rt) throw new Error("approval inbox: no runtime set");
-  if (rt.hold(scope, text, urgent, now)) return { held: true };
-  return { held: false, ts: await rt.send(scope, text) };
+  return rt.send(scope, text);
 }
 
 const flushing = new Set<string>();
@@ -82,10 +81,21 @@ export async function flushPending(scope: string, o: { ended: boolean }): Promis
   flushing.add(scope);
   try {
     const now = clock();
+    const waiting = openItems(scope).filter((p) => !p.sent);
+    // Quiet hours or /quiet: the batch waits HERE, untouched (an urgent item breaks it). It is not a held post (notices.ts): those are dropped as stale when the owner writes, merged into a digest
+    // and counted toward the day's cap. When quiet ends the tick asks, from the then current items, as its own message.
+    if (rt.holding(scope, now) && !waiting.some((p) => p.urgent)) {
+      const fresh = waiting.filter((p) => !p.deferred);
+      if (fresh.length) {
+        markDeferred(scope, fresh.map((p) => p.n));
+        for (const p of fresh) log(p, "approval-batch-held", { n: p.n });
+      }
+      return waiting.length ? "held" : "none";
+    }
     const lost = recoverStuck(scope);
     if (lost.length) {
       try {
-        await deliver(scope, lost.join("\n"), false, now);
+        await deliver(scope, lost.join("\n"));
       } catch (e) {
         console.error("approval inbox: could not tell what was interrupted:", (e as Error).message); // (the list marks them)
       }
@@ -95,24 +105,24 @@ export async function flushPending(scope: string, o: { ended: boolean }): Promis
     const told = takeExpired(scope);
     if (told.length) {
       try {
-        await deliver(scope, expiryLine(told, settings.pendingActionDays), false, now);
+        await deliver(scope, expiryLine(told, settings.pendingActionDays));
       } catch (e) {
         console.error("approval inbox: could not tell what expired:", (e as Error).message);
         addExpired(scope, told); // not silent: said at the next flush
       }
     }
-    const unsent = openItems(scope).filter((p) => !p.sent);
+    const unsent = openItems(scope).filter((p) => !p.sent); // (read again: what was answered or dropped meanwhile is gone)
     if (unsent.length === 0) return "none";
     const oldest = Math.min(...unsent.map((p) => p.createdAt));
-    if (!o.ended && now.getTime() - oldest < BATCH_WAIT_MS) return arm(scope), "none"; // (not old enough yet: looked at again)
+    if (!o.ended && !unsent.some((p) => p.deferred) && now.getTime() - oldest < BATCH_WAIT_MS) return arm(scope), "none"; // (not old enough yet: looked at again)
     const timer = timers.get(scope);
     if (timer) (clearTimeout(timer), timers.delete(scope));
     const ns = unsent.map((p) => p.n);
     try {
-      const r = await deliver(scope, renderBatch(unsent), unsent.some((p) => p.urgent), now);
-      markSent(scope, ns, { at: now.getTime(), ...(r.held ? { held: true as const } : { ts: r.ts }) });
-      for (const p of unsent) log(p, r.held ? "approval-batch-held" : "approval-batch-sent", { n: p.n });
-      return r.held ? "held" : "sent";
+      const ts = await deliver(scope, renderBatch(unsent));
+      markSent(scope, ns, { at: now.getTime(), ts }); // the message's timestamp: a reply that quotes it is an answer, also after a night's wait
+      for (const p of unsent) log(p, "approval-batch-sent", { n: p.n, afterHold: !!p.deferred });
+      return "sent";
     } catch (e) {
       console.error("approval inbox: could not ask:", (e as Error).message);
       arm(scope); // not lost: asked again in a few minutes

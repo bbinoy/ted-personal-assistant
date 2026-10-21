@@ -15,7 +15,7 @@ let seq = 0;
 
 function rig(over: Partial<PendingRuntime> = {}) {
   const r = { scope: `tenant:drift${++seq}`, sent: [] as string[], ran: [] as number[] };
-  const rt: PendingRuntime = { send: async (_s, t) => (r.sent.push(t), 1), hold: () => false, execute: async (_s, i) => (r.ran.push(i.n), { ran: true, line: "replied to Rebecca" }), now: () => NOW, ...over };
+  const rt: PendingRuntime = { send: async (_s, t) => (r.sent.push(t), 1), holding: () => false, execute: async (_s, i) => (r.ran.push(i.n), { ran: true, line: "replied to Rebecca" }), now: () => NOW, ...over };
   setPendingRuntime(rt);
   return r;
 }
