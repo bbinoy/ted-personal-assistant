@@ -9,13 +9,16 @@ export interface DigestItem {
   text: string;
   notice?: boolean; // a system notice
   at?: number; // when it was held (epoch ms)
+  needsYou?: boolean; // the look's own say that it asks something of the owner; absent on items held without it (then the words decide)
   why?: "quiet" | "cap";
 }
 
 const NEEDS = /\?|\b(approve|approval|confirm|reply|respond|decide|let me know|need(?:s)? (?:you|your)|waiting (?:for|on) you|your (?:ok|okay|go-ahead|decision|call|answer))\b/i;
 
-// A system notice is "system"; a post that asks something of her (a question, an approval, a reply) is "needs you"; the rest is FYI.
-export const kindOfItem = (h: Pick<DigestItem, "text" | "notice">): DigestKind => (h.notice ? "system" : NEEDS.test(h.text) ? "needs" : "fyi");
+// A system notice is "system"; a post the look flagged `needsYou` is "needs you" (false: FYI, whatever its punctuation); an item held without the flag (an older one, or a mid-run send) is judged
+// by its words as a fallback: a question, an approval, a reply. The rest is FYI.
+export const kindOfItem = (h: Pick<DigestItem, "text" | "notice" | "needsYou">): DigestKind =>
+  h.notice ? "system" : typeof h.needsYou === "boolean" ? (h.needsYou ? "needs" : "fyi") : NEEDS.test(h.text) ? "needs" : "fyi";
 
 const words = (text: string): string[] => text.split("\n")[0]!.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(" ").filter(Boolean);
 // The same text, or the same subject: the first line's first six words without digits ("3 new mails from the bank" and "5 new mails from the bank" are one subject). Shorter than

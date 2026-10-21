@@ -183,7 +183,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (answer?.message && !stale) {
       const message = answer.message;
       // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
-      if (submitPost(conv, message, answer.urgent, now) === "held") pipeline.record(conv, "action", Date.now(), `[heartbeat] held for later (quiet hours or the day's limit): ${message.slice(0, 300)}`);
+      if (submitPost(conv, message, answer.urgent, now, answer.needsYou) === "held") pipeline.record(conv, "action", Date.now(), `[heartbeat] held for later (quiet hours or the day's limit): ${message.slice(0, 300)}`);
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);

@@ -39,6 +39,7 @@ export interface Held {
   text: string;
   why: "quiet" | "cap";
   notice?: boolean; // a system notice (exempt from the cap)
+  needsYou?: boolean; // the look said this post asks something of the owner (digest.ts kindOfItem)
   at?: number; // when it was held (epoch ms); older rows have none and are kept as they were
   day?: string; // the conversation's day it was held on
   sameDay?: boolean; // true only for the day it was written (the budget notice: "paused until midnight" is false the next morning)
@@ -130,7 +131,7 @@ const isNight = (now: Date, zone: string): boolean => inQuietHours(now, settings
 const holding = (conv: Conversation, now: Date, zone: string): boolean => isNight(now, zone) || isQuiet(conv, now);
 
 // A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).
-export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date): "post" | "held" {
+export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date, needsYou?: boolean): "post" | "held" {
   const zone = zoneFor(conv);
   const st = load(conv, now, zone);
   const plan = planPost({ urgent, night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay });
@@ -139,7 +140,7 @@ export function submitPost(conv: Conversation, text: string, urgent: boolean, no
     save(conv, st);
     return "post";
   }
-  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: plan === "hold-quiet" ? "quiet" : "cap", at: now.getTime(), day: st.day });
+  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: plan === "hold-quiet" ? "quiet" : "cap", at: now.getTime(), day: st.day, ...(typeof needsYou === "boolean" ? { needsYou } : {}) });
   save(conv, st);
   return "held";
 }

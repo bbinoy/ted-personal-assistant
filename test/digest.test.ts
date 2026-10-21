@@ -8,6 +8,7 @@ import { clockIn } from "../src/core/timezone.ts";
 import { dataPath, readJson } from "../src/core/state.ts";
 import { dedupe, digestDue, digestText, kindOfItem, lastSlotBefore, oneLine, planDigest, subjectOf, zonedInstant } from "../src/heartbeat/digest.ts";
 import { usableLines } from "../src/heartbeat/digestlines.ts";
+import { parseHeartbeatAnswer } from "../src/run/rules.ts";
 import { heldFileOf, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -25,6 +26,14 @@ test("kindOfItem: notices are system, asks are needs you, the rest FYI", () => {
   assert.equal(kindOfItem({ text: "Can you do Friday lunch?" }), "needs");
   assert.equal(kindOfItem({ text: "Please approve the invoice reply" }), "needs");
   assert.equal(kindOfItem({ text: "Your parcel arrived" }), "fyi");
+});
+
+test("kindOfItem: the look's needsYou flag decides when present; the words only when it is absent", () => {
+  assert.equal(kindOfItem({ text: "Did you know octopuses have three hearts?", needsYou: false }), "fyi");
+  assert.equal(kindOfItem({ text: "Anna is waiting at the door", needsYou: true }), "needs");
+  assert.equal(kindOfItem({ text: "Did you know octopuses have three hearts?" }), "needs", "fallback for an item held without the flag");
+  assert.equal(kindOfItem({ text: "Your parcel arrived" }), "fyi");
+  assert.equal(kindOfItem({ text: "Is this a question?", needsYou: true, notice: true }), "system");
 });
 
 test("subjectOf and dedupe: same text or same subject, the newest stays, newest first", () => {
@@ -175,4 +184,21 @@ test("the cap's items wait for a digest slot: held at 19:00, the next morning is
   assert.equal(await releaseHeld(pipe(sent), c, new Date(2026, 9, 15, 9, 0)), false, "the day turned (the cap is free) but no slot has come since 19:00");
   assert.equal(await releaseHeld(pipe(sent), c, new Date(2026, 9, 15, 12, 31)), true);
   assert.deepEqual(sent, ["held for the cap"]);
+});
+
+test("the look's needsYou flag: parsed (only a literal true), carried on the held item, and it decides the digest group", async () => {
+  assert.equal(parseHeartbeatAnswer({ message: "hi", nextCheckMinutes: 30, needsYou: true }, "").needsYou, true);
+  assert.equal(parseHeartbeatAnswer({ message: "hi", nextCheckMinutes: 30, needsYou: "true" }, "").needsYou, false);
+  assert.equal(parseHeartbeatAnswer({ message: "hi", nextCheckMinutes: 30 }, "").needsYou, false);
+  assert.equal(parseHeartbeatAnswer({ message: "[[silent]]", nextCheckMinutes: 30, needsYou: true }, "").needsYou, false);
+  reset();
+  const c = owner();
+  submitPost(c, "Did you know octopuses have three hearts?", false, NIGHT, false);
+  submitPost(c, "Anna is waiting at the door", false, NIGHT, true);
+  submitPost(c, "Lunch on Friday?", false, NIGHT); // (held without the flag: the words decide)
+  const rows = readJson<{ held: { text: string; needsYou?: boolean }[] }>(heldFileOf(c), { held: [] }).held;
+  assert.deepEqual(rows.map((h) => h.needsYou), [false, true, undefined]);
+  const sent: string[] = [];
+  await releaseHeld(pipe(sent), c, MORNING);
+  assert.equal(sent[0], "A few things I held back:\nNeeds you\n- Lunch on Friday?\n- Anna is waiting at the door\nFYI\n- Did you know octopuses have three hearts?");
 });
