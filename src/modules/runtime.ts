@@ -50,7 +50,7 @@ export const SERVERS: Readonly<Record<string, ServerFactory>> = {
   browser: (ctx) => {
     const status = browseStatus();
     if (!status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
-    return browserServer(status, ctx.guard!.outDir, undefined, { mode: ctx.guard!.vision, cdpPort: ctx.guard!.cdpPort });
+    return browserServer(status, ctx.guard!.outDir, undefined, { mode: ctx.guard!.vision, cdpPort: ctx.guard!.cdpPort, proxyPort: ctx.guard!.proxyPort });
   },
   intake: (ctx) => createIntakeServer(ctx.tenant!),
   // A friend's Google tools: her own server process, started by this process with her token (googlemcp.ts), forwarded to the run through a proxy that has no command line and no environment.
