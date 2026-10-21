@@ -43,8 +43,11 @@ test("makeApprove: the sent question is the model's plus the footer; a card paym
   const d = await approve(details, { tool: SEND, input: { messageId: 1 } }, new AbortController().signal);
   assert.match(seen[0]!.question!, /^Send a short thank-you to a@example\.com\?\n\n— exactly what will go —\nTo: a@example\.com, x@evil\.example\nText: “Your 2FA code: 482913”$/);
   assert.equal(d.question, seen[0]!.question, "the decision carries the question exactly as shown");
+  const bg = makeApprove(async () => 1, { scope: "owner", source: "background", background: true, request, compose });
+  await bg(details, { tool: SEND, input: { messageId: 1 } }, new AbortController().signal);
+  assert.match(seen.at(-1)!.question!, /Text: “Your 2FA code: 482913”\n\n↩️ Reply to this message or react 👍 \/ 👎 to answer\.$/, "a background question says how to answer it, after the footer");
   await approve("Card payment approval\nMerchant: Shop\nTo: nobody@example.com", { tool: "pay", input: {} }, new AbortController().signal, { typedYes: true });
-  assert.equal(seen[1]!.question, "Send a short thank-you to a@example.com?");
+  assert.equal(seen.at(-1)!.question, "Send a short thank-you to a@example.com?");
 });
 
 // ---- expiry is not a decline (A3) ----

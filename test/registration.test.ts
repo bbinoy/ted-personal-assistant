@@ -180,7 +180,7 @@ test("the question and the pending list carry the profile name and id only; a nu
   const { io } = rig(false);
   R.admitStranger({ fromUuid: aci(31), name: "Rex", number: "+15555550114", text: CANARY }, io, (NOW + 1_000));
   const [r] = Reg.openRequests((NOW + 1_000));
-  assert.equal(questionFor(r!), "Approve Rex (+15555550114) as a friend? They wrote to me; I have not looked at what they wrote. Reply yes or no.");
+  assert.equal(questionFor(r!), "Approve Rex (+15555550114) as a friend? They wrote to me; I have not looked at what they wrote. Reply to this message with yes or no, or react 👍 / 👎.");
   const listed = Reg.describePending((NOW + 1_000)).join("\n");
   assert.ok(listed.includes("Rex (+15555550114)") && !listed.includes(CANARY));
   assert.equal(Reg.approve("bbb"), undefined, "a short prefix is no id");

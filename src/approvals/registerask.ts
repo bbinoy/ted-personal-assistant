@@ -9,7 +9,7 @@ import type { TenantRecord } from "../tenants/tenants.ts";
 // anything she wrote and never a model's words about her. Yes: she becomes a tenant and what she wrote meanwhile is replayed as her first turn. No: remembered as declined,
 // silent, her held text deleted. No answer for a day: the question lapses, the request stays open (and is asked again at the next start) until it expires after 7 days.
 
-export const questionFor = (r: Pick<Request, "aci" | "name" | "number">): string => `Approve ${labelOf(r)} as a friend? They wrote to me; I have not looked at what they wrote. Reply yes or no.`;
+export const questionFor = (r: Pick<Request, "aci" | "name" | "number">): string => `Approve ${labelOf(r)} as a friend? They wrote to me; I have not looked at what they wrote. Reply to this message with yes or no, or react 👍 / 👎.`;
 const LAPSE_MINUTES = 24 * 60;
 
 export interface Registrar {
