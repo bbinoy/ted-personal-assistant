@@ -11,7 +11,8 @@ import { settings } from "../core/settings.ts";
 export type KeyProblem = "refused" | "missing";
 
 const TEXT: Readonly<Record<KeyProblem, string>> = {
-  refused: "The shared API key was refused (expired, over its limit or out of credit): check TENANT_ANTHROPIC_API_KEY in .env, then restart. Until then friends' chats and their background work fail.",
+  // (each ends with the one step: the exact setting; the same fix as errors.ts FIXES.refused)
+  refused: "The shared API key was refused (expired, over its limit or out of credit), so friends' chats and their background work fail until it is fixed: check TENANT_ANTHROPIC_API_KEY in .env, then restart.",
   missing: "TENANT_ANTHROPIC_API_KEY is not set, so friends cannot be answered and their background work does not run. Set it in .env (a separate Console workspace key with a spend limit) and restart.",
 };
 
