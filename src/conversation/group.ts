@@ -1,5 +1,5 @@
 import { clockLine } from "../core/brief.ts";
-import { budgetSpent } from "../core/budget.ts";
+import { budgetSpent, GROUP_BUDGET_TEXT, groupBudgetDue } from "../core/budget.ts";
 import { DELETED_LINE, editNote, sameText } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { prepare, runConversation } from "../run/agent.ts";
@@ -208,7 +208,12 @@ export function createGroupBrain(brain: Brain) {
     // behind an earlier turn.
     const gone = () => !!st.gone?.has(m.timestamp);
     const answer = async (batch: Batch<GroupMessage>, showTyping: () => void): Promise<void> => {
-      if (isPaused(now) || budgetSpent()) return;
+      if (isPaused(now)) return;
+      if (budgetSpent()) {
+        // Someone addressed us and the day's budget turned it away: say so once per group per day (notices.ts), never for a message that was not meant for us.
+        if (pending() && groupBudgetDue(m.groupId, now)) await batch.run(async () => void (await pipeline.runTurn(conv, { run: async () => ({ text: GROUP_BUDGET_TEXT }), background: true, announce: false, kind: "notice" })));
+        return;
+      }
       const asked = pending();
       if (asked) showTyping();
       let delay = 0;

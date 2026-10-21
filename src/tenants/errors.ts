@@ -22,7 +22,7 @@ export const isApiRefusal = (e: unknown): e is AuthError | RateLimitError | Inst
 // What to tell whom, by what went wrong and who is reading: the owner in their own chat (where to look), a group (nobody there should be sent to a terminal), a friend
 // (no terminals, no logs; the account is the instance's, not hers, so she is told who must fix it).
 export type Audience = "owner" | "group" | "friend";
-type Kind = "auth" | "limit" | "billing" | "refused" | "other";
+type Kind = "auth" | "limit" | "billing" | "refused" | "timeout" | "connector" | "other";
 const OTHER = "Something broke on my end, sorry. Try again in a bit.";
 const LIMIT = "I've hit my usage limit for now, so I can't think until it resets. Try me again a bit later.";
 const NOTICES: Readonly<Record<Kind, Readonly<Record<Audience, string>>>> = {
@@ -30,9 +30,24 @@ const NOTICES: Readonly<Record<Kind, Readonly<Record<Audience, string>>>> = {
   limit: { owner: LIMIT, group: LIMIT, friend: "The account I run on for friends has hit a usage limit, so I can't think for a while. I'll answer again once the limit has lifted." },
   billing: { owner: OTHER, group: OTHER, friend: `The account I run on for friends says there is no credit left (or a billing problem). ${OWNER} needs to look at it; I can answer again once that is fixed.` },
   refused: { owner: OTHER, group: OTHER, friend: `Anthropic refused the request made with the account I run on for friends. ${OWNER} needs to check it; I'll try again later.` },
-  other: { owner: "Something broke on my end. Check the logs, I'm not telling you what it was.", group: OTHER, friend: OTHER },
+  timeout: { owner: "That ran too long and I stopped it. Ask for something smaller, or try again; the limit is RUN_MAX_MINUTES_CHAT in .env.", group: "That took too long, so I stopped. Try something smaller, or ask again.", friend: "That took too long, so I stopped. Try something smaller, or ask again." },
+  connector: { owner: "A connector I need (Notion, Calendar or Gmail) did not answer. Run `npm run doctor` to see which; if it is missing, add it again in your Claude account (Settings, Connectors). Then message me again.", group: OTHER, friend: OTHER },
+  other: { owner: "Something broke on my end and I don't know the cause. Check the logs (logs/agent.log) or run `npm run doctor`.", group: OTHER, friend: OTHER },
 };
-const kindOf = (e: unknown): Kind => (e instanceof AuthError ? "auth" : e instanceof RateLimitError ? "limit" : e instanceof InstanceKeyError ? (e.why === "limit" ? "limit" : e.why) : "other");
+// What went wrong, in the classes a person can act on (also what the background-failure notice says, heartbeat/notices.ts). A connector's failure reaches us only as text from the SDK, hence the words.
+export type Cause = "login" | "limit" | "billing" | "refused" | "timeout" | "connector" | "other";
+const CONNECTOR_WORDS = /\bmcp\b|connector|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|server .*(?:failed|not connected|disconnected)/i;
+export function causeOf(e: unknown): Cause {
+  if (e instanceof AuthError) return "login";
+  if (e instanceof RateLimitError) return "limit";
+  if (e instanceof InstanceKeyError) return e.why;
+  if (e instanceof Error && /^run timed out after/.test(e.message)) return "timeout"; // (ceiling.ts RunTimeout; tenants may not import run)
+  return e instanceof Error && CONNECTOR_WORDS.test(e.message) ? "connector" : "other";
+}
+const kindOf = (e: unknown): Kind => {
+  const c = causeOf(e);
+  return c === "login" ? "auth" : c;
+};
 export const noticeFor = (audience: Audience) => (e: unknown): string => NOTICES[kindOf(e)][audience];
 
 // The SDK reports a failed turn as an assistant error code and an error result. `payer`: whose call it was. On the instance key any refusal of the key is the key's (HTTP

@@ -16,6 +16,7 @@ export const HEARTBEAT_SCHEMA: Options["outputFormat"] = {
     properties: {
       message: { type: "string" }, // the message to the owner, or [[silent]]
       nextCheckMinutes: { type: "integer", minimum: MIN_LOOK_MINUTES, maximum: MAX_LOOK_MINUTES },
+      urgent: { type: "boolean" }, // truly time-critical: code then posts it also in quiet hours and past the day's cap (heartbeat/notices.ts)
     },
   },
 };
@@ -30,6 +31,7 @@ export const clampLook = (minutes: unknown, fallback: number = settings.heartbea
 export interface Answer {
   message: string | undefined; // undefined: silent
   nextCheckMinutes: number;
+  urgent: boolean; // the model marked the message time-critical (only a literal true counts)
 }
 
 // Pure: the run's answer. The constrained JSON is read first, a JSON text second; anything else is silent (a run that did not follow the format must never post its reasoning).
@@ -42,8 +44,8 @@ export function parseAnswer(structured: unknown, text: string): Answer {
       raw = undefined;
     }
   }
-  const v = (raw && typeof raw === "object" ? raw : {}) as { message?: unknown; nextCheckMinutes?: unknown };
+  const v = (raw && typeof raw === "object" ? raw : {}) as { message?: unknown; nextCheckMinutes?: unknown; urgent?: unknown };
   const message = typeof v.message === "string" ? v.message.trim() : "";
   const silent = !message || message.toLowerCase().includes(SILENT.toLowerCase());
-  return { message: silent ? undefined : message, nextCheckMinutes: clampLook(v.nextCheckMinutes) };
+  return { message: silent ? undefined : message, nextCheckMinutes: clampLook(v.nextCheckMinutes), urgent: !silent && v.urgent === true };
 }

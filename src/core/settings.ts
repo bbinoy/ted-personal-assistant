@@ -20,6 +20,15 @@ function num(env: Env, name: string, fallback: number, min: number, max: number)
   return n;
 }
 
+// QUIET_HOURS="22:00-07:00" (or "22-7"): the whole hours the owner's quiet window runs from and to; it wins over QUIET_START_HOUR / QUIET_END_HOUR. Minutes other than :00 are refused.
+function quietHours(env: Env, from: number, to: number): { from: number; to: number } {
+  const raw = env.QUIET_HOURS?.trim();
+  if (!raw) return { from, to };
+  const m = /^(\d{1,2})(?::00)?\s*-\s*(\d{1,2})(?::00)?$/.exec(raw);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 23) throw new Error(`QUIET_HOURS must look like 22:00-07:00, whole hours (got "${raw}")`);
+  return { from: Number(m[1]), to: Number(m[2]) };
+}
+
 function oneOf<T extends string>(env: Env, name: string, fallback: T, allowed: readonly T[]): T {
   const raw = env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
@@ -143,6 +152,7 @@ export function loadSettings(env: Env) {
   // The rhythm (when the heartbeat ticks, the quiet hours, the daily brief's words, the dream) has its defaults in the assistant preset (preset.ts); each env variable below still overrides its own.
   rejectArchiveSwitches(env);
   const rhythm = presetFor(env).rhythm;
+  const quiet = quietHours(env, num(env, "QUIET_START_HOUR", rhythm.heartbeat.quietFromHour, 0, 23), num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23));
   const kokoro = {
     dir: env.TTS_DIR || `${env.HOME ?? ""}/.cache/ted-personal-assistant/kokoro`,
     voice: env.TTS_VOICE || "am_onyx",
@@ -174,8 +184,11 @@ export function loadSettings(env: Env) {
     mail: mailProvider !== "none", // is there any mail to look at? Every mail-only path asks this, never the provider's name
 
     heartbeatMinutes: num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240),
-    quietStartHour: num(env, "QUIET_START_HOUR", rhythm.heartbeat.quietFromHour, 0, 23),
-    quietEndHour: num(env, "QUIET_END_HOUR", rhythm.heartbeat.quietToHour, 0, 23),
+    // Quiet hours (code holds the heartbeat's unprompted posts in them, heartbeat/notices.ts): the preset's window, else 22:00-07:00; QUIET_HOURS or the two hours override it.
+    quietStartHour: quiet.from,
+    quietEndHour: quiet.to,
+    maxUnpromptedPerDay: num(env, "MAX_UNPROMPTED_PER_DAY", 6, 1, 100), // unprompted heartbeat posts per conversation per day; past it they are held for the next day's one combined message (urgent ones are exempt)
+    mailBacklogDays: num(env, "MAIL_BACKLOG_DAYS", 7, 0, 3650), // first run only: inbox mail older than this is marked seen without triage (seenmail.ts)
 
     // The owner's heartbeat run (src/heartbeat/look.ts): on every look a model (HEARTBEAT_MODEL: haiku, sonnet, or a full model id) reads the chat, mail, calendar and
     // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). How quiet it is at night is its instruction's business, not code's.

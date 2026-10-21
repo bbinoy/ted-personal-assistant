@@ -13,6 +13,7 @@ import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { settings } from "../src/core/settings.ts";
 import { dataPath, readText } from "../src/core/state.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
+import { heldFileOf, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -21,9 +22,9 @@ const DAY = new Date(2026, 9, 14, 14, 0, 0); // a Wednesday, 14:00 local
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
 const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
-const reset = () => rmSync(dataPath(HEARTBEAT_LOG), { force: true });
+const reset = () => (rmSync(dataPath(HEARTBEAT_LOG), { force: true }), rmSync(dataPath(heldFileOf(owner())), { force: true })); // (the rows, and what quiet hours held)
 
-interface Answer { sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
+interface Answer { urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -56,7 +57,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
       for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
-      return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30 } };
+      return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30, ...(a.urgent ? { urgent: true } : {}) } };
     },
     notesChangedAt: () => 0,
     now: () => now,
@@ -81,8 +82,8 @@ test("the next look is clamped to 10..120 minutes, whatever the model says, and 
 });
 
 test("the answer: a message or [[silent]]; anything that does not follow the format is silent", () => {
-  assert.deepEqual(parseAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15 });
-  assert.deepEqual(parseAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 120 });
+  assert.deepEqual(parseAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15, urgent: false });
+  assert.deepEqual(parseAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 120, urgent: false });
   for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say"]) assert.equal(parseAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
   assert.equal(parseAnswer({ message: null, nextCheckMinutes: 30 }, "").message, undefined);
   assert.equal(parseAnswer(undefined, "I looked at the mail and thought about it").message, undefined, "free text is never posted");
@@ -95,7 +96,8 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   assert.ok(text.includes(Intl.DateTimeFormat().resolvedOptions().timeZone));
   assert.match(text, /Your last look was at 13:30\./);
   assert.match(text, /Quiet hours \(night\) are 22:00-07:00/);
-  assert.match(text, /very few messages: a handful at most/);
+  assert.match(text, /Code holds what you would post unprompted at night/);
+  assert.match(text, /Set "urgent" to true only for what is truly time-critical/);
   assert.match(text, /working late, tell me everything tonight/);
   assert.match(text, /memory note/);
   assert.match(text, /seen_mail tool/);
@@ -167,16 +169,49 @@ test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, an
   assert.deepEqual(readRows().map((r) => [r.night, r.nextCheckMinutes]), [[true, 120]]);
 });
 
-test("owner's look at night: no cap in code, every message the model writes is posted (night behaviour is the instruction's)", async () => {
-  const { w, conv, seen, at } = rig(() => ({ message: `urgent #${seen.posted.length + 1}`, nextCheckMinutes: 10 }));
-  for (let i = 0; i < 4; i++) {
-    const t = min(NIGHT, i * 11);
+test("owner's look at night: the posts are HELD in code, an urgent one goes at once, and the morning tick delivers the rest as one message", async () => {
+  let urgent = false;
+  const { w, conv, seen, at } = rig(() => ({ message: `news #${seen.recorded.length + 1}`, nextCheckMinutes: 10, urgent }));
+  at(NIGHT);
+  assert.equal(await w.look(conv, NIGHT), "silent", "held, not posted");
+  const t2 = min(NIGHT, 11);
+  at(t2);
+  assert.equal(await w.look(conv, t2), "silent");
+  assert.deepEqual(seen.posted, []);
+  assert.ok(seen.recorded.some(([, t]) => /held for later/.test(t)), "the log says it was held, so the next look does not write it again");
+  urgent = true;
+  const t3 = min(NIGHT, 22);
+  at(t3);
+  assert.equal(await w.look(conv, t3), "posted", "urgent: posted at night");
+  assert.equal(seen.posted.length, 1);
+  assert.deepEqual(readRows().map((r) => [r.night, r.outcome]), [[true, "silent"], [true, "silent"], [true, "posted"]]);
+  const morning = new Date(2026, 9, 15, 7, 5, 0);
+  at(morning);
+  await w.tick(morning); // the tick delivers what was held first (then the look that is due posts its own urgent news)
+  assert.equal(seen.posted.length, 3);
+  assert.match(seen.posted[1]!, /^A few things I held back:\n- news #\d+\n- news #\d+/);
+});
+
+test("owner's look in the day: the daily cap holds the posts past it (urgent ones exempt)", async () => {
+  s.maxUnpromptedPerDay = 2;
+  try {
+    let urgent = false;
+    const { w, conv, seen, at } = rig(() => ({ message: `msg #${seen.recorded.length + seen.posted.length + 1}`, nextCheckMinutes: 10, urgent }));
+    const outcomes: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const t = min(DAY, i * 11);
+      at(t);
+      outcomes.push(await w.look(conv, t));
+    }
+    urgent = true;
+    const t = min(DAY, 40);
     at(t);
-    assert.equal(await w.look(conv, t), "posted");
+    outcomes.push(await w.look(conv, t));
+    assert.deepEqual(outcomes, ["posted", "posted", "silent", "posted"]);
+    assert.equal(seen.posted.length, 3);
+  } finally {
+    s.maxUnpromptedPerDay = 6;
   }
-  assert.deepEqual(seen.posted, ["urgent #1", "urgent #2", "urgent #3", "urgent #4"]);
-  assert.deepEqual(readRows().map((r) => [r.night, r.outcome]), [[true, "posted"], [true, "posted"], [true, "posted"], [true, "posted"]]);
-  assert.ok(!seen.recorded.some(([, t]) => /held/.test(t)));
 });
 
 test("owner's look: due only when the chosen time has come, the owner wrote or a note changed", async () => {
@@ -269,4 +304,28 @@ test("the report: counts per day, messages by day and night, dollars and the nex
   const mixed = heartbeatReport([...rows, row(new Date(2026, 9, 14, 9, 30), { kind: "tenant", message: true, costUsd: 0.02, outcome: "posted" }), row(new Date(2026, 9, 14, 9, 40), { kind: "group", costUsd: 0.01 })], DAY, 7).join("\n");
   assert.match(mixed, /by conversation: owner 4 look\(s\), 2 message\(s\), \$0\.07; groups 1 look\(s\), 0 message\(s\), \$0\.01; friends 1 look\(s\), 1 message\(s\), \$0\.02/);
   assert.deepEqual(heartbeatReport([], DAY), ["No heartbeat looks in the last 7 day(s)."]);
+});
+
+test("looks that fail again and again: ONE owner notice with the cause and the fix, then one 'back to normal'", async () => {
+  const told: string[] = [];
+  ownerNotices.sendTo((t) => told.push(t));
+  try {
+    let mode: "boom" | "ok" = "boom";
+    const { w, conv, at } = rig(() => (mode === "boom" ? { throws: true } : { message: "[[silent]]" }));
+    for (let i = 0; i < 4; i++) {
+      const t = min(DAY, i * 35); // (a failed look is retried at the day interval)
+      at(t);
+      assert.equal(await w.look(conv, t), "failed");
+    }
+    assert.equal(told.length, 1, "said once, not on every failure");
+    assert.match(told[0]!, /failed 3 times in a row/);
+    assert.match(told[0]!, /npm run doctor/);
+    mode = "ok";
+    const t = min(DAY, 140);
+    at(t);
+    assert.equal(await w.look(conv, t), "silent");
+    assert.deepEqual(told.slice(1), ["My background checks work again."]);
+  } finally {
+    ownerNotices.sendTo(undefined);
+  }
 });
