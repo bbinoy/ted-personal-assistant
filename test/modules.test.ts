@@ -84,7 +84,7 @@ test("modules: each module decides from the run whether it has a server (a conve
   assert.equal(when(module("memory"), chat), true);
   assert.equal(when(module("memory"), ctx({ source: "background", key: undefined })), false);
   assert.equal(when(module("notes"), ctx({ source: "background", key: undefined })), false, "no notes of its own, no read_note");
-  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined, notesRead: { dir: "/n" } })), true, "a heartbeat run reads its notes one at a time");
+  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined, notesRead: { dir: "/n", write: [], maxNotes: 1 } })), true, "a heartbeat run reads its notes one at a time");
   assert.equal(when(module("notes"), chat), false, "chat reads them as files");
   assert.equal(when(module("browse"), ctx({ source: "handler", key: undefined })), false, "the unattended mail runs never browse");
   assert.equal(when(module("tenants"), ctx({ source: "group", key: "g" })), false, "the tenant administration is the owner's chat only");

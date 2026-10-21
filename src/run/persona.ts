@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { allows, capabilitiesOf, groupCapabilities } from "../policy/capabilities.ts";
 import { fence } from "../core/fence.ts";
 import type { Capability } from "../tenants/tenants.ts";
@@ -173,11 +174,25 @@ export function groupSystem(parts: { style?: string; caps?: ReadonlySet<Capabili
   );
 }
 
+// How a person's note is written, from the stay-in-touch skill itself (its "Writing a person's note" section), so the dream and the skill never drift apart. Empty if the skill is absent.
+function peopleGuide(): string {
+  try {
+    const text = readFileSync(`${settings.pluginDir}/skills/stay-in-touch/SKILL.md`, "utf8");
+    const from = text.indexOf("## Writing a person's note");
+    if (from < 0) return "";
+    const rest = text.slice(from).replace(/^## .*\n+/, "");
+    const end = rest.indexOf("\n## ");
+    return (end < 0 ? rest : rest.slice(0, end)).replace(/```[^\n]*\n/g, "").replace(/```/g, "").trim();
+  } catch {
+    return "";
+  }
+}
+
 // The nightly dream (dream.ts), one prompt for every conversation: reads what the owner, a friend or a group's members said and proposes changes to those notes as
 // JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three, `categories` the note categories that
 // conversation has (the preset's notes.dream, .tenant or .group).
 export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant"; categories: readonly string[] }): string {
-  return say("dream", { subject: oneLineName(d.subject), own: d.kind === "owner", group: d.kind === "group", categories: d.categories.join(", ") });
+  return say("dream", { subject: oneLineName(d.subject), own: d.kind === "owner", group: d.kind === "group", categories: d.categories.join(", "), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
 }
 
 // Whose heartbeat run it is when it is not the owner's: a friend (her name, her own words about language and tone from tenant.json) or a group. The owner's has none.

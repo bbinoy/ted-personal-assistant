@@ -9,7 +9,8 @@
     "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status"],
     "dream": ["triage", "people", "scheduling", "context", "brief", "style"],
     "group": ["people", "context", "scheduling", "style"],
-    "tenant": ["people", "context", "scheduling", "style"]
+    "tenant": ["people", "context", "scheduling", "style"],
+    "background": ["people", "context", "scheduling"]
   },
   "profiles": {
     "chat": { "maxTurns": 40, "maxBudgetUsd": 2 },

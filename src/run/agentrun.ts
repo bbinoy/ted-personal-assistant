@@ -48,7 +48,7 @@ export interface RunOptions {
   // Turns on the SDK's auto-memory: notes in `dir`, the only place the file tools may write (policy.ts).
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
-  notesRead?: { dir: string; categories?: readonly string[]; zone?: string }; // an unattended run's notes: the prompt holds their index, the read_note tool reads one (readnote.ts)
+  notesRead?: { dir: string; categories?: readonly string[]; write: readonly string[]; maxNotes: number; zone?: string }; // an unattended run's notes: the prompt holds their index, read_note reads one and write_note saves an inferred one (notestools.ts)
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
   groupId?: string; // a group's unattended run (the heartbeat run) has no memory but is still the group's: its send, its browse approvals and its questions go there (memory.groupId says the same for a chat turn)
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt

@@ -15,7 +15,7 @@ import { approveIn, type Approve } from "../approvals/permissions.ts";
 import { expertSystem, heartbeatSystem } from "./persona.ts";
 import { expertSetup } from "./delegation.ts";
 import type { Payer } from "../tenants/payer.ts";
-import { categoriesFor } from "../core/preset.ts";
+import { categoriesFor, preset } from "../core/preset.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import { PROFILES } from "./profiles.ts";
 import type { SeenMail } from "../modules/seenmail/seenmail.ts";
@@ -67,7 +67,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
       })();
   return {
     ...base,
-    notesRead: { dir: conv.notesDir, ...(looker.own ? {} : { categories: categoriesFor(conv.kind) }), zone: looker.zone },
+    notesRead: { dir: conv.notesDir, ...(looker.own ? {} : { categories: categoriesFor(conv.kind) }), write: preset().notes.background.filter((c) => categoriesFor(conv.kind).includes(c)), maxNotes: settings.memoryMaxNotes, zone: looker.zone },
     model: p.model,
     outputFormat: p.outputSchema,
     onToolSuccess: extra.onToolSuccess,
