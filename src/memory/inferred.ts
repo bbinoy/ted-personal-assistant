@@ -7,7 +7,7 @@ import { noteContent } from "./dreamplan.ts";
 import { MAX_NOTE_CHARS, NOTES_DIR, parseNote, readNotes } from "./notes.ts";
 
 // A note a background look writes itself (the write_note tool): the heartbeat run learned something (a person moved, a trip, a new contact) while the owner was not talking to it.
-// It is never silent and never confirmed: the note says `origin: inferred` (the index shows it, a later run weighs it less), the owner is told when it is saved, and only the owner's
+// It is never confirmed: the note says `origin: inferred` (the index shows it, a later run weighs it less), the save is logged by the tool (not announced), and only the owner's
 // own words, through the chat or the dream's quote rule, turn it into a confirmed note. What it may do is narrow by construction: categories the preset allows it (facts, not
 // rules), a new note or one of its own earlier inferred notes (never a note the owner confirmed), one fact, a bounded size and number.
 

@@ -10,8 +10,7 @@ export const memoryModule: ToolModule = {
   free: true,
 };
 
-// notes (notestools.ts): the unattended runs' access to their own notes. Their prompt holds the index only; read_note reads one, write_note saves an inferred one and tells the
-// owner. Any heartbeat run of any conversation has them, scoped to that conversation's notes folder and categories. They are free: a save is announced and marked, not asked; reading
+// notes (notestools.ts): the unattended runs' access to their own notes. Their prompt holds the index only; read_note reads one, write_note saves an inferred one quietly (audited). Any heartbeat run of any conversation has them, scoped to that conversation's notes folder and categories. They are free: a save is marked and logged, not asked or announced; reading
 // shows nothing a third party wrote, so it does not taint the run.
 const notes = rowsOf("mcp__notes__", "notes", "heartbeat");
 export const notesModule: ToolModule = {
