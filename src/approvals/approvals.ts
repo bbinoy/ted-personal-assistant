@@ -70,6 +70,9 @@ const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
 const closed = new Map<string, string>(); // recently ended approvals (scope and timestamp -> label): a quoted reply to one must not land on another
 
+// How many questions are waiting for an answer in this conversation ("/status", conversation/ownercommands.ts).
+export const openCount = (scope: string): number => [...open.values()].filter((o) => o.scope === scope && !o.done).length;
+
 // "15 min", "2 h", "1 h 30 min".
 export function formatWait(minutes: number): string {
   const m = Math.round(minutes);
