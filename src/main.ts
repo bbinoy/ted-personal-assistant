@@ -46,6 +46,9 @@ import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProbl
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
 import { writeAgentPid } from "./core/migrateservices.ts";
+import { retentionTrigger, runRetention } from "./core/retention.ts";
+import { registerFileRules } from "./heartbeat/retentionrules.ts";
+import { instancePaths } from "./core/convpaths.ts";
 
 writeAgentPid(settings.dataDir); // so `npm run migrate` knows the agent is up
 applyCredentialMode();
@@ -259,6 +262,10 @@ const dream = () => {
   return dreamer.run().catch(() => {});
 };
 const dreamAtItsHour = dreamTrigger(dream);
+// The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window (rotated audit lines, old signal-cli attachments, expired notes, old snapshots and logs...).
+// Plain file work, no model; it waits for the next tick while the owner's chat is in a turn. RETENTION=off disables it.
+registerFileRules();
+const retentionAtItsHour = retentionTrigger((now) => runRetention(now, { stateFile: instancePaths().retention }), { stateFile: instancePaths().retention, enabled: () => settings.retention, busy: () => pipeline.busy(owner()) });
 // The clock of every conversation's own initiative: every tick, each conversation whose next look has come may be woken (wake.ts). The look is the heartbeat run
 // (heartbeat/look.ts; the daily brief is a skill it delegates), the same for the owner, every group and every friend, each with its own approver: a question goes to the chat that triggered it.
 const wakeups = createWakeups({
@@ -276,6 +283,7 @@ startHeartbeat({
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
+      retention: () => retentionAtItsHour(), // the first tick at or after 03:30, once a day, never while a chat turn runs (core/retention.ts)
       dream: () => dreamAtItsHour(), // the first tick at or after DREAM_HOUR; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
     });
   },

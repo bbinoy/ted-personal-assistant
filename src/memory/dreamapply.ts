@@ -4,19 +4,21 @@ import { basename, join } from "node:path";
 import { audit } from "../core/audit.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import { OWNER_SCOPE, type Plan, type Scope } from "./dreamplan.ts";
+import { settings } from "../core/settings.ts";
 import { forgetNote, STATUS_PREFIX } from "./notes.ts";
 
 // Applying a plan to the notes folder, with a snapshot first, and undoing the latest one.
 
-const KEEP_SNAPSHOTS = 7;
-
 const stamp = (now: Date) => now.toISOString().replace(/[:.]/g, "-");
+
+// The snapshots of a backups folder, oldest first: only the stamped ones (a folder of anything else in there, such as the retention job's expired/, is neither counted, pruned nor undone).
+export const snapshotsOf = (backupsDir: string): string[] => (existsSync(backupsDir) ? readdirSync(backupsDir).filter((n) => /^\d{4}-\d{2}-\d{2}T/.test(n)).sort() : []);
 
 function snapshot(now: Date, scope: Scope): string {
   mkdirSync(scope.backupsDir, { recursive: true, mode: 0o700 });
   const dir = join(scope.backupsDir, stamp(now));
   cpSync(scope.notesDir, dir, { recursive: true, filter: (src) => !basename(src).startsWith(STATUS_PREFIX) }); // a status note is not the dream's: an undo must not bring back yesterday's
-  for (const old of readdirSync(scope.backupsDir).sort().slice(0, -KEEP_SNAPSHOTS)) rmSync(join(scope.backupsDir, old), { recursive: true, force: true });
+  for (const old of snapshotsOf(scope.backupsDir).slice(0, -settings.notesBackupKeep)) rmSync(join(scope.backupsDir, old), { recursive: true, force: true });
   return dir;
 }
 
@@ -67,7 +69,7 @@ export function applyPlan(plan: Plan, now = new Date(), scope: Scope = OWNER_SCO
 
 // Puts the notes back as they were before the latest dream. The snapshot is used up.
 export function undoLatest(scope: Scope = OWNER_SCOPE): { ok: true; restored: number; from: string } | { ok: false; error: string } {
-  const snaps = existsSync(scope.backupsDir) ? readdirSync(scope.backupsDir).sort() : [];
+  const snaps = snapshotsOf(scope.backupsDir);
   const latest = snaps.at(-1);
   if (!latest) return { ok: false, error: "there is no dream to undo" };
   const dir = join(scope.backupsDir, latest);

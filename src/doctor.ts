@@ -32,8 +32,10 @@ import { disconnected, readConnectors, reportable } from "./modules/connectors.t
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
 import { dataPath, readJson, readText } from "./core/state.ts";
-import { convPaths, conversationsDir, instancePaths, LAYOUT_VERSION, logPaths, OWNER_CONV } from "./core/convpaths.ts";
+import { convPaths, conversationsDir, dataRoot, instancePaths, LAYOUT_VERSION, layout, logPaths, OWNER_CONV } from "./core/convpaths.ts";
 import { layoutState, readVersion, refusal, stragglers } from "./core/migrate.ts";
+import { readRetentionState, retentionSummary } from "./core/retention.ts";
+import { staleForReview } from "./heartbeat/retentionrules.ts";
 
 type Line = DoctorLine;
 
@@ -298,6 +300,13 @@ export async function doctor() {
 
   const dream = readJson<{ lastRunAt?: string }>(convPaths(OWNER_CONV).dream, {});
   if (!legacy) line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (DREAM_HOUR); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
+
+  if (!legacy) {
+    const r = retentionSummary(readRetentionState(instancePaths().retention), settings.retention, localTime);
+    line(r.ok, "retention", r.detail);
+    const old = staleForReview(layout(dataRoot()), new Date(), settings.migrationReviewDays);
+    if (old.length) line("warn", "old migration copies", `${old.length} entr${old.length === 1 ? "y" : "ies"} in instance/migration-backup or migration-orphans older than ${settings.migrationReviewDays} days (${old.slice(0, 3).map((o) => o.name).join(", ")}): review and delete them by hand, nothing removes them`);
+  }
 
   browseCheck(line, settings.browse, browseStatus());
   await openbaoCheck(line);
