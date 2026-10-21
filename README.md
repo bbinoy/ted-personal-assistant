@@ -50,7 +50,7 @@ Step by step: [docs/SETUP.md](docs/SETUP.md).
 - **Permission policy in code.** Every tool call is allow, ask or deny in `src/policy/policy.ts`, tested against real tool names. Deletes are denied. Memory can shape tone and priorities but never grant permissions.
 - **Untrusted content cleaned at the door.** Messages, mail, web pages and tool results lose hidden and look-alike characters and invisible HTML before a model reads them, and are treated as data.
 - **What this is not.** This is application-level policy running on your Mac as your user. It is **not** OS-level or container isolation. Prompt injection is contained and tested, not eliminated: a hostile mail can still try. `signal-cli` keeps its keys unencrypted on disk, so keep FileVault on.
-- **Control and no silent failures.** `/stop`, `/pause 2h`, `/resume` and `/status` work from your chat in code, whatever a model is doing. Unprompted messages are held in quiet hours and capped per day; a spent budget or background work that keeps failing is reported to you once, with the fix.
+- **Control and no silent failures.** `/stop`, `/pause 2h`, `/resume`, `/status`, `/quiet 2h` (or `/quiet until 18:00`, `/quiet`) and `/unquiet` work from your chat in code, whatever a model is doing (`/quiet` only holds what I'd post unprompted; `/pause` stops unattended work). Unprompted messages are held in quiet hours and capped per day, and what was held comes as one digest; a spent budget or background work that keeps failing is reported to you once, ending with the one step that fixes it.
 - **Tests.** Full test suite ensures the code behaves as expected.
 - **Logging.** Every decision and action is logged and can be inspected for behaviour (`npm run report`).
 

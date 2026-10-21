@@ -34,7 +34,7 @@ export function takeCapNotice(key: string, now = Date.now()): boolean {
 
 export const FRIEND_CAP_TEXT = "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved.";
 export const GROUP_CAP_TEXT = "I've reached today's limit for this group, back tomorrow.";
-export const ownerCapText = (limitUsd: number): string => `Friends' shared daily limit of $${limitUsd} reached; they're paused until midnight. Raise INSTANCE_KEY_DAILY_USD to change it.`;
+export const ownerCapText = (limitUsd: number): string => `Friends' shared daily limit of $${limitUsd} reached; they're paused until midnight. To lift it today, raise INSTANCE_KEY_DAILY_USD in .env and restart.`;
 
 // The owner's one notice a day about the shared key's ceiling (main.ts wires `sendTo` to her chat, like keynotice.ts). Returns whether it was sent. Never throws.
 let ownerSend: ((text: string) => void) | undefined;
