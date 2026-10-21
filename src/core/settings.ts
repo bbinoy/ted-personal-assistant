@@ -327,6 +327,8 @@ export function loadSettings(env: Env) {
 
     // Voice notes are transcribed on this Mac with whisper.cpp (src/transcribe.ts); nothing leaves it.
     whisperModel: env.WHISPER_MODEL || `${env.HOME ?? ""}/.cache/ted-personal-assistant/ggml-small.bin`,
+    maxConcurrentRuns: num(env, "MAX_CONCURRENT_RUNS", 3, 1, 16), // model processes running at once, all kinds together (rungate.ts); chat turns and small helper calls never wait for a place, looks and dreams do
+    groupWarmSlots: num(env, "GROUP_WARM_SLOTS", 2, 0, 10), // warm model processes kept for the most recently active groups (agentwarm.ts); 0: none
     transcribeConcurrency: num(env, "TRANSCRIBE_CONCURRENCY", 2, 1, 8), // voice notes transcribed at the same time; the rest wait their turn (main.ts, limiter.ts)
     // Spoken replies to voice messages (src/conversation/voicereply.ts): local text to speech with Kokoro (scripts/setup-tts.sh).
     voiceReplies: oneOf(env, "VOICE_REPLIES", "on", ["on", "off"] as const) === "on",
