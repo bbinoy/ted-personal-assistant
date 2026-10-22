@@ -495,23 +495,33 @@ test("an UNQUOTED answer right after the proposal is about it (so the chat model
   forgetSeenMail();
   const c = conv();
   const q = await offerOf(c, ["u1", "u2", "u3"]);
+  recordMessage("proposals", 5010, "📥 I'd archive these 3", NOW, c.logFile); // (the real send writes this line)
   const say = async () => 1;
   const t0 = 5010; // the proposal's timestamp
+  for (const other of ["all of them", "no", "none", "nothing", "cancel", "skip", "2 no", "all"]) assert.equal(await shadowReply(ownerLike(c), { text: other } as never, say, t0 + 60_000), false, `an unquoted "${other}" is ordinary chat`);
   assert.equal(await shadowReply(ownerLike(c), { text: "just checking" } as never, say, t0 + 60_000), false, "an ordinary message");
   assert.equal(await shadowReply(ownerLike(c), { text: "keep 2" } as never, say, t0 + 31 * 60_000), false, "half an hour later it is a chat message");
   assert.equal(q.ran.length, 0);
   for (const bare of ["yes", "ok", "sure", "👍"]) assert.equal(await shadowReply(ownerLike(c), { text: bare } as never, say, t0 + 60_000), false, `an unquoted bare "${bare}" is ordinary chat`);
   assert.equal(q.ran.length, 0);
-  assert.equal(await shadowReply(ownerLike(c), { text: "keep 2" } as never, say, t0 + 60_000), true);
+  assert.equal(await shadowReply(ownerLike(c), { text: "keep" } as never, say, t0 + 60_000), false, "no clarify for a half answer: it goes to the chat");
+  recordMessage("chat", 5020, "something else I said", NOW, c.logFile);
+  assert.equal(await shadowReply(ownerLike(c), { text: "keep 2" } as never, say, t0 + 60_000), false, "the assistant said something after the proposal: the reply is about that");
+  assert.equal(q.ran.length, 0);
+  const c3 = conv();
+  const q3 = await offerOf(c3, ["w1", "w2", "w3"]);
+  recordMessage("proposals", 5010, "📥 I'd archive these 3", NOW, c3.logFile);
+  assert.equal(await shadowReply(ownerLike(c3), { text: "keep 2" } as never, say, t0 + 60_000), true);
   await S.idle();
-  assert.deepEqual(q.ran[0]!.map((r) => r.input.conversationId), ["u1", "u3"]);
-  assert.deepEqual(peekConvDb(c.convId)!.all<{ state: string }>("SELECT state FROM shadow_proposals ORDER BY n").map((r) => r.state), ["archived", "kept", "archived"], "no row is left asked");
+  assert.deepEqual(q3.ran[0]!.map((r) => r.input.conversationId), ["w1", "w3"]);
+  assert.deepEqual(peekConvDb(c3.convId)!.all<{ state: string }>("SELECT state FROM shadow_proposals ORDER BY n").map((r) => r.state), ["archived", "kept", "archived"], "no row is left asked");
 });
 
 test("an unquoted \"archive all\" archives; a quoted bare yes still works", async () => {
   forgetSeenMail();
   const c = conv();
   const q = await offerOf(c, ["u1", "u2"]);
+  recordMessage("proposals", 5010, "📥 I'd archive these 2", NOW, c.logFile);
   const say = async () => 1;
   assert.equal(await shadowReply(ownerLike(c), { text: "archive all" } as never, say, 5010 + 60_000), true);
   await S.idle();

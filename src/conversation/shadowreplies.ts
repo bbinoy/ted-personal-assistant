@@ -3,7 +3,9 @@ import { join } from "node:path";
 import type { IncomingReaction } from "@ted-assistant/messenger";
 import { convDb } from "../core/convdb.ts";
 import { settings } from "../core/settings.ts";
-import { answerShadow, latestProposal, reactShadow, type Listed } from "../approvals/shadow.ts";
+import { answerShadow, latestProposal, listedBy, reactShadow, type Listed } from "../approvals/shadow.ts";
+import { messagesSince } from "../core/messages.ts";
+import { parseShadowReply } from "../approvals/shadowparse.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { waitingCount } from "../approvals/pendingflow.ts";
 import { dreamScope } from "../modules/memory/dreamscope.ts";
@@ -18,14 +20,27 @@ type Say = (text: string) => Promise<unknown>;
 const RIGHT_AFTER_MS = 30 * 60_000; // an unquoted answer counts as about the proposal for this long
 
 const BARE_YES = /(?:^|[^a-z])(?:yes|y|yep|yeah|yup|ok|okay|sure|approve|confirm|do|go|ahead)(?:[^a-z]|$)|👍|✅/i;
+const VERB = /(?:^|[^a-z])(?:keep|archive)(?:[^a-z]|$)/i;
+const NOT_ASSISTANT = new Set(["owner", "reaction", "member"]);
+
+function unquotedTarget(conv: Conversation, text: string, now: number): number | undefined {
+  if (!VERB.test(text) || BARE_YES.test(text) || hasOpen(conv.key) || waitingCount(conv.key) > 0) return undefined;
+  const ts = latestProposal(conv.key, now, RIGHT_AFTER_MS);
+  if (ts === undefined) return undefined;
+  const lastSaid = messagesSince(undefined, conv.logFile).filter((e) => !NOT_ASSISTANT.has(e.kind)).reduce((mx, e) => Math.max(mx, e.ts), 0);
+  if (lastSaid > ts) return undefined;
+  const p = parseShadowReply(text, listedBy(conv.key, ts).length);
+  return p.kind === "none" || p.kind === "clarify" ? undefined : ts;
+}
 
 export async function shadowReply(conv: Conversation, m: Pick<Held, "text" | "quote" | "picture" | "document" | "edit">, say: Say, now: number = Date.now()): Promise<boolean> {
   if (m.picture || m.document || m.edit) return false; // a caption or an edit never answers
   const quoted = m.quote && m.quote.timestamp !== 0 ? m.quote.timestamp : undefined;
   // An unquoted reply ("3,5 keep") straight after the proposal is about it, unless something else is open to be answered (a question, the approval inbox): otherwise the chat model would
   // read the numbers and rebuild the archive calls itself, outside the exact replay.
-  // Only in the proposal's own grammar ("archive all", "all", "3 keep", "no", "keep all"): an unquoted bare "yes" / "ok" / "sure" may be about anything else just said, so it never answers one.
-  const ts = quoted ?? (BARE_YES.test(m.text) || hasOpen(conv.key) || waitingCount(conv.key) > 0 ? undefined : latestProposal(conv.key, now, RIGHT_AFTER_MS));
+  // An unquoted reply counts only as the proposal's own grammar, and only while the proposal is the LAST thing the assistant said here (a reply to anything else is about that): it must say "keep" or
+  // "archive" ("archive all", "3,5 keep", "keep all", "all except 2 archive"); a bare "all" / "no" / "none" / "yes" is ordinary chat, and a half-understood one is left to the chat, never answered with a clarify.
+  const ts = quoted ?? unquotedTarget(conv, m.text, now);
   if (ts === undefined) return false;
   const done = answerShadow(conv, m.text, ts);
   if (!done) return false;
