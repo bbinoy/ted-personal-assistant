@@ -288,6 +288,36 @@ export const CONV_SCHEMA: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 7,
+    name: "what I learned overnight: memory changes made quietly (dream, inferred notes) and which summary listed them (memory/learned.ts)",
+    up: `
+      CREATE TABLE learned_changes (
+        seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+        at      INTEGER NOT NULL,                                   -- UTC ms
+        source  TEXT NOT NULL CHECK (source IN ('dream', 'inferred')),
+        action  TEXT NOT NULL CHECK (action IN ('add', 'update', 'merge', 'delete')),
+        file    TEXT NOT NULL,                                      -- the note's file name
+        gist    TEXT NOT NULL,                                      -- its one-line description (or, for a delete, why)
+        merged  TEXT,                                               -- JSON: the notes a merge replaced
+        batch   INTEGER,                                            -- the summary that listed it; NULL: not yet summarised (so nothing is told twice)
+        outcome TEXT CHECK (outcome IS NULL OR outcome IN ('confirmed', 'undone', 'gone'))  -- what a reply did with it; gone: no longer true by summary time, never listed
+      );
+      CREATE INDEX learned_changes_batch ON learned_changes (batch, seq);
+      CREATE TABLE learned_batches (
+        id     INTEGER PRIMARY KEY AUTOINCREMENT,
+        at     INTEGER NOT NULL,                                    -- UTC ms
+        msg_ts INTEGER                                              -- the message that carried the list (a reply that quotes it answers for its numbers); NULL: it went in the brief
+      );
+      CREATE INDEX learned_batches_ts ON learned_batches (msg_ts);
+      CREATE TABLE learned_asks (
+        batch INTEGER NOT NULL REFERENCES learned_batches (id),
+        n     INTEGER NOT NULL,                                     -- the number it had in that list
+        seq   INTEGER NOT NULL REFERENCES learned_changes (seq),
+        PRIMARY KEY (batch, n)
+      );
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

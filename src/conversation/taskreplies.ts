@@ -4,6 +4,7 @@ import { parseNumbered } from "../approvals/pendingparse.ts";
 import { asksOf, groupTasksReply, settle } from "../tasks/suggest.ts";
 import { getItem } from "../tasks/store.ts";
 import { isThumbUp } from "./feedback.ts";
+import { learnedReply } from "./learnedreplies.ts";
 import type { SuggestConv } from "../tasks/suggest.ts";
 import type { Conversation, Held } from "./conversationmodel.ts";
 
@@ -11,6 +12,7 @@ import type { Conversation, Held } from "./conversationmodel.ts";
 // suggestions or a 👍 on it (tasks/suggest.ts), and "/tasks" said in a group (the owner's and a friend's /tasks is ownercommands.ts; a group has no other command). true: handled here.
 export async function taskReply(conv: Conversation, m: Pick<Held, "text" | "quote" | "fromName" | "picture" | "document" | "edit">, say: (text: string) => Promise<unknown>): Promise<boolean> {
   if (m.picture || m.document || m.edit) return false; // a caption or an edit never answers
+  if (await learnedReply(conv, m, say)) return true; // "undo 2" / "confirm 1" on the "🧠 Learned overnight" list (learnedreplies.ts)
   const zone = zoneOf(conv);
   const listed = conv.kind === "group" ? groupTasksReply(conv, m.text, zone) : undefined;
   if (listed !== undefined) return void (await say(listed)), true;

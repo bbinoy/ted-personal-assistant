@@ -41,6 +41,7 @@ import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
 import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
 import { setSuggestRuntime } from "./tasks/suggest.ts";
+import { setLearnedRuntime } from "./conversation/learned.ts";
 import { runPending } from "./run/pendingrun.ts";
 import { holdingNow } from "./heartbeat/notices.ts";
 import { isRefusal, mayRun } from "./tenants/payer.ts";
@@ -104,6 +105,8 @@ setPendingRuntime({
 });
 // The "💡" message of task suggestions (tasks/suggest.ts): one per look, an approval-kind question in the conversation's chat, held in quiet hours.
 setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "approval", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
+// A friend's "🧠 Learned overnight" (conversation/learned.ts): one message after her dream, an approval-kind one (a reply that quotes it answers "undo 2"), held in quiet hours.
+setLearnedRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "approval", target: convOf(conv.key).target }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });

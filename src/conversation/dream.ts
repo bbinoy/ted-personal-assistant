@@ -11,6 +11,8 @@ import { dreamScope, dreamStateConv, readDream, writeDream, type DreamState } fr
 import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
+import { offerLearned } from "./learned.ts";
+import { recordDream } from "../memory/learned.ts";
 import { likedLines } from "./feedback.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { NOTES_DIR, STATUS_PREFIX } from "../memory/notes.ts";
@@ -164,6 +166,7 @@ export interface DreamerDeps {
   key?: () => string | undefined; // where a friend's instance key comes from (default settings.tenantApiKey; tests)
   busy?: (conv: Conversation) => boolean; // a turn of it is settling, queued or running (pipeline.busy): the conversation is skipped for now (its day stays open, the hourly retry comes back)
   run?: (payer: Payer, conv: Conversation) => Runner; // the model (default runnerFor(payer); tests)
+  told?: (conv: Conversation, now: Date) => unknown; // after a friend's dream: tell her what changed overnight (default offerLearned: one message, held in quiet hours; the owner's goes in the brief, a group's never)
 }
 
 export function createDreamer(deps: DreamerDeps = {}) {
@@ -202,6 +205,8 @@ export function createDreamer(deps: DreamerDeps = {}) {
       emit({ type: "dream", result: snapshot ? "changed" : "no-change", source: "dream", conv: conv.key, friend: false, meta: { ...tag, actions: plan.actions.length, rejected: plan.rejected.length }, text: `Tidied my notes in the nightly dream (${plan.actions.length} change${plan.actions.length === 1 ? "" : "s"})` });
       console.log(`${label}: ${plan.actions.length} change(s), ${plan.rejected.length} rejected`);
       if (snapshot && conv.kind !== "tenant") console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
+      if (snapshot && conv.kind !== "group") recordDream(conv.convId, plan, scope.notesDir, now.getTime()); // not silent to the person: it is listed once in "what I learned overnight" (memory/learned.ts); a group's notes are shared, nothing is listed
+      if (conv.kind === "tenant") await Promise.resolve((deps.told ?? ((c, n) => offerLearned(c, n, { afterDream: true })))(conv, now)).catch(() => undefined);
     } catch (e) {
       console.error(`dream (${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""}): failed:`, (e as Error).message);
       emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: false, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });
