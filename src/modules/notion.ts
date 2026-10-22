@@ -25,14 +25,13 @@ export const NOTION_UPDATE_TITLE = { icon: "📝", title: "Change Notion page", 
 
 export const notionModule: ToolModule = {
   name: "notion",
-  connection: { kind: "connector", key: "notion", label: "Notion", skipped: "tasks and meeting prep pages", server: /\bnotion\b/i, prefix: NOTION },
+  connection: { kind: "connector", key: "notion", label: "Notion", skipped: "meeting prep pages", server: /\bnotion\b/i, prefix: NOTION },
   rows: [...notionRows(NOTION), ...rowsOf(NOTION, "notion", "notion")("read", OWNER_READS)],
   free: ["read"],
   titles: { [`${NOTION}notion-update-page`]: NOTION_UPDATE_TITLE },
   floor: NOTION_FLOOR,
   skills: [{ name: "notion-tasks", required: true }],
   setup: [
-    { file: "setup-tasks.md", label: "task list (your Notion page)", needs: "notion" },
     { file: "setup-meetings.md", label: "meeting notes (where prep pages go)", needs: "notion" },
   ],
   hide: {

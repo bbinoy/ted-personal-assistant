@@ -388,7 +388,7 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {};
   const toolNames = (o: Parameters<typeof buildOptions>[1]) => Object.keys(((servers(o) as Record<string, { instance?: { _registeredTools: object } }>).tasks?.instance?._registeredTools ?? {}) as object);
-  assert.equal(toolNames({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).length, 8);
+  assert.equal(toolNames({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).length, 10) // (the owner's chat also has the two import tools);
   assert.equal(toolNames({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 8);
   assert.deepEqual(toolNames({ ...base, source: "background" }).sort(), ["add_task", "list_tasks"], "the owner's look");
   assert.deepEqual(toolNames({ ...base, source: "group", groupId: "g", tools: groupTools() }).sort(), ["add_task", "list_tasks"], "a group's look has no chat memory");

@@ -32,7 +32,7 @@ official letters, anything unsure: keep), FYI (receipts, status notices, calenda
 the row), Noise (newsletters, promos, cold outreach: archive from the row). Real-person threads are
 never auto-archived; flag dormant ones in the brief. Skim at most 4 relevant newsletters for the brief's
 Radar before archiving. Scan sent mail (`in:sent newer_than:7d`) for waiting-on threads and for promises
-to turn into tasks, as `ted-personal-assistant:notion-tasks` describes.
+to turn into tasks, (`add_task`, as `ted-personal-assistant:notion-tasks` describes).
 
 ## Archiving
 

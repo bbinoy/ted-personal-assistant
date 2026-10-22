@@ -14,6 +14,8 @@
 {"tool":"mcp__tasks__snooze_task","provider":"tasks","action":"task-write","cap":"tasks","only":["chat","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__tasks__confirm_suggestion","provider":"tasks","action":"task-write","cap":"tasks","only":["chat","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__tasks__reject_suggestion","provider":"tasks","action":"task-write","cap":"tasks","only":["chat","group"],"view":null,"free":true,"untrusted":false},
+{"tool":"mcp__tasks__import_tasks_preview","provider":"tasks","action":"task-import","cap":"tasks","only":["chat"],"view":null,"free":true,"untrusted":false},
+{"tool":"mcp__tasks__import_tasks_commit","provider":"tasks","action":"task-import","cap":"tasks","only":["chat"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__voice__voice","provider":"voice","action":"voice","cap":"voice","only":["chat","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__forget_note","provider":"memory","action":"memory","cap":"chat","only":["chat","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__journal","provider":"memory","action":"memory","cap":"chat","only":["chat","group"],"view":null,"free":true,"untrusted":false},

@@ -1,6 +1,6 @@
 ---
 name: meeting-prep
-description: Use when deciding which upcoming meetings need preparation, creating and drafting a prep page in the owner's Notion "Meetings" database, and running the post-meeting follow-up pass. Part of the daily brief. Gets the event list from `ted-personal-assistant:calendar`; pairs with `ted-personal-assistant:mailbird`, `ted-personal-assistant:notion-tasks`, `ted-personal-assistant:daily-brief`.
+description: Use when deciding which upcoming meetings need preparation, creating and drafting a prep page in the owner's Notion "Meetings" database, and running the post-meeting follow-up pass. Part of the daily brief. Gets the event list from `ted-personal-assistant:calendar`; pairs with `ted-personal-assistant:mailbird`, the task tools (`list_tasks`, `add_task`), `ted-personal-assistant:daily-brief`.
 delegate: sonnet
 ---
 
@@ -71,7 +71,7 @@ rebuild or re-research.
    Structure: **Context** (who they are, how the owner knows them, last
    contact), **Goal**, **Talking points / questions** (3-6), **Open
    threads / asks**, **Prep to do** (if any - also add it to
-   `ted-personal-assistant:notion-tasks`).
+   the task list with `add_task`).
 4. Put a short version + the Notion link in the briefing.
 
 ## Post-meeting follow-up (every run)
@@ -81,7 +81,7 @@ For meetings that already happened in the look-back window:
 1. Find the Meetings DB row (by name / attendee / date).
 2. **If it has real notes / a Summary:** read them, pull out follow-ups
    (a promise the owner made, a next step, a doc to send). For each, add a
-   task to `ted-personal-assistant:notion-tasks` if none exists and list it in the brief;
+   task with `add_task` (a suggestion when unattended) if none exists and list it in the brief;
    draft any follow-up email in-thread via `ted-personal-assistant:mailbird`.
 3. **If there are no notes:** in the brief, ask "add notes from your
    <meeting> with <person>?" and, if the meeting type usually needs a
@@ -90,7 +90,7 @@ For meetings that already happened in the look-back window:
 ## Guardrails
 
 - May: create meeting rows, set their properties, write / update prep
-  body content, add a matching task via `ted-personal-assistant:notion-tasks`.
+  body content, add a matching task with `add_task` (never to Notion: the tasks live in the assistant).
 - May not: delete meeting rows, touch the calendar (that is `ted-personal-assistant:calendar`),
   send invites, change other people's notes.
 - Draft only - never email an attendee or share prep without the owner.

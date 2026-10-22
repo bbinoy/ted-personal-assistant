@@ -68,7 +68,8 @@
       "ted-personal-assistant:stay-in-touch",
       "ted-personal-assistant:setup",
       "ted-personal-assistant:surf-conditions",
-      "ted-personal-assistant:draw"
+      "ted-personal-assistant:draw",
+      "ted-personal-assistant:task-import"
     ],
     "disallowedTools": [
       "mcp__claude_ai_Interactive_Brokers_IBKR",

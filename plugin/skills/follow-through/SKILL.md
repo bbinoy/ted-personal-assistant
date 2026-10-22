@@ -1,6 +1,6 @@
 ---
 name: follow-through
-description: Load after any action that changes mail, the calendar, the task list or a booking (a booking mail handled, an event created, a task added or ticked off, a reply drafted), and before you say you are done. Ask what else the change implies and take the routine next step. Pairs with `ted-personal-assistant:calendar`, `ted-personal-assistant:notion-tasks`, `ted-personal-assistant:mailbird`.
+description: Load after any action that changes mail, the calendar, the task list or a booking (a booking mail handled, an event created, a task added or ticked off, a reply drafted), and before you say you are done. Ask what else the change implies and take the routine next step. Pairs with `ted-personal-assistant:calendar`, `ted-personal-assistant:notion-tasks` (the task list), `ted-personal-assistant:mailbird`.
 ---
 
 # Follow-through

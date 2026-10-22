@@ -24,6 +24,7 @@
       { "name": "meeting-prep", "required": true },
       { "name": "follow-through" },
       { "name": "stay-in-touch" },
+      { "name": "task-import" },
       { "name": "setup", "required": true }
     ],
     "order": ["daily-brief", "mailbird", "mailbird-troubleshooting", "gmail", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"]

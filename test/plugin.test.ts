@@ -35,7 +35,7 @@ test("plugin: skills hold no personal details, only references to the owner's no
 test("plugin: every skill that needs setup names the note it reads, and setup saves under those names", () => {
   const setup = readFileSync(join(skillsDir, "setup", "SKILL.md"), "utf8");
   for (const item of setupItems()) assert.ok(setup.includes(item.file), `setup skill saves ${item.file}`);
-  for (const [skill, note] of [["calendar", "setup-calendars"], ["notion-tasks", "setup-tasks"], ["meeting-prep", "setup-meetings"], ["mailbird", "voice-writing"]] as const) {
+  for (const [skill, note] of [["calendar", "setup-calendars"], ["task-import", "setup-tasks"], ["meeting-prep", "setup-meetings"], ["mailbird", "voice-writing"]] as const) {
     assert.ok(readFileSync(join(skillsDir, skill, "SKILL.md"), "utf8").includes(note), `${skill} reads ${note}`);
   }
   assert.ok(existsSync(join(settings.pluginDir, ".claude-plugin", "plugin.json")));
@@ -58,7 +58,7 @@ test("setup: Notion tasks and meetings are found by the agent, saved, and only a
   assert.match(setup, /Exactly one clear match/);
   assert.match(setup, /Several plausible matches/);
   assert.match(setup, /Nothing found/);
-  for (const s of ["notion-tasks", "meeting-prep"]) {
+  for (const s of ["meeting-prep"]) {
     assert.match(read(s), /find it yourself and save it/, `${s}: discovers in chat`);
     assert.match(read(s), /(do not edit a page\s+nobody has confirmed|create no\s+pages)/, `${s}: no edits to an unconfirmed page when unattended`);
   }
@@ -74,7 +74,7 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   // setup items that depend on a down connector are not listed as "missing"
   const base = missingSetup([]);
   assert.equal(missingSetup([], ["calendar"]).length, base.length - 1);
-  assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 3);
+  assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 2);
   const chat = chatContext({ down: ["notion"] })!;
   assert.match(chat, /Not connected right now[\s\S]*Notion[\s\S]*Do not ask them to type in/);
   assert.match(heartbeatSystem("", { down: ["notion", "calendar"] }), /🔌 Notion and Google Calendar aren't connected/);
@@ -82,7 +82,7 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   assert.equal(NAMES.calendar, "Google Calendar");
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
   assert.match(read("setup"), /do not\*\* ask them to type in what the connector/);
-  for (const s of ["calendar", "notion-tasks", "meeting-prep"]) assert.match(read(s), /🔌/, `${s} reports a missing connector`);
+  for (const s of ["calendar", "meeting-prep"]) assert.match(read(s), /🔌/, `${s} reports a missing connector`);
 });
 
 test("connectors: judged by the server status in the start-up message, so a slow connector is not reported as missing", async () => {

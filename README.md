@@ -27,16 +27,16 @@
 - **Meeting prep** from your Notion meeting database and past threads.
 - **People.** "Invite Sam" or "write to Anna" does not mean guessing or asking for an address: `find_person` looks in your people notes and, for a friend, her Google Contacts, and only asks when it finds none or several. Google Drive and Docs are on by default: it can find and read your files.
 - **Its own task list.** Say "remind me to call Sam on Friday" and it keeps a list per chat (yours, each friend's, each group's): tasks, promises you made and things you wait on, with repeat rules (`every monday at 09:00`), snoozing and a full history, never deleting anything. What it notices in mail it only *suggests*, and you confirm. `/tasks` shows the list.
-- **Tasks.** It reads your Notion task list, spots what is overdue, adds tasks from mail and removes ones clearly done. Chat with it to get a brief on what's up next, or to add/tick off tasks.
+- **Tasks live in Ted, not in Notion.** The daily brief reads Ted's own list (overdue, due today, waiting on, what you owe, suggestions waiting); mail only ever adds *suggestions* that you confirm. Chat with it to add, tick off or reschedule. If you have an old Notion task table, Ted moves it over once, after a preview you confirm ("import my tasks"); after that it never writes tasks to Notion again.
 - **Calendar.** Creates events from mail, flags conflicts and proposes fixes. Plain events on your own calendar just happen (logged); anything with other people asks.
 - **Daily brief.** An email sent to you once a day in the morning with a key focus for the day based on tasks, emails and calendar, upcoming calendar events, what it did since the last brief (emails that were auto-archived), and newsletter digest.
 - **Newsletter digest.** The top three nuggets, based on your preferences, in the daily brief.
 
-Tasks, meeting prep and calendar need the Notion and Google Calendar connectors. Without one, Ted skips that part and says so. It helps you point it to the right page in Notion if it doesn't find it automatically.
+Meeting prep and the calendar need the Notion and Google Calendar connectors (the task list does not). Without one, Ted skips that part and says so. It helps you point it to the right page in Notion if it doesn't find it automatically.
 
 ## Setup
 
-Just ask Claude Code to set up the repo and install dependencies. Then start Ted, it will automatically look where in Notion you keep your tasks and meetings, and confirms those with you.
+Just ask Claude Code to set up the repo and install dependencies. Then start Ted, it will automatically look where in Notion you keep your meetings, and confirms that with you. Tasks need no setup (an old Notion task table can be imported once, see docs/SETUP.md).
 
 By default it uses the "Note to self" chat on Signal, but for a better experience consider creating a dedicated Signal account for Ted so you can chat to him as its own user and add him to groups.
 
