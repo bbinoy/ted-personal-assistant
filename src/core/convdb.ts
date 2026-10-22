@@ -26,7 +26,7 @@ import { writeFileAtomic } from "./state.ts";
 // the heartbeat look, the dream, quiet compaction, approved actions), the owner is told once a day (heartbeat/notices.ts) and the doctor fails with the file's name. A person restores the set-aside file
 // (or `sqlite3 .recover`) and deletes the marker; deleting only the marker accepts the fresh start. The other conversations are not affected: each has its own file.
 //
-// How to add state (version 2, the tasks, is the example): append ONE numbered step to CONV_SCHEMA below (version n+1, `CREATE TABLE ...`). Steps run in order, each in
+// How to add state (version 3, the tasks, is the example): append ONE numbered step to CONV_SCHEMA below (version n+1, `CREATE TABLE ...`). Steps run in order, each in
 // its own transaction, at the first open of each conversation's file; a step is never edited once shipped. Then a small store module over convDb(conv), and, if the table grows, a retention rule (heartbeat/convretention.ts).
 
 export const CONV_SCHEMA: readonly Migration[] = [
@@ -170,6 +170,29 @@ export const CONV_SCHEMA: readonly Migration[] = [
   },
   {
     version: 2,
+    name: "feedback offers and thumbs-up signals (conversation/feedback.ts)",
+    up: `
+      CREATE TABLE feedback_offers (
+        seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+        on_ts       INTEGER NOT NULL,                               -- the unprompted message the feedback was about: it is offered about once
+        offer_ts    INTEGER,                                        -- the offer message we sent (what a 👍 or a quoted yes points at); NULL: no offer went out
+        state       TEXT NOT NULL,                                  -- offered, saved, declined, none (the model had no usable rule: counts for nothing)
+        file        TEXT,
+        description TEXT,
+        body        TEXT,                                           -- the proposed note, exactly as shown
+        at          INTEGER NOT NULL
+      );
+      CREATE INDEX feedback_offers_on ON feedback_offers (on_ts);
+      CREATE INDEX feedback_offers_offer ON feedback_offers (offer_ts);
+      CREATE TABLE feedback_signals (
+        key     TEXT PRIMARY KEY,                                   -- a note file, or cat:<journal category>: what the 👍 was on
+        up      INTEGER NOT NULL,
+        last_at TEXT NOT NULL                                       -- ISO
+      );
+    `,
+  },
+  {
+    version: 3,
     name: "tasks: items and their append-only history",
     up: `
       CREATE TABLE items (

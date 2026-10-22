@@ -8,8 +8,6 @@ import { readSession } from "../src/run/sessionstore.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
 import { settings } from "../src/core/settings.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
-import type { ChatSession } from "../src/run/session.ts";
-import { scratch } from "./scratch.ts";
 
 // The untrusted-input flag of a chat session: kept in the session record, so a resumed session that holds a hostile mail is still told to the judge.
 

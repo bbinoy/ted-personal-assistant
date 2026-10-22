@@ -18,7 +18,6 @@ const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modu
 const { recordDone, markNeedsReconnect, readDone, connectionState } = await import("../src/intake/intakelinks.ts");
 const { deleteTenantItems } = await import("../src/secrets/secrets.ts");
 const { addPending, openItems } = await import("../src/approvals/pending.ts");
-const { dataPath } = await import("../src/core/state.ts");
 const { tenantKey } = await import("../src/core/ownerkey.ts");
 const { OpenBao } = await import("../src/secrets/openbao.ts");
 

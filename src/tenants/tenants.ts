@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { emitRecord } from "../core/events.ts";
 import { FILE as OWNER_LOG, type Summarize } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";

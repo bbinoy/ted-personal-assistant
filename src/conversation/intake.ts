@@ -230,6 +230,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     // While an approval is pending, a message may be its answer. That must skip the queue.
     scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
     if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
+    if (!edited && (await deps.feedback?.message(conv, m))) return void console.log("feedback: a quoted reply to something sent unprompted was handled (an offer, or the answer to one)"); // learning from feedback (feedback.ts); only a short quoted reply, and a group never gets here
     forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
     overtake(conv); // a look of this conversation that is running gives way to the turn
     await burst(conv, m, async (b) => {
@@ -269,6 +270,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       console.log(`owner reacted ${r.emoji}`);
       const on = findMessage(r.targetTimestamp, conv.logFile);
       record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
+      if (await deps.feedback?.reaction(conv, r)) return void console.log("feedback: a reaction was handled (an offer, or the answer to one)"); // a 👎 on something sent unprompted, or the 👍 / 👎 on an offer: no chat turn (feedback.ts)
       const prompt = reactionPrompt(r.emoji, on);
       // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
       await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text, on ? Date.parse(on.at) || 0 : 0), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });

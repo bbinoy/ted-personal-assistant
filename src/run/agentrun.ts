@@ -72,7 +72,8 @@ export interface RunOptions {
   gate?: RunKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
   stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's session file
   signal?: AbortSignal; // an unattended run is called off from outside (a chat message overtook the heartbeat look, look.ts): while waiting for a place (rungate.ts) it never starts, once running the query is aborted
-  maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else the chat or background one
+  maxMinutes?: number; // a wall-clock ceiling of its own (the browse run, a heartbeat look), else the chat or background one
+  expertMaxMinutes?: number; // a heartbeat look: when it delegates to an expert the whole ceiling becomes this many minutes (never less than maxMinutes)
   // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
   // read at every call (a warm process is built before the message that uses it arrives): a job passes `() => ({ kind: "standing", task })` with its fixed text, an
   // unattended turn of a conversation `derived` text (turnscope.ts derivedTurn). A conversation's own turn passes nothing: its turn-scoped messages are its scope's
@@ -325,7 +326,9 @@ export async function runAgent(prompt: string, approve: Approve, opts: RunOption
       const off = () => c.controller.abort();
       if (wait.signal.aborted) off();
       wait.signal.addEventListener("abort", off, { once: true });
-      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
+      // (a delegation gives the look more time: the first call to an expert extends the ceiling)
+      const o = opts.experts && opts.expertMaxMinutes ? { ...opts, experts: { ...opts.experts, onDelegate: (d: Delegation) => (c.extend(opts.expertMaxMinutes! * 60_000), opts.experts!.onDelegate?.(d)) } } : opts;
+      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), o, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
     }, opts.maxMinutes, opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined));
   }, wait.signal).finally(() => (forget(), endRun(run), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
     if (opts.sessionConv) forgetUnresumable(opts.sessionConv, e, opts.source);

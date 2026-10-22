@@ -8,7 +8,6 @@ import { join } from "node:path";
 // behind, the invited list, and the owner's fixed hello. A stranger's words are held as data and reach no model: nothing here has a model to call.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "registration-store-test-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const Reg = await import("../src/tenants/registration.ts");
 const { readAudit } = await import("../src/core/audit.ts");

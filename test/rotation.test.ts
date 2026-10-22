@@ -7,7 +7,6 @@ import { join } from "node:path";
 // Size-bounded files (a log a child holds open) and the tables that replaced the rotated ones: the heartbeat rows (age-pruned), the payment ledger (a financial record: never rotated or deleted).
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "rotation-test-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const { scratchDb } = await import("./scratch.ts");
 const { rotateIfOver, copyTruncateIfOver } = await import("../src/core/rotate.ts");
 const rows = await import("../src/core/looks.ts");

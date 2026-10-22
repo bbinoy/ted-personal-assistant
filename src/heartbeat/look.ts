@@ -22,7 +22,9 @@ import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
 import { createSeenMail, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
-import { RunStopped } from "../run/ceiling.ts";
+import { RunStopped, RunTimeout } from "../run/ceiling.ts";
+import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
+import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { flushPending } from "../approvals/pendingflow.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
@@ -69,7 +71,8 @@ export function lastLookText(looked: string | undefined, now: Date, zone: string
 const briefHow = (): string => (settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format.");
 
 // The fixed text of one look, as the judge's standing provenance and the start of the prompt. Written by code from the preset and the conversation's capabilities; no mail, no chat in it.
-export function lookInstruction(now: Date, looked: string | undefined, looker: Looker = lookerOf(owner())): string {
+// `notesDir`: where the conversation's status notes are (the daily brief's state: its fact line is computed from there).
+export function lookInstruction(now: Date, looked: string | undefined, looker: Looker = lookerOf(owner()), notesDir: string = NOTES_DIR): string {
   const today = dayAt(now, 0, looker.zone);
   return heartbeatInstruction({
     now: `${WEEKDAYS[today.weekday]} ${today.date} ${timeIn(now, looker.zone)}`,
@@ -81,6 +84,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     delegated: looker.experts ? delegatedText(expertSetup(looker.skills, "")) : "",
     briefTime: preset().rhythm.heartbeat.briefTime,
     briefOverdueHour: `${String(preset().rhythm.heartbeat.briefOverdueHour).padStart(2, "0")}:00`,
+    briefFact: looker.brief ? statusFact("brief", now, looker.zone, notesDir) : "",
     briefHow: looker.brief ? briefHow() : "",
     who: looker.who,
     own: looker.own,
@@ -112,6 +116,8 @@ export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: numb
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
   const history = new Map<string, LookHistory>(); // per conversation, in memory (a restart starts fresh)
+  const inflight = new Set<AbortController>(); // the looks that are running now (abortAll)
+  const slept = new WeakSet<AbortController>(); // those stopped because the Mac slept
 
   // One look of one conversation. Returns what happened (for the log and tests).
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
@@ -140,7 +146,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let delegations = 0;
     const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
-    const instruction = lookInstruction(now, st.wake?.looked, looker);
+    const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -150,6 +156,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       if (preemptible(h, now.getTime(), settings.heartbeatDayMinutes)) overtaken.abort();
       else console.log(`heartbeat: a message came while the ${conv.kind} look ran; it is not called off (${h.preempted} preempted in a row, or the last full look is old)`);
     };
+    inflight.add(overtaken);
     const lease = pipeline.lease?.(conv, callOff, () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
     try {
       reply = await pipeline.sendWhile(
@@ -180,14 +187,19 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       failure = e;
       if (!overtaken.signal.aborted && !(e instanceof RunStopped)) console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
     } finally {
+      inflight.delete(overtaken);
       lease?.end();
     }
     // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
     await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
-    const calledOff = overtaken.signal.aborted || failure instanceof RunStopped; // a message overtook it, or the owner said /stop: not a failure
-    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : calledOff ? "preempted" : "failed";
+    const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once
+    const timedOut = !reply && failure instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
+    const calledOff = !interrupted && (overtaken.signal.aborted || failure instanceof RunStopped); // a message overtook it, or the owner said /stop: not a failure
+    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : interrupted ? "failed" : calledOff ? "preempted" : timedOut ? "timeout" : "failed";
+    if (timedOut) console.error(`heartbeat: the ${conv.kind} run timed out:`, (failure as Error).message);
+    else if (interrupted) console.error(`heartbeat: the ${conv.kind} run was stopped: the Mac slept`);
     const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
     if (answer?.message && !stale) {
       const message = answer.message;
@@ -201,16 +213,28 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     }
     if (outcome === "preempted") h.preempted++;
     else (h.preempted = 0, (h.completedAt = now.getTime()));
-    if (outcome !== "preempted") observeLook(conv, outcome, failure, now);
-    if (outcome === "failed" || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
+    const failed = outcome === "failed" || outcome === "timeout";
+    const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
+    // A look that ended badly after delegating the brief must not leave its note `started` for 45 minutes: the code marks it failed now, so the next look redoes it (heartbeat.md)
+    if (failed && looker.brief && delegations > 0 && failStartedNote("brief", timedOut ? "the run timed out" : interrupted ? "the run was stopped, the Mac slept" : "the run failed", new Date(), conv.notesDir, looker.zone)) console.error("heartbeat: the brief's note was left 'started'; marked failed");
+    if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now);
+    if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
-    emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
-    recordWake(pipeline, conv, answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
+    emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
+    if (interrupted) recordWake(pipeline, conv, 0, now, (m) => Number(m)); // it was cut off, not decided: due again at the next due-check (no 10-minute minimum)
+    else recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }
 
-  return { look };
+  // Stops every look that is running (the Mac slept: their connections are dead). Each one ends as a failed row and is due again at once.
+  const abortAll = (reason: string): number => {
+    const n = inflight.size;
+    for (const c of inflight) (slept.add(c), c.abort(reason));
+    return n;
+  };
+
+  return { look, abortAll };
 }

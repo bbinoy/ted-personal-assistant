@@ -12,7 +12,7 @@ test("startJobs: a job that throws (sync or async) or never finishes does not st
   const ran: string[] = [];
   const errors: string[] = [];
   const was = console.error;
-  console.error = (...a: unknown[]) => void errors.push(a.join(" "));
+  console.error = (...a: unknown[]) => void (/tick failed/.test(a.join(" ")) && errors.push(a.join(" "))); // (not Node's one-time SQLite warning, which lands on whichever test first opens a database)
   try {
     startJobs({
       throws: () => { throw new Error("sync boom"); },

@@ -100,7 +100,8 @@ export function createWakeups(deps: WakeDeps) {
 
   // Every conversation looks on its own: a slow brief or a failing group never delays another conversation.
   const busy = new Set<string>();
-  const started = new Set<string>(); // conversations that have had their first look since the process started
+  const started = new Set<string>(); // conversations that have had their first look since the process started (or since the Mac last slept: slept())
+  let epoch = 0; // raised when the Mac sleeps: a conversation still napping before its first look is dropped (it is still due; the next tick starts it)
   const nap = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref()));
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
@@ -130,6 +131,7 @@ export function createWakeups(deps: WakeDeps) {
         quietCompact(conv);
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
+        const mine = epoch;
         try {
           await flushPending(conv.key, { ended: false }).catch((e) => console.error("wake: approval inbox:", (e as Error).message)); // parked approvals: asked once quiet hours end, expired ones told, a cut-short run noticed, even with no look
           await releaseHeld(pipeline, conv, clock()); // what quiet hours or the day's cap held back goes out now, as one message
@@ -137,7 +139,7 @@ export function createWakeups(deps: WakeDeps) {
             started.add(conv.key);
             const ms = deps.stagger?.(conv) ?? 0;
             if (ms > 0) await nap(ms);
-            if (paused(clock())) return;
+            if (paused(clock()) || mine !== epoch) return;
           }
           await look(conv, clock());
         } catch (e) {
@@ -149,5 +151,14 @@ export function createWakeups(deps: WakeDeps) {
     );
   }
 
-  return { tick, look, idle };
+  // The Mac slept (heartbeat.ts): the connections of every look in flight are dead, so they are stopped (those still waiting for a place in the run gate never start), and
+  // the conversations take their staggered first look again, as after a restart (stagger above), so waking up does not start a dozen runs together. Everything stopped is still due and
+  // is started again by the normal due-check. Returns how many runs were stopped.
+  function slept(): number {
+    epoch++;
+    started.clear();
+    return heartbeat.abortAll("the Mac slept");
+  }
+
+  return { tick, look, idle, slept };
 }

@@ -246,7 +246,7 @@ test("replayUnanswered: one queued turn per chat with unanswered lines, none for
   const logs: Record<string, Sent[]> = { owner: [line(5, "owner", "where is my 3pm?", { by: "+1555" })], t1: [line(5, "owner", "hi"), line(4, "chat", "hello")], t2: [] };
   const pipeline = {
     enqueue: (_c: never, job: () => Promise<unknown>) => job(),
-    runTurn: async (c: { key: string }, turn: { run: (h: never) => Promise<unknown>; announce: boolean; target?: { author: string; timestamp: number } }) => {
+    runTurn: async (_c: { key: string }, turn: { run: (h: never) => Promise<unknown>; announce: boolean; target?: { author: string; timestamp: number } }) => {
       await turn.run({} as never);
       assert.equal(turn.announce, true);
       assert.equal(turn.target?.author, "+1555");

@@ -7,7 +7,7 @@ import type { Db } from "../core/db.ts";
 import { nextDue, nextInstant, parseRepeat } from "./repeat.ts";
 import { isZone, localOf, parseLocal, showInstant, showLocal, todayIn, wallToUtc } from "./when.ts";
 
-// The tasks of ONE conversation: a typed API over the `items` and `task_events` tables of its assistant.db (core/convdb.ts migration 2, docs/ARCHITECTURE.md "Tasks"). Three kinds of item: a
+// The tasks of ONE conversation: a typed API over the `items` and `task_events` tables of its assistant.db (core/convdb.ts migration 3, docs/ARCHITECTURE.md "Tasks"). Three kinds of item: a
 // task, a promise the person made (i_owe) and something owed to them (owed_to_me). Every mutation is ONE transaction that changes the item AND appends a task_events row (before/after of the
 // changed fields), then tells the event stream (a `task` event: the audit row and the journal line). Nothing is ever deleted: `dropped` is the end state (the tables have triggers that refuse a
 // DELETE, and this file has no path to one). A conversation can only reach its own file: the key names it, there is no other connection (convdb.ts).
