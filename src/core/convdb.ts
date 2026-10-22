@@ -233,6 +233,26 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE TRIGGER task_events_no_delete BEFORE DELETE ON task_events BEGIN SELECT RAISE(ABORT, 'the task history is append-only'); END;
     `,
   },
+  {
+    version: 4,
+    name: "reminders: the urgent flag and the ledger of reminders fired (src/tasks/remind.ts)",
+    up: `
+      ALTER TABLE items ADD COLUMN urgent INTEGER CHECK (urgent IS NULL OR urgent IN (0, 1));  -- 1: the reminder may break quiet hours
+      CREATE TABLE reminders (
+        seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL REFERENCES items (id),
+        key     TEXT NOT NULL,                                      -- which reminder: at:<remind_at>, due:<date>, snooze:<until>
+        state   TEXT NOT NULL CHECK (state IN ('held', 'claimed', 'sent', 'retry', 'folded')),  -- held: due in quiet hours; claimed: marked BEFORE the send (at most once); sent; retry: the send failed; folded: too late, left to the brief
+        fire_at INTEGER NOT NULL,                                   -- UTC ms: when it was meant to go
+        at      INTEGER NOT NULL,                                   -- the last change of state
+        late    INTEGER NOT NULL DEFAULT 0,                         -- 1: it went out late (the doctor counts these)
+        tries   INTEGER NOT NULL DEFAULT 0,
+        ts      INTEGER,                                            -- the reminder message's timestamp: what a quote or a reaction points at
+        UNIQUE (item_id, key)
+      );
+      CREATE INDEX reminders_ts ON reminders (ts);
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

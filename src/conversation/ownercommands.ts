@@ -1,3 +1,4 @@
+import { nextReminderText } from "../tasks/remind.ts";
 import { rmSync } from "node:fs";
 import { openCount } from "../approvals/approvals.ts";
 import { clearText, listText, waitingCount } from "../approvals/pendingflow.ts";
@@ -113,6 +114,7 @@ export interface StatusFacts {
   approvals: number;
   down: readonly string[]; // connectors down in the last run
   zone?: string;
+  nextReminder?: string; // when the next task reminder goes (tasks/remind.ts nextReminderText); none: no reminder is scheduled
   damaged?: boolean; // the ledger database is damaged: the agent runs degraded (core/instancedb.ts)
 }
 
@@ -124,6 +126,7 @@ export function statusText(f: StatusFacts): string {
     f.damaged ? "Ledger damaged (instance/instance.db): background work and payments are off, chat works. See `npm run doctor`." : `Budget today: $${f.spentUsd.toFixed(2)} of $${f.limitUsd}${f.spentUsd >= f.limitUsd ? " (reached, background work is paused)" : ""}.`,
     f.lastLook ? `Last look: ${timeIn(f.lastLook.at, f.zone)} (${f.lastLook.outcome}).` : "Last look: none yet.",
     `Open approvals: ${f.approvals}.`,
+    ...(f.nextReminder !== undefined ? [`Next reminder: ${f.nextReminder || "none"}.`] : []),
     f.down.length ? `Connectors down: ${f.down.join(", ")}. See \`npm run doctor\`.` : "Connectors: none down.",
   ].join("\n");
 }
@@ -165,6 +168,7 @@ const real: CommandDeps = {
       limitUsd: settings.dailyBudgetUsd,
       approvals: openCount(conv.key) + waitingCount(conv.key), // (the questions open in the chat, and the calls parked in the approval inbox)
       lastLook: lastOwnerLook(),
+      nextReminder: nextReminderText(conv.key, conv.convId, now.getTime(), zoneOf(conv)) ?? "",
       ...(ledgerDamage() ? { damaged: true } : {}),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };

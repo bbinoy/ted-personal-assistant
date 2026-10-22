@@ -272,11 +272,26 @@ export function convDbCheck(line: Line, root: string = dataRoot()): void {
     else if (verdict !== "ok") line(false, `conversation database ${conv}`, `${verdict}; restore ${p.db} from your backup with the agent stopped, or the agent will set it aside at its next use`);
     else if (existsSync(p.db)) {
       ok++;
+      const late = lateReminders(p.db);
+      if (late) line("warn", `reminders sent late in ${conv}`, `${late} in the last 7 days (the Mac asleep or the agent down at their time; npm run heartbeat-report, docs/SETUP.md "Keep it running")`);
       const lost = lostApprovals(p.db);
       if (lost.length) line("warn", `approvals not restored in ${conv}`, `${lost.map((x) => `#${x.n}${x.label ? ` ${x.label}` : ""}`).join("; ")}; they are not run, ask again if wanted (listed for 30 days)`);
     }
   }
   if (ok > 0 || names.length === 0) line(true, "conversation databases", `${ok} assistant.db file(s), quick_check ok`);
+}
+
+/** How many reminders went out late (after a sleep or a restart) in the last 7 days: read-only, never opens the database the normal way. */
+function lateReminders(path: string): number {
+  let raw: DatabaseSync | undefined;
+  try {
+    raw = new DatabaseSync(path, { readOnly: true });
+    return Number((raw.prepare("SELECT COUNT(*) AS n FROM reminders WHERE late = 1 AND at > ?").get(Date.now() - 7 * 86_400_000) as { n: number }).n);
+  } catch {
+    return 0; // (an older schema has no such table)
+  } finally {
+    try { raw?.close(); } catch { /* closed */ }
+  }
 }
 
 /** The approvals that could not be restored into this database (a late pending.json, a damaged file): read-only, never opens it the normal way. */

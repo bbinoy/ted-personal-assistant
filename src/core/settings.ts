@@ -45,6 +45,16 @@ export function digestTimes(raw: string | undefined): number[] {
   return [...out].sort((a, b) => a - b);
 }
 
+// TASK_DEFAULT_REMIND="08:30": the clock time (the conversation's own zone) of the default ping on the morning of a due date, for an open task with a due and no reminder of its own. "off" = no default pings.
+export function remindTime(raw: string | undefined): string | "off" {
+  const t = raw?.trim();
+  if (t === undefined || t === "") return "08:30";
+  if (t.toLowerCase() === "off") return "off";
+  const m = /^(\d{1,2})(?::(\d{2}))?$/.exec(t);
+  if (!m || Number(m[1]) > 23 || Number(m[2] ?? 0) > 59) throw new Error(`TASK_DEFAULT_REMIND must look like 08:30 (a clock time, or "off"; got "${t}")`);
+  return `${m[1]!.padStart(2, "0")}:${m[2] ?? "00"}`;
+}
+
 function oneOf<T extends string>(env: Env, name: string, fallback: T, allowed: readonly T[]): T {
   const raw = env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
@@ -203,6 +213,7 @@ export function loadSettings(env: Env) {
     quietStartHour: quiet.from,
     quietEndHour: quiet.to,
     maxUnpromptedPerDay: num(env, "MAX_UNPROMPTED_PER_DAY", 6, 1, 100), // unprompted heartbeat posts per conversation per day; past it they are held for the next day's one combined message (urgent ones are exempt)
+    taskDefaultRemind: remindTime(env.TASK_DEFAULT_REMIND), // the morning ping for a task due that day with no reminder of its own (tasks/remind.ts)
     digestMinutes: digestTimes(env.DIGEST_TIMES), // when held posts and notices go out as one digest (minutes since midnight, the conversation's own zone), besides the end of quiet hours (heartbeat/digest.ts)
     digestMaxItems: num(env, "DIGEST_MAX_ITEMS", 8, 1, 50), // lines in one digest; the rest is "and N more, ask me"
     digestSummarize: oneOf(env, "DIGEST_SUMMARIZE", "off", ["on", "off"] as const) === "on", // on: one small helper-model call turns the owner's digest items into one-liners (code's own lines when it fails or times out)

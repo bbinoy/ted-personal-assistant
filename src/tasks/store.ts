@@ -49,6 +49,7 @@ export interface Item {
   createdAt: number;
   updatedAt: number;
   doneAt?: number;
+  urgent?: boolean; // the reminder may break quiet hours (tasks/remind.ts)
 }
 
 export interface TaskEvent {
@@ -104,6 +105,7 @@ interface Row {
   created_at: number;
   updated_at: number;
   done_at: number | null;
+  urgent: number | null;
 }
 const opt = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
 const toItem = (r: Row): Item => ({
@@ -125,6 +127,7 @@ const toItem = (r: Row): Item => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   ...(opt(r.done_at) !== undefined ? { doneAt: r.done_at! } : {}),
+  ...(r.urgent ? { urgent: true } : {}),
 });
 
 const writeDb = (key: string): Db => {
@@ -180,7 +183,7 @@ function checkInstant(label: string, v: number | null | undefined): number | nul
 
 const NOUN: Record<Kind, string> = { task: "task", i_owe: "promise", owed_to_me: "item owed to you" };
 const VERB: Record<Action, string> = { added: "Added", edited: "Edited", done: "Completed", reopened: "Reopened", dropped: "Dropped", snoozed: "Snoozed", suggested: "Suggested", confirmed: "Confirmed the suggested", rejected: "Rejected the suggested", reminded: "Reminded about" };
-const FIELD_NAMES: Record<string, string> = { title: "title", details: "details", due: "due", remind_at: "reminder", repeat: "repeat", person: "person", assignee: "assignee", kind: "kind" };
+const FIELD_NAMES: Record<string, string> = { title: "title", details: "details", due: "due", remind_at: "reminder", repeat: "repeat", person: "person", assignee: "assignee", kind: "kind", urgent: "urgent" };
 
 /** The line for the journal and the tool's reply: "Added task #4 'Call Sam' (due Fri 24 Oct)". `zone` and `now` put dates in the conversation's clock. */
 export function lineOf(action: Action, it: Item, o: { zone: string; now: number; changed?: readonly string[]; next?: string }): string {
@@ -249,6 +252,7 @@ export interface NewItem {
   repeat?: string;
   person?: string;
   assignee?: string;
+  urgent?: boolean; // only the person's own words may set it (never a background look)
   status?: Status; // open (default) or suggested; an inferred origin is always suggested
   sourceKind?: SourceKind;
   sourceRef?: string;
@@ -300,8 +304,8 @@ export function addItem(scope: Scope, n: NewItem): Added {
   if (status === "suggested" && db.num("SELECT COUNT(*) FROM items WHERE status = 'suggested'") >= LIMITS.suggestions) throw new TaskError(`${LIMITS.suggestions} suggestions are already waiting for an answer; no more until they are confirmed or rejected.`);
   const id = db.tx(() => {
     const r = db.run(
-      "INSERT INTO items (kind, title, details, due, due_zone, remind_at, repeat, person, assignee, status, origin, source_kind, source_ref, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      kind, title, details, due, due ? scope.zone : null, remindAt, repeat, person, assignee, status, scope.origin, sourceKind, ref, now, now,
+      "INSERT INTO items (kind, title, details, due, due_zone, remind_at, repeat, person, assignee, status, origin, source_kind, source_ref, created_at, updated_at, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      kind, title, details, due, due ? scope.zone : null, remindAt, repeat, person, assignee, status, scope.origin, sourceKind, ref, now, now, n.urgent && !inferred ? 1 : null,
     );
     const after = { kind, title, ...(details ? { details } : {}), ...(due ? { due } : {}), ...(remindAt !== null ? { remind_at: remindAt } : {}), ...(repeat ? { repeat } : {}), ...(person ? { person } : {}), ...(assignee ? { assignee } : {}), status };
     db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, ?, NULL, ?)", r.lastInsertRowid, now, scope.by, status === "suggested" ? "suggested" : "added", JSON.stringify(after));
@@ -322,6 +326,7 @@ export interface Patch {
   repeat?: string | null;
   person?: string | null;
   assignee?: string | null;
+  urgent?: boolean;
 }
 
 const live = (it: Item, what: string): void => {
@@ -355,6 +360,7 @@ export function editItem(scope: Scope, id: number, p: Patch): { item: Item; line
   if (person !== undefined) set.person = person;
   const assignee = optText("assignee", p.assignee, LIMITS.assignee);
   if (assignee !== undefined) set.assignee = assignee;
+  if (p.urgent !== undefined) set.urgent = p.urgent ? 1 : null;
   if (!Object.keys(set).length) throw new TaskError("Nothing to change: give at least one field to update.");
   const finalRepeat = set.repeat !== undefined ? set.repeat : (it.repeat ?? null);
   const finalDue = set.due !== undefined ? set.due : (it.due ?? null);
@@ -485,6 +491,9 @@ export function dueClass(it: Item, now: number, zone: string): DueClass {
 const dueKey = (it: Item): string => (it.due ? (it.due.length === 10 ? `${it.due}T23:59` : it.due) : "9999-99-99T99:99"); // (an all-day due sorts after the timed ones of its day)
 
 const allItems = (key: string, kind?: Kind): Item[] => readDb(key)?.all<Row>("SELECT * FROM items" + (kind ? " WHERE kind = ?" : ""), ...(kind ? [kind] : [])).map(toItem) ?? [];
+
+/** Every open or snoozed item (the reminder tick reads these; no cap, unlike a list). */
+export const activeItems = (key: string): Item[] => allItems(key).filter((it) => it.status === "open" || it.status === "snoozed");
 
 export function listItems(key: string, f: Filter = {}, now = Date.now(), zone = "UTC"): Item[] {
   const want = f.status === undefined ? ["open"] : Array.isArray(f.status) ? f.status : [f.status];
