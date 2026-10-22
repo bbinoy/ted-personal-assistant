@@ -668,6 +668,7 @@ src/conversation/messenger.ts          the app's one meeting point with its chat
 src/conversation/outbound.ts           sending (one message, however long), echo guard, retry of a failed send
 src/conversation/replay.ts             at start: answers owner/friend messages a restart lost (unansweredSince)
 src/conversation/quote.ts              Signal reply threading: quoted text in, threaded answers out (pure, tested)
+src/conversation/taskreplies.ts        answers to the "💡" suggestions message (a 👍, a quoted "1 yes") and a group's /tasks, in code before any model (tasks/suggest.ts)
 src/conversation/edit.ts               edited and deleted messages, the pure parts: same text after normalisation, the prompt note, who may edit (pure, tested)
 src/conversation/guards.ts             owner check: the sender resolves to the admin record (pure, tested)
 src/conversation/document.ts           files people send that are not pictures, made ready for the model (the bytes decide what a file is)
