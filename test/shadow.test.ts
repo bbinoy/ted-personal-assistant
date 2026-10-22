@@ -472,3 +472,16 @@ test("runShadow: the recorded calls are made by the run and marked by code (the 
   assert.deepEqual(refused, { ran: [false, false], refused: "the day's budget is spent" });
   assert.deepEqual(await runShadow(c, [], () => payer), { ran: [] });
 });
+
+test("the proposal message has its own kind: replay still replays the owner's next line (it is not an open question), and the readers know the kind", async () => {
+  const { unansweredSince } = await import("../src/conversation/replay.ts");
+  const { noticeLines } = await import("../src/core/messages.ts");
+  const { isProactive } = await import("../src/conversation/feedback.ts");
+  const now = NOW.getTime();
+  const line = (kind: string, text: string, m: number, ts: number) => ({ ts, at: new Date(now - m * 60_000).toISOString(), kind, text }) as never;
+  const after = (kind: string) => unansweredSince([line(kind, "q", 5, 1), line("owner", "unrelated message", 4, 2)], now, 30 * 60_000).map((x) => x.text);
+  assert.deepEqual(after("proposals"), ["unrelated message"], "replayed after a restart");
+  assert.deepEqual(after("approval"), [], "(control: a real open question still sets the next line aside)");
+  assert.equal(noticeLines([line("proposals", "📥 I'd archive these", 5, 1)], NOW).length, 1, "the chat is told what it proposed on its own");
+  assert.equal(isProactive(line("proposals", "x", 1, 1)), true);
+});

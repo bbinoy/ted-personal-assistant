@@ -16,7 +16,7 @@ import type { Pipeline } from "./conversation.ts";
 const ANSWERS: ReadonlySet<string> = new Set(["chat", "other"]);
 // A question the assistant had open: the line right after one is most likely its answer ("yes"), which is not a request to run again.
 const ASKED: ReadonlySet<string> = new Set(["approval", "draft"]);
-const SPOKEN: ReadonlySet<string> = new Set(["chat", "other", "approval", "suggestions", "draft", "notice", "brief"]); // (suggestions: said, but no open question: the next owner line is an ordinary message and is replayed)
+const SPOKEN: ReadonlySet<string> = new Set(["chat", "other", "approval", "suggestions", "proposals", "draft", "notice", "brief"]); // (suggestions: said, but no open question: the next owner line is an ordinary message and is replayed)
 const MAX_REPLAY_LINES = 10;
 
 // Pure: the lines of someone's own (owner, member) that were never answered and are younger than `maxAgeMs`, oldest first. Edits are folded into their original and

@@ -10,13 +10,13 @@ export const memoryModule: ToolModule = {
   free: true,
 };
 
-// notes (notestools.ts): the unattended runs' access to their own notes. Their prompt holds the index only; read_note reads one, write_note saves an inferred one quietly (audited). Any heartbeat run of any conversation has them, scoped to that conversation's notes folder and categories. They are free: a save is marked and logged, not asked or announced; reading
+// notes (notestools.ts): the unattended runs' access to their own notes. Their prompt holds the index only; read_note reads one, write_note saves an inferred one quietly (audited); memory_changes_since_brief (the OWNER's own look only: a friend or a group has no brief) hands the daily brief the code-written "learned overnight" list. Any heartbeat run of any conversation has them, scoped to that conversation's notes folder and categories. They are free: a save is marked and logged, not asked or announced; reading
 // shows nothing a third party wrote, so it does not taint the run.
 const notes = rowsOf("mcp__notes__", "notes", "heartbeat");
 export const notesModule: ToolModule = {
   name: "notes",
   connection: { kind: "in-process", name: "notes", when: (ctx) => !!ctx.notesRead && !ctx.browsing },
-  rows: [...notes("memory-read", "read_note journal", { only: ["background", "group"] }), ...notes("memory-write", "write_note", { only: ["background", "group"] })],
+  rows: [...notes("memory-read", "read_note journal", { only: ["background", "group"] }), ...notes("memory-read", "memory_changes_since_brief", { only: ["background"] }), ...notes("memory-write", "write_note", { only: ["background", "group"] })],
   free: true,
   trusted: true,
 };
