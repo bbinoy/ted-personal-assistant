@@ -16,7 +16,7 @@ const notes = rowsOf("mcp__notes__", "notes", "heartbeat");
 export const notesModule: ToolModule = {
   name: "notes",
   connection: { kind: "in-process", name: "notes", when: (ctx) => !!ctx.notesRead && !ctx.browsing },
-  rows: [...notes("memory-read", "read_note journal", { only: ["background", "group"] }), ...notes("memory-read", "memory_changes_since_brief", { only: ["background"] }), ...notes("memory-write", "write_note", { only: ["background", "group"] })],
+  rows: [...notes("memory-read", "read_note journal", { only: ["background", "group"] }), ...notes("memory-told", "memory_changes_since_brief", { only: ["background"] }), ...notes("memory-write", "write_note", { only: ["background", "group"] })],
   free: true,
   trusted: true,
 };
