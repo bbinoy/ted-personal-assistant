@@ -17,6 +17,7 @@ import { writeFileAtomic } from "./state.ts";
 //   pending_*        the approval inbox: items (numbered, never reused), the ones expired and not yet told, the calls not to park again for a while
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   friend_notices   a friend's fixed notices (kind -> last time)
+//   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way, a suggestion; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
 //   suggestion_asks / group_remind_noted   which suggested items each "💡 ..." message listed (message ts -> number -> item: a 👍 or "1 yes" quoting it answers for them), and which group members were told once that
@@ -319,6 +320,36 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE TABLE learned_owed (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         at INTEGER NOT NULL                                         -- UTC ms: a friend's list was held (quiet hours) after her dream; the next look sends it
+      );
+    `,
+  },
+  {
+    version: 8,
+    name: "meetings: the upcoming meetings the heartbeat look recorded and the prep sent for each (src/tasks/meetings.ts)",
+    up: `
+      CREATE TABLE meetings (
+        event_id  TEXT NOT NULL,                                    -- the calendar's id for the event, as the calendar tool returned it
+        start_ms  INTEGER NOT NULL,                                 -- UTC ms: a moved event is a NEW row (its old pending row goes), so a reschedule gets its own prep
+        end_ms    INTEGER,
+        title     TEXT NOT NULL,
+        attendees TEXT NOT NULL,                                    -- JSON: [{name?, email?, self?}], bounded
+        link      TEXT,                                             -- a video-call link, https only
+        all_day   INTEGER NOT NULL DEFAULT 0 CHECK (all_day IN (0, 1)),
+        response  TEXT,                                             -- the owner's own answer to the invite (accepted, tentative, needsAction, declined)
+        private   INTEGER NOT NULL DEFAULT 0 CHECK (private IN (0, 1)),
+        noted     INTEGER NOT NULL,                                 -- UTC ms: when the look last recorded it
+        state     TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'claimed', 'sent', 'retry', 'failed', 'skipped')),  -- claimed: marked BEFORE the run starts (at most once)
+        why       TEXT,                                             -- skipped: the rule that said no
+        tries     INTEGER NOT NULL DEFAULT 0,
+        at        INTEGER,                                          -- the last change of state
+        cost_usd  REAL,
+        PRIMARY KEY (event_id, start_ms)
+      );
+      CREATE INDEX meetings_start ON meetings (start_ms);
+      CREATE TABLE meeting_calls (
+        id    INTEGER PRIMARY KEY CHECK (id = 1),
+        at    INTEGER NOT NULL,                                     -- UTC ms: the look's last note_upcoming_meetings call (an empty list too: the doctor tells "the calendar is read" from "nothing ever arrives")
+        count INTEGER NOT NULL                                      -- how many meetings that call held
       );
     `,
   },

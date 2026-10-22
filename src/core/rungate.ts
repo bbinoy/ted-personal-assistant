@@ -6,8 +6,9 @@ import { settings } from "./settings.ts";
 //   chat   a turn someone is waiting for (and an urgent compaction inside it): never queues, so a long look or dream can never keep an answer waiting. It still takes a place.
 //   helper a small bounded call a run waits on (the approval judge, the participation gate, a language check): never queues either, because the look that is waiting on its judge
 //          holds a place itself and would otherwise deadlock when the places are all looks
+//   prep   a meeting's prep run (heartbeat/preptick.ts): it must be done minutes before the meeting, so it waits for a free place but ahead of the looks and the dreams (priority 1)
 //   look   a conversation's heartbeat look, then dream / quiet compaction: wait for a free place, the look ahead of the dreams
-export const RUN = { chat: { urgent: true }, helper: { urgent: true }, look: { priority: 2 }, dream: { priority: 3 } } as const;
+export const RUN = { chat: { urgent: true }, helper: { urgent: true }, prep: { priority: 1 }, look: { priority: 2 }, dream: { priority: 3 } } as const;
 export type RunKind = keyof typeof RUN;
 
 export const runGate = new Limiter(() => settings.maxConcurrentRuns);

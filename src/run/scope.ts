@@ -5,7 +5,7 @@ import { readNotes } from "../memory/notes.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import { PROFILES } from "./profiles.ts";
-import { OWNER } from "../core/settings.ts";
+import { OWNER, settings } from "../core/settings.ts";
 import { PLUGIN, skillsFor } from "../modules/skills.ts";
 
 // What a heartbeat run is made of for ONE conversation, read from its capability set (capabilities.ts capabilitiesOf) and nothing else: the owner, a group and a friend
@@ -22,6 +22,7 @@ export interface Looker {
   experts: boolean; // it may delegate heavy work to the expert: whoever has something to read
   brief: boolean; // it has the daily-brief skill
   tasks: boolean; // it has the task list (an unattended look may suggest to it)
+  meetings: boolean; // meeting prep is on and it has a calendar: its look records the upcoming meetings (modules/meetings, heartbeat/preptick.ts)
   sources: string; // what the instruction lists after the chat log
   skills: readonly string[]; // the skills of its run (plugin-qualified)
 }
@@ -44,6 +45,7 @@ export function lookerOf(conv: Conversation): Looker {
     experts: reads,
     brief: skills.includes(`${PLUGIN}:daily-brief`),
     tasks: caps.has("tasks"),
+    meetings: settings.prepMinutes > 0 && conv.kind !== "group" && caps.has("calendar"),
     sources: [...parts, "and your notes and their schedules"].join(", "),
     skills,
   };

@@ -97,6 +97,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     brief: looker.brief,
     sources: looker.sources,
     tasks: looker.tasks,
+    meetings: looker.meetings,
     group: looker.group,
   });
 }

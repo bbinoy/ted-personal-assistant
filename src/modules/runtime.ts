@@ -20,6 +20,7 @@ import { createPeopleServer } from "./people/peopletool.ts";
 import { createStatusServer } from "./status/statusnote.ts";
 import { createTasksServer } from "./tasks/tasktools.ts";
 import { createSeenMailServer } from "./seenmail/seenmail.ts";
+import { createMeetingsServer } from "./meetings/meetingtools.ts";
 import { settings } from "../core/settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -85,6 +86,8 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
       }),
   },
   seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
+  // note_upcoming_meetings: the owner's look or a friend's, writing that conversation's own meetings table (meetingtools.ts).
+  meetings: { server: (ctx) => createMeetingsServer({ key: ctx.tenant?.key ?? OWNER_KEY }) },
   browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }) },
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: {

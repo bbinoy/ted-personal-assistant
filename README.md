@@ -24,7 +24,7 @@
 ## Personal assistant
 
 - **Inbox.** Every 15 minutes it checks for new mail. Newsletters, notifications and cold outreach are archived (never deletes). Anything that needs you arrives as one short message on Signal. When appropriate a reply is drafted automatically for you to review.
-- **Meeting prep** from your Notion meeting database and past threads.
+- **Meeting prep** from your Notion meeting database and past threads, in the daily brief and again as one short message 15 minutes before each meeting with other people (who, what it is about, your last thread with them, what you owe each other, the Notion page; `PREP_MINUTES`).
 - **People.** "Invite Sam" or "write to Anna" does not mean guessing or asking for an address: `find_person` looks in your people notes and, for a friend, her Google Contacts, and only asks when it finds none or several. Google Drive and Docs are on by default: it can find and read your files.
 - **Its own task list.** Say "remind me to call Sam on Friday" and it keeps a list per chat (yours, each friend's, each group's): tasks, promises you made and things you wait on, with repeat rules (`every monday at 09:00`), snoozing and a full history, never deleting anything. What it notices in mail it only *suggests*, and you confirm. `/tasks` shows the list.
   - *Talk to it about tasks.* "What's on my plate?", "remind me Friday at 3 to call Sam" (a task with a reminder, which only messages you: it never sends mail), "I owe Sam the deck by Friday", "Sam owes me the contract", "what does Sam owe me?", "done with the licence", "snooze that for an hour". It works out the date itself and answers with the weekday and date it understood, so a wrong guess is easy to spot.

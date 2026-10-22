@@ -41,6 +41,7 @@ import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, la
 import { layoutState, readVersion, refusal, stragglers } from "./core/migrate.ts";
 import { readRetentionState, retentionSummary } from "./core/retention.ts";
 import { staleForReview } from "./heartbeat/retentionrules.ts";
+import { noCalendarData } from "./tasks/meetings.ts";
 
 type Line = DoctorLine;
 
@@ -274,11 +275,31 @@ export function convDbCheck(line: Line, root: string = dataRoot()): void {
       ok++;
       const late = lateReminders(p.db);
       if (late) line("warn", `reminders sent late in ${conv}`, `${late} in the last 7 days (the Mac asleep or the agent down at their time; npm run heartbeat-report, docs/SETUP.md "Keep it running")`);
+      if (conv === OWNER_CONV) prepLine(line, p.db);
       const lost = lostApprovals(p.db);
       if (lost.length) line("warn", `approvals not restored in ${conv}`, `${lost.map((x) => `#${x.n}${x.label ? ` ${x.label}` : ""}`).join("; ")}; they are not run, ask again if wanted (listed for 30 days)`);
     }
   }
   if (ok > 0 || names.length === 0) line(true, "conversation databases", `${ok} assistant.db file(s), quick_check ok`);
+}
+
+/** Meeting prep (heartbeat/preptick.ts) is on but the look has recorded no meetings for over a day: the calendar is not connected, or the look does not run. Read-only like the checks around it. */
+function prepLine(line: Line, path: string): void {
+  if (settings.prepMinutes <= 0) return;
+  let raw: DatabaseSync | undefined;
+  let at: number | undefined;
+  try {
+    raw = new DatabaseSync(path, { readOnly: true });
+    at = (raw.prepare("SELECT at FROM meeting_calls WHERE id = 1").get() as { at: number } | undefined)?.at;
+  } catch {
+    /* an older schema has no such table: no data */
+  } finally {
+    try { raw?.close(); } catch { /* closed */ }
+  }
+  let age = 0;
+  try { age = Date.now() - statSync(path).birthtimeMs; } catch { /* unknown: not blamed */ }
+  if (noCalendarData({ enabled: true, lastNoted: at, dbAgeMs: age, now: Date.now() })) line("warn", "meeting prep: no calendar data", `${at ? `the look last recorded meetings ${localTime(new Date(at).toISOString())}` : "the look has never recorded any meetings"}; check that the Google Calendar connector is connected and the heartbeat is running (set PREP_MINUTES=0 to switch prep off)`);
+  else if (at !== undefined) line(true, "meeting prep", `${settings.prepMinutes} min before meetings with other people; the look last reported ${localTime(new Date(at).toISOString())}`);
 }
 
 /** How many reminders went out late (after a sleep or a restart) in the last 7 days: read-only, never opens the database the normal way. */
