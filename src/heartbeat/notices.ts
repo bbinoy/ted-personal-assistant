@@ -177,6 +177,13 @@ export function submitPost(conv: Conversation, text: string, urgent: boolean, no
   return "held";
 }
 
+// A line for the next digest that is not a post: a system notice (exempt from the cap) kept for when quiet ends or a digest slot comes (a reminder too late to send, tasks/remind.ts).
+export function holdLine(conv: Conversation, text: string, now: Date): void {
+  const st = load(conv, now, zoneFor(conv));
+  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: "quiet", notice: true, at: now.getTime(), day: st.day });
+  save(conv, st);
+}
+
 // Pieces the run sent with the send tool while it worked count toward the day's cap (they are not held: they are out).
 export function countPosts(conv: Conversation, n: number, now: Date): void {
   if (n <= 0) return;

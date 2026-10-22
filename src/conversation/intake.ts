@@ -160,6 +160,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       // A question asked in this group is answered here by ANY member (their message, a quoted reply or a reaction); the model reads it
       // like the owner's. Only this group's approvals can be answered; an edit and a caption never answer.
       if (await approvalAnswer(conv, m, author)) return;
+      if (!m.edited && (await deps.reminders?.message(conv, m))) return; // (a quoted "done" on a reminder, tasks/remindanswer.ts)
       forgetDeclined(conv.key);
       if (m.addressedToMe) overtake(conv); // (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
       return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: line, picture: m.picture, document: m.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, voice: m.voice });
@@ -230,6 +231,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     // While an approval is pending, a message may be its answer. That must skip the queue.
     scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
     if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
+    if (!edited && (await deps.reminders?.message(conv, m))) return; // a quoted "done" / "snooze 1h" on a reminder (tasks/remindanswer.ts)
     if (!edited && (await deps.feedback?.message(conv, m))) return void console.log("feedback: a quoted reply to something sent unprompted was handled (an offer, or the answer to one)"); // learning from feedback (feedback.ts); only a short quoted reply, and a group never gets here
     forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
     overtake(conv); // a look of this conversation that is running gives way to the turn
@@ -270,6 +272,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       console.log(`owner reacted ${r.emoji}`);
       const on = findMessage(r.targetTimestamp, conv.logFile);
       record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
+      if (await deps.reminders?.reaction(conv, r)) return; // ✅ / 👍 on a reminder: done (tasks/remindanswer.ts)
       if (await deps.feedback?.reaction(conv, r)) return void console.log("feedback: a reaction was handled (an offer, or the answer to one)"); // a 👎 on something sent unprompted, or the 👍 / 👎 on an offer: no chat turn (feedback.ts)
       const prompt = reactionPrompt(r.emoji, on);
       // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
@@ -282,6 +285,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     if (!(await deps.vouch(groupId))) return;
     const answered = deps.approvals.answerReaction(r.emoji, r.targetTimestamp, conv.key, r.from || r.fromUuid); // a reaction on a question asked in this group
     if (answered !== "ignored") return void console.log(`approval ${answered} (by reaction, in a group)`);
+    if (await deps.reminders?.reaction(conv, r)) return;
     const on = findMessage(r.targetTimestamp, conv.logFile)?.text ?? "an older message";
     return deps.admitGroup(conv, { groupId, text: "", timestamp: now(), isOwner: deps.isOwner(r), fromName: r.fromName && oneLine("group member name", r.fromName, LIMITS.name), addressedToMe: false, reaction: { emoji: oneLine("reaction", r.emoji, 16), on } });
   }

@@ -13,6 +13,7 @@ import { runGate } from "../core/rungate.ts";
 import { noticeBudget, noticeDamaged, releaseHeld } from "./notices.ts";
 import { closeIdleConvDbs } from "../core/convdb.ts";
 import { flushPending } from "../approvals/pendingflow.ts";
+import { fireReminders } from "./remindtick.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
@@ -129,6 +130,7 @@ export function createWakeups(deps: WakeDeps) {
       convs.map(async (conv) => {
         if (paused(clock())) return;
         quietCompact(conv);
+        await fireReminders(pipeline, conv, clock()); // reminders that have come due (tasks/remind.ts): a message each, no model, before and apart from the look
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
         const mine = epoch;

@@ -123,6 +123,7 @@ export function createTasksServer(run: TasksRun) {
       repeat: z.string().max(120).optional().describe("A repeat rule: 'every monday at 09:00', 'every weekday', 'every 2 weeks', 'every month on the 1st'"),
       person: z.string().max(80).optional().describe("Who it is with (for i_owe and owed_to_me: who is owed or who owes)"),
       assignee: z.string().max(80).optional().describe("In a group: which member it is for"),
+      urgent: z.boolean().optional().describe("true only when the person says the reminder must reach them even at night; it then ignores quiet hours"),
       status: z.enum(["open", "suggested"]).optional().describe("Leave out. Unattended runs always add a suggestion"),
       source_kind: z.enum(SOURCE_KINDS.filter((k) => k !== "import") as unknown as [string, ...string[]]).optional().describe("Where it came from: message (default), mail, meeting, other"),
       source_ref: z.string().max(300).optional().describe("The mail id, message or link it came from (stops the same one being added twice)"),
@@ -138,6 +139,7 @@ export function createTasksServer(run: TasksRun) {
           repeat: a.repeat,
           person: a.person,
           assignee: a.assignee,
+          urgent: a.urgent,
           status: a.status,
           sourceKind: a.source_kind as (typeof SOURCE_KINDS)[number] | undefined,
           sourceRef: a.source_ref,
@@ -162,6 +164,7 @@ export function createTasksServer(run: TasksRun) {
           repeat: z.string().max(120).nullable().optional().describe("A repeat rule, or null to stop repeating"),
           person: z.string().max(80).nullable().optional(),
           assignee: z.string().max(80).nullable().optional(),
+          urgent: z.boolean().optional().describe("true: the reminder ignores quiet hours; false: back to normal"),
           reopen: z.boolean().optional().describe("true: put a done, dropped or snoozed item back on the open list (before any other change)"),
         },
         (a) =>
@@ -176,6 +179,7 @@ export function createTasksServer(run: TasksRun) {
               repeat: clearable(a.repeat),
               person: clearable(a.person),
               assignee: clearable(a.assignee),
+              urgent: a.urgent,
             };
             if (reopened && Object.values(patch).every((v) => v === undefined)) return reopened;
             return editItem(s, a.id, patch);
