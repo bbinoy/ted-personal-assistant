@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 // Repeat rules and local-time arithmetic for tasks (src/tasks/repeat.ts, when.ts): the grammar, the canonical text, the next firing, and the clock-change days.
 
-const { formatRepeat, nextDate, nextDue, nextInstant, occursOn, parseRepeat } = await import("../src/tasks/repeat.ts");
+const { nextDate, nextDue, nextInstant, occursOn, parseRepeat } = await import("../src/tasks/repeat.ts");
 const W = await import("../src/tasks/when.ts");
 
 const ok = (text: string) => {

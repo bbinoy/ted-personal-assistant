@@ -128,7 +128,7 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
 }
 
 // A send that failed outright: the mark is undone (the item's remind_at back, the row 'retry') unless it has been tried enough.
-function release(db: NonNullable<ReturnType<typeof liveConvDb>>, conv: Conversation, sc: Scope, p: Planned, zone: string, t: number): void {
+function release(db: NonNullable<ReturnType<typeof liveConvDb>>, conv: Conversation, sc: Scope, p: Planned, _zone: string, t: number): void {
   const tries = (db.get<{ tries: number }>("SELECT tries FROM reminders WHERE item_id = ? AND key = ?", p.item.id, p.key)?.tries ?? 0) + 1;
   if (tries >= MAX_TRIES || p.kind === "snooze") return void db.run("UPDATE reminders SET tries = ? WHERE item_id = ? AND key = ?", tries, p.item.id, p.key); // (given up: it stays marked; the item is open and the brief lists it)
   db.tx(() => {

@@ -37,7 +37,7 @@ function rig(run: (extra: { shadow?: (t: string, i: Record<string, unknown>) => 
   let now = DAY;
   const pipeline = {
     canSpeak: () => false, busy: () => false, sendWhile: async (_c: unknown, f: () => Promise<unknown>) => f(), enqueue: <T>(_c: Conversation, job: () => Promise<T>) => job(),
-    record: (c: Conversation, kind: Kind, ts: number, text: string) => recordMessage(kind, ts, text, now, conv.logFile),
+    record: (_c: Conversation, kind: Kind, ts: number, text: string) => recordMessage(kind, ts, text, now, conv.logFile),
     runTurn: async (_c: Conversation, turn: any) => (await turn.run(), { spoke: true }),
   };
   const w = createWakeups({

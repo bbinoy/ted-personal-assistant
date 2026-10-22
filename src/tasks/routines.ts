@@ -81,7 +81,6 @@ export function markTold(conv: ConvRef, names: readonly string[]): void {
 // The expert a delegation names -> the routine it runs, if any (variantOf: "expert-<skill>").
 export const routineOfAgent = (routines: readonly Routine[], agent: string, agentOf: (skill: string) => string): Routine | undefined => routines.find((r) => r.planned && agentOf(r.skill) === agent);
 
-const label = (r: Routine): string => `${r.name} (${whenText(r)})`;
 
 export interface RoutineFacts {
   text: string; // for the heartbeat instruction; "" when there is nothing to say

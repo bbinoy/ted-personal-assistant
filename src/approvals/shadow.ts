@@ -219,7 +219,7 @@ export function settleShadow(conv: ShadowConv, ts: number, keep: readonly number
     for (const r of left) db.run("UPDATE shadow_proposals SET state = 'kept' WHERE seq = ? AND state = 'asked'", r.seq);
     for (const r of go) db.run("UPDATE shadow_proposals SET state = 'archiving' WHERE seq = ? AND state = 'asked'", r.seq); // (claimed: a second 👍 finds nothing to do)
   });
-  for (const r of left) emitRecord("shadow", "kept", "chat", { conv: conv.key, how });
+  left.forEach(() => emitRecord("shadow", "kept", "chat", { conv: conv.key, how }));
   const kept = left.map((r) => ({ n: r.n!, line: r.line, state: "kept" as const }));
   const said = [go.length ? `On it: archiving ${go.length === 1 ? "that one" : `${go.length}`}.` : "", left.length ? `Leaving ${left.length === 1 ? "that one" : `${numbers(left.map((r) => r.n!))}`} in your inbox.` : ""].filter(Boolean).join(" ");
   if (go.length) run(conv, ts, go);
