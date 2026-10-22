@@ -7,6 +7,7 @@ import { isQuiet } from "../conversation/quiet.ts";
 import { allows } from "../policy/capabilities.ts";
 import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
 import { zoneOf } from "../tenants/tenants.ts";
+import { RunStopped } from "../run/ceiling.ts";
 import { lookerOf } from "../run/scope.ts";
 import { PLUGIN } from "../modules/skills.ts";
 import { claimMeeting, giveBack, MIN_LEAD_MS, openMeetings, prepDue, prepSkip, settleMeeting, sweepMeetings, type MeetingRow } from "../tasks/meetings.ts";
@@ -20,7 +21,7 @@ import { parsePrep, prepPrompt } from "../run/prep.ts";
 // The rules, all in code:
 //   * AT MOST ONCE per event id AND start time: the row is claimed in the database BEFORE the run starts; a moved event is a new row (its old pending one went when the look re-recorded it), so a reschedule gets its own prep.
 //   * SKIPPED (meetings.ts prepSkip): declined by the owner, all-day, private, nobody else on it (and no video link), and with PREP_ONLY_EXTERNAL nobody outside her e-mail domain.
-//   * NEVER IN THE DEEP NIGHT: no prep goes out between 23:00 and 06:00 in her zone, nor while her own /quiet is on. A prep is only useful before its meeting, so it is DROPPED then (never held for a digest).
+//   * NEVER IN THE DEEP NIGHT: no prep goes out between 23:00 and 06:00 in her zone, nor while her own /quiet is on. A prep is only useful before its meeting, so it is not sent then (never held for a digest, left open until the sweep drops it once too late).
 //     The configured quiet window (22:00-07:00 by default) does not hold it back otherwise: a calendar entry says she is up, and a prep for a 07:00 meeting that arrives at 07:30 is worth nothing.
 //   * COUNTED, NEVER CAPPED: it counts toward the day's unprompted posts (countPosts) but is not held by the cap, like an urgent post: it is time-critical by design and the cap is for chatter.
 //   * NOT SENT LATE: less than MIN_LEAD_MS before the start (the run was slow, the tick late) it is dropped.
@@ -64,10 +65,7 @@ export function startPreps(deps: PrepDeps, conv: Conversation, now: Date = deps.
         settleMeeting(db, m, "skipped", t, { why: skip });
         continue;
       }
-      if (!prepAllowedNow(conv, now)) {
-        settleMeeting(db, m, "skipped", t, { why: "quiet" });
-        continue;
-      }
+      if (!prepAllowedNow(conv, now)) continue; // night or /quiet: it stays open, a later tick sends it if the night or /quiet ends in time (a 06:10 meeting due at 05:55); the sweep drops it once too late
       const payer = deps.may(conv, "meeting prep");
       if (isRefusal(payer)) continue; // paused, in a cooldown or over the day's budget: it stays open, and the sweep drops it if the time runs out
       if (!claimMeeting(db, m, t)) continue; // (another tick has it)
@@ -109,6 +107,7 @@ async function job(deps: PrepDeps, conv: Conversation, payer: Payer, m: MeetingR
     countPosts(conv, 1, now);
     return done("sent", undefined, cost);
   } catch (e) {
+    if (e instanceof RunStopped) return done("skipped", "stopped"); // "/stop": it stays stopped, no retry
     console.error(`meeting prep: the ${conv.kind} run failed:`, (e as Error).message);
     return retry("run failed");
   }
