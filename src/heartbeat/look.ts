@@ -30,6 +30,8 @@ import { flushPending } from "../approvals/pendingflow.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
+import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
+import { zoneOf } from "../tenants/tenants.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown, the day's budget, a friend's
@@ -93,6 +95,8 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     experts: looker.experts,
     brief: looker.brief,
     sources: looker.sources,
+    tasks: looker.tasks,
+    group: looker.group,
   });
 }
 
@@ -123,6 +127,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged })) return "not-due";
+    expireSuggestions(conv.key, now.getTime(), zoneOf(conv)); // (tasks/suggest.ts: a suggestion nobody answered in SUGGESTION_DAYS is dropped, kept in the history)
     if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
     // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
@@ -192,6 +197,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     }
     // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
     await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
+
+    await offerSuggestions(conv, now, looker.zone); // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once

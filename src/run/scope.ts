@@ -21,6 +21,7 @@ export interface Looker {
   mail: boolean; // it has mail tools
   experts: boolean; // it may delegate heavy work to the expert: whoever has something to read
   brief: boolean; // it has the daily-brief skill
+  tasks: boolean; // it has the task list (an unattended look may suggest to it)
   sources: string; // what the instruction lists after the chat log
   skills: readonly string[]; // the skills of its run (plugin-qualified)
 }
@@ -42,6 +43,7 @@ export function lookerOf(conv: Conversation): Looker {
     mail: caps.has("mail"),
     experts: reads,
     brief: skills.includes(`${PLUGIN}:daily-brief`),
+    tasks: caps.has("tasks"),
     sources: [...parts, "and your notes and their schedules"].join(", "),
     skills,
   };

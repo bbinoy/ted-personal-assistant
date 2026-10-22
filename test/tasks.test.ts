@@ -242,7 +242,7 @@ test("tasks: the tools, in the person's clock: a reply echoes what was understoo
   const t = chat(k);
   const added = await t.add_task!.handler({ title: "Call Sam", due: "2026-10-24T14:30", remind: "2026-10-24T09:00", person: "Sam" });
   assert.equal(added.isError, undefined);
-  assert.equal(text(added), "Added task #1 'Call Sam' (due Sat 24 Oct 14:30, with Sam).\nDue: Sat 24 Oct 14:30 (2026-10-24T14:30, Europe/Berlin)\nReminder: Sat 24 Oct 09:00 (Europe/Berlin)");
+  assert.equal(text(added).replace(/\. Tell them, in your own words[^\n]*/, "."), "Added task #1 'Call Sam' (due Sat 24 Oct 14:30, with Sam, for a member).\nDue: Sat 24 Oct 14:30 (2026-10-24T14:30, Europe/Berlin)\nReminder: Sat 24 Oct 09:00 (Europe/Berlin)");
   assert.equal(S.getItem(k, 1)!.remindAt, Date.parse("2026-10-24T07:00:00Z"), "09:00 in Berlin is 07:00 UTC (summer time)");
   const bare = await t.add_task!.handler({ title: "Bare day reminder", remind: "2026-11-02" });
   assert.match(text(bare), /Reminder: Mon 2 Nov 09:00 \(Europe\/Berlin\)/, "a bare day means 09:00");
@@ -282,7 +282,7 @@ test("tasks: the tools, in the person's clock: a reply echoes what was understoo
   assert.match(text(await t.drop_task!.handler({ id: 1 })), /^Dropped task #1 'Call Sam back'/);
   const list = text(await t.list_tasks!.handler({}));
   assert.match(list, /^<tasks>\nToday is Thu 22 Oct \(2026-10-22\), time zone Europe\/Berlin\. 2 items shown \(2 open, 0 overdue, 0 suggested\)\./, "fenced as data, with today's date and the zone");
-  assert.match(list, /#2 \[task\] Bare day reminder \| remind Mon 2 Nov 09:00/);
+  assert.match(list, /#2 \[task\] Bare day reminder \| for a member \| remind Mon 2 Nov 09:00/);
   assert.match(list, /#3 \[task\] Standup \| due Mon 26 Oct 09:30 \| repeats every weekday at 09:30/);
   assert.match(text(await t.list_tasks!.handler({ status: "dropped" })), /#1 \[task\] Call Sam back \| .*dropped/);
   assert.match(text(await t.list_tasks!.handler({ due_from: "26.10." })), /due_from must be a day/);

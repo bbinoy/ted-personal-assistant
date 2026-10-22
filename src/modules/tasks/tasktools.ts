@@ -8,6 +8,8 @@ import { echoLines, itemLine } from "../../tasks/render.ts";
 import { USAGE as REPEAT_USAGE } from "../../tasks/repeat.ts";
 import { parseLocal, showLocal, todayIn, wallToUtc } from "../../tasks/when.ts";
 import { askingIn } from "../voice/voicenote.ts";
+import { settings } from "../../core/settings.ts";
+import { groupReminderNote } from "../../tasks/suggest.ts";
 
 // The `tasks` tools: the conversation's own to-do list, promises and things it waits on (tasks/store.ts, in the conversation's assistant.db). ONE server per run, closed over ONE conversation (its key),
 // never a parameter. Own-data writes: no approval is asked, the journal says what was done (the call's `done` event, whose line is the first line of the reply) and every change is in the item's
@@ -67,6 +69,8 @@ export function createTasksServer(run: TasksRun) {
     }
   };
 
+  let suggested = 0; // what THIS run (one look) has suggested: the cap per look is code (SUGGESTIONS_PER_LOOK), whatever the prompt says
+  const isGroup = run.key !== OWNER_KEY && !isTenantKey(run.key);
   const unattendedNote = run.unattended ? " You are running unattended: what you add is only a SUGGESTION for the person to confirm; you cannot change, finish or drop anything." : "";
 
   const list = tool(
@@ -128,9 +132,10 @@ export function createTasksServer(run: TasksRun) {
       source_kind: z.enum(SOURCE_KINDS.filter((k) => k !== "import") as unknown as [string, ...string[]]).optional().describe("Where it came from: message (default), mail, meeting, other"),
       source_ref: z.string().max(300).optional().describe("The mail id, message or link it came from (stops the same one being added twice)"),
     },
-    (a) =>
-      act((s) =>
-        addItem(s, {
+    (a) => {
+      if (run.unattended && suggested >= settings.suggestionsPerLook) return Promise.resolve(reply(`No more suggestions in this look (${settings.suggestionsPerLook} at most): keep the most important ones; the rest can be suggested at a later look.`, true));
+      return act((s) => {
+        const added = addItem(s, {
           title: a.title,
           kind: a.kind,
           details: a.details,
@@ -138,13 +143,21 @@ export function createTasksServer(run: TasksRun) {
           remindAt: a.remind === undefined ? undefined : instant("remind", a.remind, s.zone),
           repeat: a.repeat,
           person: a.person,
-          assignee: a.assignee,
+          assignee: a.assignee ?? (isGroup && !run.unattended && a.remind !== undefined ? s.by : undefined), // "remind me" in a group: the reminder is for whoever said it
           urgent: a.urgent,
           status: a.status,
           sourceKind: a.source_kind as (typeof SOURCE_KINDS)[number] | undefined,
           sourceRef: a.source_ref,
-        }),
-      ),
+        });
+        if (run.unattended && !added.duplicate) suggested++;
+        // A reminder said in a group is the group's task (everyone sees it, assigned to who asked): the first time for each member, the reply carries one sentence saying so (persisted, suggest.ts).
+        if (isGroup && !run.unattended && !added.duplicate && a.remind !== undefined) {
+          const note = groupReminderNote(s.key, s.by, s.now ?? Date.now());
+          if (note) return { ...added, line: `${added.line}. Tell them, in your own words and their language, exactly this and nothing more about it: "${note}"` };
+        }
+        return added;
+      });
+    },
   );
 
   const tools: SdkMcpToolDefinition<any>[] = [list, add]; // (the schemas differ per tool)
