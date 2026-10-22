@@ -5,6 +5,7 @@ import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { type Picture } from "../run/image.ts";
 import { type Document } from "./document.ts";
+import type { Feedback } from "./feedback.ts";
 import { tenantKey } from "../core/ownerkey.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, friendConvId, groupConvId, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
@@ -154,6 +155,7 @@ export interface PipelineDeps {
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
   speech: { ready: () => boolean; synth: (words: string, conversation: string) => Promise<string>; foreign: (words: string) => Promise<string | undefined> }; // spoken replies: local TTS, a file
   approvals: { answer: (text: string, working: () => void, quote: { timestamp: number } | undefined, deps: undefined, ctx: { scope: string; by?: string; voice?: boolean }) => Promise<{ outcome: "none" | "approved" | "modified" | "declined" | "feedback" | "clarify"; changes?: { field: string; value: unknown }[]; reply?: string }>; answerReaction: (emoji: string, ts: number, scope: string, by?: string) => string };
+  feedback?: Pick<Feedback, "reaction" | "message">; // learning from feedback (feedback.ts): a 👎 or "less of this" on something sent unprompted becomes one offer to save a note; off when unset
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group?
   isOwner: (who: { from: string; fromUuid?: string }) => boolean;
   admitGroup: (conv: Conversation, m: GroupMessage) => Promise<void>; // the participation gate (group.ts)
