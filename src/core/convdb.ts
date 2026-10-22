@@ -308,6 +308,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE TABLE learned_batches (
         id     INTEGER PRIMARY KEY AUTOINCREMENT,
         at     INTEGER NOT NULL,                                    -- UTC ms
+        delivered INTEGER,                                          -- NULL: the brief's list, made for a brief that has not been sent yet (a status-brief 'delivered' sets it; until then the next brief offers it again); 1: told
         msg_ts INTEGER                                              -- the message that carried the list (a reply that quotes it answers for its numbers); NULL: it went in the brief
       );
       CREATE INDEX learned_batches_ts ON learned_batches (msg_ts);

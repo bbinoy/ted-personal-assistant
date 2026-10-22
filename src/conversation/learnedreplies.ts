@@ -3,6 +3,10 @@ import { confirmInferredNote } from "../memory/inferred.ts";
 import { memoryNoticeText } from "../memory/memorynotice.ts";
 import { emitRecord } from "../core/events.ts";
 import { askOf, batchFor, isGroupConv, isStillInferred, settleChange } from "../memory/learned.ts";
+import { hasOpen } from "../approvals/approvals.ts";
+import { openItems } from "../approvals/pending.ts";
+import { findMessage } from "../core/messages.ts";
+import { briefBatchFor } from "../memory/learned.ts";
 import type { Conversation, Held } from "./conversationmodel.ts";
 
 // Answering the "🧠 Learned overnight" list (memory/learned.ts), in code, before any model: "confirm 2" turns inferred note 2 into a confirmed one (announced like any note change, with its undo
@@ -11,8 +15,8 @@ import type { Conversation, Held } from "./conversationmodel.ts";
 // one told in the last day or two (the brief's section, which has no message of its own). A bare "undo" is ambiguous, so it asks, but only straight after a list or when it quotes one; anywhere else
 // it is an ordinary message (the model's undo_dream and forget_note do the rest). A group has no list. true: handled here.
 
-const WITHIN_MS = 48 * 3_600_000; // the brief's list: a reply still counts for two days
-const RIGHT_AFTER_MS = 15 * 60_000; // a bare "undo" with no quote is only taken to be about the list for this long
+const WITHIN_MS = 48 * 3_600_000; // a reply that QUOTES a list (or the brief that carried it) still counts for two days
+const RIGHT_AFTER_MS = 30 * 60_000; // an UNQUOTED reply is only taken to be about the list for this long after it, and only while no approval is open ("confirm 2" is also the approval inbox's grammar)
 const CMD = /^\s*(undo|confirm)\s+#?(\d{1,2}(?:\s*(?:,|and|&|\+)?\s*#?\d{1,2})*)\s*[.!]?\s*$/i;
 const BARE = /^\s*(undo|confirm)\s*[.!]?\s*$/i;
 
@@ -26,12 +30,19 @@ export function parseLearned(text: string): { verb: "undo" | "confirm"; nums: nu
   return b ? { verb: b[1]!.toLowerCase() as "undo" | "confirm", nums: [] } : undefined;
 }
 
-export async function learnedReply(conv: Pick<Conversation, "kind" | "convId" | "notesDir">, m: Pick<Held, "text" | "quote" | "picture" | "document" | "edit">, say: LearnedSay, now = Date.now()): Promise<boolean> {
+export async function learnedReply(conv: Pick<Conversation, "kind" | "convId" | "notesDir"> & { key?: string; logFile?: string }, m: Pick<Held, "text" | "quote" | "picture" | "document" | "edit">, say: LearnedSay, now = Date.now()): Promise<boolean> {
   if (conv.kind === "group" || isGroupConv(conv.convId) || m.picture || m.document || m.edit) return false;
   const cmd = parseLearned(m.text);
   if (!cmd) return false;
   const ts = m.quote && m.quote.timestamp !== 0 ? m.quote.timestamp : undefined;
-  const batch = batchFor(conv.convId, ts, now, cmd.nums.length ? WITHIN_MS : RIGHT_AFTER_MS);
+  if (!ts && conv.key && (hasOpen(conv.key) || openItems(conv.key).length > 0)) return false; // an open approval owns an unquoted "confirm 2" / "yes": it goes on to the approvals
+  let batch = ts ? batchFor(conv.convId, ts, now, WITHIN_MS) : batchFor(conv.convId, undefined, now, RIGHT_AFTER_MS);
+  if (!batch && ts && conv.logFile) {
+    // the brief has no message id of its own for the list: a reply that quotes a BRIEF message sent after the list was made is about it
+    const quoted = findMessage(ts, conv.logFile);
+    const list = quoted?.kind === "brief" ? briefBatchFor(conv.convId, now, WITHIN_MS) : undefined;
+    if (list && Date.parse(quoted!.at) >= list.at) batch = { ...list, viaQuote: true };
+  }
   if (!batch) return false; // no list it could be about (or a quote of some other message): an ordinary message
   if (!cmd.nums.length) {
     await say(`${cmd.verb === "undo" ? "Undo" : "Confirm"} which one? Say e.g. '${cmd.verb} 1'. Nothing was done.`);

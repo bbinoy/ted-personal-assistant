@@ -75,6 +75,7 @@ test("no repeats: a list is told once; the brief tool hands the same list out ag
   const first = L.briefLearned(c.convId, c.notesDir, NOW);
   assert.match(first, /^1\. people-anna: Anna moved to Lisbon \(inferred\)\nReply 'undo 1'/);
   assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + HOUR), first, "the brief was redone: the same list");
+  L.briefDelivered(c.convId); // the brief's status note says delivered
   assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 7 * HOUR), "", "told; nothing new");
   assert.equal(L.planBatch(c.convId, c.notesDir, NOW + 7 * HOUR), undefined);
   inferred(c, "people-bo.md", "Bo has a new job", NOW + 8 * HOUR);
@@ -122,14 +123,14 @@ test("undo N: an inferred note is forgotten (it was the assistant's own guess); 
   L.commitBatch(c.convId, L.planBatch(c.convId, c.notesDir, NOW)!, NOW);
   put(c.notesDir, "people-bo.md", "Bo has a new job", "y", "owner"); // confirmed in chat meanwhile
   const s = said();
-  assert.equal(await learnedReply(c, msg("undo 2 and 3"), s.say, NOW + HOUR), true, "no quote: the latest list");
+  assert.equal(await learnedReply(c, msg("undo 2 and 3"), s.say, NOW + 60_000), true, "no quote: the latest list");
   assert.equal(existsSync(join(c.notesDir, "people-anna.md")), false);
   assert.doesNotMatch(readFileSync(join(c.notesDir, "MEMORY.md"), "utf8"), /people-anna/);
   assert.match(s.out.join("\n"), /Forgot people-anna \(it was my own guess\)/);
   assert.match(s.out.join("\n"), /3\. people-bo is not a guess of mine any more/);
   assert.equal(existsSync(join(c.notesDir, "people-bo.md")), true);
   const d = said();
-  await learnedReply(c, msg("undo 1"), d.say, NOW + HOUR);
+  await learnedReply(c, msg("undo 1"), d.say, NOW + 60_000);
   assert.match(d.out.join("\n"), /came from the nightly dream/);
   assert.match(d.out.join("\n"), /only be undone as a whole night/);
   assert.equal(existsSync(join(c.notesDir, "style-new.md")), true, "nothing was touched");
@@ -148,7 +149,7 @@ test("a bare 'undo' asks which, only right after a list or when it quotes one; a
   assert.equal(await learnedReply(c, msg("undo", 7_000), s.say, NOW + HOUR), true, "quoting the list it is clear which one it is about");
   assert.equal(await learnedReply(c, msg("undo 1", 9_999), said().say, NOW), false, "quotes some other message");
   s = said();
-  await learnedReply(c, msg("undo 7"), s.say, NOW + HOUR);
+  await learnedReply(c, msg("undo 7"), s.say, NOW + 60_000);
   assert.match(s.out[0]!, /#7 is not on that list/);
   assert.equal(await learnedReply(c, msg("undo 1"), said().say, NOW + 3 * 86_400_000), false, "a list older than two days no longer answers");
   assert.equal(await learnedReply({ ...c, kind: "group" }, msg("undo 1"), said().say, NOW), false);
@@ -226,6 +227,7 @@ test("the owner's dream: what it applied is recorded and listed once (a forgotte
   await createDreamer({ conversations: () => [owner()], run: () => ran }).run(new Date("2026-10-14T07:00:00"));
   const text = L.briefLearned(OWNER_CONV, NOTES_DIR, Date.parse("2026-10-14T08:00:00"));
   assert.match(text, /1\. people-anna: Anna is the owner's sister \(saved\)\n2\. context-old: expired \(forgotten\)\nReply 'undo 1'/);
+  L.briefDelivered(OWNER_CONV);
 });
 
 test("a whole-dream undo: lines not yet told are never listed; lines already told get one 'the dream of <day> was undone' note in the next list", () => {
@@ -240,10 +242,12 @@ test("a whole-dream undo: lines not yet told are never listed; lines already tol
   inferred(c, "people-anna.md", "Anna moved to Lisbon", NOW + 2 * HOUR);
   const first = L.briefLearned(c.convId, c.notesDir, NOW + 3 * HOUR);
   assert.match(first, /1\. style-new/);
+  L.briefDelivered(c.convId);
   L.dreamUndone(c.convId, NOW + 4 * HOUR);
   inferred(c, "people-bo.md", "Bo has a new job", NOW + 4 * HOUR);
   const next = L.briefLearned(c.convId, c.notesDir, NOW + 20 * HOUR);
   assert.match(next, /^1\. people-bo: Bo has a new job \(inferred\)\n- the dream of 2026-10-22 was undone \(what it changed was put back\)\nReply 'undo 1'/);
+  L.briefDelivered(c.convId);
   assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 40 * HOUR), "", "said once");
   assert.equal(L.planBatch(c.convId, c.notesDir, NOW + 40 * HOUR), undefined);
 });
@@ -273,4 +277,68 @@ test("a friend's held list is owed in her assistant.db, not in memory: it surviv
   assert.equal(await offerLearned(c as never, new Date(NOW + HOUR)), "sent", "a look, with no dream change waiting, still sends what is owed");
   assert.equal(L.isOwed(c.convId), false);
   setLearnedRuntime(undefined);
+});
+
+test("an UNQUOTED 'confirm 2' belongs to an open approval (the inbox), a quoted one to the list; unquoted replies count only right after the list", async () => {
+  const { addPending } = await import("../src/approvals/pending.ts");
+  const c = friend();
+  inferred(c, "people-anna.md", "Anna moved to Lisbon");
+  inferred(c, "people-bo.md", "Bo has a new job");
+  L.commitBatch(c.convId, L.planBatch(c.convId, c.notesDir, NOW)!, NOW, 8_000);
+  addPending(c.key, { tool: "t", input: { a: 1 }, label: "l", question: "q", footer: "", source: "background" }, NOW);
+  const s = said();
+  assert.equal(await learnedReply(c, msg("confirm 2"), s.say, NOW + 60_000), false, "an approval is open: the inbox gets it");
+  assert.equal(await learnedReply(c, msg("confirm"), s.say, NOW + 60_000), false, "a bare confirm never takes a yes from an open approval");
+  assert.equal(originOf(c.notesDir, "people-bo.md"), "inferred");
+  assert.equal(await learnedReply(c, msg("confirm 2", 8_000), s.say, NOW + 3 * HOUR), true, "quoted: the list, whatever is open");
+  assert.equal(originOf(c.notesDir, "people-bo.md"), "owner");
+  const d = friend();
+  inferred(d, "people-cy.md", "Cy moved");
+  L.commitBatch(d.convId, L.planBatch(d.convId, d.notesDir, NOW)!, NOW, 9_000);
+  assert.equal(await learnedReply(d, msg("confirm 1"), said().say, NOW + 2 * HOUR), false, "nothing open, but not right after the list");
+  assert.equal(await learnedReply(d, msg("confirm 1"), said().say, NOW + 60_000), true, "nothing open, right after");
+});
+
+test("quoting the BRIEF answers its list: the brief batch has no message of its own, so a quoted brief message sent after it is enough; another quote is not", async () => {
+  const { recordMessage: rec } = await import("../src/core/messages.ts");
+  const c = { ...friend(), logFile: join(process.env.HARNESS_DATA_DIR!, `log-${n}.jsonl`) };
+  inferred(c, "people-anna.md", "Anna moved to Lisbon");
+  const t0 = NOW;
+  assert.match(L.briefLearned(c.convId, c.notesDir, t0), /1\. people-anna/);
+  rec("brief", 4_001, "☀️ brief", new Date(t0 + 10 * 60_000), c.logFile);
+  rec("notice", 4_002, "something else", new Date(t0 + 10 * 60_000), c.logFile);
+  rec("brief", 4_003, "yesterday's brief", new Date(t0 - 86_400_000), c.logFile);
+  assert.equal(await learnedReply(c, msg("undo 1", 4_002), said().say, t0 + HOUR), false, "a quote of a notice");
+  assert.equal(await learnedReply(c, msg("undo 1", 4_003), said().say, t0 + HOUR), false, "a brief from before the list was made");
+  assert.equal(await learnedReply(c, msg("undo 1", 4_001), said().say, t0 + 3 * HOUR), true);
+  assert.equal(existsSync(join(c.notesDir, "people-anna.md")), false);
+});
+
+test("the brief tool is its own manifest action (not a read), and a list handed out for a brief that was never sent is offered again at the next one", async () => {
+  const { entryFor } = await import("../src/policy/toolmanifest.ts");
+  const { PREP_ACTIONS } = await import("../src/run/prep.ts");
+  const action = entryFor("mcp__notes__memory_changes_since_brief")?.action;
+  assert.equal(action, "memory-told");
+  assert.equal(PREP_ACTIONS.has(action!), false, "the meeting prep run cannot consume it");
+  const { writeStatusNote } = await import("../src/modules/status/statusnote.ts");
+  const c = friend();
+  inferred(c, "people-anna.md", "Anna moved to Lisbon");
+  const first = L.briefLearned(c.convId, c.notesDir, NOW);
+  inferred(c, "people-bo.md", "Bo has a new job", NOW + HOUR);
+  const second = L.briefLearned(c.convId, c.notesDir, NOW + 2 * HOUR);
+  assert.match(second, /^1\. people-anna[\s\S]*\n2\. people-bo/, "not delivered: the old line is offered again with the new one");
+  assert.ok(first.includes("people-anna"));
+  L.briefDelivered(c.convId);
+  assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 30 * HOUR), "", "delivered: told");
+  // the real trigger: the brief's status note saying delivered, for the owner
+  mkdirSync(NOTES_DIR, { recursive: true });
+  rmSync(NOTES_DIR, { recursive: true, force: true });
+  mkdirSync(NOTES_DIR, { recursive: true });
+  inferred({ convId: OWNER_CONV, notesDir: NOTES_DIR }, "people-di.md", "Di moved");
+  assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW), /people-di/);
+  assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + HOUR), /people-di/, "still offered");
+  assert.ok(writeStatusNote("brief", "status: started", new Date(NOW), NOTES_DIR).ok);
+  assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + 2 * HOUR), /people-di/, "started is not delivered");
+  assert.ok(writeStatusNote("brief", "status: delivered", new Date(NOW), NOTES_DIR).ok);
+  assert.equal(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + 3 * HOUR), "");
 });
