@@ -15,7 +15,7 @@ export interface HttpTtsConfig {
   fetchImpl?: Fetch;
 }
 
-export const synthesizeHttp = (text: string, c: HttpTtsConfig, format?: VoiceFormat): Promise<string> =>
+export const synthesizeHttp = (text: string, c: HttpTtsConfig, format?: VoiceFormat, signal?: AbortSignal): Promise<string> =>
   synthesizeRemote(
     {
       url: c.url,
@@ -25,6 +25,7 @@ export const synthesizeHttp = (text: string, c: HttpTtsConfig, format?: VoiceFor
       timeoutMs: c.timeoutMs,
       fetchImpl: c.fetchImpl,
       format,
+      signal,
     },
     "Remote speech server",
   );

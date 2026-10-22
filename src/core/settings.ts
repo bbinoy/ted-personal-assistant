@@ -419,6 +419,7 @@ export function loadSettings(env: Env) {
     transcribeConcurrency: num(env, "TRANSCRIBE_CONCURRENCY", 2, 1, 8), // voice notes transcribed at the same time; the rest wait their turn (main.ts, limiter.ts)
     // Spoken replies to voice messages (src/conversation/voicereply.ts): local text to speech with Kokoro (scripts/setup-tts.sh).
     voiceReplies: oneOf(env, "VOICE_REPLIES", "on", ["on", "off"] as const) === "on",
+    voiceTimeoutSeconds: num(env, "VOICE_TIMEOUT_SECONDS", 75, 20, 600), // ONE deadline for a whole voice reply, from the start of the synthesis to the hand-over to the messenger; over it the reply goes out as text (src/conversation/delivery.ts)
     ttsLanguages: parseLanguages(env.TTS_LANGUAGES), // languages the voice speaks (default en); a reply in another one goes out as text (src/conversation/lang.ts)
     // Optional remote speech (docs/REMOTE-TTS.md): sends the spoken words to a third party or to your own server.
     tts: ttsProvider(env, kokoro, dataDir),

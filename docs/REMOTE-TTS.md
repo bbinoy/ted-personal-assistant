@@ -9,6 +9,7 @@ By default Ted speaks with the local Qwen3-TTS voice on your Mac (Kokoro stands 
 | `TTS_PROVIDER` | `qwen` (default; local cloned voice, below), `kokoro`, `elevenlabs` or `http` |
 | `TTS_FALLBACK` | `none` (default): a failed remote request is sent as text with the usual note. `kokoro`: speak the same words locally instead (needs `scripts/setup-tts.sh`). Never switches unless you set it. |
 | `TTS_TIMEOUT_SECONDS` | per request, 5 to 300, default 60 |
+| `VOICE_TIMEOUT_SECONDS` | one deadline for the whole voice reply, engine, fallback, conversion and upload together, 20 to 600, default 75; over it Ted sends the text. Kokoro is not tried as a fallback when less than 30 s of it are left |
 
 Keys and tokens live in `.env` only, are sent only in a request header, and are blanked out of any error message. A wrong setting stops the agent at start-up. `npm run doctor` shows which provider is chosen.
 

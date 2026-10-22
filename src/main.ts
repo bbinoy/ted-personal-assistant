@@ -176,7 +176,7 @@ const pipeline: Pipeline = createPipeline({
   transcript,
   speech: {
     ready: () => settings.voiceReplies && messenger.capabilities.voice && providerReady(settings.tts).ok,
-    synth: (words, conversation) => synthesizeWith(words, settings.tts, console, conversation, messenger.capabilities.voiceFormat), // the conversation picks its cloned voice (voicetool.ts); the messenger picks the audio format
+    synth: (words, conversation, limits) => synthesizeWith(words, settings.tts, console, conversation, messenger.capabilities.voiceFormat, limits), // the conversation picks its cloned voice (voicetool.ts); the messenger picks the audio format
     foreign: (words) => unsupportedForVoice(words, settings.ttsLanguages),
   },
   approvals,

@@ -12,7 +12,7 @@ test("exports: ./voice", () => {
 
 test("exports: ./tts", () => {
   assert.deepEqual(names(tts), [
-    "ClipRefused", "DEFAULT_VOICE", "MAX_SECONDS", "MAX_SPOKEN_CHARS", "MAX_VOICES", "MIN_SECONDS", "OWNER_SCOPE", "VOICE_NAME", "activeVoice", "activeVoiceRel", "buildReference", "deleteVoice", "getMeta", "isSafeUrl", "listVoices", "looksLikeSpeech",
+    "ClipRefused", "DEFAULT_VOICE", "KOKORO_MIN_MS", "MAX_SECONDS", "MAX_SPOKEN_CHARS", "MAX_VOICES", "MIN_SECONDS", "OWNER_SCOPE", "VOICE_NAME", "VoiceAbort", "activeVoice", "activeVoiceRel", "buildReference", "deleteVoice", "getMeta", "isSafeUrl", "listVoices", "looksLikeSpeech",
     "maxVoices", "providerReady", "qwenReady", "realClipTools", "removeScope", "sanitizeVoiceName", "saveVoice", "scopeRoot", "setActiveVoice", "stopQwen", "synthesize", "synthesizeQwen", "synthesizeWith", "ttsReady", "voiceFiles", "warmQwen",
   ]);
 });

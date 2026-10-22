@@ -12,6 +12,8 @@ import { settings } from "../core/settings.ts";
 import { convPaths, friendConvId, groupConvId, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { type Timing } from "../core/timing.ts";
+import type { Deadline } from "../core/deadline.ts";
+import type { SynthLimits } from "@ted-assistant/speech/tts";
 import type { IncomingDeletion, IncomingMessage, IncomingReaction, Messenger, Quote, Target } from "@ted-assistant/messenger";
 
 // What a conversation is (the owner's chat or a group: data, never built by hand) and the types the pipeline (conversation.ts) works with.
@@ -154,7 +156,7 @@ export interface PipelineDeps {
   longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; // the full text of a long message (the messenger's attachment, by id only); undefined when it cannot be read
   document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/conversation/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
-  speech: { ready: () => boolean; synth: (words: string, conversation: string) => Promise<string>; foreign: (words: string) => Promise<string | undefined> }; // spoken replies: local TTS, a file
+  speech: { ready: () => boolean; synth: (words: string, conversation: string, limits?: SynthLimits) => Promise<string>; foreign: (words: string) => Promise<string | undefined>; timeoutMs?: number; deadline?: (ms: number) => Deadline }; // spoken replies: local TTS, a file
   approvals: { answer: (text: string, working: () => void, quote: { timestamp: number } | undefined, deps: undefined, ctx: { scope: string; by?: string; voice?: boolean }) => Promise<{ outcome: "none" | "approved" | "modified" | "declined" | "feedback" | "clarify"; changes?: { field: string; value: unknown }[]; reply?: string }>; answerReaction: (emoji: string, ts: number, scope: string, by?: string) => string };
   feedback?: Pick<Feedback, "reaction" | "message">; // learning from feedback (feedback.ts): a 👎 or "less of this" on something sent unprompted becomes one offer to save a note; off when unset
   reminders?: Pick<ReminderAnswers, "reaction" | "message">; // answering a reminder in code (tasks/remindanswer.ts): a quoted "done" / "snooze 1h" or a ✅ / 👍 on it; off when unset
