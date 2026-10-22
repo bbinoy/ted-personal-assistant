@@ -114,7 +114,7 @@ export function rememberMail(conv: string, response: unknown, now = Date.now()):
   for (const [id, e] of found) m.set(id, { ...e, at: now });
   while (m.size > MAX_SEEN) m.delete(m.keys().next().value!);
 }
-const mailName = (conv: string, id: string): string | undefined => {
+export const mailName = (conv: string, id: string): string | undefined => { // (shadow.ts names a proposed archive by it)
   const e = seenMail.get(conv)?.get(id);
   return e ? `“${clip(e.subject, 80)}”${e.from ? ` from ${clip(e.from, 50)}` : ""}` : undefined;
 };

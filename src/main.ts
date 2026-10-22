@@ -40,6 +40,9 @@ import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
 import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
+import { setShadowRuntime } from "./approvals/shadow.ts";
+import { runShadow } from "./run/shadowrun.ts";
+import { welcomeOnce } from "./core/welcome.ts";
 import { setSuggestRuntime } from "./tasks/suggest.ts";
 import { runPending } from "./run/pendingrun.ts";
 import { holdingNow } from "./heartbeat/notices.ts";
@@ -104,6 +107,12 @@ setPendingRuntime({
 });
 // The "💡" message of task suggestions (tasks/suggest.ts): one per look, an approval-kind question in the conversation's chat, held in quiet hours.
 setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "approval", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
+// The first week's archive proposals (approvals/shadow.ts): one message per look listing what the look would have archived, held in quiet hours; an approved batch is run exactly as recorded in a small follow-up run (run/shadowrun.ts).
+setShadowRuntime({
+  send: (conv, text) => out.reply(text, { plain: true, kind: "approval", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }),
+  holding: (conv, now) => holdingNow(convOf(conv.key), now),
+  execute: (conv, calls) => runShadow(convOf(conv.key), calls, (c, what) => mayRun(c, what)),
+});
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
@@ -247,6 +256,7 @@ console.log(`connected to ${messenger.name} (${messenger.summary}); accepting on
 warmChat();
 if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
+void welcomeOnce(say); // a fresh data folder's first start: one short welcome, once ever (core/welcome.ts)
 const reorganised = ownerNotice(settings.dataDir); // the data folder was moved to the current layout at this start (or an earlier one whose notice could not be sent): she is told once
 if (reorganised) void say(reorganised).then(() => markOwnerTold(settings.dataDir)).catch(() => {});
 const late = lateNotice(settings.dataDir); // files an old version wrote after the move: merged or set aside (core/migrate.ts reconcile), named to her once

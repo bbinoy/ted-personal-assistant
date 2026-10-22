@@ -27,6 +27,8 @@ import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { flushPending } from "../approvals/pendingflow.ts";
+import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
+import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
@@ -48,6 +50,7 @@ export interface RunExtra {
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
   signal?: AbortSignal; // the look is called off (a message overtook it): the run stops, or never starts if it still waits for a place (rungate.ts)
+  shadow?: ShadowGate; // the look is in the conversation's gentle first week: its archives are collected as proposals, not made (approvals/shadow.ts)
 }
 
 export interface HeartbeatDeps {
@@ -150,6 +153,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let archived = 0;
     let delegations = 0;
     const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
+    const shadow = looker.mail && shadowActive(conv, now) ? createShadowRun(conv.key) : undefined; // the gentle first week (approvals/shadow.ts): this look proposes its archives
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
@@ -176,6 +180,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
+            ...(shadow ? { shadow: shadow.gate } : {}),
             signal: overtaken.signal,
             onDelegate: () => void delegations++,
             onToolSuccess: (tool) => {
@@ -197,6 +202,12 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     }
     // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
     await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
+
+    // The first week's archives, offered as ONE message ("I'd archive these 14"), then, once, that the week is over (approvals/shadow.ts). Held in quiet hours; never throws.
+    if (looker.mail) {
+      await offerShadow(conv, shadow?.proposed() ?? [], now);
+      if (!shadow) await tellShadowEnded(conv, now);
+    }
 
     await offerSuggestions(conv, now, looker.zone); // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
 
