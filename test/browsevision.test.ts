@@ -47,10 +47,10 @@ test("vision off is today's behaviour: no screenshot, no point tools, the same h
   const g = guard("off");
   for (const t of ["take_screenshot", "mouse_click_xy", "mouse_move_xy", "mouse_wheel", "mouse_down", "mouse_drag_xy"]) assert.equal((await g.decide(B + t, { x: 1, y: 1 })).kind, "deny", t);
   const dir = mkdtempSync(join(tmpdir(), "bv-"));
-  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1") as { args: string[] };
+  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "off", unproxiedForTest: true }) as { args: string[] };
   assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "omit");
   assert.ok(!cfg.args.includes("--caps"));
-  assert.equal(JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8")).browser.launchOptions, undefined, "no debugging port");
+  assert.equal(JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8")).browser.launchOptions.args.some((a: string) => a.startsWith("--remote-debugging-port")), false, "no debugging port");
 });
 
 // ---- read: a screenshot reaches the model, clicks stay by ref ----
@@ -76,10 +76,10 @@ test("vision read: the screenshot is allowed as a small jpeg of the viewport, ne
 
 test("vision read: the server sends images; the ref rules are untouched (a commit by ref still goes to the judge)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "bv-"));
-  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "read" }) as { args: string[] };
+  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "read", unproxiedForTest: true }) as { args: string[] };
   assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "allow");
   assert.ok(!cfg.args.includes("--caps"), "no point tools in read");
-  assert.equal(JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8")).browser.launchOptions, undefined);
+  assert.equal(JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8")).browser.launchOptions.args.some((a: string) => a.startsWith("--remote-debugging-port")), false);
   for (const f of ["--headless", "--isolated", "--block-service-workers", "--blocked-origins"]) assert.ok(cfg.args.includes(f), f);
   const g = guard("read");
   g.shape(`${B}snapshot`, {}, `### Page\n- Page URL: ${PAGE}\n### Snapshot\n\`\`\`yaml\n- button "Book now" [ref=e9]\n\`\`\``);
@@ -120,10 +120,10 @@ test("vision click: the tools, the server (point tools and a loopback debugging 
     assert.ok(hiddenBrowserTools("click").includes(B + t), t);
   }
   const dir = mkdtempSync(join(tmpdir(), "bv-"));
-  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "click", cdpPort: 41234 }) as { args: string[] };
+  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "click", cdpPort: 41234, unproxiedForTest: true }) as { args: string[] };
   assert.equal(cfg.args[cfg.args.indexOf("--caps") + 1], "vision");
   assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "allow");
-  assert.deepEqual(JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8")).browser.launchOptions, { args: ["--remote-debugging-port=41234"] });
+  assert.deepEqual(JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8")).browser.launchOptions.args.filter((a: string) => a.startsWith("--remote-debugging-port")), ["--remote-debugging-port=41234"]);
   assert.match(browseSystem(undefined, "click"), /browser_mouse_click_xy/);
   assert.match(browseSystem(undefined, "click"), /Type only by ref/);
 });

@@ -59,6 +59,7 @@ export interface RunContext {
   groupId?: string;
   tenant?: TenantRun; // a tenant's run (her key, her ledger)
   memory?: RunOptions["memory"];
+  notesRead?: RunOptions["notesRead"]; // an unattended run's notes (heartbeat): its read-only note tool
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: its tracker of the inbox mail already worked through (seenmail.ts)
   guard?: BrowseGuard; // the browse run's guard
   mode: "owner" | "group";
@@ -71,7 +72,7 @@ export interface RunContext {
 // nothing else; every other server belongs to the other runs.
 export type Connection =
   | { kind: "builtin" } // the SDK's own tools (Skill, Read, WebSearch, ...); nothing to connect
-  | { kind: "connector"; key?: string; server: RegExp; prefix: string } // the owner's claude.ai connector or user-scope MCP server, inherited from the login; `server` and `prefix` say how to see whether it is up, `key` is its name in connectors.ts (absent: not reported)
+  | { kind: "connector"; key?: string; label?: string; skipped?: string; server: RegExp; prefix: string } // `label`: its name to the owner ("Google Calendar"); `skipped`: what the owner loses while it is down, in plain words (a connector with both is reported to the prompts, the brief and the doctor when its last run could not see it; connectors.ts);  the owner's claude.ai connector or user-scope MCP server, inherited from the login; `server` and `prefix` say how to see whether it is up, `key` is its name in connectors.ts (absent: not reported)
   | { kind: "in-process" | "external"; name: string; when: (ctx: RunContext) => boolean; forBrowse?: true };
 
 // For a friend's own connection: she is a tenant and her capability set offers at least one of the module's tools (the capability table decides, as for every tool).
@@ -99,6 +100,9 @@ export interface ModuleFloor {
   // policy.ts classify, one step of the fold: a hard rule for this module's tools that a row cannot say (attachment content, a Gmail archive under another provider). It may only
   // restrict: "ask" or "deny", never "allow" (the verdict is the minimum of deny < ask < allow over the manifest and every floor).
   verdict?: (tool: string, input: Record<string, unknown>, source: Source) => Exclude<FloorVerdict, "allow"> | undefined;
+  // permissions.ts, once per run: makes the run's own gate (it may keep a count). Asked before every call that is not already denied; a message is a refusal, said to the model
+  // as it is. For a limit that is about the run, not the call (the archive cap, archivecap.ts); it only restricts.
+  perRun?: () => (tool: string, input: Record<string, unknown>) => string | undefined;
   // permissions.ts, when classify denied the call: what to record and tell the model instead of the plain "blocked by policy".
   onDeny?: (tool: string, input: Record<string, unknown>) => Denial | undefined;
   // autojudge.ts isJudgeable: actions that are never judged (always asked), and a per-action veto on the call's own arguments (false: not judged).

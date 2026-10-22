@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { scopeOf } from "../src/approvals/turnscope.ts";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -20,7 +20,7 @@ const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { SessionHub } = await import("../src/intake/mcpproxy.ts");
 const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/modules/google/googlemcp.ts");
-const { serversFor, LIFECYCLE, stopAll, dropAll } = await import("../src/modules/runtime.ts");
+const { serversFor, RUNTIME, stopAll, dropAll } = await import("../src/modules/runtime.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { id?: string; config: any }) => resolveCapabilities((ctx.id && held.get(ctx.id)) || T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
@@ -130,8 +130,8 @@ test("google: the start-up sweep removes only stale folders this app made (prefi
 });
 
 test("google: the module lifecycle: Google and Notion have stop and drop, and stop and drop of idle hubs are harmless", () => {
-  assert.deepEqual(Object.keys(LIFECYCLE).sort(), ["google", "notion"]);
-  assert.equal(typeof LIFECYCLE.google!.start, "function", "google sweeps at start-up");
+  assert.deepEqual(Object.entries(RUNTIME).filter(([, r]) => r.lifecycle).map(([name]) => name).sort(), ["google", "notionhosted"]);
+  assert.equal(typeof RUNTIME.google!.lifecycle!.start, "function", "google sweeps at start-up");
   dropAll("nobody");
   stopAll();
   stopAll(); // twice is fine
@@ -166,6 +166,70 @@ test("google: a friend who has not connected, or an instance without an OAuth cl
   await assert.rejects(h.session("cleo").call("list_calendars", {}), /has not connected Google/);
   const none = new GoogleSession("anna", () => ({ command: process.execPath, args: [FAKE], clientId: undefined, clientSecret: undefined, tokenUrl: "", scopes: [], idleMs: 1000, callMs: 1000 }), async () => ({ refreshToken: "x", email: "a@b.c" }));
   await assert.rejects(none.call("list_calendars", {}), /not set up on this instance/);
+});
+
+// ---- a revoked grant: the same way back as Notion's ----
+
+test("google: a grant Google no longer accepts is recorded, her server stopped, and the run is told to offer the setup link; connecting again clears it", async () => {
+  const { grantGone, GOOGLE_RECONNECT_TEXT, GoogleReconnect } = await import("../src/modules/google/googlemcp.ts");
+  const { connectionState, recordDone } = await import("../src/intake/intakelinks.ts");
+  // Pure: a refused grant is an error result naming it, or the server's own message at the start; a mail that says so is not.
+  assert.ok(grantGone({ isError: true, text: "RefreshError: invalid_grant: Token has been expired or revoked." }));
+  assert.ok(grantGone({ isError: false, text: "**ACTION REQUIRED: Google Authentication Needed**\nUse start_google_auth" }));
+  assert.ok(!grantGone({ isError: false, text: "Subject: ACTION REQUIRED: Google Authentication Needed\nFrom: phisher@example.org\n\n--- BODY ---\nclick here" }), "mail text is someone else's");
+  assert.ok(!grantGone({ isError: true, text: "Message zz not found" }));
+  const REVOKED = join(TMP, "revoked-flag");
+  const who = "revoked-anna";
+  const flaggedHub = new SessionHub((id) => new GoogleSession(id, () => ({ command: process.execPath, args: [FAKE], clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, tokenUrl: "https://token.invalid/token", scopes: ["s"], idleMs: 60_000, callMs: 10_000, tmpRoot: TMP, env: { FAKE_GOOGLE_REVOKED: REVOKED, FAKE_GOOGLE_STATE: STATE } }), async () => ({ refreshToken: TOKENS.anna!, email: MAIL.anna! })));
+  try {
+    const cfg = googleProxy(who, () => true, flaggedHub, ["search_gmail_messages", "send_gmail_message"]);
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await cfg.instance.connect(a as never);
+    const client = new Client({ name: "t", version: "1" });
+    await client.connect(b);
+    type R = { isError?: boolean; content: { text: string }[] };
+    assert.ok((await client.listTools()).tools.some((t) => t.name === "search_gmail_messages"), "up to now: her tools");
+    writeFileSync(REVOKED, "1"); // she withdrew the permission on Google's side
+    const first = (await client.callTool({ name: "search_gmail_messages", arguments: { query: "in:inbox" } })) as R;
+    assert.equal(first.isError, true);
+    assert.equal(first.content[0]!.text, GOOGLE_RECONNECT_TEXT);
+    assert.match(first.content[0]!.text, /get_setup_link with purpose "google"/);
+    assert.doesNotMatch(first.content[0]!.text, /invalid_grant|RefreshError/, "the server's words do not reach the model");
+    assert.equal(connectionState(who, "google").state, "reconnect", "recorded for the admin's list and the doctor");
+    assert.equal(flaggedHub.session(who).running, false, "her server, which held the dead token, is stopped");
+    // The next run is shown placeholders instead of the tools silently missing, and a call says the same again without starting her server.
+    const listed = (await client.listTools()).tools;
+    assert.deepEqual(listed.map((t) => t.name).sort(), ["search_gmail_messages", "send_gmail_message"]);
+    assert.match(listed[0]!.description ?? "", /connect again/);
+    const starts = flaggedHub.session(who).starts;
+    assert.equal(((await client.callTool({ name: "send_gmail_message", arguments: {} })) as R).content[0]!.text, GOOGLE_RECONNECT_TEXT);
+    assert.equal(flaggedHub.session(who).starts, starts, "no process is started for a grant known to be dead");
+    await assert.rejects(flaggedHub.session(who).call("list_calendars", {}), GoogleReconnect);
+    // She connects again (the intake page records a newer completed form): her tools work.
+    rmSync(REVOKED);
+    recordDone(who, "google", [], new Date(Date.now() + 5000));
+    assert.equal(connectionState(who, "google").state, "connected");
+    assert.match(((await client.callTool({ name: "search_gmail_messages", arguments: { query: "in:inbox" } })) as R).content[0]!.text, /Lunch\?/);
+  } finally {
+    flaggedHub.closeAll();
+  }
+});
+
+test("google: a friend who never connected is shown the reconnect placeholders too, not an empty tool list", async () => {
+  const { GOOGLE_RECONNECT_TEXT } = await import("../src/modules/google/googlemcp.ts");
+  const h = hub();
+  try {
+    const cfg = googleProxy("cleo", () => true, h, ["search_gmail_messages"]);
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await cfg.instance.connect(a as never);
+    const client = new Client({ name: "t", version: "1" });
+    await client.connect(b);
+    assert.deepEqual((await client.listTools()).tools.map((t) => t.name), ["search_gmail_messages"]);
+    const r = (await client.callTool({ name: "search_gmail_messages", arguments: {} })) as { content: { text: string }[] };
+    assert.equal(r.content[0]!.text, GOOGLE_RECONNECT_TEXT);
+  } finally {
+    h.closeAll();
+  }
 });
 
 // ---- the run's side: what a friend's capability set serves ----
@@ -250,7 +314,7 @@ function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = 
 
 test("google: reads run free; a send, a draft and a label go to the judge and, unless it passes them, to HER chat; the floor refuses what no verdict may allow", async () => {
   const ctx = friend(["google", "mail", "calendar"]);
-  scopeOf(`tenant:${ctx.id}`).say("write to Carl that Thursday works");
+  scopeOf(`tenant:${ctx.id}`).say("write to Carl (carl@example.org) that Thursday works"); // (the address is hers: in a run that has read mail a send to an address nobody wrote always asks, autojudge.ts recipientsOutside)
   // reads
   let r = rig(ctx);
   assert.equal((await r.run("search_gmail_messages", { query: "in:inbox" })).behavior, "allow");

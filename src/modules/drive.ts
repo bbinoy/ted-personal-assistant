@@ -12,7 +12,7 @@ const CLAUDE_DOCS = "mcp__claude_ai_Claude_Docs__";
 const drive = rowsOf(DRIVE, "drive", "drive");
 export const driveModule: ToolModule = {
   name: "drive",
-  connection: { kind: "connector", server: /google drive/i, prefix: DRIVE },
+  connection: { kind: "connector", key: "drive", label: "Google Drive", skipped: "reading and saving Drive files", server: /google drive/i, prefix: DRIVE },
   rows: [
     ...drive("read", "search_files read_file_content download_file_content get_file_metadata get_file_permissions list_recent_files"),
     ...drive("drive-write", "create_file update_file copy_file"),
@@ -27,7 +27,7 @@ export const driveModule: ToolModule = {
 const docs = rowsOf(DOCS, "docs", "drive");
 export const docsModule: ToolModule = {
   name: "docs",
-  connection: { kind: "connector", server: /google docs/i, prefix: DOCS },
+  connection: { kind: "connector", key: "docs", label: "Google Docs", skipped: "reading and editing Google Docs", server: /google docs/i, prefix: DOCS },
   rows: [...docs("read", "read_doc"), ...docs("doc-write", "update_doc")],
   free: ["read"],
 };
@@ -36,7 +36,7 @@ export const docsModule: ToolModule = {
 const claudeDocs = rowsOf(CLAUDE_DOCS, "claudedocs", "drive");
 export const claudeDocsModule: ToolModule = {
   name: "claudedocs",
-  connection: { kind: "connector", server: /claude docs/i, prefix: CLAUDE_DOCS },
+  connection: { kind: "connector", key: "claudedocs", label: "Claude Docs", skipped: "living documents in Claude Docs", server: /claude docs/i, prefix: CLAUDE_DOCS },
   rows: [...claudeDocs("read", "read query guide export"), ...claudeDocs("doc-write", "create update batch"), ...claudeDocs("delete", "delete")],
   free: ["read"],
 };

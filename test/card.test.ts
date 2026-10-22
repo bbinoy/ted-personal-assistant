@@ -9,6 +9,7 @@ import { approvalId, cartHash, cartLines, findPayableTotal, frameVerdict, isType
 import { ProfileStore, type Entries } from "../src/modules/browse/profile.ts";
 import { TenantSecrets } from "../src/secrets/secrets.ts";
 import { fakeCardStore, startFakeBao } from "./fakebao.ts";
+import { scratch, scratchDb } from "./scratch.ts";
 
 // Obviously fake values only: the public test card number of the card networks (a Luhn-valid number that belongs to nobody), a made-up security code,
 // a local fake checkout. No test touches the real OpenBao or Keychain (the store talks to an in-process fake, fakebao.ts) or a real merchant.
@@ -27,8 +28,8 @@ const cli = async (argv: string[], inputs: string[], o: { store?: CardStore; kil
   const store = o.store ?? (await fakeCardStore());
   const code = await cardCli(argv, {
     store,
-    kill: o.kill ?? new KillSwitch("state/card-test-cli.disabled"),
-    ledger: o.ledger ?? new Ledger("state/payments-test-cli.jsonl"),
+    kill: o.kill ?? new KillSwitch(scratch("card-test-cli.disabled")),
+    ledger: o.ledger ?? new Ledger(scratchDb("payments-test-cli")),
     readHidden: async (p) => (asked.push(p), queue.shift() ?? ""),
     out: (l) => lines.push(l),
     now: new Date("2026-10-17T10:00:00Z"),
@@ -144,7 +145,7 @@ test("a friend's card is refused in code: no card item for any tenant but the ow
 // ---- the kill switch ----
 
 test("kill switch: /card off from the owner's chat switches card use off, the chat cannot switch it on, the terminal can", async () => {
-  const kill = new KillSwitch("state/card-test-kill.disabled");
+  const kill = new KillSwitch(scratch("card-test-kill.disabled"));
   kill.turnOn();
   assert.equal(kill.off(), undefined);
   assert.equal(cardCommand("hello", kill), undefined, "an ordinary message is not a command");
@@ -158,18 +159,18 @@ test("kill switch: /card off from the owner's chat switches card use off, the ch
   assert.ok(kill.off());
   // an open access is not given while it is off, even if the card is fine
   const store = await fakeCardStore(CARD);
-  assert.equal(await openCardAccess({ store, kill, ledger: new Ledger("state/payments-test-kill.jsonl") }), undefined);
+  assert.equal(await openCardAccess({ store, kill, ledger: new Ledger(scratchDb("payments-test-kill")) }), undefined);
   const r = await cli(["enable"], [], { kill });
   assert.match(r.out, /on again/);
   assert.equal(kill.off(), undefined);
-  assert.ok(await openCardAccess({ store, kill, ledger: new Ledger("state/payments-test-kill.jsonl") }));
+  assert.ok(await openCardAccess({ store, kill, ledger: new Ledger(scratchDb("payments-test-kill")) }));
   assert.equal((await cli(["disable"], [], { kill })).code, 0);
   assert.match(kill.off()!, /at the terminal/);
   kill.turnOn();
 });
 
 test("kill switch: it works with no card at all, and a store that cannot be opened is no access", async () => {
-  const kill = new KillSwitch("state/card-test-kill2.disabled");
+  const kill = new KillSwitch(scratch("card-test-kill2.disabled"));
   kill.turnOff("test");
   assert.ok(kill.off());
   kill.turnOn();
@@ -185,7 +186,7 @@ test("kill switch: it works with no card at all, and a store that cannot be open
 // ---- the ledger and the caps ----
 
 test("ledger: rows hold no card data; a clicked payment counts as spent; a duplicate cart is refused; a crash becomes unconfirmed; clear releases it", () => {
-  const ledger = new Ledger("state/payments-test-ledger.jsonl");
+  const ledger = new Ledger(scratchDb("payments-test-ledger"));
   const now = new Date("2026-10-17T10:00:00Z");
   const base = { merchant: "shop.test", totalMinor: 4500, currency: "CHF", last4: "4242", cartHash: "h1" };
   ledger.add({ ...base, id: "aaaa0001", status: "approved" }, now);
@@ -205,9 +206,9 @@ test("ledger: rows hold no card data; a clicked payment counts as spent; a dupli
   ledger.setStatus("aaaa0001", "cleared", now);
   assert.equal(ledger.spentToday("CHF", now), 0);
   assert.equal(ledger.duplicate("shop.test", "h1", now), undefined);
-  const file = readFileSync(join(process.env.HARNESS_DATA_DIR!, "state/payments-test-ledger.jsonl"), "utf8");
-  assert.ok(!file.includes(PAN) && !/pan|cvc/i.test(file));
-  assert.equal(statSync(join(process.env.HARNESS_DATA_DIR!, "state/payments-test-ledger.jsonl")).mode & 0o777, 0o600);
+  const file = JSON.stringify(ledger.history()) + readFileSync(scratch("payments-test-ledger.db")).toString("latin1"); // (the rows, and the database file itself)
+  assert.ok(!file.includes(PAN) && !/\bpan\b|cvc/i.test(file));
+  assert.equal(statSync(scratch("payments-test-ledger.db")).mode & 0o777, 0o600);
 });
 
 test("caps: per payment and per day, in minor units; 0 switches payments off", () => {

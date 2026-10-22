@@ -12,13 +12,26 @@ export class RunTimeout extends Error {
   }
 }
 
-// The run was stopped from outside before its time (the Mac slept: the sockets of the model call are dead). Not a timeout: the caller restarts the work.
-export class RunAborted extends Error {
-  readonly reason: string;
-  constructor(reason: string) {
-    super(`run aborted: ${reason}`);
-    this.reason = reason;
+// The owner stopped the run ("/stop", conversation/ownercommands.ts): not a failure, so nobody is told "something broke".
+export class RunStopped extends Error {
+  constructor() {
+    super("run stopped by the owner");
   }
+}
+
+// The runs in flight by scope (a conversation's session file): what "/stop" aborts. Only runs that name a scope are listed.
+const live = new Map<string, Set<(e: Error) => void>>();
+// Abort every run of this scope: the query's abort signal fires and the caller's promise rejects at once with RunStopped. Returns how many were running.
+export function stopRuns(scope: string): number {
+  const stops = [...(live.get(scope) ?? [])];
+  for (const stop of stops) stop(new RunStopped());
+  return stops.length;
+}
+
+// Be told when "/stop" names this scope (a run that is not under its ceiling yet, e.g. still waiting for a place in the run gate). Returns how to stop listening.
+export function onStop(scope: string, stop: (e: Error) => void): () => void {
+  (live.get(scope) ?? live.set(scope, new Set()).get(scope)!).add(stop);
+  return () => void live.get(scope)?.delete(stop);
 }
 
 export interface Ceiling {
@@ -28,7 +41,7 @@ export interface Ceiling {
   extend(totalMs: number): void; // the whole allowance becomes `totalMs` if that is more than it is now (an expert the heartbeat look delegates to gets more time); never shortens it
 }
 
-export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise<T>, signal?: AbortSignal): Promise<T> {
+export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise<T>, scope?: string): Promise<T> {
   const controller = new AbortController();
   let total = maxMs;
   let left = maxMs;
@@ -64,13 +77,12 @@ export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise
     total = totalMs;
     if (running) arm();
   };
-  const stop = () => {
-    controller.abort();
-    fire(new RunAborted(String(signal?.reason ?? "stopped")));
-  };
-  if (signal?.aborted) stop();
-  else signal?.addEventListener("abort", stop, { once: true });
   arm();
+  const stop = (e: Error) => {
+    controller.abort();
+    fire(e);
+  };
+  if (scope) (live.get(scope) ?? live.set(scope, new Set()).get(scope)!).add(stop);
   const running = run({ controller, signal: controller.signal, pause, extend });
   running.catch(() => {}); // after a timeout the abandoned run may still fail; that is not news
   try {
@@ -78,7 +90,7 @@ export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise
   } finally {
     finished = true;
     clearTimeout(timer);
-    signal?.removeEventListener("abort", stop);
+    if (scope) live.get(scope)?.delete(stop);
   }
 }
 

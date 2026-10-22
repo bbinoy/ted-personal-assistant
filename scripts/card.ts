@@ -1,4 +1,5 @@
 // npm run card -- set|list|enable|disable|delete|payments|clear: the owner's payment card for the browse worker (src/modules/browse/cardcli.ts). Local terminal only.
+import "../src/core/requirelayout.ts";
 import { CardStore, killSwitch } from "../src/modules/browse/card.ts";
 import { cardCli } from "../src/modules/browse/cardcli.ts";
 import { Ledger } from "../src/modules/browse/payments.ts";

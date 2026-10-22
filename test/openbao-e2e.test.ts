@@ -121,7 +121,7 @@ test("real OpenBao (throwaway): setup, store and read fake items, narrow token, 
     assert.deepEqual((await intake.lookupSelf()).policies.sort(), ["default", "ted-intake"]);
     await assert.rejects(bao.read("tenants/ann/profile/address.home"), (e: Error) => e instanceof BaoError && e.status === 403); // the owner's token does not reach what the page wrote for her
     const seenIntake: { ok: boolean | "warn"; detail: string }[] = [];
-    await intakeCheck((ok, _w, detail = "") => seenIntake.push({ ok, detail }), { keychain, prefix, cfg: { baseUrl: "https://intake.example.test", port: 1, allowHttpLoopback: false, linkMinutes: 15, dir: "" }, bao: () => appBao({ keychain, cfg, as: "intake" }), probe: async () => true });
+    await intakeCheck((ok, _w, detail = "") => seenIntake.push({ ok, detail }), { keychain, prefix, cfg: { baseUrl: "https://intake.example.test", port: 1, allowHttpLoopback: false, linkMinutes: 15, clientIpHeader: "x-forwarded-for", dir: "" }, bao: () => appBao({ keychain, cfg, as: "intake" }), probe: async () => true });
     assert.deepEqual(seenIntake.map((x) => x.ok), [true, true, true], seenIntake.map((x) => x.detail).join(" | "));
 
     // the doctor sees it healthy

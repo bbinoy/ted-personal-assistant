@@ -4,6 +4,8 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,

@@ -18,11 +18,13 @@ const { coolingDown, noteRateLimit, resetCooldown } = await import("../src/core/
 const { recordCost, spentToday } = await import("../src/core/budget.ts");
 const { keyNotices } = await import("../src/tenants/keynotice.ts");
 const { compactConversation } = await import("../src/run/chatsession.ts");
+const { readSession, writeSession } = await import("../src/run/sessionstore.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 const { recentIn } = await import("../src/approvals/recentchat.ts");
 const { tenantKey } = await import("../src/core/ownerkey.ts");
 
 const on = settings as unknown as Record<string, unknown>;
+on.instanceKeyDailyUsd = 1e9; // these tests spend a friend's day by hand (recordCost): her own ceiling is what they look at; the key's ceiling is test/spendcaps.test.ts (a friend's spend IS the key's in the one ledger)
 const KEY = "instance-key-for-the-payer-tests";
 const owner = { kind: "owner" } as const;
 const group = { kind: "group" } as const;
@@ -59,7 +61,7 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
   const anna = friend("Anna");
   const bea = friend("Bea");
   const p = mayRun(her(anna), "t", { key: () => KEY });
-  assert.deepEqual(p, { kind: "instance", id: anna.id, apiKey: KEY, costFile: T.tenantContext(anna).costFile });
+  assert.deepEqual(p, { kind: "instance", id: anna.id, apiKey: KEY, ledger: T.tenantContext(anna).ledger });
   // no key: no run, and the owner hears of it once (never the login as a fallback)
   const alerts: string[] = [];
   keyNotices.sendTo((t) => void alerts.push(t));
@@ -67,7 +69,7 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
   assert.deepEqual(mayRun(her(bea), "t", { key: () => undefined }), { refused: "no-key" });
   assert.equal(alerts.length, 1);
   // her budget
-  recordCost(100, T.tenantContext(anna).costFile);
+  recordCost(100, T.tenantContext(anna).ledger);
   assert.deepEqual(mayRun(her(anna), "t", { key: () => KEY }), { refused: "budget", limit: T.tenantContext(anna).dailyBudgetUsd });
   assert.equal((mayRun(her(bea), "t", { key: () => KEY }) as { kind: string }).kind, "instance", "another friend's day is her own");
   // the key's cooldown
@@ -85,19 +87,18 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
 
 test("a friend's urgent compaction waits while she is blocked (her day's budget spent): no model call, nothing marked", async () => {
   const anna = friend("Anna2");
-  const conv = { ...her(anna), sessionFile: T.tenantContext(anna).sessionFile, source: "group", notesDir: T.tenantContext(anna).notesDir } as const;
-  const file = T.tenantContext(anna).sessionFile;
-  const { writeFileSync, mkdirSync } = await import("node:fs");
+  const conv = { ...her(anna), convId: T.tenantContext(anna).convId, source: "group", notesDir: T.tenantContext(anna).notesDir } as const;
+  const { mkdirSync } = await import("node:fs");
   mkdirSync(T.tenantContext(anna).dir, { recursive: true });
-  const stale = JSON.stringify({ sessionId: "s", costUsd: 0, lastContextTokens: 10_000_000, baseTokens: 1, lastTurnAt: new Date().toISOString() });
-  writeFileSync(file, stale);
-  recordCost(100, T.tenantContext(anna).costFile); // her day is spent
+  const stale = { sessionId: "s", costUsd: 0, lastContextTokens: 10_000_000, baseTokens: 1, lastTurnAt: new Date().toISOString() };
+  writeSession(conv.convId, stale);
+  recordCost(100, T.tenantContext(anna).ledger); // her day is spent
   const err = console.error;
   const log = console.log;
   console.error = console.log = () => {};
   try {
     await compactConversation(conv, "urgent", { key: () => KEY });
-    assert.equal(readFileSync(file, "utf8"), stale, "blocked: not even attempted (no failure marker, no model call)");
+    assert.deepEqual(readSession(conv.convId), stale, "blocked: not even attempted (no failure marker, no model call)");
   } finally {
     console.error = err;
     console.log = log;
@@ -137,7 +138,7 @@ test("oneShot on the login: the process's environment, the instance ledger, the 
   await assert.rejects(oneShot({ system: "s", prompt: "p", payer: LOGIN, run: expired }), AuthError);
 });
 
-test("oneShot on the instance key: her cost file, the key in the environment and no login, a refusal is the key's (every friend's cooldown, one owner notice)", async () => {
+test("oneShot on the instance key: her ledger, the key in the environment and no login, a refusal is the key's (every friend's cooldown, one owner notice)", async () => {
   const anna = friend("Anna3");
   const payer = mayRun(her(anna), "t", { key: () => KEY });
   assert.ok(!isRefusal(payer) && payer.kind === "instance");
@@ -152,7 +153,7 @@ test("oneShot on the instance key: her cost file, the key in the environment and
   await oneShot({ system: "s", prompt: "p", payer, run: ok as never });
   assert.equal(seen.options!.env.ANTHROPIC_API_KEY, KEY);
   assert.equal(seen.options!.env.CLAUDE_CODE_OAUTH_TOKEN, undefined, "never the owner's login");
-  assert.equal(JSON.parse(readFileSync(T.tenantContext(anna).costFile, "utf8")).usd, 0.4);
+  assert.equal(spentToday(T.tenantContext(anna).ledger), 0.4);
   assert.equal(spentToday(), before, "not the instance's own ledger");
   const alerts: string[] = [];
   keyNotices.sendTo((t) => void alerts.push(t));

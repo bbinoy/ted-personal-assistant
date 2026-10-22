@@ -1,8 +1,8 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 
 // A tenant is a "group" run with one person in it and a folder of her own. What this pins: her file tools reach her notes and nothing else (not
@@ -15,6 +15,8 @@ const INSTANCE_KEY = "sk-" + "ant-api03-INSTANCEINSTANCEINSTANCE"; // TENANT_ANT
 process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 
 const { settings } = await import("../src/core/settings.ts");
+const { convDb } = await import("../src/core/convdb.ts");
+const { readSession } = await import("../src/run/sessionstore.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
@@ -24,7 +26,8 @@ const { classify, isReadableData, hiddenTools } = await import("../src/policy/po
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
 const { searchLogs } = await import("../src/core/logsearch.ts");
-const { searchHistoryFile, groupDir, groupNotesDir, GROUPS_DIR } = await import("../src/conversation/groupstore.ts");
+const { searchHistoryFile, groupDir, groupNotesDir } = await import("../src/conversation/groupstore.ts");
+const { convPaths, conversationsDir, groupConvId, instancePaths, logPaths, OWNER_CONV } = await import("../src/core/convpaths.ts");
 const { runConversation } = await import("../src/run/agent.ts");
 const askTenant = (ctx: { id: string }, apiKey: string, prompt: string, _pictures: unknown[], hooks: { firstOutput: () => void } | undefined, _documents: unknown[], io: { query?: never }) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt }), hooks?.firstOutput, io);
 const { runOptionsFor } = await import("../src/run/runoptions.ts");
@@ -81,7 +84,7 @@ test("tenant files: her tools reach her own notes and nothing else", () => {
     assert.equal(asTenant(tool, { file_path: ann.logFile }), "deny", `${tool}: even her own history is not a file she edits`);
     assert.equal(asTenant(tool, { file_path: join(ann.notesDir, "..", "..", bea.id, "notes", "context-secret.md") }), "deny", `${tool}: through ..`);
     assert.equal(asTenant(tool, { file_path: join(ann.notesDir, "..", "tenant.json") }), "deny", `${tool}: her own settings`);
-    assert.equal(asTenant(tool, { file_path: `${ann.notesDir}/../../../memory/notes/context-secret.md` }), "deny", `${tool}: out to the owner's notes`);
+    assert.equal(asTenant(tool, { file_path: `${ann.notesDir}/../../../conversations/owner/notes/context-secret.md` }), "deny", `${tool}: out to the owner's notes`);
     assert.equal(asTenant(tool, { file_path: ann.notesDir }), "deny", `${tool}: the folder itself`);
     assert.equal(asTenant(tool, { file_path: "context-secret.md" }), "deny", `${tool}: a relative path`);
     assert.equal(asTenant(tool, { file_path: join(ann.notesDir, "x\0y") }), "deny", `${tool}: a NUL`);
@@ -107,22 +110,46 @@ test("tenant history: search_logs reads the history file it was built with and n
 });
 
 test("the owner's chat: no tenant's notes, history or secret store, but its own data as always", () => {
-  mkdirSync(join(settings.stateDir, "openbao", "tls"), { recursive: true });
-  writeFileSync(join(settings.stateDir, "openbao", "tls", "key.pem"), "private");
-  writeFileSync(join(settings.stateDir, "registrations.json"), "{}");
-  writeFileSync(join(settings.stateDir, "cost.json"), "{}");
-  mkdirSync(settings.memoryDir, { recursive: true });
-  assert.equal(isReadableData(join(settings.logsDir, "audit.jsonl")), true);
-  assert.equal(isReadableData(join(settings.stateDir, "cost.json")), true);
+  const I = instancePaths();
+  const O = convPaths(OWNER_CONV);
+  mkdirSync(join(I.openbao, "tls"), { recursive: true });
+  writeFileSync(join(I.openbao, "tls", "key.pem"), "private");
+  mkdirSync(I.dir, { recursive: true });
+  writeFileSync(I.registrations, "{}");
+  mkdirSync(dirname(I.db), { recursive: true });
+  writeFileSync(I.db, "x"); // (the database file itself is as closed as any other file of instance/)
+  mkdirSync(O.dir, { recursive: true });
+  assert.equal(isReadableData(logPaths().audit), true);
+  writeFileSync(O.messages, "{}\n");
+  assert.equal(isReadableData(O.messages), true, "the owner's own history");
+  assert.equal(isReadableData(I.db), false, "an allow-list: instance/ is closed unless named");
   assert.equal(isReadableData(join(NOTES_DIR, "context-secret.md")), true);
-  assert.equal(isReadableData(join(settings.stateDir, "tenants.json")), true, "the registry: ids, account ids, status; no key, no words");
+  // every store the old deny-list missed (names and account ids, friends' voice audio, deleted notes, raw group ids, the search indexes), in instance/ and in her own folder
+  const closed = [I.tenants, I.db, `${I.db}-wal`, `${I.db}-shm`, O.search, O.db, `${O.db}-wal`, join(O.voices, "ref.wav"), join(O.notesBackup, "2026-01-01", "note.md")];
+  for (const leak of closed) {
+    mkdirSync(dirname(leak), { recursive: true });
+    if (!existsSync(leak)) writeFileSync(leak, "x"); // (tenants.json is the real registry)
+    assert.equal(isReadableData(leak), false, leak);
+    assert.equal(classify("Read", { file_path: leak }, "chat"), "deny", leak);
+  }
+  convDb(OWNER_CONV).run("DELETE FROM session"); // (a later test asserts a tenant run leaves the owner's session alone)
+  symlinkSync(I.tenants, join(NOTES_DIR, "link-out.md")); // a link from an ALLOWED folder to a closed file
+  assert.equal(isReadableData(join(NOTES_DIR, "link-out.md")), false, "a symlink out of the notes does not make the target readable");
+  const g1 = convPaths(groupConvId("g1"));
+  mkdirSync(g1.notes, { recursive: true });
+  writeFileSync(join(g1.notes, "a.md"), "x");
+  assert.equal(isReadableData(join(g1.notes, "a.md")), false);
+  for (const f of [logPaths().agent, logPaths().signalDaemon, logPaths().intakeLaunchdStderr]) {
+    writeFileSync(f, "x");
+    assert.equal(isReadableData(f), f !== logPaths().intakeLaunchdStderr, f);
+  }
   assert.equal(isReadableData(join(bea.notesDir, "context-secret.md")), false);
   assert.equal(isReadableData(bea.logFile), false);
   assert.equal(isReadableData(join(ann.dir, "meta.json")), false);
-  assert.equal(isReadableData(join(settings.stateDir, "openbao", "tls", "key.pem")), false);
-  assert.equal(isReadableData(join(settings.stateDir, "registrations.json")), false);
-  symlinkSync(bea.notesDir, join(settings.memoryDir, "sneaky")); // a link from a readable folder into hers
-  assert.equal(isReadableData(join(settings.memoryDir, "sneaky", "context-secret.md")), false);
+  assert.equal(isReadableData(join(I.openbao, "tls", "key.pem")), false);
+  assert.equal(isReadableData(I.registrations), false);
+  symlinkSync(bea.notesDir, join(O.dir, "sneaky")); // a link from a folder of the owner's into hers
+  assert.equal(isReadableData(join(O.dir, "sneaky", "context-secret.md")), false);
   for (const tool of ["Read"]) {
     assert.equal(classify(tool, { file_path: join(bea.notesDir, "context-secret.md") }, "chat"), "deny");
     assert.equal(classify(tool, { file_path: bea.logFile }, "chat"), "deny");
@@ -193,7 +220,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "send", "weather", "draw", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
   assert.equal((o.settings as { autoMemoryDirectory: string }).autoMemoryDirectory, ann.notesDir);
   // the owner's chat is as it was: the process environment, no key injected, and no tenant tools without TENANTS
-  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionFile: "state/session.json", memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
   const off = buildOptions(noop, ownerOpts, undefined);
   assert.equal(off.env!.ANTHROPIC_API_KEY, process.env.ANTHROPIC_API_KEY);
   assert.ok(!("tenants" in (off.mcpServers as object)));
@@ -236,17 +263,17 @@ test("a tenant's run: her key in the environment, her cost on her ledger, her se
   assert.equal(r.text, "hi Ann");
   assert.equal((seen.options!.env as Record<string, string>).ANTHROPIC_API_KEY, KEY);
   assert.equal((seen.options!.env as Record<string, string>).CLAUDE_CODE_OAUTH_TOKEN, undefined);
-  assert.equal(spentToday(ann.costFile), 0.05);
+  assert.equal(spentToday(ann.ledger), 0.05);
   assert.equal(spentToday(), before, "the instance's daily guard did not move");
-  assert.equal(JSON.parse(readFileSync(ann.sessionFile, "utf8")).sessionId, "sess-ann");
-  assert.equal(existsSync(join(settings.stateDir, "session.json")), false);
+  assert.equal(readSession(ann.convId).sessionId, "sess-ann");
+  assert.deepEqual(readSession(OWNER_CONV), { costUsd: 0 }, "the owner's session record is untouched");
 });
 
 test("the instance key: read into settings, gone from the process environment, in a tenant run's env only, never in a log or an audit row", async () => {
   assert.equal(settings.tenantApiKey, INSTANCE_KEY);
   assert.equal(process.env.TENANT_ANTHROPIC_API_KEY, undefined, "no child process (Claude Code, MCP servers, the owner's runs) inherits it");
   const noop = async () => ({ approved: false });
-  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionFile: "state/session.json", memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { source: "chat" as const, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
   const owners = buildOptions(noop, ownerOpts, undefined);
   assert.ok(!JSON.stringify(owners.env).includes(INSTANCE_KEY), "the owner's run never carries it");
   const logged: string[] = [];
@@ -260,7 +287,7 @@ test("the instance key: read into settings, gone from the process environment, i
   }
   assert.equal((seen.options!.env as Record<string, string>).ANTHROPIC_API_KEY, INSTANCE_KEY, "the tenant's run has it as ANTHROPIC_API_KEY");
   assert.equal((seen.options!.env as Record<string, string>).TENANT_ANTHROPIC_API_KEY, undefined);
-  const written = [logged.join("\n"), ...["logs/audit.jsonl", "logs/agent.log"].map((f) => (existsSync(join(settings.dataDir, f)) ? readFileSync(join(settings.dataDir, f), "utf8") : ""))];
+  const written = [logged.join("\n"), ...[logPaths().audit, logPaths().agent].map((f) => (existsSync(f) ? readFileSync(f, "utf8") : ""))];
   for (const text of written) assert.ok(!text.includes(INSTANCE_KEY) && !text.includes("INSTANCEINSTANCE"), "not in a log or an audit row");
   assert.ok(!JSON.stringify(tenantRunOptions(ann, INSTANCE_KEY, new Date()).systemPrompt).includes("INSTANCEINSTANCE"), "nor in the prompt");
 });
@@ -350,8 +377,8 @@ test("group + tenant: a tenant in a group is a member of that group; the group's
   const g = group("signal-group-1");
   assert.equal(g.kind, "group");
   assert.equal(g.notesDir, groupNotesDir("signal-group-1"));
-  assert.ok(g.notesDir.startsWith(GROUPS_DIR) && !g.notesDir.startsWith(settings.tenantsDir));
-  assert.ok(!g.logFile.includes(ann.id) && g.logFile.startsWith("logs/group-"));
+  assert.equal(g.notesDir, convPaths(groupConvId("signal-group-1")).notes);
+  assert.ok(!g.logFile.includes(ann.id) && g.logFile.startsWith(conversationsDir()) && !g.logFile.includes("signal-group-1"), "a group's folder is named by its hash, never its id");
   await pipeline.handleIncoming(g, { type: "message", m: { from: "", fromUuid: aciOf(ann), fromName: "Ann", text: "hello group", timestamp: 700, direct: false, group: { id: "signal-group-1" }, addressedToMe: true } });
   assert.deepEqual(ran.group, ["signal-group-1: hello group"], "the group path, as for any member");
   assert.deepEqual(ran.tenant, [], "no private run for a group message");

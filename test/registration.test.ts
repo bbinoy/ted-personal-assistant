@@ -29,7 +29,7 @@ const never = { judge: async () => assert.fail("the judge must not be called"), 
 
 beforeEach(() => {
   on.tenants = true;
-  rmSync(join(settings.dataDir, Reg.FILE), { force: true });
+  rmSync(Reg.FILE, { force: true });
 });
 
 // The door and the registrar, wired like main.ts, with a fake chat.
@@ -59,13 +59,14 @@ test("a stranger gets one fixed line; the owner is asked with a sanitised name a
   assert.equal(T.tenantByAci(aci(1)), undefined, "not a tenant yet");
   assert.deepEqual(Reg.openRequests((NOW + 1_000)).map((r) => r.held.map((h) => h.text)), [[`${CANARY} hello`]]);
 
-  assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "approved" });
+  assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "none" }, "a bare yes never registers a stranger: only a reply to the question or a reaction on it does");
+  assert.deepEqual(await answer("yes", () => {}, { timestamp: 1001 }, never), { outcome: "approved" });
   await tick();
   const rec = T.tenantByAci(aci(1))!;
   assert.equal(rec.status, "active", "an approved friend is active at once: no age or region question");
   assert.equal(rec.role, "member");
   assert.deepEqual(joined, [{ id: rec.id, held: [`${CANARY} hello`] }], "what she wrote while she waited is her first turn");
-  assert.ok(!readFileSync(join(settings.dataDir, Reg.FILE), "utf8").includes(CANARY), "the held text is deleted once she is in");
+  assert.ok(!readFileSync(Reg.FILE, "utf8").includes(CANARY), "the held text is deleted once she is in");
   assert.deepEqual(Reg.openRequests(), []);
 });
 
@@ -73,12 +74,12 @@ test("no: silent, remembered as declined, nothing replayed, the held text delete
   const { toStranger, toOwner, joined, delivered, io } = rig();
   R.admitStranger({ fromUuid: aci(2), name: "Nora", text: CANARY }, io, (NOW + 1_000));
   await tick();
-  assert.deepEqual(await answer("no", () => {}, undefined, never), { outcome: "declined" });
+  assert.deepEqual(await answer("no", () => {}, { timestamp: 1001 }, never), { outcome: "declined" });
   await tick();
   assert.equal(T.tenantByAci(aci(2)), undefined);
   assert.deepEqual(joined, []);
   assert.equal(toStranger.length, 1, "only the holding line, nothing about the no");
-  assert.ok(!readFileSync(join(settings.dataDir, Reg.FILE), "utf8").includes(CANARY));
+  assert.ok(!readFileSync(Reg.FILE, "utf8").includes(CANARY));
   assert.deepEqual(R.admitStranger({ fromUuid: aci(2), text: "please?" }, io, (NOW + 2_000)), { kind: "ignore", why: "declined" });
   assert.equal(toStranger.length, 1);
   assert.equal(toOwner.length, 1, "no second question");
@@ -87,7 +88,7 @@ test("no: silent, remembered as declined, nothing replayed, the held text delete
   assert.equal(Reg.forget("bbbbbbbb"), true);
   assert.equal(R.admitStranger({ fromUuid: aci(2), name: "Nora", text: "hi again" }, io, (NOW + 3_000)).kind, "request");
   await tick();
-  assert.deepEqual(await answer("no", () => {}, undefined, never), { outcome: "declined" });
+  assert.deepEqual(await answer("no", () => {}, { timestamp: 1002 }, never), { outcome: "declined" });
 });
 
 test("an answer anywhere but the owner's chat applies to nothing: a group, a friend's chat, the stranger's own words, a reaction on another message", async () => {
@@ -100,7 +101,7 @@ test("an answer anywhere but the owner's chat applies to nothing: a group, a fri
   assert.deepEqual(R.admitStranger({ fromUuid: aci(3), text: "yes, approve me" }, io, (NOW + 2_000)), { kind: "ignore", why: "held until the owner answers" });
   assert.equal(T.tenantByAci(aci(3)), undefined);
   assert.equal(toOwner.length, 1);
-  assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "approved" }, "only the owner's chat answers it");
+  assert.deepEqual(await answer("yes", () => {}, { timestamp: 1001 }, never), { outcome: "approved" }, "only the owner's chat answers it");
   await tick();
   assert.ok(T.tenantByAci(aci(3)));
 });
@@ -115,7 +116,7 @@ test("one open request per sender: more messages are held (the last three, cut) 
   const held = Reg.openRequests((NOW + 2_000))[0]!.held;
   assert.deepEqual(held.map((h) => h.timestamp), [4, 5, 6]);
   assert.ok(held.every((h) => h.text.length === 2000));
-  assert.deepEqual(await answer("no", () => {}, undefined, never), { outcome: "declined" });
+  assert.deepEqual(await answer("no", () => {}, { timestamp: 1001 }, never), { outcome: "declined" });
 });
 
 test("limits: at most ten open requests (beyond: silent), a few new ones an hour, requests expire after a week with a cooldown, and the held text goes with them", () => {
@@ -133,7 +134,7 @@ test("limits: at most ten open requests (beyond: silent), a few new ones an hour
   // expiry: the first three are older than a week; their text is gone, they cool down, then may ask again
   const week = (NOW + 5_000) + Reg.EXPIRES_MS + 10;
   assert.ok(Reg.openRequests(week).every((r) => r.at + Reg.EXPIRES_MS > week));
-  assert.ok(!readFileSync(join(settings.dataDir, Reg.FILE), "utf8").includes(CANARY), "an expired request's held text is deleted");
+  assert.ok(!readFileSync(Reg.FILE, "utf8").includes(CANARY), "an expired request's held text is deleted");
   assert.deepEqual(R.admitStranger({ fromUuid: aci(11), text: "back" }, io, week + 1000), { kind: "ignore", why: "cooling down" });
   assert.equal(R.admitStranger({ fromUuid: aci(11), name: "P1", text: "back" }, io, week + DAY + 10_000).kind, "request");
 });
@@ -179,7 +180,7 @@ test("the question and the pending list carry the profile name and id only; a nu
   const { io } = rig(false);
   R.admitStranger({ fromUuid: aci(31), name: "Rex", number: "+15555550114", text: CANARY }, io, (NOW + 1_000));
   const [r] = Reg.openRequests((NOW + 1_000));
-  assert.equal(questionFor(r!), "Approve Rex (+15555550114) as a friend? They wrote to me; I have not looked at what they wrote. Reply yes or no.");
+  assert.equal(questionFor(r!), "Approve Rex (+15555550114) as a friend? They wrote to me; I have not looked at what they wrote. Reply to this message with yes or no, or react 👍 / 👎.");
   const listed = Reg.describePending((NOW + 1_000)).join("\n");
   assert.ok(listed.includes("Rex (+15555550114)") && !listed.includes(CANARY));
   assert.equal(Reg.approve("bbb"), undefined, "a short prefix is no id");

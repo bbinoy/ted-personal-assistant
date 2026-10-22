@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 import { group, owner } from "../src/conversation/conversation.ts";
 import { askGateWith, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/conversation/gate.ts";
 import { clampCheck, lookDue, lookState, wakeText } from "../src/conversation/ledger.ts";
@@ -11,6 +12,7 @@ import { groupContext, groupLogFile } from "../src/conversation/groupstore.ts";
 import { AuthError, RateLimitError } from "../src/tenants/errors.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
 import { dataPath } from "../src/core/state.ts";
+import { scratchLog } from "./scratch.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.briefBackstopHour = 24; // the backstop has its own tests below
@@ -57,8 +59,8 @@ test("gate prompt: a message look sees the latest exchange with long lines cut, 
 test("gate prompt: the style the gate is told of is one compact line; no style, no personality section", () => {
   assert.equal(typeof styleSummary(T0), "string");
   // the owner's style notes (read from the notes folder, other categories left out) are what a group's gate and run are told of
-  const note = join(settings.memoryDir, "notes", "style-gate-test.md");
-  const other = join(settings.memoryDir, "notes", "people-gate-test.md");
+  const note = join(convPaths(OWNER_CONV).notes, "style-gate-test.md");
+  const other = join(convPaths(OWNER_CONV).notes, "people-gate-test.md");
   mkdirSync(dirname(note), { recursive: true });
   writeFileSync(note, "warm and folksy,\nfew emoji\n");
   writeFileSync(other, "Anna is the dentist\n");
@@ -134,7 +136,7 @@ test("ledger: wakeText clamps the next look", () => {
 // ---- the ledger is not conversation ----
 
 test("ledger kinds never reach anything that reads the log as conversation", async () => {
-  const file = "logs/gate-test-ledger.jsonl";
+  const file = scratchLog("gate-test-ledger.jsonl");
   rmSync(dataPath(file), { force: true });
   const rec = (kind: Kind, ts: number, text: string, min: number) => recordMessage(kind, ts, text, new Date(T0.getTime() + min * 60_000), file);
   rec("member", 1, "Eve (a member): we play Thursday", 0);

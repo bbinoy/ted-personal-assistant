@@ -23,7 +23,7 @@ const { chatResume } = await import("../src/run/chatsession.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { dropTenantWarm } = await import("../src/run/agent.ts");
 const { userInput } = await import("../src/run/image.ts");
-const { writeJson } = await import("../src/core/state.ts");
+const { writeSession } = await import("../src/run/sessionstore.ts");
 
 const result = { type: "result", subtype: "success", is_error: false, result: "hi", session_id: "sess-new", total_cost_usd: 0.001 };
 const stream = (log: string[], name: string) => (async function* () { log.push(name); yield result; })();
@@ -52,14 +52,14 @@ const withSettings = async (change: Record<string, unknown>, fn: () => Promise<v
 };
 
 const inputsOf = (conv: ReturnType<typeof tenant | typeof group | typeof owner>, apiKey = INSTANCE_KEY) => (conv.kind === "tenant" ? { apiKey } : conv.kind === "group" ? { style: "" } : { notify: async () => {} });
-const prepare = (conv: any, start: any, apiKey?: string) => warmUp(conv, runOptionsFor(conv, inputsOf(conv, apiKey)), chatResume(conv.sessionFile), start);
+const prepare = (conv: any, start: any, apiKey?: string) => warmUp(conv, runOptionsFor(conv, inputsOf(conv, apiKey)), chatResume(conv.convId), start);
 const turn = (conv: any, log: string[], apiKey?: string) => {
   const o = runOptionsFor(conv, inputsOf(conv, apiKey));
-  return runWarmOrCold(conv, o, chatResume(conv.sessionFile), userInput("p", [], []), cold(log));
+  return runWarmOrCold(conv, o, chatResume(conv.convId), userInput("p", [], []), cold(log));
 };
 
 test("warm pool: one process per kind of room, the owner's untouched by groups and tenants; a full kind replaces its least recently used", async () => {
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     const [a, b, c] = [person("A"), person("B"), person("C")].map((x) => tenant(x.id));
     const g1 = group(`pool-${++n}-aaaaaaaaaaaaaaaa`);
@@ -67,7 +67,7 @@ test("warm pool: one process per kind of room, the owner's untouched by groups a
     for (const conv of [owner(), g1, a!, b!]) prepare(conv, r.start);
     await tick();
     assert.deepEqual(pool.holders().sort(), [owner().key, g1.key, a!.key, b!.key].sort());
-    prepare(g2, r.start); // another group spoke last: at most one group process
+    prepare(g2, r.start); // another group spoke last: at most GROUP_WARM_SLOTS (here 1) group processes
     await tick();
     assert.equal(pool.has(g1), false);
     assert.equal(pool.has(g2), true);
@@ -83,7 +83,7 @@ test("warm pool: one process per kind of room, the owner's untouched by groups a
 });
 
 test("warm pool: a process serves only its own conversation, once, and is built from that conversation's options", async () => {
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     const a = tenant(person("A").id);
     const b = tenant(person("B").id);
@@ -114,13 +114,13 @@ test("warm pool: a process serves only its own conversation, once, and is built 
 });
 
 test("warm pool: a process built before something changed is not used: the session, her key", async () => {
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     const a = tenant(person("A").id);
     const b = tenant(person("B").id);
     prepare(a, r.start);
     prepare(b, r.start);
-    writeJson(a.sessionFile, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
+    writeSession(a.convId, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
     const log: string[] = [];
     await turn(a, log);
     await turn(b, log, OTHER_KEY); // the instance key changed
@@ -146,7 +146,7 @@ test("warm pool: WARM=off and TENANT_WARM_MAX=0 start nothing; dropping a tenant
     assert.equal(r.started.length, 1, "the owner's does not depend on it");
     pool.drop(owner().key);
   });
-  await withSettings({ warm: true, tenantWarmMax: 2 }, async () => {
+  await withSettings({ warm: true, tenantWarmMax: 2, groupWarmSlots: 1 }, async () => {
     const r = rig();
     prepare(a, r.start);
     await tick();
@@ -169,7 +169,7 @@ test("warm pool: a renewal wants a process in use, not an idle one", async () =>
   });
 });
 
-const refreshing = (conv: any, start: any) => warmUp(conv, runOptionsFor(conv, inputsOf(conv)), chatResume(conv.sessionFile), start, true);
+const refreshing = (conv: any, start: any) => warmUp(conv, runOptionsFor(conv, inputsOf(conv)), chatResume(conv.convId), start, true);
 
 test("warm pool: a renewal of an unchanged spare that stays fresh starts nothing; a changed one is rebuilt", async () => {
   await withSettings({ warm: true }, async () => {
@@ -182,7 +182,7 @@ test("warm pool: a renewal of an unchanged spare that stays fresh starts nothing
     await tick();
     assert.equal(r.started.length, 1, "nothing changed: the spare it has is kept");
     assert.deepEqual(r.closed, []);
-    writeJson(owner().sessionFile, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
+    writeSession(owner().convId, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
     refreshing(owner(), r.start);
     await tick();
     assert.equal(r.started.length, 2, "the session moved on: rebuilt");

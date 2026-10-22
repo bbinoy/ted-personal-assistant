@@ -9,7 +9,10 @@ import { ledgerEntries, logSignature } from "../core/messages.ts";
 import { isPaused } from "../core/pause.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
-import { createStagger, type StaggerOptions } from "./stagger.ts";
+import { runGate } from "../core/rungate.ts";
+import { noticeBudget, noticeDamaged, releaseHeld } from "./notices.ts";
+import { closeIdleConvDbs } from "../core/convdb.ts";
+import { flushPending } from "../approvals/pendingflow.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
@@ -21,11 +24,15 @@ import { createStagger, type StaggerOptions } from "./stagger.ts";
 // Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her own budget and the shared
 // key) and runs on the Payer it returns: no per-conversation branches here.
 // The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the owner's once-a-day notice; a tenant's own day is her access,
-// tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours are the instruction's words, not a rule here.
+// tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
+// an unprompted post and the tick delivers what was held as one message); the owner hears of a spent budget once a day and of looks that keep failing (notices.ts).
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy"> & Partial<Pick<Pipeline, "lease">>;
+  stagger?: (conv: Conversation) => number; // ms a conversation waits before its FIRST look since the process started, so a restart that finds every one due does not start them all at once (default none; main.ts startupStagger)
+  sleep?: (ms: number) => Promise<void>; // (tests)
+  awaitingApproval?: HeartbeatDeps["awaitingApproval"]; // (tests) default: a question of the conversation open in the chat (approvals.ts)
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
   run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runHeartbeat, with that conversation's approver)
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
@@ -34,9 +41,11 @@ interface WakeDeps {
   tenantIds?: () => string[]; // active tenants (default: the registry)
   notesChangedAt?: (dir: string) => number;
   now?: () => Date;
-  stagger?: StaggerOptions; // tests; default: LOOK_CONCURRENCY at a time, LOOK_STAGGER_MS apart
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
 }
+
+// The wait before a conversation's first look after a start: random within the tick interval, at most 5 minutes (a spread of work, not a delay of any one look).
+export const startupStagger = (): number => Math.random() * Math.min(settings.heartbeatMinutes * 60_000, 5 * 60_000);
 
 export function createWakeups(deps: WakeDeps) {
   const { pipeline } = deps;
@@ -58,6 +67,7 @@ export function createWakeups(deps: WakeDeps) {
   function quietCompact(conv: Conversation): void {
     const key = `compact:${conv.key}`;
     if (!deps.compact || running.has(key) || !deps.compact.due(conv)) return;
+    if (runGate.full) return; // the run gate (rungate.ts) has no free place: a compaction that waits holds the conversation's queue, so it is left for a later tick
     if (isRefusal(may(conv, "compaction"))) return; // billed like any call: stops with the pause switch, the cooldown and the budget (hers: the key and her own budget)
     const run = deps.compact.run;
     const job = pipeline.enqueue(conv, () => run(conv)).then(
@@ -80,9 +90,7 @@ export function createWakeups(deps: WakeDeps) {
     return st;
   }
 
-  const stagger = createStagger(deps.stagger ?? { concurrency: settings.lookConcurrency, gapMs: settings.lookStaggerMs });
-  let epoch = 0; // raised when the Mac sleeps: looks that were only waiting for a slot are dropped (still due; the next tick starts them)
-  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed });
+  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed, awaitingApproval: deps.awaitingApproval });
 
   // One conversation, one look. Returns what happened (for the log and tests).
   async function look(conv: Conversation, now: Date): Promise<string> {
@@ -92,8 +100,14 @@ export function createWakeups(deps: WakeDeps) {
 
   // Every conversation looks on its own: a slow brief or a failing group never delays another conversation.
   const busy = new Set<string>();
+  const started = new Set<string>(); // conversations that have had their first look since the process started (or since the Mac last slept: slept())
+  let epoch = 0; // raised when the Mac sleeps: a conversation still napping before its first look is dropped (it is still due; the next tick starts it)
+  const nap = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref()));
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
+    if (spent()) noticeBudget(now); // the owner's one notice of the day: background work stops until midnight (budget.ts overBudget says whether it is the first)
+    noticeDamaged(now); // a conversation whose assistant.db was set aside: the owner is told once a day until a person looks (core/convdb.ts)
+    closeIdleConvDbs(now.getTime()); // connections nobody used for a while (a store reopens one at its next use)
     const convs: Conversation[] = [owner()]; // (each conversation asks mayRun: the instance's day budget is the owner's and the groups', a friend's is her own)
     if (settings.wakeups && deps.groupChats) {
       const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
@@ -119,7 +133,15 @@ export function createWakeups(deps: WakeDeps) {
         busy.add(conv.key);
         const mine = epoch;
         try {
-          await stagger.run(async () => (mine === epoch ? look(conv, clock()) : "restarted"));
+          await flushPending(conv.key, { ended: false }).catch((e) => console.error("wake: approval inbox:", (e as Error).message)); // parked approvals: asked once quiet hours end, expired ones told, a cut-short run noticed, even with no look
+          await releaseHeld(pipeline, conv, clock()); // what quiet hours or the day's cap held back goes out now, as one message
+          if (!started.has(conv.key)) {
+            started.add(conv.key);
+            const ms = deps.stagger?.(conv) ?? 0;
+            if (ms > 0) await nap(ms);
+            if (paused(clock()) || mine !== epoch) return;
+          }
+          await look(conv, clock());
         } catch (e) {
           console.error(`wake: ${conv.kind} look failed:`, (e as Error).message);
         } finally {
@@ -129,10 +151,12 @@ export function createWakeups(deps: WakeDeps) {
     );
   }
 
-  // The Mac slept (heartbeat.ts): the connections of every look in flight are dead, so they are stopped, and those still waiting for a slot are dropped. All of them are
-  // still due and start again, staggered, on the next tick. Returns how many runs were stopped.
+  // The Mac slept (heartbeat.ts): the connections of every look in flight are dead, so they are stopped (those still waiting for a place in the run gate never start), and
+  // the conversations take their staggered first look again, as after a restart (stagger above), so waking up does not start a dozen runs together. Everything stopped is still due and
+  // is started again by the normal due-check. Returns how many runs were stopped.
   function slept(): number {
     epoch++;
+    started.clear();
     return heartbeat.abortAll("the Mac slept");
   }
 

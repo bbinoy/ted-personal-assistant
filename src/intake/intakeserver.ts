@@ -1,12 +1,24 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { audit } from "../core/audit.ts";
+import { settings } from "../core/settings.ts";
+import { emitRecord } from "../core/events.ts";
 import { LINK_CODE, LinkStore, recordDone } from "./intakelinks.ts";
 import { Invalid, purposeOf, type Field, type Purpose } from "./intakepurposes.ts";
 import type { Put } from "./intakepurposes.ts";
 import { CALLBACK, OAuthProblem, bindingCookie, bindingFrom, type OAuthFlows } from "./oauth.ts";
 import { capabilitiesOfRecord } from "../tenants/capabilityset.ts";
 import { people, type Capability, type TenantRecord } from "../tenants/tenants.ts";
+
+// After the secret is stored and the link burnt: the status mark is a nicety. If the database is busy, full or damaged the secret is STILL saved (the page must not say "Nothing was saved" and
+// release the claim); the status is just not recorded, said in the log and the audit trail.
+export function noteDone(tenant: string, purpose: string, stored: Parameters<typeof recordDone>[2]): void {
+  try {
+    recordDone(tenant, purpose, stored);
+  } catch (e) {
+    console.error(`intake: saved ${purpose} for ${tenant}, but the status could not be recorded (${(e as Error).message})`);
+    emitRecord("intake_store", "status-not-recorded", "background", { tenant, purpose });
+  }
+}
 
 // The intake page: a separate process (scripts/intake.ts), on 127.0.0.1 only, that is the one place a tenant types a secret. A tunnel the owner sets up
 // (docs/SETUP.md) puts it on the internet over https; this file knows nothing of that. Nothing secret goes through Signal, and the model never sees a
@@ -36,11 +48,13 @@ const DEFAULT_LIMITS: Limits = { perIpPerMinute: 60, globalPerMinute: 300, badCo
 const BAD_WINDOW = 15 * 60_000;
 
 // Hits per key in a sliding window, in memory.
-class Window {
+export class Window {
   private readonly hits = new Map<string, number[]>();
   private readonly ms: number;
-  constructor(ms: number) {
+  private readonly maxKeys: number;
+  constructor(ms: number, maxKeys = 10_000) {
     this.ms = ms;
+    this.maxKeys = maxKeys;
   }
   count(key: string, now: number): number {
     const fresh = (this.hits.get(key) ?? []).filter((t) => now - t < this.ms);
@@ -49,12 +63,34 @@ class Window {
     return fresh.length;
   }
   add(key: string, now: number): void {
-    if (this.hits.size > 10_000) this.hits.clear(); // a flood of addresses cannot grow it without bound (the global limit still holds)
-    this.hits.set(key, [...(this.hits.get(key) ?? []), now]);
+    const mine = this.hits.get(key) ?? [];
+    this.hits.delete(key); // (re-inserted last: the map's order is least recently hit first)
+    this.hits.set(key, [...mine, now]);
+    // A flood of addresses cannot grow it without bound, and it costs only the quietest keys their history: clearing everything would hand a flooder a clean slate for every address, his own included.
+    for (const old of this.hits.keys()) {
+      if (this.hits.size <= this.maxKeys) break;
+      this.hits.delete(old);
+    }
+  }
+  get size(): number {
+    return this.hits.size;
   }
 }
 
+// Behind a tunnel every request comes from the loopback address, so the visitor is what the tunnel says: by default the LAST X-Forwarded-For entry (the one the tunnel itself added; the
+// ones before it are the visitor's to forge); a tunnel that sets its own header instead (Cloudflare Tunnel: cf-connecting-ip) is named by INTAKE_CLIENT_IP_HEADER, and then that one
+// header's value is used (the tunnel overwrites it). A direct, non-loopback peer is itself. A loopback peer with no such header (no tunnel, or one that does not set it) is "127.0.0.1".
+export function clientIpOf(peer: string | undefined, headers: IncomingMessage["headers"], header: string): string {
+  const p = peer ?? "?";
+  if (p !== "127.0.0.1" && p !== "::1" && p !== "::ffff:127.0.0.1") return p;
+  const raw = headers[header.toLowerCase()];
+  const v = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+  const named = header.toLowerCase() === "x-forwarded-for" ? v?.split(",").pop() : v;
+  return named?.trim().slice(0, 64) || p;
+}
+
 export interface IntakeDeps {
+  clientIpHeader?: string; // which request header carries the visitor's address behind a tunnel (default: settings.intake.clientIpHeader)
   links: LinkStore;
   writer: { for(tenant: string): Put };
   oauth?: OAuthFlows; // the sign-in purposes ("Connect Google", "Connect Notion"): their flows in progress; absent: those purposes are not offered
@@ -133,12 +169,8 @@ export class IntakeServer {
     return want.length === got.length && timingSafeEqual(want, got);
   }
 
-  // Behind a tunnel every request comes from the loopback address; the last X-Forwarded-For entry is the one the tunnel itself added.
   private clientIp(req: IncomingMessage): string {
-    const peer = req.socket.remoteAddress ?? "?";
-    if (peer !== "127.0.0.1" && peer !== "::1" && peer !== "::ffff:127.0.0.1") return peer;
-    const xff = req.headers["x-forwarded-for"];
-    return (typeof xff === "string" ? xff.split(",").pop()?.trim() : "") || peer;
+    return clientIpOf(req.socket.remoteAddress, req.headers, this.deps.clientIpHeader ?? settings.intake.clientIpHeader);
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -221,14 +253,14 @@ export class IntakeServer {
       await this.deps.writer.for(flow.tenant)(provider.store.kind, provider.store.name, { ...grant.data, at: new Date(this.now()).toISOString() });
       claim.burn();
       const stored = [{ name: `${provider.name.toLowerCase()} connection`, chars: grant.chars }];
-      recordDone(flow.tenant, id, stored);
-      audit("intake_store", "stored", "background", { tenant: flow.tenant, purpose: id, items: stored });
+      noteDone(flow.tenant, id, stored);
+      emitRecord("intake_store", "stored", "background", { tenant: flow.tenant, purpose: id, items: stored });
       sendPage(res, 200, "Connected", `<h1>${esc(provider.name)} is connected${grant.account ? ` as ${esc(grant.account)}` : ""}</h1><p>${grant.account ? "If that is not your account, tell the person who runs the assistant. " : ""}You can close this page and go back to the chat.</p>`);
     } catch (e) {
       claim.release(); // the same link works again until it expires
       if (e instanceof OAuthProblem) return sendPage(res, 400, "Not connected", `<h1>Not connected</h1><p>${esc(e.message)}</p>`);
       console.error(`intake: connecting ${id} failed (${(e as Error).name})`);
-      audit("intake_store", "failed", "background", { tenant: flow.tenant, purpose: id });
+      emitRecord("intake_store", "failed", "background", { tenant: flow.tenant, purpose: id });
       sendPage(res, 503, "Not saved", `<h1>Not saved</h1><p>The secret store could not be reached. Nothing was saved. Open the same link again in a moment.</p>`);
     }
   }
@@ -265,14 +297,14 @@ export class IntakeServer {
     try {
       const stored = await purpose.store(who.tenant, values, this.deps.writer.for(who.tenant));
       claim.burn();
-      recordDone(who.tenant, who.purpose, stored);
-      audit("intake_store", "stored", "background", { tenant: who.tenant, purpose: who.purpose, items: stored });
+      noteDone(who.tenant, who.purpose, stored);
+      emitRecord("intake_store", "stored", "background", { tenant: who.tenant, purpose: who.purpose, items: stored });
       sendPage(res, 200, "Saved", `<h1>Saved</h1><ul>${stored.map((s) => `<li>${esc(s.name)} (${s.chars} characters)</li>`).join("")}</ul><p>You can close this page and go back to the chat.</p>`);
     } catch (e) {
       claim.release(); // the same link works again until it expires
       if (e instanceof Invalid) return this.form(res, code, purpose, who.tenant, e.message, 400);
       console.error(`intake: storing failed (${(e as Error).name})`);
-      audit("intake_store", "failed", "background", { tenant: who.tenant, purpose: who.purpose });
+      emitRecord("intake_store", "failed", "background", { tenant: who.tenant, purpose: who.purpose });
       sendPage(res, 503, "Not saved", `<h1>Not saved</h1><p>The secret store could not be reached. Nothing was saved. Try the same link again in a moment.</p>`);
     }
   }

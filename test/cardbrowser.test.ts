@@ -17,6 +17,7 @@ import { KillSwitch, openCardAccess } from "../src/modules/browse/card.ts";
 import { Ledger } from "../src/modules/browse/payments.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
+import { scratch, scratchDb } from "./scratch.ts";
 
 // The card flow against a REAL headless Chromium and the real @playwright/mcp server, on local fake checkouts (test/fixtures/checkout): a shop, a hosted
 // payment page of a "known payment provider" (checkout.stripe.com), and the payment provider's card fields in a cross-origin iframe (js.stripe.com).
@@ -93,7 +94,7 @@ async function start(t: TestContext, o: { ads?: boolean } = {}): Promise<Env | u
   const outDir = join(dir, "out");
   execFileSync("mkdir", ["-p", outDir]);
   const st = { ok: true as const, cli: join(dirname(createRequire(import.meta.url).resolve("@playwright/mcp/package.json")), "cli.js"), exe };
-  const cfg = browserServer(st, outDir, undefined, { mode: "off", cdpPort });
+  const cfg = browserServer(st, outDir, undefined, { mode: "off", cdpPort, unproxiedForTest: true });
   assert.ok(cfg.type === "stdio" || cfg.type === undefined);
   const stdio = cfg as { command: string; args: string[]; env: Record<string, string> };
   const configFile = stdio.args[stdio.args.indexOf("--config") + 1]!;
@@ -106,8 +107,8 @@ async function start(t: TestContext, o: { ads?: boolean } = {}): Promise<Env | u
 
   // the card in an in-process fake of OpenBao
   const cards = await fakeCardStore({ pan: PAN, expMonth: 12, expYear: 2099, cvc: CVC, label: "Wise", last4: "4242", currency: "CHF" });
-  const ledger = new Ledger(`state/payments-test-browser-${process.pid}-${Date.now()}.jsonl`);
-  const access = (await openCardAccess({ store: cards, kill: new KillSwitch(`state/card-test-browser-${process.pid}.disabled`), ledger, caps: { purchaseMinor: 5000, dayMinor: 10000 } }))!;
+  const ledger = new Ledger(scratchDb(`payments-test-browser-${process.pid}-${Date.now()}`));
+  const access = (await openCardAccess({ store: cards, kill: new KillSwitch(scratch(`card-test-browser-${process.pid}.disabled`)), ledger, caps: { purchaseMinor: 5000, dayMinor: 10000 } }))!;
   const g = new BrowseGuard({ mode: "owner", task: "buy the ticket", outDir, resolver: publicDns, card: access, frames: cdpFrames(cdpPort) });
   const asked: string[] = [];
   const judge = async (): Promise<Verdict> => ({ decision: "auto", reason: "test" });

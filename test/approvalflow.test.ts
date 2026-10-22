@@ -265,7 +265,7 @@ test("a background approval is judged too, and marked as such", async () => {
 const q = { tool: MAIL, args: { to: ["alice@example.com"], cc: ["bob@example.com"], bcc: ["carol@example.com"], subject: "Offsite agenda", body: "See below. Mail me at ceo@example.org" }, details: `✉️ Send email\nTo: alice@example.com\nCc: bob@example.com\nBcc: carol@example.com\n\n${"A long body that needs a summary. ".repeat(30)}`, recent: [], background: false, source: "chat" as const };
 const GOOD = "Send “Offsite agenda” to alice@example.com, with bob@example.com on Cc and carol@example.com on Bcc?";
 
-test("factsOf / validateQuestion: every address, title and role word must be there; extra addresses and links are allowed", () => {
+test("factsOf / validateQuestion: every address, title and role word must be there; an address or link that is in neither the call nor its details is refused", () => {
   const f = factsOf(q.args, q.details);
   for (const m of ["alice@example.com", "bob@example.com", "carol@example.com", "Offsite agenda"]) assert.ok(f.must.includes(m), m);
   assert.ok(!f.must.includes("ceo@example.org")); // an address in free text is allowed, not required
@@ -273,10 +273,11 @@ test("factsOf / validateQuestion: every address, title and role word must be the
   assert.match(validateQuestion(GOOD.replace(" and carol@example.com on Bcc", ""), f)!, /carol/);
   assert.match(validateQuestion(GOOD.replace("on Bcc", "on Cc"), f)!, /Bcc/); // bcc described as cc
   assert.match(validateQuestion(GOOD.replace("alice@", "alyce@"), f)!, /missing/);
-  assert.equal(validateQuestion(`${GOOD} Also dave@example.com.`, f), undefined); // an extra address is fine: the real ones are all there
-  assert.equal(validateQuestion(`${GOOD} See https://example.org/x`, f), undefined);
+  assert.match(validateQuestion(`${GOOD} Also dave@example.com.`, f)!, /dave@example\.com.*not in the call/); // an extra address is refused even when the real ones are all there
+  assert.match(validateQuestion(`${GOOD} See https://example.org/x`, f)!, /not in the call/);
+  assert.equal(validateQuestion(GOOD.replace("alice@example.com", "ALICE@example.com"), f), undefined); // case does not matter
   assert.match(validateQuestion("Send “Offsite agenda” to dave@example.com?", f)!, /missing/); // but an invented recipient in place of the real ones is still refused
-  assert.equal(validateQuestion(`${GOOD} (the body mentions ceo@example.org)`, f), undefined); // an address from the body is allowed, not required
+  assert.equal(validateQuestion(`${GOOD} (the body mentions ceo@example.org)`, f), undefined); // an address that is in the call (here its body) is allowed, not required
   // times, dates, ids, zone, amounts, urls
   const cal2 = factsOf({ eventId: "evt_8f2a", calendarId: "primary", summary: "Dentist", startTime: "2026-10-20T16:00:00", endTime: "2026-10-20T17:00:00", timeZone: "Europe/Berlin" }, "");
   assert.deepEqual(cal2.must, ["evt_8f2a", "Dentist", "Europe/Berlin", "20 Oct", "16:00", "17:00"].sort((a, b) => cal2.must.indexOf(a) - cal2.must.indexOf(b)));

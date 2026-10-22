@@ -7,11 +7,12 @@ import { tick as settle } from "./util.ts";
 
 // The admin is the owner's chat: its powers are the instance's (invites, suspend and remove with approval, groups, logs of the instance), not a
 // person's. Nobody reaches another person's folder through the assistant, the admin included: the tenant's notes, history, session and ledger are not
-// readable or writable from the owner's chat, `tenants/` and `state/openbao/` are shut to every tool, and the audit log (the admin's search_logs)
+// readable or writable from the owner's chat, every other conversation folder, `instance/` and `state/openbao/` are shut to every tool, and the audit log (the admin's search_logs)
 // holds no word of a tenant's chat. The host's own administrator can of course read the files on the Mac (docs/SAFETY.md).
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "admin-isolation-"));
 
 const { settings } = await import("../src/core/settings.ts");
+const { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } = await import("../src/core/convpaths.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
@@ -29,31 +30,35 @@ const { buildOptions } = await import("../src/run/agentrun.ts");
 const CANARY = "CANARY-ANN-4242";
 const rec = T.addTenant({ aci: "00000000-0000-4000-8000-000000000001", name: "Ann" })!;
 const ann = T.tenantContext(rec);
+const annDb = convPaths(ann.convId).db; // her assistant.db: a private file of hers like the rest
 const ownerNotes = join(NOTES_DIR, "context-own.md");
 mkdirSync(NOTES_DIR, { recursive: true });
 writeFileSync(ownerNotes, "the owner's own note");
 for (const [dir, file] of [[ann.notesDir, "people-eve.md"], [ann.dir, "tenant.json"], [ann.dir, "meta.json"], [ann.dir, "cost.json"]] as const) writeFileSync(join(dir, file), `{"text":"${CANARY}"}`);
 writeFileSync(ann.logFile, `{"ts":1,"kind":"owner","text":"${CANARY}"}\n`);
-writeFileSync(ann.sessionFile, `{"id":"${CANARY}"}`);
-const bao = join(settings.stateDir, "openbao");
+(await import("../src/core/convdb.ts")).convDb(ann.convId).run("INSERT INTO session (id, session_id, cost_usd) VALUES (1, ?, 0)", CANARY); // (a real database: a junk file would be a damaged one)
+const bao = instancePaths().openbao;
 mkdirSync(join(bao, "tls"), { recursive: true });
 writeFileSync(join(bao, "tls", "key.pem"), "private");
 writeFileSync(join(bao, "config.hcl"), "listener");
-writeFileSync(join(settings.stateDir, "registrations.json"), "{}");
+mkdirSync(instancePaths().dir, { recursive: true });
+writeFileSync(instancePaths().registrations, "{}");
 // links from the places the owner's file tools do reach, into hers and into the secret store
-mkdirSync(settings.memoryDir, { recursive: true });
+mkdirSync(convPaths(OWNER_CONV).dir, { recursive: true });
 mkdirSync(settings.logsDir, { recursive: true });
 symlinkSync(ann.dir, join(NOTES_DIR, "to-ann"));
-symlinkSync(ann.notesDir, join(settings.memoryDir, "to-ann-notes"));
-symlinkSync(bao, join(settings.stateDir, "to-bao"));
+symlinkSync(ann.notesDir, join(convPaths(OWNER_CONV).dir, "to-ann-notes"));
+symlinkSync(bao, join(instancePaths().installed, "to-bao"));
 
 const HERS = [
-  join(ann.notesDir, "people-eve.md"), ann.logFile, ann.sessionFile, join(ann.dir, "tenant.json"), join(ann.dir, "meta.json"), join(ann.dir, "cost.json"),
-  ann.dir, ann.notesDir, settings.tenantsDir, join(settings.tenantsDir, "tenants.json"),
-  join(NOTES_DIR, "..", "..", "tenants", ann.id, "notes", "people-eve.md"), // out of the notes with ..
-  join(NOTES_DIR, "to-ann", "tenant.json"), join(NOTES_DIR, "to-ann", "notes", "people-eve.md"), join(settings.memoryDir, "to-ann-notes", "people-eve.md"), // through a link
+  join(ann.notesDir, "people-eve.md"), ann.logFile, annDb, join(ann.dir, "tenant.json"), join(ann.dir, "meta.json"), join(ann.dir, "cost.json"),
+  ann.dir, ann.notesDir, conversationsDir(), join(conversationsDir(), "tenants.json"),
+  join(NOTES_DIR, "..", "..", friendConvId(ann.id), "notes", "people-eve.md"), // out of the notes with ..
+  join(NOTES_DIR, "to-ann", "tenant.json"), join(NOTES_DIR, "to-ann", "notes", "people-eve.md"), join(convPaths(OWNER_CONV).dir, "to-ann-notes", "people-eve.md"), // through a link
 ];
-const SECRETS = [bao, join(bao, "tls", "key.pem"), join(bao, "config.hcl"), join(settings.stateDir, "registrations.json"), join(settings.stateDir, "to-bao", "tls", "key.pem")];
+mkdirSync(settings.intake.dir, { recursive: true }); // (the open links, hashed: the real folder is instance/intake/, not a file)
+writeFileSync(join(settings.intake.dir, "0123abcd.json"), "{}");
+const SECRETS = [settings.intake.dir, join(settings.intake.dir, "0123abcd.json"), bao, join(bao, "tls", "key.pem"), join(bao, "config.hcl"), instancePaths().registrations, instancePaths().tenants, join(instancePaths().installed, "to-bao", "tls", "key.pem")];
 
 test("the admin's file tools: Read, Write and Edit reach none of a tenant's files, `tenants/` or the secret store", () => {
   for (const path of [...HERS, ...SECRETS]) {
@@ -63,19 +68,19 @@ test("the admin's file tools: Read, Write and Edit reach none of a tenant's file
   // her own folder is as it always was
   assert.equal(classify("Write", { file_path: join(NOTES_DIR, "context-new.md") }, "chat"), "allow");
   assert.equal(classify("Read", { file_path: ownerNotes }, "chat"), "allow");
-  assert.equal(classify("Read", { file_path: join(settings.stateDir, "tenants.json") }, "chat"), "allow", "the registry holds ids and status, no words");
+  assert.equal(classify("Read", { file_path: instancePaths().tenants }, "chat"), "deny", "the registry holds every friend's name and account id");
 });
 
 test("no run of the instance has Glob, Grep or Bash (they could list and read any folder): the built-in file tools are Read, Write and Edit, each confined by path", () => {
   const probes: [string, Record<string, unknown>][] = [
-    ["Glob", { pattern: "**/*", path: settings.tenantsDir }],
-    ["Grep", { pattern: CANARY, path: settings.tenantsDir }],
+    ["Glob", { pattern: "**/*", path: conversationsDir() }],
+    ["Grep", { pattern: CANARY, path: conversationsDir() }],
     ["Bash", { command: `cat ${join(ann.notesDir, "people-eve.md")}` }],
-    ["Bash", { command: `ls ${settings.tenantsDir} ${bao}` }],
+    ["Bash", { command: `ls ${conversationsDir()} ${bao}` }],
     ["NotebookEdit", { notebook_path: join(ann.notesDir, "x.ipynb") }],
   ];
   // not offered to the model at all (agentrun.ts builtinTools), and a group's or a tenant's classify refuses them outright
-  const ownerOpts = { systemPrompt: "x", sessionFile: "state/session.json", maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { systemPrompt: "x", sessionConv: OWNER_CONV, maxTurns: 3, maxBudgetUsd: 1 };
   const runs = [
     buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source: "chat", memory: { dir: NOTES_DIR } }, undefined),
     ...(["background", "handler", "radar", "dream", "heartbeat"] as const).map((source) => buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source }, undefined)),

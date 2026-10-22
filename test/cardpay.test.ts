@@ -16,6 +16,8 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { dataPath } from "../src/core/state.ts";
+import { logPaths } from "../src/core/convpaths.ts";
+import { scratch, scratchDb } from "./scratch.ts";
 
 // Obviously fake: the public test card number, a made-up security code, a local fake checkout (`shop.test`, a hosted page on stripe.com) that exists
 // only as page text in these tests. No real merchant, card or money.
@@ -36,8 +38,8 @@ const newStore = async (card: CardRecord = CARD) => {
   return fakeCardStore(card);
 };
 const newAccess = async (o: { card?: CardRecord; caps?: CardAccess["caps"]; kill?: KillSwitch; ledger?: Ledger } = {}) => {
-  const kill = o.kill ?? new KillSwitch(`state/card-test-${unique()}.disabled`);
-  const ledger = o.ledger ?? new Ledger(`state/payments-test-${unique()}.jsonl`);
+  const kill = o.kill ?? new KillSwitch(scratch(`card-test-${unique()}.disabled`));
+  const ledger = o.ledger ?? new Ledger(scratchDb(`payments-test-${unique()}`));
   const access = await openCardAccess({ store: await newStore(o.card), kill, ledger, caps: o.caps ?? { purchaseMinor: 2500 * 10, dayMinor: 5000 * 10 } });
   return { access: access!, kill, ledger };
 };
@@ -78,7 +80,7 @@ interface Rig {
   canUse: ReturnType<typeof makeCanUseTool>;
 }
 const rig = async (o: { access?: CardAccess; mode?: "owner" | "group"; frames?: FrameProbe; task?: string } = {}): Promise<Rig & { access: CardAccess; kill: KillSwitch; ledger: Ledger }> => {
-  const made = o.access ? { access: o.access, kill: new KillSwitch(`state/card-test-${unique()}.disabled`), ledger: o.access.ledger } : await newAccess();
+  const made = o.access ? { access: o.access, kill: new KillSwitch(scratch(`card-test-${unique()}.disabled`)), ledger: o.access.ledger } : await newAccess();
   const g = new BrowseGuard({ mode: o.mode ?? "owner", task: o.task ?? "buy the 10:00 train ticket Zurich to Bern", outDir: join(tmpdir(), "nope"), resolver: publicDns, card: made.access, frames: o.frames });
   const asked: Rig["asked"] = [];
   const answer = { approved: true };
@@ -175,7 +177,7 @@ test("pay: a hosted payment page opened by its address (not reached from the sho
 test("pay: the card is typed only on https, with a fresh snapshot, in an empty enabled field of the right kind, and in order", async () => {
   const deny = async (r: Rig, input: Record<string, unknown>, re: RegExp) => assert.match(((await step(r, "type", input)).res as Denied).message, re);
   const http = await rig();
-  await open(http, "http://shop.test/checkout");
+  open(http, "http://shop.test/checkout");
   http.g.shape(`${B}snapshot`, {}, page("http://shop.test/checkout"));
   await deny(http, { target: "e4", text: "{{card:number}}" }, /only typed on https/);
   const stale = await rig();
@@ -263,7 +265,7 @@ test("caps: a payment above the cap for one payment, one that would pass the dai
   const r3 = await rig({ access: ok.access });
   await toPsp(r3);
   assert.equal((await typeNumber(r3)).res.behavior, "allow", "20 + 45 is within 65; an unconfirmed payment counted as spent");
-  assert.equal(await openCardAccess({ store: await newStore(), kill: new KillSwitch(`state/card-test-${unique()}.disabled`), caps: { purchaseMinor: 0, dayMinor: 5000 } }), undefined, "a cap of 0 gives the run no card");
+  assert.equal(await openCardAccess({ store: await newStore(), kill: new KillSwitch(scratch(`card-test-${unique()}.disabled`)), caps: { purchaseMinor: 0, dayMinor: 5000 } }), undefined, "a cap of 0 gives the run no card");
   assert.equal(r1.asked.length + r2.asked.length, 0);
 });
 
@@ -399,7 +401,7 @@ test("while a card is typed the keyboard cannot submit it, and nothing is typed 
 // ---- the kill switch ----
 
 test("kill switch: at the question, after the yes, and at the click; a run that starts with it on gets no card at all", async () => {
-  const k1 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k1 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   const a1 = await newAccess({ kill: k1 });
   const r1 = await rig({ access: a1.access });
   await toPsp(r1);
@@ -407,7 +409,7 @@ test("kill switch: at the question, after the yes, and at the click; a run that 
   assert.match(((await typeNumber(r1)).res as Denied).message, /Card payments are switched off/);
   assert.equal(r1.asked.length, 0);
   // switched off while the owner was deciding
-  const k2 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k2 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   const a2 = await newAccess({ kill: k2 });
   const r2 = await rig({ access: a2.access });
   await toPsp(r2);
@@ -419,7 +421,7 @@ test("kill switch: at the question, after the yes, and at the click; a run that 
   assert.match(res.message, /Nothing was typed/);
   assert.equal(r2.g.pay.typed.size, 0);
   // switched off between the typing and the click
-  const k3 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k3 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   const a3 = await newAccess({ kill: k3 });
   const r3 = await rig({ access: a3.access });
   await fullPay(r3);
@@ -428,9 +430,9 @@ test("kill switch: at the question, after the yes, and at the click; a run that 
   assert.match((click.res as Denied).message, /Nothing was clicked: card payments are switched off/);
   assert.equal(r3.g.pay.attempted, false);
   // with it on at the start, the run has no card and says nothing of one
-  const k4 = new KillSwitch(`state/card-test-${unique()}.disabled`);
+  const k4 = new KillSwitch(scratch(`card-test-${unique()}.disabled`));
   k4.turnOff("test");
-  assert.equal(await openCardAccess({ store: await newStore(), kill: k4, ledger: new Ledger(`state/payments-test-${unique()}.jsonl`) }), undefined);
+  assert.equal(await openCardAccess({ store: await newStore(), kill: k4, ledger: new Ledger(scratchDb(`payments-test-${unique()}`)) }), undefined);
   k1.turnOn(); k2.turnOn(); k3.turnOn(); k4.turnOn();
 });
 
@@ -501,10 +503,10 @@ test("nothing leaks: no result, question, approval call, audit row, ledger row o
   assert.ok(![PAN, PAN_SPACED, EXPIRY].some((v) => said.answer.includes(v)) && said.answer.includes("[card]"));
   assert.ok(!(r.g.finishPayment() ?? "").includes(PAN));
   // the audit log and the ledger
-  const audit = readFileSync(dataPath("logs/audit.jsonl"), "utf8");
+  const audit = readFileSync(dataPath(logPaths().audit), "utf8");
   for (const secret of [PAN, PAN_SPACED, "4242-4242", EXPIRY, `"${CVC}"`, `fill('${CVC}')`, "Fakename"]) assert.ok(!audit.includes(secret), `the audit log holds ${secret}`);
   assert.ok(!audit.match(/(^|[^\d])0731([^\d]|$)/m), "no security code in the audit log");
-  const ledger = readFileSync(dataPath(r.ledger.file), "utf8");
+  const ledger = JSON.stringify(r.ledger.history());
   assert.ok(!ledger.includes(PAN) && !ledger.includes(CVC) && !ledger.includes(EXPIRY));
   // what the audit does say
   const rows = readAudit((e) => e.tool.startsWith("card_"));
@@ -588,4 +590,55 @@ test("the real asking path: the audited ask holds the placeholder and the code-w
   assert.ok(![PAN, EXPIRY, CVC].some((v) => JSON.stringify(asked).includes(v)));
   const outcome = readAudit((e) => e.tool === `${B}type` && e.decision === "approval-outcome").at(-1)!;
   assert.equal(outcome.meta?.argsEqual, true);
+});
+
+// ---- a payment in progress: nothing around the pay button ----
+
+test("while a payment is open every other click, a dialog accept and a choice are refused; only a text field may be clicked into and the pay button goes to payClick", async () => {
+  const r = await rig();
+  await toPsp(r);
+  await typeNumber(r);
+  // approved, number typed: a link, the save-card checkbox and a point click are not free reads any more
+  assert.match(((await step(r, "click", { target: "e9" })).res as Denied).message, /fresh browser_snapshot/, "a pay-like link is held to the pay-click checks");
+  assert.match(((await step(r, "click", { target: "e7" })).res as Denied).message, /only click allowed is the page's pay button/);
+  assert.match(((await step(r, "select_option", { target: "e5", values: ["12"] })).res as Denied).message, /choose nothing now/);
+  assert.match(((await step(r, "handle_dialog", { accept: true })).res as Denied).message, /do not accept a dialog/);
+  assert.equal((await step(r, "handle_dialog", { accept: false })).res.behavior, "allow", "dismissing a dialog is harmless");
+  assert.equal((await step(r, "click", { target: "e5" })).res.behavior, "allow", "clicking into the next text field to type the card detail");
+  await typeRest(r);
+  r.g.shape(`${B}snapshot`, {}, page(PSP, { values: { e4: PAN_SPACED, e5: EXPIRY, e6: CVC } }));
+  assert.equal((await step(r, "click", { target: "e8" })).res.behavior, "allow", "the pay button is still clicked, through the payment checks");
+});
+
+test("with no payment open clicks are as before; once the number is approved the same click is refused", async () => {
+  const r = await rig();
+  await toPsp(r);
+  assert.equal((await step(r, "click", { target: "e7" })).res.behavior, "allow", "no payment open: an ordinary click");
+  await typeNumber(r);
+  assert.ok(r.g.pay.approval);
+  assert.match(((await step(r, "click", { target: "e7" })).res as Denied).message, /payment is in progress/);
+});
+
+test("an approval dropped after card digits were typed marks the ledger row unconfirmed and the owner is told in the result", async () => {
+  const r = await rig();
+  await toPsp(r);
+  const num = await typeNumber(r);
+  assert.equal(num.res.behavior, "allow");
+  const id = r.g.pay.approval!.id;
+  const row = () => r.ledger.rows().find((x) => x.id === id);
+  assert.equal(row()?.status, "approved");
+  assert.ok(r.g.pay.typed.size > 0, "digits are in the page");
+  r.g.shape(`${B}click`, { target: "e9" }, page("https://other.test/checkout")); // the page moved on
+  assert.equal(r.g.pay.approval, undefined);
+  assert.equal(row()?.status, "unconfirmed");
+  assert.ok(r.ledger.duplicate("shop.test", row()!.cartHash), "it counts for the duplicate check and the caps");
+  assert.match(r.g.finishPayment() ?? "", /card details were typed, then the payment was dropped.*npm run card -- clear/s);
+  // no digits typed: nothing to report, the row stays as it was
+  const q = await rig();
+  await toPsp(q);
+  await typeNumber(q);
+  q.g.pay.typed.clear();
+  q.g.shape(`${B}click`, { target: "e9" }, page("https://other.test/checkout"));
+  assert.equal(q.ledger.rows().find((x) => x.status === "unconfirmed"), undefined);
+  assert.equal(q.g.finishPayment(), undefined);
 });

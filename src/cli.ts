@@ -59,6 +59,7 @@ async function restore(id: string) {
 }
 
 const [cmd, arg] = process.argv.slice(2);
+if (cmd !== "doctor") await import("./core/requirelayout.ts"); // report and restore stop on an old or newer data folder with a sentence; doctor runs anyway and reports it (it is the tool for when things look wrong)
 if (!settings.mail && cmd === "restore") {
   console.error(`${cmd} needs mail, and mail is off (MAIL_PROVIDER=none).`);
   process.exit(1);

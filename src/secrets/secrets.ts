@@ -134,3 +134,19 @@ export function ownerSecrets(): TenantSecrets {
 // Tenants have no keys of their own: they run on TENANT_ANTHROPIC_API_KEY (settings.tenantApiKey). This is only the shape check the doctor uses.
 const KEY_SHAPE = /^sk-ant-[A-Za-z0-9_-]{16,300}$/;
 export const looksLikeApiKey = (v: unknown): v is string => typeof v === "string" && KEY_SHAPE.test(v);
+
+// ---- removing a friend ----
+
+// Every item under tenants/<tenant>/ (all kinds), for good. How many were there. The app's own token may delete only the owner's folder (the store's policy,
+// openbaoadmin.ts): for a friend this is for the admin's root token (npm run openbao -- forget-tenant <id>); the app's call is refused with a BaoError 403.
+export async function deleteTenantItems(bao: OpenBao, tenant: string): Promise<number> {
+  if (!TENANT_ID.test(tenant) || tenant === OWNER) throw new SecretsError("not a friend's tenant id");
+  let n = 0;
+  for (const kind of ITEM_KINDS) {
+    for (const name of await bao.list(`tenants/${tenant}/${kind}`, { cache: false })) {
+      if (name.endsWith("/")) continue; // (items are flat today)
+      if (await bao.delete(`tenants/${tenant}/${kind}/${name}`)) n++;
+    }
+  }
+  return n;
+}

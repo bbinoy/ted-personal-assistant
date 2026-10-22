@@ -30,27 +30,69 @@ export function connectionFrom(cfg: { args?: unknown } | undefined): { url: stri
 
 const connectionDetails = () => connectionFrom(JSON.parse(readFileSync(`${process.env.HOME}/.claude.json`, "utf8")).mcpServers?.mailbird);
 
-export class Mailbird {
-  private client: Client | undefined;
+// The two things of the MCP client this file uses; a test hands the class a fake.
+export interface Session {
+  callTool(req: { name: string; arguments: Record<string, unknown> }, schema: undefined, opts: { timeout: number }): Promise<unknown>;
+  close(): Promise<void>;
+}
 
-  async connect(): Promise<void> {
-    const { url, headerName, headerValue } = connectionDetails();
-    // Mailbird's cert is self-signed. Verification is off for this one loopback connection only.
-    const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
-    const transport = new StreamableHTTPClientTransport(new URL(url), {
-      requestInit: { headers: { [headerName]: headerValue } },
-      fetch: ((u: any, init: any) => undiciFetch(u, { ...init, dispatcher })) as any,
-    });
-    const client = new Client({ name: "agent-harness", version: "0.1.0" });
-    await client.connect(transport);
-    this.client = client;
+const CONNECT_MS = 10_000; // a Mailbird that is not answering must not stall the approval of a send, or a command, forever
+const CALL_MS = 60_000;
+
+async function openSession(): Promise<Session> {
+  const { url, headerName, headerValue } = connectionDetails();
+  // Mailbird's cert is self-signed. Verification is off for this one loopback connection only.
+  const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+  const transport = new StreamableHTTPClientTransport(new URL(url), {
+    requestInit: { headers: { [headerName]: headerValue } },
+    fetch: ((u: any, init: any) => undiciFetch(u, { ...init, dispatcher })) as any,
+  });
+  const client = new Client({ name: "agent-harness", version: "0.1.0" });
+  await client.connect(transport);
+  return client as unknown as Session;
+}
+
+// A request that timed out may have run on Mailbird's side (a send, an archive): it is never repeated by itself. Anything else that throws (a closed socket, a session
+// Mailbird forgot after a restart) happened before or instead of the work, so the call is made once more on a fresh connection.
+const timedOut = (e: unknown): boolean => /timed? ?out/i.test((e as Error)?.message ?? "") || (e as { code?: number })?.code === -32001;
+
+export class Mailbird {
+  private client: Session | undefined;
+
+  private readonly open: () => Promise<Session>;
+  private readonly connectMs: number;
+
+  constructor(open: () => Promise<Session> = openSession, connectMs = CONNECT_MS) {
+    this.open = open;
+    this.connectMs = connectMs;
   }
 
-  // Calls a tool and returns parsed JSON when the result is JSON text, else the raw text.
-  async call<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+  async connect(): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const opening = this.open();
+    try {
+      this.client = await Promise.race([opening, new Promise<never>((_, no) => (timer = setTimeout(() => no(new Error(`mailbird connect timed out after ${this.connectMs} ms`)), this.connectMs)))]);
+    } catch (e) {
+      opening.then((late) => late.close().catch(() => {}), () => {}); // a connection that comes up after the timeout is not left open
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Calls a tool and returns parsed JSON when the result is JSON text, else the raw text. The client built once for the process outlives Mailbird restarts: when the
+  // connection itself fails it is closed and forgotten, and the call is made once more on a new one (never after a timeout, see above).
+  async call<T = unknown>(name: string, args: Record<string, unknown> = {}, retry = true): Promise<T> {
     if (!this.client) await this.connect();
-    // A hung call must not stall a command forever: fail after 60s, reconnect next time.
-    const res: any = await this.client!.callTool({ name, arguments: args }, undefined, { timeout: 60_000 });
+    let res: any;
+    try {
+      // A hung call must not stall a command forever: fail after 60s, and reconnect next time.
+      res = await this.client!.callTool({ name, arguments: args }, undefined, { timeout: CALL_MS });
+    } catch (e) {
+      void this.close().catch(() => {}); // the dead connection is forgotten at once; closing it is not waited for
+      if (!retry || timedOut(e)) throw e;
+      return this.call<T>(name, args, false);
+    }
     const text: string = res.content?.find((c: any) => c.type === "text")?.text ?? "";
     if (res.isError) throw new Error(`mailbird ${name} failed: ${text.slice(0, LIMITS.preview)}`);
     try {

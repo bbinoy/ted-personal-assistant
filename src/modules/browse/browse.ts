@@ -2,10 +2,11 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit, wordless } from "../../core/audit.ts";
+import { emit } from "../../core/events.ts";
 import { budgetSpent } from "../../core/budget.ts";
 import { addressProblem, type Resolver, type VisionMode } from "./browserules.ts";
 import { BrowseGuard, type BrowseMode } from "./browseguard.ts";
+import { startEgressProxy, type EgressProxy } from "./browseproxy.ts";
 import { cdpFrames, cdpProbe, freePort, type FrameProbe, type Probe } from "./browsecdp.ts";
 import { maskCard, openCardAccess, type CardAccess, type CardInfo } from "./card.ts";
 import { browseStatus, type BrowseStatus } from "./browseserver.ts";
@@ -17,6 +18,7 @@ import { OWNER_KEY } from "../../core/ownerkey.ts";
 import { clip, cleanText, LIMITS } from "../../core/sanitize.ts";
 import { adoptShots, newShotsDir } from "../send/shots.ts";
 import { OWNER, settings } from "../../core/settings.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 
 // The browse sub-task. The owner's chat, a background job or a group asks `browse(task)`; a SEPARATE run (policy source "browse")
 // does the browsing with a headless browser (@playwright/mcp) and nothing else: no mail, calendar, notes or memory tools. It reads
@@ -112,23 +114,76 @@ export interface BrowseContext {
   run: (prompt: string, guard: BrowseGuard) => Promise<{ text: string; costUsd?: number; structured?: unknown }>;
 }
 
-let busy = false;
+// ---- how many runs at once ----
 
-// Why a browse run may not start now, or undefined. Code only: pause, the daily spend limit, set-up, one run at a time.
+// A small pool instead of one global flag: up to BROWSE_MAX_CONCURRENT runs at once, at most one per conversation, and a run that finds no slot waits (the owner's
+// chat ahead of everyone else) up to SLOT_WAIT_MS before it is refused with the old message. Everything else a run holds (folder, screenshots, page views, proxy) is its own.
+export const SLOT_WAIT_MS = 60_000;
+export class Slots {
+  private readonly running = new Map<number, string>(); // slot id -> conversation key
+  private readonly waiting: { key: string; owner: boolean; go: (release: () => void) => void }[] = [];
+  private next = 0;
+  private readonly max: () => number;
+  constructor(max: () => number = () => settings.browseMaxConcurrent) {
+    this.max = max;
+  }
+  get size(): number {
+    return this.running.size;
+  }
+  private take(key: string): (() => void) | undefined {
+    if (this.running.size >= this.max() || [...this.running.values()].includes(key)) return undefined;
+    const id = this.next++;
+    this.running.set(id, key);
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      this.running.delete(id);
+      this.pump();
+    };
+  }
+  private pump(): void {
+    for (let i = 0; i < this.waiting.length; ) {
+      const w = this.waiting[i]!;
+      const r = this.take(w.key);
+      if (r) (this.waiting.splice(i, 1), w.go(r));
+      else i++; // (its conversation is running, or the pool is full: a later one may still fit)
+    }
+  }
+  // A release function, or undefined when no slot came free within waitMs.
+  acquire(key: string, owner: boolean, waitMs = SLOT_WAIT_MS): Promise<(() => void) | undefined> {
+    const now = this.take(key);
+    if (now || waitMs <= 0) return Promise.resolve(now);
+    return new Promise((resolve) => {
+      const w = { key, owner, go: (r: () => void) => (clearTimeout(timer), resolve(r)) };
+      const timer = setTimeout(() => {
+        const i = this.waiting.indexOf(w);
+        if (i >= 0) this.waiting.splice(i, 1);
+        resolve(undefined);
+      }, waitMs);
+      const at = owner ? this.waiting.findIndex((x) => !x.owner) : -1; // the owner's chat goes ahead of the others who wait
+      if (at >= 0) this.waiting.splice(at, 0, w);
+      else this.waiting.push(w);
+    });
+  }
+}
+const slots = new Slots();
+let wakeSeq = 0;
+
+// Why a browse run may not start now, or undefined. Code only: pause, the daily spend limit, set-up (a free slot is the pool above, awaited by browse()).
 export function startRefusal(ctx: Pick<BrowseContext, "mode" | "spent">, now = Date.now(), status: BrowseStatus = browseStatus()): string | undefined {
   if (!settings.browse) return "Browsing is switched off (BROWSE=off).";
   if (!status.ok) return `Browsing is not set up: ${status.reason}.`;
   if (isPaused(new Date(now))) return "Paused: no browsing now.";
   if ((ctx.spent ?? budgetSpent)()) return "The daily spend limit is reached: no browsing until tomorrow.";
-  if (busy) return "Another browser run is in progress. Try again in a minute.";
   return undefined;
 }
 
-// A run that never ended (a crash, a kill) leaves its page views (state/browse/run-*) and its screenshots (state/browse/shots/run-*) on disk. Swept at start-up:
-// folders older than an hour go (no run lasts that long). Page views are untrusted text and the assistant's own chat could read state/, so they must not pile up
-// (policy.ts also hides state/browse from it).
+// A run that never ended (a crash, a kill) leaves its page views (instance/browse/run-*) and its screenshots (instance/browse/shots/run-*) on disk. Swept at start-up:
+// folders older than an hour go (no run lasts that long). Page views are untrusted text and the assistant's own chat could read the data folder, so they must not pile up
+// (policy.ts also hides instance/ from it).
 export const STALE_RUN_MS = 60 * 60_000;
-export function sweepStaleRuns(now = Date.now(), root = join(settings.stateDir, "browse")): number {
+export function sweepStaleRuns(now = Date.now(), root = instancePaths().browse): number {
   let removed = 0;
   for (const dir of [root, join(root, "shots")]) {
     let names: string[] = [];
@@ -151,18 +206,49 @@ export function sweepStaleRuns(now = Date.now(), root = join(settings.stateDir, 
   return removed;
 }
 
-export async function browse(ctx: BrowseContext, rawTask: string, o: { resolver?: Resolver; now?: number; status?: BrowseStatus; vision?: VisionMode; probe?: Probe; profile?: Profile | null; card?: CardAccess | null; frames?: FrameProbe } = {}): Promise<string> {
+type BrowseOptions = { resolver?: Resolver; now?: number; status?: BrowseStatus; vision?: VisionMode; probe?: Probe; proxy?: Pick<EgressProxy, "port" | "close"> | null; startProxy?: typeof startEgressProxy; slots?: Slots; waitMs?: number; profile?: Profile | null; card?: CardAccess | null; frames?: FrameProbe };
+
+export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptions = {}): Promise<string> {
   const task = clean1(rawTask, 2000);
   if (!task) return "No task given.";
-  const log: typeof audit = ctx.tenant ? (tool, decision, source, meta) => audit(tool, decision, source, wordless(meta)) : audit; // (her rows say what happened and how big, never what she asked for)
+  const log = (tool: string, decision: string, source: "browse", meta?: Record<string, unknown>): void => emit({ type: "tool", tool, decision, source, friend: !!ctx.tenant, meta }); // (her rows say what happened and how big, never what she asked for)
   const refusal = startRefusal(ctx, o.now, o.status);
   if (refusal) {
     log("browse_run", "refused", "browse", { mode: ctx.mode, reason: refusal.slice(0, 100) });
     return refusal;
   }
-  busy = true;
-  mkdirSync(join(settings.stateDir, "browse"), { recursive: true });
-  const outDir = mkdtempSync(join(settings.stateDir, "browse", "run-"));
+  // A slot: one per conversation (a wake-up has none and counts as its own), the owner's chat first in line. Waits a little, then the old refusal.
+  const release = await (o.slots ?? slots).acquire(ctx.key ?? `wake-${wakeSeq++}`, ctx.mode === "owner" && ctx.key === OWNER_KEY, o.waitMs);
+  if (!release) {
+    const busy = "Another browser run is in progress. Try again in a minute.";
+    log("browse_run", "refused", "browse", { mode: ctx.mode, reason: busy.slice(0, 100) });
+    return busy;
+  }
+  let proxy: Pick<EgressProxy, "port" | "close"> | undefined;
+  try {
+    const again = startRefusal(ctx, Date.now(), o.status); // (the wait may have run into the pause or the spend limit)
+    if (again) {
+      log("browse_run", "refused", "browse", { mode: ctx.mode, reason: again.slice(0, 100) });
+      return again;
+    }
+    // This run's own egress proxy (browseproxy.ts): every connection of its browser is resolved and checked there; closed with the run.
+    try {
+      proxy = o.proxy === undefined ? await (o.startProxy ?? startEgressProxy)({ resolve: o.resolver, onRefuse: (host, why) => log("browse_step", "egress-refused", "browse", { host: host.slice(0, 100), why }) }) : (o.proxy ?? undefined);
+    } catch (e) { // no filter, no browser
+      const msg = "Browsing is not available: its network filter could not start.";
+      log("browse_run", "refused", "browse", { mode: ctx.mode, reason: `egress proxy: ${clean1((e as Error).message, 80)}` });
+      return msg;
+    }
+    return await runBrowse(ctx, task, log, o, proxy?.port);
+  } finally {
+    await proxy?.close();
+    release();
+  }
+}
+
+async function runBrowse(ctx: BrowseContext, task: string, log: (tool: string, decision: string, source: "browse", meta?: Record<string, unknown>) => void, o: BrowseOptions, proxyPort: number | undefined): Promise<string> {
+  mkdirSync(instancePaths().browse, { recursive: true });
+  const outDir = mkdtempSync(join(instancePaths().browse, "run-"));
   const vision = o.vision ?? settings.browseVision;
   // The owner's payment card goes to the owner's chat run only, like the profile: not a group, not a wake-up. It is a handle (last four, a way to
   // open the card after a typed yes), not the card. A store that cannot be read, a kill switch that is on or a cap of 0 mean no card.
@@ -173,7 +259,7 @@ export async function browse(ctx: BrowseContext, rawTask: string, o: { resolver?
   const shotsDir = vision !== "off" ? newShotsDir(o.now) : undefined;
   // The owner's saved details go to the owner's chat run only: not a group, not a wake-up. A profile that cannot be read is left out (and audited).
   const profile = ctx.mode === "owner" && ctx.key === OWNER_KEY ? (o.profile === undefined ? await loadProfile(undefined, (reason) => log("browse_run", "profile-unavailable", "browse", { reason: reason.slice(0, LIMITS.reason) })) : (o.profile ?? undefined)) : undefined;
-  const guard = new BrowseGuard({ mode: ctx.mode, tenant: ctx.tenant, task, outDir, resolver: o.resolver, vision, shotsDir, profile, card, frames: o.frames ?? (card && cdpPort ? cdpFrames(cdpPort) : undefined), ...(cdpPort ? { cdpPort } : {}), ...(vision === "click" && cdpPort ? { probe: o.probe ?? cdpProbe(cdpPort) } : {}) });
+  const guard = new BrowseGuard({ mode: ctx.mode, tenant: ctx.tenant, task, outDir, resolver: o.resolver, vision, shotsDir, profile, card, frames: o.frames ?? (card && cdpPort ? cdpFrames(cdpPort) : undefined), ...(cdpPort ? { cdpPort } : {}), ...(proxyPort ? { proxyPort } : {}), ...(vision === "click" && cdpPort ? { probe: o.probe ?? cdpProbe(cdpPort) } : {}) });
   const started = Date.now();
   try {
     const r = await ctx.run(browsePrompt(task), guard);
@@ -195,7 +281,6 @@ export async function browse(ctx: BrowseContext, rawTask: string, o: { resolver?
   } finally {
     guard.finishPayment(); // the card is dropped whatever happened (the notes above are for the owner)
     guard.endRun(); // so is an approved plan carried for the later steps
-    busy = false;
     rmSync(outDir, { recursive: true, force: true });
     if (shotsDir) rmSync(shotsDir, { recursive: true, force: true });
   }

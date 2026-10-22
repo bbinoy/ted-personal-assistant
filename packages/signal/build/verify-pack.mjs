@@ -37,6 +37,7 @@ try {
     `import * as messenger from "@ted-assistant/messenger";
 import * as messengerTesting from "@ted-assistant/messenger/testing";
 import * as messengerContract from "@ted-assistant/messenger/contract";
+import * as messengerEnv from "@ted-assistant/messenger/env";
 import * as signalMessenger from "@ted-assistant/signal/messenger";
 import { SignalClient } from "@ted-assistant/signal";
 import { FakeSignalDaemon } from "@ted-assistant/signal/testing";
@@ -44,6 +45,7 @@ for (const [name, mod, symbol] of [
   ["@ted-assistant/messenger", messenger, "loadMessenger"],
   ["@ted-assistant/messenger/testing", messengerTesting, "FakeMessenger"],
   ["@ted-assistant/messenger/contract", messengerContract, "messengerContract"],
+  ["@ted-assistant/messenger/env", messengerEnv, "withoutSecrets"],
   ["@ted-assistant/signal/messenger", signalMessenger, "createMessenger"],
 ]) {
   if (typeof mod[symbol] !== "function") throw new Error(name + " does not export " + symbol);

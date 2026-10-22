@@ -1,4 +1,5 @@
 import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { REBINDING_HOST } from "../../policy/webaddress.ts";
 
 // The pure rules of the browse sub-task (browse.ts holds the state around them). Everything here is code, never the model:
@@ -7,25 +8,49 @@ import { REBINDING_HOST } from "../../policy/webaddress.ts";
 
 // ---- addresses ----
 
-// Private, loopback, link-local, CGNAT and reserved IPv4 ranges.
-export function isPrivateIPv4(host: string): boolean {
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!m) return false;
-  const [a, b] = [Number(m[1]), Number(m[2])];
-  return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19));
+// The 16 bytes of an IPv6 address (zone id cut, a dotted IPv4 tail allowed), or undefined when it is not one.
+function ipv6Bytes(raw: string): number[] | undefined {
+  let s = raw.toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");
+  if (!isIP(s) || !s.includes(":")) return undefined;
+  const tail = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s);
+  if (tail) s = s.slice(0, tail.index) + ((Number(tail[1]) << 8) | Number(tail[2])).toString(16) + ":" + ((Number(tail[3]) << 8) | Number(tail[4])).toString(16);
+  const [head, rest, extra] = s.split("::");
+  if (extra !== undefined) return undefined;
+  const h = head ? head.split(":") : [];
+  const t = rest ? rest.split(":") : [];
+  const groups = rest === undefined ? h : [...h, ...Array(8 - h.length - t.length).fill("0"), ...t];
+  if (groups.length !== 8) return undefined;
+  return groups.flatMap((g) => [parseInt(g, 16) >> 8, parseInt(g, 16) & 255]);
 }
-export function isPrivateAddress(ip: string): boolean {
-  const v = ip.toLowerCase();
-  if (v.includes(":")) {
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(v);
-    if (mapped) return isPrivateIPv4(mapped[1]!);
-    return v === "::" || v === "::1" || /^f[cd]/.test(v) || /^fe[89ab]/.test(v) || v.startsWith("::ffff:"); // unique-local, link-local, mapped
+const publicV4 = (a: number, b: number, c: number): boolean =>
+  !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && c <= 2) || (a === 192 && b === 88 && c === 99) || (a === 198 && (b === 18 || b === 19)) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113));
+
+// Pure. Is this IP literal (v4 or v6) a public, globally routable unicast address? The one rule of the network layer (browseproxy.ts) and of the DNS checks, so
+// every range is in ONE place: 0/8, 10/8, 100.64/10 (CGNAT, Tailscale), 127/8, 169.254/16, 172.16/12, 192.0.0/24 and the documentation ranges, 192.168/16, 198.18/15,
+// multicast and reserved; for IPv6 only 2000::/3 outside the protocol-assignment and documentation blocks, with IPv4-mapped (::ffff:), NAT64 (64:ff9b::/96) and 6to4
+// (2002::/16) judged by the IPv4 address they carry, Teredo, ULA fc00::/7, link-local fe80::/10 and the rest refused. Anything that is not an IP literal is not public.
+export function isPublicAddress(ip: string): boolean {
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip.trim());
+  if (v4) {
+    const o = v4.slice(1).map(Number);
+    return isIP(ip.trim()) === 4 && publicV4(o[0]!, o[1]!, o[2]!);
   }
-  return isPrivateIPv4(v);
+  const b = ipv6Bytes(ip.trim());
+  if (!b) return false;
+  const zeros = (n: number) => b.slice(0, n).every((x) => x === 0);
+  if (zeros(10) && b[10] === 0xff && b[11] === 0xff) return publicV4(b[12]!, b[13]!, b[14]!); // ::ffff:a.b.c.d
+  if (b[0] === 0 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b && b.slice(4, 12).every((x) => x === 0)) return publicV4(b[12]!, b[13]!, b[14]!); // 64:ff9b::/96 NAT64
+  if (b[0] === 0x20 && b[1] === 0x02) return publicV4(b[2]!, b[3]!, b[4]!); // 6to4: the IPv4 address inside
+  if ((b[0]! & 0xe0) !== 0x20) return false; // not global unicast 2000::/3 (::, ::1, ::/96, fc00::/7, fe80::/10, fec0::/10, ff00::/8, 100::/64, 64:ff9b:1::/48 ...)
+  if (b[0] === 0x20 && b[1] === 0x01 && (b[2]! < 2 || (b[2] === 0x0d && b[3] === 0xb8))) return false; // 2001::/23 (Teredo, ORCHID, protocol assignments), 2001:db8::/32
+  if (b[0] === 0x3f && b[1] === 0xff && (b[2]! & 0xf0) === 0) return false; // 3fff::/20 documentation
+  return true;
 }
+export const isPrivateAddress = (ip: string): boolean => !isPublicAddress(ip);
 
 const LOCAL_NAME = /(^|\.)(localhost|local|internal|lan|home|corp|localdomain|intranet|private|home\.arpa)$/i;
-const PORTS = new Set(["", "80", "443", "8080", "8443"]);
+export const ALLOWED_PORTS: readonly number[] = [80, 443, 8080, 8443]; // the ports a page may be fetched from (the proxy enforces the same list)
+const PORTS = new Set(["", ...ALLOWED_PORTS.map(String)]);
 
 // Why this address may not be opened, or undefined. http and https only, no credentials, a named public host (no IP literal,
 // local name or single-label host), a normal web port. A later DNS check (`resolvesPublic`) covers names that point inside.
@@ -68,8 +93,11 @@ export async function resolvesPublic(host: string, resolve: Resolver = dnsResolv
   }
 }
 
-// `--blocked-origins` for the browser itself (a best-effort extra: the project says it is not a boundary and it ignores redirects).
-export const BLOCKED_ORIGINS = ["http://localhost:*", "https://localhost:*", "http://127.0.0.1:*", "https://127.0.0.1:*", "http://[::1]:*", "http://0.0.0.0:*", "http://169.254.169.254", "http://10.*", "https://10.*", "http://192.168.*", "https://192.168.*", "file://*"];
+// `--blocked-origins` for the browser itself (a best-effort extra by NAME: the project says it is not a boundary and it ignores redirects; the real veto is the
+// egress proxy, browseproxy.ts, which judges every connection by the address it resolves to). The private IPv4 ranges the name patterns can say, both schemes.
+const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+const PRIVATE_V4_PREFIXES = ["10.", "192.168.", "169.254.", "127.", "0.", ...range(16, 31).map((n) => `172.${n}.`), ...range(64, 127).map((n) => `100.${n}.`)];
+export const BLOCKED_ORIGINS = ["http://localhost:*", "https://localhost:*", "http://[::1]:*", "https://[::1]:*", "http://[::]:*", "http://[fc*", "http://[fd*", "http://[fe80*", "http://[::ffff:*", "https://[fc*", "https://[fd*", "https://[fe80*", "https://[::ffff:*", ...PRIVATE_V4_PREFIXES.flatMap((p) => [`http://${p}*`, `https://${p}*`]), "file://*"];
 
 // ---- snapshots ----
 

@@ -1,6 +1,6 @@
 // Import this FIRST (for its side effects).
 //  - owner-only files: everything the harness creates is mode 600/700 (the audit log holds senders and subjects)
-//  - logs go to logs/agent.log; startup secures state/, logs/, memory/
+//  - logs go to logs/agent.log; startup secures instance/, conversations/, logs/
 //  - every console line gets a local timestamp, is redacted, and is appended to a rotating file
 //  - crashes and unhandled rejections are written to that same file before the process exits
 process.umask(0o077);
@@ -9,12 +9,13 @@ import { appendFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { trimLogInPlace } from "./logtrim.ts";
 import { redact } from "./redact.ts";
 import { dataPath, secureDataDirs } from "./state.ts";
+import { logPaths } from "./convpaths.ts";
 
-const FILE = dataPath("logs/agent.log");
+const FILE = dataPath(logPaths().agent);
 const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP = 3;
 
-// Before anything reads a file: create and tighten state/, logs/ and memory/ (owner-only, whatever made the files).
+// Before anything reads a file: create and tighten instance/, conversations/ and logs/ (owner-only, whatever made the files).
 secureDataDirs();
 
 let writes = 0;
@@ -29,8 +30,8 @@ function rotateIfNeeded() {
   } catch { /* no file yet */ }
 }
 rotateIfNeeded();
-// launchd's raw stderr file is never rotated by anyone else: over 5 MB at start, keep the last 1 MB.
-const trimmedStderr = trimLogInPlace(dataPath("logs/launchd-stderr.log"), MAX_BYTES, 1024 * 1024);
+// launchd's raw stderr files (the agent's, and the intake page's: scripts/intake.ts imports this file first too) are never rotated by anyone else: over 5 MB at start, keep the last 1 MB.
+const trimmedStderr = [logPaths().launchdStderr, logPaths().intakeLaunchdStderr].map((f) => trimLogInPlace(dataPath(f), MAX_BYTES, 1024 * 1024)).reduce((a, b) => a + b, 0);
 
 const pad = (n: number, w = 2) => String(n).padStart(w, "0");
 function stamp(d = new Date()) {
@@ -63,7 +64,7 @@ for (const level of ["log", "error", "warn", "info", "debug"] as const) {
   };
 }
 
-if (trimmedStderr) console.log(`logs/launchd-stderr.log was over ${MAX_BYTES / 1024 / 1024} MB: dropped the oldest ${Math.round(trimmedStderr / 1024)} KB`);
+if (trimmedStderr) console.log(`launchd's stderr log was over ${MAX_BYTES / 1024 / 1024} MB: dropped the oldest ${Math.round(trimmedStderr / 1024)} KB`);
 
 // Let launchd restart us, but leave a trace of why.
 process.on("uncaughtException", (e) => {

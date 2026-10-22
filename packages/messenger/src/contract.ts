@@ -45,8 +45,8 @@ const next = <T>(register: (h: (x: T) => void) => void): Promise<T> => new Promi
  * Each behaviour is one the app relies on (packages/messenger/src/index.ts documents it on the interface).
  */
 export function messengerContract(name: string, make: () => Promise<ContractRig>): void {
-  const withRig = (what: string, f: (rig: ContractRig) => Promise<void>) =>
-    test(`${name} messenger: ${what}`, async () => {
+  const withRig = (what: string, f: (rig: ContractRig) => Promise<void>): void =>
+    void test(`${name} messenger: ${what}`, async () => {
       const rig = await make();
       try {
         await f(rig);

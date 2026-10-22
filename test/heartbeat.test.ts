@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sleep } from "./util.ts";
 const tick = () => sleep(10);
-import { startHeartbeat, startJobs } from "../src/heartbeat/heartbeat.ts";
-import { readJson } from "../src/core/state.ts";
+import { HEARTBEAT_KEY, startHeartbeat, startJobs } from "../src/heartbeat/heartbeat.ts";
+import { kvGet } from "../src/core/instancedb.ts";
 
 // The heartbeat tick and the jobs it starts (every conversation's look, the dream) are independent: a failing or hanging one never keeps another from
 // running. What a conversation does on a tick is the heartbeat run (test/heartbeatrun.test.ts).
@@ -54,7 +54,7 @@ test("heartbeat: the tick starts its jobs, a throwing or hanging job skips nothi
     timers[0]!();
     await tick();
     assert.deepEqual(ran, ["wake", "mail"]);
-    assert.ok(readJson<{ lastTickAt?: string }>("state/heartbeat.json", {}).lastTickAt, "proof of life for doctor");
+    assert.ok(kvGet<{ lastTickAt?: string }>(HEARTBEAT_KEY, {}).lastTickAt, "proof of life for doctor");
     timers[1]!();
     await tick();
     assert.deepEqual(ran, ["wake", "mail", "wake", "mail"]);

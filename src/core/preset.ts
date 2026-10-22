@@ -25,8 +25,8 @@ export type ProfileKey = "chat" | "heartbeat" | "group";
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
-  // categories: every note category; dream: the ones the owner's dream may write; group and tenant: the ones a group's and a friend's notes (and their dreams) have.
-  readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[]; readonly tenant: readonly string[] };
+  // categories: every note category; background: the ones a heartbeat look may write itself (facts, never rules); dream: the ones the owner's dream may write; group and tenant: the ones a group's and a friend's notes (and their dreams) have.
+  readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[]; readonly tenant: readonly string[]; readonly background: readonly string[] };
   readonly profiles: Readonly<Record<ProfileKey, ProfileData>>;
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
   readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert the heartbeat run delegates heavy work to (heartbeat/delegation.ts)
@@ -101,12 +101,12 @@ export const PROMPTS = {
   noMail: [],
   reactions: ["who"],
   skills: ["mail", "mailSkill"],
-  chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "stateDir", "memoryDir", "selfTimed", "categories"],
+  chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "ownerDir", "selfTimed", "categories"],
   voice: ["own", "group"],
   summary: [],
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "selfTimed", "sources", "reactions", "send"],
   tenant: ["browse", "weather", "draw", "timed", "google", "her", "personality", "selfTimed", "sources", "reactions", "send", "categories"],
-  dream: ["subject", "own", "group", "categories"],
+  dream: ["subject", "own", "group", "categories", "peopleGuide"],
   heartbeatSystem: ["personality", "own", "who", "group"],
   expert: ["personality", "own", "who"],
   heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefFact", "briefHow", "who", "Who", "own", "reads", "mail", "experts", "brief", "sources"],
@@ -197,7 +197,7 @@ export function loadPreset(dir: string): Preset {
     const stray = list.find((c) => !categories.includes(c));
     return stray ? fail(at(path), `"${stray}" is not one of notes.categories (${categories.join(", ")})`) : list;
   };
-  const notes = { categories, dream: subset("notes.dream", n.dream), group: subset("notes.group", n.group), tenant: subset("notes.tenant", n.tenant) };
+  const notes = { categories, dream: subset("notes.dream", n.dream), group: subset("notes.group", n.group), tenant: subset("notes.tenant", n.tenant), background: n.background === undefined ? [] : words(at("notes.background"), n.background).filter((c) => categories.includes(c)) }; // (a preset that extends another and changes the categories keeps the ones it still has)
 
   const p = sec("profiles");
   const profile = (key: ProfileKey): ProfileData => {

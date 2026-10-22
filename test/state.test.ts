@@ -7,6 +7,7 @@ import { checkHideSettings, registered } from "../src/modules/index.ts";
 import { appendLine, dataPath, readJson, readText, secureDataDirs, writeJson, writeText } from "../src/core/state.ts";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { convPaths, conversationsDir, instancePaths, layout, logPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 test("tests run against a throwaway data directory, never the real one", () => {
   assert.ok(process.env.HARNESS_DATA_DIR, "npm test sets HARNESS_DATA_DIR");
@@ -14,11 +15,12 @@ test("tests run against a throwaway data directory, never the real one", () => {
   assert.ok(!existsSync(join(settings.dataDir, "src")), "the data root is not the repo");
 });
 
-test("settings: three folders under HARNESS_DATA_DIR, default is the repo root", () => {
+test("settings: the data folders sit under HARNESS_DATA_DIR, default is the repo root", () => {
   const s = loadSettings({ HARNESS_DATA_DIR: "/tmp/x-data" });
-  assert.deepEqual([s.dataDir, s.stateDir, s.logsDir, s.memoryDir], ["/tmp/x-data", "/tmp/x-data/state", "/tmp/x-data/logs", "/tmp/x-data/memory"]);
+  const l = layout("/tmp/x-data");
+  assert.deepEqual([s.dataDir, s.logsDir, l.instance.dir, l.conversations], ["/tmp/x-data", "/tmp/x-data/logs", "/tmp/x-data/instance", "/tmp/x-data/conversations"]);
   const d = loadSettings({});
-  assert.ok(!d.dataDir.endsWith("/src") && d.stateDir === join(d.dataDir, "state"));
+  assert.ok(!d.dataDir.endsWith("/src") && d.logsDir === join(d.dataDir, "logs"));
   assert.ok(existsSync(join(d.dataDir, "src")), "default data root is the parent of src/");
 });
 
@@ -31,34 +33,40 @@ test("settings: chat session rules are validated", () => {
 });
 
 test("state: JSON round-trips, owner-only, no temp files left behind", () => {
-  writeJson("state/t.json", { a: 1 });
-  assert.deepEqual(readJson("state/t.json", null), { a: 1 });
-  assert.equal(statSync(dataPath("state/t.json")).mode & 0o777, 0o600);
-  assert.equal(readdirSync(settings.stateDir).filter((f) => f.endsWith(".tmp")).length, 0);
+  const t = join(instancePaths().dir, "t.json");
+  writeJson(t, { a: 1 });
+  assert.deepEqual(readJson(t, null), { a: 1 });
+  assert.equal(statSync(dataPath(t)).mode & 0o777, 0o600);
+  assert.equal(readdirSync(instancePaths().dir).filter((f) => f.endsWith(".tmp")).length, 0);
 });
 
-test("state: all three folders are 700 and their files 600; paths outside them are refused", () => {
-  writeText("logs/t.log", "x");
-  appendLine("logs/t.log", "y");
-  writeText("memory/t.md", "x");
-  chmodSync(dataPath("memory/t.md"), 0o644);
-  mkdirSync(join(settings.memoryDir, "sub"), { recursive: true }); // a folder inside is left to its owner, only files are tightened
+test("state: the data folders are 700 and their files 600; paths outside the data root are refused", () => {
+  const log = join(logPaths().dir, "t.log");
+  const note = join(convPaths(OWNER_CONV).dir, "t.md");
+  writeText(log, "x");
+  appendLine(log, "y");
+  writeText(note, "x");
+  chmodSync(dataPath(note), 0o644);
+  mkdirSync(join(convPaths(OWNER_CONV).dir, "sub"), { recursive: true }); // a folder inside is left to its owner, only files are tightened
   secureDataDirs();
-  for (const d of [settings.stateDir, settings.logsDir, settings.memoryDir]) assert.equal(statSync(d).mode & 0o777, 0o700, d);
-  assert.equal(statSync(dataPath("memory/t.md")).mode & 0o777, 0o600);
-  assert.equal(readText("logs/t.log"), "xy\n");
-  // a group's session pointer lives in its own folder: an absolute path is fine inside the data root, never outside
-  writeJson(join(settings.memoryDir, "groups", "k", "session.json"), { a: 1 });
-  assert.deepEqual(readJson(join(settings.memoryDir, "groups", "k", "session.json"), {}), { a: 1 });
+  for (const d of [instancePaths().dir, conversationsDir(), logPaths().dir, convPaths(OWNER_CONV).dir]) assert.equal(statSync(d).mode & 0o777, 0o700, d);
+  assert.equal(statSync(dataPath(note)).mode & 0o777, 0o600);
+  assert.equal(readText(log), "xy\n");
+  // every conversation keeps its files in its own folder: an absolute path is fine inside the data root, never outside
+  const session = convPaths("group-0123456789abcdef").tenantJson;
+  writeJson(session, { a: 1 });
+  assert.deepEqual(readJson(session, {}), { a: 1 });
   assert.throws(() => dataPath(join(settings.dataDir, "..", "elsewhere.json")), /not a path/);
   assert.throws(() => dataPath("/etc/passwd"), /not a path/);
-  for (const bad of ["seen.json", "other/x.json", "state/../x", "state/.hidden", "state/a/b"]) assert.throws(() => dataPath(bad), /not a path/, bad);
+  for (const bad of ["seen.json", "other/x.json", "instance/x.json", "logs/x", "../x"]) assert.throws(() => dataPath(bad), /not a path/, bad); // (a relative spelling is no longer a path: convpaths.ts builds absolute ones)
 });
 
 test("state: a missing or corrupt file falls back to the default", () => {
-  assert.deepEqual(readJson("state/missing.json", { d: true }), { d: true });
-  writeText("state/bad.json", "{not json");
-  assert.deepEqual(readJson("state/bad.json", { d: true }), { d: true });
+  const missing = join(instancePaths().dir, "missing.json");
+  const bad = join(instancePaths().dir, "bad.json");
+  assert.deepEqual(readJson(missing, { d: true }), { d: true });
+  writeText(bad, "{not json");
+  assert.deepEqual(readJson(bad, { d: true }), { d: true });
 });
 
 test("budget: costs accumulate and the over-budget notice fires once", () => {

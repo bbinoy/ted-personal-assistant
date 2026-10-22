@@ -1,9 +1,9 @@
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { settings } from "../../core/settings.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 
 // Pictures of a turn, kept so the model can send one with the `send` tool (send.ts): screenshots of a browse run and drawings (drawtool.ts). The worker
-// keeps each screenshot as a small jpeg in a private folder (state/browse/shots); the browse result lists them by short id (shot1, shot2...). A drawing is
+// keeps each screenshot as a small jpeg in a private folder (instance/browse/shots); the browse result lists them by short id (shot1, shot2...). A drawing is
 // a PNG that code rendered from the model's sanitised SVG, kept in the same turn folder (img1, img2...). The model names an id; code looks it up in THIS
 // conversation's turn only (never a path) and checks the file again (a plain file in that folder, jpeg or png bytes, size).
 // A screenshot is page content: untrusted, only ever sent to the conversation that asked for it, never fed back as an instruction. The files are
@@ -13,7 +13,7 @@ export const MAX_PICTURE_BYTES = 3_000_000;
 export const SHOT_TTL_MS = 60 * 60_000;
 export const MAX_DRAWINGS = 20; // per turn
 const ID = /^(shot|img)[1-9]\d{0,2}$/;
-const shotsRoot = () => join(settings.stateDir, "browse", "shots");
+const shotsRoot = () => join(instancePaths().browse, "shots");
 
 export const isJpeg = (b: Uint8Array): boolean => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
 export const isPng = (b: Uint8Array): boolean => b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;

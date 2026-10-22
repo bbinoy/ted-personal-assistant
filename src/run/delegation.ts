@@ -1,5 +1,6 @@
 import type { AgentDefinition, HookCallback } from "@anthropic-ai/claude-agent-sdk";
-import { audit, type Source } from "../core/audit.ts";
+import { type Source } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { PLUGIN, preset } from "../core/preset.ts";
 import { skillHint, type SkillHint } from "../modules/skills.ts";
 
@@ -84,21 +85,21 @@ export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: nu
     const args = (input.tool_input ?? {}) as Record<string, unknown>;
     if (AGENT_TOOLS.has(input.tool_name)) {
       const agent = typeof args.subagent_type === "string" ? args.subagent_type : "";
-      const refuse = (why: string, reason: string) => (audit(input.tool_name, `deny-${why}`, source, { agent_type: agent || undefined }), deny(reason));
+      const refuse = (why: string, reason: string) => (emitRecord(input.tool_name, `deny-${why}`, source, { agent_type: agent || undefined }), deny(reason));
       if (input.agent_id) return refuse("nested", "An expert cannot delegate further: do the work yourself with your tools.");
       if (!Object.hasOwn(setup.agents, agent)) return refuse("agent", `Only ${Object.keys(setup.agents).map((a) => `"${a}"`).join(", ")} may be called (subagent_type); other agents do not exist here. Use one of them, or do the work yourself.`);
       if (delegations.length >= max) return refuse("cap", `You already delegated ${max} times in this look, the most there is. Do the rest yourself or leave it for the next look.`);
       const brief = typeof args.prompt === "string" ? args.prompt : "";
       const d = { agent, brief };
       delegations.push(d);
-      audit(input.tool_name, "delegate", source, { agent_type: agent, n: delegations.length, briefChars: brief.length });
+      emitRecord(input.tool_name, "delegate", source, { agent_type: agent, n: delegations.length, briefChars: brief.length });
       o.onDelegate?.(d);
       return allow; // (the Agent call is not asked about by canUseTool: the checks above are the whole gate; what the expert does is judged call by call)
     }
     if (input.tool_name === "Skill" && !input.agent_id) {
       const skill = String(args.skill ?? args.name ?? "").replace(`${PLUGIN}:`, "");
       const agent = setup.delegated.get(skill);
-      if (agent) return (audit("Skill", "deny-delegated", source, { skill }), deny(`The skill ${skill} is heavy work and is delegated: call the Agent tool with subagent_type "${agent}" and a self-contained brief instead of loading it yourself.`));
+      if (agent) return (emitRecord("Skill", "deny-delegated", source, { skill }), deny(`The skill ${skill} is heavy work and is delegated: call the Agent tool with subagent_type "${agent}" and a self-contained brief instead of loading it yourself.`));
     }
     return {};
   };

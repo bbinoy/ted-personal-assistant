@@ -40,8 +40,44 @@ export function fitParts(r: { text: string; styles: TextStyle[] }, max: number |
   return parts;
 }
 
+// A failed send is retried, by what the error says about whether the message left:
+//   - "refused": it certainly was not accepted (the connection was not up, nothing was written): retried twice, after 2 s and 6 s;
+//   - "unsure": a timeout or a connection lost with the request in flight: the messenger may have sent it. Retried ONCE, after 2 s, and a rare duplicate is accepted over a paid-for reply that
+//     never arrives (the retry is echo-registered like the first try, so neither comes back as the owner's message);
+//   - anything else (signal-cli refused it: bad attachment, unknown group, a user error): not retried, the error reaches the caller as before.
+export type SendFailure = "refused" | "unsure" | "permanent";
+export function classifySendError(e: unknown): SendFailure {
+  const m = e instanceof Error ? e.message : String(e);
+  if (/not connected|is closed|ECONNREFUSED|EPIPE/i.test(m) && !/timed out/i.test(m)) return "refused";
+  if (/timed out|socket closed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(m)) return "unsure";
+  return "permanent";
+}
+const BACKOFF_MS = [2_000, 6_000];
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 // `record` is told about every message sent (kind, timestamp, text, target if it did not go to the owner's chat): the message log.
-export function createOutbound(messenger: Pick<Messenger, "send" | "capabilities">, record?: (kind: MessageKind, ts: number, text: string, target?: Target) => void) {
+export function createOutbound(
+  messenger: Pick<Messenger, "send" | "capabilities">,
+  record?: (kind: MessageKind, ts: number, text: string, target?: Target) => void,
+  retry: { backoffMs?: readonly number[]; sleep?: (ms: number) => Promise<void> } = {},
+) {
+  const backoff = retry.backoffMs ?? BACKOFF_MS;
+  const sleep = retry.sleep ?? sleepMs;
+  // messenger.send with the retry rule above.
+  async function send(target: Target | undefined, message: Parameters<Messenger["send"]>[1]): Promise<number> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await messenger.send(target, message);
+      } catch (e) {
+        const kind = classifySendError(e);
+        const allowed = kind === "refused" ? backoff.length : kind === "unsure" ? Math.min(1, backoff.length) : 0;
+        if (attempt >= allowed) throw e;
+        console.error(`outbound: send failed (${(e as Error).message}); retrying in ${backoff[attempt]! / 1000}s${kind === "unsure" ? " (it may have gone out: a duplicate is possible)" : ""}`);
+        await sleep(backoff[attempt]!);
+      }
+    }
+  }
+
   // Everything we send to Note to Self comes back to us as an incoming message, and must not
   // be answered. Each message is registered BEFORE sending, by text (the echo can arrive
   // before the send returns its timestamp), then by timestamp. Entries expire after a while.
@@ -76,7 +112,7 @@ export function createOutbound(messenger: Pick<Messenger, "send" | "capabilities
       const whole = opts.plain ? { text: text.trim(), styles: [] } : renderMarkdown(text.trim());
       for (const r of fitParts(whole, messenger.capabilities.maxMessageBytes)) {
         if (!opts.target) remember(`x:${r.text}`);
-        last = await messenger.send(opts.target, { text: r.text, styles: r.styles, quote });
+        last = await send(opts.target, { text: r.text, styles: r.styles, quote });
         quote = undefined;
         if (!opts.target) remember(`t:${last}`);
         record?.(opts.kind ?? "other", last, r.text, opts.target);
@@ -87,7 +123,7 @@ export function createOutbound(messenger: Pick<Messenger, "send" | "capabilities
 
   // A voice message (an audio file), to the owner's chat or another conversation. What was said is logged as text, so the log stays searchable.
   async function sendVoice(file: string, spoken: string, target?: Target): Promise<number> {
-    const ts = await messenger.send(target, { text: "", attachments: [{ file, kind: "voice" }] });
+    const ts = await send(target, { text: "", attachments: [{ file, kind: "voice" }] });
     if (!target) remember(`t:${ts}`);
     record?.("chat", ts, `🔊 ${spoken}`, target);
     return ts;
@@ -97,7 +133,7 @@ export function createOutbound(messenger: Pick<Messenger, "send" | "capabilities
   async function sendPicture(file: string, caption: string, opts: { quote?: Quote; kind?: MessageKind; target?: Target } = {}): Promise<number> {
     const r = caption ? renderMarkdown(clean("picture caption", caption, { max: 300 })) : { text: "", styles: [] };
     if (!opts.target && r.text) remember(`x:${r.text}`);
-    const ts = await messenger.send(opts.target, { text: r.text, styles: r.styles, quote: messenger.capabilities.quotes ? opts.quote : undefined, attachments: [{ file, kind: "picture" }] });
+    const ts = await send(opts.target, { text: r.text, styles: r.styles, quote: messenger.capabilities.quotes ? opts.quote : undefined, attachments: [{ file, kind: "picture" }] });
     if (!opts.target) remember(`t:${ts}`);
     record?.(opts.kind ?? "chat", ts, `🖼️ ${r.text || "(picture)"}`, opts.target);
     return ts;

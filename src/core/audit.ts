@@ -1,8 +1,9 @@
 import { renameSync, statSync } from "node:fs";
 import { redactSecrets } from "./redact.ts";
 import { appendLine, dataPath, readText } from "./state.ts";
+import { logPaths } from "./convpaths.ts";
 
-// One append-only log for everything the agent does or observes.
+// One append-only log for everything the agent does or observes. Written only by the audit sink of the event stream (core/events.ts).
 //   source: who acted (a chat turn, a heartbeat run, the dream, the heartbeat itself)
 //   meta:   small structured details. Agent tool calls log ids only, never content; heartbeat
 //           triage entries add sender and subject so the brief and `npm run report` can list them.
@@ -22,17 +23,18 @@ export interface AuditEntry {
 // The audit log is the admin's (logs/, search_logs, npm run report). A tenant's rows in it say what happened and how big, never what she said or
 // asked for: these fields hold words (a question, her reply, the arguments of a call, a judge's reason, the host of a page she opened, the name of a control on it, an
 // address, an error that quotes a page) and become their length.
-const WORDS = ["args", "question", "details", "reply", "feedback", "executed", "reason", "facts", "name", "host", "address", "why", "merchant", "error"];
+const WORDS = ["args", "question", "details", "reply", "feedback", "executed", "reason", "facts", "name", "host", "address", "why", "merchant", "error", "label", "approvedControl", "result", "by"];
 export function wordless(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!meta) return meta;
   return Object.fromEntries(Object.entries(meta).map(([k, v]) => (WORDS.includes(k) && v !== undefined ? [`${k}Chars`, (typeof v === "string" ? v : JSON.stringify(v) ?? "").length] : [k, v])));
 }
 
-const FILE = "logs/audit.jsonl";
+const FILE = logPaths().audit;
 const MAX_BYTES = 20 * 1024 * 1024;
 let appends = 0;
 
-export function audit(tool: string, decision: string, source: Source, meta?: Record<string, unknown>): void {
+// The audit sink's writer (core/sinks/auditsink.ts); nothing else writes this log. Callers tell core/events.ts what happened.
+export function writeAuditRow(tool: string, decision: string, source: Source, meta?: Record<string, unknown>): void {
   const entry = { ts: new Date().toISOString(), source, tool, decision, ...(meta ? { meta } : {}) };
   appendLine(FILE, redactSecrets(JSON.stringify(entry))); // an error message or a subject can carry a key; senders and subjects stay readable (phone numbers are not masked here)
   // Keep one previous generation; readers only ever need the recent past.

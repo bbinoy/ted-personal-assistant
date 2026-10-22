@@ -1,20 +1,23 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
+import "./core/migrateatstart.ts"; // second: an old data folder is moved to the current layout before any module opens a file (core/migrate.ts)
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
+import type { PipelineDeps } from "./conversation/conversationmodel.ts";
+import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
-import { approveIn, setApprovers } from "./approvals/permissions.ts";
+import { approveIn, renderDetails } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./conversation/guards.ts";
 import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
 import { createGroupBrain, groupName, ownerInGroup } from "./conversation/group.ts";
-import { keyNotices } from "./tenants/keynotice.ts";
 import { groupDir, recordGroup } from "./conversation/groupstore.ts";
 import { logTail } from "./conversation/gate.ts";
-import { createWakeups } from "./heartbeat/wake.ts";
+import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
+import { ownerSearchScope, warmSearchIndex } from "./memory/search.ts";
 import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
 import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
@@ -32,16 +35,28 @@ import { Limiter } from "./core/limiter.ts";
 import { activeTenant, admitStranger } from "./tenants/tenantroute.ts";
 import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
-import { tenantHooks } from "./tenants/tenanttools.ts";
+import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { ensureOwner, learnOwnerAci, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
+import { runPending } from "./run/pendingrun.ts";
+import { holdingNow } from "./heartbeat/notices.ts";
+import { isRefusal, mayRun } from "./tenants/payer.ts";
+import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
+import { ensureOwner, learnOwnerAci, listTenants, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
+import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
+import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
+import { writeAgentPid } from "./core/migrateservices.ts";
+import { retentionTrigger, runRetention } from "./core/retention.ts";
+import { registerFileRules } from "./heartbeat/retentionrules.ts";
+import { instancePaths } from "./core/convpaths.ts";
 
+writeAgentPid(settings.dataDir); // so `npm run migrate` knows the agent is up
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
-ensureNotesDir(); // first run: memory/notes/, where the chat agent keeps its notes
+ensureNotesDir(); // first run: conversations/owner/notes/, where the chat agent keeps its notes
 sweepStaleRuns(); // page views and screenshots of a browse run that never ended
-if (new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
+if (!ledgerDamage() && new Ledger().recover()) console.log("card: a payment that was clicked and never reported back is now unconfirmed (npm run card -- payments)"); // a crash between the click and the result
 
 // The owner's record in the registry (tenants.ts): made on the first start from SIGNAL_OWNER_NUMBER, its account id learned from her first message.
 const identity = signalIdentity();
@@ -67,7 +82,23 @@ const out = createOutbound(messenger, (kind, ts, text, target) => record(target,
 // Every question is asked in the conversation that triggered the action (approvers.ts): the owner's chat for her own turns and her unattended
 // runs (the heartbeat run: only an explicit yes / no or a reply to the question answers those, whatever else she types meanwhile is a chat message), a group in the group
 // (any member may answer), a tenant in her own chat. approvals.ts scopes every question to its conversation, so an answer from another one (the admin's included) never applies.
-setApprovers(createApprovers(out));
+// This is the one place the modules' hooks are set (wiring.ts; it stops the start if one is missing): those modules are used by runs that have no pipeline in reach.
+wire({
+  approvers: createApprovers(out),
+  notifyOwner: (text) => void out.replyPlain(text, "notice"), // the shared-key notice, the daily cap line, the budget and failing-looks notices
+  sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
+  dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
+});
+// The approval inbox (approvals/pendingflow.ts): what an unattended run needed a yes for is asked as one numbered message in that conversation, held in quiet hours (notices.ts), and
+// an approved call is run exactly as recorded in a small follow-up run (run/pendingrun.ts). The conversation is found from the key the item was parked under.
+const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
+setPendingRuntime({
+  send: (scope, text) => out.reply(text, { plain: true, kind: "approval", ...(scope === OWNER_KEY ? {} : { target: convOf(scope).target }) }),
+  holding: (scope, now) => holdingNow(convOf(scope), now),
+  details: (scope, item) => renderDetails(scope, item.tool, item.input),
+  canRun: (scope) => { const r = mayRun(convOf(scope), "approved action"); return isRefusal(r) ? r.refused : undefined; },
+  execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
+});
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
@@ -76,8 +107,8 @@ const warmChat = () => prepare(owner(), { notify: say });
 // instead of starting that many whisper processes. One line for the owner's chat and every group.
 const transcribing = new Limiter(() => settings.transcribeConcurrency);
 
-// A voice message's words, from the local speech model; the transcript is logged (logs/voice.jsonl) to inspect a
-// mishearing. Throws a sentence the user can be told if it cannot be made out.
+// A voice message's words, from the local speech model; the transcript goes into the message log like any message (a
+// mishearing can be searched there). Throws a sentence the user can be told if it cannot be made out.
 async function transcript(m: IncomingMessage): Promise<string> {
   let heard = "";
   try {
@@ -110,20 +141,18 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 // Several people on one instance (TENANTS=on, src/tenants/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
 // Needs a messenger other people can write to: with Signal that is the assistant's own account (in Note to Self there is nobody else to talk to).
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
-keyNotices.sendTo((text) => void out.replyPlain(text, "notice")); // the one notice for the owner about the shared instance key (keynotice.ts), from every kind of run
 const tenantRunner = createTenantRunner({});
-tenantHooks.sendFirst = messenger.sendFirst?.bind(messenger); // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
-tenantHooks.drop = (id) => (dropTenantWarm(id), dropAll(id)); // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts LIFECYCLE: her Google server, her Notion) stop
+// One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
+const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
+  const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
+  turn.say(ownerMessage, reactedTo, reactedAt);
+  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
+};
 const pipeline: Pipeline = createPipeline({
   messenger,
   out,
   record,
-  // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
-  run: (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
-    const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
-    turn.say(ownerMessage, reactedTo, reactedAt);
-    return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
-  },
+  run: runChat,
   picture: async (m) => preparePicture(await messenger.attachmentFile(m.image!)), // the messenger resolves the id to its own file (Signal: a plain file name inside signal-cli's folder)
   document: async (m) => prepareFile(await messenger.attachmentFile(m.file!), m.file!.name, audioTools), // the same; an audio file is transcribed (queued with voice messages)
   longText: (m) => messenger.readLongText(m.longText!), // the same
@@ -209,30 +238,45 @@ await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
 warmChat();
+if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
+if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
+const reorganised = ownerNotice(settings.dataDir); // the data folder was moved to the current layout at this start (or an earlier one whose notice could not be sent): she is told once
+if (reorganised) void say(reorganised).then(() => markOwnerTold(settings.dataDir)).catch(() => {});
+const late = lateNotice(settings.dataDir); // files an old version wrote after the move: merged or set aside (core/migrate.ts reconcile), named to her once
+if (late) void say(late).then(() => markLateTold(settings.dataDir)).catch(() => {});
+replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
+void recoverAtStart([OWNER_KEY, ...(settings.tenants ? listTenants().filter((r) => r.status === "active").map((r) => tenantKey(r.id)) : [])]); // an approved item whose run was cut short by the stop is told once (pendingflow.ts recoverStuck)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
+// The owner's search index (memory/search.ts) is brought up to date a little after start-up, in small slices that leave the event loop free, so the first real search_logs is quick.
+setTimeout(() => void warmSearchIndex(ownerSearchScope()).catch(() => {}), 20_000).unref();
 
 // One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, and the friends'
 // (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
-const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]) });
-const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]) });
+const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]), busy: (conv) => pipeline.busy(conv) });
+const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]), busy: (conv) => pipeline.busy(conv) });
 const dream = () => {
   void friendsDreamer.run().catch(() => {});
   return dreamer.run().catch(() => {});
 };
 const dreamAtItsHour = dreamTrigger(dream);
+// The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window (rotated audit lines, old signal-cli attachments, expired notes, old snapshots and logs...).
+// Plain file work, no model; it waits for the next tick while the owner's chat is in a turn. RETENTION=off disables it.
+registerFileRules();
+const retentionAtItsHour = retentionTrigger((now) => runRetention(now, { stateFile: instancePaths().retention }), { stateFile: instancePaths().retention, enabled: () => settings.retention, busy: () => pipeline.busy(owner()) });
 // The clock of every conversation's own initiative: every tick, each conversation whose next look has come may be woken (wake.ts). The look is the heartbeat run
 // (heartbeat/look.ts; the daily brief is a skill it delegates), the same for the owner, every group and every friend, each with its own approver: a question goes to the chat that triggered it.
 const wakeups = createWakeups({
   pipeline,
   groupChats: messenger.capabilities.groups,
+  stagger: startupStagger,
   vouch,
   run: (conv, payer, prompt, extra) => runHeartbeat(conv, payer, prompt, approveIn(conv.key, { background: true }), extra),
-  compact: { due: (conv) => compactDue(conv.sessionFile), run: (conv) => compactConversation(conv, "quiet") },
+  compact: { due: (conv) => compactDue(conv.convId), run: (conv) => compactConversation(conv, "quiet") },
 });
 
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the
@@ -242,6 +286,7 @@ startHeartbeat({
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
+      retention: () => retentionAtItsHour(), // the first tick at or after 03:30, once a day, never while a chat turn runs (core/retention.ts)
       dream: () => dreamAtItsHour(), // the first tick at or after DREAM_HOUR; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
     });
   },

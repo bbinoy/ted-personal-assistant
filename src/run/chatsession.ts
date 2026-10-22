@@ -1,19 +1,20 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { audit, type Source } from "../core/audit.ts";
+import { gated } from "../core/rungate.ts";
+import { type Source } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { withCeiling } from "./ceiling.ts";
 import { failure, isApiRefusal } from "../tenants/errors.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { charge, envFor, isRefusal, LOGIN, mayRun, observe, succeeded, type MayRunOptions, type Payer } from "../tenants/payer.ts";
-import { OWNER_SESSION_FILE } from "../core/ownerkey.ts";
+import { OWNER_CONV, type ConvId } from "../core/convpaths.ts";
+import { readSession, writeSession } from "./sessionstore.ts";
 import { planSession, type ChatSession, type CompactMode } from "./session.ts";
 import { settings } from "../core/settings.ts";
-import { readJson, writeJson } from "../core/state.ts";
 import { forgetShown } from "./turncontext.ts";
 
 // Every conversation (the owner's chat, each group) persists across restarts, with the hygiene rules in
 // session.ts (fresh after idle, compacted when large). total_cost_usd is cumulative across a resumed
-// session, so we keep the running total and report each turn's delta. The owner's session pointer is
-// state/session.json; a group's is session.json in its own folder (conversation.ts).
+// session, so we keep the running total and report each turn's delta. Every conversation's session pointer is the `session` row of its own assistant.db (sessionstore.ts, core/convdb.ts).
 
 export interface Resume {
   resume?: string; // session to continue (chat only)
@@ -24,8 +25,8 @@ export interface Resume {
 const chatPlanOpts = (mode: CompactMode) => ({ compactTokens: settings.chatCompactTokens, compactGrowth: settings.chatCompactGrowthTokens, quietMinutes: settings.compactQuietMinutes, mode });
 
 // A conversation continues its saved session unless session.ts says to start fresh.
-export function chatResume(file: string = OWNER_SESSION_FILE): Resume {
-  const saved = readJson<ChatSession>(file, { costUsd: 0 });
+export function chatResume(conv: ConvId = OWNER_CONV): Resume {
+  const saved = readSession(conv);
   // A fresh session starts its cost total at zero, so the previous total must not be subtracted.
   if (planSession(saved, new Date(), chatPlanOpts("off")) === "fresh") return { previousCost: 0 };
   return { resume: saved.sessionId, previousCost: saved.costUsd, seenAt: saved.seenAt };
@@ -50,22 +51,23 @@ export function compactOptions(sessionId: string | undefined, source: Source, no
   };
 }
 
-// Is a quiet-time compaction due for this session? A cheap read of the session file, for the heartbeat to ask before it queues anything.
-export function compactDue(file: string = OWNER_SESSION_FILE, now: Date = new Date()): boolean {
-  return planSession(readJson<ChatSession>(file, { costUsd: 0 }), now, chatPlanOpts("quiet")) === "resume then compact";
+// Is a quiet-time compaction due for this session? A cheap read of the session row, for the heartbeat to ask before it queues anything.
+export function compactDue(conv: ConvId = OWNER_CONV, now: Date = new Date()): boolean {
+  return planSession(readSession(conv), now, chatPlanOpts("quiet")) === "resume then compact";
 }
 
-// Compact a conversation's session (`file`) in place by sending the SDK's own /compact command on the resumed session, if
+// Compact a conversation's session (`conv`) in place by sending the SDK's own /compact command on the resumed session, if
 // session.ts says so for this `mode`: "urgent" right after a reply that left the context far past the limit (the caller waits),
 // "quiet" from the heartbeat once the conversation has been still for COMPACT_QUIET_MINUTES. Always called from the conversation's
-// serial queue, so a message that arrives meanwhile waits behind it and nothing else touches the file. Never throws.
-export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, source: Source = "chat", notesDir?: string, mode: "quiet" | "urgent" = "urgent", payer: Payer = LOGIN): Promise<void> {
+// serial queue, so a message that arrives meanwhile waits behind it and nothing else touches the record. Never throws.
+export async function compactChatIfNeeded(conv: ConvId = OWNER_CONV, source: Source = "chat", notesDir?: string, mode: "quiet" | "urgent" = "urgent", payer: Payer = LOGIN): Promise<void> {
   try {
-    const saved = readJson<ChatSession>(file, { costUsd: 0 });
+    const saved = readSession(conv);
     if (planSession(saved, new Date(), chatPlanOpts(mode)) !== "resume then compact") return;
     console.log(`${source}: context is ${saved.lastContextTokens} tokens, compacting (${mode})`);
     // Bounded in time like every run (ceiling.ts): it runs inside the conversation's queue, and a hung one would block it.
-    await withCeiling(settings.compactMaxMinutes * 60_000, async (c) => {
+    // It runs inside the conversation's queue, where a message may be waiting, so it never waits for a place in the run gate (rungate.ts) but takes one; the quiet one is started only when a place is free (wake.ts).
+    await gated("chat", () => withCeiling(settings.compactMaxMinutes * 60_000, async (c) => {
       let boundary: { pre_tokens: number; post_tokens?: number } | undefined;
       let lastError: string | undefined;
       for await (const message of query({ prompt: "/compact", options: { ...compactOptions(saved.sessionId, source, notesDir, payer), abortController: c.controller } })) {
@@ -73,7 +75,7 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
         observe(payer, message);
         if (message.type === "assistant" && message.error) lastError = message.error;
         if (message.type !== "result") continue;
-        charge(payer, message.total_cost_usd - saved.costUsd);
+        charge(payer, message.total_cost_usd - saved.costUsd, "compact");
         if (!boundary) {
           // A compaction that failed is reported like any other call on its payer (errors.ts failure: the cooldown, the owner's one notice about a refused instance key).
           const refused = failure(lastError, message.subtype, payer);
@@ -81,63 +83,63 @@ export async function compactChatIfNeeded(file: string = OWNER_SESSION_FILE, sou
         }
         if (!lastError) succeeded(payer);
         const { compactFailedAt: _cleared, untrustedIn: _held, ...rest } = saved;
-        writeJson(file, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens, ...carriedTaint(saved, message.session_id) }); // (a compaction continues the session: its summary may still hold the untrusted text)
-        forgetShown(file); // the summary may have lost what the conversation was last told at the start of a turn (turncontext.ts)
+        writeSession(conv, { ...rest, sessionId: message.session_id, costUsd: message.total_cost_usd, lastContextTokens: boundary.post_tokens, ...carriedTaint(saved, message.session_id) }); // (a compaction continues the session: its summary may still hold the untrusted text)
+        forgetShown(conv); // the summary may have lost what the conversation was last told at the start of a turn (turncontext.ts)
         console.log(`${source}: compacted ${boundary.pre_tokens} -> ${boundary.post_tokens ?? "?"} tokens (${mode})`);
-        audit("chat_session", "compacted", source);
+        emitRecord("chat_session", "compacted", source);
         return;
       }
       throw new Error("compaction stream ended without a result");
-    });
+    }));
   } catch (e) {
     console.error(`${source}: compaction failed:`, (e as Error).message);
-    audit("chat_session", "compact-failed", source);
-    writeJson(file, { ...readJson<ChatSession>(file, { costUsd: 0 }), compactFailedAt: new Date().toISOString() });
+    emitRecord("chat_session", "compact-failed", source);
+    writeSession(conv, { ...readSession(conv), compactFailedAt: new Date().toISOString() });
   }
 }
 
 // Compaction of a conversation's session (the urgent one after a reply, the quiet one from the tick): like any call it asks payer.ts mayRun first, so a friend's runs on
 // the instance key and is billed to her, and waits while she is blocked (the key in a cooldown, her day's budget spent), urgent or quiet. The owner's and a group's urgent
 // one is never held back (somebody's next message waits for it); their quiet one stops with the pause switch, the cooldown and the budget.
-export async function compactConversation(conv: Pick<Conversation, "kind" | "tenantId" | "sessionFile" | "source" | "notesDir">, mode: "quiet" | "urgent", o: MayRunOptions = {}): Promise<void> {
+export async function compactConversation(conv: Pick<Conversation, "kind" | "tenantId" | "convId" | "source" | "notesDir">, mode: "quiet" | "urgent", o: MayRunOptions = {}): Promise<void> {
   const payer = mayRun(conv, "compaction", { chat: mode === "urgent", ...o });
-  if (!isRefusal(payer)) await compactChatIfNeeded(conv.sessionFile, conv.source, conv.notesDir, mode, payer);
+  if (!isRefusal(payer)) await compactChatIfNeeded(conv.convId, conv.source, conv.notesDir, mode, payer);
 }
 
 // A conversation never starts fresh just because time passed: its recent history is kept across days and compaction keeps it small.
 // The one exception is a session the SDK can no longer resume (expired or deleted): forget its id, so the next message starts a fresh
 // one instead of failing the same way for ever. Returns whether it did.
-export function forgetUnresumable(file: string, e: unknown, source: Source): boolean {
+export function forgetUnresumable(conv: ConvId, e: unknown, source: Source): boolean {
   if (!/no conversation found|session id.*not found|could not (resume|find) (the )?(session|conversation)/i.test((e as Error)?.message ?? "")) return false;
-  const { sessionId: _gone, baseTokens: _base, lastContextTokens: _ctx, untrustedIn: _tainted, ...rest } = readJson<ChatSession>(file, { costUsd: 0 });
-  writeJson(file, { ...rest, costUsd: 0 });
+  const { sessionId: _gone, baseTokens: _base, lastContextTokens: _ctx, untrustedIn: _tainted, ...rest } = readSession(conv);
+  writeSession(conv, { ...rest, costUsd: 0 });
   console.error(`${source}: the saved session can no longer be resumed, the next message starts a fresh one`);
-  audit("chat_session", "unresumable-reset", source);
+  emitRecord("chat_session", "unresumable-reset", source);
   return true;
 }
 
 // ---- the untrusted-input flag of a session ----
 // A session that has read raw mail or a web page still holds that text in its context on every later turn, so the approval judge must be told "untrusted input in
-// this run" from then on, not just in the turn that read it. The flag lives in the session file (ChatSession.untrustedIn, the id of the session) and follows the
+// this run" from then on, not just in the turn that read it. The flag lives in the session record (ChatSession.untrustedIn, the id of the session) and follows the
 // session: a fresh session starts clean (consume() carries it only for the session that held it), a compaction CONTINUES the session and its summary may still
 // contain the text, so it stays set (compactChatIfNeeded carries it); it is cleared only when a new session starts (or the saved one can no longer be resumed).
 export interface Taint {
   read(): boolean; // does the session this run continues, or this run itself, hold untrusted input?
-  mark(): void; // this run has read some: kept in the file for the turns after it
+  mark(): void; // this run has read some: kept in the record for the turns after it
 }
 
-export function sessionTaint(file: string | undefined, resume: string | undefined): Taint {
+export function sessionTaint(conv: ConvId | undefined, resume: string | undefined): Taint {
   let here = false; // this run
   return {
-    read: () => here || (!!file && !!resume && readJson<ChatSession>(file, { costUsd: 0 }).untrustedIn === resume),
+    read: () => here || (!!conv && !!resume && readSession(conv).untrustedIn === resume),
     mark: () => {
       here = true;
-      if (file) writeJson(file, { ...readJson<ChatSession>(file, { costUsd: 0 }), untrustedIn: resume ?? "pending" }); // (a fresh run does not know its session id yet: consume() fills it in)
+      if (conv) writeSession(conv, { ...readSession(conv), untrustedIn: resume ?? "pending" }); // (a fresh run does not know its session id yet: consume() fills it in)
     },
   };
 }
 
-// The flag of the session file after a turn that ended in session `id`: kept for the session that held it (or that this turn started and marked), dropped for any other.
+// The flag of the session record after a turn that ended in session `id`: kept for the session that held it (or that this turn started and marked), dropped for any other.
 export function carriedTaint(before: ChatSession, id: string): { untrustedIn?: string } {
   const held = before.untrustedIn;
   return held !== undefined && (held === "pending" || held === before.sessionId) ? { untrustedIn: id } : {};

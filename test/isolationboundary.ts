@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { conversationsDir, instancePaths } from "../src/core/convpaths.ts";
 import type { CanUseTool, Options } from "@anthropic-ai/claude-agent-sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -75,8 +76,8 @@ export async function buildWorld(): Promise<World> {
   writeFileSync(ownerIndex, `- [secret](context-owner-secret.md) ${word} ${canary}\n`);
   const auditLine = `{"tool":"mail","detail":"${word} ${canary}"}\n`;
   writeFileSync(ownerAudit, auditLine);
-  mkdirSync(join(settings.stateDir, "openbao"), { recursive: true });
-  writeFileSync(join(settings.stateDir, "openbao", "marker.txt"), `${word} ${canary}\n`);
+  mkdirSync(instancePaths().openbao, { recursive: true });
+  writeFileSync(join(instancePaths().openbao, "marker.txt"), `${word} ${canary}\n`);
 
   let n = 0;
   const join_ = (name: string) => {
@@ -95,7 +96,7 @@ export async function buildWorld(): Promise<World> {
   const { groupLogFile } = await import("../src/conversation/groupstore.ts");
   const gconv = group("g1");
   mkdirSync(gconv.notesDir, { recursive: true });
-  writeFileSync(join(settings.dataDir, groupLogFile("g1")), `{"ts":3,"at":"2026-10-17T10:00:00.000Z","kind":"user","text":"the group likes tea"}\n`);
+  writeFileSync(groupLogFile("g1"), `{"ts":3,"at":"2026-10-17T10:00:00.000Z","kind":"user","text":"the group likes tea"}\n`);
   const folder = { group: realpathSync(gconv.notesDir), tenant: realpathSync(ann.notesDir) };
   for (const f of Object.values(folder)) {
     writeFileSync(join(f, "context-pizza.md"), `---\nname: pizza\n---\n\nLikes pineapple pizza on Fridays.\n`);
@@ -134,8 +135,8 @@ export async function buildWorld(): Promise<World> {
     beaNote,
     beaLog: bea.logFile,
     beaDir: bea.notesDir,
-    tenantsDir: settings.tenantsDir,
-    openbaoDir: join(settings.stateDir, "openbao"),
+    tenantsDir: conversationsDir(),
+    openbaoDir: instancePaths().openbao,
     outsideFile: join(dataDir, "outside-file.md"),
     instanceKey,
     folder,
@@ -212,10 +213,10 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
       ["the owner's note", w.ownerNote],
       ["the owner's MEMORY.md", w.ownerIndex],
       ["the owner's audit log", w.ownerAudit],
-      ["the tenants folder", w.tenantsDir],
-      ["state/openbao", join(w.openbaoDir, "marker.txt")],
+      ["the conversations folder", w.tenantsDir],
+      ["state/openbao (the installed software)", join(w.openbaoDir, "marker.txt")],
       ["a symlink out of her folder", join(folder, "sneaky", "context-owner-secret.md")],
-      ["a .. path", `${folder}/../../../memory/notes/context-owner-secret.md`],
+      ["a .. path", `${folder}/../../../conversations/owner/notes/context-owner-secret.md`],
       ["an outside file", w.outsideFile],
     ];
     if (s === "tenant") paths.push(["Bea's note", w.beaNote], ["Bea's log", w.beaLog], ["a symlink to Bea", join(folder, "to-bea", "context-bea-secret.md")]);
@@ -253,7 +254,7 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
       check(`${label} search_logs for a word only the owner's and Bea's lines have returns nothing of theirs`, !w.canaries[s].some((c) => search.includes(c)) && search.includes("No matching messages"), search.slice(0, 200));
       const own = textOf(await client.callTool({ name: "search_logs", arguments: { query: "tea" } }));
       check(`${label} search_logs finds her own history (the control)`, /likes tea/.test(own), own.slice(0, 200));
-      for (const file of ["context-owner-secret.md", "../../../memory/notes/context-owner-secret.md", s === "tenant" ? "context-bea-secret.md" : "context-nothing.md"]) {
+      for (const file of ["context-owner-secret.md", "../../../conversations/owner/notes/context-owner-secret.md", s === "tenant" ? "context-bea-secret.md" : "context-nothing.md"]) {
         const r = (await client.callTool({ name: "forget_note", arguments: { file } })) as { isError?: boolean };
         check(`${label} forget_note ${file} is an error`, r.isError === true);
       }

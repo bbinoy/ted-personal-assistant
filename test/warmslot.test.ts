@@ -9,7 +9,7 @@ import { prepare, runConversation } from "../src/run/agent.ts";
 import { group, owner } from "../src/conversation/conversation.ts";
 import { createGroupBrain } from "../src/conversation/group.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
-import { writeJson } from "../src/core/state.ts";
+import { writeSession } from "../src/run/sessionstore.ts";
 
 const T0 = new Date(2026, 9, 14, 9, 0, 0);
 
@@ -120,9 +120,10 @@ test("group warm: built from that group's own options only, exactly like a norma
   }
 });
 
-test("group warm: one process for the latest group; another group replaces it; each group only ever gets its own", async () => {
-  const was = settings.warm;
+test("group warm: GROUP_WARM_SLOTS (1 here) processes for the latest groups; another group replaces the oldest; each group only ever gets its own", async () => {
+  const was = [settings.warm, settings.groupWarmSlots] as const;
   (settings as { warm: boolean }).warm = true;
+  (settings as { groupWarmSlots: number }).groupWarmSlots = 1;
   try {
     const rig = startRig();
     const a = group(gid());
@@ -144,7 +145,8 @@ test("group warm: one process for the latest group; another group replaces it; e
     assert.deepEqual(rig.used, ["warm2"]);
     assert.deepEqual(log, ["cold"]);
   } finally {
-    (settings as { warm: boolean }).warm = was;
+    (settings as { warm: boolean }).warm = was[0];
+    (settings as { groupWarmSlots: number }).groupWarmSlots = was[1];
   }
 });
 
@@ -155,7 +157,7 @@ test("group warm: a process built before the session moved on is not used", asyn
     const rig = startRig();
     const conv = group(gid());
     prepare(conv, { style: "" }, { start: rig.start, keep: true });
-    writeJson(conv.sessionFile, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
+    writeSession(conv.convId, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
     const log: string[] = [];
     await runConversation(conv, { style: "" }, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(log, ["cold"]);

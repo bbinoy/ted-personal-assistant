@@ -476,15 +476,15 @@ test("results: status is one of three words, bad structure becomes failed, strin
 
 const READY: BrowseStatus = { ok: true, cli: "cli.js", exe: "chrome" };
 
-test("starting: not set up, off, one at a time are explained, not silent", async () => {
+test("starting: not set up, off, one at a time per conversation are explained, not silent", async () => {
   assert.match(startRefusal({ mode: "owner" }, Date.now(), { ok: false, reason: "the browser is not downloaded (run npm run setup:browse)" })!, /not set up: the browser is not downloaded/);
   assert.equal(startRefusal({ mode: "owner" }, Date.now(), READY), settings.browse ? undefined : "Browsing is switched off (BROWSE=off).");
   const never = (): Promise<never> => new Promise(() => {});
   void never;
   let release!: () => void;
   const gate = new Promise<void>((r) => (release = r));
-  const slow = browse({ mode: "owner", run: async () => (await gate, { text: "", structured: { status: "done", answer: "slept", sources: [] } }) }, "look up opening hours", { status: READY, resolver: publicDns });
-  assert.match(await browse({ mode: "owner", run: async () => ({ text: "" }) }, "look up opening hours", { status: READY }), /Another browser run is in progress/);
+  const slow = browse({ mode: "owner", key: "conv-a", run: async () => (await gate, { text: "", structured: { status: "done", answer: "slept", sources: [] } }) }, "look up opening hours", { status: READY, resolver: publicDns });
+  assert.match(await browse({ mode: "owner", key: "conv-a", run: async () => ({ text: "" }) }, "look up opening hours", { status: READY, waitMs: 0 }), /Another browser run is in progress/, "the same conversation does not run twice at once");
   release();
   assert.match(await slow, /slept/);
   const group = { mode: "group" as const, groupId: "g-rate", run: async () => ({ text: "", structured: { status: "done", answer: "fine", sources: [] } }) };
@@ -540,14 +540,14 @@ test("browser server: a plain desktop Chrome user agent of the same version, an 
   assert.equal(desktopUserAgent("x", () => "no version here"), undefined);
   assert.equal(desktopUserAgent("x", () => { throw new Error("nope"); }), undefined);
   const dir = mkdtempSync(join(tmpdir(), "bs-"));
-  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1") as { args: string[] };
+  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "off", unproxiedForTest: true }) as { args: string[] };
   assert.equal(cfg.args[cfg.args.indexOf("--user-agent") + 1], "UA/1");
   for (const f of ["--headless", "--isolated", "--block-service-workers", "--blocked-origins", "--config"]) assert.ok(cfg.args.includes(f), f);
   assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "omit");
   const conf = JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8"));
   assert.equal(conf.browser.contextOptions.locale, settings.browseLocale);
   assert.ok(conf.browser.contextOptions.timezoneId);
-  assert.ok(!(browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, undefined) as { args: string[] }).args.includes("--user-agent"));
+  assert.ok(!(browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, undefined, { mode: "off", unproxiedForTest: true }) as { args: string[] }).args.includes("--user-agent"));
 });
 
 // ---- the search form (the case that asked needlessly): judged, not hard-coded ----

@@ -71,9 +71,9 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
       key: conv.key,
       apiKey,
       keyTag: createHash("sha256").update(apiKey).digest("hex").slice(0, 8),
-      costFile: ctx.costFile,
+      ledger: ctx.ledger,
       logFile: ctx.logFile,
-      overBudget: () => tenantOverBudget(ctx.costFile, ctx.dailyBudgetUsd),
+      overBudget: () => tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd),
     },
   };
 };
@@ -98,5 +98,5 @@ const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) 
 export const turnContext = (conv: Conversation, inputs: RunInputs = {}): string | undefined => CONTEXTS[conv.kind](conv, inputs);
 
 export function runOptionsFor(conv: Conversation, inputs: RunInputs = {}): RunOptions {
-  return { source: conv.source, sessionFile: conv.sessionFile, ...SHAPES[conv.kind](conv, inputs) };
+  return { source: conv.source, sessionConv: conv.convId, ...SHAPES[conv.kind](conv, inputs) };
 }

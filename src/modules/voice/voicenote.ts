@@ -1,8 +1,8 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { settings } from "../../core/settings.ts";
+import { convDb, hasConvDb, peekConvDb } from "../../core/convdb.ts";
+import { convIdOfKey, type ConvId } from "../../core/convpaths.ts";
+import type { Db } from "../../core/db.ts";
 
-// The voice notes received in each conversation (the owner's chat, and each group on its own), so the voice tool can build a cloned voice from
+// The voice notes received in each conversation (the owner's chat, each friend and each group on its own: in the conversation's own assistant.db), so the voice tool can build a cloned voice from
 // one of them. Audio FILES that contain speech (an MP3 someone sent) are kept in the same list, marked kind "file". Only the attachment id is kept (signal-cli's file name; the file is found by joining it to the attachments folder, voice.ts
 // does the same for transcription), the sender, the time and a short snippet of the transcript for the model to recognise it by.
 // The audio itself is not copied. Bounded: the last NOTES_PER_CONVERSATION notes of a conversation, none older than MAX_AGE_MS (a note
@@ -23,60 +23,57 @@ export interface VoiceNote {
   seconds?: number; // file: its length
 }
 
-interface Store {
-  notes: Record<string, VoiceNote[]>; // by conversation key (OWNER_KEY or a group id)
-  quotes: Record<string, Record<string, number>>; // by conversation: a message's timestamp -> the voice note it replies to
+// The tables `voice_notes` and `voice_quotes` of the conversation's own assistant.db (core/convdb.ts), so nothing is shared across conversations: a lookup cannot cross them because it has no connection to another one's rows.
+interface NoteRow {
+  ts: number;
+  id: string;
+  size: number;
+  by: string;
+  by_name: string | null;
+  snippet: string;
+  kind: string | null;
+  name: string | null;
+  seconds: number | null;
 }
+const COLS = "ts, id, size, by, by_name, snippet, kind, name, seconds";
+const noteOf = (r: NoteRow): VoiceNote => ({
+  ts: r.ts,
+  id: r.id,
+  size: r.size,
+  by: r.by,
+  ...(r.by_name !== null ? { byName: r.by_name } : {}),
+  snippet: r.snippet,
+  ...(r.kind === "voice" || r.kind === "file" ? { kind: r.kind } : {}),
+  ...(r.name !== null ? { name: r.name } : {}),
+  ...(r.seconds !== null ? { seconds: r.seconds } : {}),
+});
+const db = (key: string) => convDb(convIdOfKey(key));
 
-const fileOf = () => join(settings.stateDir, "voice", "sources.json");
-let cache: Store | undefined;
-const load = (): Store => {
-  if (cache) return cache;
-  try {
-    cache = JSON.parse(readFileSync(fileOf(), "utf8")) as Store;
-    cache.notes ??= {};
-    cache.quotes ??= {};
-  } catch {
-    cache = { notes: {}, quotes: {} };
-  }
-  return cache;
-};
-const save = (): void => {
-  try {
-    const f = fileOf();
-    mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
-    const tmp = `${f}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify(cache), { mode: 0o600 });
-    renameSync(tmp, f);
-  } catch {
-    // a note not remembered across a restart is only a note to send again
-  }
-};
-
-/** Tests: forget everything held in memory (the file is read again). */
-export const resetVoiceNotes = (): void => void (cache = undefined);
+/** Tests: the state used to be cached in memory and read again from its file; it is always read from the database now, so there is nothing to forget. */
+export const resetVoiceNotes = (): void => undefined;
 
 /** A voice note arrived in conversation `key`. */
 export function holdVoiceNote(key: string, n: VoiceNote, now = Date.now()): void {
-  const s = load();
-  const list = (s.notes[key] ??= []).filter((x) => x.ts !== n.ts && now - x.ts < MAX_AGE_MS);
-  list.push(n);
-  s.notes[key] = list.slice(-NOTES_PER_CONVERSATION);
-  save();
+  const d = db(key);
+  d.tx(() => {
+    d.run("DELETE FROM voice_notes WHERE ts = ? OR ? - ts >= ?", n.ts, now, MAX_AGE_MS);
+    d.run(`INSERT INTO voice_notes (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, n.ts, n.id, n.size ?? 0, n.by ?? "", n.byName ?? null, n.snippet ?? "", n.kind ?? null, n.name ?? null, n.seconds ?? null);
+    d.run("DELETE FROM voice_notes WHERE seq IN (SELECT seq FROM voice_notes ORDER BY seq DESC LIMIT -1 OFFSET ?)", NOTES_PER_CONVERSATION);
+  });
 }
 
 /** A message in conversation `key` replies to a voice note. */
 export function holdQuote(key: string, messageTs: number, quotedTs: number): void {
-  const q = ((load().quotes[key] ??= {}));
-  q[String(messageTs)] = quotedTs;
-  const keys = Object.keys(q);
-  if (keys.length > NOTES_PER_CONVERSATION * 2) for (const k of keys.slice(0, keys.length - NOTES_PER_CONVERSATION * 2)) delete q[k];
-  save();
+  const d = db(key);
+  d.tx(() => {
+    d.run("INSERT INTO voice_quotes (message_ts, quoted_ts) VALUES (?, ?) ON CONFLICT (message_ts) DO UPDATE SET quoted_ts = excluded.quoted_ts", messageTs, quotedTs); // (an update keeps its place)
+    d.run("DELETE FROM voice_quotes WHERE seq IN (SELECT seq FROM voice_quotes ORDER BY seq DESC LIMIT -1 OFFSET ?)", NOTES_PER_CONVERSATION * 2);
+  });
 }
 
 /** The voice notes of a conversation that are still in the look-back, newest first. */
 export function voiceNotes(key: string, now = Date.now()): VoiceNote[] {
-  return (load().notes[key] ?? []).filter((x) => now - x.ts < MAX_AGE_MS).sort((a, b) => b.ts - a.ts);
+  return (peekConvDb(convIdOfKey(key))?.all<NoteRow>(`SELECT ${COLS} FROM voice_notes WHERE ? - ts < ? ORDER BY ts DESC`, now, MAX_AGE_MS) ?? []).map(noteOf);
 }
 
 /** One voice note of THIS conversation by its id (timestamp), if it is in the look-back. */
@@ -84,8 +81,22 @@ export const voiceNote = (key: string, ts: number, now = Date.now()): VoiceNote 
 
 /** The voice note a message replies to, if it is one received in this conversation. */
 export function quotedVoiceNote(key: string, messageTs: number, now = Date.now()): VoiceNote | undefined {
-  const q = load().quotes[key]?.[String(messageTs)];
+  const q = peekConvDb(convIdOfKey(key))?.get<{ quoted_ts: number }>("SELECT quoted_ts FROM voice_quotes WHERE message_ts = ?", messageTs)?.quoted_ts;
   return q === undefined ? undefined : voiceNote(key, q, now);
+}
+
+/** Retention (heartbeat/convretention.ts): notes outside the look-back are neither offered nor used, so they go; and the bounds hold. Returns how many went (`dryRun`: how many would). */
+export function pruneVoiceNotes(d: Db, now: number, dryRun = false): number {
+  const old = d.num("SELECT COUNT(*) FROM voice_notes WHERE ? - ts >= ?", now, MAX_AGE_MS);
+  const overN = Math.max(0, d.num("SELECT COUNT(*) FROM voice_notes WHERE ? - ts < ?", now, MAX_AGE_MS) - NOTES_PER_CONVERSATION);
+  const overQ = Math.max(0, d.num("SELECT COUNT(*) FROM voice_quotes") - NOTES_PER_CONVERSATION * 2);
+  if (dryRun) return old + overN + overQ;
+  d.tx(() => {
+    d.run("DELETE FROM voice_notes WHERE ? - ts >= ?", now, MAX_AGE_MS);
+    d.run("DELETE FROM voice_notes WHERE seq IN (SELECT seq FROM voice_notes ORDER BY seq DESC LIMIT -1 OFFSET ?)", NOTES_PER_CONVERSATION);
+    d.run("DELETE FROM voice_quotes WHERE seq IN (SELECT seq FROM voice_quotes ORDER BY seq DESC LIMIT -1 OFFSET ?)", NOTES_PER_CONVERSATION * 2);
+  });
+  return old + overN + overQ;
 }
 
 // Who is asking in the running turn of a conversation: the message being answered. Set around the turn (withSend), so the tool knows
@@ -105,3 +116,17 @@ export function rememberSender(key: string, id: string | undefined, name: string
 }
 export const setAsking = (key: string, a: Asking | undefined): void => void (a ? asking.set(key, { ...a, authorName: a.authorName ?? (a.author ? names.get(`${key}|${a.author}`) : undefined) }) : asking.delete(key));
 export const askingIn = (key: string): Asking | undefined => asking.get(key);
+
+/** A removed friend (or group): everything held for conversation `key`. Returns the attachment ids of its notes, so their files can go too. Idempotent (the folder goes with the conversation; this is for the part that is read before it is deleted). */
+export const forgetConversation = (key: string): string[] => forgetConvId(convIdOfKey(key));
+/** The same by the conversation's folder name (a group's raw id is not known to the one who forgets it). */
+export function forgetConvId(conv: ConvId): string[] {
+  if (!hasConvDb(conv)) return []; // (nothing to read, and a forgotten conversation must not get a database made for it)
+  const d = convDb(conv);
+  return d.tx(() => {
+    const ids = d.all<{ id: string }>("SELECT id FROM voice_notes").map((r) => r.id);
+    d.run("DELETE FROM voice_notes");
+    d.run("DELETE FROM voice_quotes");
+    return ids;
+  });
+}

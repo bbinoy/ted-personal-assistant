@@ -1,14 +1,15 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../core/audit.ts";
+import { emitRecord } from "../core/events.ts";
 import { spentToday } from "../core/budget.ts";
 import { cooldownUntil } from "../core/cooldown.ts";
 import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
 import { capabilitiesOfRecord } from "./capabilityset.ts";
 import { invitePerson } from "./registration.ts";
-import { deleteTenant, OWNER_ID, people, setStatus, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
-import { TENANT_ID } from "../secrets/secrets.ts";
+import { OWNER_ID, people, setStatus, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
+import { appBao, deleteTenantItems, TENANT_ID } from "../secrets/secrets.ts";
+import { removeTenant, type RemovalDeps } from "./removal.ts";
 
 // The tenant administration: a small in-process MCP server (like memory-tools.ts) in the owner's chat, only with TENANTS=on: list tenants, suspend, resume, delete
 // (the last two ask on the phone, toolmanifest.ts).
@@ -21,7 +22,7 @@ export interface TenantRun {
   key: string; // her conversation's key ("tenant:<id>"): where send, voice and the browse questions go
   apiKey: string; // the instance key (TENANT_ANTHROPIC_API_KEY): only into the environment of this run (payer.ts envFor), nowhere else, never logged or audited
   keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after it changed
-  costFile: string;
+  ledger: string;
   logFile: string; // her history: what search_logs reads
   overBudget: () => boolean; // her own ledger against her own ceiling (the browse run asks)
 }
@@ -31,11 +32,13 @@ export { tenantEnv }; // (payer.ts: the environment of a call on the instance ke
 // ---- the owner's side ----
 
 // Set by main.ts (a hook, so this file does not import the agent): stops what is in flight for a tenant who was suspended or deleted.
-export const tenantHooks: { drop?: (id: string) => void; sendFirst?: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }> } = {};
+export const tenantHooks: { drop?: (id: string) => void; remove?: (id: string, d: RemovalDeps) => ReturnType<typeof removeTenant>; sendFirst?: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }> } = {};
 
 export interface AdminDeps {
   drop?: (id: string) => void; // stop anything in flight for her (warm process, queue state)
   sendFirst?: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }>; // the messenger's first message to somebody (undefined: the platform has none)
+  remove?: typeof tenantHooks.remove; // removal with the pieces of the upper layers wired (conversation/tenantremoval.ts); default: tenantHooks.remove, else the plain one
+  secrets?: RemovalDeps["secrets"]; // how her secret-store items are deleted when she is removed (default: the app's token; tests)
 }
 
 const when = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
@@ -52,7 +55,7 @@ export function describeTenants(): string[] {
     const ctx = tenantContext(rec);
     const c = cooldownUntil(INSTANCE_KEY_COOLDOWN); // (the key is cooling down: for every friend alike)
     const connections = connectionSummary(rec);
-    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.costFile).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
+    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.ledger).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
   }
   return lines;
 }
@@ -77,10 +80,10 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
           if (!send) return reply("This chat platform cannot write first to a person.", true);
           try {
             const { preapproved } = await invitePerson(recipient, send);
-            audit("tenant_invite", "sent", "chat");
+            emitRecord("tenant_invite", "sent", "chat");
             return reply(preapproved ? "The hello is sent. When she answers she is a friend, no further question." : "The hello is sent, but her account could not be recognised, so if she answers the owner is asked as for anyone else.");
           } catch (e) {
-            audit("tenant_invite", "failed", "chat");
+            emitRecord("tenant_invite", "failed", "chat");
             return reply(`The hello was not sent: ${(e as Error).message}`, true);
           }
         },
@@ -93,7 +96,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
           if (!found(id)) return reply("No such tenant.", true);
           setStatus(id, "suspended");
           (deps.drop ?? tenantHooks.drop)?.(id);
-          audit("tenant_status", "suspended", "chat", { tenant: id });
+          emitRecord("tenant_status", "suspended", "chat", { tenant: id });
           return reply(`${id} is suspended.`);
         },
       ),
@@ -101,7 +104,7 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
         const rec = found(id);
         if (!rec) return reply("No such tenant.", true);
         setStatus(id, "active");
-        audit("tenant_status", "resumed", "chat", { tenant: id });
+        emitRecord("tenant_status", "resumed", "chat", { tenant: id });
         return reply(`${id} can talk to me again.`);
       }),
       tool(
@@ -110,9 +113,9 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
         { ...idArg, confirm: z.literal(true).describe("Always true: the owner's approval is what actually decides") },
         async ({ id }) => {
           if (!found(id)) return reply("No such tenant.", true);
-          deleteTenant(id, { drop: deps.drop ?? tenantHooks.drop });
-          audit("tenant_status", "deleted", "chat", { tenant: id });
-          return reply(`Deleted ${id} and her data.`);
+          const r = await (deps.remove ?? tenantHooks.remove ?? removeTenant)(id, { drop: (t) => (deps.drop ?? tenantHooks.drop)?.(t), secrets: deps.secrets ?? [(t) => deleteTenantItems(appBao(), t)] });
+          emitRecord("tenant_status", "deleted", "chat", { tenant: id });
+          return reply([`Deleted ${id} and her data${r?.removed.length ? `: ${r.removed.join(", ")}` : ""}.`, ...(r?.failed.length ? [`Not removed (ask again): ${r.failed.join(", ")}.`] : []), ...(r?.manual ? [r.manual] : [])].join(" "));
         },
       ),
     ],

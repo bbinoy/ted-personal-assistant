@@ -1,4 +1,7 @@
-import { audit } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
+import { convIdOfKey, convPaths } from "../core/convpaths.ts";
+import { ledgerEntries } from "../core/messages.ts";
+import { journalable } from "../approvals/journalrender.ts";
 import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
@@ -13,15 +16,20 @@ import { mailSlot } from "../modules/index.ts";
 import { preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
 import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
+import { isReadTool } from "../policy/policy.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
-import { clampLook, parseAnswer } from "../run/rules.ts";
-import { RunAborted, RunTimeout } from "../run/ceiling.ts";
-import { createSeenMail, seenFileOf, type SeenMail } from "../modules/seenmail/seenmail.ts";
-import { NOTES_DIR } from "../memory/notes.ts";
-import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
+import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
+import { createSeenMail, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
-import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
+import { RunStopped, RunTimeout } from "../run/ceiling.ts";
+import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
+import { NOTES_DIR } from "../memory/notes.ts";
+import { hasOpen } from "../approvals/approvals.ts";
+import { flushPending } from "../approvals/pendingflow.ts";
+import type { HeartbeatRow } from "../core/looks.ts";
+import { observeLook, postNotice, submitPost } from "./notices.ts";
+import { gateSink } from "../modules/send/send.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown, the day's budget, a friend's
@@ -30,23 +38,23 @@ import { appendRow, HEARTBEAT_LOG, type HeartbeatRow } from "./rows.ts";
 // (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge -> phone path, with `standing` provenance (the fixed instruction below is what the
 // judge reads as the reason for the run; no message of anyone's led there) and the conversation's own approver (a question is asked in the chat that triggered it).
 // It answers with a message or [[silent]] and the minutes until its next look.
-// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in state/heartbeat.jsonl (counts, never words).
+// What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
 export interface RunExtra {
   onToolSuccess?: (tool: string, input: unknown) => void;
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
-  signal?: AbortSignal; // aborted when the Mac slept (abortAll): the run stops and the look is due again at once
+  signal?: AbortSignal; // the look is called off (a message overtook it): the run stops, or never starts if it still waits for a place (rungate.ts)
 }
 
 export interface HeartbeatDeps {
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy">;
+  pipeline: Pick<Pipeline, "enqueue" | "runTurn" | "record" | "sendWhile" | "busy"> & Partial<Pick<Pipeline, "lease">>;
+  awaitingApproval?: (conv: Conversation) => boolean; // is a question of the look open in the chat (default approvals.ts hasOpen): a message then does not call the look off
   run: (conv: Conversation, payer: Payer, prompt: string, extra: RunExtra) => Promise<{ text: string; costUsd?: number; structured?: unknown }>; // agent.ts runHeartbeat
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
   notesChangedAt: (dir: string) => number;
-  rowsFile?: string; // tests
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -91,18 +99,34 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
 export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string): string =>
   [clockLine(now, zone), instruction, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].join("\n\n");
 
+// How a conversation's recent looks ended, for the starvation guard below.
+export interface LookHistory {
+  preempted: number; // consecutive looks that ended preempted, up to now
+  completedAt?: number; // ms: when the last look that was not preempted began
+}
+
+// May a message call the running look off? Not if that would starve it: a conversation that chats steadily would otherwise preempt every look, and triage (the mail, the brief) would
+// never finish while each aborted look still costs money. So a look is preemptible only while (a) fewer than 2 looks in a row ended preempted and (b) the last look that was not
+// preempted is younger than 2x the look interval (30 minutes at least). Otherwise it runs to completion (the message is still news: a read-only look's post is dropped as stale).
+export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: number): boolean {
+  if (h.preempted >= 2) return false;
+  return h.completedAt === undefined || nowMs - h.completedAt < Math.max(2 * intervalMinutes, 30) * 60_000;
+}
+
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
-  const inflight = new Set<AbortController>(); // the looks that are running now
-  const file = deps.rowsFile ?? HEARTBEAT_LOG;
+  const history = new Map<string, LookHistory>(); // per conversation, in memory (a restart starts fresh)
+  const inflight = new Set<AbortController>(); // the looks that are running now (abortAll)
+  const slept = new WeakSet<AbortController>(); // those stopped because the Mac slept
 
   // One look of one conversation. Returns what happened (for the log and tests).
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged })) return "not-due";
     if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
-    // One run at a time per conversation: while a turn of it is settling, queued or running (the owner has just written and is being answered), the look waits. Nothing is
-    // recorded and nothing is dropped: it is still due, and the next tick (a few minutes) looks again.
+    // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
+    // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
+    // a message to the conversation OVERTAKES it: the look is called off unless it waits on an approval, and a closing message-only post is dropped when news came meanwhile.
     if (pipeline.busy(conv)) return "busy";
     // A look is a model run on someone's account (a friend's: the instance key, billed to her): paused, in a cooldown or past the day's budget means no run, nothing recorded, and the next tick looks again.
     const access = deps.may(conv, "heartbeat look");
@@ -113,59 +137,93 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const looker = lookerOf(conv);
     const night = inQuietHours(now, settings.quietStartHour, settings.quietEndHour, looker.zone);
     let toolCalls = 0;
+    const journalFile = convPaths(convIdOfKey(conv.key)).messages; // where the journal sink writes this conversation's lines
+    const journaled = (): number => ledgerEntries(journalFile).filter((m) => m.kind === "journal").length;
+    const journaledBefore = journaled();
+    let steps = 0; // calls that could have a journal line (an action, not a read or plumbing)
+    let acted = 0; // tool calls that are not reads (listing the inbox or asking seen_mail is looking, not acting)
     let archived = 0;
     let delegations = 0;
-    const seenMail = createSeenMail(seenFileOf(conv)); // the ids the run is told are new count as seen only if this look ends well
+    const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir);
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
-    let timedOut = false;
-    let interrupted = false;
-    const stop = new AbortController();
-    inflight.add(stop);
+    let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
+    const overtaken = new AbortController();
+    const h = history.get(conv.key) ?? { preempted: 0 };
+    history.set(conv.key, h);
+    const callOff = () => {
+      if (preemptible(h, now.getTime(), settings.heartbeatDayMinutes)) overtaken.abort();
+      else console.log(`heartbeat: a message came while the ${conv.kind} look ran; it is not called off (${h.preempted} preempted in a row, or the last full look is old)`);
+    };
+    inflight.add(overtaken);
+    const lease = pipeline.lease?.(conv, callOff, () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
     try {
       reply = await pipeline.sendWhile(
         conv,
-        () =>
-          deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
+        () => {
+          // What the run sends with the send tool is held like its final answer (quiet hours, the day's cap) unless it says urgent (notices.ts).
+          gateSink(conv.key, (text, urgent) => {
+            if (submitPost(conv, text, urgent, now) !== "held") return undefined;
+            emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
+            return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
+          });
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
-            signal: stop.signal,
+            signal: overtaken.signal,
             onDelegate: () => void delegations++,
             onToolSuccess: (tool) => {
               toolCalls++;
+              if (!isReadTool(tool) && tool !== "mcp__seenmail__seen_mail") acted++;
               if (entryFor(tool)?.action === "archive") archived++;
+              if (journalable(tool)) steps++;
             },
-          }),
+          });
+        },
         () => void sent++,
       );
     } catch (e) {
-      timedOut = e instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
-      interrupted = e instanceof RunAborted; // stopped from outside (abortAll): not a failure of the look
-      console.error(`heartbeat: the ${conv.kind} run ${timedOut ? "timed out" : interrupted ? "was stopped" : "failed"}:`, (e as Error).message);
+      failure = e;
+      if (!overtaken.signal.aborted && !(e instanceof RunStopped)) console.error(`heartbeat: the ${conv.kind} run failed:`, (e as Error).message);
     } finally {
-      inflight.delete(stop);
+      inflight.delete(overtaken);
+      lease?.end();
     }
+    // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
+    await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
 
-    const answer = reply ? parseAnswer(reply.structured, reply.text) : undefined;
-    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : timedOut ? "timeout" : "failed";
-    if (answer?.message) {
+    const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
+    const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once
+    const timedOut = !reply && failure instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
+    const calledOff = !interrupted && (overtaken.signal.aborted || failure instanceof RunStopped); // a message overtook it, or the owner said /stop: not a failure
+    let outcome: HeartbeatRow["outcome"] = reply ? "silent" : interrupted ? "failed" : calledOff ? "preempted" : timedOut ? "timeout" : "failed";
+    if (timedOut) console.error(`heartbeat: the ${conv.kind} run timed out:`, (failure as Error).message);
+    else if (interrupted) console.error(`heartbeat: the ${conv.kind} run was stopped: the Mac slept`);
+    const stale = !!lease?.news() && acted === 0 && sent === 0; // news came while it looked and it did nothing but read: what it would say was written for a log that has moved on
+    if (answer?.message && !stale) {
       const message = answer.message;
-      const res = await pipeline.enqueue(conv, async () =>
-        pipeline.runTurn(conv, { run: async () => ({ text: message, costUsd: reply?.costUsd }), background: true, announce: false, kind: "notice" }),
-      ).catch((e) => (console.error("heartbeat: could not post:", (e as Error).message), { error: e, spoke: false }));
-      outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
+      // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
+      if (submitPost(conv, message, answer.urgent, now, answer.needsYou) === "held") emit({ type: "notice", state: "held", conv: conv.key, text: message, source: onLogin(conv) ? "background" : "group" });
+      else {
+        const res = await postNotice(pipeline, conv, message, reply?.costUsd);
+        if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);
+        outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
+      }
     }
+    if (outcome === "preempted") h.preempted++;
+    else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";
+    const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
     // A look that ended badly after delegating the brief must not leave its note `started` for 45 minutes: the code marks it failed now, so the next look redoes it (heartbeat.md)
     if (failed && looker.brief && delegations > 0 && failStartedNote("brief", timedOut ? "the run timed out" : interrupted ? "the run was stopped, the Mac slept" : "the run failed", new Date(), conv.notesDir, looker.zone)) console.error("heartbeat: the brief's note was left 'started'; marked failed");
-    const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
-    if (failed) seenMail.discard();
+    if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now);
+    if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
-    if (toolCalls > 0) pipeline.record(conv, "action", Date.now(), `[heartbeat] look: ${toolCalls} tool call(s), ${archived} mail archived${delegations > 0 ? `, ${delegations} delegated` : ""}, ${outcome === "posted" ? "message sent" : "no message"}`);
-    audit("wake", outcome, onLogin(conv) ? "background" : "group"); // (a friend's rows carry no words: permissions.ts)
-    appendRow({ at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome }, file);
+    // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
+    const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
+    emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
     if (interrupted) recordWake(pipeline, conv, 0, now, (m) => Number(m)); // it was cut off, not decided: due again at the next due-check (no 10-minute minimum)
     else recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
@@ -174,7 +232,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   // Stops every look that is running (the Mac slept: their connections are dead). Each one ends as a failed row and is due again at once.
   const abortAll = (reason: string): number => {
     const n = inflight.size;
-    for (const c of inflight) c.abort(reason);
+    for (const c of inflight) (slept.add(c), c.abort(reason));
     return n;
   };
 

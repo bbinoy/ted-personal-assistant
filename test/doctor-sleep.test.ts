@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { failedLooksCheck, sleepCheck } from "../src/doctor.ts";
-import type { HeartbeatRow } from "../src/heartbeat/rows.ts";
+import type { HeartbeatRow } from "../src/core/looks.ts";
 
 // `npm run doctor`: "laptop can sleep" (battery power) and the heartbeat's own failed looks of the last 6 hours. Only reads; nothing changes a system setting.
 

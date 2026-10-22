@@ -7,7 +7,7 @@ import { delegationHook, expertSetup } from "../src/run/delegation.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
 import { announceMemoryChanges, noteWritten } from "../src/memory/memorynotice.ts";
 import { registered } from "../src/modules/index.ts";
-import { categoryOf, MAX_NOTE_CHARS, readNotes } from "../src/memory/notes.ts";
+import { categoryOf, MAX_STATUS_CHARS, readNotes } from "../src/memory/notes.ts";
 import { classify } from "../src/policy/policy.ts";
 import { preset } from "../src/core/preset.ts";
 import { dreamScope } from "../src/modules/memory/dreamscope.ts";
@@ -57,7 +57,7 @@ test("the status note: written by the one narrow tool, status-<name>.md only, on
   // refused: a path, a bad name, empty, too long. Nothing else is written.
   for (const name of ["../x", "Brief", "a/b", "", "x".repeat(41), "-x"]) assert.equal(writeStatusNote(name, "t", now, dir).ok, false, name);
   assert.equal(writeStatusNote("brief", "   ", now, dir).ok, false);
-  const long = writeStatusNote("brief", "x".repeat(MAX_NOTE_CHARS + 1), now, dir);
+  const long = writeStatusNote("brief", "x".repeat(MAX_STATUS_CHARS + 1), now, dir);
   assert.ok(!long.ok && /too long/.test(long.error));
   assert.deepEqual(readdirSync(dir), ["status-brief.md"]);
   // protected from the dream (its categories), and never announced as a memory change

@@ -14,8 +14,9 @@
 - **Pictures, PDFs and text files.** Send a picture, a PDF or a text file and Ted reads it. When browsing the web it can send you screenshots of what it sees.
 - **Browse the web.** It has a browser it can use to research for you online, and tells you what it is up to before a long errand. *Coming soon: fill in forms, store secrets securely and pay securely, with your typed YES for every payment.*
 - **Groups, where it decides when to speak.** Add Ted to a group and a small model judges each message: Ted always answers when addressed and otherwise joins in only when it fits. Each group has its own notes and history, and Ted brings none of your private data there.
-- **Smart memory and context.** Ted remembers relevant details about you, your preferences and recurring tasks. A nightly dream organises memory. Context is automatically populated with relevant tools, recent messages, memory, and compacted above a threshold.
+- **Smart memory and context.** Ted remembers relevant details about you, your preferences and recurring tasks, and while you are away it can note facts it learns (a friend moved, a trip), always marked as unconfirmed and logged, so you can inspect it and say "forget it". A nightly dream organises memory. Context is automatically populated with relevant tools, recent messages, memory, and compacted above a threshold.
 - **Smart about asking for permission.** A small model judge decides what is a safe action and when to ask you for confirmation, like sending an email.
+- **People who matter.** Tell Ted about friends and family (where they live, how close, how often you'd like to be in touch). When your calendar or mail shows you are travelling to where they live, Ted sends you one short message with who is there and how long since you last spoke, and offers a draft.
 - **Proactive.** Wakes up every 15min to check if anything needs acting on (via small model judge).
 - **Its own contact.** Give Ted its own Signal account (a name, a picture) and you chat with a contact instead of with yourself.
 - **Pre-configured as a helpful personal assistant.** Comes with skills out of the box to be a helpful personal assistant.
@@ -44,11 +45,13 @@ Step by step: [docs/SETUP.md](docs/SETUP.md).
 ## Safety
 
 - **A judge that can skip questions, inside a floor.** One small model decides, for every tool in every place, which questions to spare you: what follows from your request or your standing tasks and is easy to undo goes ahead, anything a mail asks for, new recipients, sharing and the like ask. The floor is code and no verdict overrides it: payments, logins, the never-allowed set, group and tenant boundaries and web addresses that could carry data out. Skips are logged and listed by `npm run report`, and `AUTO_APPROVE=off` turns the judge off.
+- **Ask "what did you do today?"** Everything it did on its own (mail archived, calendar and Notion changes, notes saved, messages held) is one line in a journal in your chat's own history, written by code as it happened: what it did (the mail by subject and sender), why (your message at 09:12, the approval you answered, a safety-check verdict) and how to undo it. Ask "what did you do today?" or "why did you archive that?" and Ted reads it; `/today` is the same in one phone-sized message. A friend or a group has the journal of their own conversation, and no one else's.
 - **Approvals with the exact arguments.** Sending, forwarding, sharing and anything that involves other people ask first.
 - **A browser with guard rails.** Browsing runs in a separate, throwaway browser with no logins and none of your data. A small judge decides whether a step is read-only (searching, filtering) or books, buys or sends something, and anything like that asks you first. Payment and login fields always ask you, and the address checks that keep the browser away from your own machine and network are code, not a model decision.
 - **Permission policy in code.** Every tool call is allow, ask or deny in `src/policy/policy.ts`, tested against real tool names. Deletes are denied. Memory can shape tone and priorities but never grant permissions.
 - **Untrusted content cleaned at the door.** Messages, mail, web pages and tool results lose hidden and look-alike characters and invisible HTML before a model reads them, and are treated as data.
 - **What this is not.** This is application-level policy running on your Mac as your user. It is **not** OS-level or container isolation. Prompt injection is contained and tested, not eliminated: a hostile mail can still try. `signal-cli` keeps its keys unencrypted on disk, so keep FileVault on.
+- **Control and no silent failures.** `/stop`, `/pause 2h`, `/resume`, `/status`, `/today`, `/quiet 2h` (or `/quiet until 18:00`, `/quiet`) and `/unquiet` work from your chat in code, whatever a model is doing (`/quiet` only holds what I'd post unprompted; `/pause` stops unattended work). Unprompted messages are held in quiet hours and capped per day, and what was held comes as one digest; a spent budget or background work that keeps failing is reported to you once, ending with the one step that fixes it.
 - **Tests.** Full test suite ensures the code behaves as expected.
 - **Logging.** Every decision and action is logged and can be inspected for behaviour (`npm run report`).
 
@@ -139,7 +142,7 @@ Personal agents are having a moment. Ted sits in the middle: hosted products lik
 
 ## Make it yours
 
-- **Your preferences**: personality, tone, length, who matters, what the brief includes. They live in small notes (`memory/notes/`) that you can also change by chatting. No code, no restart.
+- **Your preferences**: personality, tone, length, who matters, what the brief includes. They live in small notes (`conversations/owner/notes/`) that you can also change by chatting. No code, no restart.
 - **Your mail**: it ships with [Mailbird](https://www.getmailbird.com/). If you use Gmail only, set `MAIL_PROVIDER=gmail` to use your Claude account's Gmail connector instead and skip the local client ([docs/SETUP.md](docs/SETUP.md#gmail-no-local-mail-client)).
 - **Your messenger**: Signal is a thin layer. Telegram, Slack, iMessage and WhatsApp are realistic swaps.
 - **Your rules**: what runs unattended, what needs approval and what is blocked is one short, tested file.

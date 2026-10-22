@@ -1,18 +1,19 @@
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The voice library of the cloned voice (Qwen). One library per conversation: the owner's chat (`owner`) lives directly in the voice
-// folder, each group in groups/<hash of its id>/ (the id stays out of file names). Layout of a library:
+// The voice library of the cloned voice (Qwen). One library per conversation, but this package does not know what a conversation is: the host hands it a ROOT folder and a SCOPE
+// (a folder name it chose and made safe: the app passes conversations/ and the conversation's id), and the library is <root>/<scope>/voices/. Layout of a library:
 //   active.json            {"name": ...}   absent or invalid: the default voice (the clip from TTS_REF_AUDIO / TTS_REF_TEXT, not stored here)
-//   voices/<name>/ref.wav  mono 24 kHz reference clip     ref.txt  what is said in it     meta.json  created, source, seconds, who asked
-// The names are the only thing that ever becomes part of a path, and they are checked against NAME first, so nothing can climb out of
+//   <name>/ref.wav         mono 24 kHz reference clip     ref.txt  what is said in it     meta.json  created, source, seconds, who asked
+// (the host may keep its own files in the same folder, like the voice notes it received: a name is [a-z0-9-] so no file of theirs is ever a voice.)
+// The scope and the names are the only things that ever become part of a path, and they are checked against SCOPE and NAME first, so nothing can climb out of
 // the folder. The clips are private data: they are only read by the local speech server and never logged.
 
 export const OWNER_SCOPE = "owner";
 export const DEFAULT_VOICE = "default";
 export const MAX_VOICES = { owner: 10, group: 5 } as const;
 export const NAME = /^[a-z0-9-]{1,32}$/;
+export const SCOPE = /^[a-z][a-z0-9_-]{0,63}$/; // what the host may call a conversation here (it is a folder name)
 
 /** Pure: a name the model or a person gave, made into a library name ([a-z0-9-], at most 32 characters). Empty when nothing is left. */
 export function sanitizeVoiceName(raw: string): string {
@@ -26,11 +27,11 @@ export function sanitizeVoiceName(raw: string): string {
     .replace(/-+$/g, "");
 }
 
-/** A short stable folder name for a group id. */
-export const groupHash = (groupId: string): string => createHash("sha256").update(groupId).digest("hex").slice(0, 16);
-
-/** The library folder of a conversation (`owner` or a group id) under the voice folder. */
-export const scopeRoot = (voiceRoot: string, scope: string): string => (scope === OWNER_SCOPE ? voiceRoot : join(voiceRoot, "groups", groupHash(scope)));
+/** The library folder of a conversation (its scope) under the host's root. Throws for a scope that is not a plain folder name. */
+export function scopeRoot(voiceRoot: string, scope: string): string {
+  if (!SCOPE.test(scope)) throw new Error("bad voice scope");
+  return join(voiceRoot, scope, "voices");
+}
 export const maxVoices = (scope: string): number => (scope === OWNER_SCOPE ? MAX_VOICES.owner : MAX_VOICES.group);
 
 export interface VoiceMeta {
@@ -49,13 +50,13 @@ export interface VoiceInfo {
 
 const dirOf = (root: string, name: string): string => {
   if (!NAME.test(name) || name === DEFAULT_VOICE) throw new Error("bad voice name");
-  return join(root, "voices", name);
+  return join(root, name);
 };
 
 /** The clip and text of a saved voice, or undefined when it is not (completely) there. Never the default. */
 export function voiceFiles(root: string, name: string): { audio: string; text: string } | undefined {
   if (!NAME.test(name) || name === DEFAULT_VOICE) return undefined;
-  const d = join(root, "voices", name);
+  const d = join(root, name);
   const audio = join(d, "ref.wav");
   const textFile = join(d, "ref.txt");
   if (!existsSync(audio) || !existsSync(textFile)) return undefined;
@@ -64,7 +65,7 @@ export function voiceFiles(root: string, name: string): { audio: string; text: s
 
 function readMeta(root: string, name: string): VoiceMeta | undefined {
   try {
-    return JSON.parse(readFileSync(join(root, "voices", name, "meta.json"), "utf8")) as VoiceMeta;
+    return JSON.parse(readFileSync(join(root, name, "meta.json"), "utf8")) as VoiceMeta;
   } catch {
     return undefined;
   }
@@ -76,7 +77,7 @@ export const getMeta = (root: string, name: string): VoiceMeta | undefined => (N
 export function listVoices(root: string): VoiceInfo[] {
   let names: string[] = [];
   try {
-    names = readdirSync(join(root, "voices"));
+    names = readdirSync(root);
   } catch {
     return [];
   }
@@ -125,16 +126,16 @@ export function saveVoice(root: string, name: string, v: { wav: Uint8Array; text
 /** Deletes a saved voice; if it was active, the default is active again. The default cannot be deleted. */
 export function deleteVoice(root: string, name: string): void {
   if (name === DEFAULT_VOICE) throw new Error("The default voice cannot be deleted.");
-  if (!NAME.test(name) || !existsSync(join(root, "voices", name))) throw new Error(`There is no voice called "${name}".`);
+  if (!NAME.test(name) || !existsSync(join(root, name))) throw new Error(`There is no voice called "${name}".`);
   const wasActive = activeVoice(root) === name;
   rmSync(dirOf(root, name), { recursive: true, force: true });
   if (wasActive) setActiveVoice(root, DEFAULT_VOICE);
 }
 
-/** Removes a group's whole library (the group's data goes). */
-export function removeScope(voiceRoot: string, groupId: string): void {
-  if (groupId === OWNER_SCOPE) return;
-  rmSync(scopeRoot(voiceRoot, groupId), { recursive: true, force: true });
+/** Removes a conversation's whole library (the owner's is never removed this way). */
+export function removeScope(voiceRoot: string, scope: string): void {
+  if (scope === OWNER_SCOPE) return;
+  rmSync(scopeRoot(voiceRoot, scope), { recursive: true, force: true });
 }
 
 /**
@@ -145,5 +146,5 @@ export function activeVoiceRel(voiceRoot: string, scope: string): string | undef
   const root = scopeRoot(voiceRoot, scope);
   const name = activeVoice(root);
   if (name === DEFAULT_VOICE) return undefined;
-  return scope === OWNER_SCOPE ? `voices/${name}` : `groups/${groupHash(scope)}/voices/${name}`;
+  return `${scope}/voices/${name}`;
 }

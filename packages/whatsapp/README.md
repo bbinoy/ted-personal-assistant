@@ -39,7 +39,7 @@ The supported route is the **WhatsApp Business Platform (Cloud API)** from Meta.
 | `readLongText` | not needed; return `undefined` |
 | `self` | the business phone number |
 
-Targets: the owner's chat is `undefined`; other people are `directTarget(waId)` (the sender's `wa_id`, digits only). WhatsApp message ids are strings (`wamid...`): keep a map from the numeric timestamp the interface needs to the `wamid`, persisted under `state/`.
+Targets: the owner's chat is `undefined`; other people are `directTarget(waId)` (the sender's `wa_id`, digits only). WhatsApp message ids are strings (`wamid...`): keep a map from the numeric timestamp the interface needs to the `wamid`, persisted under `instance/`.
 
 ## 24 hour window and templates
 

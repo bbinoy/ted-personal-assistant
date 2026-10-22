@@ -2,13 +2,13 @@
   "owner": {
     "run": {
       "source": "chat",
-      "sessionFile": "state/session.json",
+      "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "a1683003d424b8ba"
+        "sha": "840b825c970591e6"
       },
       "memory": {
-        "dir": "<data>/memory/notes",
+        "dir": "<data>/conversations/owner/notes",
         "notify": "[fn]"
       },
       "maxTurns": 40,
@@ -20,13 +20,13 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "a1683003d424b8ba"
+        "sha": "840b825c970591e6"
       },
       "snapshot": false
     },
     "settings": {
       "autoMemoryEnabled": true,
-      "autoMemoryDirectory": "<data>/memory/notes"
+      "autoMemoryDirectory": "<data>/conversations/owner/notes"
     },
     "mcpServers": [
       "send",
@@ -63,6 +63,7 @@
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:follow-through",
+      "ted-personal-assistant:stay-in-touch",
       "ted-personal-assistant:setup",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
@@ -159,13 +160,13 @@
   "group": {
     "run": {
       "source": "group",
-      "sessionFile": "<data>/memory/groups/ff36ac23eadd/session.json",
+      "sessionConv": "group-ff36ac23eadd0841",
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "435b6d4e31d40d6d"
+        "sha": "ed917f626ee30139"
       },
       "memory": {
-        "dir": "<data>/memory/groups/ff36ac23eadd/notes",
+        "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
         "groupId": "g-run-options"
       },
       "skills": [
@@ -182,8 +183,12 @@
         "mcp__browse__browse",
         "mcp__draw__draw",
         "mcp__memory__forget_note",
+        "mcp__memory__journal",
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
+        "mcp__notes__journal",
+        "mcp__notes__read_note",
+        "mcp__notes__write_note",
         "mcp__send__send",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
@@ -201,13 +206,13 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "435b6d4e31d40d6d"
+        "sha": "ed917f626ee30139"
       },
       "snapshot": false
     },
     "settings": {
       "autoMemoryEnabled": true,
-      "autoMemoryDirectory": "<data>/memory/groups/ff36ac23eadd/notes"
+      "autoMemoryDirectory": "<data>/conversations/group-ff36ac23eadd0841/notes"
     },
     "mcpServers": [
       "send",
@@ -251,13 +256,13 @@
   "tenant": {
     "run": {
       "source": "group",
-      "sessionFile": "<data>/tenants/<bea>/session.json",
+      "sessionConv": "friend-<bea>",
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "63775c6495add89f"
+        "sha": "5e2d469bdfab9356"
       },
       "memory": {
-        "dir": "<data>/tenants/<bea>/notes"
+        "dir": "<data>/conversations/friend-<bea>/notes"
       },
       "skills": [
         "ted-personal-assistant:research-booking",
@@ -273,8 +278,12 @@
         "mcp__browse__browse",
         "mcp__draw__draw",
         "mcp__memory__forget_note",
+        "mcp__memory__journal",
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
+        "mcp__notes__journal",
+        "mcp__notes__read_note",
+        "mcp__notes__write_note",
         "mcp__send__send",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
@@ -290,8 +299,8 @@
         "key": "tenant:<bea>",
         "apiKey": "<instance-key>",
         "keyTag": "f8707298",
-        "costFile": "<data>/tenants/<bea>/cost.json",
-        "logFile": "<data>/tenants/<bea>/messages.jsonl",
+        "ledger": "friend-<bea>",
+        "logFile": "<data>/conversations/friend-<bea>/messages.jsonl",
         "overBudget": "[fn]"
       }
     },
@@ -301,13 +310,13 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "63775c6495add89f"
+        "sha": "5e2d469bdfab9356"
       },
       "snapshot": false
     },
     "settings": {
       "autoMemoryEnabled": true,
-      "autoMemoryDirectory": "<data>/tenants/<bea>/notes"
+      "autoMemoryDirectory": "<data>/conversations/friend-<bea>/notes"
     },
     "mcpServers": [
       "send",

@@ -8,5 +8,8 @@ import { join } from "node:path";
 
 const dir = mkdtempSync(join(tmpdir(), "harness-test-"));
 process.env.HARNESS_DATA_DIR = dir;
-process.env.LOOK_STAGGER_MS ??= "0"; // looks of different conversations start together in tests; test/heartbeatrun.test.ts and test/heartbeat-sleep.test.ts check the staggering itself
 process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+
+// The owner's own way of logging in (src/tenants/payer.ts OWN_LOGIN) must not leak from the developer's shell into the tests: the run-options
+// snapshot is built from the process environment, and it differs when e.g. ANTHROPIC_BASE_URL is set. Removed before anything is imported.
+for (const k of ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_API_KEY_HELPER", "ANTHROPIC_API_KEY"]) delete process.env[k];

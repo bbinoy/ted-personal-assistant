@@ -15,11 +15,12 @@ import { approveIn, type Approve } from "../approvals/permissions.ts";
 import { expertSystem, heartbeatSystem } from "./persona.ts";
 import { expertSetup } from "./delegation.ts";
 import type { Payer } from "../tenants/payer.ts";
-import { categoriesFor } from "../core/preset.ts";
+import { categoriesFor, preset } from "../core/preset.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import { PROFILES } from "./profiles.ts";
 import type { SeenMail } from "../modules/seenmail/seenmail.ts";
 import { lookerOf, unattendedTools, type Looker } from "./scope.ts";
+import { gated } from "../core/rungate.ts";
 import { settings } from "../core/settings.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 
@@ -30,8 +31,8 @@ export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
-  signal?: AbortSignal; // the look can be stopped from outside (the Mac slept; wake.ts)
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
+  signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
@@ -64,17 +65,19 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     ? { source: p.source, systemPrompt: texts.run, skills: p.skills, mcpTools: p.mcpTools, maxTurns: p.maxTurns, maxBudgetUsd: p.maxBudgetUsd }
     : (() => {
         const mine = runOptionsFor(conv, { ...(payer.kind === "instance" ? { apiKey: payer.apiKey } : {}), now });
-        return { ...mine, sessionFile: undefined, memory: undefined, seenAt: undefined, groupId: conv.groupId, tools: unattendedTools(mine.tools ?? new Set()), systemPrompt: texts.run, maxTurns: p.maxTurns, maxBudgetUsd: Math.min(p.maxBudgetUsd, mine.maxBudgetUsd), conversation: conv.key };
+        return { ...mine, sessionConv: undefined, memory: undefined, seenAt: undefined, groupId: conv.groupId, tools: unattendedTools(mine.tools ?? new Set()), systemPrompt: texts.run, maxTurns: p.maxTurns, maxBudgetUsd: Math.min(p.maxBudgetUsd, mine.maxBudgetUsd), conversation: conv.key };
       })();
   return {
     ...base,
+    notesRead: { dir: conv.notesDir, ...(looker.own ? {} : { categories: categoriesFor(conv.kind) }), write: preset().notes.background.filter((c) => categoriesFor(conv.kind).includes(c)), maxNotes: settings.memoryMaxNotes, zone: looker.zone },
     model: p.model,
     maxMinutes: settings.heartbeatTimeoutMinutes, // short on purpose: a look that hangs frees its conversation and is retried on the next ticks (an expert it delegates to: expertMaxMinutes in all)
     expertMaxMinutes: settings.expertTimeoutMinutes,
-    signal: extra.signal,
     outputFormat: p.outputSchema,
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
+    signal: extra.signal,
+    stopScope: conv.convId, // "/stop" in this conversation reaches its look too
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
   };
@@ -92,13 +95,17 @@ export type TurnBuilder = (since?: string) => { prompt: string; seenAt?: string;
 // The one path of a chat turn: the conversation's own resumed session, options (runoptions.ts) and approver (its key), on the conversation's
 // warm process when it still fits (agentwarm.ts), else a cold start.
 export async function runConversation(conv: Conversation, inputs: RunInputs, build: TurnBuilder, onFirstOutput?: () => void, io: { query?: typeof query } = {}): Promise<AgentReply> {
-  const r = chatResume(conv.sessionFile);
+  return gated("chat", () => chatTurn(conv, inputs, build, onFirstOutput, io)); // a place in the run gate (rungate.ts), which a chat turn never waits for
+}
+
+async function chatTurn(conv: Conversation, inputs: RunInputs, build: TurnBuilder, onFirstOutput?: () => void, io: { query?: typeof query } = {}): Promise<AgentReply> {
+  const r = chatResume(conv.convId);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const o = { ...runOptionsFor(conv, inputs), seenAt, onFirstOutput };
-  const context = unseen(conv.sessionFile, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
+  const context = unseen(conv.convId, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
   const input = userInput(context ? `${context}\n\n${prompt}` : prompt, pictures, documents);
-  const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume), abortController } }));
-  if (context) markShown(conv.sessionFile, chatResume(conv.sessionFile).resume, context); // the turn went through: the session has it now
+  const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume, abortController.signal), abortController } }));
+  if (context) markShown(conv.convId, chatResume(conv.convId).resume, context); // the turn went through: the session has it now
   return reply;
 }
 
@@ -108,7 +115,7 @@ export function prepare(conv: Conversation, inputs: RunInputs, opts: { refresh?:
   if (opts.refresh && !pool.wants(conv)) return;
   if (!settings.warm) return;
   if (opts.keep && pool.has(conv)) return void pool.touch(conv);
-  warmUp(conv, runOptionsFor(conv, inputs), chatResume(conv.sessionFile), opts.start, opts.refresh);
+  warmUp(conv, runOptionsFor(conv, inputs), chatResume(conv.convId), opts.start, opts.refresh);
 }
 
 // A tenant who was suspended or removed: her process is closed.

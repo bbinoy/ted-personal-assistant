@@ -22,18 +22,51 @@ export const isApiRefusal = (e: unknown): e is AuthError | RateLimitError | Inst
 // What to tell whom, by what went wrong and who is reading: the owner in their own chat (where to look), a group (nobody there should be sent to a terminal), a friend
 // (no terminals, no logs; the account is the instance's, not hers, so she is told who must fix it).
 export type Audience = "owner" | "group" | "friend";
-type Kind = "auth" | "limit" | "billing" | "refused" | "other";
+// What went wrong, in the classes a person can act on (also what the background-failure notice says, heartbeat/notices.ts). A connector's failure reaches us only as text from the SDK, hence the words.
+export type Cause = "login" | "limit" | "billing" | "refused" | "timeout" | "connector" | "reconnect" | "other";
+// THE table from a cause to what the OWNER is told and the ONE next step she can take (the exact command, the exact setting, or the exact place in the Claude app). Every owner-facing failure
+// text ends with `fix`: the chat notices below and the failing-looks notice (heartbeat/notices.ts). No secret, token or word of a friend's: a fixed sentence per cause. A friend's reconnect puts
+// no minted link in the message (a link is a secret that works once): the fix is the sentence that makes the assistant send HER one, in her own chat.
+export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
+  login: { what: "my Claude login expired", fix: "On the Mac, run `claude auth login`." },
+  limit: { what: "the plan's usage limit is hit", fix: "It lifts by itself; message me again after it resets." },
+  billing: { what: "the shared API key has no credit left", fix: "Add credit to the account behind TENANT_ANTHROPIC_API_KEY in .env, then restart." },
+  refused: { what: "the shared API key was refused", fix: "Check TENANT_ANTHROPIC_API_KEY in .env, then restart." },
+  timeout: { what: "the runs are timing out", fix: "Raise RUN_MAX_MINUTES_BACKGROUND in .env, then restart." },
+  connector: { what: "a connector (Notion, Calendar or Gmail) is not answering", fix: "Reconnect it in the Claude app under Settings > Connectors (`npm run doctor` says which)." },
+  reconnect: { what: "a friend's Notion or Google permission expired", fix: 'Ask her to message me "reconnect Google" (or Notion): I send her a new one-time link in her own chat (`npm run doctor` lists who).' },
+  other: { what: "the model run keeps failing", fix: "Run `npm run doctor`; it reads the errors in logs/agent.log." },
+};
+
+type Kind = "auth" | "limit" | "billing" | "refused" | "timeout" | "connector" | "reconnect" | "other";
 const OTHER = "Something broke on my end, sorry. Try again in a bit.";
 const LIMIT = "I've hit my usage limit for now, so I can't think until it resets. Try me again a bit later.";
 const NOTICES: Readonly<Record<Kind, Readonly<Record<Audience, string>>>> = {
-  auth: { owner: "My login expired. On the Mac, run `claude auth login`, then message me again.", group: `I can't think right now: my login has expired, and ${OWNER} needs to fix it.`, friend: OTHER },
-  limit: { owner: LIMIT, group: LIMIT, friend: "The account I run on for friends has hit a usage limit, so I can't think for a while. I'll answer again once the limit has lifted." },
-  billing: { owner: OTHER, group: OTHER, friend: `The account I run on for friends says there is no credit left (or a billing problem). ${OWNER} needs to look at it; I can answer again once that is fixed.` },
-  refused: { owner: OTHER, group: OTHER, friend: `Anthropic refused the request made with the account I run on for friends. ${OWNER} needs to check it; I'll try again later.` },
-  other: { owner: "Something broke on my end. Check the logs, I'm not telling you what it was.", group: OTHER, friend: OTHER },
+  auth: { owner: `My login expired, so I can't think. ${FIXES.login.fix}`, group: `I can't think right now: my login has expired, and ${OWNER} needs to fix it.`, friend: OTHER },
+  limit: { owner: `I've hit my usage limit for now, so I can't think until it resets. ${FIXES.limit.fix}`, group: LIMIT, friend: "The account I run on for friends has hit a usage limit, so I can't think for a while. I'll answer again once the limit has lifted." },
+  billing: { owner: `The shared API key has no credit left, so friends get no answers. ${FIXES.billing.fix}`, group: OTHER, friend: `The account I run on for friends says there is no credit left (or a billing problem). ${OWNER} needs to look at it; I can answer again once that is fixed.` },
+  refused: { owner: `The shared API key was refused, so friends get no answers. ${FIXES.refused.fix}`, group: OTHER, friend: `Anthropic refused the request made with the account I run on for friends. ${OWNER} needs to check it; I'll try again later.` },
+  timeout: { owner: "That ran too long and I stopped it. Raise RUN_MAX_MINUTES_CHAT in .env and restart, or ask for something smaller.", group: "That took too long, so I stopped. Try something smaller, or ask again.", friend: "That took too long, so I stopped. Try something smaller, or ask again." },
+  connector: { owner: `A connector I need (Notion, Calendar or Gmail) did not answer. ${FIXES.connector.fix}`, group: OTHER, friend: OTHER },
+  reconnect: { owner: `A friend's Notion or Google connection no longer works. ${FIXES.reconnect.fix}`, group: OTHER, friend: OTHER },
+  other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}`, group: OTHER, friend: OTHER },
 };
-const kindOf = (e: unknown): Kind => (e instanceof AuthError ? "auth" : e instanceof RateLimitError ? "limit" : e instanceof InstanceKeyError ? (e.why === "limit" ? "limit" : e.why) : "other");
-export const noticeFor = (audience: Audience) => (e: unknown): string => NOTICES[kindOf(e)][audience];
+const CONNECTOR_WORDS = /\bmcp\b|connector|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|server .*(?:failed|not connected|disconnected)/i;
+const RECONNECT_WORDS = /permission expired or was withdrawn|has not connected (?:Google|Notion)/i; // (googlemcp.ts GoogleReconnect, notionoauth.ts NotionReconnect: fixed sentences)
+export function causeOf(e: unknown): Cause {
+  if (e instanceof AuthError) return "login";
+  if (e instanceof RateLimitError) return "limit";
+  if (e instanceof InstanceKeyError) return e.why;
+  if (e instanceof Error && /^run timed out after/.test(e.message)) return "timeout"; // (ceiling.ts RunTimeout; tenants may not import run)
+  if (e instanceof Error && RECONNECT_WORDS.test(e.message)) return "reconnect";
+  return e instanceof Error && CONNECTOR_WORDS.test(e.message) ? "connector" : "other";
+}
+const kindOf = (e: unknown): Kind => {
+  const c = causeOf(e);
+  return c === "login" ? "auth" : c;
+};
+export class FixedNotice extends Error {} // a notice that is its own message (a daily ceiling was hit: capnotice.ts), shown as it is
+export const noticeFor = (audience: Audience) => (e: unknown): string => (e instanceof FixedNotice ? e.message : NOTICES[kindOf(e)][audience]);
 
 // The SDK reports a failed turn as an assistant error code and an error result. `payer`: whose call it was. On the instance key any refusal of the key is the key's (HTTP
 // 429, 400 and 402 arrive as rate_limit, invalid_request, billing_error): its cooldown, and the owner's one notice (keynotice.ts); on the login an expired login or the plan's limit.

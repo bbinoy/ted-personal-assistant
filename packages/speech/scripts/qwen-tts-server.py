@@ -20,7 +20,7 @@ ref_text = os.environ.get("QWEN_TTS_REF_TEXT", "")
 nonce = os.environ.get("QWEN_TTS_NONCE", "")
 MAX_CHARS = 4000
 voice_root = os.path.realpath(os.environ["QWEN_TTS_VOICE_ROOT"]) if os.environ.get("QWEN_TTS_VOICE_ROOT") else ""
-VOICE_PATH = re.compile(r"^(groups/[0-9a-f]{16}/)?voices/[a-z0-9-]{1,32}$")
+VOICE_PATH = re.compile(r"^[a-z][a-z0-9_-]{0,63}/voices/[a-z0-9-]{1,32}$")  # <scope>/voices/<name> under the voice root (voices.ts)
 
 
 def watch_parent():

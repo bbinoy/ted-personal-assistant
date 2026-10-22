@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { audit } from "../../core/audit.ts";
+import { emitRecord } from "../../core/events.ts";
 import { isOneEmoji } from "../../core/reaction.ts";
 import { dropShots, loadShot } from "./shots.ts";
 import { setAsking, type Asking } from "../voice/voicenote.ts";
@@ -25,6 +25,15 @@ export type SendSink = (c: Content) => Promise<string>;
 
 const sinks = new Map<string, SendSink>();
 
+// An unattended run's sink may have a GATE (heartbeat/look.ts): asked with each text before it is delivered, it returns what the model is told when the text is HELD instead (quiet hours,
+// the day's cap: heartbeat/notices.ts), or undefined to let it go. Tied to the run's own sink, so a chat turn of the same conversation (another sink) is never held.
+export type SendGate = (text: string, urgent: boolean) => string | undefined;
+const gates = new WeakMap<SendSink, SendGate>();
+export function gateSink(key: string, gate: SendGate): void {
+  const sink = sinks.get(key);
+  if (sink) gates.set(sink, gate);
+}
+
 // Around a conversation's turn: the sink is found by key while it runs (a warm process is built before its turn exists); afterwards the
 // turn's screenshots are removed.
 // A run that starts while another is under way (a heartbeat run during a chat turn) takes the sink over and gives it back when it ends.
@@ -47,6 +56,7 @@ export interface SendArgs {
   picture?: string;
   caption?: string;
   react?: string;
+  urgent?: boolean; // a background look only: time-critical, goes out at once also in quiet hours and past the day's cap
 }
 
 // The tool body, apart from the server so tests can call it. Checks which combination makes sense, then hands the content to the turn's sink.
@@ -67,17 +77,21 @@ export async function sendNow(key: string, a: SendArgs): Promise<string> {
   } else {
     const r = loadShot(key, a.picture!);
     if ("problem" in r) {
-      audit("send", "refused", source, { kind: "picture", id: a.picture!.slice(0, 20), conversation: source });
+      emitRecord("send", "refused", source, { kind: "picture", id: a.picture!.slice(0, 20), conversation: source });
       return r.problem;
     }
     content = { kind: "picture", file: r.shot.file, caption: a.caption ?? "", id: r.shot.id, size: r.shot.size };
   }
+  if (content.kind === "text") {
+    const held = gates.get(sink)?.(content.text, !!a.urgent);
+    if (held) return held;
+  }
   try {
     const told = await sink(content);
-    audit("send", "sent", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
+    emitRecord("send", "sent", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
     return told;
   } catch (e) {
-    audit("send", "failed", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
+    emitRecord("send", "failed", source, { kind: content.kind, conversation: source, ...(content.kind === "picture" ? { id: content.id, size: content.size } : {}) });
     console.error(`${source}: send ${content.kind} failed:`, (e as Error).message);
     return "Could not send it; carry on.";
   }
@@ -98,6 +112,7 @@ export function createSendServer(key: string) {
           picture: z.string().min(1).max(20).optional().describe("A screenshot id from the browse result (shot1) or a drawing id from the draw tool (img1)."),
           caption: z.string().max(300).optional().describe("With picture: one short line."),
           react: z.string().min(1).max(16).optional().describe("One emoji, on the message you are answering."),
+          urgent: z.boolean().optional().describe("Only in your own periodic look: true if the text is truly time-critical and cannot wait; otherwise at night or past the day's limit it is held and delivered later. Default false."),
         },
         async (a) => ({ content: [{ type: "text" as const, text: await sendNow(key, a) }] }),
         { alwaysLoad: true },

@@ -905,3 +905,88 @@ test("a thumbs-up on a payment question is answered with 'type YES' and starts n
   assert.match(r.sent[0]!.text, /needs a typed YES/);
   assert.deepEqual(r.prompts, []);
 });
+
+test("lease: a message to the conversation calls a running look off unless it is parked on an approval; either way the look is told there was news", async () => {
+  for (const parked of [false, true]) {
+    const { pipeline } = rig();
+    let aborted = 0;
+    const lease = pipeline.lease(owner(), () => void aborted++, () => parked);
+    assert.equal(lease.news(), false);
+    await pipeline.handleIncoming(owner(), msg({ timestamp: 300 }));
+    assert.equal(aborted, parked ? 0 : 1);
+    assert.equal(lease.news(), true);
+    lease.end();
+    await pipeline.handleIncoming(owner(), msg({ timestamp: 301 }));
+    assert.equal(aborted, parked ? 0 : 1, "an ended lease is not touched again");
+  }
+});
+
+test("bursts: an entry whose messages nobody answered (a group message the gate let pass) is dropped, so the conversation is not busy for ever", async () => {
+  const { pipeline } = rig();
+  const g = group("quiet-group-0123456789abcdef");
+  await pipeline.burst(g, { timestamp: 1 }, async () => {}); // settled, and nothing ran
+  assert.equal(pipeline.busy(g), false);
+  let ran = 0;
+  await pipeline.burst(g, { timestamp: 2 }, async (b) => b.run(async () => void ran++));
+  assert.equal(ran, 1);
+  assert.equal(pipeline.busy(g), false);
+});
+
+test("lease: a bare reaction is news for a running look but never calls it off", async () => {
+  const { pipeline } = rig();
+  let aborted = 0;
+  const lease = pipeline.lease(owner(), () => void aborted++, () => false);
+  await pipeline.handleIncoming(owner(), react());
+  assert.equal(aborted, 0);
+  assert.equal(lease.news(), true);
+  lease.end();
+});
+
+// ---- /stop, /pause, /resume, /status ----
+
+test("owner chat: /stop aborts the running turn at once, says Stopped. and no 'something broke'; /pause and /resume write and clear the switch, and none of them reaches the model", async () => {
+  const { withCeiling } = await import("../src/run/ceiling.ts");
+  const { isPaused } = await import("../src/core/pause.ts");
+  let prompts = 0;
+  const { r, pipeline } = rig({ run: async () => (prompts++, withCeiling(60_000, () => new Promise<string>(() => {}), owner().convId)) });
+  const turn = pipeline.handleIncoming(owner(), msg({ text: "write me a long report", timestamp: 300 }));
+  await tick();
+  assert.equal(prompts, 1, "the turn is running");
+  await pipeline.handleIncoming(owner(), msg({ text: "/stop", timestamp: 301 }));
+  await turn;
+  assert.deepEqual(r.sent.map((x) => x.text), ["Stopped."], "no error notice for a stopped turn");
+  assert.equal(prompts, 1, "/stop is not a message to the model");
+  await pipeline.handleIncoming(owner(), msg({ text: "/pause 1h", timestamp: 302 }));
+  assert.match(r.sent.at(-1)!.text, /^Paused until \d\d:\d\d\. \/resume to undo\./);
+  assert.equal(isPaused(), true);
+  await pipeline.handleIncoming(owner(), msg({ text: "/resume", timestamp: 303 }));
+  assert.equal(r.sent.at(-1)!.text, "Resumed.");
+  assert.equal(isPaused(), false);
+  await pipeline.handleIncoming(owner(), msg({ text: "/status", timestamp: 304 }));
+  assert.match(r.sent.at(-1)!.text, /^Running \(not paused\)\.\nBudget today: \$/);
+  assert.equal(prompts, 1);
+});
+
+test("a group message /pause from anyone goes to the group's pipeline and touches nothing", async () => {
+  const { isPaused } = await import("../src/core/pause.ts");
+  const seen: string[] = [];
+  const { r, pipeline } = rig({ admitGroup: async (_c: unknown, a: { text: string }) => void seen.push(a.text) });
+  await pipeline.handleIncoming(group("g1"), msg({ text: "/pause 2h", direct: false, groupId: "g1" } as never));
+  assert.equal(isPaused(), false);
+  assert.deepEqual(seen, ["/pause 2h"]);
+  assert.deepEqual(r.sent, []);
+});
+
+test("owner chat: /stop within the settle window drops the message that was about to run, and what is queued behind a stopped turn", async () => {
+  let prompts = 0;
+  const h = hold();
+  const { r, pipeline } = rig({ wait: h.wait, run: async () => (prompts++, "ok") });
+  const pending = pipeline.handleIncoming(owner(), msg({ text: "archive all newsletters", timestamp: 400 }));
+  await tick();
+  await pipeline.handleIncoming(owner(), msg({ text: "/stop", timestamp: 401 }));
+  h.release();
+  await pending;
+  await tick();
+  assert.equal(r.sent[0]?.text, "Stopped.");
+  assert.equal(prompts, 0, "the message never ran");
+});

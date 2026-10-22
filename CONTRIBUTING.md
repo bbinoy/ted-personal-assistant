@@ -2,7 +2,7 @@
 
 ## Git hygiene
 
-**Commit messages** (checked by a `commit-msg` hook; enable it once per clone with `npm run setup:hooks`):
+**Commit messages** (checked by a `commit-msg` hook; a `pre-commit` hook runs `npm run check:secrets`; enable both once per clone with `npm run setup:hooks`):
 
 ```
 <type>(<optional scope>): <summary in the imperative, lower case, no full stop>
@@ -20,13 +20,13 @@
 **Commits**
 
 - One logical change per commit; the tests pass at every commit that is merged.
-- Never commit secrets, `.env`, private data (`memory/`, `state/`, `logs/`) or local plans and reports (`plans/`). `npm run check:secrets` must pass.
+- Never commit secrets, `.env`, private data (`conversations/`, `instance/`, `state/`, `logs/`, and the older `memory/`, `tenants/`) or local plans and reports (`plans/`). `npm run check:secrets` must pass.
 - Do not rewrite shared history: no force-push to `main`, no rebase of `main`.
 
 **Branches**
 
 - Work on a branch and merge it with `git merge --no-ff`, so the branch stays visible as one unit in the history.
-- Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm test`, `npm run check:secrets` and `npm run check:isolation` all pass. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
+- Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm run lint`, `npm test`, `npm run check:secrets` and `npm run check:isolation` all pass. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
 - Behaviour that changes on purpose gets its fixture regenerated on purpose (`SNAPSHOT_WRITE=1 npm test`) and the diff reviewed.
 
 **Layout**

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getForecast, getMarineForecast, getSpotInfo, searchPlaces, type WeatherIo } from "../src/modules/weather/weather.ts";
+import { getForecast, getMarineForecast, getSpotInfo, retryDelayMs, searchPlaces, type WeatherIo } from "../src/modules/weather/weather.ts";
 import { nearestSpot } from "../src/modules/weather/kitespots.ts";
 import { exposure, featuresFrom, rings, type Ring } from "../src/modules/weather/shore.ts";
 import { access } from "./util.ts";
@@ -98,4 +98,24 @@ test("manifest: the weather tools are free reads in the owner's chat and in grou
     assert.equal(access(`mcp__weather__${t}`, "handler"), undefined);
   }
   assert.ok(ownerSkills(settings.mail).includes("ted-personal-assistant:surf-conditions"));
+});
+
+test("weather: a 429 is retried after the Retry-After the service sends; a 5xx after a growing pause; both bounded", async () => {
+  assert.equal(retryDelayMs("3", 0), 3000);
+  assert.equal(retryDelayMs(undefined, 1), 3000, "no header: 1.5 s times the attempt");
+  assert.equal(retryDelayMs("999", 0), 10_000, "never longer than the bound");
+  assert.equal(retryDelayMs("Mon, 19 Oct 2026 08:30:05 GMT", 0, Date.parse("2026-10-19T08:30:00Z")), 5000, "an HTTP date is a pause too");
+  assert.equal(retryDelayMs("soon", 0), 1500);
+  const waits: number[] = [];
+  const seq = [new Response("{}", { status: 429, headers: { "Retry-After": "2" } }), new Response("", { status: 503 }), json({ results: [{ name: "Yvonand", latitude: 46.8, longitude: 6.7, timezone: "Europe/Zurich" }] })];
+  const flaky: WeatherIo = { fetch: async () => seq.shift()!, now: () => new Date("2026-10-19T08:30:00Z"), sleep: async (ms) => void waits.push(ms) };
+  assert.match(await searchPlaces("Yvonand", flaky), /^Yvonand.*lat 46\.800/);
+  assert.deepEqual(waits, [2000, 3000]);
+  // a service that wants more than the bound: say so, do not stall the tool call
+  const never: WeatherIo = { fetch: async () => new Response("{}", { status: 429, headers: { "Retry-After": "600" } }), now: () => new Date(), sleep: async () => { throw new Error("must not wait"); } };
+  assert.match(await searchPlaces("Yvonand", never), /busy \(rate limited\), try again in a minute/);
+});
+
+test("weather: the owner's background look has the weather tools (the surf-conditions skill's unprompted look needs them)", () => {
+  for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) assert.equal(access(`mcp__weather__${t}`, "background"), "free", t);
 });

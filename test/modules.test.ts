@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { classify } from "../src/policy/policy.ts";
 import { settings } from "../src/core/settings.ts";
 import { loaded, mailModule, mailProviders, mailSlot, registered } from "../src/modules/index.ts";
-import { MAIL, SERVERS, mailRuntime } from "../src/modules/runtime.ts";
+import { MAIL, RUNTIME, mailRuntime } from "../src/modules/runtime.ts";
 import type { RunContext, ToolModule } from "../src/modules/types.ts";
 import { INTAKE_LINK_TOOL } from "../src/intake/intakelinks.ts";
 import { allRows, entryFor, manifest } from "../src/policy/toolmanifest.ts";
@@ -17,7 +17,7 @@ import { CAPABILITIES } from "../src/tenants/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "voice", "memory", "notes", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -57,13 +57,17 @@ test("modules: a module's floor keeps restricting when it is not loaded (the Gma
   assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX"] }, "chat"), "deny"); // an archive is the Gmail provider's: refused under Mailbird
 });
 
-test("modules: every server a module names is built under that name in runtime.ts, and runtime.ts builds no other", () => {
-  const servers = registered().flatMap((m) => (m.connection.kind === "in-process" || m.connection.kind === "external" ? [m.connection.name] : []));
-  assert.deepEqual([...servers].sort(), Object.keys(SERVERS).sort());
+test("modules: every module that names a server has its server in runtime.ts (RUNTIME, by the module's name), and runtime.ts has no entry for a module that does not exist", () => {
+  const withServer = registered().filter((m) => m.connection.kind === "in-process" || m.connection.kind === "external");
+  const servers = withServer.map((m) => (m.connection as { name: string }).name);
+  for (const m of withServer) assert.equal(typeof RUNTIME[m.name]?.server, "function", `module ${m.name} has no server factory`);
+  assert.deepEqual(withServer.map((m) => m.name).sort(), Object.entries(RUNTIME).filter(([, r]) => r.server).map(([name]) => name).sort(), "a server factory for no module");
+  assert.deepEqual(Object.keys(RUNTIME).filter((name) => !registered().some((m) => m.name === name)), [], "a runtime entry for no module");
+  for (const m of registered().filter((m) => RUNTIME[m.name]?.lifecycle)) assert.ok(m.connection.kind === "external", `${m.name}: only a separate server or connection outlives a run`);
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "notes", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
@@ -83,6 +87,9 @@ test("modules: each module decides from the run whether it has a server (a conve
   assert.equal(when(module("send"), ctx({ source: "group", key: "g", offers: (t) => t !== "mcp__send__send" })), false, "a group whose capability set lacks it");
   assert.equal(when(module("memory"), chat), true);
   assert.equal(when(module("memory"), ctx({ source: "background", key: undefined })), false);
+  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined })), false, "no notes of its own, no read_note");
+  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined, notesRead: { dir: "/n", write: [], maxNotes: 1 } })), true, "a heartbeat run reads its notes one at a time");
+  assert.equal(when(module("notes"), chat), false, "chat reads them as files");
   assert.equal(when(module("browse"), ctx({ source: "handler", key: undefined })), false, "the unattended mail runs never browse");
   assert.equal(when(module("tenants"), ctx({ source: "group", key: "g" })), false, "the tenant administration is the owner's chat only");
   assert.equal(when(module("intake"), chat), false, "intake is a tenant's");
@@ -121,7 +128,7 @@ test("modules: the mail slot answers for the provider, so central code never ask
 
 test("modules: skills come from the loaded modules, in the order the owner's list always had; shared ones need a capability", () => {
   const P = (s: string) => `ted-personal-assistant:${s}`;
-  const mailbird = ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "setup", "surf-conditions", "draw"].map(P);
+  const mailbird = ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"].map(P);
   if (settings.weather && settings.draw) assert.deepEqual(ownerSkills(true, "mailbird"), mailbird);
   assert.deepEqual(ownerSkills(true, "gmail").filter((s) => /mail/.test(s)), [P("gmail")]);
   assert.ok(!ownerSkills(true, "gmail").includes(P("mailbird")));
@@ -132,4 +139,28 @@ test("modules: skills come from the loaded modules, in the order the owner's lis
   assert.deepEqual(skillsFor(new Set(["browse", "draw"] as const)), [P("research-booking"), P("draw")]);
   assert.deepEqual(skillsFor(new Set(["mail", "calendar", "notion", "chat"] as const)), []);
   for (const s of [...Object.keys(sharedSkills()), ...privateSkills()]) assert.ok(existsSync(`${settings.pluginDir}/skills/${s}/SKILL.md`), s);
+});
+
+test("connectors: which are reported down comes from the loaded modules' connections (key, label, skipped), not from a list in connectors.ts", async () => {
+  const { detect, disconnected, reportable, NAMES, SKIPPED } = await import("../src/modules/connectors.ts");
+  const keys = () => reportable().map((r) => r.key);
+  assert.deepEqual(keys(), ["notion", "calendar"], "under Mailbird: the two the owner has always been told about; Gmail's connector is not loaded and Drive is hidden by default");
+  const s = settings as unknown as Record<string, unknown>;
+  const was = { mailProvider: s.mailProvider, hiddenConnectors: s.hiddenConnectors };
+  try {
+    s.mailProvider = "gmail";
+    assert.deepEqual(keys(), ["notion", "calendar", "gmail"]);
+    const up = (name: string) => ({ name: `claude.ai ${name}`, status: "connected" });
+    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar")])), ["gmail"], "a Gmail outage reaches the prompts and the brief");
+    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Gmail")])), []);
+    assert.equal(NAMES.gmail, "Gmail");
+    assert.match(SKIPPED.gmail!, /mail pass/);
+    s.hiddenConnectors = (s.hiddenConnectors as string[]).filter((h) => !/Google_(Drive|Docs)/.test(h)); // the owner switched Drive and Docs on
+    assert.deepEqual(keys(), ["notion", "calendar", "drive", "docs", "gmail"], "in module order after the two");
+    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Gmail"), up("Google Docs")])), ["drive"]);
+  } finally {
+    Object.assign(s, was);
+  }
+  // Every connector module that is reported says what it is called and what is lost.
+  for (const m of registered()) if (m.connection.kind === "connector" && m.connection.skipped) assert.ok(m.connection.key && m.connection.label, `${m.name}: key and label`);
 });

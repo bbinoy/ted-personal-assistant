@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { scratchLog } from "./scratch.ts";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 // seen_mail (src/modules/seenmail/seenmail.ts): the mail a conversation's heartbeat run has worked through, as a bounded log of ids kept per conversation. The ids a call returns are pending
 // until the look ends well; the run and its expert share the pending set; nothing about the mailbox or the provider is known to code.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "seenmail-test-"));
 
-const { createSeenMail, createSeenMailServer, seenFileOf, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
+const { createSeenMail, createSeenMailServer, isBacklog, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
 const { createHeartbeatLook } = await import("../src/heartbeat/look.ts");
 const { heartbeatOptions } = await import("../src/run/agent.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
@@ -16,13 +18,15 @@ const { group, owner, tenant } = await import("../src/conversation/conversation.
 const { LOGIN } = await import("../src/tenants/payer.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { settings } = await import("../src/core/settings.ts");
-const { readJson } = await import("../src/core/state.ts");
+const { instanceDb } = await import("../src/core/instancedb.ts");
+const { convDb } = await import("../src/core/convdb.ts");
+const { groupConvId } = await import("../src/core/convpaths.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 
 const dir = join(settings.dataDir, "seenmail-files");
 mkdirSync(dir, { recursive: true });
-const file = (n: string) => join(dir, `${n}.json`);
-const ids = (f: string): string[] => readJson<{ ids?: string[] }>(f, {}).ids ?? [];
+const file = (n: string) => groupConvId(`seenmail-${n}`); // (a conversation of its own per test: its log is a table of its own assistant.db)
+const ids = (f: string): string[] => convDb(f).all<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq").map((r) => r.id);
 
 test("the unseen subset: ids as the mail tool returned them, any provider; repeats and blanks are dropped; the committed log is remembered", () => {
   const f = file("a");
@@ -32,7 +36,7 @@ test("the unseen subset: ids as the mail tool returned them, any provider; repea
   seen.commit();
   assert.deepEqual(ids(f), ["c-1", "c-2", "18f3a", "c-3"]);
   assert.deepEqual(seen.unseen(["c-1", "c-3", "c-4"]), ["c-4"], "the next look is told only about what is new");
-  assert.deepEqual(createSeenMail(f).unseen(["c-2"]), [], "a restart keeps it: the log is a file");
+  assert.deepEqual(createSeenMail(f).unseen(["c-2"]), [], "a restart keeps it: the log is in the database");
 });
 
 test("pending versus committed: a failed or aborted look leaves its ids unseen, so an offline gap is worked off over successive looks", () => {
@@ -67,15 +71,14 @@ test("the log is bounded: the newest SEEN_MAX ids stay, the oldest are forgotten
 test("per conversation: the owner's log, each friend's in her own folder; one never shows the other", () => {
   const rec = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c1", name: "Ana" })!;
   const rec2 = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000c2", name: "Bo" })!;
-  assert.equal(seenFileOf(owner()), "state/seen-mail.json");
-  assert.equal(seenFileOf(tenant(rec.id)), join(T.tenantContext(rec).dir, "seen-mail.json"));
-  assert.notEqual(seenFileOf(tenant(rec.id)), seenFileOf(tenant(rec2.id)));
-  assert.ok(seenFileOf(group("seen-group-0123456789abcd")).endsWith("seen-mail.json"));
-  const a = createSeenMail(seenFileOf(tenant(rec.id)));
+  assert.equal(owner().convId, OWNER_CONV);
+  assert.equal(tenant(rec.id).convId, T.tenantContext(rec).convId);
+  assert.notEqual(tenant(rec.id).convId, tenant(rec2.id).convId);
+  const a = createSeenMail(tenant(rec.id).convId);
   a.unseen(["same-id"]);
   a.commit();
-  assert.deepEqual(createSeenMail(seenFileOf(tenant(rec2.id))).unseen(["same-id"]), ["same-id"], "Bo has not seen what Ana has");
-  assert.deepEqual(createSeenMail(seenFileOf(tenant(rec.id))).unseen(["same-id"]), []);
+  assert.deepEqual(createSeenMail(tenant(rec2.id).convId).unseen(["same-id"]), ["same-id"], "Bo has not seen what Ana has");
+  assert.deepEqual(createSeenMail(tenant(rec.id).convId).unseen(["same-id"]), []);
 });
 
 test("the tool: reports the unseen ids, and the run and its expert share one pending set", async () => {
@@ -106,21 +109,22 @@ test("the heartbeat run is given the tracker only where there is mail, and the e
 // ---- the look commits or discards ----
 
 function look(run: () => Promise<{ text: string; structured?: unknown }>) {
-  const conv = { ...owner(), logFile: `logs/seen-look-${Math.random().toString(36).slice(2)}.jsonl` };
-  const f = seenFileOf(conv);
+  const conv = { ...owner(), logFile: scratchLog(`seen-look-${Math.random().toString(36).slice(2)}.jsonl`) };
+  const f = conv.convId;
   const pipeline = {
     enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(),
     record: () => {},
     busy: () => false, sendWhile: async (_c: unknown, r: () => Promise<unknown>) => r(),
     runTurn: async (_c: unknown, turn: { run: () => Promise<unknown> }) => (await turn.run(), { spoke: true }),
   };
-  const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (async (_c: unknown, _p: unknown, _prompt: string, extra: { seenMail: { unseen: (i: string[]) => string[] } }) => (extra.seenMail.unseen(["look-1", "look-2"]), run())) as never, may: () => LOGIN, why: () => "x", notesChangedAt: () => 0, rowsFile: join(dir, "rows.jsonl") });
+  const hb = createHeartbeatLook({ pipeline: pipeline as never, run: (async (_c: unknown, _p: unknown, _prompt: string, extra: { seenMail: { unseen: (i: string[]) => string[] } }) => (extra.seenMail.unseen(["look-1", "look-2"]), run())) as never, may: () => LOGIN, why: () => "x", notesChangedAt: () => 0 });
   recordMessage("owner", Date.now(), "hi", new Date(), conv.logFile);
   return { hb, conv, f };
 }
 
 test("a look that ends well commits what it was told was new; a look that fails leaves it unseen", async () => {
   const quiet = { text: "", structured: { message: "[[silent]]", nextCheckMinutes: 30 } };
+  const looksBefore = instanceDb().num("SELECT COUNT(*) FROM looks");
   const err = console.error;
   console.error = () => {};
   try {
@@ -136,5 +140,35 @@ test("a look that ends well commits what it was told was new; a look that fails 
   } finally {
     console.error = err;
   }
-  assert.equal(readFileSync(join(dir, "rows.jsonl"), "utf8").trim().split("\n").length, 2);
+  assert.equal(instanceDb().num("SELECT COUNT(*) FROM looks") - looksBefore, 2, "two looks, two rows");
+});
+
+test("the first run does not triage the backlog: mail older than MAIL_BACKLOG_DAYS is marked seen unread, later runs are not affected", () => {
+  const NOW = Date.parse("2026-10-20T12:00:00Z");
+  assert.equal(isBacklog("2026-10-01T09:00:00Z", NOW, 7), true);
+  assert.equal(isBacklog("2026-10-18T09:00:00Z", NOW, 7), false);
+  assert.equal(isBacklog("not a date", NOW, 7), false, "an unreadable date is triaged, not skipped");
+  assert.equal(isBacklog(undefined, NOW, 7), false);
+  assert.equal(isBacklog("2020-01-01T00:00:00Z", NOW, 0), false, "0 days: the cutoff is off");
+  const f = file("backlog");
+  const first = createSeenMail(f, SEEN_MAX, 7, () => NOW);
+  const received = { old1: "2026-09-01T00:00:00Z", old2: "2026-10-10T00:00:00Z", fresh: "2026-10-19T08:00:00Z" };
+  assert.deepEqual(first.unseen(["old1", "old2", "fresh", "nodate"], received), ["fresh", "nodate"]);
+  assert.equal(first.aged(), 2);
+  assert.deepEqual(first.unseen(["old1", "fresh"], received), ["fresh"], "asking again within the look gives the same answer");
+  first.commit();
+  assert.deepEqual(ids(f).sort(), ["fresh", "nodate", "old1", "old2"].sort());
+  // from now on a log exists: an old mail that turns up unseen is an ordinary new mail
+  const second = createSeenMail(f, SEEN_MAX, 7, () => NOW);
+  assert.deepEqual(second.unseen(["older", "fresh"], { older: "2026-01-01T00:00:00Z" }), ["older"]);
+  assert.equal(second.aged(), 0);
+});
+
+test("seen_mail tells the run, once, how many old mails it skipped on the first look", async () => {
+  const f = file("backlog-tool");
+  const seen = createSeenMail(f, SEEN_MAX, 7, () => Date.parse("2026-10-20T12:00:00Z"));
+  const server = createSeenMailServer(seen) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: unknown) => Promise<{ content: { text: string }[] }> }> } };
+  const out = await server.instance._registeredTools.seen_mail!.handler({ ids: ["a", "b"], received: { a: "2026-01-01T00:00:00Z", b: "2026-10-19T00:00:00Z" } });
+  assert.match(out.content[0]!.text, /Not looked at yet \(1 of 2\):\nb/);
+  assert.match(out.content[0]!.text, /first look: 1 mail\(s\) older than 7 days were marked as looked at/);
 });

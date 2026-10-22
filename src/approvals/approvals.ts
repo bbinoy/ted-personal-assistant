@@ -1,12 +1,14 @@
 import { discardJudge, prepareJudge } from "./approvaljudge.ts";
 import { applyChanges, isModifiable, type Change } from "../policy/policy.ts";
 import { settings } from "../core/settings.ts";
-import { audit, wordless, type Source } from "../core/audit.ts";
+import type { Source } from "../core/audit.ts";
+import { emit } from "../core/events.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
 import { recentIn } from "./recentchat.ts";
 import { sameCall } from "./declined.ts";
+import { answerPending } from "./pendingflow.ts";
 import { isTypedYes, TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 
 // Human-in-the-loop approvals over Signal. Several questions may be open at once; each is
@@ -41,6 +43,7 @@ export interface Decision {
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
+  queued?: { n: number; message: string }; // an unattended run's call was parked in the approval inbox instead of waiting (pendingflow.ts): nothing was approved or declined, the run is told this and carries on
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
 
@@ -68,7 +71,10 @@ interface Open {
 const slot = (scope: string, ts: number) => `${scope}:${ts}`;
 const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
-const closed = new Map<string, string>(); // recently ended approvals (scope and timestamp -> label): a quoted reply to one must not land on another
+const closed = new Map<string, { label: string; expired: boolean }>(); // recently ended approvals (scope and timestamp -> label, and whether nobody answered in time): a quoted reply to one must not land on another
+
+// How many questions are waiting for an answer in this conversation ("/status", conversation/ownercommands.ts).
+export const openCount = (scope: string): number => [...open.values()].filter((o) => o.scope === scope && !o.done).length;
 
 // "15 min", "2 h", "1 h 30 min".
 export function formatWait(minutes: number): string {
@@ -78,23 +84,27 @@ export function formatWait(minutes: number): string {
 }
 
 // A tenant's rows in the audit log (the admin's) carry no words (audit.ts wordless), and her questions stay out of the console log too.
-const rows = (scope: string, meta: Record<string, unknown>) => (isTenantKey(scope) ? wordless(meta) : meta);
+// An audit row of the approval path, in the conversation `scope`: a friend's carry no words (the event stream makes them wordless, core/events.ts).
+const row = (tool: string, decision: string, source: Source, scope: string, meta: Record<string, unknown>): void => emit({ type: "tool", tool, decision, source, conv: scope, meta });
 
 const REACT_YES = new Set(["👍", "✅"]);
 const REACT_NO = new Set(["👎", "❌"]);
 
 // A reaction counts only if it is on an open "Approve?" message itself; it answers that one. A card payment is the exception: a 👍 never
 // approves it ("needs_text": the question stays open and the owner is told to type yes); a 👎 declines it like any other.
+// Is a question of this conversation open (asked, not answered)? A heartbeat look parked on one is not called off by a message: that message may be its answer (conversation.ts lease).
+export const hasOpen = (scope: string): boolean => [...open.values()].some((o) => o.scope === scope && !o.done);
+
 export function answerReaction(emoji: string, targetTimestamp: number, scope: string, by?: string): "approved" | "declined" | "ignored" | "needs_text" {
   const current = open.get(slot(scope, targetTimestamp));
   if (!current || current.done || current.scope !== scope) return "ignored";
   const e = emoji.replace(/[︎️]/g, ""); // drop variation selectors
   if (current.typedYes && REACT_YES.has(e)) {
-    audit(current.call.tool, "answer-reaction-refused", current.source, rows(scope, { by, scope, question: current.shown }));
+    row(current.call.tool, "answer-reaction-refused", current.source, scope, { by, scope, question: current.shown });
     return "needs_text";
   }
   if (REACT_YES.has(e) || REACT_NO.has(e)) {
-    audit(current.call.tool, "answer-reaction", current.source, rows(scope, { by, scope, approved: REACT_YES.has(e), question: current.shown }));
+    row(current.call.tool, "answer-reaction", current.source, scope, { by, scope, approved: REACT_YES.has(e), question: current.shown });
     current.resolve({ approved: REACT_YES.has(e) });
     return REACT_YES.has(e) ? "approved" : "declined";
   }
@@ -116,12 +126,20 @@ export interface Ctx {
   voice?: boolean;
 }
 export async function answer(text: string, onJudging: () => void, quote: { timestamp: number } | undefined, deps: AnswerDeps = {}, ctx: Ctx): Promise<Answer> {
+  // The approval inbox first (pendingflow.ts): a numbered answer ("1,3 yes", "all yes") or a reply to its batch. A bare unquoted yes is never one.
+  const parked = await answerPending(text, quote, ctx);
+  if (parked) return parked;
   const mine = [...open.values()].filter((o) => o.scope === ctx.scope && !o.done);
+  // A plain yes that quotes a question which has ended (timed out, answered): nothing is run from it. Said so, not passed on as a chat message.
+  if (mine.length === 0 && quote && quote.timestamp !== 0 && closed.has(slot(ctx.scope, quote.timestamp)) && YES.has(normalise(text))) return { outcome: "clarify", reply: endedReply(ctx.scope, quote.timestamp) };
   if (mine.length === 0) return { outcome: "none" };
   return read(text, onJudging, quote, deps, ctx, mine);
 }
 
 const ENDED = "That question has already ended. Reply to one that is still open, or react to it.";
+// A late yes: nothing is run from it, the owner is told why and that asking again is all it takes.
+const TIMED_OUT = "That question timed out before you answered, so nothing was done. Just ask me again if you still want it.";
+const endedReply = (scope: string, ts: number) => (closed.get(slot(scope, ts))?.expired ? TIMED_OUT : `${ENDED} Or just ask me again.`);
 const WHICH = "Which one do you mean? Reply to the question itself, or react to it.";
 
 // Code decides only two things: an exact plain yes / no that unambiguously targets the one
@@ -135,13 +153,18 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const t = normalise(text);
   const found = quote && quote.timestamp !== 0 ? open.get(slot(ctx.scope, quote.timestamp)) : undefined;
   const quoted = found?.scope === ctx.scope ? found : undefined;
-  const direct = quoted && !quoted.done ? quoted : live.length === 1 && !quote ? live[0] : undefined;
+  // A background approval (a wake-up's, a stranger's registration) is answered only by a reply that quotes it or a reaction on it: an unquoted "ok" is about something
+  // else, so it never reaches one, neither on the fast path nor through the judge (SAFETY.md).
+  const eligible = live.filter((o) => !o.background || o === quoted);
+  const direct = quoted && !quoted.done ? quoted : eligible.length === 1 && !quote ? eligible[0] : undefined;
+  // A plain yes / no with nothing it can answer (only background questions are open and it quotes none) is a chat message for something else: no judge call for it.
+  if (eligible.length === 0 && (YES.has(t) || NO.has(t))) return { outcome: "none" };
   // A card payment: the fast path approves only a typed yes (not 👍, ok, sure, and not a transcript of a voice message); any other yes is asked for again.
   const typedOk = (o: Open) => !o.typedYes || (isTypedYes(text) && !ctx.voice);
   if (direct && (YES.has(t) || NO.has(t) || (direct.typedYes && isTypedYes(text)))) {
-    if (!NO.has(t) && !typedOk(direct)) return audit(direct.call.tool, "answer-refused", direct.source, rows(ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, question: direct.shown })), { outcome: "clarify", reply: TYPED_YES_NEEDED };
+    if (!NO.has(t) && !typedOk(direct)) return row(direct.call.tool, "answer-refused", direct.source, ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, question: direct.shown }), { outcome: "clarify", reply: TYPED_YES_NEEDED };
     const approved = !NO.has(t);
-    audit(direct.call.tool, "answer-fast", direct.source, rows(ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, approved, question: direct.shown }));
+    row(direct.call.tool, "answer-fast", direct.source, ctx.scope, { by: ctx.by, scope: direct.scope, reply: text, approved, question: direct.shown });
     direct.resolve({ approved });
     return { outcome: approved ? "approved" : "declined" };
   }
@@ -159,7 +182,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   const started = Date.now();
   const j = await (deps.judge ?? judgeAnswer)(text, views, (deps.recent ?? ((reply) => recentIn(ctx.scope, reply)))(text), quote && quote.timestamp !== 0 || ctx.voice ? { id: quotedId, ended: !!quote && !quoted && closed.has(slot(ctx.scope, quote.timestamp)), voice: ctx.voice } : undefined);
   const stillOpen = () => live.filter((o) => !o.done);
-  const record = (what: string, o?: Open) => audit(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", rows(ctx.scope, { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started }));
+  const record = (what: string, o?: Open) => row(o?.call.tool ?? "approval", `answer-${what}`, o?.source ?? "chat", ctx.scope, { by: ctx.by, scope: o?.scope ?? ctx.scope, reply: text, question: o?.shown, verdict: j && `${j.target} ${j.outcome}`, reason: j?.reason, ms: Date.now() - started });
   // A reply that is neither yes nor no (a change, a condition, a question, "later") ends that approval: it is superseded by the owner's new instruction. The pending call
   // fails back to the agent with the owner's words, and the agent makes a fresh proposal in the same turn if it still wants to act, so no old approval stays open next to a new
   // question. A card payment is the exception (it stays open until a typed yes or a no: the caller handles it).
@@ -174,7 +197,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
     let replaced = 0;
     for (const p of parts) {
       const o = ids.get(p.target);
-      if (!o || o.done || o.typedYes && p.outcome !== "decline") continue; // "yes to both" is no typed yes to a payment, and no reply replaces one
+      if (!o || o.done || (o.background && o !== quoted) || o.typedYes && p.outcome !== "decline") continue; // (a background question is answered only by a quote of it) // "yes to both" is no typed yes to a payment, and no reply replaces one
       if (p.outcome === "other") {
         supersede(o);
         replaced++;
@@ -193,7 +216,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
     // Not approved, and not silent for the agent: every open chat approval returns the owner's words as feedback, so the agent
     // decides itself whether to ask again, rephrase or drop the action (permissions.ts caps the re-asks). Background ones stay open.
     record("failed");
-    const chat = live.filter((o) => !o.background && !o.done);
+    const chat = eligible.filter((o) => !o.background && !o.done);
     for (const o of chat) o.resolve({ approved: false, feedback: text, failure: "the owner's reply could not be read as a yes or no" });
     return chat.length ? { outcome: "feedback" } : { outcome: "none" };
   }
@@ -205,6 +228,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   }
   const current = ids.get(j.target);
   if (!current || current.done) return { outcome: "none" }; // resolved or expired while the judge thought
+  if (current.background && current !== quoted) return record("unrelated"), { outcome: "none" }; // the judge may read a background question but never answers it from a message that quotes nothing of it
   // A payment resolves only through the direct paths (the sole open approval, or a reply that quotes it), never because the answer model chose it as the target of a message
   // that quotes nothing: "YES" meant for the calendar question must not pay when the model picks the payment. Ask which one is meant.
   if (current.typedYes && current !== direct) {
@@ -243,7 +267,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
   // other: a condition, a change, a delay, a question...
   if (quote && !quoted && closed.has(slot(ctx.scope, quote.timestamp))) {
     record("clarify", current); // it quotes a question that has ended: that says nothing about this open one
-    return { outcome: "clarify", reply: ENDED };
+    return { outcome: "clarify", reply: endedReply(ctx.scope, quote.timestamp) };
   }
   if (current.typedYes) {
     record("clarify", current);
@@ -261,7 +285,7 @@ export function request(
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal | undefined,
-  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number },
+  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number; quietExpiry?: boolean },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
@@ -274,7 +298,7 @@ export function request(
       if (entry.done) return;
       entry.done = true;
       if (entry.ts) {
-        closed.set(slot(opts.scope, entry.ts), label);
+        closed.set(slot(opts.scope, entry.ts), { label, expired: !!d.expired });
         if (closed.size > 50) closed.delete(closed.keys().next().value!);
       }
       clearTimeout(timer);
@@ -287,10 +311,11 @@ export function request(
     };
     const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, typedYes: !!opts.typedYes };
     const onAbort = () => finish({ approved: false });
-    const timer = setTimeout(
-      () => finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`),
-      minutes * 60_000,
-    );
+    const timer = setTimeout(() => {
+      finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`);
+      // A background question nobody answered is not silent (a registration says so itself: it is asked again, "do it" would mean nothing there): one line in that conversation, with the code's label (never model text). A chat question is not: the owner is in that conversation.
+      if (background && !opts.quietExpiry && entry.ts) send(`⏳ Didn't hear back, so I left it: ${label}. Say 'do it' if you still want it.`).catch(() => {});
+    }, minutes * 60_000);
     signal?.addEventListener("abort", onAbort);
     console.log(`approval requested${background ? " (background)" : ""}: ${named}`);
     // At most one open question per conversation for one action: a newer question about the same call closes the older one (declined.ts sameCall).

@@ -28,6 +28,7 @@ const { InstanceKeyError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
 
 const on = settings as unknown as Record<string, unknown>;
+on.instanceKeyDailyUsd = 1e9; // a friend's day is spent by hand (recordCost): her own ceiling is under test; the key's is test/spendcaps.test.ts (a friend's spend IS the key's in the one ledger)
 on.briefBackstopHour = 24;
 const KEY = "instance-key-for-the-loop-tests";
 const NOON = new Date(2026, 9, 14, 12, 0, 0);
@@ -109,7 +110,7 @@ test("a friend gets the heartbeat run, on the instance key, with her log and her
   await r.wakeups.tick(NOON);
   assert.deepEqual(tenantRuns(r), [anna.id], "the look: only hers; Bo is suspended");
   const run = r.seen.runs.find((x) => x.conv.tenantId === anna.id)!;
-  assert.deepEqual(run.payer, { kind: "instance", id: anna.id, apiKey: KEY, costFile: T.tenantContext(anna).costFile }, "billed to her, on the instance key");
+  assert.deepEqual(run.payer, { kind: "instance", id: anna.id, apiKey: KEY, ledger: T.tenantContext(anna).ledger }, "billed to her, on the instance key");
   assert.match(run.prompt, /Anna: remind me about my sister's birthday/, "her words, under her name");
   assert.doesNotMatch(run.prompt, /secret of Bo/);
   assert.match(run.prompt, /Anna's local time/);
@@ -155,7 +156,7 @@ test("a tenant's suspension, cooldown, budget and a missing instance key each st
   const cool = rig();
   assert.equal(await cool.wakeups.look(tenant(anna.id), NOON), "cooldown");
   resetCooldown();
-  recordCost(100, T.tenantContext(anna).costFile);
+  recordCost(100, T.tenantContext(anna).ledger);
   const rich = rig();
   assert.equal(await rich.wakeups.look(tenant(anna.id), NOON), "blocked");
   assert.equal(rich.seen.runs.length, 0, "no run");
@@ -261,11 +262,11 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
     }) as never,
   });
   const before = spentToday();
-  const input = { conv: tenant(anna.id), trigger: "clock" as const, now: NOON, tail: [], payer: { kind: "instance" as const, id: anna.id, apiKey: KEY, costFile: ctx.costFile } };
+  const input = { conv: tenant(anna.id), trigger: "clock" as const, now: NOON, tail: [], payer: { kind: "instance" as const, id: anna.id, apiKey: KEY, ledger: ctx.ledger } };
   await askGateWith(input, fake());
   assert.equal(options!.env!.ANTHROPIC_API_KEY, KEY);
   assert.equal(options!.env!.CLAUDE_CODE_OAUTH_TOKEN, undefined, "never the owner's login");
-  assert.equal(spentToday(ctx.costFile), 0.25);
+  assert.equal(spentToday(ctx.ledger), 0.25);
   assert.equal(spentToday(), before, "not the instance's own ledger");
   await assert.rejects(askGateWith(input, fake("rate_limit")), InstanceKeyError);
   const { coolingDown } = await import("../src/core/cooldown.ts");
@@ -307,7 +308,7 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   const { createMemoryServer } = await import("../src/modules/memory/memory-tools.ts");
   const { dreamScope } = await import("../src/modules/memory/dreamscope.ts");
   const mem = createMemoryServer({ notesDir: hers.notesDir, tenantLog: hers.logFile, dream: dreamScope(tenant(anna.id)), record() {} }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
-  assert.deepEqual(Object.keys(mem.instance._registeredTools).sort(), ["forget_note", "search_logs", "undo_dream"]);
+  assert.deepEqual(Object.keys(mem.instance._registeredTools).sort(), ["forget_note", "journal", "search_logs", "undo_dream"]);
   const undone = await mem.instance._registeredTools.undo_dream!.handler({}, {});
   assert.match(undone.content[0]!.text, /Restored \d+ notes/);
   assert.ok(!existsSync(join(hers.notesDir, "people-sister.md")), "her notes are back as before the dream");
@@ -331,7 +332,7 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
   const boom = person("Uma");
   for (const p of [sus, poor, fine, boom]) said(p, `${p.name} says something worth keeping about her plans`);
   T.setStatus(sus.id, "suspended");
-  recordCost(100, T.tenantContext(poor).costFile);
+  recordCost(100, T.tenantContext(poor).ledger);
   const ran: string[] = [];
   const alerts: string[] = [];
   keyNotices.reset();

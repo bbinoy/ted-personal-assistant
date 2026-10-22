@@ -4,7 +4,9 @@
 .node-path
 *.log
 logs/
-memory/
+/memory/
+/instance/
+/conversations/
 node_modules
 state/
 dist/

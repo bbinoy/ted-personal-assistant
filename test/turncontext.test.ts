@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { scratch } from "./scratch.ts";
 
 // What changes between two messages (what is connected, the messages sent on its own) is not in the chat's system prompt but at the start of the
 // turn's message, and only when the session has not been told it yet. The system prompt, and with it the warm process and the cached session, stays put.
@@ -17,7 +18,7 @@ const { forgetShown, markShown, unseen } = await import("../src/run/turncontext.
 const { settings } = await import("../src/core/settings.ts");
 
 const NOW = new Date("2026-10-12T09:00:00");
-const conv = { ...owner(), sessionFile: "state/turncontext-session.json" };
+const conv = owner();
 const inputs = { now: NOW };
 const sessionOf = (id: string) => ({ type: "result", subtype: "success", is_error: false, result: "hi", session_id: id, total_cost_usd: 0.01 });
 function rig(sessionId = "s1") {
@@ -38,7 +39,7 @@ test("turn context: the system prompt does not move with notices or the connecto
 });
 
 test("turn context: told at the start of the message once, again when it changes, after a new session, and after a compaction", async () => {
-  forgetShown(conv.sessionFile);
+  forgetShown(conv.convId);
   const r = rig();
   await r.ask("hello");
   assert.match(r.prompts[0]!, /Not connected right now[\s\S]*Meeting prep: call at 11:00[\s\S]*\n\nhello$/);
@@ -50,13 +51,13 @@ test("turn context: told at the start of the message once, again when it changes
   assert.match(r.prompts[2]!, /Meeting prep: call at 11:00/, "the whole block again, not only the change");
   await r.ask("fourth");
   assert.equal(r.prompts[3], "fourth");
-  forgetShown(conv.sessionFile); // a compaction
+  forgetShown(conv.convId); // a compaction
   await r.ask("fifth");
   assert.match(r.prompts[4]!, /call at 15:00[\s\S]*fifth$/);
 });
 
 test("turn context: a session that is no longer the one told is told again; a fresh one always", () => {
-  const f = "state/x.json";
+  const f = scratch("x.json");
   assert.equal(unseen(f, "s1", "ctx"), "ctx");
   markShown(f, "s1", "ctx");
   assert.equal(unseen(f, "s1", "ctx"), undefined);

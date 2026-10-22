@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { PURPOSES, purposeAvailable } from "./intakepurposes.ts";
 import { settings } from "../core/settings.ts";
-import { readJson, writeJson } from "../core/state.ts";
+import { instanceDb } from "../core/instancedb.ts";
 import type { Capability } from "../tenants/tenants.ts";
 
 // The setup links of the intake page (intakeserver.ts): a single-use code in a URL, minted by the chat tool or the local CLI, redeemed by the page.
@@ -141,35 +141,66 @@ export const linkUrl = (base: string, code: string): string => `${base.replace(/
 
 // ---- what was stored, for the model: names and lengths, never a value ----
 
-export const STATUS_FILE = "state/intake-status.json";
+// What the intake page stored, and which connections stopped working: the `intake` table of instance.db, one row per (tenant, purpose). The intake page is a separate process and the
+// agent another: SQLite's WAL lets both write (each statement is one row of one of them, so there is no read-modify-write to lose).
 export interface Done {
   at: string; // ISO time
   stored: { name: string; chars: number }[];
 }
-type StatusFile = Record<string, Record<string, Done>>; // tenant -> purpose -> the last completed form
 
 // Written by the process that uses a connection (the agent) when a service no longer accepts it: her permission expired, was withdrawn or was never complete. She is
 // told in the chat to reconnect; the admin's list and the doctor show it. It is cleared by connecting again (a newer completed form than this mark).
-export const PROBLEMS_FILE = "state/intake-problems.json";
-type ProblemFile = Record<string, Record<string, string>>; // tenant -> purpose -> ISO time
-
 export function markNeedsReconnect(tenant: string, purpose: string, now = new Date()): void {
-  const all = readJson<ProblemFile>(PROBLEMS_FILE, {});
-  writeJson(PROBLEMS_FILE, { ...all, [tenant]: { ...all[tenant], [purpose]: now.toISOString() } });
+  try {
+    instanceDb().run("INSERT INTO intake (tenant, purpose, problem_at) VALUES (?, ?, ?) ON CONFLICT (tenant, purpose) DO UPDATE SET problem_at = excluded.problem_at", tenant, purpose, now.toISOString());
+  } catch (e) {
+    console.error(`intake: could not mark ${tenant}/${purpose} as needing a reconnect (${(e as Error).message})`);
+  }
 }
+
+interface IntakeRow {
+  done_at: string | null;
+  stored: string | null;
+  problem_at: string | null;
+}
+const rowOf = (tenant: string, purpose: string): IntakeRow | undefined => {
+  try {
+    return instanceDb().get<IntakeRow>("SELECT done_at, stored, problem_at FROM intake WHERE tenant = ? AND purpose = ?", tenant, purpose);
+  } catch {
+    return undefined; // (a damaged or busy database: no connection is claimed)
+  }
+};
 
 // Is her connection to a service there? Times only, never a token. "reconnect": it was made and no longer works.
 export function connectionState(tenant: string, purpose: string): { state: "connected" | "reconnect" | "none"; at?: string } {
-  const done = readJson<StatusFile>(STATUS_FILE, {})[tenant]?.[purpose];
-  const problem = readJson<ProblemFile>(PROBLEMS_FILE, {})[tenant]?.[purpose];
-  if (done && (!problem || problem <= done.at)) return { state: "connected", at: done.at };
+  const r = rowOf(tenant, purpose);
+  const done = r?.done_at ?? undefined;
+  const problem = r?.problem_at ?? undefined;
+  if (done && (!problem || problem <= done)) return { state: "connected", at: done };
   if (problem) return { state: "reconnect", at: problem };
   return { state: "none" };
 }
 
-export const readDone = (tenant: string, purpose: string): Done | undefined => readJson<StatusFile>(STATUS_FILE, {})[tenant]?.[purpose];
+export function readDone(tenant: string, purpose: string): Done | undefined {
+  const r = rowOf(tenant, purpose);
+  if (!r?.done_at) return undefined;
+  let stored: Done["stored"] = [];
+  try {
+    stored = JSON.parse(r.stored ?? "[]") as Done["stored"];
+  } catch {
+    /* names only; a damaged list is an empty one */
+  }
+  return { at: r.done_at, stored };
+}
 // Written by the intake page only (one writer).
 export function recordDone(tenant: string, purpose: string, stored: Done["stored"], now = new Date()): void {
-  const all = readJson<StatusFile>(STATUS_FILE, {});
-  writeJson(STATUS_FILE, { ...all, [tenant]: { ...all[tenant], [purpose]: { at: now.toISOString(), stored } } });
+  instanceDb().run(
+    "INSERT INTO intake (tenant, purpose, done_at, stored) VALUES (?, ?, ?, ?) ON CONFLICT (tenant, purpose) DO UPDATE SET done_at = excluded.done_at, stored = excluded.stored",
+    tenant, purpose, now.toISOString(), JSON.stringify(stored),
+  );
+}
+
+// A removed friend: her marks (a key she owned is no longer a fact about anybody). True when she had any.
+export function forgetTenantConnections(tenant: string): boolean {
+  return instanceDb().run("DELETE FROM intake WHERE tenant = ?", tenant).changes > 0;
 }

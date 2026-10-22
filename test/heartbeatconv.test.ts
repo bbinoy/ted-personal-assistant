@@ -49,7 +49,7 @@ function friend(name: string): string {
   T.provision(rec);
   return rec.id;
 }
-const payerOf = (id: string) => ({ kind: "instance" as const, id, apiKey: KEY, costFile: T.tenantContext(T.tenantById(id)!).costFile });
+const payerOf = (id: string) => ({ kind: "instance" as const, id, apiKey: KEY, ledger: T.tenantContext(T.tenantById(id)!).ledger });
 const note = (id: string, file: string, text: string) => writeFileSync(join(T.tenantContext(T.tenantById(id)!).notesDir, file), text);
 const system = (o: { systemPrompt: string }) => o.systemPrompt;
 
@@ -61,12 +61,12 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   const conv = tenant(id);
   const o = heartbeatOptions(conv, payerOf(id), { provenance: { kind: "standing", task: "THE LOOK" } }, NOW);
   assert.equal(o.source, "group", "the isolated policy source: none of the owner's data");
-  assert.deepEqual([o.sessionFile, o.memory, o.seenAt], [undefined, undefined, undefined], "a fresh session, no auto-memory: a run that reads mail cannot write notes");
+  assert.deepEqual([o.sessionConv, o.memory, o.seenAt], [undefined, undefined, undefined], "a fresh session, no auto-memory: a run that reads mail cannot write notes");
   assert.equal(o.model, settings.heartbeatModel);
   assert.ok(o.outputFormat);
   assert.deepEqual(o.provenance?.(), { kind: "standing", task: "THE LOOK" });
   assert.equal(o.conversation, `tenant:${id}`);
-  assert.deepEqual([o.tenant?.id, o.tenant?.apiKey, o.tenant?.costFile], [id, KEY, T.tenantContext(T.tenantById(id)!).costFile], "her ledger: what the run costs is hers");
+  assert.deepEqual([o.tenant?.id, o.tenant?.apiKey, o.tenant?.ledger], [id, KEY, T.tenantContext(T.tenantById(id)!).ledger], "her ledger: what the run costs is hers");
   assert.ok(o.maxBudgetUsd <= T.tenantContext(T.tenantById(id)!).maxBudgetUsdPerRun, "held to her own per-run ceiling");
   const tools = [...(o.tools ?? [])];
   assert.ok(tools.includes(GOOGLE_MAIL_TOOL), "her own mail");
@@ -141,7 +141,7 @@ test("a friend on an instance without Google has no expert and no mail in her in
   assert.equal(go.source, "group");
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
   assert.deepEqual([...go.tools!].sort(), [...unattendedTools(groupTools())].sort(), "the group's capability set, less the notes' file tools");
-  assert.deepEqual([go.sessionFile, go.memory, go.tenant], [undefined, undefined, undefined]);
+  assert.deepEqual([go.sessionConv, go.memory, go.tenant], [undefined, undefined, undefined]);
   assert.ok(go.maxBudgetUsd <= 0.5);
   assert.match(system(go), /in a group chat on Signal/);
   const gb = buildOptions(async () => ({ approved: false }), go, undefined);

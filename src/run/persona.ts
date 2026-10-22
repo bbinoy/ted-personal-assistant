@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { allows, capabilitiesOf, groupCapabilities } from "../policy/capabilities.ts";
 import { fence } from "../core/fence.ts";
 import type { Capability } from "../tenants/tenants.ts";
@@ -6,12 +7,13 @@ import { localDay } from "../core/pause.ts";
 import { NAMES, SKIPPED, type Connector } from "../modules/connectors.ts";
 import { categoriesFor, PLUGIN, preset, render, type PromptKey, type Value } from "../core/preset.ts";
 import { ASSISTANT, OWNER, settings } from "../core/settings.ts";
+import { convPaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
 
 // System prompts. The WORDS are the assistant preset's (assistants/<name>/persona/*.md, loaded by preset.ts): who the assistant is,
 // how it talks, what each kind of run is told. This file is the other half: it fills in what only code knows (the owner's name, which
 // tools exist, the folders, the date, what is connected) and adds the rules that are the harness's own, not a personality's.
 //
-// They are built per run, not constants, because they carry the owner's memory (memory/notes/).
+// They are built per run, not constants, because they carry the owner's memory (conversations/owner/notes/).
 // What belongs in the preset: the default personality and the technical facts it talks about. Personal
 // preferences (tone tweaks, "never use em dashes", people, topics) live in notes instead, so
 // the owner can change them from chat. Memory is written through the model, so it is never
@@ -94,9 +96,8 @@ export function chatSystem(now = new Date(), mail: boolean = settings.mail): str
       send: `${SEND_RULE}${voiceRule("owner", capabilitiesOf({ kind: "owner" }))}`,
       channel: settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`,
       mailNote: mail ? mailNote() : "",
-      logsDir: settings.logsDir,
-      stateDir: settings.stateDir,
-      memoryDir: settings.memoryDir,
+      logsDir: logPaths().dir,
+      ownerDir: convPaths(OWNER_CONV).dir,
       selfTimed: SELF_TIMED,
       categories: categoriesFor("owner").join(", "),
     }),
@@ -173,11 +174,25 @@ export function groupSystem(parts: { style?: string; caps?: ReadonlySet<Capabili
   );
 }
 
+// How a person's note is written, from the stay-in-touch skill itself (its "Writing a person's note" section), so the dream and the skill never drift apart. Empty if the skill is absent.
+function peopleGuide(): string {
+  try {
+    const text = readFileSync(`${settings.pluginDir}/skills/stay-in-touch/SKILL.md`, "utf8");
+    const from = text.indexOf("## Writing a person's note");
+    if (from < 0) return "";
+    const rest = text.slice(from).replace(/^## .*\n+/, "");
+    const end = rest.indexOf("\n## ");
+    return (end < 0 ? rest : rest.slice(0, end)).replace(/```[^\n]*\n/g, "").replace(/```/g, "").trim();
+  } catch {
+    return "";
+  }
+}
+
 // The nightly dream (dream.ts), one prompt for every conversation: reads what the owner, a friend or a group's members said and proposes changes to those notes as
 // JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three, `categories` the note categories that
 // conversation has (the preset's notes.dream, .tenant or .group).
 export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant"; categories: readonly string[] }): string {
-  return say("dream", { subject: oneLineName(d.subject), own: d.kind === "owner", group: d.kind === "group", categories: d.categories.join(", ") });
+  return say("dream", { subject: oneLineName(d.subject), own: d.kind === "owner", group: d.kind === "group", categories: d.categories.join(", "), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
 }
 
 // Whose heartbeat run it is when it is not the owner's: a friend (her name, her own words about language and tone from tenant.json) or a group. The owner's has none.

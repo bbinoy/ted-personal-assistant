@@ -2,15 +2,19 @@ import { LIMITS } from "./core/sanitize.ts";
 import { providerReady, qwenReady } from "@ted-assistant/speech/tts";
 import { voiceReady } from "@ted-assistant/speech/voice";
 import { execFileSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { ROOT } from "./core/paths.ts";
 import { spentToday } from "./core/budget.ts";
-import { readRows, type HeartbeatRow } from "./heartbeat/rows.ts";
+import { lastLookAt, readRows, type HeartbeatRow } from "./core/looks.ts";
+import { HEARTBEAT_KEY } from "./heartbeat/heartbeat.ts";
+import { kvGet, openInstanceDbAt } from "./core/instancedb.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
 import { ownerSkills } from "./modules/skills.ts";
-import { isPaused, localTime } from "./core/pause.ts";
+import { isPaused, localTime, pauseText } from "./core/pause.ts";
+import { errorLinesSince } from "./core/logwindow.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./modules/browse/browseserver.ts";
 import { killSwitch } from "./modules/browse/card.ts";
 import { macKeychain, type Keychain } from "./secrets/keychain.ts";
@@ -23,14 +27,20 @@ import { INTAKE_ROLE } from "./secrets/openbaoadmin.ts";
 import { BaoError, type OpenBao } from "./secrets/openbao.ts";
 import { appBao, ITEM_KINDS, keychainNames, looksLikeApiKey, OWNER } from "./secrets/secrets.ts";
 import { openRequests } from "./tenants/registration.ts";
-import { listTenants, OWNER_ID, pausedUntil, people, tenantContext } from "./tenants/tenants.ts";
+import { listTenants, OWNER_ID, pausedUntil, people, registryProblem, tenantContext } from "./tenants/tenants.ts";
 import { Ledger } from "./modules/browse/payments.ts";
 import { messengerDoctor } from "./conversation/messenger.ts";
 import { settings } from "./core/settings.ts";
-import { disconnected, NAMES, readConnectors } from "./modules/connectors.ts";
+import { disconnected, readConnectors, reportable } from "./modules/connectors.ts";
 import { readNotes } from "./memory/notes.ts";
 import { missingSetup } from "./modules/index.ts";
-import { dataPath, readJson, readText } from "./core/state.ts";
+import { dataPath, readText } from "./core/state.ts";
+import { checkConvDbFile, damagedConvs } from "./core/convdb.ts";
+import { readDream } from "./modules/memory/dreamscope.ts";
+import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, layout, logPaths, OWNER_CONV } from "./core/convpaths.ts";
+import { layoutState, readVersion, refusal, stragglers } from "./core/migrate.ts";
+import { readRetentionState, retentionSummary } from "./core/retention.ts";
+import { staleForReview } from "./heartbeat/retentionrules.ts";
 
 type Line = DoctorLine;
 
@@ -92,7 +102,7 @@ export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake;
   const keychain = o.keychain ?? macKeychain;
   const problem = baseUrlProblem(cfg);
   const hasToken = await keychain.get(keychainNames(o.prefix ?? settings.openbao.keychainPrefix).intake).then((t) => !!t, () => false);
-  if (!cfg.baseUrl) line(true, `${what}: off`, "INTAKE_BASE_URL is not set: friends are told setup links are not available yet (the owner can still use npm run intake -- link owner profile)");
+  if (!cfg.baseUrl) line(true, `${what}: off`, "INTAKE_BASE_URL is not set: friends are told setup links are not available yet (the owner sets her own details with npm run profile and npm run card)");
   else if (problem) return line(false, what, problem);
   else line(true, what, `links point to ${new URL(cfg.baseUrl).origin}`);
   if (!hasToken) return cfg.baseUrl ? line("warn", "intake write-only token", "this Mac's Keychain has none: npm run openbao -- setup") : undefined;
@@ -180,8 +190,10 @@ export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
 
 // The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today against her own limit,
 // and whether she is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
-export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number } = {}): void {
+export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number; broken?: string | undefined } = {}): void {
   const on = o.on ?? settings.tenants;
+  const broken = "broken" in o ? o.broken : registryProblem();
+  if (broken !== undefined) line(false, "friends list", `tenants.json in the instance folder can't be read (${broken}); friends are paused, the owner is unaffected. It is kept as is: repair or move it, then restart`);
   if (!on) return line(true, "tenants: off", "TENANTS=off: one person, as always");
   const now = o.now ?? Date.now();
   const key = "key" in o ? o.key : settings.tenantApiKey;
@@ -191,7 +203,7 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
   line(true, "tenants", `${all.length} (${count("active")} active, ${count("suspended")} suspended); ${openRequests(now).length} registration request(s) waiting for your answer`);
   for (const rec of all) {
     const ctx = tenantContext(rec);
-    const spent = spentToday(ctx.costFile);
+    const spent = spentToday(ctx.ledger);
     const paused = pausedUntil(ctx, now);
     const problems = [
       spent >= ctx.dailyBudgetUsd ? "today's budget is spent" : "",
@@ -212,7 +224,7 @@ export const qwenReference = (q: { builtIn?: boolean; refAudio: string }): strin
 
 export const requiredSkills = (mail: boolean, provider: string = settings.mailProvider): string[] => ownerSkills(mail, provider, { required: true });
 
-// What the heartbeat line says: the last tick, and the heartbeat run's last look (state/heartbeat.jsonl).
+// What the heartbeat line says: the last tick, and the heartbeat run's last look (the looks table of instance.db).
 export const heartbeatDetail = (beat: { lastTickAt?: string }, ageMin: number, lastLookAt: string | undefined, localTime: (iso: string) => string): string =>
   beat.lastTickAt ? `last tick ${Math.round(ageMin)} min ago; last look ${lastLookAt ? localTime(lastLookAt) : "none yet"}` : "no tick recorded yet";
 
@@ -234,7 +246,7 @@ export function sleepCheck(line: Line, pmset: (args: string[]) => string | undef
 export const FAILED_LOOKS_WARN = 3; // this many failed or timed-out looks in the window is a warning
 export const FAILED_LOOKS_HOURS = 6;
 
-// The heartbeat's own record says the looks are failing: counts from state/heartbeat.jsonl only, no words.
+// The heartbeat's own record says the looks are failing: counts from the looks table only, no words.
 export function failedLooksCheck(line: Line, rows: readonly HeartbeatRow[], now: Date = new Date()): void {
   const since = now.getTime() - FAILED_LOOKS_HOURS * 3600_000;
   const recent = rows.filter((r) => Date.parse(r.at) >= since);
@@ -243,6 +255,54 @@ export function failedLooksCheck(line: Line, rows: readonly HeartbeatRow[], now:
   const what = `looks failing in the last ${FAILED_LOOKS_HOURS} hours`;
   if (failed.length < FAILED_LOOKS_WARN) return line(true, what, `${failed.length} of ${recent.length} look(s) failed`);
   line("warn", what, `${failed.length} of ${recent.length} look(s) failed or timed out${timeouts ? ` (${timeouts} timed out)` : ""}; likely causes: the Mac sleeping, no network, or the usage limit (npm run heartbeat-report; docs/SETUP.md "Keep it running")`);
+}
+
+// instance.db opens, is in WAL mode, has the schema this code knows, and passes SQLite's quick check; the row counts say whether the ledgers are there (never what is in them).
+/** The conversations' databases (assistant.db): a damaged one FAILS with the file's name and what to do; the healthy ones are one line. Reads each read-only, never opens one the normal way (which would set a damaged one aside). */
+export function convDbCheck(line: Line, root: string = dataRoot()): void {
+  const L = layout(root);
+  const names = existsSync(L.conversations) ? readdirSync(L.conversations).filter(isConvId) : [];
+  const damaged = new Map(damagedConvs(root).map((d) => [d.conv, d]));
+  let ok = 0;
+  for (const conv of names) {
+    const p = L.conv(conv);
+    const marker = damaged.get(conv);
+    const verdict = existsSync(p.db) ? checkConvDbFile(p.db) : "ok";
+    if (marker) line(false, `conversation database ${conv}`, `was damaged${marker.at ? ` at ${localTime(marker.at)}` : ""} and set aside as ${marker.keptAs || "assistant.db.corrupt-*"}${marker.salvaged ? ` (the mail already handled${marker.salvaged.session ? " and the session" : ""} were copied into the fresh one: ${marker.salvaged.seenMail} id(s))` : ""}; its background work (looks, dream, approvals) is stopped, chat goes on with a fresh start${marker.pendingLost?.length ? `; approvals that were waiting and are NOT restored: ${marker.pendingLost.map((x) => `#${x.n}${x.label ? ` ${x.label}` : ""}`).join("; ")}` : ""}. Restore the set-aside file with the agent stopped (or sqlite3 .recover), then run: npm run convdb -- accept ${conv}; accepting without restoring keeps the fresh start (the first look then skips what is in the inbox, it does not triage it again)`);
+    else if (verdict !== "ok") line(false, `conversation database ${conv}`, `${verdict}; restore ${p.db} from your backup with the agent stopped, or the agent will set it aside at its next use`);
+    else if (existsSync(p.db)) {
+      ok++;
+      const lost = lostApprovals(p.db);
+      if (lost.length) line("warn", `approvals not restored in ${conv}`, `${lost.map((x) => `#${x.n}${x.label ? ` ${x.label}` : ""}`).join("; ")}; they are not run, ask again if wanted (listed for 30 days)`);
+    }
+  }
+  if (ok > 0 || names.length === 0) line(true, "conversation databases", `${ok} assistant.db file(s), quick_check ok`);
+}
+
+/** The approvals that could not be restored into this database (a late pending.json, a damaged file): read-only, never opens it the normal way. */
+function lostApprovals(path: string): { n: number; label: string }[] {
+  let raw: DatabaseSync | undefined;
+  try {
+    raw = new DatabaseSync(path, { readOnly: true });
+    return (raw.prepare("SELECT n, label FROM pending_lost ORDER BY seq").all() as { n: number; label: string }[]).slice(0, 20);
+  } catch {
+    return [];
+  } finally {
+    try { raw?.close(); } catch { /* closed */ }
+  }
+}
+
+export function dbCheck(line: Line, path: string = instancePaths().db): boolean {
+  try {
+    const db = openInstanceDbAt(path);
+    const verdict = db.check(true);
+    const count = (t: string) => db.num(`SELECT COUNT(*) FROM ${t}`);
+    line(verdict === "ok" && db.journalMode === "wal", "instance database", `${db.journalMode} mode, schema ${db.version}, integrity_check ${verdict}; ${count("spend")} spend, ${count("payments")} payment, ${count("looks")} look row(s)${verdict === "ok" ? "" : "; restore it from a backup (docs/SETUP.md)"}`);
+    return verdict === "ok";
+  } catch (e) {
+    line(false, "instance database", (e as Error).message);
+    return false;
+  }
 }
 
 // `npm run doctor`: is everything this agent depends on in place? Prints no secrets.
@@ -258,15 +318,15 @@ export async function doctor() {
   };
 
   const major = Number(process.versions.node.split(".")[0]);
-  line(major >= 24, "Node 24+ (runs TypeScript directly)", process.versions.node);
+  line(major >= 24, "Node 24+ (runs TypeScript directly)", major >= 24 ? process.versions.node : `${process.versions.node}; install Node 24 or newer`);
 
   const envPath = `${root}.env`;
-  if (!existsSync(envPath)) line(false, ".env present");
+  if (!existsSync(envPath)) line(false, ".env present", "copy .env.example to .env and fill in SIGNAL_OWNER_NUMBER");
   else {
     const mode = (statSync(envPath).mode & 0o777).toString(8);
-    line(mode === "600", ".env is owner-only (600)", `mode ${mode}`);
+    line(mode === "600", ".env is owner-only (600)", mode === "600" ? `mode ${mode}` : `mode ${mode}; fix: chmod 600 .env`);
     const env = await readFile(envPath, "utf8");
-    line(/^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env), "SIGNAL_OWNER_NUMBER set");
+    line(/^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env), "SIGNAL_OWNER_NUMBER set", /^SIGNAL_OWNER_NUMBER=\+\d+/m.test(env) ? "" : "add SIGNAL_OWNER_NUMBER=+<your number> to .env");
     line(!/^ANTHROPIC_API_KEY=./m.test(env) || settings.credential === "api-key" ? true : "warn", "no API key shadowing the stored login", "API key lines override login mode only if HARNESS_AUTH=api-key");
   }
 
@@ -276,30 +336,42 @@ export async function doctor() {
   await mailCheck(line, settings.mail);
 
   const auth = run("claude", ["auth", "status"]);
-  line(!!auth && !/not logged in|logged out/i.test(auth), "Claude login valid (needed for Notion/Calendar/Gmail connectors)");
+  line(!!auth && !/not logged in|logged out/i.test(auth), "Claude login valid (needed for Notion/Calendar/Gmail connectors)", !!auth && !/not logged in|logged out/i.test(auth) ? "" : "fix: claude auth login");
 
   const lc = run("launchctl", ["list", settings.launchdLabel]);
-  line(lc ? (/"PID"/.test(lc) ? true : "warn") : false, `launchd job ${settings.launchdLabel} loaded and running`, lc ? "" : "not loaded");
+  line(lc ? (/"PID"/.test(lc) ? true : "warn") : false, `launchd job ${settings.launchdLabel} loaded and running`, lc ? "" : "not loaded; fix: scripts/install-launchd.sh");
 
   // The skills ship with the repo (plugin/skills), so there is nothing to install. What each
   // one still needs about the owner lives in memory notes, and the chat sets those up.
   for (const skill of requiredSkills(settings.mail)) {
     line(existsSync(`${settings.pluginDir}/skills/${skill}/SKILL.md`), `skill ${skill} (bundled)`);
   }
-  const conn = readConnectors();
+  // On an old data folder doctor still runs (it is what one reaches for when things look wrong): the layout line fails and says what to do, and only the checks that read the new layout are skipped.
+  const legacy = refusal(layoutState(settings.dataDir)) !== null;
+  if (!legacy) convDbCheck(line);
+  const dbOk = !legacy && dbCheck(line); // (instance.db: spend, payments, looks, notices, intake marks, connectors; a damaged one skips the checks that read it)
+  const conn = dbOk ? readConnectors() : undefined;
   if (conn) {
-    for (const k of ["notion", "calendar"] as const) line(conn[k] ? true : "warn", `${NAMES[k]} connector`, conn[k] ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors)`);
+    // Every connector module the owner uses (src/modules: Notion, Calendar, Drive and Docs once unhidden, ...); the mail provider's own is the mail check above.
+    for (const r of reportable().filter((x) => !x.mail)) line(conn[r.key] !== false ? true : "warn", `${r.label} connector`, conn[r.key] !== false ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors); without it: ${r.skipped}`);
   }
-  const gaps = missingSetup(readNotes(), disconnected(conn), settings.mail);
-  line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
+  const gaps = legacy ? [] : missingSetup(readNotes(), disconnected(conn), settings.mail);
+  if (!legacy) line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
 
-  for (const [name, dir] of [["state", settings.stateDir], ["logs", settings.logsDir], ["memory", settings.memoryDir]] as const) {
-    if (!existsSync(dir)) continue;
+  const layoutVersion = readVersion(settings.dataDir);
+  if (legacy) line(false, "data layout", "old data layout: start the agent once or run `npm run migrate`; `npm run migrate -- --dry-run` shows the plan. Checks that need the new layout are skipped");
+  else line(layoutVersion === LAYOUT_VERSION ? true : "warn", "data layout", layoutVersion === LAYOUT_VERSION ? `version ${layoutVersion}: instance/, conversations/<id>/, logs/` : "not stamped yet: the first start does it (or run npm run migrate)");
+  if (!legacy) {
+    const late = stragglers(settings.dataDir).map((o) => o.from.slice(settings.dataDir.length + 1));
+    if (late.length) line(false, "files in the old places", `${late.length} path(s) an older version wrote after the move (${late.slice(0, 5).join(", ")}); restart the agent: it merges the logs and sets the rest aside in instance/migration-orphans/`);
+  }
+  for (const [name, dir] of [["instance", instancePaths().dir], ["conversations", conversationsDir()], ["logs", logPaths().dir]] as const) {
+    if (legacy || !existsSync(dir)) continue;
     const loose = readdirSync(dir).filter((f) => (statSync(`${dir}/${f}`).mode & 0o077) !== 0 && statSync(`${dir}/${f}`).isFile());
-    line((statSync(dir).mode & 0o077) === 0, `${name}/ directory is owner-only`);
+    line((statSync(dir).mode & 0o077) === 0, `${name}/ directory is owner-only`, (statSync(dir).mode & 0o077) === 0 ? "" : `fix: chmod 700 ${dir}`);
     line(loose.length === 0 ? true : "warn", `${name}/ files are owner-only`, loose.length ? `group/world-readable: ${loose.join(", ")}` : "");
   }
-  line(true, "memory/notes/", `${readNotes().length} active note(s)`); // the count only, never the notes
+  if (!legacy) line(true, "the owner's notes", `${readNotes().length} active note(s)`); // the count only, never the notes
 
   const voice = voiceReady(settings.whisperModel);
   line(voice.ok ? true : "warn", "voice messages", voice.ok ? "transcribed locally with whisper.cpp" : `not available, missing: ${voice.missing.join("; ")}`);
@@ -310,37 +382,46 @@ export async function doctor() {
   const where = settings.tts.provider === "elevenlabs" ? "ElevenLabs (spoken text is sent to elevenlabs.io)" : settings.tts.provider === "http" ? `your own server at ${new URL(settings.tts.http.url).host} (spoken text is sent there)` : settings.tts.provider === "qwen" ? (qwen!.ok ? `local cloned voice (Qwen3-TTS ${settings.tts.qwen.model.split("/").pop()}; reference: ${qwenReference(settings.tts.qwen)}); fallback: ${settings.tts.fallback}` : `Qwen voice not ready (${qwen!.missing.join(", ")}); ${tts.ok ? "Kokoro speaks instead" : "no fallback"}`) : `local Kokoro, voice ${settings.tts.kokoro.voice}`;
   line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
 
-  const dream = readJson<{ lastRunAt?: string }>("state/dream.json", {});
-  line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (DREAM_HOUR); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
+  const dream = legacy ? {} : readDream(OWNER_CONV);
+  if (!legacy) line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (DREAM_HOUR); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
+
+  if (!legacy) {
+    const r = retentionSummary(readRetentionState(instancePaths().retention), settings.retention, localTime);
+    line(r.ok, "retention", r.detail);
+    const old = staleForReview(layout(dataRoot()), new Date(), settings.migrationReviewDays);
+    if (old.length) line("warn", "old migration copies", `${old.length} entr${old.length === 1 ? "y" : "ies"} in instance/migration-backup or migration-orphans older than ${settings.migrationReviewDays} days (${old.slice(0, 3).map((o) => o.name).join(", ")}): review and delete them by hand, nothing removes them`);
+  }
 
   browseCheck(line, settings.browse, browseStatus());
   await openbaoCheck(line);
-  await intakeCheck(line);
-  tenantCheck(line);
+  if (dbOk) {
+    await intakeCheck(line);
+    tenantCheck(line);
+  }
   servicesCheck(line);
 
-  const beat = readJson<{ lastTickAt?: string }>("state/heartbeat.json", {});
+  if (dbOk) {
+  const beat = kvGet<{ lastTickAt?: string }>(HEARTBEAT_KEY, {});
   const ageMin = beat.lastTickAt ? (Date.now() - Date.parse(beat.lastTickAt)) / 60_000 : Infinity;
   line(
     ageMin <= 2 * settings.heartbeatMinutes + 1 ? true : "warn",
     "heartbeat is ticking",
-    heartbeatDetail(beat, ageMin, readRows().at(-1)?.at, localTime),
+    heartbeatDetail(beat, ageMin, lastLookAt(), localTime),
   );
   sleepCheck(line);
-  failedLooksCheck(line, readRows());
+  failedLooksCheck(line, readRows(1));
   line(true, "heartbeat run", `every conversation's look (owner, groups, friends with wake) at its chat and what it can read, on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
 
   const spent = spentToday();
-  line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)`);
-  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${dataPath("state/paused")} exists` : "");
+  line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)${spent < settings.dailyBudgetUsd ? "" : `: background work is paused until midnight; to change it set DAILY_BUDGET_USD in .env and restart`}`);
+  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${pauseText() ?? "paused"} (${dataPath(instancePaths().paused)}); to resume say /resume in your chat or delete that file` : "");
   const cardOff = killSwitch.off();
   const unconfirmed = new Ledger().rows().filter((r) => r.status === "unconfirmed").length;
   line(unconfirmed ? "warn" : true, "card payments", `${cardOff ? `OFF (${cardOff}); switch on: npm run card -- enable` : "not switched off (npm run card -- list shows the card, if one is saved)"}${unconfirmed ? `; ${unconfirmed} payment(s) unconfirmed: npm run card -- payments` : ""}`);
-  const log = readText("logs/agent.log") ?? "";
-  const hourAgo = new Date(Date.now() - 3600_000);
-  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const recentErrors = log.split("\n").filter((l) => l.includes(" ERR ") && l.slice(0, 5) >= hhmm(hourAgo)).length;
-  line(recentErrors === 0 ? true : "warn", "no errors in the log in the last hour", recentErrors ? `${recentErrors} error line(s) in logs/agent.log` : "");
+  }
+  const logFile = dataPath(logPaths().agent);
+  const recentErrors = existsSync(logFile) ? errorLinesSince(readText(logFile) ?? "", statSync(logFile).mtimeMs, Date.now() - 3600_000) : 0; // (log lines have a time but no date: logwindow.ts)
+  line(recentErrors === 0 ? true : "warn", "no errors in the log in the last hour", recentErrors ? `${recentErrors} error line(s) in logs/agent.log; look at them with: grep " ERR " ${logFile} | tail -n 20` : "");
 
   console.log(bad === 0 ? "\nAll required checks passed." : `\n${bad} check(s) failed.`);
   process.exit(bad === 0 ? 0 : 1);

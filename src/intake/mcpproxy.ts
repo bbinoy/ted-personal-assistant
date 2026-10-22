@@ -59,7 +59,14 @@ export abstract class UpstreamSession {
   }
 
   private async start(): Promise<Client> {
-    const opened = await this.open();
+    let opened: Opened;
+    try {
+      opened = await this.open();
+    } catch (e) {
+      // open() reads the credential: an error it did not make itself (a library's, which may quote the token it was handed) is never passed on, only the fixed sentence.
+      if (e instanceof UpstreamError) throw e;
+      throw new UpstreamError(`${this.label} did not start`);
+    }
     this.cleanup = opened.cleanup;
     this.transport = opened.transport;
     try {

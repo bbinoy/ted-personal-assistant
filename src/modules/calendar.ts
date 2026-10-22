@@ -22,7 +22,7 @@ const cal = rowsOf(CAL, "calendar", "calendar");
 
 export const calendarModule: ToolModule = {
   name: "calendar",
-  connection: { kind: "connector", key: "calendar", server: /google calendar/i, prefix: CAL },
+  connection: { kind: "connector", key: "calendar", label: "Google Calendar", skipped: "the calendar review and the meeting list", server: /google calendar/i, prefix: CAL },
   rows: [
     ...cal("read", "list_calendars list_events get_event search_events suggest_time"),
     ...cal("calendar-write", "create_event update_event"), // the guest floor is below

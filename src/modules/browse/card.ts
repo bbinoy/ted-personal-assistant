@@ -1,9 +1,11 @@
 import { existsSync, rmSync } from "node:fs";
 import { luhnValid } from "./browserules.ts";
 import { Ledger } from "./payments.ts";
+import { ledgerDamage } from "../../core/instancedb.ts";
 import { inTenant, ProfileError } from "./profile.ts";
 import { CARD_TENANTS, SecretsError, type TenantSecrets } from "../../secrets/secrets.ts";
 import { dataPath, readText, writeText } from "../../core/state.ts";
+import { instancePaths } from "../../core/convpaths.ts";
 import { LIMITS } from "../../core/sanitize.ts";
 import { settings } from "../../core/settings.ts";
 
@@ -91,7 +93,7 @@ export class CardStore {
 // a spoofed or injected message can never re-enable it.
 export class KillSwitch {
   private readonly file: string;
-  constructor(file = "state/card.disabled") {
+  constructor(file = instancePaths().cardDisabled) {
     this.file = file;
   }
   // Why card use is off, or undefined when it is on.
@@ -142,6 +144,10 @@ export async function openCardAccess(o: { store?: CardStore; kill?: KillSwitch; 
   const kill = o.kill ?? killSwitch;
   const caps = o.caps ?? capsFromSettings();
   if (kill.off() || caps.purchaseMinor <= 0 || caps.dayMinor <= 0) return undefined;
+  if (!o.ledger && ledgerDamage()) { // no payment without a ledger to make it happen once and to sum the cap from (the degraded mode, core/instancedb.ts)
+    o.onProblem?.("the payment ledger (instance/instance.db) is damaged");
+    return undefined;
+  }
   let info: CardInfo | undefined;
   try {
     info = await store.peek();

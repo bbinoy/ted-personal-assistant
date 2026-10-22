@@ -39,7 +39,7 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
   assert.deepEqual(Object.keys(p.profiles).sort(), ["chat", "group", "heartbeat"]);
   assert.ok(Object.values(p.profiles).every((x) => !("notes" in x)), "no profile names note categories: the heartbeat run reads all of its conversation's own notes");
   assert.deepEqual(Object.keys(p.persona).sort(), Object.keys(PROMPTS).sort());
-  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "setup"]);
+  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "stay-in-touch", "setup"]);
   assert.deepEqual(p.expert, { model: "sonnet", maxTurns: 40 });
   assert.strictEqual(presetFor({}), presetFor({ ASSISTANT_PRESET: "ted" }), "ted is the default, loaded once");
 });
@@ -170,7 +170,7 @@ test("a second preset's note categories reach every run: chat, group, friend, he
       group: prompt(runOptionsFor(group("g1"), {})),
       friend: prompt(runOptionsFor(tenant(rec.id), { apiKey: "k" })),
       heartbeat: heartbeatOptions(owner(), LOGIN, {}),
-      friendHeartbeat: heartbeatOptions(tenant(rec.id), { kind: "instance", id: rec.id, apiKey: "k", costFile: "unused.json" }, {}),
+      friendHeartbeat: heartbeatOptions(tenant(rec.id), { kind: "instance", id: rec.id, apiKey: "k", ledger: "unused.json" }, {}),
       profiles: Object.fromEntries(["chat", "heartbeat", "group"].map((k) => [k, [PROFILES[k].maxTurns, PROFILES[k].maxBudgetUsd]])),
       scopes: Object.fromEntries(["owner", "group", "tenant"].map((k) => [k, dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories])),
       dream: ["owner", "group", "tenant"].map((k) => dreamSystem({ subject: "S", kind: k, categories: dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories })),

@@ -31,7 +31,7 @@ const rules: { name: string; re: RegExp; skipFiles?: RegExp; allow?: RegExp }[] 
   { name: "JWT", re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/ },
   // a Signal account id (SIGNAL_OWNER_ACI) is a UUID; the repeating-digit ones in tests are obviously fake
   { name: "UUID (could be a Signal account id)", re: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i, skipFiles: /package-lock\.json$/, allow: /\b([0-9a-f])\1{7}-|00000000-0000|github\.com\/user-attachments\/assets\//i }, // the last: the id in a GitHub-hosted README image is public, not a Signal id
-  { name: "long secret-looking token", re: /\b[A-Za-z0-9_-]{40,}\b/, skipFiles: /package-lock\.json$|\.test\.ts$/, allow: /mcp__|https?:\/\/|sha\d+-|sha256: "[0-9a-f]{64}"|node_modules|[a-z]+(-[a-z]+){4,}|[a-z]+(_[a-z]+){4,}/ },
+  { name: "long secret-looking token", re: /\b[A-Za-z0-9_-]{40,}\b/, skipFiles: /package-lock\.json$|\.test\.ts$/, allow: /uses: [\w./-]+@[0-9a-f]{40}|mcp__|https?:\/\/|sha\d+-|sha256: "[0-9a-f]{64}"|node_modules|[a-z]+(-[a-z]+){4,}|[a-z]+(_[a-z]+){4,}/ },
 ];
 
 // Exact secrets from this machine: if any appears in a publishable file, that is a leak.

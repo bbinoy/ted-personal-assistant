@@ -1,12 +1,16 @@
 import { query, type HookCallbackMatcher, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { audit, type Source } from "../core/audit.ts";
+import { gated, parked, type RunKind } from "../core/rungate.ts";
+import { type Source } from "../core/audit.ts";
+import { emitRecord, endRun } from "../core/events.ts";
+import { randomUUID } from "node:crypto";
+import { noteDone } from "../approvals/journalrender.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
-import { charge, envFor, LOGIN, observe, succeeded, type Payer } from "../tenants/payer.ts";
+import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
 import { browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard, type BrowseMode } from "../modules/browse/browseguard.ts";
 import { hiddenBrowserTools } from "../modules/browse/browserules.ts";
-import { pausing, RunAborted, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
+import { onStop, pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
@@ -16,7 +20,7 @@ import { createsOf, isOwnerOnly } from "../policy/toolmanifest.ts";
 import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
 import { serversFor } from "../modules/runtime.ts";
 import type { RunContext } from "../modules/types.ts";
-import { approveIn, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
+import { approveIn, makeCanUseTool, type Approve, type CallGuard } from "../approvals/permissions.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { groupCapabilities, groupTools } from "../policy/capabilities.ts";
@@ -26,7 +30,8 @@ import { PROFILES } from "./profiles.ts";
 import { type ChatSession } from "./session.ts";
 import { settings } from "../core/settings.ts";
 import { cleanToolOutput } from "../core/toolclean.ts";
-import { readJson, writeJson } from "../core/state.ts";
+import { readSession, writeSession } from "./sessionstore.ts";
+import type { ConvId } from "../core/convpaths.ts";
 import { ownerSkills, skillsFor } from "../modules/skills.ts";
 import { recordToolsSeen, toolsSeen } from "../policy/toolsseen.ts";
 import type { SeenMail } from "../modules/seenmail/seenmail.ts";
@@ -44,10 +49,11 @@ export interface AgentReply {
 export interface RunOptions {
   source: Source; // audit tag: who is acting
   systemPrompt: string;
-  sessionFile?: string; // chat and groups: continue + save the conversation here; brief and the rest: fresh every run
+  sessionConv?: ConvId; // chat and groups: continue + save the conversation's session here (its assistant.db); brief and the rest: fresh every run
   // Turns on the SDK's auto-memory: notes in `dir`, the only place the file tools may write (policy.ts).
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
+  notesRead?: { dir: string; categories?: readonly string[]; write: readonly string[]; maxNotes: number; zone?: string }; // an unattended run's notes: the prompt holds their index, read_note reads one and write_note saves an inferred one (notestools.ts)
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
   groupId?: string; // a group's unattended run (the heartbeat run) has no memory but is still the group's: its send, its browse approvals and its questions go there (memory.groupId says the same for a chat turn)
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
@@ -61,9 +67,12 @@ export interface RunOptions {
   // Fires after a tool call succeeds. Used to capture the brief the agent sends.
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
+  callGuard?: CallGuard; // a run that may make exactly one approved call (approvals/pendingexec.ts): sees every call first (permissions.ts)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
+  gate?: RunKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
+  stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's session file
+  signal?: AbortSignal; // an unattended run is called off from outside (a chat message overtook the heartbeat look, look.ts): while waiting for a place (rungate.ts) it never starts, once running the query is aborted
   maxMinutes?: number; // a wall-clock ceiling of its own (the browse run, a heartbeat look), else the chat or background one
-  signal?: AbortSignal; // the code that started the run can stop it (a heartbeat look when the Mac slept): the query is aborted and the run rejects with RunAborted
   expertMaxMinutes?: number; // a heartbeat look: when it delegates to an expert the whole ceiling becomes this many minutes (never less than maxMinutes)
   // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
   // read at every call (a warm process is built before the message that uses it arrives): a job passes `() => ({ kind: "standing", task })` with its fixed text, an
@@ -81,7 +90,7 @@ export interface RunOptions {
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
-const payerOf = (opts: Pick<RunOptions, "tenant">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, costFile: opts.tenant.costFile } : LOGIN);
+const payerOf = (opts: Pick<RunOptions, "tenant" | "source" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, ledger: opts.tenant.ledger } : loginFor(opts.source === "group" ? (opts.groupId ?? opts.memory?.groupId) : undefined));
 
 // Context size of one model call: everything it was sent.
 const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) =>
@@ -89,8 +98,11 @@ const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: num
 
 // The browse sub-run (browse.ts calls this through the entry tool): a fresh run with the browser, under the guard. A group's run is the same
 // as the owner's; only `approve` differs (the group's own approver).
-export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation"> = {}): RunOptions {
+export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> = {}): RunOptions {
   return {
+    gate: "helper", // (a child of a run that holds a place: queuing for a second one could deadlock the looks that browse, and make a chat turn wait behind them)
+    signal: parent.signal, // called off with its parent (a look overtaken by a message, a ceiling)
+    stopScope: parent.stopScope, // and by "/stop" in the parent's conversation
     source: PROFILES.browse.source,
     systemPrompt: browseSystem(undefined, guard.vision, guard.profileKeys(), guard.cardInfo()),
     maxTurns: PROFILES.browse.maxTurns,
@@ -106,7 +118,7 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
 }
 
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
-export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
+export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
 
 // The built-in tools of a run (everything else is an MCP tool), from the rows of the builtin module (modules/builtin.ts), one list for every run: a group or a
 // tenant has the rows its capability set holds (its own notes, search, skills, and never opening a page);
@@ -116,12 +128,20 @@ function builtinTools(source: Source, tools: ReadonlySet<string> | undefined): s
   return builtinModule.rows.filter((r) => (tools ? tools.has(r.tool) && !isOwnerOnly(r.tool) : !!r.offeredTo?.includes(source))).map((r) => r.tool);
 }
 
-export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined): Options {
+export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined, signal?: AbortSignal, run: string = randomUUID()): Options { // signal: the run's own abort signal, when the caller has it (its browse child is called off with it)
   // After a successful tool call: announce a note change on the phone (chat), and report the
   // call to whoever asked (the brief captures what it sent).
+  // The notes this run has read so far, in order (read_note reports each; a chat turn reads its notes with the Read tool): the journal says "per your notes: ..." for what it does next (journalrender.ts whyOf).
+  const notesSeen: { file: string; inferred: boolean }[] = [];
+  const noteSeen = (file: string, inferred: boolean): void => {
+    const name = file.split("/").pop()!.replace(/\.md$/, "");
+    if (name && name !== "MEMORY" && !notesSeen.some((n) => n.file === name)) notesSeen.push({ file: name, inferred });
+  };
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
+    if (tool === "Read" && opts.memory?.dir && typeof input.file_path === "string" && input.file_path.startsWith(opts.memory.dir) && input.file_path.endsWith(".md")) noteSeen(input.file_path, false);
     if (opts.memory?.notify) noteWritten(tool, input);
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
+    void noteDone({ conv: conversation, run, source: opts.source, tool, input, response }); // the journal line of an action, with the why the permission layer recorded (core/events.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
   const delegation = opts.experts ? delegationHook(opts.experts.setup, opts.source, { onDelegate: opts.experts.onDelegate }) : undefined;
@@ -175,7 +195,10 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation }) };
+  // Whether this run read a note a background look inferred (read_note tells us): the approval judge then does not take a wake-up's task as the person's word (permissions.ts).
+  let readInferred = false;
+  const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { file?: string; inferred?: boolean }) => void (n.inferred && (readInferred = true), n.file && noteSeen(n.file, !!n.inferred)) };
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, stopScope: opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined) }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -223,7 +246,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionFile, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
@@ -250,14 +273,14 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     }
     if (message.type !== "result") continue;
     if (opts.memory?.notify) announceMemoryChanges(opts.memory.notify, message.subtype === "success" ? message.result : "");
-    if (opts.sessionFile) {
+    if (opts.sessionConv) {
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
-      const before = readJson<ChatSession>(opts.sessionFile, { costUsd: 0 });
+      const before = readSession(opts.sessionConv);
       const baseTokens = before.sessionId === message.session_id ? before.baseTokens : lastContext; // a session from before this existed has none: the absolute limit applies until it starts fresh
       const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
-      writeJson(opts.sessionFile, next);
+      writeSession(opts.sessionConv, next);
     }
-    charge(payer, message.total_cost_usd - previousCost); // failures cost money too (a friend's goes to her own ledger)
+    charge(payer, message.total_cost_usd - previousCost, opts.source); // failures cost money too (a friend's goes to her own ledger)
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
       return { text: message.result, costUsd: message.total_cost_usd - previousCost, structured: message.structured_output };
@@ -270,33 +293,45 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
 // The one place every run passes: chat, groups, wake-ups, brief, heartbeat run, the mail handler. On the ceiling the query is aborted, the
 // timeout is logged and audited, and the rejection takes the usual error path (a notice, rate-limited in groups; the queue moves on).
 // A chat run (the owner's chat and groups alike) and a background run have their own limits (settings.ts).
-export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number, signal?: AbortSignal): Promise<T> {
+export async function underCeiling<T>(source: Source, run: (c: Ceiling) => Promise<T>, minutes?: number, scope?: string): Promise<T> {
   const chat = source === "chat" || source === "group";
   try {
-    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run, signal);
+    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run, scope);
   } catch (e) {
-    if (e instanceof RunAborted) {
-      console.error(`run: ${e.message} (${source})`);
-      audit("run", "aborted", source, { reason: e.reason.slice(0, 60) });
-    }
     if (e instanceof RunTimeout) {
       console.error(`run: timed out after ${e.minutes} minutes (${source})`);
-      audit("run", "timeout", source, { minutes: e.minutes });
+      emitRecord("run", "timeout", source, { minutes: e.minutes });
     }
     throw e;
   }
 }
 
 export async function runAgent(prompt: string, approve: Approve, opts: RunOptions, io: { query?: typeof query } = {}): Promise<AgentReply> {
-  const { resume, previousCost } = opts.sessionFile ? chatResume(opts.sessionFile) : { resume: undefined, previousCost: 0 };
+  const { resume, previousCost } = opts.sessionConv ? chatResume(opts.sessionConv) : { resume: undefined, previousCost: 0 };
+  // The entry gate of an unattended run (rungate.ts; every one is a heartbeat look, a chat turn goes through agent.ts runConversation): it waits for a place, and its ceiling starts only once it has one.
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
-  return underCeiling(opts.source, (c) => {
-    // (a delegation gives the look more time: the first call to an expert extends the ceiling)
-    const experts = opts.experts && opts.expertMaxMinutes ? { ...opts.experts, onDelegate: (d: Delegation) => (c.extend(opts.expertMaxMinutes! * 60_000), opts.experts!.onDelegate?.(d)) } : opts.experts;
-    const o = experts === opts.experts ? opts : { ...opts, experts };
-    return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, approve), o, resume), abortController: c.controller } }), opts, previousCost);
-  }, opts.maxMinutes, opts.signal).catch((e) => {
-    if (opts.sessionFile) forgetUnresumable(opts.sessionFile, e, opts.source);
+  // "/stop" (ceiling.ts stopRuns) reaches a look too, also while it still waits for a place: `wait` is called off by it, by the caller's signal (a message overtook the look)
+  // and, once running, by the ceiling; the gate place is released as soon as the run's promise rejects.
+  const wait = new AbortController();
+  const callOff = () => wait.abort(opts.signal?.reason);
+  if (opts.signal?.aborted) callOff();
+  opts.signal?.addEventListener("abort", callOff, { once: true });
+  let started = false;
+  const run = randomUUID(); // this run's id: what the journal kept for its calls is dropped when it ends
+  const forget = opts.stopScope ? onStop(opts.stopScope, (e) => void (started || wait.abort(e))) : () => {};
+  return gated(opts.gate ?? "look", () => {
+    started = true;
+    forget(); // from here on the ceiling answers "/stop" itself
+    return underCeiling(opts.source, (c) => {
+      const off = () => c.controller.abort();
+      if (wait.signal.aborted) off();
+      wait.signal.addEventListener("abort", off, { once: true });
+      // (a delegation gives the look more time: the first call to an expert extends the ceiling)
+      const o = opts.experts && opts.expertMaxMinutes ? { ...opts, experts: { ...opts.experts, onDelegate: (d: Delegation) => (c.extend(opts.expertMaxMinutes! * 60_000), opts.experts!.onDelegate?.(d)) } } : opts;
+      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), o, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
+    }, opts.maxMinutes, opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined));
+  }, wait.signal).finally(() => (forget(), endRun(run), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
+    if (opts.sessionConv) forgetUnresumable(opts.sessionConv, e, opts.source);
     throw e;
   });
 }
