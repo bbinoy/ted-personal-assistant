@@ -7,6 +7,7 @@ import { clearQuiet, isQuiet, quietOn, quietText, quietValue, setQuiet } from ".
 import { settings } from "../src/core/settings.ts";
 import { dataPath } from "../src/core/state.ts";
 import { isPaused } from "../src/core/pause.ts";
+import { systemZone } from "../src/core/timezone.ts";
 import { resetHeld, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
 import { groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
@@ -26,7 +27,7 @@ const clean = () => {
   resetHeld(owner());
   rmSync(dataPath(instancePaths().paused), { force: true });
 };
-const Z = "UTC";
+const Z = systemZone(); // the machine's zone: NOW is local time
 
 test("parseQuiet: a span, a clock time (today's or tomorrow's), bare /quiet, /unquiet, usage, and nothing inside a sentence", () => {
   const two = parseCommand("/quiet 2h", NOW);

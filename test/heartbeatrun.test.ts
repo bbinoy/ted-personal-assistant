@@ -370,9 +370,9 @@ test("after a sleep every conversation takes its staggered first look again, as 
   release();
   await again;
   assert.equal(seen.runs.length, 1, "and then it is looked at");
-  assert.equal(w.slept(), 0, "nothing in flight");
   await w.tick(DAY);
   assert.deepEqual(naps, [4000], "later ticks do not nap");
+  assert.equal(w.slept(), 0, "nothing in flight");
 });
 
 test("a look that is stopped after delegating the brief marks its 'started' note failed at once, for a timeout, a sleep and a failure alike; a delivered note and a look without a delegation are left alone", async () => {

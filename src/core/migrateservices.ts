@@ -48,7 +48,7 @@ export function realServices(root: string): Services {
     },
     agentPids: () => {
       const pids = new Set<number>();
-      try {
+      if (process.env.MIGRATE_AGENT_SCAN !== "off") try { // (off: tests, which must not see the live agent of the machine they run on; the pid file of THIS data folder is still read)
         for (const l of execFileSync("pgrep", ["-f", "src/main.ts"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }).split("\n")) if (/^\d+$/.test(l.trim())) pids.add(Number(l));
       } catch { /* none */ }
       try {

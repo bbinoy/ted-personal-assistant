@@ -361,7 +361,7 @@ test("the owner is told once, in her chat, that storage was reorganised", () => 
 // ---- the doors: a tool that does not migrate refuses, the agent migrates ----
 
 const run = (args: string[], root: string, extra: Record<string, string> = {}) =>
-  spawnSync(process.execPath, ["--conditions=workspace-source", ...args], { cwd: ROOT, env: { ...process.env, HARNESS_DATA_DIR: root, BROWSE_SKIP_INSTALL: "1", ...extra }, encoding: "utf8", timeout: 60_000 });
+  spawnSync(process.execPath, ["--conditions=workspace-source", ...args], { cwd: ROOT, env: { ...process.env, HARNESS_DATA_DIR: root, BROWSE_SKIP_INSTALL: "1", MIGRATE_AGENT_SCAN: "off", ...extra }, encoding: "utf8", timeout: 60_000 });
 const guard = (file: string) => ["--input-type=module", "-e", `import ${JSON.stringify(new URL(`../${file}`, import.meta.url).href)}; console.log("went on");`];
 
 test("refusal: the CLIs and the intake page stop on an old or a newer data folder, with a sentence; a migrated or new one goes on", () => {
