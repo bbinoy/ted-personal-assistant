@@ -29,7 +29,7 @@ import { createOutbound } from "./conversation/outbound.ts";
 import { Ledger } from "./modules/browse/payments.ts";
 import { applyCredentialMode, mask, settings, signalIdentity } from "./core/settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
-import { unsupportedForVoice } from "./conversation/lang.ts";
+import { createVoiceLanguage } from "./conversation/lang.ts";
 import { directOf, type IncomingMessage } from "@ted-assistant/messenger";
 import { loadMessengerInUse } from "./conversation/messenger.ts";
 import { providerReady, stopQwen, synthesizeWith, warmQwen } from "@ted-assistant/speech/tts";
@@ -177,7 +177,7 @@ const pipeline: Pipeline = createPipeline({
   speech: {
     ready: () => settings.voiceReplies && messenger.capabilities.voice && providerReady(settings.tts).ok,
     synth: (words, conversation, limits) => synthesizeWith(words, settings.tts, console, conversation, messenger.capabilities.voiceFormat, limits), // the conversation picks its cloned voice (voicetool.ts); the messenger picks the audio format
-    foreign: (words) => unsupportedForVoice(words, settings.ttsLanguages),
+    foreign: createVoiceLanguage(settings.ttsLanguages), // the language the voice does not speak, if any; a failed check falls back to the conversation's last known language
   },
   approvals,
   reminders: createReminderAnswers({ out, zone: zoneOf, isOwner: fromOwner }), // a quoted "done" / "snooze 1h" or a ✅ on a reminder is answered in code (tasks/remindanswer.ts)

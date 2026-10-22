@@ -9,7 +9,6 @@ import { splitReaction } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { splitVoice, VOICE_FAILED_NOTE } from "./voicereply.ts";
 import { settings } from "../core/settings.ts";
-import { UNSURE } from "./lang.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { type Timing } from "../core/timing.ts";
 import type { Quote } from "@ted-assistant/messenger";
@@ -39,25 +38,32 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
 
   const canSpeak = () => deps.speech.ready();
 
-  // Speaks and sends. False on any failure: the caller then sends the words as text.
-  // ONE deadline (VOICE_TIMEOUT_SECONDS) covers the whole of it, from here to the hand-over of the file to the messenger: every engine and the fallback, the
-  // conversion and the upload. When it runs out, the work is aborted (the engines kill their processes and requests), a file that came too late is never sent,
-  // and the words go out as text.
-  async function speak(conv: Conversation, words: string): Promise<boolean> {
+  // Checks the language, speaks and sends: "spoken", "text" (the voice does not speak this language: the words go out as text, as they are) or "failed" (the words go out
+  // as text with a note that the voice did not work).
+  // ONE deadline (VOICE_TIMEOUT_SECONDS) covers the whole of it, from here to the hand-over of the file to the messenger: the language check, every engine and the
+  // fallback, the conversion and the upload. When it runs out, the work is aborted (the engines kill their processes and requests), a file that came too late is never
+  // sent, and the words go out as text.
+  async function speak(conv: Conversation, words: string): Promise<"spoken" | "text" | "failed"> {
     const ms = deps.speech.timeoutMs ?? settings.voiceTimeoutSeconds * 1000;
     const deadline = (deps.speech.deadline ?? startDeadline)(ms);
     let file: string | undefined;
     try {
+      // Safety net: the voice speaks only TTS_LANGUAGES; text in another language would get a wrong accent, so it goes out as text. A check that fails does not cost the voice (lang.ts).
+      const foreign = await deadline.guard(deps.speech.foreign(words, conv.convId));
+      if (foreign) {
+        console.error(`voice skipped: reply looks ${foreign}, the voice speaks ${settings.ttsLanguages.join("/")}; sending text`);
+        return "text";
+      }
       const made = deps.speech.synth(words, conv.convId, { signal: deadline.signal, remainingMs: deadline.remainingMs }); // the voice active in THIS conversation (its library: voices/ in its folder)
       void made.then((f) => f !== file && rmSync(dirname(f), { recursive: true, force: true }), () => {}); // a file that finishes after we gave up is deleted, not kept
       file = await deadline.guard(made);
       deadline.check(); // a file that arrives after the deadline is stale
       await deadline.guard(out.sendVoice(file, words, conv.target));
-      return true;
+      return "spoken";
     } catch (e) {
       if (e instanceof VoiceAbort) console.error(e.kind === "slept" ? "voice skipped: the Mac slept, sending text" : `voice skipped: took longer than ${Math.round(ms / 1000)} s, sending text`);
       else console.error("voice reply failed, sending text:", (e as Error).message);
-      return false;
+      return "failed";
     } finally {
       deadline.stop();
       if (file) rmSync(dirname(file), { recursive: true, force: true });
@@ -92,11 +98,11 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
         const words = SILENT.test(c.text) ? "" : c.text.trim();
         let spoken = false;
         let speechFailed = false;
-        // Safety net: the voice speaks only TTS_LANGUAGES; text in another language would get a wrong accent, so it goes out as text.
-        const speakable = c.voice && !!words && canSpeak() && words.length <= MAX_SPOKEN_CHARS;
-        const foreign = speakable ? await deps.speech.foreign(words) : undefined;
-        if (foreign) console.error(`voice skipped: ${foreign === UNSURE ? "the language of the reply could not be told" : `reply looks ${foreign}`}, the voice speaks ${settings.ttsLanguages.join("/")}; sending text`);
-        if (speakable && !foreign) speechFailed = !(spoken = await speak(conv, words));
+        if (c.voice && !!words && canSpeak() && words.length <= MAX_SPOKEN_CHARS) {
+          const result = await speak(conv, words);
+          spoken = result === "spoken";
+          speechFailed = result === "failed";
+        }
         if (spoken) {
           state.spoke = true;
           state.pieces++;

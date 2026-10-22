@@ -6,7 +6,7 @@ import { LOGIN } from "../tenants/payer.ts";
 // Whether a reply may go out by voice. The voice speaks only the languages in TTS_LANGUAGES, and a German sentence read by an English
 // voice sounds bad, so a reply in an unsupported language goes out as text. The language is a model decision (one Haiku call) when a
 // cheap script check cannot settle it and the text is long enough to matter; the script check alone answers for text in a script that
-// is never Latin (Cyrillic, Arabic, Han ...). When the model is unavailable or fails the voice is held back: text is always safe.
+// is never Latin (Cyrillic, Arabic, Han ...). When the model is unavailable or fails, the reply is taken to be in the conversation's last known language (else the voice's own), so a failed check never costs the voice (createVoiceLanguage).
 
 // Scripts that are never Latin: a third of the letters in one is enough.
 const SCRIPTS: ReadonlyArray<[string, RegExp]> = [
@@ -43,19 +43,41 @@ export const askLanguage: LanguageModel = async (text) => {
   return typeof out === "string" ? out : undefined;
 };
 
-export const UNSURE = "unknown";
+const UNSURE = "unknown";
 
-// What keeps this text from being spoken: the language it is in when the voice does not speak it, `UNSURE` when it could not be
-// decided, undefined when the voice may speak it. Never throws.
-export async function unsupportedForVoice(text: string, supported: readonly string[], model: LanguageModel = askLanguage): Promise<string | undefined> {
+// The language of this text: a code, UNSURE when it could not be decided (the model failed or gave junk), undefined when no decision is needed (short text).
+async function languageOf(text: string, model: LanguageModel): Promise<string | undefined> {
   const script = scriptLanguage(text);
-  if (script) return supported.includes(script) ? undefined : script;
+  if (script) return script;
   if ((text.match(/\p{L}/gu)?.length ?? 0) < MIN_LETTERS) return undefined;
   try {
     const code = (await model(text))?.trim().toLowerCase().split(/[-_]/)[0];
-    if (!code || !/^[a-z]{2,3}$/.test(code)) return UNSURE;
-    return supported.includes(code) ? undefined : code;
+    return code && /^[a-z]{2,3}$/.test(code) ? code : UNSURE;
   } catch {
     return UNSURE;
   }
+}
+
+// The check of the pipeline (speech.foreign): the language of the reply when the voice does not speak it, else undefined. A detection that failed or timed out does NOT
+// skip the voice: the reply is taken to be in the conversation's last known language, or in the voice's first language when there is none yet (the voice's own default), and
+// one line says so. Only a last known language the voice does not speak (the conversation was in German a moment ago) still sends text. The last known language is remembered per conversation, in memory.
+export function createVoiceLanguage(supported: readonly string[], model: LanguageModel = askLanguage, log: Pick<Console, "error"> = console): (text: string, conversation: string) => Promise<string | undefined> {
+  const last = new Map<string, string>();
+  return async (text, conversation) => {
+    const code = await languageOf(text, model);
+    if (code === undefined) return undefined;
+    if (code !== UNSURE) {
+      last.delete(conversation); // (re-inserted: the map keeps the most recent conversations)
+      last.set(conversation, code);
+      if (last.size > 200) last.delete(last.keys().next().value!);
+      return supported.includes(code) ? undefined : code;
+    }
+    const known = last.get(conversation);
+    if (known && !supported.includes(known)) {
+      log.error(`voice skipped: the language of the reply could not be told, the conversation was last in ${known}, the voice speaks ${supported.join("/")}; sending text`);
+      return known;
+    }
+    log.error(`voice: the language of the reply could not be told, speaking it as ${known ?? supported[0] ?? "en"}`);
+    return undefined;
+  };
 }

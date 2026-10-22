@@ -7,13 +7,14 @@ import { createPipeline, owner } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
 import { startDeadline } from "../src/core/deadline.ts";
 import { noteSleep } from "../src/core/sleep.ts";
+import { createVoiceLanguage } from "../src/conversation/lang.ts";
 import { VOICE_FAILED_NOTE } from "../src/conversation/voicereply.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 import type { SynthLimits } from "@ted-assistant/speech/tts";
 
 // The overall deadline of a voice reply (VOICE_TIMEOUT_SECONDS): fake clock, fake engine, fake messenger. Over it the engine is aborted, a stale file is never sent, the words go out as text.
 
-function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) => Promise<string>; sendVoice?: () => Promise<void> }) {
+function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) => Promise<string>; sendVoice?: () => Promise<void>; foreign?: (words: string, conversation: string) => Promise<string | undefined> }) {
   const sent: string[] = [];
   const voices: string[] = [];
   const dir = mkdtempSync(join(tmpdir(), "voicedl-"));
@@ -53,7 +54,7 @@ function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) =
     speech: {
       ready: () => true,
       synth: (_w, _c, limits) => o.synth(limits, makeFile),
-      foreign: async () => undefined,
+      foreign: o.foreign ?? (async () => undefined),
       timeoutMs: 75_000,
       deadline: (ms) => startDeadline(ms, { now: () => clock.t, mono: () => clock.m, setInterval: (f) => ((clock.tick = f), 1), clearInterval: () => void clock.stopped++ }),
     },
@@ -66,12 +67,12 @@ function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) =
   return { pipeline, sent, voices, clock, makeFile };
 }
 
-async function say(r: ReturnType<typeof rig>): Promise<string[]> {
+async function say(r: ReturnType<typeof rig>, words = "Good morning, you have two meetings today."): Promise<string[]> {
   const logged: string[] = [];
   const err = console.error;
   console.error = (...a: unknown[]) => void logged.push(a.join(" "));
   try {
-    await r.pipeline.runTurn(owner(), { announce: false, run: async () => ({ text: "[[voice]] Good morning, you have two meetings today." }) });
+    await r.pipeline.runTurn(owner(), { announce: false, run: async () => ({ text: `[[voice]] ${words}` }) });
   } finally {
     console.error = err;
   }
@@ -134,6 +135,27 @@ test("voice deadline: a slow upload is covered too, and an engine error that is 
   const broken = rig({ synth: async () => { throw new Error("no tts"); } });
   assert.deepEqual(await say(broken), ["voice reply failed, sending text: no tts"]);
   assert.match(broken.sent[0]!, /voice didn't work/);
+});
+
+// The language check runs under the same deadline, and a check that fails does not cost the voice.
+
+test("voice language: a detection that fails still speaks (the voice's language is assumed, one log line); a hanging one is cut by the deadline", async () => {
+  const foreign = createVoiceLanguage(["en"], async () => { throw new Error("haiku timeout"); }, console);
+  const r = rig({ synth: async (_l, file) => file(), foreign });
+  const logged = await say(r, "Good morning, you have two meetings today and the first one is at ten thirty.");
+  assert.equal(r.voices.length, 1);
+  assert.deepEqual(r.sent, []);
+  assert.deepEqual(logged, ["voice: the language of the reply could not be told, speaking it as en"]);
+  const hang = rig({ synth: async () => assert.fail("not reached"), foreign: () => new Promise(() => {}) });
+  const turn = say(hang);
+  await new Promise((res) => setTimeout(res, 20));
+  hang.clock.advance(76_000);
+  hang.clock.tick!();
+  assert.deepEqual((await turn).filter((l) => l.startsWith("voice")), ["voice skipped: took longer than 75 s, sending text"]);
+  assert.deepEqual(hang.sent, [`Good morning, you have two meetings today.\n\n${VOICE_FAILED_NOTE}`]);
+  const german = rig({ synth: async () => assert.fail("not reached"), foreign: async () => "de" });
+  assert.deepEqual(await say(german), ["voice skipped: reply looks de, the voice speaks en; sending text"]);
+  assert.deepEqual(german.sent, ["Good morning, you have two meetings today."], "a foreign language is plain text, no note");
 });
 
 // A sleeping Mac: the Date clock runs on while the monotonic one stands still.
