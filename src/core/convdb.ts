@@ -296,7 +296,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
         seq     INTEGER PRIMARY KEY AUTOINCREMENT,
         at      INTEGER NOT NULL,                                   -- UTC ms
         source  TEXT NOT NULL CHECK (source IN ('dream', 'inferred')),
-        action  TEXT NOT NULL CHECK (action IN ('add', 'update', 'merge', 'delete')),
+        action  TEXT NOT NULL CHECK (action IN ('add', 'update', 'merge', 'delete', 'undone')),  -- undone: not a change, the note that a whole dream (gist: its day) was undone after its lines were told
         file    TEXT NOT NULL,                                      -- the note's file name
         gist    TEXT NOT NULL,                                      -- its one-line description (or, for a delete, why)
         merged  TEXT,                                               -- JSON: the notes a merge replaced
@@ -315,6 +315,10 @@ export const CONV_SCHEMA: readonly Migration[] = [
         n     INTEGER NOT NULL,                                     -- the number it had in that list
         seq   INTEGER NOT NULL REFERENCES learned_changes (seq),
         PRIMARY KEY (batch, n)
+      );
+      CREATE TABLE learned_owed (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        at INTEGER NOT NULL                                         -- UTC ms: a friend's list was held (quiet hours) after her dream; the next look sends it
       );
     `,
   },

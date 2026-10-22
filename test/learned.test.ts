@@ -227,3 +227,50 @@ test("the owner's dream: what it applied is recorded and listed once (a forgotte
   const text = L.briefLearned(OWNER_CONV, NOTES_DIR, Date.parse("2026-10-14T08:00:00"));
   assert.match(text, /1\. people-anna: Anna is the owner's sister \(saved\)\n2\. context-old: expired \(forgotten\)\nReply 'undo 1'/);
 });
+
+test("a whole-dream undo: lines not yet told are never listed; lines already told get one 'the dream of <day> was undone' note in the next list", () => {
+  const c = friend();
+  put(c.notesDir, "style-new.md", "Short replies", "y", "dream");
+  const add = (file: string) => plan([{ kind: "add", file, description: "d", content: "", merged: [] }]);
+  L.recordDream(c.convId, add("style-new.md"), c.notesDir, NOW);
+  L.dreamUndone(c.convId, NOW + HOUR);
+  assert.equal(L.planBatch(c.convId, c.notesDir, NOW + HOUR), undefined, "never told: nothing to say, nothing listed");
+  // told first, then undone
+  L.recordDream(c.convId, add("style-new.md"), c.notesDir, NOW + 2 * HOUR);
+  inferred(c, "people-anna.md", "Anna moved to Lisbon", NOW + 2 * HOUR);
+  const first = L.briefLearned(c.convId, c.notesDir, NOW + 3 * HOUR);
+  assert.match(first, /1\. style-new/);
+  L.dreamUndone(c.convId, NOW + 4 * HOUR);
+  inferred(c, "people-bo.md", "Bo has a new job", NOW + 4 * HOUR);
+  const next = L.briefLearned(c.convId, c.notesDir, NOW + 20 * HOUR);
+  assert.match(next, /^1\. people-bo: Bo has a new job \(inferred\)\n- the dream of 2026-10-22 was undone \(what it changed was put back\)\nReply 'undo 1'/);
+  assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 40 * HOUR), "", "said once");
+  assert.equal(L.planBatch(c.convId, c.notesDir, NOW + 40 * HOUR), undefined);
+});
+
+test("undo_dream's own path (undoLatest) marks the owner's dream lines undone", async () => {
+  const { undoLatest } = await import("../src/memory/dreamapply.ts");
+  rmSync(NOTES_DIR, { recursive: true, force: true });
+  mkdirSync(NOTES_DIR, { recursive: true });
+  recordMessage("owner", 9, "Bo is my brother and he lives in Basel", new Date("2026-10-14T20:00:00Z"));
+  const ran = async () => ({ ops: [{ op: "write", file: "people-bo.md", description: "Bo is the owner's brother", text: "Bo is the brother.", evidence: "Bo is my brother" }] });
+  const { owner } = await import("../src/conversation/conversationmodel.ts");
+  await createDreamer({ conversations: () => [owner()], run: () => ran }).run(new Date("2026-10-15T07:00:00"));
+  assert.equal(undoLatest().ok, true);
+  assert.equal(L.briefLearned(OWNER_CONV, NOTES_DIR, Date.parse("2026-10-15T08:00:00")), "", "its lines are never listed");
+});
+
+test("a friend's held list is owed in her assistant.db, not in memory: it survives a restart and is cleared once sent", async () => {
+  const c = friend();
+  let quiet = true;
+  setLearnedRuntime({ send: async () => 1, holding: () => quiet });
+  inferred(c, "people-anna.md", "Anna moved to Lisbon");
+  assert.equal(L.isOwed(c.convId), false);
+  assert.equal(await offerLearned(c as never, new Date(NOW), { afterDream: true }), "held");
+  assert.equal(L.isOwed(c.convId), true);
+  assert.equal(peekConvDb(c.convId)!.num("SELECT COUNT(*) FROM learned_owed"), 1, "a row, so a restart keeps it");
+  quiet = false;
+  assert.equal(await offerLearned(c as never, new Date(NOW + HOUR)), "sent", "a look, with no dream change waiting, still sends what is owed");
+  assert.equal(L.isOwed(c.convId), false);
+  setLearnedRuntime(undefined);
+});

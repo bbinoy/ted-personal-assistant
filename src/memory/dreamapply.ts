@@ -5,7 +5,9 @@ import { emitRecord } from "../core/events.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import { OWNER_SCOPE, type Plan, type Scope } from "./dreamplan.ts";
 import { settings } from "../core/settings.ts";
-import { forgetNote, STATUS_PREFIX } from "./notes.ts";
+import { forgetNote, NOTES_DIR, STATUS_PREFIX } from "./notes.ts";
+import { dreamUndone } from "./learned.ts";
+import { convOfPath, OWNER_CONV } from "../core/convpaths.ts";
 
 // Applying a plan to the notes folder, with a snapshot first, and undoing the latest one.
 
@@ -81,5 +83,7 @@ export function undoLatest(scope: Scope = OWNER_SCOPE): { ok: true; restored: nu
   }
   rmSync(dir, { recursive: true, force: true });
   emitRecord("dream_undo", "restored", "chat", { restored });
+  const conv = scope.notesDir === NOTES_DIR ? OWNER_CONV : convOfPath(scope.notesDir);
+  if (conv) dreamUndone(conv, Date.now()); // its lines are not listed as news any more ("what I learned overnight", learned.ts)
   return { ok: true, restored, from: latest };
 }

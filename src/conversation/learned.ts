@@ -1,4 +1,4 @@
-import { commitBatch, learnedMessage, planBatch } from "../memory/learned.ts";
+import { commitBatch, isOwed, learnedMessage, planBatch, setOwed } from "../memory/learned.ts";
 import type { Conversation } from "./conversationmodel.ts";
 
 // "What I learned overnight" for a friend (she has no daily brief; the owner's list is a section of the brief, the `memory_changes_since_brief` tool): after her dream, and at each look after it, ONE short
@@ -12,9 +12,8 @@ export interface LearnedRuntime {
 let rt: LearnedRuntime | undefined;
 export const setLearnedRuntime = (r: LearnedRuntime | undefined): void => void (rt = r);
 
-// Who is owed a list because her dream finished while she was left alone (held): the looks that follow try again. Without it a look offers only when a dream change is waiting, so an inferred
-// note saved at noon is not announced at noon: it goes out after the next dream.
-const owed = new Set<string>();
+// Who is owed a list because her dream finished while she was left alone (held): the looks that follow try again (the mark is a row of her assistant.db, so a restart keeps it). Without it a look offers only
+// when a dream change is waiting, so an inferred note saved at noon is not announced at noon: it goes out after the next dream.
 
 /** Tells a friend what changed in her notes since the last list. `afterDream`: her dream just ran (always offers); otherwise (a look) only what a dream left, or an earlier hold, is offered. Never throws (a failed send leaves the changes untold). */
 export async function offerLearned(conv: Conversation, now: Date, o: { afterDream?: boolean } = {}): Promise<"sent" | "held" | "none"> {
@@ -22,11 +21,11 @@ export async function offerLearned(conv: Conversation, now: Date, o: { afterDrea
   try {
     const batch = planBatch(conv.convId, conv.notesDir, now.getTime());
     if (!batch) return "none";
-    if (!o.afterDream && !owed.has(conv.convId) && !batch.items.some((i) => i.source === "dream")) return "none";
-    if (batch.items.length && rt.holding(conv, now)) return owed.add(conv.convId), "held";
-    owed.delete(conv.convId);
-    if (!batch.items.length) return commitBatch(conv.convId, batch, now.getTime()), "none"; // (only changes that no longer hold)
-    const ts = await rt.send(conv, learnedMessage(batch.items));
+    if (!o.afterDream && !isOwed(conv.convId) && !batch.items.some((i) => i.source === "dream")) return "none";
+    if ((batch.items.length || batch.notes.length) && rt.holding(conv, now)) return setOwed(conv.convId, true, now.getTime()), "held";
+    setOwed(conv.convId, false, now.getTime());
+    if (!batch.items.length && !batch.notes.length) return commitBatch(conv.convId, batch, now.getTime()), "none"; // (only changes that no longer hold)
+    const ts = await rt.send(conv, learnedMessage(batch.items, batch.notes));
     commitBatch(conv.convId, batch, now.getTime(), ts);
     return "sent";
   } catch (e) {

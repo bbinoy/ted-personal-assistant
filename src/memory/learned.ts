@@ -21,7 +21,7 @@ export interface Change {
   seq: number;
   at: number;
   source: "dream" | "inferred";
-  action: "add" | "update" | "merge" | "delete";
+  action: "add" | "update" | "merge" | "delete" | "undone";
   file: string;
   gist: string;
   merged: string[];
@@ -92,6 +92,7 @@ export interface Item extends Change {
 }
 export interface Batch {
   items: Item[];
+  notes: string[]; // lines without a number (a dream that was undone)
   seqs: number[]; // every row this list settles (the stale ones too)
 }
 
@@ -121,9 +122,15 @@ export function planBatch(conv: ConvId, dir: string, now: number): Batch | undef
   if (!db) return undefined;
   const rows = db.all<Row>("SELECT seq, at, source, action, file, gist, merged, outcome FROM learned_changes WHERE batch IS NULL AND outcome IS NULL ORDER BY seq");
   const items: Item[] = [];
+  const notes: string[] = [];
   const seqs: number[] = [];
   for (const r of rows) {
     const c = changeOf(r);
+    if (c.action === "undone") {
+      notes.push(`the dream of ${c.gist} was undone (what it changed was put back)`);
+      seqs.push(c.seq);
+      continue;
+    }
     const fresh = now - c.at < STALE_MS;
     const true_ = c.source === "inferred" ? isStillInferred(dir, c.file) : c.action === "delete" ? !existsSync(join(dir, c.file)) : existsSync(join(dir, c.file));
     if (!fresh || !true_) {
@@ -135,7 +142,7 @@ export function planBatch(conv: ConvId, dir: string, now: number): Batch | undef
     items.push({ ...c, ...(live ? { gist: oneLineGist(live) } : {}), n: items.length + 1 });
     seqs.push(c.seq);
   }
-  return items.length || seqs.length ? { items, seqs } : undefined;
+  return items.length || seqs.length ? { items, notes, seqs } : undefined;
 }
 
 /** Writes down that `batch` was told (as message `ts`, if it went as one): its rows will not be listed again, and its numbers answer replies. Returns the batch id. */
@@ -179,10 +186,10 @@ export function hintOf(items: readonly Item[]): string {
 }
 
 /** The list as it goes into the brief (under the section's own heading): the lines and the hint. */
-export const learnedBody = (items: readonly Item[]): string => [...items.map(lineOf), hintOf(items)].join("\n");
+export const learnedBody = (items: readonly Item[], notes: readonly string[] = []): string => [...items.map(lineOf), ...notes.map((t) => `- ${t}`), ...(items.length ? [hintOf(items)] : [])].join("\n");
 
 /** The list as a message of its own (a friend's, after her dream). */
-export const learnedMessage = (items: readonly Item[]): string => `🧠 Learned overnight\n${learnedBody(items)}`;
+export const learnedMessage = (items: readonly Item[], notes: readonly string[] = []): string => `🧠 Learned overnight\n${learnedBody(items, notes)}`;
 
 // ---- answering ----
 
@@ -226,7 +233,31 @@ export function briefLearned(conv: ConvId, dir: string, now: number): string {
   if (isGroupConv(conv)) return "";
   const batch = planBatch(conv, dir, now);
   if (batch) commitBatch(conv, batch, now); // (a batch of changes that no longer hold is settled without a word)
-  if (batch?.items.length) return learnedBody(batch.items);
+  if (batch?.items.length || batch?.notes.length) return learnedBody(batch.items, batch.notes);
   const again = recentBriefBatch(conv, dir, now, REDO_MS);
   return again ? learnedBody(again) : "";
+}
+
+// ---- a whole-dream undo ----
+
+/** The latest dream was undone (undo_dream, dreamapply.ts undoLatest). Its lines not yet told are never listed; if they were told, the next list says once that it was undone. The run is the latest dream's `at` (one run, one time). */
+export function dreamUndone(conv: ConvId, now: number): void {
+  if (isGroupConv(conv)) return;
+  const db = liveConvDb(conv);
+  if (!db) return;
+  db.tx(() => {
+    const run = db.get<{ at: number | null }>("SELECT MAX(at) AS at FROM learned_changes WHERE source = 'dream' AND action != 'undone' AND outcome IS NULL")?.at;
+    if (run == null) return;
+    const told = db.num("SELECT COUNT(*) FROM learned_changes WHERE source = 'dream' AND at = ? AND batch IS NOT NULL AND outcome IS NULL", run);
+    db.run("UPDATE learned_changes SET outcome = 'undone' WHERE source = 'dream' AND at = ? AND outcome IS NULL", run);
+    if (told > 0) db.run("INSERT INTO learned_changes (at, source, action, file, gist) VALUES (?, 'dream', 'undone', '', ?)", now, new Date(run).toISOString().slice(0, 10));
+  });
+}
+
+// ---- a friend's list that was held ----
+
+export const isOwed = (conv: ConvId): boolean => (peekConvDb(conv)?.num("SELECT COUNT(*) FROM learned_owed") ?? 0) > 0;
+export function setOwed(conv: ConvId, owed: boolean, now: number): void {
+  if (owed) liveConvDb(conv)?.run("INSERT OR REPLACE INTO learned_owed (id, at) VALUES (1, ?)", now);
+  else peekConvDb(conv)?.run("DELETE FROM learned_owed");
 }
