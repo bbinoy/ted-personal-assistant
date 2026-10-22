@@ -47,7 +47,7 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   assert.deepEqual(missingSetup(setupItems().map((i) => note(i.file))), []);
   assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
-  assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the Notion task list and meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
+  assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
   assert.match(heartbeatSystem("", { missing }), /You cannot ask anyone[\s\S]*message "set up"/);
   assert.ok(!chatSystem(new Date()).includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
 });

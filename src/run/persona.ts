@@ -75,7 +75,7 @@ function setupLine(missing: readonly string[], interactive: boolean): string | u
   if (missing.length === 0) return undefined;
   const list = missing.map((m) => `- ${m}`).join("\n");
   return interactive
-    ? `Not set up yet (the skills cannot do these parts well without it):\n${list}\nWhen ${OWNER}'s request needs one of them, or they ask to set up, load the ${PLUGIN}:setup skill. For the Notion task list and meeting notes, find them yourself and save them, and ask ${OWNER} only if you find nothing or several candidates; for calendars and writing style, walk them through it in this chat. Offer setup once, briefly, if it is relevant; never nag.`
+    ? `Not set up yet (the skills cannot do these parts well without it):\n${list}\nWhen ${OWNER}'s request needs one of them, or they ask to set up, load the ${PLUGIN}:setup skill. For the meeting notes, find them yourself and save them, and ask ${OWNER} only if you find nothing or several candidates; for calendars and writing style, walk them through it in this chat. Offer setup once, briefly, if it is relevant; never nag.`
     : `Not set up yet:\n${list}\nYou cannot ask anyone: do the parts of your task that need these only as far as you can without them (never guess ids, calendars or writing style), and end your output with one line naming what is missing and saying ${OWNER} can message "set up" to be walked through it.`;
 }
 
