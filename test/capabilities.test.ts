@@ -24,18 +24,19 @@ const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude
 
 const P = (s: string) => `ted-personal-assistant:${s}`;
 const WEATHER = ["get_distance", "get_forecast", "get_marine_forecast", "get_spot_info", "search_places"].map((t) => `mcp__weather__${t}`);
+const TASKS = ["add_task", "complete_task", "confirm_suggestion", "drop_task", "list_tasks", "reject_suggestion", "snooze_task", "update_task"].map((t) => `mcp__tasks__${t}`);
 const CHAT = ["Edit", "Read", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__people__find_person", "mcp__send__send"];
 const sorted = (s: Iterable<string>) => [...s].sort();
 const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities });
 const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
-  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__notes__journal", "mcp__notes__read_note", "mcp__notes__write_note", "mcp__voice__voice", ...WEATHER]);
+  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__notes__journal", "mcp__notes__read_note", "mcp__notes__write_note", "mcp__voice__voice", ...WEATHER, ...TASKS]);
   const shared = [P("research-booking"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(groupTools()), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
   // a new friend's record is the same set as a group's
-  const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw");
+  const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw", "tasks");
   assert.deepEqual(sorted(toolsFor(friend)), full);
   assert.deepEqual(skillsFor(friend), shared);
   // chat alone: the basics, no skill and so no Skill tool
@@ -60,6 +61,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     wake: { tools: [], skills: [] },
     weather: { tools: ["Skill", ...WEATHER], skills: [P("surf-conditions")] },
     draw: { tools: ["Skill", "mcp__draw__draw"], skills: [P("draw")] },
+    tasks: { tools: TASKS, skills: [] }, // the conversation's own list: on for the owner, every friend and every group
     notes: { tools: [], skills: [] },
     intake: { tools: [], skills: [] }, // its tools also need INTAKE_BASE_URL and a purpose (below)
     // the owner's login and the admin's powers: never a tool or a skill of an isolated conversation, whatever a record lists

@@ -17,7 +17,7 @@ import { CAPABILITIES } from "../src/tenants/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "notes", "people", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "tasks", "voice", "memory", "notes", "people", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -67,7 +67,7 @@ test("modules: every module that names a server has its server in runtime.ts (RU
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "notes", "people", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "tasks", "voice", "memory", "notes", "people", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });

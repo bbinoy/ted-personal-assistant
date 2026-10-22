@@ -390,7 +390,7 @@ test("the CLI has no grant or revoke: nothing about a friend's tools is stored, 
   writeFileSync(T.tenantContext(rec).configFile, JSON.stringify({ voice: false }));
   assert.ok(!tenantTools(T.tenantContext(T.tenantById(rec.id)!)).has("mcp__voice__voice"), "her own switch in tenant.json still takes a tool away");
   const lines = describeTenants().filter((l) => l.startsWith(rec.id));
-  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, wake, notes, weather, draw;/, "the effective set: voice is off by her own switch, and Google, Notion and the setup page are not set up on this instance");
+  assert.match(lines[0]!, /capabilities chat, browse, heartbeat, dream, wake, notes, weather, draw, tasks;/, "the effective set: voice is off by her own switch, and Google, Notion and the setup page are not set up on this instance");
   assert.doesNotMatch(lines[0]!, /\b(admin|profile|card|drive)\b/, "the owner's own are not hers");
   assert.match(describeTenants()[0]!, /^owner \(.*\): admin; capabilities .*admin/);
 });

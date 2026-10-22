@@ -112,7 +112,7 @@ test("group warm: built from that group's own options only, exactly like a norma
     const o = rig.started[0];
     assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
     assert.notEqual(conv.notesDir, owner().notesDir);
-    assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "voice", "memory", "people", "browse"]]);
+    assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "tasks", "voice", "memory", "people", "browse"]]);
     assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
     assert.match(JSON.stringify(o.systemPrompt), /be warm/);
   } finally {

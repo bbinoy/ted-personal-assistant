@@ -18,6 +18,7 @@ import { OWNER_KEY } from "../core/ownerkey.ts";
 import { createNotesServer } from "./memory/notestools.ts";
 import { createPeopleServer } from "./people/peopletool.ts";
 import { createStatusServer } from "./status/statusnote.ts";
+import { createTasksServer } from "./tasks/tasktools.ts";
 import { createSeenMailServer } from "./seenmail/seenmail.ts";
 import { settings } from "../core/settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
@@ -73,6 +74,16 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
       }),
   },
   status: { server: () => createStatusServer() },
+  // The conversation's task list. An unattended run (the owner's background source, or an isolated run with no chat memory: a friend's or a group's look, a mail handler) can only suggest (tasktools.ts).
+  tasks: {
+    server: (ctx) =>
+      createTasksServer({
+        key: ctx.tenant?.key ?? ctx.groupId ?? ctx.key ?? OWNER_KEY,
+        source: ctx.source,
+        unattended: ctx.source === "background" || (ctx.source === "group" && !ctx.memory),
+        zone: () => zoneOf({ tenantId: ctx.tenant?.id }),
+      }),
+  },
   seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
   browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }) },
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).

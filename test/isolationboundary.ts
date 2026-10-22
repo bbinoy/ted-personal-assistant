@@ -196,7 +196,7 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
     const tools = Array.isArray(o.tools) ? (o.tools as string[]) : [];
     check(`${label} built-in tools are a subset of ${[...allowedBuiltins].join("/")}`, Array.isArray(o.tools) && tools.every((t) => allowedBuiltins.has(t)), tools.join(","));
     const servers = Object.keys((o.mcpServers as object | undefined) ?? {}).sort();
-    const expected = ["draw", "memory", "people", "send", "weather", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort();
+    const expected = ["draw", "memory", "people", "send", "tasks", "weather", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort();
     check(`${label} MCP servers are exactly the set's (${expected.join(",")})`, JSON.stringify(servers) === JSON.stringify(expected), servers.join(","));
     const env = o.env ?? {};
     if (s === "tenant") {

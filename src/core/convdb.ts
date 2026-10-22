@@ -18,6 +18,7 @@ import { writeFileAtomic } from "./state.ts";
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   friend_notices   a friend's fixed notices (kind -> last time)
 //   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
+//   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way, a suggestion; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
 //
 // NOT rebuildable. Losing the approval inbox or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
@@ -25,7 +26,7 @@ import { writeFileAtomic } from "./state.ts";
 // the heartbeat look, the dream, quiet compaction, approved actions), the owner is told once a day (heartbeat/notices.ts) and the doctor fails with the file's name. A person restores the set-aside file
 // (or `sqlite3 .recover`) and deletes the marker; deleting only the marker accepts the fresh start. The other conversations are not affected: each has its own file.
 //
-// How to add state (the upcoming tasks are the example): append ONE numbered step to CONV_SCHEMA below (version n+1, `CREATE TABLE items (...)`, `CREATE TABLE task_events (...)`). Steps run in order, each in
+// How to add state (version 3, the tasks, is the example): append ONE numbered step to CONV_SCHEMA below (version n+1, `CREATE TABLE ...`). Steps run in order, each in
 // its own transaction, at the first open of each conversation's file; a step is never edited once shipped. Then a small store module over convDb(conv), and, if the table grows, a retention rule (heartbeat/convretention.ts).
 
 export const CONV_SCHEMA: readonly Migration[] = [
@@ -188,6 +189,48 @@ export const CONV_SCHEMA: readonly Migration[] = [
         up      INTEGER NOT NULL,
         last_at TEXT NOT NULL                                       -- ISO
       );
+    `,
+  },
+  {
+    version: 3,
+    name: "tasks: items and their append-only history",
+    up: `
+      CREATE TABLE items (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,              -- numbered, never reused (AUTOINCREMENT): the number the person and the model say
+        kind        TEXT NOT NULL DEFAULT 'task' CHECK (kind IN ('task', 'i_owe', 'owed_to_me')),
+        title       TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 300),
+        details     TEXT,
+        due         TEXT CHECK (due IS NULL OR due GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'),  -- LOCAL wall time: YYYY-MM-DD or YYYY-MM-DDTHH:MM, in due_zone
+        due_zone    TEXT,                                           -- the conversation's zone when the due was set
+        remind_at   INTEGER,                                        -- UTC ms; NULL: no reminder
+        repeat      TEXT,                                           -- the canonical rule text (src/tasks/repeat.ts); NULL: once
+        person      TEXT,                                           -- who it is with (free text)
+        assignee    TEXT,                                           -- a group member's name or id
+        status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('suggested', 'open', 'done', 'dropped', 'snoozed')),
+        snooze_until INTEGER,                                       -- UTC ms; with status snoozed
+        origin      TEXT NOT NULL DEFAULT 'owner' CHECK (origin IN ('owner', 'member', 'friend', 'inferred')),
+        source_kind TEXT NOT NULL DEFAULT 'message' CHECK (source_kind IN ('message', 'mail', 'meeting', 'import', 'other')),
+        source_ref  TEXT,                                           -- a message ts, a mail id, a url
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL,
+        done_at     INTEGER
+      );
+      CREATE INDEX items_status ON items (status, due);
+      -- Nothing is ever deleted: dropped is the end state. The database says so itself, so no code path can (a test greps for one as well).
+      CREATE TRIGGER items_no_delete BEFORE DELETE ON items BEGIN SELECT RAISE(ABORT, 'tasks are never deleted: drop them'); END;
+
+      CREATE TABLE task_events (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL REFERENCES items (id),
+        at      INTEGER NOT NULL,                                   -- UTC ms
+        by      TEXT NOT NULL,                                      -- owner, a member's or friend's name, assistant (inferred), system
+        action  TEXT NOT NULL CHECK (action IN ('added', 'edited', 'done', 'reopened', 'dropped', 'snoozed', 'suggested', 'confirmed', 'rejected', 'reminded')),
+        before  TEXT,                                               -- JSON: the changed fields as they were
+        after   TEXT                                                -- JSON: ... and as they are
+      );
+      CREATE INDEX task_events_item ON task_events (item_id, id);
+      CREATE TRIGGER task_events_no_update BEFORE UPDATE ON task_events BEGIN SELECT RAISE(ABORT, 'the task history is append-only'); END;
+      CREATE TRIGGER task_events_no_delete BEFORE DELETE ON task_events BEGIN SELECT RAISE(ABORT, 'the task history is append-only'); END;
     `,
   },
 ];
