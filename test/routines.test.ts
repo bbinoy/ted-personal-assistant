@@ -221,3 +221,64 @@ test("/status lists the routines and their next run", () => {
   assert.match(text, /\nRoutines: brief: 07:30 daily, next tomorrow 07:30; last .* \| evening: 18:30 on weekdays, next today 18:30; last .* \| weekly: Fridays 16:30, next tomorrow 16:30; last .*\.\nConnectors: none down\./);
   assert.doesNotMatch(statusText({ spentUsd: 1, limitUsd: 20, approvals: 0, down: [] }), /Routines/, "no facts, no line (the existing text is unchanged)");
 });
+
+test("the catch-up window is at least an hour: 0 would make every routine late the moment its time passes", async () => {
+  const { loadSettings } = await import("../src/core/settings.ts");
+  assert.throws(() => loadSettings({ ROUTINE_CATCHUP_HOURS: "0" }), /ROUTINE_CATCHUP_HOURS must be a number from 1 to 24/);
+  assert.equal(loadSettings({ ROUTINE_CATCHUP_HOURS: "1" }).routineCatchUpHours, 1);
+  assert.equal(loadSettings({}).routineCatchUpHours, 4);
+});
+
+test("a second skip in a row is recorded and told too, not only the first", () => {
+  const conv = "friend-skips0000000000";
+  const opts = { catchUpHours: 4, who: "Ben", agentOf: (k: string) => `expert-${k}` };
+  S.routineFacts(conv, base, z("2026-11-02T09:00:00Z"), BERLIN, opts); // Monday morning: first sight
+  const one = S.routineFacts(conv, base, z("2026-11-03T12:00:00Z"), BERLIN, opts); // Tuesday noon: Monday's 18:30 is long gone
+  assert.match(one.text, /evening: did not run on 2026-11-02/);
+  S.markTold(conv, one.told);
+  assert.equal(S.routineFacts(conv, base, z("2026-11-03T12:30:00Z"), BERLIN, opts).text.includes("evening"), false, "told once, then quiet");
+  const two = S.routineFacts(conv, base, z("2026-11-04T12:00:00Z"), BERLIN, opts); // Wednesday noon: Tuesday's was missed too
+  assert.match(two.text, /evening: did not run on 2026-11-03/, "the newer skip is a new fact");
+  assert.equal(S.readRecord(conv, "evening")!.period, "2026-11-03");
+  assert.deepEqual(two.told, ["evening"]);
+});
+
+test("settling a look: delivered only with the expert's result; an attempt comes back only when the look was called off and nothing reached the owner", () => {
+  const conv = "friend-settle000000000";
+  const start = () => S.markStarted(conv, "evening", "2026-11-02", 1_000);
+  const none = new Set<string>();
+  const readOf = () => S.readRecord(conv, "evening")!;
+  S.routineFacts(conv, base, z("2026-11-02T09:00:00Z"), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` }); // creates the records
+
+  start(); // the look ended well but the expert never came back with a result
+  S.settleRoutines(conv, new Set(["evening"]), none, { calledOff: false, sends: 0 }, 2_000);
+  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 1]);
+
+  start(); // called off before anything left: the attempt is given back (2 started, 1 refunded)
+  S.settleRoutines(conv, new Set(["evening"]), none, { calledOff: true, sends: 0 }, 3_000);
+  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 1]);
+
+  start(); // called off after a send or the self-email went out: not given back, or the next look would send it again
+  S.settleRoutines(conv, new Set(["evening"]), none, { calledOff: true, sends: 1 }, 4_000);
+  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 2]);
+
+  start(); // the expert finished, then the look was called off: delivered
+  S.settleRoutines(conv, new Set(["evening"]), new Set(["evening"]), { calledOff: true, sends: 0 }, 5_000);
+  assert.equal(readOf().status, "delivered");
+});
+
+test("the wrap and the review: their experts have exactly the read tools, the calendar reads, Skill and the sends; no write_note, status note, task writes or seen_mail", () => {
+  const set = expertSetup(ownerSkills(), "");
+  for (const s of ["evening-wrap", "weekly-review"]) {
+    const tools = set.agents[`expert-${s}`]!.tools;
+    assert.ok(tools, `${s}: a tool allowlist, not the run's whole set`);
+    assert.deepEqual([...tools].sort(), [
+      "Skill", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__get_event", "mcp__claude_ai_Google_Calendar__list_calendars", "mcp__claude_ai_Google_Calendar__list_events",
+      "mcp__claude_ai_Google_Calendar__search_events", "mcp__mailbird__send_self_briefing", "mcp__notes__journal", "mcp__send__send", "mcp__tasks__list_tasks",
+    ]);
+    for (const banned of ["mcp__notes__write_note", "mcp__status__write_status_note", "mcp__tasks__add_task", "mcp__tasks__complete_task", "mcp__tasks__update_task", "mcp__meetings__note_upcoming_meetings", "mcp__seenmail__seen_mail", "Bash", "Write", "Edit"]) {
+      assert.ok(!tools.includes(banned), `${s}: cannot call ${banned}`);
+    }
+    assert.deepEqual(set.agents[`expert-${s}`]!.disallowedTools, ["Agent"]);
+  }
+});

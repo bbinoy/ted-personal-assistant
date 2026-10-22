@@ -31,7 +31,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => (instanceDb().run("DELETE FROM looks"), resetHeld(owner())); // (the rows, and what quiet hours held)
 
-interface Answer { mail?: string[]; hold?: Promise<unknown>; hang?: boolean; timeout?: boolean; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; during?: () => void }
+interface Answer { mail?: string[]; hold?: Promise<unknown>; hang?: boolean; timeout?: boolean; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; agents?: string[]; results?: Record<string, string>; mailed?: boolean; during?: () => void }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -63,6 +63,9 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       sends = a.sends ?? 0;
       a.during?.();
       for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
+      for (const g of a.agents ?? []) extra.onDelegate?.(g);
+      for (const [g, text] of Object.entries(a.results ?? {})) extra.onToolSuccess?.("Agent", { subagent_type: g }, { content: [{ type: "text", text }] });
+      if (a.mailed) extra.onToolSuccess?.("mcp__claude_ai_Gmail__send_message", {});
       if (a.hold) await Promise.race([a.hold, new Promise((_, no) => extra.signal?.addEventListener("abort", () => no(new Error("aborted")), { once: true }))]); // a run that goes on until it is called off
       if (a.hang) await new Promise<never>((_, no) => extra.signal?.addEventListener("abort", () => no(new Error("aborted")), { once: true }));
       if (a.timeout) throw new RunTimeout(10 * 60_000);
@@ -573,4 +576,30 @@ test("owner's look: browser steps leave no line of their own, so the look writes
   const reads = rig(() => ({ calls: ["mcp__mailbird__list_conversations"] }));
   await reads.w.look(reads.conv, min(DAY, 60));
   assert.equal(ledgerEntries().filter((e) => e.kind === "journal").length - before, 1, "reading is not acting");
+});
+
+// Routines (tasks/routines.ts): what a look that handed the evening wrap to its expert leaves in the record.
+async function eveningLook(a: Answer, day = 14) { // (a day of its own for each look: the record is the conversation's, shared by the tests)
+  const { readRecord } = await import("../src/tasks/routines.ts");
+  const r = rig(() => a);
+  await r.w.look(r.conv, new Date(2026, 9, day, 17, 0, 0)); // first sight of the routine: nothing is owed for a slot already gone
+  const at = new Date(2026, 9, day, 18, 35, 0); // after 18:30
+  r.at(at);
+  const out = await r.w.look(r.conv, at);
+  return { out, rec: readRecord(r.conv.convId, "evening")!, seen: r.seen };
+}
+
+test("routines: delivered when the expert's result came back; delegating twice is one attempt", async () => {
+  const done = await eveningLook({ agents: ["expert-evening-wrap", "expert-evening-wrap"], results: { "expert-evening-wrap": "A quiet one." } });
+  assert.match(done.seen.prompts.at(-1)!, /evening: due now/);
+  assert.equal(done.rec.status, "delivered");
+  assert.equal(done.rec.attempts, 1, "the same routine handed on twice in one look is one attempt");
+});
+
+test("routines: an expert that came back with nothing (it ran out of turns) is a failed attempt, not a delivery", async () => {
+  const none = await eveningLook({ agents: ["expert-evening-wrap"] }, 15);
+  assert.equal(none.rec.status, "failed");
+  assert.equal(none.rec.attempts, 1);
+  const blank = await eveningLook({ agents: ["expert-evening-wrap"], results: { "expert-evening-wrap": "  " } }, 16);
+  assert.equal(blank.rec.status, "failed");
 });

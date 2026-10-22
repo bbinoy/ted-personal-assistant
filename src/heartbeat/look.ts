@@ -35,7 +35,8 @@ import { gateSink } from "../modules/send/send.ts";
 import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
 import { offerLearned } from "../conversation/learned.ts";
 import { zoneOf } from "../tenants/tenants.ts";
-import { markFinished, markStarted, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
+import { resultText } from "../modules/browse/browseguard.ts";
+import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown, the day's budget, a friend's
@@ -47,7 +48,7 @@ import { markFinished, markStarted, markTold, routineFacts, routineOfAgent } fro
 // What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
 export interface RunExtra {
-  onToolSuccess?: (tool: string, input: unknown) => void;
+  onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
@@ -160,8 +161,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const shadow = looker.mail && shadowActive(conv, now) ? createShadowRun(conv.key) : undefined; // the gentle first week (approvals/shadow.ts): this look proposes its archives
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     // The routines besides the brief (core/routines.ts): only the owner's own look has them (a friend's or a group's skills never include them), and only with experts to delegate to.
-    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key) + waitingCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true) } : {}) }) : undefined;
+    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key) + waitingCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true, true) } : {}) }) : undefined;
     const started = new Set<string>(); // the routines this look handed to their expert
+    const finished = new Set<string>(); // those whose expert's result came back with something in it
+    let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
@@ -192,10 +195,16 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             onDelegate: (agent) => {
               delegations++;
               const r = routines?.due && routineOfAgent([routines.due.routine], agent, variantOf);
-              if (r) (started.add(r.name), markStarted(conv.convId, r.name, routines!.due!.plan.slot.date, Date.now()));
+              if (r && !started.has(r.name)) (started.add(r.name), markStarted(conv.convId, r.name, routines!.due!.plan.slot.date, Date.now())); // (a second delegation of the same routine is not another attempt)
             },
-            onToolSuccess: (tool) => {
+            onToolSuccess: (tool, input, response) => {
               toolCalls++;
+              if (tool === "Agent" || tool === "Task") {
+                const agent = (input as { subagent_type?: unknown } | undefined)?.subagent_type;
+                const r = routines?.due && typeof agent === "string" ? routineOfAgent([routines.due.routine], agent, variantOf) : undefined;
+                if (r && started.has(r.name) && resultText(response).trim()) finished.add(r.name); // the expert came back with a result (a run that ran out of turns has none)
+              }
+              if (tool === "mcp__claude_ai_Gmail__send_message" || tool === "mcp__mailbird__send_self_briefing") selfMailed++;
               if (!isReadTool(tool) && tool !== "mcp__seenmail__seen_mail") acted++;
               if (entryFor(tool)?.action === "archive") archived++;
               if (journalable(tool)) steps++;
@@ -249,7 +258,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     // A look that ended badly after delegating the brief must not leave its note `started` for 45 minutes: the code marks it failed now, so the next look redoes it (heartbeat.md)
     if (failed && looker.brief && delegations > 0 && failStartedNote("brief", timedOut ? "the run timed out" : interrupted ? "the run was stopped, the Mac slept" : "the run failed", new Date(), conv.notesDir, looker.zone)) console.error("heartbeat: the brief's note was left 'started'; marked failed");
     // The routine this look handed on is delivered or failed now (a look only called off by a message does not count as an attempt); a skip it mentioned counts as told once the look is over and went well.
-    for (const name of started) markFinished(conv.convId, name, !failed && outcome !== "preempted", Date.now(), outcome === "preempted" || interrupted);
+    // Delivered only when the expert's result came back; an attempt is given back only when nothing of it reached the owner (no result, no send, no email): else the next look would send it again.
+    settleRoutines(conv.convId, started, finished, { calledOff: outcome === "preempted" || interrupted, sends: sent + selfMailed }, Date.now());
     if (routines?.told.length && !failed && outcome !== "preempted") markTold(conv.convId, routines.told);
     if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now);
     if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)

@@ -209,7 +209,7 @@ export function loadSettings(env: Env) {
     briefEmail: oneOf(env, "BRIEF_EMAIL", "off", ["on", "off"] as const) === "on",
     // Routines (core/routines.ts): the brief, the evening wrap (ROUTINE_EVENING=18:30|off) and the weekly review (ROUTINE_WEEKLY="fri 16:30"|off), each also by email with ROUTINE_<NAME>_EMAIL=on.
     routines: resolveRoutines(env, presetFor(env), oneOf(env, "BRIEF_EMAIL", "off", ["on", "off"] as const) === "on"),
-    routineCatchUpHours: num(env, "ROUTINE_CATCHUP_HOURS", 4, 0, 24), // a routine the Mac slept through still runs on waking within this many hours of its time, else that period is skipped
+    routineCatchUpHours: num(env, "ROUTINE_CATCHUP_HOURS", 4, 1, 24), // a routine the Mac slept through still runs on waking within this many hours of its time, else that period is skipped
     mail: mailProvider !== "none", // is there any mail to look at? Every mail-only path asks this, never the provider's name
 
     heartbeatMinutes: num(env, "HEARTBEAT_MINUTES", rhythm.heartbeat.everyMinutes, 1, 240),

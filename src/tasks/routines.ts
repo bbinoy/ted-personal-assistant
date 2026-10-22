@@ -44,7 +44,7 @@ export function planAll(conv: ConvRef, routines: readonly Routine[], now: Date, 
     if (!routine.planned || !routine.enabled) continue;
     const rec = ensure(conv, routine.name, now.getTime());
     const plan = planRoutine(routine, now, zone, rec, catchUpHours);
-    if (plan.state === "skipped" && rec?.status !== "skipped") liveConvDb(conv)?.run("UPDATE routine_runs SET period = ?, status = 'skipped', at = ?, told = 0 WHERE name = ?", plan.slot.date, now.getTime(), routine.name);
+    if (plan.state === "skipped" && (rec?.status !== "skipped" || rec.period !== plan.slot.date)) liveConvDb(conv)?.run("UPDATE routine_runs SET period = ?, status = 'skipped', at = ?, told = 0 WHERE name = ?", plan.slot.date, now.getTime(), routine.name);
     out.push({ routine, plan });
   }
   return out;
@@ -65,6 +65,12 @@ export function markFinished(conv: ConvRef, name: string, ok: boolean, now: numb
   if (!db) return;
   if (ok) db.run("UPDATE routine_runs SET status = 'delivered', at = ?, last_delivered = ? WHERE name = ? AND status = 'started'", now, now, name);
   else db.run(`UPDATE routine_runs SET status = 'failed', at = ?, attempts = MAX(0, attempts - ?) WHERE name = ? AND status = 'started'`, now, refund ? 1 : 0, name);
+}
+
+// The end of a look that handed routines to their experts. Delivered only for those whose expert's result came back (`finished`); the others are failed, and their attempt is
+// given back only when the look was called off (a message, the Mac sleeping) AND nothing of it reached the owner: once the expert finished, or a send or the self-email went out, the next look must not send it again.
+export function settleRoutines(conv: ConvRef, started: ReadonlySet<string>, finished: ReadonlySet<string>, o: { calledOff: boolean; sends: number }, now: number): void {
+  for (const name of started) markFinished(conv, name, finished.has(name), now, o.calledOff && o.sends === 0);
 }
 
 export function markTold(conv: ConvRef, names: readonly string[]): void {

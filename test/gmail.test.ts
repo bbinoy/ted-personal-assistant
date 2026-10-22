@@ -260,6 +260,14 @@ test("brief: Gmail's delivery sentence uses the gmail skill; email only with BRI
   });
   await withGmail({ briefEmail: true }, () => assert.match(how(), new RegExp(`send_message[\\s\\S]*\\["${SELF.replace(".", "\\.")}"\\]`)));
   await withGmail({ briefEmail: true, mailSelfAddress: undefined }, () => assert.match(how(), /Do not deliver by email/, "no address: no email"));
+  // a routine that wants its result mailed (how(true, true)): with no address its chat message stays the SHORT one, never "the whole brief"
+  await withGmail({ briefEmail: false, mailSelfAddress: undefined }, () => {
+    const r = mailSlot("gmail")!.brief.how(true, true);
+    assert.match(r, /do not email anything/);
+    assert.match(r, /short chat message/);
+    assert.doesNotMatch(r, /whole brief/);
+  });
+  await withGmail({ briefEmail: false }, () => assert.match(mailSlot("gmail")!.brief.how(true, true), /Deliver the full version with the Gmail send_message tool[\s\S]*complete version/));
 });
 
 test("skills and doctor: the gmail skill is offered instead of the Mailbird ones; doctor checks the address and the connector", () => {
