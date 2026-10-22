@@ -133,8 +133,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       if (conv.attention === "always") void messenger.markRead(conv.target, { timestamp: original.timestamp, author: conv.kind === "tenant" ? author : undefined }); // the owner sees it was read, as soon as we have it (a tenant: the receipt goes to her)
       else if (original.addressedToMe && author) void messenger.markRead(conv.target, { timestamp: original.timestamp, author }); // only those who spoke to us see "seen"
     }
+    rememberSender(conv.key, author, original.fromName && oneLine("sender name", original.fromName, 40)); // (memory only, whatever the voice provider: the voice tool and the task tools both name who is asking)
     if (settings.tts.provider === "qwen") {
-      rememberSender(conv.key, author, original.fromName && oneLine("sender name", original.fromName, 40));
       if (original.quotedAudio) holdQuote(conv.key, original.timestamp, original.quotedAudio);
     }
     let m: Held = original;
@@ -250,7 +250,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
           }
           const prompt = ownerPrompt(ms);
           await runTurn(conv, {
-            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document))),
+            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
             target: { author: last.from, timestamp: last.timestamp },
             threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
             hadQuote: ms.some((x) => x.quote),

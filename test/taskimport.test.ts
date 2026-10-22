@@ -23,7 +23,7 @@ const NOW = Date.parse("2026-10-22T10:00:00Z");
 let n = 0;
 const fresh = () => `import-conv-${++n}`;
 const scope = (key: string): import("../src/tasks/store.ts").Scope => ({ key, zone: ZONE, by: "owner", origin: "owner", source: "chat", now: NOW });
-const yes: import("../src/tasks/import.ts").TurnLook = () => ({ text: "yes", at: NOW + 1000, reaction: false, said: "", others: 0 }); // (the owner said yes after the preview)
+const yes: import("../src/tasks/import.ts").TurnLook = () => ({ text: "yes", at: NOW + 1000, reaction: false, said: "", others: 0, shownAt: NOW + 500 }); // (the owner said yes after the preview was shown)
 const ALL = ["suggested", "open", "snoozed", "done", "dropped"] as never;
 const row = (i: number, o: Record<string, unknown> = {}) => ({ title: `Task ${i}`, source_ref: `https://notion.so/p${i}`, ...o });
 const journalOf = (key: string) => ledgerEntries(convPaths(convIdOfKey(key)).messages).filter((m) => m.kind === "journal").map((m) => m.text);
@@ -154,8 +154,8 @@ test("import tools: preview then commit through the tools; the journal gets ONE 
   const bad = await t.import_tasks_commit!.handler({ batch_id: "imp-000000" });
   assert.equal(bad.isError, true);
   const same = await t.import_tasks_commit!.handler({ batch_id: id });
-  assert.match(same.content[0]!.text, /Not imported: ask the owner to confirm the preview/, "the same turn as the preview: no owner message after it");
-  turn = yes(0);
+  assert.match(same.content[0]!.text, /Not imported/, "the same turn as the preview: no owner message after it");
+  turn = yes("");
   const c = await t.import_tasks_commit!.handler({ batch_id: id });
   assert.ok(!c.isError, c.content[0]!.text);
   assert.match(c.content[0]!.text, /^Imported 3 tasks from Notion\./);
@@ -193,15 +193,17 @@ test("skills: tasks live in Ted; no skill tells Ted to write tasks to Notion; th
 });
 
 // ---- the confirmation is code: only the owner's yes (or a 👍 on the preview) after the preview commits it ----
-const view = (o: Partial<import("../src/tasks/import.ts").TurnView>): import("../src/tasks/import.ts").TurnLook => () => ({ text: "yes", at: NOW + 1000, reaction: false, said: "", others: 0, ...o });
+const view = (o: Partial<import("../src/tasks/import.ts").TurnView>): import("../src/tasks/import.ts").TurnLook => () => ({ text: "yes", at: NOW + 1000, reaction: false, said: "", others: 0, shownAt: NOW + 500, ...o });
 
 test("import confirmation: a short yes after the preview commits; anything else, an earlier message, or several messages do not", () => {
   const k = fresh();
   const p = I.previewImport(scope(k), { rows: [row(1)] });
-  const refuse = (look: import("../src/tasks/import.ts").TurnLook | undefined) => assert.throws(() => I.commitImport(scope(k), p.batchId, look), /ask the owner to confirm the preview imp-/);
+  const refuse = (look: import("../src/tasks/import.ts").TurnLook | undefined) => assert.throws(() => I.commitImport(scope(k), p.batchId, look), /Not imported/);
   refuse(undefined); // no owner message in this turn (an unattended run, or none given)
   refuse(view({ at: NOW })); // the message came with the preview: the turn that made it
   refuse(view({ at: NOW - 5000 }));
+  refuse(view({ at: NOW + 400 })); // sent after the preview was made but before it was shown to them (queued behind it)
+  refuse(view({ shownAt: undefined })); // never shown to the owner
   refuse(view({ text: "what is in it?" }));
   refuse(view({ text: "yes but only the open ones" }));
   refuse(view({ others: 1 })); // something else from the owner came in between
@@ -229,8 +231,61 @@ test("import confirmation: through the tool and the real turn scope: a yes that 
   const id = /imp-[0-9a-f]{6}/.exec(r.content[0]!.text)![0];
   assert.equal((await t.import_tasks_commit!.handler({ batch_id: id })).isError, true, "the owner's last message is the one that asked for the preview");
   await new Promise((res) => setTimeout(res, 5));
+  s.assistantSaid(r.content[0]!.text); // the reply that showed the preview was sent
+  await new Promise((res) => setTimeout(res, 5));
   s.say("yes");
   const ok = await t.import_tasks_commit!.handler({ batch_id: id });
   assert.ok(!ok.isError, ok.content[0]!.text);
   assert.match(ok.content[0]!.text, /^Imported 1 task from Notion/);
+});
+
+const wait = (ms = 5) => new Promise((res) => setTimeout(res, ms));
+const idOf = (r: { content: { text: string }[] }) => /imp-[0-9a-f]{6}/.exec(r.content[0]!.text)![0];
+
+test("import confirmation: preview, a question, then yes is refused with 'show it again'; after the preview is shown again, yes works (the window resets)", async () => {
+  const { scopeOf } = await import("../src/approvals/turnscope.ts");
+  const t = ownerTools({ now: () => Date.now() });
+  const s = scopeOf("owner");
+  s.say("import my notion tasks");
+  await wait();
+  const r = await t.import_tasks_preview!.handler({ rows: [row(21)] });
+  const id = idOf(r);
+  s.assistantSaid(r.content[0]!.text); // (the reply that showed the preview was sent)
+  await wait();
+  s.say("what is in row 1?");
+  await wait();
+  s.assistantSaid("It is 'Task 21', no date.");
+  await wait();
+  s.say("yes");
+  const no = await t.import_tasks_commit!.handler({ batch_id: id });
+  assert.equal(no.isError, true);
+  assert.match(no.content[0]!.text, /Show the preview again/, "the refusal says what to do");
+  await wait();
+  s.assistantSaid(`Here it is again, ${id}: 1 task.`);
+  await wait();
+  s.say("yes");
+  const ok = await t.import_tasks_commit!.handler({ batch_id: id });
+  assert.ok(!ok.isError, ok.content[0]!.text);
+  assert.match(ok.content[0]!.text, /^Imported 1 task/);
+});
+
+test("import confirmation: an 'ok' sent while the preview was still being made (queued behind its turn) does not confirm it, even once the preview is shown", async () => {
+  const { scopeOf } = await import("../src/approvals/turnscope.ts");
+  const t = ownerTools({ now: () => Date.now() });
+  const s = scopeOf("owner");
+  const sentAt = Date.now() - 2000; // the owner typed "ok" two seconds ago, before any preview existed
+  s.say("import my notion tasks", undefined, undefined, sentAt - 3000);
+  const r = await t.import_tasks_preview!.handler({ rows: [row(31)] });
+  const id = idOf(r);
+  s.assistantSaid(r.content[0]!.text);
+  s.say("ok", undefined, undefined, sentAt); // (its turn starts only now, but it was SENT before the preview)
+  const no = await t.import_tasks_commit!.handler({ batch_id: id });
+  assert.equal(no.isError, true);
+  assert.match(no.content[0]!.text, /Not imported/);
+  await wait();
+  s.assistantSaid(r.content[0]!.text); // shown again; the queued ok still predates it
+  assert.equal((await t.import_tasks_commit!.handler({ batch_id: id })).isError, true);
+  await wait();
+  s.say("ok"); // a fresh ok, sent after the preview was shown
+  assert.ok(!(await t.import_tasks_commit!.handler({ batch_id: id })).isError);
 });
