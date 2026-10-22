@@ -2,6 +2,7 @@
 name: evening-wrap
 description: The owner's evening wrap, a short routine normally at 18:30 on weekdays (the owner can move or switch it off). A heavy skill, so the heartbeat run delegates it to its expert (subagent expert-evening-wrap); in chat it runs as is ("wrap up my day"). Read-only: what got done today, what tomorrow holds, and what is still waiting on the owner. Delivers ONE phone-sized chat message; never email unless the brief says so.
 delegate: sonnet
+tools: [Skill, mcp__notes__journal, mcp__tasks__list_tasks, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Google_Calendar__get_event, mcp__claude_ai_Google_Calendar__search_events, mcp__send__send, mcp__claude_ai_Gmail__send_message, mcp__mailbird__send_self_briefing]
 ---
 
 # Evening wrap
@@ -31,4 +32,4 @@ End with nothing extra. If all three sections are empty, answer with the silent 
 
 ## Delivery
 
-Your final answer is the chat message. Unless your brief says to email it too (then send it once to the owner's own address exactly as the brief says), nothing else leaves.
+Your final answer is the short chat message. If your brief says to email it too, send it once, to the owner's own address and nobody else, with the subject `🌙 Evening wrap — <Weekday D Mon>`, exactly as the brief says; otherwise nothing else leaves.
