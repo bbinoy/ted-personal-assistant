@@ -55,7 +55,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
       await deadline.guard(out.sendVoice(file, words, conv.target));
       return true;
     } catch (e) {
-      if (e instanceof VoiceAbort) console.error(`voice skipped: took longer than ${Math.round(ms / 1000)} s, sending text`);
+      if (e instanceof VoiceAbort) console.error(e.kind === "slept" ? "voice skipped: the Mac slept, sending text" : `voice skipped: took longer than ${Math.round(ms / 1000)} s, sending text`);
       else console.error("voice reply failed, sending text:", (e as Error).message);
       return false;
     } finally {
