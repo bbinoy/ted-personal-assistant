@@ -23,7 +23,7 @@
 {"tool":"mcp__notes__write_note","provider":"notes","action":"memory-write","cap":"heartbeat","only":["background","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__notes__read_note","provider":"notes","action":"memory-read","cap":"heartbeat","only":["background","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__notes__journal","provider":"notes","action":"memory-read","cap":"heartbeat","only":["background","group"],"view":null,"free":true,"untrusted":false},
-{"tool":"mcp__notes__memory_changes_since_brief","provider":"notes","action":"memory-read","cap":"heartbeat","only":["background"],"view":null,"free":true,"untrusted":false},
+{"tool":"mcp__notes__memory_changes_since_brief","provider":"notes","action":"memory-told","cap":"heartbeat","only":["background"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__undo_dream","provider":"memory","action":"memory","cap":"dream","only":["chat","group"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__status__write_status_note","provider":"status","action":"status-note","cap":"chat","only":["background"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__seenmail__seen_mail","provider":"seenmail","action":"seen-mail","cap":"mail","only":["background","group"],"view":null,"free":true,"untrusted":false},
