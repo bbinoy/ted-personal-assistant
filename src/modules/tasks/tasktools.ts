@@ -268,7 +268,7 @@ export function createTasksServer(run: TasksRun) {
       ),
       tool(
         "import_tasks_commit",
-        "STEP 2: import the previewed batch. ONLY after the owner has said yes to that preview in this chat (a clear yes or a thumbs-up on the preview message), never on your own and never for a preview they have not seen. Code checks it: it refuses unless the owner's newest message, sent after the preview, is a short yes (or a 👍 on the message showing the preview number); never call it in the same turn as the preview. " +
+        "STEP 2: import the previewed batch. ONLY after the owner has said yes to that preview in this chat (a clear yes or a thumbs-up on the preview message), never on your own and never for a preview they have not seen. Code checks it: it refuses unless the owner's newest message, sent after the preview, is a short yes (or a 👍 on the message showing the preview number), sent after the preview was shown to them, with nothing else from them in between. If they asked something else meanwhile, show the preview again (its text with the number) before asking for the yes. Never call it in the same turn as the preview. " +
           "Inserts the whole batch as the owner's own items and writes one journal line. Calling it again for the same batch does nothing.",
         { batch_id: z.string().max(40).describe("The number in the preview, like imp-3fa9c1") },
         (a) => importer((s) => commitImport(s, a.batch_id, run.turn ?? scopeOf(run.key).confirmView)),

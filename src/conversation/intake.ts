@@ -250,7 +250,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
           }
           const prompt = ownerPrompt(ms);
           await runTurn(conv, {
-            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document))),
+            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
             target: { author: last.from, timestamp: last.timestamp },
             threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
             hadQuote: ms.some((x) => x.quote),
