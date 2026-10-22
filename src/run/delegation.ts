@@ -12,6 +12,10 @@ import { skillHint, type SkillHint } from "../modules/skills.ts";
 //     `expert-<skill>` with the skill preloaded, on that model and with that tool set. The run itself may not load a `delegate:` skill (the Skill hook below).
 //   * The hooks below are what ENFORCES it. The Agent call itself never reaches canUseTool, so a PreToolUse hook is the only place to refuse `general-purpose`, to
 //     cap the number of delegations and to keep the depth at one.
+//   * An expert always runs in the FOREGROUND: the SDK starts an Agent call in the background unless it says `run_in_background: false`, and a run ends at its
+//     first result (agentrun.ts consume), which kills a background subagent mid-work (the daily brief of 22 Oct: the look ended "silent" seconds after it
+//     delegated, the brief was never written). So the hook rewrites every accepted call to `run_in_background: false` (updatedInput), each agent is declared
+//     `background: false`, and background tasks are off for every run (agentrun.ts env). The look then waits for its expert, bounded by EXPERT_TIMEOUT_MINUTES.
 
 export const EXPERT = "expert";
 export const MAX_DELEGATIONS = 2; // per look
@@ -37,6 +41,7 @@ export function expertSetup(skills: readonly string[], prompt: string, hints: (n
       prompt,
       model: expert.model,
       maxTurns: expert.maxTurns,
+      background: false, // (see above: a background expert dies with the look)
       disallowedTools: ["Agent"],
     },
   };
@@ -53,6 +58,7 @@ export function expertSetup(skills: readonly string[], prompt: string, hints: (n
       maxTurns: expert.maxTurns,
       skills: [`${PLUGIN}:${name}`],
       ...(hint.tools ? { tools: [...hint.tools] } : {}),
+      background: false,
       disallowedTools: ["Agent"],
     };
     if (hint.delegate) delegated.set(name, agent);
@@ -64,7 +70,13 @@ export function expertSetup(skills: readonly string[], prompt: string, hints: (n
 export const delegatedText = (setup: ExpertSetup): string => [...setup.delegated].map(([skill, agent]) => `${PLUGIN}:${skill} (subagent_type "${agent}")`).join(", ");
 
 const deny = (reason: string) => ({ hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "deny" as const, permissionDecisionReason: reason } });
-const allow = { hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "allow" as const } };
+// The accepted Agent call as it must run: in the foreground (the look waits for it), never in a remote or other isolated place (a remote agent always runs in the background).
+export function foreground(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...args, run_in_background: false };
+  delete out.isolation;
+  return out;
+}
+const allowForeground = (args: Record<string, unknown>) => ({ hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "allow" as const, updatedInput: foreground(args) } });
 
 export interface Delegation {
   agent: string;
@@ -73,7 +85,7 @@ export interface Delegation {
 
 // The PreToolUse hook of a run with experts. Called for every tool (the SDK's `matcher` is left out on purpose: it also learns the type of each subagent here).
 //   Agent / Task   from the main run only (a subagent carries an `agent_id`), only `expert` or a variant of this run, at most MAX_DELEGATIONS; its brief is kept
-//                  (`briefs`) for the approval judge, which reads it as derived data next to the run's provenance
+//                  (`briefs`) for the approval judge, which reads it as derived data next to the run's provenance; it always runs in the foreground (foreground())
 //   Skill          a `delegate:` skill is denied to the main run: it must go through its expert; the expert may load it
 export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: number; onDelegate?: (d: Delegation) => void } = {}) {
   const max = o.max ?? MAX_DELEGATIONS;
@@ -92,9 +104,9 @@ export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: nu
       const brief = typeof args.prompt === "string" ? args.prompt : "";
       const d = { agent, brief };
       delegations.push(d);
-      emitRecord(input.tool_name, "delegate", source, { agent_type: agent, n: delegations.length, briefChars: brief.length });
+      emitRecord(input.tool_name, "delegate", source, { agent_type: agent, n: delegations.length, briefChars: brief.length, ...(args.run_in_background !== false ? { foreground: "forced" } : {}) });
       o.onDelegate?.(d);
-      return allow; // (the Agent call is not asked about by canUseTool: the checks above are the whole gate; what the expert does is judged call by call)
+      return allowForeground(args); // (the Agent call is not asked about by canUseTool: the checks above are the whole gate; what the expert does is judged call by call)
     }
     if (input.tool_name === "Skill" && !input.agent_id) {
       const skill = String(args.skill ?? args.name ?? "").replace(`${PLUGIN}:`, "");

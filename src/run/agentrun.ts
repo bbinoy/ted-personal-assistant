@@ -208,7 +208,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
       ? servers
       : undefined; // (every server a module built: a new one is never dropped here)
   // A tenant's run is on the instance key or it does not run: the owner's login is never a fallback (tenanttools.ts tenantEnv).
-  const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
+  // No background tasks in any run: a run ends at its first result (consume), and whatever still ran in the background (an expert the look started) died with it (delegation.ts).
+  const baseEnv = { ...process.env, MCP_CONNECTION_NONBLOCKING: "false", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1", ...(browsing ? { MAX_MCP_OUTPUT_TOKENS: "60000" } : {}) };
   const env = envFor(payerOf(opts), baseEnv);
   return {
     model: opts.model ?? settings.model,

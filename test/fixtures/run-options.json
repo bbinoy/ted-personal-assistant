@@ -153,7 +153,9 @@
     "permissionMode": "default",
     "maxTurns": 40,
     "maxBudgetUsd": 2,
-    "envChanged": {},
+    "envChanged": {
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
+    },
     "envRemoved": [],
     "hooks": [
       "PostToolUse"
@@ -260,7 +262,9 @@
     "permissionMode": "default",
     "maxTurns": 8,
     "maxBudgetUsd": 0.5,
-    "envChanged": {},
+    "envChanged": {
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
+    },
     "envRemoved": [],
     "hooks": [
       "PostToolUse"
@@ -376,7 +380,8 @@
     "maxTurns": 12,
     "maxBudgetUsd": 0.5,
     "envChanged": {
-      "ANTHROPIC_API_KEY": "<instance-key>"
+      "ANTHROPIC_API_KEY": "<instance-key>",
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
     },
     "envRemoved": [
       "CLAUDE_CODE_OAUTH_TOKEN"

@@ -97,6 +97,22 @@ test("the Agent hook: only expert and expert-<skill>, at most two per look, no n
   assert.doesNotMatch(JSON.stringify(rows), /the brief"/);
 });
 
+test("an expert always runs in the foreground: a background Agent call is rewritten, the agents are declared foreground and no run has background tasks", async () => {
+  const { call } = run();
+  type Out = { hookSpecificOutput?: { permissionDecision?: string; updatedInput?: Record<string, unknown> } };
+  // the SDK starts an Agent call in the background unless it says false: an explicit true, and a call that says nothing, both become foreground
+  const bg = (await call("Agent", { subagent_type: "expert-heavy", prompt: "write the brief", description: "brief", run_in_background: true, isolation: "remote" })) as Out;
+  assert.equal(decision(bg), "allow");
+  assert.deepEqual(bg.hookSpecificOutput!.updatedInput, { subagent_type: "expert-heavy", prompt: "write the brief", description: "brief", run_in_background: false }, "same brief, foreground, no remote place");
+  const plain = (await call("Agent", { subagent_type: "expert", prompt: "p", description: "d" })) as Out;
+  assert.equal(plain.hookSpecificOutput!.updatedInput!.run_in_background, false);
+  assert.ok(readAudit((e) => e.tool === "Agent" && e.decision === "delegate" && e.meta?.foreground === "forced").length >= 2, "the rewrite is in the audit log");
+  for (const a of Object.values(expertSetup(SKILLS, "P", hints(plugin())).agents)) assert.equal(a.background, false);
+  const o = buildOptions(refuse, heartbeatOptions(owner(), LOGIN), undefined);
+  assert.equal((o.env as Record<string, string>).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1", "the look's process cannot background anything");
+  assert.equal((buildOptions(refuse, { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).env as Record<string, string>).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1");
+});
+
 test("the Skill hook: a delegate: skill is denied to the run and goes through its expert; the expert and light skills load", async () => {
   const { call } = run();
   const denied = await call("Skill", { skill: "ted-personal-assistant:heavy" });
@@ -160,4 +176,5 @@ test("the heartbeat instruction states the principle and names the heavy skills 
   assert.match(text, /subagent_type "expert"/);
   assert.match(text, /at most 2 times per look/);
   assert.match(text, /These skills are heavy: never load them yourself/);
+  assert.match(text, /in the foreground/);
 });
