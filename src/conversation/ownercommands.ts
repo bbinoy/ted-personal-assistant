@@ -1,3 +1,7 @@
+import { routineLines } from "../tasks/routines.ts";
+import { lastStatusText } from "../modules/status/statusnote.ts";
+import { ownerSkills } from "../modules/skills.ts";
+import { PLUGIN } from "../core/preset.ts";
 import { nextReminderText } from "../tasks/remind.ts";
 import { rmSync } from "node:fs";
 import { openCount } from "../approvals/approvals.ts";
@@ -115,6 +119,7 @@ export interface StatusFacts {
   down: readonly string[]; // connectors down in the last run
   zone?: string;
   nextReminder?: string; // when the next task reminder goes (tasks/remind.ts nextReminderText); none: no reminder is scheduled
+  routines?: readonly string[]; // one line per routine: its schedule, next and last run (tasks/routines.ts routineLines); absent: no routines
   damaged?: boolean; // the ledger database is damaged: the agent runs degraded (core/instancedb.ts)
 }
 
@@ -127,6 +132,7 @@ export function statusText(f: StatusFacts): string {
     f.lastLook ? `Last look: ${timeIn(f.lastLook.at, f.zone)} (${f.lastLook.outcome}).` : "Last look: none yet.",
     `Open approvals: ${f.approvals}.`,
     ...(f.nextReminder !== undefined ? [`Next reminder: ${f.nextReminder || "none"}.`] : []),
+    ...(f.routines?.length ? [`Routines: ${f.routines.join(" | ")}.`] : []),
     f.down.length ? `Connectors down: ${f.down.join(", ")}. See \`npm run doctor\`.` : "Connectors: none down.",
   ].join("\n");
 }
@@ -169,6 +175,7 @@ const real: CommandDeps = {
       approvals: openCount(conv.key) + waitingCount(conv.key), // (the questions open in the chat, and the calls parked in the approval inbox)
       lastLook: lastOwnerLook(),
       nextReminder: nextReminderText(conv.key, conv.convId, now.getTime(), zoneOf(conv)) ?? "",
+      routines: routineLines(conv.convId, settings.routines.filter((r) => ownerSkills().includes(`${PLUGIN}:${r.skill}`)), now, zoneOf(conv), lastStatusText("brief", zoneOf(conv))),
       ...(ledgerDamage() ? { damaged: true } : {}),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };

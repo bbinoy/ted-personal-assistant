@@ -41,6 +41,9 @@ import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, la
 import { layoutState, readVersion, refusal, stragglers } from "./core/migrate.ts";
 import { readRetentionState, retentionSummary } from "./core/retention.ts";
 import { staleForReview } from "./heartbeat/retentionrules.ts";
+import { routineLines } from "./tasks/routines.ts";
+import { systemZone } from "./core/timezone.ts";
+import { lastStatusText } from "./modules/status/statusnote.ts";
 import { noCalendarData } from "./tasks/meetings.ts";
 
 type Line = DoctorLine;
@@ -421,6 +424,14 @@ export async function doctor() {
   const qwen = settings.tts.provider === "qwen" ? qwenReady(settings.tts.qwen) : undefined;
   const where = settings.tts.provider === "elevenlabs" ? "ElevenLabs (spoken text is sent to elevenlabs.io)" : settings.tts.provider === "http" ? `your own server at ${new URL(settings.tts.http.url).host} (spoken text is sent there)` : settings.tts.provider === "qwen" ? (qwen!.ok ? `local cloned voice (Qwen3-TTS ${settings.tts.qwen.model.split("/").pop()}; reference: ${qwenReference(settings.tts.qwen)}); fallback: ${settings.tts.fallback}` : `Qwen voice not ready (${qwen!.missing.join(", ")}); ${tts.ok ? "Kokoro speaks instead" : "no fallback"}`) : `local Kokoro, voice ${settings.tts.kokoro.voice}`;
   line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
+
+  if (!legacy) {
+    // Routines (core/routines.ts): the schedule and the last run of each, from the owner's own record; a routine that failed or was skipped is a warning, not an error.
+    for (const r of settings.routines.filter((x) => x.enabled)) {
+      const last = routineLines(OWNER_CONV, [r], new Date(), systemZone(), lastStatusText("brief", systemZone()))[0]!;
+      line(/\b(failed|skipped)\b/.test(last) ? "warn" : true, `routine ${r.name}`, last.slice(r.name.length + 2));
+    }
+  }
 
   const dream = legacy ? {} : readDream(OWNER_CONV);
   if (!legacy) line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (DREAM_HOUR); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
