@@ -1,16 +1,14 @@
-import { execFile } from "node:child_process";
+import { rmSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
-import { SAFE_INPUT, toolEnv } from "./internal/exec.ts";
+import { runTool, SAFE_INPUT, toolEnv } from "./internal/exec.ts";
 import { voiceEncoding, type VoiceFormat } from "./voiceformat.ts";
 
 // Shared parts of the optional remote speech providers (tts-elevenlabs.ts, tts-http.ts): a bounded HTTPS
 // request, a check that what came back is audio, and the same ffmpeg step to the voice format as the local voice (AAC by default).
 // The text sent is only the words to be spoken; keys and tokens come from the caller's config and are never logged.
 
-const run = promisify(execFile);
 const MAX_REMOTE_AUDIO_BYTES = 25 * 1024 * 1024;
 const MAX_ERROR_BODY_BYTES = 4096; // all an error message ever shows is 160 characters
 
@@ -78,12 +76,14 @@ export interface RemoteRequest {
   timeoutMs: number;
   fetchImpl?: Fetch;
   format?: VoiceFormat; // the voice message format to encode to (default m4a)
+  signal?: AbortSignal; // the caller's overall deadline: aborting ends the request and kills ffmpeg
 }
 
 // POSTs the request, checks the answer is audio, and returns it as a voice message (AAC in an .m4a unless `format` says otherwise) in a fresh temp folder
 // (the caller deletes that folder, like for the local voice). Any timeout, HTTP error or non-audio answer throws.
 export async function synthesizeRemote(req: RemoteRequest, name: string): Promise<string> {
   const failed = (e: unknown) => {
+    if (req.signal?.aborted) return req.signal.reason as Error; // the caller's deadline, not a failure of the server
     const x = e as { name?: string };
     return new Error(`${name} request failed: ${x.name === "TimeoutError" || x.name === "AbortError" ? `timeout after ${Math.round(req.timeoutMs / 1000)} s` : "network error"}`);
   };
@@ -94,7 +94,7 @@ export async function synthesizeRemote(req: RemoteRequest, name: string): Promis
       headers: { "content-type": "application/json", ...req.headers },
       body: JSON.stringify(req.body),
       redirect: "error", // a redirect could carry the token to another host
-      signal: AbortSignal.timeout(req.timeoutMs),
+      signal: req.signal ? AbortSignal.any([AbortSignal.timeout(req.timeoutMs), req.signal]) : AbortSignal.timeout(req.timeoutMs),
     });
   } catch (e) {
     throw failed(e);
@@ -117,9 +117,11 @@ export async function synthesizeRemote(req: RemoteRequest, name: string): Promis
   await writeFile(raw, bytes, { mode: 0o600 });
   const env = toolEnv();
   try {
-    await run("ffmpeg", ["-v", "error", "-y", ...SAFE_INPUT, "-f", kind, "-i", raw, ...enc.args, out], { timeout: 60_000, env });
+    await runTool("ffmpeg", ["-v", "error", "-y", ...SAFE_INPUT, "-f", kind, "-i", raw, ...enc.args, out], { timeoutMs: 60_000, env, signal: req.signal });
   } catch (e) {
-    throw new Error(`ffmpeg failed: ${((e as { stderr?: string }).stderr ?? (e as Error).message).trim().split("\n").slice(-3).join(" | ").slice(0, 200)}`);
+    rmSync(dir, { recursive: true, force: true }); // nothing is left behind for a reply that is not sent
+    if (req.signal?.aborted) throw req.signal.reason;
+    throw new Error(`ffmpeg failed: ${((e as { stderr?: string }).stderr || (e as Error).message).trim().split("\n").slice(-3).join(" | ").slice(0, 200)}`);
   }
   return out;
 }

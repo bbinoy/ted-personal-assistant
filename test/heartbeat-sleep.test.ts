@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sleptFor, startHeartbeat, SETTLE_MS } from "../src/heartbeat/heartbeat.ts";
 import { settings } from "../src/core/settings.ts";
+import { sleepSignal } from "../src/core/sleep.ts";
 
 // A Mac that sleeps: the tick notices the gap (Date clock against a monotonic one, or ticks far apart), stops what was in flight and lets the due-check restart it after a short settle delay.
 
@@ -53,6 +54,28 @@ test("the tick: after a sleep it logs how long, stops what was in flight, and st
     intervals[0]!();
     assert.equal(events.at(-1), "jobs");
     assert.equal(events.length, 5);
+  } finally {
+    console.log = log;
+  }
+});
+
+test("the tick raises the shared sleep signal (core/sleep.ts) once per sleep, and the next signal is fresh", () => {
+  let wall = 0;
+  let mono = 0;
+  const intervals: (() => void)[] = [];
+  const log = console.log;
+  console.log = () => {};
+  try {
+    startHeartbeat({ onTick: () => {} }, { setTimeout: () => {}, setInterval: (f) => void intervals.push(f), now: () => wall, mono: () => mono });
+    const before = sleepSignal();
+    wall += PERIOD;
+    mono += PERIOD;
+    intervals[0]!();
+    assert.equal(before.aborted, false, "a normal tick is no sleep");
+    wall += 60 * MIN;
+    intervals[0]!();
+    assert.equal(before.aborted, true);
+    assert.equal(sleepSignal().aborted, false);
   } finally {
     console.log = log;
   }

@@ -16,7 +16,7 @@ export interface ElevenLabsConfig {
 
 export const ELEVENLABS_BASE = "https://api.elevenlabs.io";
 
-export const synthesizeElevenLabs = (text: string, c: ElevenLabsConfig, format?: VoiceFormat): Promise<string> =>
+export const synthesizeElevenLabs = (text: string, c: ElevenLabsConfig, format?: VoiceFormat, signal?: AbortSignal): Promise<string> =>
   synthesizeRemote(
     {
       url: `${c.baseUrl ?? ELEVENLABS_BASE}/v1/text-to-speech/${encodeURIComponent(c.voiceId)}?output_format=mp3_44100_128`,
@@ -26,6 +26,7 @@ export const synthesizeElevenLabs = (text: string, c: ElevenLabsConfig, format?:
       timeoutMs: c.timeoutMs,
       fetchImpl: c.fetchImpl,
       format,
+      signal,
     },
     "ElevenLabs",
   );

@@ -225,8 +225,8 @@ test("send: text, voice note, reaction and picture, several in order, then the f
   assert.equal(r.typing[r.typing.length - 1], true);
 });
 
-test("send: the voice language safety net: foreign or unsure text, or no speech set up, goes out as text; a failed synth adds the note", async () => {
-  for (const o of [{ speech: true, foreign: "de" }, { speech: true, foreign: "unsure" }, { speech: false }]) {
+test("send: the voice language safety net: foreign text, or no speech set up, goes out as text; a failed synth adds the note", async () => {
+  for (const o of [{ speech: true, foreign: "de" }, { speech: false }]) {
     const r = rig(o);
     await r.pipeline.runTurn(owner(), { announce: false, run: async () => (await sendNow(OWNER_KEY, { text: "Guten Morgen, wie geht es dir heute?", voice: true }), { text: "[[silent]]" }) });
     assert.deepEqual(r.spoken, [], JSON.stringify(o));

@@ -188,9 +188,9 @@ test("private chat: the voice option is offered with ANY message when speech is 
   assert.equal(mute.r.prompts[0], "hello");
 });
 
-test("private chat: a reply the language check holds back (foreign or unsure) goes out as text; the check runs only for a reply that would be spoken", async () => {
+test("private chat: a reply the language check holds back (a language the voice does not speak) goes out as text; the check runs only for a reply that would be spoken", async () => {
   const asked: string[] = [];
-  for (const verdict of ["de", "unknown"]) {
+  for (const verdict of ["de", "fr"]) {
     const held = rig({ ready: true, foreign: async (w) => (asked.push(w), verdict), run: async () => "[[voice]] Guten Morgen, du hast heute zwei Termine" });
     await held.pipeline.handleIncoming(owner(), msg());
     assert.equal(held.r.spoken.length, 0, verdict);

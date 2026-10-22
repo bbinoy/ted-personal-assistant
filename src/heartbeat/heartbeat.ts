@@ -1,6 +1,7 @@
 import { isPaused } from "../core/pause.ts";
 import { settings } from "../core/settings.ts";
 import { kvSet } from "../core/instancedb.ts";
+import { noteSleep } from "../core/sleep.ts";
 
 // The heartbeat tick: a free timer (no model call) that starts the tick-driven jobs (every conversation's look, the dream). What a conversation does on a tick is the
 // heartbeat run (src/heartbeat/look.ts, started from wake.ts): there is no separate mail check; the run reads the mail itself when it is due.
@@ -58,6 +59,7 @@ export function startHeartbeat(hooks: HeartbeatHooks, env: { setTimeout?: (f: ()
     lastMono = m;
     if (slept > 0) {
       console.log(`heartbeat: the Mac slept for ${Math.round(slept / 60_000)} min`);
+      noteSleep(); // the shared signal (core/sleep.ts): a voice reply in flight gives up (its deadline holds the signal)
       try {
         hooks.onSleep?.(slept); // stops every look in flight: their connections died with the sleep
       } catch (e) {
