@@ -1,5 +1,5 @@
 import { skipForCooldown } from "./cooldown.ts";
-import { statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 import { appendLine, dataPath, readText, writeText } from "./state.ts";
 import { settings } from "./settings.ts";
 import { convPaths, OWNER_CONV } from "./convpaths.ts";
@@ -35,7 +35,7 @@ const KEEP_AFTER_COMPACTION = 0.7; // compact down to this share of the limit, s
 // "journal" is the third ledger kind: one line per thing the assistant DID (an archive, a calendar change, a sent mail...) with why and how to undo it, written by the journal sink
 // (core/events.ts), read by the `journal` tool, /today and the daily brief. It carries a category (`cat`: archive, mail, calendar...). Not conversation, so everything above skips it; the
 // F10 search indexes it; compaction keeps it verbatim for JOURNAL_KEEP_DAYS and never folds it into the summary (compactIfNeeded).
-export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
+export type Kind = "chat" | "notice" | "approval" | "suggestions" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
 
 const LEDGER_KINDS: ReadonlySet<Kind> = new Set<Kind>(["action", "wake", "journal"]);
 const isLedger = (kind: Kind) => LEDGER_KINDS.has(kind);
@@ -119,6 +119,28 @@ function readAll(file: string = FILE): { sent: Sent[]; summary?: Summary } {
   return { sent, summary };
 }
 
+/** The newest messages of a log, read from its last `bytes` only (a cheap look at what was just appended; the whole log is not parsed). Oldest first; the first, possibly cut, line is dropped. */
+export function tailEntries(file: string = FILE, bytes = 64 * 1024): Sent[] {
+  let fd: number | undefined;
+  try {
+    fd = openSync(dataPath(file), "r");
+    const size = fstatSync(fd).size;
+    const len = Math.min(size, bytes);
+    const buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, size - len);
+    const lines = buf.toString("utf8").split("\n");
+    if (size > len) lines.shift();
+    return lines.flatMap((l) => {
+      const e = l ? parse(l) : undefined;
+      return e && !isSummary(e) ? [e] : [];
+    });
+  } catch {
+    return [];
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
 const compacting = new Set<string>(); // files being compacted: one run at a time per log
 
 export function recordMessage(kind: Kind, ts: number, text: string, now = new Date(), file: string = FILE, extra: Extra = {}): void {
@@ -199,7 +221,7 @@ export const messagesSince = (sinceIso?: string, file: string = FILE): Sent[] =>
 // Every line including the ledger, oldest first: for the gate (gate.ts) alone.
 export const ledgerEntries = (file: string = FILE): readonly Sent[] => readAll(file).sent; // shared with the cache: read-only
 
-const NOTICE_KINDS = new Set<Kind>(["notice", "draft", "brief"]);
+const NOTICE_KINDS = new Set<Kind>(["notice", "draft", "brief", "suggestions"]);
 const NOTICE_AGE_MS = settings.noticeAgeHours * 3600_000;
 
 // Pure: what the assistant told the owner on its own in the last day, as plain lines for a prompt,

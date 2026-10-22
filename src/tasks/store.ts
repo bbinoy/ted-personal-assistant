@@ -205,6 +205,7 @@ interface Change {
   action: Action;
   set: Partial<Record<keyof Row, string | number | null>>;
   next?: string;
+  keepUpdated?: boolean; // bookkeeping, not an edit: updated_at stays (a reminder being marked sent is not the person touching the item)
 }
 
 /** One transaction: the item's changed columns and the history row; then the event. Returns the item as it is now and the line. */
@@ -222,7 +223,7 @@ function commit(scope: Scope, id: number, c: Change): { item: Item; line: string
       before[k] = was;
       after[k] = v;
     }
-    db.run(`UPDATE items SET ${[...Object.keys(c.set), "updated_at"].map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, ...([...Object.values(c.set), now] as (string | number | null)[]), id);
+    db.run(`UPDATE items SET ${[...Object.keys(c.set), ...(c.keepUpdated ? [] : ["updated_at"])].map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, ...([...Object.values(c.set), ...(c.keepUpdated ? [] : [now])] as (string | number | null)[]), id);
     db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, ?, ?, ?)", id, now, scope.by, c.action, Object.keys(before).length ? JSON.stringify(before) : null, Object.keys(after).length ? JSON.stringify(after) : null);
     return { item: toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", id)!), changed: Object.keys(after).filter((k) => k !== "status" && k !== "updated_at" && k !== "snooze_until" && k !== "done_at") };
   });
@@ -238,6 +239,9 @@ export function told(scope: Scope, id: number, action: Action, line: string): vo
     console.error(`tasks: the event for #${id} (${action}) could not be told (${(e as Error)?.message ?? "error"})`); // (the change is made and in the history; the audit log is a record of it)
   }
 }
+
+/** Only the person whose chat it is (the owner, a friend in hers) can make a reminder break quiet hours: not a group member, never a background look. */
+export const mayUrgent = (scope: Scope): boolean => scope.origin === "owner" || scope.origin === "friend";
 
 const mayChange = (scope: Scope): void => {
   if (scope.origin === "inferred") throw new TaskError("A background look can only suggest a task; the person changes, finishes and drops them.");
@@ -327,7 +331,7 @@ export function addItem(scope: Scope, n: NewItem): Added {
   const id = db.tx(() => {
     const r = db.run(
       "INSERT INTO items (kind, title, details, due, due_zone, remind_at, repeat, person, assignee, status, origin, source_kind, source_ref, created_at, updated_at, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      kind, title, details, due, due ? scope.zone : null, remindAt, repeat, person, assignee, status, scope.origin, sourceKind, ref, now, now, n.urgent && !inferred ? 1 : null,
+      kind, title, details, due, due ? scope.zone : null, remindAt, repeat, person, assignee, status, scope.origin, sourceKind, ref, now, now, n.urgent && mayUrgent(scope) ? 1 : null,
     );
     const after = { kind, title, ...(details ? { details } : {}), ...(due ? { due } : {}), ...(remindAt !== null ? { remind_at: remindAt } : {}), ...(repeat ? { repeat } : {}), ...(person ? { person } : {}), ...(assignee ? { assignee } : {}), status };
     db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, ?, NULL, ?)", r.lastInsertRowid, now, scope.by, status === "suggested" ? "suggested" : "added", JSON.stringify(after));
@@ -382,7 +386,7 @@ export function editItem(scope: Scope, id: number, p: Patch): { item: Item; line
   if (person !== undefined) set.person = person;
   const assignee = optText("assignee", p.assignee, LIMITS.assignee);
   if (assignee !== undefined) set.assignee = assignee;
-  if (p.urgent !== undefined) set.urgent = p.urgent ? 1 : null;
+  if (p.urgent !== undefined && mayUrgent(scope)) set.urgent = p.urgent ? 1 : null; // (a group member's urgent is ignored)
   if (!Object.keys(set).length) throw new TaskError("Nothing to change: give at least one field to update.");
   const finalRepeat = set.repeat !== undefined ? set.repeat : (it.repeat ?? null);
   const finalDue = set.due !== undefined ? set.due : (it.due ?? null);
@@ -470,7 +474,7 @@ export function rejectSuggestion(scope: Scope, id: number): { item: Item; line: 
 
 /** A reminder was sent for this item (the history says so; T2). */
 export function noteReminded(scope: Scope, id: number, remindAt: number | null = null): void {
-  commit(scope, id, { action: "reminded", set: { remind_at: remindAt } });
+  commit(scope, id, { action: "reminded", set: { remind_at: remindAt }, keepUpdated: true });
 }
 
 /** Snoozes whose time has come are open again (the history says so). Returns the items woken. */
