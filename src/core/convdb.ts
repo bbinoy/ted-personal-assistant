@@ -18,6 +18,7 @@ import { writeFileAtomic } from "./state.ts";
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   friend_notices   a friend's fixed notices (kind -> last time)
 //   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
+//   routine_runs     the last period of each scheduled routine besides the brief (evening, weekly): once per period, retries, skips (src/heartbeat/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way, a suggestion; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
 //   suggestion_asks / group_remind_noted   which suggested items each "💡 ..." message listed (message ts -> number -> item: a 👍 or "1 yes" quoting it answers for them), and which group members were told once that
 //                    a reminder said in the group is the group's (src/tasks/suggest.ts). Small, pruned after 60 days.
@@ -319,6 +320,22 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE TABLE learned_owed (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         at INTEGER NOT NULL                                         -- UTC ms: a friend's list was held (quiet hours) after her dream; the next look sends it
+      );
+    `,
+  },
+  {
+    version: 8,
+    name: "routines: the last period of each scheduled routine (evening wrap, weekly review...), so it runs once per period and a sleeping Mac catches up or skips (heartbeat/routines.ts)",
+    up: `
+      CREATE TABLE routine_runs (
+        name           TEXT PRIMARY KEY,                            -- the routine ("evening", "weekly"); the brief keeps its own status note
+        since          INTEGER NOT NULL,                            -- UTC ms: when the planner first saw it (slots before are nobody's miss)
+        period         TEXT,                                        -- the date of the slot the status is for
+        status         TEXT CHECK (status IS NULL OR status IN ('started', 'delivered', 'failed', 'skipped')),
+        at             INTEGER,                                     -- UTC ms of the last status change
+        attempts       INTEGER NOT NULL DEFAULT 0,                  -- starts in this period
+        told           INTEGER NOT NULL DEFAULT 1,                  -- 0: a skipped period the owner has not been told about yet
+        last_delivered INTEGER                                      -- UTC ms of the last successful run (the doctor)
       );
     `,
   },
