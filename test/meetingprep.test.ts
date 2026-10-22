@@ -286,7 +286,7 @@ test("the night rule: no prep between 23:00 and 06:00, nor under /quiet; it is d
   const r = rig();
   await tick(r, late);
   assert.equal(r.prompts.length, 0, "no run at all, so nothing is spent");
-  assert.deepEqual(states(), [["night", "skipped", "quiet"]]);
+  assert.deepEqual(states(), [["night", "pending", undefined]], "left open, not settled: the sweep drops it once too late");
   assert.deepEqual(heldPosts(conv), [], "never held for a digest: a prep after its meeting is worth nothing");
 
   reset();
@@ -308,7 +308,7 @@ test("the night rule: no prep between 23:00 and 06:00, nor under /quiet; it is d
   const q = rig();
   await tick(q, NOW);
   assert.equal(q.prompts.length, 0);
-  assert.deepEqual(states(), [["dnd", "skipped", "quiet"]]);
+  assert.deepEqual(states(), [["dnd", "pending", undefined]]);
 });
 
 test("the night is checked again after the run: a prep that finishes at 23:00 is dropped", async () => {
@@ -477,4 +477,42 @@ test("retention: meeting rows older than 3 days go in the nightly sweep, newer o
   assert.ok(rowsOf().some((m) => m.eventId === "old"), "a dry run removes nothing");
   rule.run(new Date(NOW), { dryRun: false } as never);
   assert.deepEqual(rowsOf().map((m) => m.eventId), ["soon"]);
+});
+
+test("a night or /quiet that ends before the meeting does not lose the prep: a 06:10 meeting due at 05:55 is sent at 06:00; a /quiet that ends in time too; otherwise the sweep drops it", async () => {
+  reset();
+  const m = berlin("2026-10-23", "06:10");
+  record([raw("early", m)], m - 3 * 3_600_000);
+  const r = rig();
+  await tick(r, m - 15 * MIN); // 05:55: night
+  assert.equal(r.prompts.length, 0);
+  assert.equal(rowsOf()[0]!.state, "pending");
+  assert.deepEqual(await tick(r, berlin("2026-10-23", "06:00")), ["prep-sent"]);
+  assert.equal(r.sent.length, 1);
+
+  reset();
+  record([raw("dnd", NOW + 30 * MIN)]);
+  setQuiet(conv, iso(NOW + 20 * MIN)); // /quiet until 12:20
+  const q = rig();
+  await tick(q, NOW + 15 * MIN);
+  assert.equal(q.prompts.length, 0);
+  assert.deepEqual(await tick(q, NOW + 21 * MIN), ["prep-sent"], "it ended in time");
+
+  reset();
+  record([raw("late", NOW + 30 * MIN)]);
+  setQuiet(conv, "");
+  await tick(q, NOW + 15 * MIN);
+  await tick(q, NOW + 28 * MIN);
+  assert.deepEqual(states(), [["late", "skipped", "too late"]], "never in time: the sweep drops it");
+});
+
+test("/stop sticks: a prep run that is stopped is settled as stopped, not retried", async () => {
+  reset();
+  const { RunStopped } = await import("../src/run/ceiling.ts");
+  record([raw("m1", NOW + 15 * MIN)]);
+  const r = rig({ reply: async () => Promise.reject(new RunStopped()) });
+  assert.deepEqual(await tick(r, NOW), ["prep-stopped"]);
+  assert.deepEqual(states(), [["m1", "skipped", "stopped"]]);
+  assert.deepEqual(await tick(r, NOW + MIN), []);
+  assert.equal(r.prompts.length, 1);
 });

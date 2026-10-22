@@ -7,6 +7,8 @@ import { emitRecord } from "../../core/events.ts";
 import { MAX_STATUS_CHARS, NOTES_DIR, STATUS_PREFIX } from "../../memory/notes.ts";
 import { localDay } from "../../core/pause.ts";
 import { dayAt, systemZone, timeIn } from "../../core/timezone.ts";
+import { convOfPath, OWNER_CONV } from "../../core/convpaths.ts";
+import { briefDelivered } from "../../memory/learned.ts";
 
 // The assistant's own state, as memory: status-<name>.md in the notes folder (category `status`, assistant-written records such as status-brief: whether today's daily
 // brief went out). The heartbeat run and its experts have NO note tools (their notes are injected as data); this one tool is the only note write they have, and it is
@@ -59,6 +61,12 @@ export function statusFact(name: string, now: Date, zone: string = systemZone(),
   return `${label}: written at ${at} without a clear status; ${attempts}`;
 }
 
+// For /status and the doctor: when a status note was last written and how it ended ("10-22 07:41 (delivered)"), or "not yet".
+export function lastStatusText(name: string, zone: string = systemZone(), dir: string = NOTES_DIR): string {
+  const n = readStatusNote(name, dir);
+  return n ? `${dayAt(n.writtenAt, 0, zone).date.slice(5)} ${timeIn(n.writtenAt, zone)} (${n.status ?? "no status"})` : "not yet";
+}
+
 export type StatusResult = { ok: true; file: string } | { ok: false; error: string };
 
 // Pure but for the file: writes status-<name>.md. `dir`: tests.
@@ -69,7 +77,12 @@ export function writeStatusNote(name: string, text: string, now: Date = new Date
   if (body.length > MAX_STATUS_CHARS) return { ok: false, error: `too long (${body.length} characters, the most is ${MAX_STATUS_CHARS}): keep the date, the status and the headlines only` };
   const before = readStatusNote(name, dir);
   const carried = before && localDay(before.writtenAt) === localDay(now) ? before.attempts : 0; // the count is the day's
-  return put(name, body, now, dir, carried + (statusOf(body) === "started" ? 1 : 0));
+  const r = put(name, body, now, dir, carried + (statusOf(body) === "started" ? 1 : 0));
+  if (r.ok && name === "brief" && statusOf(body) === "delivered") {
+    const conv = dir === NOTES_DIR ? OWNER_CONV : convOfPath(dir);
+    if (conv) briefDelivered(conv); // the "learned overnight" list the brief carried is told now, not when the tool handed it out (memory/learned.ts)
+  }
+  return r;
 }
 
 function put(name: string, body: string, now: Date, dir: string, attempts: number): StatusResult {

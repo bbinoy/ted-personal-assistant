@@ -24,7 +24,7 @@ test("the bundled daily-brief and meeting-prep skills are heavy: the heartbeat r
   assert.equal(skillHint("calendar").delegate, undefined, "light skills have no hint");
   const set = expertSetup(ownerSkills(), "P");
   assert.ok(set.agents["expert-daily-brief"] && set.agents["expert-meeting-prep"] && set.agents.expert);
-  assert.deepEqual([...set.delegated.keys()].sort(), ["daily-brief", "meeting-prep"]);
+  assert.deepEqual([...set.delegated.keys()].sort(), ["daily-brief", "evening-wrap", "meeting-prep", "weekly-review"]);
   const h = delegationHook(set, "background");
   const call = (tool_input: Record<string, unknown>, who: object = {}) => h.hook({ hook_event_name: "PreToolUse", tool_name: "Skill", tool_input, tool_use_id: "t", ...who } as never, "t", { signal });
   const denied = (await call({ skill: "ted-personal-assistant:daily-brief" })) as { hookSpecificOutput: { permissionDecision: string } };

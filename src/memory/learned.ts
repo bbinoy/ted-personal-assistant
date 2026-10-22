@@ -146,11 +146,11 @@ export function planBatch(conv: ConvId, dir: string, now: number): Batch | undef
 }
 
 /** Writes down that `batch` was told (as message `ts`, if it went as one): its rows will not be listed again, and its numbers answer replies. Returns the batch id. */
-export function commitBatch(conv: ConvId, batch: Batch, now: number, ts?: number): number | undefined {
+export function commitBatch(conv: ConvId, batch: Batch, now: number, ts?: number, o: { brief?: boolean } = {}): number | undefined {
   const db = liveConvDb(conv);
   if (!db) return undefined;
   return db.tx(() => {
-    const id = db.run("INSERT INTO learned_batches (at, msg_ts) VALUES (?, ?)", now, ts ?? null).lastInsertRowid;
+    const id = db.run("INSERT INTO learned_batches (at, msg_ts, delivered) VALUES (?, ?, ?)", now, ts ?? null, o.brief ? null : 1).lastInsertRowid;
     const listed = new Map(batch.items.map((i) => [i.seq, i.n]));
     for (const seq of batch.seqs) {
       if (listed.has(seq)) {
@@ -218,24 +218,43 @@ export function askOf(conv: ConvId, batch: number, n: number): Ask | undefined {
 
 export const settleChange = (conv: ConvId, seq: number, outcome: "confirmed" | "undone"): void => void liveConvDb(conv)?.run("UPDATE learned_changes SET outcome = ? WHERE seq = ?", outcome, seq);
 
-/** The latest list that has no message of its own (it went in the brief), told within `withinMs`, for the brief tool to hand out again if the brief is redone. */
-export function recentBriefBatch(conv: ConvId, dir: string, now: number, withinMs: number): Item[] | undefined {
-  const db = peekConvDb(conv);
-  const b = db?.get<{ id: number }>("SELECT id FROM learned_batches b WHERE msg_ts IS NULL AND at > ? AND EXISTS (SELECT 1 FROM learned_asks WHERE batch = b.id) ORDER BY id DESC LIMIT 1", now - withinMs);
-  if (!db || !b) return undefined;
-  const items = db.all<{ n: number }>("SELECT n FROM learned_asks WHERE batch = ? ORDER BY n", b.id).map((r) => askOf(conv, b.id, r.n)).filter((a): a is Ask => !!a && a.change.outcome === undefined && (a.change.source !== "inferred" || isStillInferred(dir, a.change.file))).map((a) => ({ ...a.change, n: a.n }));
-  return items.length ? items : undefined;
-}
-
-/** The brief's section (the `memory_changes_since_brief` tool): the changes not yet told, as the lines and the hint, written down as told. Asked again within REDO_MS (the brief was redone) the same list is handed out again. Empty: nothing to tell. */
-const REDO_MS = 6 * 3_600_000;
+/**
+ * The brief's section (the `memory_changes_since_brief` tool): the changes not yet told, as the lines and the hint. A list made for a brief that was never SENT (a prep run or a look read it, the brief died) is
+ * taken back first and made again with whatever is new, so it is offered at the next brief; it counts as told only when the brief's status note says delivered (briefDelivered). Empty: nothing to tell.
+ */
 export function briefLearned(conv: ConvId, dir: string, now: number): string {
   if (isGroupConv(conv)) return "";
+  releaseUnsent(conv);
   const batch = planBatch(conv, dir, now);
-  if (batch) commitBatch(conv, batch, now); // (a batch of changes that no longer hold is settled without a word)
-  if (batch?.items.length || batch?.notes.length) return learnedBody(batch.items, batch.notes);
-  const again = recentBriefBatch(conv, dir, now, REDO_MS);
-  return again ? learnedBody(again) : "";
+  if (!batch) return "";
+  const listed = batch.items.length > 0 || batch.notes.length > 0;
+  commitBatch(conv, batch, now, undefined, { brief: listed }); // (a batch of changes that no longer hold is settled without a word)
+  return listed ? learnedBody(batch.items, batch.notes) : "";
+}
+
+/** The brief was delivered (the status note says so, statusnote.ts): its list is told. */
+export function briefDelivered(conv: ConvId): void {
+  if (!isGroupConv(conv)) peekConvDb(conv)?.run("UPDATE learned_batches SET delivered = 1 WHERE delivered IS NULL");
+}
+
+// Takes back the lists made for a brief that was not sent: their rows are untold again (the ones a reply settled stay settled).
+function releaseUnsent(conv: ConvId): void {
+  const db = peekConvDb(conv);
+  if (!db) return;
+  db.tx(() => {
+    const ids = db.all<{ id: number }>("SELECT id FROM learned_batches WHERE delivered IS NULL").map((r) => r.id);
+    for (const id of ids) {
+      db.run("UPDATE learned_changes SET batch = NULL WHERE batch = ? AND outcome IS NULL", id);
+      db.run("DELETE FROM learned_asks WHERE batch = ? AND seq IN (SELECT seq FROM learned_changes WHERE batch IS NULL)", id);
+      db.run("DELETE FROM learned_batches WHERE id = ? AND NOT EXISTS (SELECT 1 FROM learned_asks WHERE batch = ?)", id, id);
+      db.run("UPDATE learned_batches SET delivered = 1 WHERE id = ?", id); // (what is left holds the asks of rows a reply settled)
+    }
+  });
+}
+
+/** The latest brief list (it had no message of its own) with something in it, told within `withinMs`: what a reply that quotes the brief is about. */
+export function briefBatchFor(conv: ConvId, now: number, withinMs: number): { id: number; at: number } | undefined {
+  return peekConvDb(conv)?.get<{ id: number; at: number }>("SELECT id, at FROM learned_batches b WHERE msg_ts IS NULL AND at > ? AND EXISTS (SELECT 1 FROM learned_asks WHERE batch = b.id) ORDER BY id DESC LIMIT 1", now - withinMs);
 }
 
 // ---- a whole-dream undo ----

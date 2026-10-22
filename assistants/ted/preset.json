@@ -17,6 +17,10 @@
     "heartbeat": { "maxTurns": 120, "maxBudgetUsd": 2 },
     "group": { "maxTurns": 8, "maxBudgetUsd": 0.5 }
   },
+  "routines": {
+    "evening": { "when": "18:30 weekdays", "skill": "evening-wrap", "email": false, "enabled": true },
+    "weekly": { "when": "fri 16:30", "skill": "weekly-review", "email": false, "enabled": true }
+  },
   "expert": { "model": "sonnet", "maxTurns": 40 },
   "skills": {
     "core": [
@@ -25,6 +29,8 @@
       { "name": "follow-through" },
       { "name": "stay-in-touch" },
       { "name": "task-import" },
+      { "name": "evening-wrap" },
+      { "name": "weekly-review" },
       { "name": "setup", "required": true }
     ],
     "order": ["daily-brief", "mailbird", "mailbird-troubleshooting", "gmail", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"]

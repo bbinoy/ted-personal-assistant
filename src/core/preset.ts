@@ -21,6 +21,10 @@ export interface Rhythm {
   // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
   readonly dream: { readonly enabled: boolean; readonly hour: number; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
+// A routine (src/core/routines.ts plans it): something the assistant does on a schedule by delegating a plugin skill to its expert and sending the result to the owner. The daily brief is the
+// first one but keeps its own time (rhythm.heartbeat.briefTime) and switch (BRIEF_EMAIL); the others are listed here.
+// `when`: "18:30 weekdays", "07:30 daily" or "fri 16:30"; `email`: also mail the result to the owner themself; `enabled`: the preset's default, an env variable overrides.
+export interface RoutineDef { readonly when: string; readonly skill: string; readonly email: boolean; readonly enabled: boolean }
 export type ProfileKey = "chat" | "heartbeat" | "group";
 export interface Preset {
   readonly name: string;
@@ -29,11 +33,28 @@ export interface Preset {
   readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[]; readonly tenant: readonly string[]; readonly background: readonly string[] };
   readonly profiles: Readonly<Record<ProfileKey, ProfileData>>;
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
+  readonly routines: Readonly<Record<string, RoutineDef>>; // the scheduled routines besides the brief, by name (evening, weekly)
   readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert the heartbeat run delegates heavy work to (heartbeat/delegation.ts)
   readonly persona: Readonly<Record<PromptKey, Template>>;
 }
 
 // The Claude plugin that bundles the skills (plugin/skills/<name>/SKILL.md); a skill is named to the model as "<plugin>:<skill>".
+// "18:30 weekdays" | "07:30 daily" | "fri 16:30" | "18:30" (days then unspecified): the time and the days a routine runs. Days: every day, Monday to Friday, or one weekday (0 = Sunday).
+export type Days = "daily" | "weekdays" | number;
+export interface When { readonly time: string; readonly days: Days | undefined }
+const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+export function parseWhen(text: string): When | undefined {
+  let time: string | undefined, days: Days | undefined;
+  for (const w of text.trim().toLowerCase().split(/\s+/)) {
+    const t = /^(\d{1,2}):(\d{2})$/.exec(w);
+    if (t && Number(t[1]) < 24 && Number(t[2]) < 60 && time === undefined) time = `${t[1]!.padStart(2, "0")}:${t[2]}`;
+    else if ((w === "daily" || w === "weekdays") && days === undefined) days = w;
+    else if (/^(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/.test(w) && days === undefined) days = DAY_NAMES.indexOf(w.slice(0, 3));
+    else return undefined;
+  }
+  return time === undefined ? undefined : { time, days };
+}
+
 export const PLUGIN = "ted-personal-assistant";
 
 // ---- the words: templates with {{name}} (text), {{#name}}..{{/name}} (only when the flag is on) and {{^name}}..{{/name}} (only when off) ----
@@ -109,7 +130,7 @@ export const PROMPTS = {
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
   heartbeatSystem: ["personality", "own", "who", "group"],
   expert: ["personality", "own", "who"],
-  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefFact", "briefHow", "who", "Who", "own", "reads", "mail", "experts", "brief", "sources", "tasks", "meetings", "suggestionsPerLook", "group"],
+  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "briefTime", "briefOverdueHour", "briefFact", "briefHow", "routines", "routineFacts", "who", "Who", "own", "reads", "mail", "experts", "brief", "sources", "tasks", "meetings", "suggestionsPerLook", "group"],
   tasks: ["own", "group", "who"],
   gateGroup: ["participation", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;
@@ -215,6 +236,14 @@ export function loadPreset(dir: string): Preset {
   });
   const order = words(at("skills.order"), s.order);
 
+  const rt = isObj(json.routines) ? json.routines : {};
+  const routines: Record<string, RoutineDef> = {};
+  for (const [rn, rv] of Object.entries(rt)) {
+    const d = obj(at(`routines.${rn}`), rv);
+    const when = typeof d.when === "string" && parseWhen(d.when)?.days !== undefined ? d.when : fail(at(`routines.${rn}.when`), `must be a time and days like "18:30 weekdays", "07:30 daily" or "fri 16:30" (got ${JSON.stringify(d.when)})`);
+    routines[word(at(`routines.${rn}`), rn)] = { when, skill: word(at(`routines.${rn}.skill`), d.skill), email: bool(at(`routines.${rn}.email`), d.email), enabled: bool(at(`routines.${rn}.enabled`), d.enabled) };
+  }
+
   const ex = sec("expert");
   const expert = { model: typeof ex.model === "string" && /^[a-z][a-z0-9.-]*$/.test(ex.model) ? ex.model : fail(at("expert.model"), `must be a model alias or id like "sonnet" (got ${JSON.stringify(ex.model)})`), maxTurns: int(at("expert.maxTurns"), ex.maxTurns, 1, 200) };
 
@@ -228,7 +257,7 @@ export function loadPreset(dir: string): Preset {
     for (const used of namesIn(t.nodes)) if (!allowed.has(used)) fail(file, `{{${used}}} is not available here (this text may use ${[...allowed].map((a) => `{{${a}}}`).join(", ") || "nothing"})`);
     persona[key] = t;
   }
-  return { name, rhythm, notes, profiles, skills: { core, order }, expert, persona };
+  return { name, rhythm, notes, profiles, skills: { core, order }, routines, expert, persona };
 }
 
 // The preset this process runs: ASSISTANT_PRESET is the name of a folder in assistants/ (default "ted") or the path of one.
