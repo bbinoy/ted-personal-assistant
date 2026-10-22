@@ -10,6 +10,7 @@ import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
 import { mailSlot, registered } from "../modules/index.ts";
 import { archivedBy, restoredBy } from "../modules/archivecap.ts";
+import { tasksNote } from "../modules/tasks/taskfacts.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
@@ -310,7 +311,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     const doubtful = provenance?.kind === "derived" && provenance.by === "gate" && !!setup.inferredNoteRead?.();
     if (doubtful) log(tool, "judge-floor", source, { reason: "inferred-note-read" });
     if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && !doubtful && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
-      judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
+      judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;
         judged = { decision: "ask", reason: judged.reason };

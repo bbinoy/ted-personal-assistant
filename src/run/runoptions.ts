@@ -6,6 +6,8 @@ import type { Conversation } from "../conversation/conversationmodel.ts";
 import { recentNotices } from "../core/messages.ts";
 import { readNotes } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
+import { importOffer } from "../modules/tasks/taskfacts.ts";
+import { OWNER_KEY } from "../core/ownerkey.ts";
 import { chatContext, chatSystem, FIRST_CONTACT, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, groupTools, toolsFor } from "../policy/capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
@@ -86,7 +88,8 @@ const SHAPES: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) =>
 const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) => string | undefined> = {
   owner: () => {
     const off = disconnected(readConnectors()); // (read once)
-    return chatContext({ missing: missingSetup(readNotes(), off), down: off, pings: recentNotices() });
+    const notes = readNotes();
+    return chatContext({ missing: missingSetup(notes, off), down: off, pings: recentNotices(), tasks: importOffer(OWNER_KEY, notes.some((n) => n.file.startsWith("setup-task"))) });
   },
   group: () => undefined,
   // Her first turn after the owner let her in (tenantrun.ts marks it with the first reply): she is new here. (Her mail is read by her heartbeat run and her tools when she asks: there is no digest to show.)

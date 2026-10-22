@@ -518,6 +518,12 @@ const dueKey = (it: Item): string => (it.due ? (it.due.length === 10 ? `${it.due
 
 const allItems = (key: string, kind?: Kind): Item[] => readDb(key)?.all<Row>("SELECT * FROM items" + (kind ? " WHERE kind = ?" : ""), ...(kind ? [kind] : [])).map(toItem) ?? [];
 
+/** How many items the list holds at all, and how many came from the one-time import (modules/tasks/taskfacts.ts: has the list moved out of Notion yet?). */
+export function storeFacts(key: string): { items: number; imported: number } {
+  const all = allItems(key);
+  return { items: all.length, imported: all.filter((it) => it.sourceKind === "import").length };
+}
+
 /** Every open or snoozed item (the reminder tick reads these; no cap, unlike a list). */
 export const activeItems = (key: string): Item[] => allItems(key).filter((it) => it.status === "open" || it.status === "snoozed");
 
