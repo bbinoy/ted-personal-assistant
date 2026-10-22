@@ -59,7 +59,7 @@ export interface Reported {
 const ORDER = ["notion", "calendar"];
 
 // The connectors worth reporting while they are down: those of the LOADED modules (Gmail only while MAIL_PROVIDER=gmail) that say what they are called and what is lost, and that
-// the model is meant to see (a connector hidden by HIDDEN_CONNECTORS, like Drive by default, is no outage to talk about; the mail provider's is always in use).
+// the model is meant to see (a connector hidden by HIDDEN_CONNECTORS, like IBKR by default, is no outage to talk about; the mail provider's is always in use).
 export function reportable(): Reported[] {
   const out = loaded().flatMap((m): Reported[] => {
     const c = m.connection;

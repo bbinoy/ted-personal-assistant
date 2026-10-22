@@ -18,6 +18,7 @@ export const GOOGLE_PREFIX = "mcp__google__";
 
 const gm = rowsOf(GOOGLE_PREFIX, "google", "mail");
 const gc = rowsOf(GOOGLE_PREFIX, "google", "calendar");
+const gd = rowsOf(GOOGLE_PREFIX, "google", "google"); // her Drive: behind the `google` capability alone (the owner's `drive` capability is owner-only: drive.ts)
 const only = { only: ["group"] } as const; // a friend's run is an isolated "group" run; the owner's policy source has no such tool
 
 // A friend's mail tool: whether her set has it says whether she has Google mail at all (the system prompt names it, runoptions.ts).
@@ -43,6 +44,9 @@ const rows = [
     ...gm("send", "send_gmail_message", { ...only, view: "ggSend" }), // a new mail, a reply (thread_id, in_reply_to) and a forward (forward_message_id) are one tool: all are sends
     ...gm("label", "modify_gmail_message_labels", only), // removing INBOX is an archive; TRASH and SPAM are refused by the floor
     ...gc("read", "list_calendars get_events query_freebusy", only),
+    // Her Drive is READ-ONLY: search, read a file, list a folder (the default scopes ask drive.readonly only). The server also has Drive tools that write and share; they are not rows, so they
+    // are in no capability set and her run cannot call them. Her contacts have no row either: only find_person (modules/people) reads them, through her own session, fenced.
+    ...gd("read", "search_drive_files get_drive_file_content list_drive_items", only),
     ...gc("calendar-write", "manage_event", only), // create, update, delete and rsvp by its `action`; only create and update without guests are ever judged (below)
 ];
 

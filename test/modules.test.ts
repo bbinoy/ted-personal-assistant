@@ -17,7 +17,7 @@ import { CAPABILITIES } from "../src/tenants/tenants.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "voice", "memory", "notes", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "voice", "memory", "notes", "people", "status", "seenmail", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -67,7 +67,7 @@ test("modules: every module that names a server has its server in runtime.ts (RU
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "notes", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "voice", "memory", "notes", "people", "status", "seenmail", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
@@ -144,20 +144,20 @@ test("modules: skills come from the loaded modules, in the order the owner's lis
 test("connectors: which are reported down comes from the loaded modules' connections (key, label, skipped), not from a list in connectors.ts", async () => {
   const { detect, disconnected, reportable, NAMES, SKIPPED } = await import("../src/modules/connectors.ts");
   const keys = () => reportable().map((r) => r.key);
-  assert.deepEqual(keys(), ["notion", "calendar"], "under Mailbird: the two the owner has always been told about; Gmail's connector is not loaded and Drive is hidden by default");
+  assert.deepEqual(keys(), ["notion", "calendar", "drive", "docs"], "under Mailbird: the two the owner has always been told about, then Drive and Docs (visible by default); Gmail's connector is not loaded");
   const s = settings as unknown as Record<string, unknown>;
   const was = { mailProvider: s.mailProvider, hiddenConnectors: s.hiddenConnectors };
   try {
     s.mailProvider = "gmail";
-    assert.deepEqual(keys(), ["notion", "calendar", "gmail"]);
+    assert.deepEqual(keys(), ["notion", "calendar", "drive", "docs", "gmail"]);
     const up = (name: string) => ({ name: `claude.ai ${name}`, status: "connected" });
-    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar")])), ["gmail"], "a Gmail outage reaches the prompts and the brief");
-    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Gmail")])), []);
+    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Google Drive"), up("Google Docs")])), ["gmail"], "a Gmail outage reaches the prompts and the brief");
+    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Google Drive"), up("Google Docs"), up("Gmail")])), []);
     assert.equal(NAMES.gmail, "Gmail");
     assert.match(SKIPPED.gmail!, /mail pass/);
-    s.hiddenConnectors = (s.hiddenConnectors as string[]).filter((h) => !/Google_(Drive|Docs)/.test(h)); // the owner switched Drive and Docs on
-    assert.deepEqual(keys(), ["notion", "calendar", "drive", "docs", "gmail"], "in module order after the two");
-    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Gmail"), up("Google Docs")])), ["drive"]);
+    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Gmail"), up("Google Docs")])), ["drive"], "Drive is down, Docs is up");
+    s.hiddenConnectors = [...(s.hiddenConnectors as string[]), "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs"]; // the owner hid Drive and Docs again
+    assert.deepEqual(keys(), ["notion", "calendar", "gmail"], "a hidden connector is no outage to talk about");
   } finally {
     Object.assign(s, was);
   }

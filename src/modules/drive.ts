@@ -2,7 +2,7 @@ import { DELETE_CONFIRM } from "../policy/neverallowed.ts";
 import { rowsOf, type ToolModule } from "./types.ts";
 
 // Google Drive and Google Docs (capability `drive`, the owner's claude.ai connectors; a friend's own Google is a separate capability, modules/google.ts), and the
-// Claude Docs connector. Hidden from the model by default (HIDDEN_CONNECTORS); the rows say what they are for the day they are switched on. Their reads are free
+// Claude Docs connector. Google Drive and Google Docs are visible to the owner's chat by default (HIDDEN_CONNECTORS hides them again; Claude Docs stays hidden by default). Their reads are free
 // and untrusted (a file's text is written by whoever can edit it). Sharing a file hands it to other people: it is never judged and always asks. Moving a file to the bin is a destructive action the judge handles with care (neverallowed.ts DELETE_CONFIRM); Claude Docs
 // delete is never allowed, like everywhere (neverallowed.ts).
 const DRIVE = "mcp__claude_ai_Google_Drive__";

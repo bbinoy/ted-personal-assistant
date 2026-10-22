@@ -25,6 +25,7 @@
 
 - **Inbox.** Every 15 minutes it checks for new mail. Newsletters, notifications and cold outreach are archived (never deletes). Anything that needs you arrives as one short message on Signal. When appropriate a reply is drafted automatically for you to review.
 - **Meeting prep** from your Notion meeting database and past threads.
+- **People.** "Invite Sam" or "write to Anna" does not mean guessing or asking for an address: `find_person` looks in your people notes and, for a friend, her Google Contacts, and only asks when it finds none or several. Google Drive and Docs are on by default: it can find and read your files.
 - **Tasks.** It reads your Notion task list, spots what is overdue, adds tasks from mail and removes ones clearly done. Chat with it to get a brief on what's up next, or to add/tick off tasks.
 - **Calendar.** Creates events from mail, flags conflicts and proposes fixes. Plain events on your own calendar just happen (logged); anything with other people asks.
 - **Daily brief.** An email sent to you once a day in the morning with a key focus for the day based on tasks, emails and calendar, upcoming calendar events, what it did since the last brief (emails that were auto-archived), and newsletter digest.

@@ -5,7 +5,7 @@
       "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "840b825c970591e6"
+        "sha": "54d6f65f382cc713"
       },
       "memory": {
         "dir": "<data>/conversations/owner/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "840b825c970591e6"
+        "sha": "54d6f65f382cc713"
       },
       "snapshot": false
     },
@@ -34,6 +34,7 @@
       "draw",
       "voice",
       "memory",
+      "people",
       "browse"
     ],
     "tools": [
@@ -71,8 +72,6 @@
     "disallowedTools": [
       "mcp__claude_ai_Interactive_Brokers_IBKR",
       "mcp__claude_ai_Gmail",
-      "mcp__claude_ai_Google_Drive",
-      "mcp__claude_ai_Google_Docs",
       "mcp__claude_ai_Claude_Docs",
       "mcp__claude_ai_Notion__notion-ai-search",
       "mcp__claude_ai_Notion__notion-check-mcp-next-steps",
@@ -189,6 +188,7 @@
         "mcp__notes__journal",
         "mcp__notes__read_note",
         "mcp__notes__write_note",
+        "mcp__people__find_person",
         "mcp__send__send",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
@@ -220,6 +220,7 @@
       "draw",
       "voice",
       "memory",
+      "people",
       "browse"
     ],
     "strictMcpConfig": true,
@@ -284,6 +285,7 @@
         "mcp__notes__journal",
         "mcp__notes__read_note",
         "mcp__notes__write_note",
+        "mcp__people__find_person",
         "mcp__send__send",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
@@ -324,6 +326,7 @@
       "draw",
       "voice",
       "memory",
+      "people",
       "browse"
     ],
     "strictMcpConfig": true,

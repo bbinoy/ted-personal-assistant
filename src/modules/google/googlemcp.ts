@@ -192,6 +192,22 @@ export const GOOGLE_RECONNECT_TEXT =
 
 export const googleUnavailable = (e: unknown): string => (e instanceof GoogleReconnect ? GOOGLE_RECONNECT_TEXT : e instanceof UpstreamError ? `Google is not available for her right now: ${e.message}.` : "Google is not available for her right now.");
 
+// find_person's Google Contacts source (modules/people): one search through HER session, with HER address put in last, so it can only ever read her own contacts. It is not a tool of
+// her run (no row): the text goes to find_person, which fences it. A failure is a short plain reason (never a token: the session's errors are fixed sentences), not the model's problem.
+export async function searchContacts(tenantId: string, query: string, hub: GoogleHub = googleHub): Promise<string> {
+  try {
+    const s = hub.session(tenantId);
+    await s.prepare();
+    if (!s.address) await s.tools(); // starts her server and learns her address
+    if (!s.address) throw new GoogleError("her Google account is not known");
+    const r = await s.call("search_contacts", { query, page_size: 10, user_google_email: s.address });
+    if (r.isError) throw new GoogleError("Google would not search her contacts (she may need to connect Google again to allow contacts)");
+    return r.text;
+  } catch (e) {
+    throw new Error(e instanceof GoogleReconnect ? "she has not connected Google, or her permission expired" : e instanceof UpstreamError ? e.message : "it did not answer");
+  }
+}
+
 // ---- what the model's run gets: a proxy to her server, no command line, no environment (mcpproxy.ts) ----
 
 // The in-process MCP server of a friend's run. `allowed`: the tools her run is offered (its capability set); anything else is refused here too. Every call is forwarded
