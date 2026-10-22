@@ -1,10 +1,8 @@
 import type { Source } from "../core/audit.ts";
 import { liveConvDb, peekConvDb } from "../core/convdb.ts";
 import { convIdOfKey } from "../core/convpaths.ts";
-import { parseNumbered } from "../approvals/pendingparse.ts";
-import { isThumbUp } from "../conversation/feedback.ts";
 import { settings } from "../core/settings.ts";
-import { confirmSuggestion, listItems, rejectSuggestion, TaskError, getItem, type Item, type Scope } from "./store.ts";
+import { confirmSuggestion, listItems, rejectSuggestion, TaskError, type Item, type Scope } from "./store.ts";
 import { suggestionsText, tasksText } from "./render.ts";
 import { showLocal, todayIn } from "./when.ts";
 
@@ -118,17 +116,17 @@ export async function offerSuggestions(conv: SuggestConv, now: Date, zone: strin
 
 // ---- answering ----
 
-interface Ask {
+export interface Ask {
   n: number;
   id: number;
 }
-const asksOf = (key: string, ts: number): Ask[] => peekConvDb(convIdOfKey(key))?.all<{ n: number; item_id: number }>("SELECT n, item_id FROM suggestion_asks WHERE msg_ts = ? ORDER BY n", ts).map((r) => ({ n: r.n, id: r.item_id })) ?? [];
+export const asksOf = (key: string, ts: number): Ask[] => peekConvDb(convIdOfKey(key))?.all<{ n: number; item_id: number }>("SELECT n, item_id FROM suggestion_asks WHERE msg_ts = ? ORDER BY n", ts).map((r) => ({ n: r.n, id: r.item_id })) ?? [];
 
 /** Does this message list suggestions? (a reply quoting it, or a reaction on it, is an answer) */
 export const isSuggestionMessage = (key: string, ts: number): boolean => asksOf(key, ts).length > 0;
 
 /** Confirm or drop the named items; each one that is no longer a suggestion (answered in chat meanwhile, expired) is left alone. The reply says what happened. */
-function settle(conv: SuggestConv, asks: readonly Ask[], yes: readonly number[], no: readonly number[], o: { who?: string; zone: string; now: number; how: string }): string {
+export function settle(conv: SuggestConv, asks: readonly Ask[], yes: readonly number[], no: readonly number[], o: { who?: string; zone: string; now: number; how: string }): string {
   const sc = scopeOf(conv, o.who, o.zone, o.now, o.how);
   const said: string[] = [];
   const gone: string[] = [];
@@ -153,57 +151,6 @@ function settle(conv: SuggestConv, asks: readonly Ask[], yes: readonly number[],
   }
   const out = [said.length ? `✅ Added: ${said.join("; ")}.` : "", gone.length ? `Dropped: ${gone.join("; ")}.` : "", stale.length ? `${stale.map((n) => `#${n}`).join(", ")} ${stale.length === 1 ? "was" : "were"} already handled.` : ""].filter(Boolean);
   return out.join(" ") || "Nothing to do.";
-}
-
-export interface Answerer {
-  say(text: string): Promise<unknown>;
-  who?: string; // the member who answered (a group); the owner and a friend are themselves
-  zone: string;
-  now?: number;
-}
-
-/**
- * A reply that quotes a suggestions message. true: it was an answer (said back, the message is not also a chat turn). A reply that is not in the answer grammar ("1 yes, but make it Friday") is an
- * ordinary message (false); a bare yes / 👍 means all of them, a bare no is only clear for a single suggestion.
- */
-export async function answerSuggestions(conv: SuggestConv, text: string, quote: { timestamp: number } | undefined, a: Answerer): Promise<boolean> {
-  if (!quote || quote.timestamp === 0) return false;
-  const asks = asksOf(conv.key, quote.timestamp);
-  if (!asks.length) return false;
-  const now = a.now ?? Date.now();
-  const nums = asks.map((x) => x.n);
-  const parsed = parseNumbered(text, nums, nums);
-  const how = "a reply to the suggestions I listed";
-  const o = { who: a.who, zone: a.zone, now, how };
-  try {
-    if (parsed.kind === "none") return false;
-    if (parsed.kind === "clarify") return void (await a.say(parsed.why)), true;
-    if (parsed.kind === "bare") {
-      if (parsed.yes) return void (await a.say(settle(conv, asks, nums, [], o))), true;
-      if (asks.length === 1) return void (await a.say(settle(conv, asks, [], nums, o))), true;
-      return void (await a.say("Which ones? Say e.g. '1 no' or 'all no'; nothing was done.")), true;
-    }
-    return void (await a.say(settle(conv, asks, parsed.yes, parsed.no, o))), true;
-  } catch (e) {
-    console.error("suggestions: could not apply the answer:", (e as Error).message);
-    return void (await a.say("I could not do that just now (it is logged).").catch(() => undefined)), true;
-  }
-}
-
-/** A 👍 on a suggestions message confirms every suggestion it listed that is still waiting. true: it was one (no chat turn for it). Other emoji and removed reactions are not answers here. */
-export async function reactSuggestions(conv: SuggestConv, r: { emoji: string; targetTimestamp: number; isRemove?: boolean }, a: Answerer): Promise<boolean> {
-  if (r.isRemove || !isThumbUp(r.emoji)) return false;
-  const asks = asksOf(conv.key, r.targetTimestamp);
-  if (!asks.length) return false;
-  const nums = asks.map((x) => x.n);
-  const waiting = asks.filter((x) => getItem(conv.key, x.id)?.status === "suggested");
-  if (!waiting.length) return true; // answered already: a second 👍 is not news (and not a chat turn)
-  try {
-    await a.say(settle(conv, asks, nums, [], { who: a.who, zone: a.zone, now: a.now ?? Date.now(), how: "a 👍 on the suggestions I listed" }));
-  } catch (e) {
-    console.error("suggestions: could not apply the 👍:", (e as Error).message);
-  }
-  return true;
 }
 
 // ---- groups: /tasks ----
