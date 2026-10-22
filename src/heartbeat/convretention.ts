@@ -6,6 +6,7 @@ import { pruneBlocked } from "../approvals/pending.ts";
 import { pruneVoiceNotes } from "../modules/voice/voicenote.ts";
 import { SEEN_MAX, trimSeenMail } from "../modules/seenmail/seenmail.ts";
 import { MAX_HELD } from "./notices.ts";
+import { KEEP_MS as MEETING_KEEP_MS } from "../tasks/meetings.ts";
 
 // The retention rule for the tables of every conversation's assistant.db (core/convdb.ts; core/retention.ts says how rules run). Each table is bounded where it is written already; this is the
 // nightly guarantee that the bound holds (a changed bound, a crash between a write and its trim) and the sweep of what has only an age:
@@ -14,6 +15,7 @@ import { MAX_HELD } from "./notices.ts";
 //   pending_blocked the calls not to park again for a while: past their window, and at most 100
 //   voice_notes / voice_quotes   notes outside the 7-day look-back, and the 50 / 100 newest
 //   learned_*       the "learned overnight" rows (memory/learned.ts) older than 60 days, told or not (the lists prune themselves as they are made; this is for a conversation that never makes one)
+//   meetings        rows whose meeting started more than 3 days ago (tasks/meetings.ts)
 // NEVER touched: the session record, the dream day, /quiet, the approval inbox's items and its numbering (a number is never reused), a friend's bookkeeping. A dry run counts and removes nothing.
 // Only conversations that HAVE a database are visited (none is made for the sweep).
 
@@ -31,7 +33,7 @@ export function convDbRule(L: () => Layout): RetentionRule {
     everyHours: 24,
     run(now, o) {
       const l = L();
-      const parts = { seen: 0, held: 0, blocked: 0, voice: 0, lost: 0, learned: 0 };
+      const parts = { seen: 0, held: 0, blocked: 0, voice: 0, lost: 0, learned: 0, meetings: 0 };
       for (const conv of names(l.conversations)) {
         if (!isConvId(conv) || !existsSync(l.conv(conv).db)) continue;
         const db = convDbAt(l.root, conv);
@@ -50,9 +52,10 @@ export function convDbRule(L: () => Layout): RetentionRule {
           db.run("DELETE FROM learned_changes WHERE at < ?", old);
           db.run("DELETE FROM learned_batches WHERE at < ?", old);
         }
+        parts.meetings += o.dryRun ? db.num("SELECT COUNT(*) FROM meetings WHERE start_ms < ?", now.getTime() - MEETING_KEEP_MS) : db.run("DELETE FROM meetings WHERE start_ms < ?", now.getTime() - MEETING_KEEP_MS).changes;
       }
-      const removed = parts.seen + parts.held + parts.blocked + parts.voice + parts.lost + parts.learned;
-      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} seen-mail id(s) past ${SEEN_MAX}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.blocked} expired block(s), ${parts.voice} voice row(s) past their window, ${parts.lost} not-restored approval note(s) older than 30 days` };
+      const removed = parts.seen + parts.held + parts.blocked + parts.voice + parts.lost + parts.learned + parts.meetings;
+      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} seen-mail id(s) past ${SEEN_MAX}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.blocked} expired block(s), ${parts.voice} voice row(s) past their window, ${parts.lost} not-restored approval note(s) older than 30 days, ${parts.learned} learned row(s) older than 60 days, ${parts.meetings} meeting row(s) older than 3 days` };
     },
   };
 }

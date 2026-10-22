@@ -23,6 +23,10 @@ import { lookerOf, unattendedTools, type Looker } from "./scope.ts";
 import { gated } from "../core/rungate.ts";
 import { settings } from "../core/settings.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
+import { PREP_ACTIONS, PREP_MAX_MINUTES, PREP_MAX_TURNS, PREP_SCHEMA, PREP_TASK, readOnlyGuard } from "./prep.ts";
+import { loaded } from "../modules/index.ts";
+import { PLUGIN } from "../modules/skills.ts";
+import type { ShadowGate } from "../approvals/shadowgate.ts";
 
 const down = () => disconnected(readConnectors());
 
@@ -33,6 +37,7 @@ export interface ProfileExtra {
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
   signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
+  shadow?: ShadowGate; // the look is in its first week: its archives are proposals, not actions (approvals/shadow.ts)
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
@@ -77,6 +82,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
     signal: extra.signal,
+    ...(extra.shadow ? { shadow: extra.shadow } : {}),
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
@@ -86,6 +92,34 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
 // One heartbeat run of a conversation: always a fresh session. `approve` is that conversation's own approver (main.ts).
 export const runHeartbeat = (conv: Conversation, payer: Payer, prompt: string, approve: Approve, extra: ProfileExtra = {}): Promise<AgentReply> =>
   runAgent(prompt, approve, heartbeatOptions(conv, payer, extra));
+
+// The options of a MEETING PREP run (heartbeat/preptick.ts): the heartbeat run's conversation, tools, persona and notes, narrowed to READING and bounded to a few minutes and cents. READ-ONLY by three layers:
+// the MCP tools it sees are the reads only (the rest is out of its view), the call guard denies every call whose manifest action is not a read (run/prep.ts readOnlyGuard; it cannot send, write a
+// note, add a task, archive or change the calendar), and what it could still ask for passes the floor, judge and phone as anywhere. No experts, no seen-mail, no notes written; its own place in the run gate
+// (ahead of the looks), its own wall-clock ceiling and PREP_BUDGET_USD as the hard spend cap (charged like any run, payer.ts).
+export function prepOptions(conv: Conversation, payer: Payer, extra: Pick<ProfileExtra, "signal"> = {}, now = new Date()): RunOptions {
+  const base = heartbeatOptions(conv, payer, extra, now);
+  const reads = new Set(loaded().flatMap((m) => m.rows).filter((r) => r.tool.startsWith("mcp__") && PREP_ACTIONS.has(r.action)).map((r) => r.tool)); // (the lookups of every server, the connectors' and the in-process ones': list_tasks, read_note; a write is not even in its view)
+  return {
+    ...base,
+    ...(lookerOf(conv).own ? { skills: [`${PLUGIN}:meeting-prep`], mcpTools: reads } : {}),
+    notesRead: base.notesRead && { ...base.notesRead, write: [] },
+    experts: undefined,
+    seenMail: undefined,
+    outputFormat: PREP_SCHEMA,
+    maxTurns: PREP_MAX_TURNS,
+    maxBudgetUsd: Math.min(base.maxBudgetUsd, settings.prepBudgetUsd),
+    maxMinutes: PREP_MAX_MINUTES,
+    expertMaxMinutes: undefined,
+    gate: "prep",
+    callGuard: readOnlyGuard(),
+    provenance: () => ({ kind: "standing", task: PREP_TASK }),
+  };
+}
+
+// One meeting prep run of a conversation: always a fresh session; `approve` is the conversation's background approver (nothing is asked in practice: the guard denies what would need a question).
+export const runPrep = (conv: Conversation, payer: Payer, prompt: string, approve: Approve, extra: Pick<ProfileExtra, "signal"> = {}): Promise<AgentReply> =>
+  runAgent(prompt, approve, prepOptions(conv, payer, extra));
 
 // ---- a conversation's chat: the owner's, a group's, a tenant's ----
 

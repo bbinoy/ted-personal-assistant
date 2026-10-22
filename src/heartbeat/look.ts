@@ -27,6 +27,8 @@ import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen, openCount } from "../approvals/approvals.ts";
 import { flushPending, waitingCount } from "../approvals/pendingflow.ts";
+import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
+import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { countPosts, observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
@@ -50,6 +52,7 @@ export interface RunExtra {
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
   signal?: AbortSignal; // the look is called off (a message overtook it): the run stops, or never starts if it still waits for a place (rungate.ts)
+  shadow?: ShadowGate; // the look is in the conversation's gentle first week: its archives are collected as proposals, not made (approvals/shadow.ts)
 }
 
 export interface HeartbeatDeps {
@@ -99,6 +102,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     brief: looker.brief,
     sources: looker.sources,
     tasks: looker.tasks,
+    meetings: looker.meetings,
     group: looker.group,
   });
 }
@@ -153,6 +157,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let archived = 0;
     let delegations = 0;
     const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
+    const shadow = looker.mail && shadowActive(conv, now) ? createShadowRun(conv.key) : undefined; // the gentle first week (approvals/shadow.ts): this look proposes its archives
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     // The routines besides the brief (core/routines.ts): only the owner's own look has them (a friend's or a group's skills never include them), and only with experts to delegate to.
     const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, approvals: openCount(conv.key) + waitingCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true) } : {}) }) : undefined;
@@ -182,6 +187,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
+            ...(shadow ? { shadow: shadow.gate } : {}),
             signal: overtaken.signal,
             onDelegate: (agent) => {
               delegations++;
@@ -207,6 +213,12 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     }
     // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
     await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
+
+    // The first week's archives, offered as ONE message ("I'd archive these 14"), then, once, that the week is over (approvals/shadow.ts). Held in quiet hours; never throws.
+    if (looker.mail) {
+      await offerShadow(conv, shadow?.proposed() ?? [], now);
+      if (!shadow) await tellShadowEnded(conv, now);
+    }
 
     if (conv.kind === "tenant") await offerLearned(conv, now); // a friend's "what I learned overnight", when her dream left it held (conversation/learned.ts)
     if ((await offerSuggestions(conv, now, looker.zone)) === "sent") countPosts(conv, 1, now); // one per look; it counts toward MAX_UNPROMPTED_PER_DAY but is never held by it (the answer needs the message itself)

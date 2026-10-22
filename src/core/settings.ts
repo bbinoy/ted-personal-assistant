@@ -222,6 +222,10 @@ export function loadSettings(env: Env) {
     digestMaxItems: num(env, "DIGEST_MAX_ITEMS", 8, 1, 50), // lines in one digest; the rest is "and N more, ask me"
     digestSummarize: oneOf(env, "DIGEST_SUMMARIZE", "off", ["on", "off"] as const) === "on", // on: one small helper-model call turns the owner's digest items into one-liners (code's own lines when it fails or times out)
     mailBacklogDays: num(env, "MAIL_BACKLOG_DAYS", 7, 0, 3650), // first run only: inbox mail older than this is marked seen without triage (seenmail.ts)
+    // Timely meeting prep (heartbeat/preptick.ts): PREP_MINUTES before a meeting with other people (the look records upcoming meetings, modules/meetings), ONE short prep message; 0 = off.
+    prepMinutes: num(env, "PREP_MINUTES", 15, 0, 120),
+    prepOnlyExternal: oneOf(env, "PREP_ONLY_EXTERNAL", "off", ["on", "off"] as const) === "on", // on: only meetings with someone outside your own e-mail domain
+    prepBudgetUsd: num(env, "PREP_BUDGET_USD", 0.15, 0.01, 2), // the hard cap of ONE prep run (counted in the day's spend like any run)
 
     // The owner's heartbeat run (src/heartbeat/look.ts): on every look a model (HEARTBEAT_MODEL: haiku, sonnet, or a full model id) reads the chat, mail, calendar and
     // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). How quiet it is at night is its instruction's business, not code's.
@@ -234,6 +238,9 @@ export function loadSettings(env: Env) {
     // The most characters of ONE tool result the model reads (toolclean.ts, in the PostToolUse path of every tool, MCP results included); the rest is cut with a hint to narrow the query.
     toolOutputMaxChars: num(env, "TOOL_OUTPUT_MAX_CHARS", 60_000, 1000, 1_000_000),
     archiveMaxPerRun: num(env, "ARCHIVE_MAX_PER_RUN", 25, 1, 500),
+    // The gentle first week (approvals/shadow.ts): auto = while the conversation is new an unattended look PROPOSES its archives (one batch message, a 👍 archives them) instead of making them;
+    // it ends when 3 days have passed AND the person has a triage note, at the latest after 14 days. on: always propose. off: archive as the notes say from the first look.
+    shadowMode: oneOf(env, "SHADOW_MODE", "auto", ["auto", "on", "off"] as const),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),

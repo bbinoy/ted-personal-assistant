@@ -16,6 +16,7 @@ import { OWNER_KEY } from "../core/ownerkey.ts";
 import { callKey } from "../core/callkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { journalable, whyOf } from "./journalrender.ts";
+import type { ShadowGate } from "./shadowgate.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 
@@ -128,6 +129,7 @@ export interface JudgeSetup {
   taint?: Taint;
   conversation?: string;
   run?: string; // this run's id: the journal pairs a call's why with its success within the run only (agentrun.ts)
+  shadow?: ShadowGate; // the gentle first week (approvals/shadow.ts): an archive this look makes is held back and proposed to the person in one batch instead
   seenMail?: { forget: (ids: readonly string[]) => void }; // the look's seen-mail tracker: mail an archive the run cap refused named is not worked through, so it is not marked seen
   notesSeen?: () => readonly { file: string; inferred: boolean }[]; // the notes this run has read so far, in order, for the journal's "per your notes: ..."
   inferredNoteRead?: () => boolean; // this run has read (read_note) a note a background look inferred (origin: inferred): such a note is untrusted text, so a wake-up is not judged
@@ -209,6 +211,15 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       if (limit !== undefined) {
         log(tool, "deny-run-cap", source, idsOf(input));
         return { behavior: "deny", message: limit };
+      }
+    }
+    // The gentle first week, in code: while a look is in shadow mode (shadowgate.ts) its archives do not happen. The call is collected and refused with a sentence for the model; the look's end
+    // proposes the whole batch to the person. Only a look's own run has this gate: a chat turn's archive (the person asked), and the follow-up run of an archive she then approved, never do.
+    if (base !== "deny" && setup.shadow) {
+      const held = setup.shadow(tool, input);
+      if (held !== undefined) {
+        log(tool, "shadow-proposed", source, idsOf(input));
+        return { behavior: "deny", message: held };
       }
     }
     const verdict = g?.kind === "allow" && base !== "deny" ? "allow" : g?.kind === "ask" && base !== "deny" ? "ask" : base;

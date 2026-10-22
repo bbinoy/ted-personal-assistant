@@ -32,7 +32,7 @@ import type { IncomingMessage, IncomingReaction, Target } from "@ted-assistant/m
 // A 👍 on an unprompted message is only counted (feedback_signals, per note or journal category): the dream may use the count as a reason to KEEP a related note, never to create one.
 // Notes grant nothing (permissions are code, SAFETY.md), so a proposal cannot widen what the assistant may do; the reacted message may quote mail, so it is fenced as data.
 
-const PROACTIVE: ReadonlySet<string> = new Set(["notice", "brief", "draft", "suggestions"]); // what the assistant says on its own (messages.ts); a chat reply, an approval question, a system line is not
+const PROACTIVE: ReadonlySet<string> = new Set(["notice", "brief", "draft", "suggestions", "proposals"]); // what the assistant says on its own (messages.ts); a chat reply, an approval question, a system line is not
 const JOURNAL_BEFORE_MS = 30 * 60_000; // the actions of the look that wrote the message are logged just before it
 const JOURNAL_AFTER_MS = 2 * 60_000;
 const MAX_JOURNAL = 6;

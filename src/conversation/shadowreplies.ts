@@ -1,0 +1,52 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import type { IncomingReaction } from "@ted-assistant/messenger";
+import { convDb } from "../core/convdb.ts";
+import { clip } from "../core/sanitize.ts";
+import { settings } from "../core/settings.ts";
+import { answerShadow, reactShadow, type Listed } from "../approvals/shadow.ts";
+import { dreamScope } from "../modules/memory/dreamscope.ts";
+import { checkProposal, isThumbDown, isThumbUp, offerText } from "./feedback.ts";
+import type { Conversation, Held } from "./conversationmodel.ts";
+
+// The two places a message or a reaction can answer a shadow-mode proposal (approvals/shadow.ts: "I'd archive these 14"), handled in code before any model (intake.ts calls these as one-line hooks,
+// like taskreplies.ts): a reply that quotes the proposal ("3,5 keep", "yes", "no") and a 👍 / 👎 on it. true: handled here (no chat turn for it). When mail was left in the inbox, the person is offered
+// ONE triage note made from it, through the feedback machinery (feedback.ts): it is saved only by her 👍 on the offer, like every note the assistant proposes.
+
+type Say = (text: string) => Promise<unknown>;
+
+export async function shadowReply(conv: Conversation, m: Pick<Held, "text" | "quote" | "picture" | "document" | "edit">, say: Say): Promise<boolean> {
+  if (m.picture || m.document || m.edit || !m.quote || m.quote.timestamp === 0) return false; // a caption or an edit never answers
+  const done = answerShadow(conv, m.text, m.quote.timestamp);
+  if (!done) return false;
+  await say(done.reply);
+  await offerKeep(conv, done.kept, m.quote.timestamp, say);
+  return true;
+}
+
+export async function shadowReaction(conv: Conversation, r: Pick<IncomingReaction, "emoji" | "targetTimestamp"> & { isRemove?: boolean }, say: Say): Promise<boolean> {
+  if (r.isRemove || (!isThumbUp(r.emoji) && !isThumbDown(r.emoji))) return false;
+  const done = reactShadow(conv, isThumbUp(r.emoji), r.targetTimestamp);
+  if (!done) return false;
+  await say(done.reply);
+  await offerKeep(conv, done.kept, r.targetTimestamp, say);
+  return true;
+}
+
+// One note from what she left in the inbox, written by CODE from the subject and sender lines the connector gave (nothing a model wrote), offered with the feedback machinery's own text and recorded as one of
+// its offers, so her 👍 (or a quoted yes) on it saves it as hers (origin: owner) and a 👎 drops it. Not in a group, not when offers are off, not when the conversation has no triage notes.
+async function offerKeep(conv: Conversation, kept: readonly Listed[], batchTs: number, say: Say): Promise<void> {
+  try {
+    const named = kept.filter((k) => k.line.startsWith("“")).slice(0, 3);
+    if (!named.length || conv.kind === "group" || settings.feedbackOffersPerDay <= 0) return;
+    const categories = dreamScope(conv).categories;
+    const file = `triage-kept-${new Date().toISOString().slice(0, 10)}.md`;
+    const description = "Mail kept in the inbox when archiving was proposed";
+    const text = clip(`Keep in the inbox, do not archive: ${named.map((k) => k.line).join("; ")}.`, 280);
+    if (!checkProposal({ propose: true, file, description, text }, { categories, sources: [text, description] })) return; // (the same check the confirm step makes: a category this conversation has, a short line)
+    const ts = await say(offerText({ file, description, text }, existsSync(join(conv.notesDir, file))));
+    if (typeof ts === "number") convDb(conv.convId).run("INSERT INTO feedback_offers (on_ts, offer_ts, state, file, description, body, at) VALUES (?, ?, 'offered', ?, ?, ?, ?)", batchTs, ts, file, description, text, Date.now());
+  } catch (e) {
+    console.error("shadow: could not offer a note:", (e as Error).message);
+  }
+}

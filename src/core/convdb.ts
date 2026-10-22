@@ -17,6 +17,7 @@ import { writeFileAtomic } from "./state.ts";
 //   pending_*        the approval inbox: items (numbered, never reused), the ones expired and not yet told, the calls not to park again for a while
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   friend_notices   a friend's fixed notices (kind -> last time)
+//   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
 //   routine_runs     the last period of each scheduled routine besides the brief (evening, weekly): once per period, retries, skips (src/heartbeat/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way, a suggestion; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
@@ -325,6 +326,61 @@ export const CONV_SCHEMA: readonly Migration[] = [
   },
   {
     version: 8,
+    name: "meetings: the upcoming meetings the heartbeat look recorded and the prep sent for each (src/tasks/meetings.ts)",
+    up: `
+      CREATE TABLE meetings (
+        event_id  TEXT NOT NULL,                                    -- the calendar's id for the event, as the calendar tool returned it
+        start_ms  INTEGER NOT NULL,                                 -- UTC ms: a moved event is a NEW row (its old pending row goes), so a reschedule gets its own prep
+        end_ms    INTEGER,
+        title     TEXT NOT NULL,
+        attendees TEXT NOT NULL,                                    -- JSON: [{name?, email?, self?}], bounded
+        link      TEXT,                                             -- a video-call link, https only
+        all_day   INTEGER NOT NULL DEFAULT 0 CHECK (all_day IN (0, 1)),
+        response  TEXT,                                             -- the owner's own answer to the invite (accepted, tentative, needsAction, declined)
+        private   INTEGER NOT NULL DEFAULT 0 CHECK (private IN (0, 1)),
+        noted     INTEGER NOT NULL,                                 -- UTC ms: when the look last recorded it
+        state     TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'claimed', 'sent', 'retry', 'failed', 'skipped')),  -- claimed: marked BEFORE the run starts (at most once)
+        why       TEXT,                                             -- skipped: the rule that said no
+        tries     INTEGER NOT NULL DEFAULT 0,
+        at        INTEGER,                                          -- the last change of state
+        cost_usd  REAL,
+        PRIMARY KEY (event_id, start_ms)
+      );
+      CREATE INDEX meetings_start ON meetings (start_ms);
+      CREATE TABLE meeting_calls (
+        id    INTEGER PRIMARY KEY CHECK (id = 1),
+        at    INTEGER NOT NULL,                                     -- UTC ms: the look's last note_upcoming_meetings call (an empty list too: the doctor tells "the calendar is read" from "nothing ever arrives")
+        count INTEGER NOT NULL                                      -- how many meetings that call held
+      );
+    `,
+  },
+  {
+    version: 9,
+    name: "the gentle first week: shadow-mode state and the archives a look proposed instead of making (approvals/shadow.ts)",
+    up: `
+      CREATE TABLE shadow_state (
+        id       INTEGER PRIMARY KEY CHECK (id = 1),
+        since    INTEGER NOT NULL,                                  -- UTC ms: where the first week is counted from (the conversation's first message, else its first look)
+        ended_at INTEGER,                                           -- UTC ms: shadow mode ended (never re-entered, however the notes change afterwards)
+        told     INTEGER NOT NULL DEFAULT 0                         -- 1: the one-time "from now on I'll archive these myself" line has been said (or needs no saying: an install that was already past its first week)
+      );
+      CREATE TABLE shadow_proposals (
+        seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+        tool    TEXT NOT NULL,                                      -- the archive call exactly as the look made it, split to ONE mail (the exact-args replay runs it as recorded)
+        input   TEXT NOT NULL,                                      -- JSON
+        mail_id TEXT NOT NULL,                                      -- the conversation / thread / message id the call names
+        line    TEXT NOT NULL,                                      -- the code-rendered line shown to the person ("“Subject” from Sender")
+        at      INTEGER NOT NULL,
+        state   TEXT NOT NULL DEFAULT 'collected' CHECK (state IN ('collected', 'asked', 'archiving', 'archived', 'kept', 'failed', 'expired')),
+        msg_ts  INTEGER,                                            -- the batch message that listed it (a reply that quotes it, or a 👍 on it, answers for its items)
+        n       INTEGER                                             -- its number in that message
+      );
+      CREATE INDEX shadow_proposals_msg ON shadow_proposals (msg_ts, n);
+      CREATE INDEX shadow_proposals_state ON shadow_proposals (state, mail_id);
+    `,
+  },
+  {
+    version: 10,
     name: "routines: the last period of each scheduled routine (evening wrap, weekly review...), so it runs once per period and a sleeping Mac catches up or skips (heartbeat/routines.ts)",
     up: `
       CREATE TABLE routine_runs (
