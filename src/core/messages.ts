@@ -35,7 +35,7 @@ const KEEP_AFTER_COMPACTION = 0.7; // compact down to this share of the limit, s
 // "journal" is the third ledger kind: one line per thing the assistant DID (an archive, a calendar change, a sent mail...) with why and how to undo it, written by the journal sink
 // (core/events.ts), read by the `journal` tool, /today and the daily brief. It carries a category (`cat`: archive, mail, calendar...). Not conversation, so everything above skips it; the
 // F10 search indexes it; compaction keeps it verbatim for JOURNAL_KEEP_DAYS and never folds it into the summary (compactIfNeeded).
-export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
+export type Kind = "chat" | "notice" | "approval" | "suggestions" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
 
 const LEDGER_KINDS: ReadonlySet<Kind> = new Set<Kind>(["action", "wake", "journal"]);
 const isLedger = (kind: Kind) => LEDGER_KINDS.has(kind);
@@ -199,7 +199,7 @@ export const messagesSince = (sinceIso?: string, file: string = FILE): Sent[] =>
 // Every line including the ledger, oldest first: for the gate (gate.ts) alone.
 export const ledgerEntries = (file: string = FILE): readonly Sent[] => readAll(file).sent; // shared with the cache: read-only
 
-const NOTICE_KINDS = new Set<Kind>(["notice", "draft", "brief"]);
+const NOTICE_KINDS = new Set<Kind>(["notice", "draft", "brief", "suggestions"]);
 const NOTICE_AGE_MS = settings.noticeAgeHours * 3600_000;
 
 // Pure: what the assistant told the owner on its own in the last day, as plain lines for a prompt,

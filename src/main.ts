@@ -102,8 +102,8 @@ setPendingRuntime({
   canRun: (scope) => { const r = mayRun(convOf(scope), "approved action"); return isRefusal(r) ? r.refused : undefined; },
   execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
 });
-// The "💡" message of task suggestions (tasks/suggest.ts): one per look, an approval-kind question in the conversation's chat, held in quiet hours.
-setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "approval", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
+// The "💡" message of task suggestions (tasks/suggest.ts): one per look, its own message kind ("suggestions") in the conversation's chat, held in quiet hours.
+setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "suggestions", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
