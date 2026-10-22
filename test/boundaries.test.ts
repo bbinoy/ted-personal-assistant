@@ -24,16 +24,16 @@ export const ALLOWED: Record<string, readonly string[]> = {
   // The entry points (main.ts, cli.ts, doctor.ts) are the only files in the src/ root; they wire everything, so they may import anything.
   ".": ["*"],
   // The tick and the look of every conversation: starts the jobs, so it sits on top of everything below.
-  heartbeat: ["conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  heartbeat: ["conversation", "run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "tasks", "secrets", "core"],
   // The pipeline of every conversation (and the dream and the friend's turn, which read all of them), above the run machinery.
-  conversation: ["run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  conversation: ["run", "modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "tasks", "secrets", "core"],
   // What a model run is made of (agent, agentrun, options, profiles, persona, the session, the heartbeat run's scope and delegation); it binds the module servers through modules/runtime.ts.
   run: ["modules", "modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   // modules/index.ts, types.ts, runtime.ts, skills.ts, connectors.ts and the single-file declarations (policy leaves + the binding point).
   modules: ["modules/*", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
   // a feature folder: its declaration (light) and its server, guard, rules and store files. -> conversation is accepted: the voice tool sends through the messenger and lists the
   // groups, the memory module scopes a group's notes (dreamscope.ts). The pipeline wires features in the other direction (conversation -> modules/*), so this is the one mutual pair.
-  "modules/*": ["modules", "conversation", "approvals", "policy", "tenants", "intake", "memory", "secrets", "core"],
+  "modules/*": ["modules", "conversation", "approvals", "policy", "tenants", "intake", "memory", "tasks", "secrets", "core"],
   // policy decides from data only, approvals sit above it.
   approvals: ["modules", "modules/*", "policy", "tenants", "intake", "memory", "secrets", "core"], // approvals -> modules/browse (payment wording) is accepted
   policy: ["modules", "tenants", "intake", "memory", "secrets", "core"], // reads modules/index lazily; never imports approvals; capabilities.ts reads the intake links, policy.ts knows what a note path is
@@ -41,6 +41,8 @@ export const ALLOWED: Record<string, readonly string[]> = {
   tenants: ["intake", "memory", "secrets", "core"],
   intake: ["modules/*", "tenants", "memory", "secrets", "core"], // intake -> modules/browse (the card and profile items) is accepted
   memory: ["tenants", "intake", "secrets", "core"],
+  // the tasks of a conversation (store over its assistant.db, repeat rules, local-time arithmetic, the lists as text): a domain leaf, it needs the core only. The tool server (modules/tasks) and the /tasks command sit above it.
+  tasks: ["core"],
   secrets: ["core"],
   // the bottom: settings, state, audit, the message log and the other leaves; imports nothing of the app.
   core: [],

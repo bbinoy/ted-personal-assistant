@@ -44,8 +44,9 @@ export type Event =
   | ({ type: "payment"; status: string; text: string; source: Source } & Where)
   // Something was forgotten or removed (a group's data, a friend's): the audit row, and a line in the OWNER's journal.
   | ({ type: "removal"; tool: string; decision: string; source: Source; meta: Meta; text: string } & Where)
-  // Room for the task events (a standing task created, changed, done): audit row and journal line, no producer yet.
-  | ({ type: "task"; id: string; state: string; text: string; source: Source } & Where)
+  // A task changed (tasks/store.ts, one per mutation): the audit row (id and state) and the journal line (`text`, with its `why` when the change was made outside a tool call). A tool call's journal line is the
+  // call's own (the `done` event, which has the run's why), so `viaTool` keeps this one to the audit log.
+  | ({ type: "task"; id: string; state: string; text: string; source: Source; why?: Why; viaTool?: boolean } & Where)
   // An audit-only record of something the system did that is no permission decision and no journalled action (a refused send, tenant administration, a compacted session).
   | { type: "record"; tool: string; decision: string; source: Source; meta?: Meta };
 

@@ -17,6 +17,7 @@ import { createSendServer } from "./send/send.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import { createNotesServer } from "./memory/notestools.ts";
 import { createStatusServer } from "./status/statusnote.ts";
+import { createTasksServer } from "./tasks/tasktools.ts";
 import { createSeenMailServer } from "./seenmail/seenmail.ts";
 import { settings } from "../core/settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
@@ -61,6 +62,16 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }) },
   notes: { server: (ctx) => createNotesServer(ctx.notesRead!, ctx.source) },
   status: { server: () => createStatusServer() },
+  // The conversation's task list. An unattended run (the owner's background source, or an isolated run with no chat memory: a friend's or a group's look, a mail handler) can only suggest (tasktools.ts).
+  tasks: {
+    server: (ctx) =>
+      createTasksServer({
+        key: ctx.tenant?.key ?? ctx.groupId ?? ctx.key ?? OWNER_KEY,
+        source: ctx.source,
+        unattended: ctx.source === "background" || (ctx.source === "group" && !ctx.memory),
+        zone: () => zoneOf({ tenantId: ctx.tenant?.id }),
+      }),
+  },
   seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
   browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }) },
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
