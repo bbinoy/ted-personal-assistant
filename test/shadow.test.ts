@@ -9,7 +9,8 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "shadow-test-"));
 
 const { settings } = await import("../src/core/settings.ts");
-const { convIdOfKey } = await import("../src/core/convpaths.ts");
+const require_paths = await import("../src/core/convpaths.ts");
+const { convIdOfKey } = require_paths;
 const { convDb, peekConvDb } = await import("../src/core/convdb.ts");
 const { instanceDb, kvGet } = await import("../src/core/instancedb.ts");
 const { readAudit } = await import("../src/core/audit.ts");
@@ -65,8 +66,9 @@ function runtime(o: { holding?: boolean; refuse?: string; fail?: boolean } = {})
   });
   return { sent, ran };
 }
-const mails = (c: { key: string }, ids: string[]) => rememberMail(c.key, JSON.stringify(ids.map((id) => ({ id, subject: `Subject ${id}`, from: `Sender ${id}` }))), NOW.getTime());
-const mbArchive = (id: string) => ({ tool: `${MB}archive_conversation`, input: { conversationId: id }, id, line: `“Subject ${id}” from Sender ${id}` });
+const from = (id: string, addr: boolean) => (addr ? `s${id}@news.example` : `Sender ${id}`);
+const mails = (c: { key: string }, ids: string[], addr = false) => rememberMail(c.key, JSON.stringify(ids.map((id) => ({ id, subject: `Subject ${id}`, from: from(id, addr) }))), NOW.getTime());
+const mbArchive = (id: string, addr = false) => ({ tool: `${MB}archive_conversation`, input: { conversationId: id }, id, line: `“Subject ${id}” from ${from(id, addr)}` });
 
 // ---- the welcome ----
 
@@ -271,10 +273,10 @@ test("chat-initiated archives are unaffected: a run without the gate (a chat tur
 // ---- the batch message and the answers ----
 
 const ownerLike = (c: object) => ({ ...c, kind: "owner" }) as never;
-const offerOf = async (c: ReturnType<typeof conv>, ids: string[]) => {
+const offerOf = async (c: ReturnType<typeof conv>, ids: string[], addr = false) => {
   const q = runtime();
-  mails(c, ids);
-  assert.equal(await S.offerShadow(c, ids.map((i) => mbArchive(i)), NOW), "sent");
+  mails(c, ids, addr);
+  assert.equal(await S.offerShadow(c, ids.map((i) => mbArchive(i, addr)), NOW), "sent");
   return q;
 };
 
@@ -340,7 +342,7 @@ test("a 👍 on the batch archives EXACTLY the listed mails, as recorded, in one
 test("'3,5 keep' leaves those in the inbox and archives the rest; the kept mail is offered as ONE triage note through the feedback machinery", async () => {
   forgetSeenMail();
   const c = conv();
-  const q = await offerOf(c, ["k1", "k2", "k3", "k4", "k5"]);
+  const q = await offerOf(c, ["k1", "k2", "k3", "k4", "k5"], true);
   const said: string[] = [];
   const say = async (t: string) => (said.push(t), 7_000 + said.length);
   assert.equal(await shadowReply(ownerLike(c), { text: "just checking", quote: { timestamp: 5010 } } as never, say), false, "an ordinary reply is not an answer");
@@ -354,7 +356,8 @@ test("'3,5 keep' leaves those in the inbox and archives the rest; the kept mail 
   assert.deepEqual(rows.map((r) => [r.mail_id, r.state]), [["k1", "archived"], ["k2", "archived"], ["k3", "kept"], ["k4", "archived"], ["k5", "kept"]]);
   // the offer: code-written, saved only by her 👍 (feedback.ts), recorded as one of its offers
   const offer = said.find((t) => /Save this note/.test(t))!;
-  assert.match(offer, /Keep in the inbox, do not archive: “Subject k3” from Sender k3; “Subject k5” from Sender k5\./);
+  assert.doesNotMatch(offer, /Subject/, "no subject line, written by a stranger, goes into a note");
+  assert.match(offer, /Keep in the inbox, do not archive mail from: sk3@news\.example, sk5@news\.example\./);
   const o = convDb(c.convId).get<{ state: string; offer_ts: number; file: string; body: string }>("SELECT state, offer_ts, file, body FROM feedback_offers WHERE state = 'offered'")!;
   assert.match(o.file, /^triage-kept-\d{4}-\d{2}-\d{2}\.md$/);
   assert.equal(o.offer_ts, 7_000 + said.indexOf(offer) + 1);
@@ -423,12 +426,14 @@ test("the reply grammar: archive all, leave all, or leave the named ones; anythi
   const p = (t: string, n = 6) => parseShadowReply(t, n);
   for (const t of ["yes", "ok", "all", "all yes", "archive all", "yes please", "do it", "👍"]) assert.deepEqual(p(t), { kind: "all" }, t);
   for (const t of ["no", "none", "keep all", "nothing", "leave them all"]) assert.deepEqual(p(t), { kind: "nothing" }, t);
-  for (const [t, keep] of [["3,5 keep", [3, 5]], ["keep 3 and 5", [3, 5]], ["all except 2", [2]], ["yes except 2-4", [2, 3, 4]], ["3 no", [3]], ["don't archive 6", [6]], ["keep #1, #2", [1, 2]]] as const) assert.deepEqual(p(t), { kind: "keep", keep: [...keep] }, t);
+  for (const [t, keep] of [["3,5 keep", [3, 5]], ["keep 3 and 5", [3, 5]], ["all except 2", [2]], ["yes except 2-4", [2, 3, 4]], ["don't archive 6", [6]], ["keep #1, #2", [1, 2]]] as const) assert.deepEqual(p(t), { kind: "keep", keep: [...keep] }, t);
   assert.deepEqual(p("1 2 3 4 5 6 keep"), { kind: "nothing" }, "keeping every one is keeping all");
   for (const t of ["what about Thursday", "3", "keep 3 but please also call Sam", "thanks"]) assert.deepEqual(p(t), { kind: "none" }, t);
   assert.equal(p("keep 9").kind, "clarify", "no such number");
   assert.equal(p("1,2 yes").kind, "clarify", "a number list with a plain yes is ambiguous");
   assert.equal(p("keep").kind, "clarify");
+  assert.deepEqual(p("keep", 1), { kind: "nothing" }, "the one-mail proposal says: reply 'keep'");
+  assert.equal(p("3 no").kind, "clarify", "numbers with a plain no read differently in the approval inbox: asked again");
   assert.equal(p("yes no").kind, "clarify");
 });
 
@@ -484,4 +489,71 @@ test("the proposal message has its own kind: replay still replays the owner's ne
   assert.deepEqual(after("approval"), [], "(control: a real open question still sets the next line aside)");
   assert.equal(noticeLines([line("proposals", "📥 I'd archive these", 5, 1)], NOW).length, 1, "the chat is told what it proposed on its own");
   assert.equal(isProactive(line("proposals", "x", 1, 1)), true);
+});
+
+test("an UNQUOTED answer right after the proposal is about it (so the chat model never rebuilds the calls); not much later", async () => {
+  forgetSeenMail();
+  const c = conv();
+  const q = await offerOf(c, ["u1", "u2", "u3"]);
+  const say = async () => 1;
+  const t0 = 5010; // the proposal's timestamp
+  assert.equal(await shadowReply(ownerLike(c), { text: "just checking" } as never, say, t0 + 60_000), false, "an ordinary message");
+  assert.equal(await shadowReply(ownerLike(c), { text: "keep 2" } as never, say, t0 + 31 * 60_000), false, "half an hour later it is a chat message");
+  assert.equal(q.ran.length, 0);
+  for (const bare of ["yes", "ok", "sure", "👍"]) assert.equal(await shadowReply(ownerLike(c), { text: bare } as never, say, t0 + 60_000), false, `an unquoted bare "${bare}" is ordinary chat`);
+  assert.equal(q.ran.length, 0);
+  assert.equal(await shadowReply(ownerLike(c), { text: "keep 2" } as never, say, t0 + 60_000), true);
+  await S.idle();
+  assert.deepEqual(q.ran[0]!.map((r) => r.input.conversationId), ["u1", "u3"]);
+  assert.deepEqual(peekConvDb(c.convId)!.all<{ state: string }>("SELECT state FROM shadow_proposals ORDER BY n").map((r) => r.state), ["archived", "kept", "archived"], "no row is left asked");
+});
+
+test("an unquoted \"archive all\" archives; a quoted bare yes still works", async () => {
+  forgetSeenMail();
+  const c = conv();
+  const q = await offerOf(c, ["u1", "u2"]);
+  const say = async () => 1;
+  assert.equal(await shadowReply(ownerLike(c), { text: "archive all" } as never, say, 5010 + 60_000), true);
+  await S.idle();
+  assert.deepEqual(q.ran[0]!.map((r) => r.input.conversationId), ["u1", "u2"]);
+  const c2 = conv();
+  const q2 = await offerOf(c2, ["v1"]);
+  assert.equal(await shadowReply(ownerLike(c2), { text: "yes", quote: { timestamp: 5010 } } as never, say), true);
+  await S.idle();
+  assert.equal(q2.ran.length, 1);
+});
+
+test("the welcome says nothing about starting gently when SHADOW_MODE=off", () => {
+  assert.match(W.welcomeText({ assistant: "Ted", owner: "Sam", mail: true, shadow: true }), /starting gently/);
+  const off = W.welcomeText({ assistant: "Ted", owner: "Sam", mail: true, shadow: false });
+  assert.doesNotMatch(off, /starting gently|won't archive/);
+  assert.match(off, /archive newsletters/);
+});
+
+test("shadowActive fails closed: a conversation whose database was found damaged is still in shadow mode", async () => {
+  await withMode("auto", () => {
+    const c = conv();
+    convDb(c.convId); // (the folder exists)
+    const { convPaths } = require_paths;
+    writeFileSync(convPaths(c.convId).dbDamaged, JSON.stringify({ at: "", keptAs: "" }));
+    assert.equal(S.shadowActive(c, NOW), true);
+  });
+});
+
+test("a once-only guard (the first week's batch guard, the approval inbox's exact guard) lets a recorded call through ONCE per run: the model calling it twice does not run it twice", async () => {
+  const { exactGuard } = await import("../src/approvals/pendingexec.ts");
+  const prev = s.autoApprove;
+  s.autoApprove = "auto";
+  try {
+    const call = { tool: `${MB}archive_conversation`, input: { conversationId: "once-1" } };
+    for (const guard of [batchGuard([call], "background"), exactGuard(call, "background")]) {
+      const can = makeCanUseTool(async () => ({ approved: false }), "background", undefined, autoJudge as never, guard, undefined, false, { provenance: () => ({ kind: "standing", task: "approved" }) as never, conversation: `once-${Math.random()}` });
+      assert.equal(((await can(call.tool, call.input, opts)) as Out).behavior, "allow");
+      const again = (await can(call.tool, { ...call.input }, opts)) as Out;
+      assert.equal(again.behavior, "deny");
+      assert.match(again.message ?? "", /already made in this run/);
+    }
+  } finally {
+    s.autoApprove = prev;
+  }
 });
