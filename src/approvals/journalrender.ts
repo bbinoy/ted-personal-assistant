@@ -58,6 +58,8 @@ export function categoryOf(tool: string): string {
     case "notes":
     case "builtin":
       return "memory";
+    case "tasks":
+      return "task";
     case "browse":
       return "browse";
     default:
@@ -153,6 +155,15 @@ function named(conv: string, tool: string, input: Record<string, unknown>): stri
   return createdLabel(conv, input) ?? callLabel(input);
 }
 
+// A task tool's line is what the store said about the change (the first line of the reply: "Added task #4 'Call Sam' (due Fri 24 Oct)"), written by code from the stored item; the undo is a sentence to say.
+function renderTask(tool: string, response: unknown, cat: string): Rendered {
+  const first = (typeof response === "string" ? response : resultText(response)).split("\n")[0]?.trim().replace(/\.$/, "") ?? "";
+  const id = /#(\d+)/.exec(first)?.[1];
+  const name = tool.split("__").pop() ?? tool;
+  const undo = !id ? undefined : name === "add_task" || name === "confirm_suggestion" ? `say 'drop task #${id}'` : name === "complete_task" || name === "drop_task" || name === "snooze_task" || name === "reject_suggestion" ? `say 'reopen task #${id}'` : undefined;
+  return { what: first || doneVerb(tool, {}), cat, ...(undo ? { undo } : {}) };
+}
+
 export function render(conv: string, tool: string, input: Record<string, unknown>, response?: unknown): Rendered {
   const cat = categoryOf(tool);
   const archived = archivedBy(tool, input);
@@ -170,6 +181,7 @@ export function render(conv: string, tool: string, input: Record<string, unknown
     const file = typeof input.file_path === "string" ? input.file_path.split("/").pop() : undefined;
     return { what: `${tool === "Write" ? "Wrote" : "Edited"} the note ${file ?? "(unnamed)"}`, cat, undo: file ? `say 'forget ${file}'` : undefined };
   }
+  if (e?.provider === "tasks") return renderTask(tool, response, cat);
   if (tool.endsWith("__forget_note")) return { what: `Forgot the note ${String(input.file ?? "").slice(0, 80)}`, cat };
   if (tool.endsWith("__write_note")) return { what: `Saved the inferred note ${String(input.file ?? "").slice(0, 80)}`, cat, undo: `say 'forget ${String(input.file ?? "").slice(0, 80)}'` };
   if (tool.endsWith("__undo_dream")) return { what: "Put the notes back as they were before the dream", cat };

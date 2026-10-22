@@ -66,10 +66,10 @@ test("a new table is one migration: a step appended to the list is applied once,
   writeSession(EXT, { sessionId: "two", costUsd: 2 });
   closeConvDb(EXT);
   const path = convPaths(EXT).db;
-  const tasks = { version: CONV_SCHEMA.length + 1, name: "tasks", up: "CREATE TABLE items (id INTEGER PRIMARY KEY, title TEXT NOT NULL); CREATE TABLE task_events (id INTEGER PRIMARY KEY, item INTEGER NOT NULL REFERENCES items (id), at INTEGER NOT NULL);" };
+  const tasks = { version: CONV_SCHEMA.length + 1, name: "example", up: "CREATE TABLE example_items (id INTEGER PRIMARY KEY, title TEXT NOT NULL); CREATE TABLE example_events (id INTEGER PRIMARY KEY, item INTEGER NOT NULL REFERENCES example_items (id), at INTEGER NOT NULL);" };
   const db = openDb(path, { migrations: [...CONV_SCHEMA, tasks], rebuildable: false });
   assert.equal(db.version, CONV_SCHEMA.length + 1);
-  db.run("INSERT INTO items (title) VALUES ('first')");
+  db.run("INSERT INTO example_items (title) VALUES ('first')");
   assert.equal(db.get<{ session_id: string }>("SELECT session_id FROM session")?.session_id, "two", "the existing rows are untouched");
   db.close();
   // the code of today refuses a file that a newer step made (it will not write to what it does not know)

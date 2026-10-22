@@ -16,19 +16,20 @@ import { notionModule } from "./notion.ts";
 import { seenMailModule } from "./seenmail/module.ts";
 import { sendModule } from "./send/module.ts";
 import { statusModule } from "./status/module.ts";
+import { tasksModule } from "./tasks/module.ts";
 import { tenantsModule } from "./tenants.ts";
 import type { MailSlot, SetupNeed, ToolModule } from "./types.ts";
 import { voiceModule } from "./voice/module.ts";
 import { weatherModule } from "./weather/module.ts";
 
 // THE LIST OF TOOL MODULES. Adding a tool is a file in this folder and a line here; nothing else in the code names its tools. The order is the order the
-// run's MCP servers are listed in (send, weather, draw, voice, memory, notes, status, seenmail, browse, intake, tenants) and the order setup questions and known tools are listed in.
+// run's MCP servers are listed in (send, weather, draw, tasks, voice, memory, notes, status, seenmail, browse, intake, tenants) and the order setup questions and known tools are listed in.
 //
 // A function and not a constant on purpose: files that this list's own imports lead back to (the manifest, policy, skills) read it, so it is built on first use,
 // when every module has been evaluated.
 let all: readonly ToolModule[] | undefined;
 export const registered = (): readonly ToolModule[] =>
-  (all ??= [sendModule, weatherModule, drawModule, voiceModule, memoryModule, notesModule, statusModule, seenMailModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, calendarModule, notionModule, driveModule, docsModule, claudeDocsModule, ibkrModule, googleModule, notionHostedModule, mailbirdModule, gmailModule]);
+  (all ??= [sendModule, weatherModule, drawModule, tasksModule, voiceModule, memoryModule, notesModule, statusModule, seenMailModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, calendarModule, notionModule, driveModule, docsModule, claudeDocsModule, ibkrModule, googleModule, notionHostedModule, mailbirdModule, gmailModule]);
 
 // LOADED: every module without a slot, and in the `mail` slot the one MAIL_PROVIDER names (none: no mail module). A module that is not loaded has no rows,
 // no skills and no connection; only its floor data (registered() below) keeps restricting, because a floor rule can only take away.

@@ -51,7 +51,7 @@ test("groups: a group run is built with its own memory folder, its own session a
   assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
   assert.notEqual(conv.notesDir, owner().notesDir);
   assert.equal(runOptionsFor(conv).sessionConv, groupConvId("g-build"), "its own session: the session row of its own assistant.db");
-  assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "voice", "memory", "browse"]]);
+  assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "tasks", "voice", "memory", "browse"]]);
   assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
   const oo = buildOptions(async () => ({ approved: false }), { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: NOTES_DIR } }, undefined);
   assert.deepEqual(oo.settings, { autoMemoryEnabled: true, autoMemoryDirectory: NOTES_DIR }); // the owner's wiring is unchanged

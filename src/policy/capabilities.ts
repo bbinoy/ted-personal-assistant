@@ -14,7 +14,7 @@ import { isOwnerOnly, manifest } from "./toolmanifest.ts";
 export { capabilitiesOfRecord, resolveCapabilities }; // (the derivation lives in tenants/capabilityset.ts: the admin's list and the intake page need it too and sit below policy/)
 
 // What a group has: no record, a fixed set. Nothing of the owner's (no mail, calendar, notion, profile, card), and no secrets to set up (no intake).
-export const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw"];
+export const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw", "tasks"];
 
 type Who = Pick<Conversation, "kind" | "tenantId">;
 
