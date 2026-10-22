@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchLog } from "./scratch.ts";
-import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { OWNER_CONV } from "../src/core/convpaths.ts";
 
 // seen_mail (src/modules/seenmail/seenmail.ts): the mail a conversation's heartbeat run has worked through, as a bounded log of ids kept per conversation. The ids a call returns are pending
 // until the look ends well; the run and its expert share the pending set; nothing about the mailbox or the provider is known to code.

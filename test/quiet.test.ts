@@ -7,7 +7,7 @@ import { clearQuiet, isQuiet, quietOn, quietText, quietValue, setQuiet } from ".
 import { settings } from "../src/core/settings.ts";
 import { dataPath } from "../src/core/state.ts";
 import { isPaused } from "../src/core/pause.ts";
-import { heldPosts, resetHeld, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
+import { resetHeld, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
 import { groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 const s = settings as unknown as Record<string, unknown>;

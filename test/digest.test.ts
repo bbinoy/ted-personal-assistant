@@ -1,11 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
 import { owner } from "../src/conversation/conversationmodel.ts";
 import { settings } from "../src/core/settings.ts";
 import { digestTimes } from "../src/core/settings.ts";
 import { clockIn } from "../src/core/timezone.ts";
-import { dataPath, readJson } from "../src/core/state.ts";
 import { dedupe, digestDue, digestText, kindOfItem, lastSlotBefore, oneLine, planDigest, subjectOf, zonedInstant } from "../src/heartbeat/digest.ts";
 import { usableLines } from "../src/heartbeat/digestlines.ts";
 import { parseHeartbeatAnswer } from "../src/run/rules.ts";

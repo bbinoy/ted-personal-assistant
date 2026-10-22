@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Scope } from "../memory/dreamplan.ts";
 import { compactIfNeeded, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "../core/messages.ts";
 import { matchLines } from "../core/logsearch.ts";

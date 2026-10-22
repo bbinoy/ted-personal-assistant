@@ -15,7 +15,7 @@ import { NOTES_DIR } from "../src/memory/notes.ts";
 import { dreamSystem } from "../src/run/persona.ts";
 import { preset } from "../src/core/preset.ts";
 import { settings } from "../src/core/settings.ts";
-import { dataPath, readJson, writeJson } from "../src/core/state.ts";
+import { dataPath } from "../src/core/state.ts";
 import { convPaths, groupConvId, OWNER_CONV } from "../src/core/convpaths.ts";
 
 // The ONE dreamer (dream.ts createDreamer): the owner's chat and every group go through the same gates (the `dream` capability, the day guard, the preset's

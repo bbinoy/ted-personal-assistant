@@ -7,7 +7,6 @@ import { join } from "node:path";
 // The notices that repeat after an interval (the shared key's problem, a group's error notice) are remembered in the notices table of instance.db, so a restart does not repeat them.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "noticepersist-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const { instanceDb } = await import("../src/core/instancedb.ts");
 const { createKeyNotices } = await import("../src/tenants/keynotice.ts");
 const { capNoticeDue, markCapNotice, lastNoticeAt, markNoticeAt } = await import("../src/core/capnotice.ts");

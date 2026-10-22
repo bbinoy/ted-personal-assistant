@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planSession, type ChatSession } from "../src/run/session.ts";
-import { scratch } from "./scratch.ts";
 
 const opts = { compactTokens: 60_000, compactGrowth: 40_000 };
 const now = new Date("2026-10-12T12:00:00Z");

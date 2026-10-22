@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { group, owner, type Conversation } from "../src/conversation/conversation.ts";
@@ -13,12 +13,11 @@ import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
-import { dataPath } from "../src/core/state.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
 import { statusFact, writeStatusNote } from "../src/modules/status/statusnote.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
-import { heldPosts, resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
+import { resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 import { clearPending, openItems } from "../src/approvals/pending.ts";
 import { queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
@@ -195,7 +194,7 @@ test("owner's look: while a chat turn of the conversation is settling, queued or
 });
 
 test("owner's look: the delegations to experts are counted in the row; the expert's cost is in the run's cost", async () => {
-  const { w, conv, seen } = rig(() => ({ delegates: 2, calls: ["Agent", "mcp__claude_ai_Notion__notion-fetch", "Agent"] }));
+  const { w, conv } = rig(() => ({ delegates: 2, calls: ["Agent", "mcp__claude_ai_Notion__notion-fetch", "Agent"] }));
   assert.equal(await w.look(conv, DAY), "silent", "the expert delivered itself; the run answered [[silent]]");
   assert.deepEqual(readRows().map((r) => [r.delegations, r.toolCalls, r.costUsd]), [[2, 3, 0.02]]);
 });
