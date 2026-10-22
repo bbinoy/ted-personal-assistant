@@ -20,12 +20,14 @@ export function heartbeatReport(rows: readonly HeartbeatRow[], now: Date, days =
   const lines = [`Heartbeat run, last ${days} day(s): ${mine.length} look(s) on ${byDay.size} day(s)`, "", "day         looks  msgs  night  failed  tools  archived  cost"];
   for (const [day, rs] of [...byDay].sort(([a], [b]) => (a < b ? -1 : 1))) {
     const n = (f: (r: HeartbeatRow) => boolean) => rs.filter(f).length;
-    lines.push(`${day}  ${String(rs.length).padStart(5)}  ${String(n((r) => r.message)).padStart(4)}  ${String(n((r) => r.message && r.night)).padStart(5)}  ${String(n((r) => r.outcome === "failed")).padStart(6)}  ${String(sum(rs, (r) => r.toolCalls)).padStart(5)}  ${String(sum(rs, (r) => r.archived)).padStart(8)}  ${usd(sum(rs, (r) => r.costUsd))}`);
+    lines.push(`${day}  ${String(rs.length).padStart(5)}  ${String(n((r) => r.message)).padStart(4)}  ${String(n((r) => r.message && r.night)).padStart(5)}  ${String(n((r) => r.outcome === "failed" || r.outcome === "timeout")).padStart(6)}  ${String(sum(rs, (r) => r.toolCalls)).padStart(5)}  ${String(sum(rs, (r) => r.archived)).padStart(8)}  ${usd(sum(rs, (r) => r.costUsd))}`);
   }
   const cost = sum(mine, (r) => r.costUsd);
   lines.push("", `cost: ${usd(cost)} in total, ${usd(cost / byDay.size)} per day with looks`);
   lines.push(`messages: ${mine.filter((r) => r.message).length} sent (${mine.filter((r) => r.message && r.night).length} at night), ${(mine.filter((r) => r.message).length / byDay.size).toFixed(1)} per day`);
   lines.push(`delegations: ${sum(mine, (r) => r.delegations)}; mail archived: ${sum(mine, (r) => r.archived)}; tool calls: ${sum(mine, (r) => r.toolCalls)}`);
+  const timeouts = mine.filter((r) => r.outcome === "timeout").length;
+  if (timeouts > 0) lines.push(`failed looks: ${mine.filter((r) => r.outcome === "failed").length + timeouts}, of which ${timeouts} timed out (the run was aborted at HEARTBEAT_TIMEOUT_MINUTES / EXPERT_TIMEOUT_MINUTES and the look retried on the next ticks)`);
   const kinds = (["owner", "group", "tenant"] as const).map((k) => [k, mine.filter((r) => (r.kind ?? "owner") === k)] as const).filter(([, rs]) => rs.length > 0);
   if (kinds.length > 1) lines.push(`by conversation: ${kinds.map(([k, rs]) => `${k === "tenant" ? "friends" : k === "group" ? "groups" : "owner"} ${rs.length} look(s), ${rs.filter((r) => r.message).length} message(s), ${usd(sum(rs, (r) => r.costUsd))}`).join("; ")}`);
   lines.push("", "the next look it chose:");

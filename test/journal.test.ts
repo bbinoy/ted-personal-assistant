@@ -24,7 +24,6 @@ import { scratchLog } from "./scratch.ts";
 
 // The event stream and the journal (core/events.ts): the sinks' projections, the fan-out, the readers (the journal tool, /today), the log's compaction and the search index.
 
-const HR = 3_600_000;
 const T = (iso: string) => new Date(iso);
 let n = 0;
 const logOf = () => scratchLog(`journal-${++n}.jsonl`);

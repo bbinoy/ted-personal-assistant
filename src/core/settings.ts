@@ -231,6 +231,10 @@ export function loadSettings(env: Env) {
     compactMaxMinutes: num(env, "COMPACT_MAX_MINUTES", 10, 1, 120), // a compaction that takes longer is abandoned (chatsession.ts); the failure backoff applies
     runMaxMinutesChat: num(env, "RUN_MAX_MINUTES_CHAT", 40, 1, 1440),
     runMaxMinutesBackground: num(env, "RUN_MAX_MINUTES_BACKGROUND", 180, 1, 2880),
+    // A heartbeat look (the owner's, a group's, a friend's) is a short job: a model call that hangs (a lost connection, a sleeping Mac) must free its conversation soon, and the look is due again
+    // on the next ticks. An expert the look delegates to may take longer: the look's whole allowance then becomes EXPERT_TIMEOUT_MINUTES. Approval waits are not counted (ceiling.ts).
+    heartbeatTimeoutMinutes: num(env, "HEARTBEAT_TIMEOUT_MINUTES", 10, 1, 240),
+    expertTimeoutMinutes: num(env, "EXPERT_TIMEOUT_MINUTES", 20, 1, 240),
 
     // The browser sub-task (src/modules/browse/browse.ts): a separate run that opens pages, reads them and fills forms for the owner's chat, background
     // jobs and groups. Pages are untrusted; the run holds no mail, calendar or notes. A commit step (book, buy, send...) asks the owner,
@@ -334,6 +338,7 @@ export function loadSettings(env: Env) {
     memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 2000, 10, 20000), // how many notes a run reads (each is cut at MAX_NOTE_CHARS); far above normal use, so it only guards against runaway growth
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
     dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
+    feedbackOffersPerDay: num(env, "FEEDBACK_OFFERS_PER_DAY", 3, 0, 20), // learning from feedback (conversation/feedback.ts): at most this many "save this note?" offers a day per conversation, after a 👎 or a clear "less of this" on something sent unprompted (0: off)
 
     // The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window. RETENTION=off disables all of it; each window is a setting (0 where noted: that rule off).
     retention: oneOf(env, "RETENTION", "on", ["on", "off"] as const) === "on",

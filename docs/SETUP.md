@@ -207,6 +207,14 @@ Off by default. A friend can connect her OWN Notion; her Notion tools are Notion
 5. **When it stops working.** Notion can refuse the renewal after a long time unused or when she withdraws the connection (Notion, Settings, Connections). The assistant then tells her in the chat and sends a new link; `npm run tenants -- list` and `npm run doctor` show "needs to be reconnected".
 6. **Take it away.** Suspend her (her tools stop at once), or she can remove the connection in Notion. Removing her deletes her folder; her token stays in OpenBao until you delete `tenants/<id>/notion/oauth` there (it is never used again).
 
+## Keep it running
+
+The assistant only works while the Mac is awake: a sleeping Mac stops the heartbeat, cuts off the model call of a look that is running, and scheduled things (the daily brief, a morning message in a group) come late or not at all. `caffeinate` only prevents IDLE sleep; closing the lid on battery power still sleeps the Mac (every 15 minutes or so it wakes for a moment, "DarkWake", without a network). What helps:
+
+- **Plug in power.** `npm run doctor` warns ("laptop can sleep") while the Mac is on battery.
+- **A closed lid:** keep the lid open, or use clamshell mode (power plus an external display, keyboard and mouse), or run it on a Mac mini. If you must have a laptop running with the lid closed, switch sleep off yourself: `sudo pmset -a disablesleep 1`, and undo it with `sudo pmset -a disablesleep 0`. It changes a system setting for the whole Mac, keeps it hot and drains the battery, so do it only on power and undo it when you carry the Mac around. The assistant never runs this (or any `sudo`) itself, and `npm run doctor` only reads `pmset`.
+- **After a sleep** the heartbeat notices (log line `heartbeat: the Mac slept for N min`), stops the runs whose connections died and starts the looks that are due again after about 20 seconds, a few at a time. A look that hangs is cut after `HEARTBEAT_TIMEOUT_MINUTES` (10; an expert it delegates to: `EXPERT_TIMEOUT_MINUTES`, 20) and tried again on the next ticks. `npm run doctor` also warns when several looks failed or timed out in the last 6 hours, and `npm run heartbeat-report` shows the failed and timed-out looks per day.
+
 ## Daily use
 
 - **Chat**: message yourself. Replies are formatted with Signal's native styles (bold, italic, strikethrough, monospace).

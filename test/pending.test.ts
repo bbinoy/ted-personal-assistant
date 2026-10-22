@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import * as approvals from "../src/approvals/approvals.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
 import { createApprovers } from "../src/approvals/approvers.ts";
@@ -11,7 +10,6 @@ import { answerPending, clearText, flushPending, idle, listText, queueCall, setP
 import { parseNumbered } from "../src/approvals/pendingparse.ts";
 import { declinedAgo, resetDeclined } from "../src/approvals/declined.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { dataPath } from "../src/core/state.ts";
 import { settings } from "../src/core/settings.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { commandReply, parseCommand } from "../src/conversation/ownercommands.ts";
@@ -418,7 +416,7 @@ test("runPending: code decides it ran; the model's line only words it; a refusal
   const conv = owner();
   const payer = { kind: "login" } as never;
   let opts: any;
-  const ranIt = await runPending(conv, item, () => payer, { run: async (prompt, o) => ((opts = o), o.onToolSuccess!(SEND, MAIL), { text: "DONE: replied to Rebecca", costUsd: 0 }) });
+  const ranIt = await runPending(conv, item, () => payer, { run: async (_prompt, o) => ((opts = o), o.onToolSuccess!(SEND, MAIL), { text: "DONE: replied to Rebecca", costUsd: 0 }) });
   assert.deepEqual(ranIt, { ran: true, line: "replied to Rebecca" });
   assert.equal(opts.experts, undefined);
   assert.equal(opts.notesRead, undefined);

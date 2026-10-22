@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { cardCommand, CardStore, KillSwitch, openCardAccess, parseExpiry, type CardRecord } from "../src/modules/browse/card.ts";
 import { cardCli } from "../src/modules/browse/cardcli.ts";
 import { capProblem, Ledger } from "../src/modules/browse/payments.ts";

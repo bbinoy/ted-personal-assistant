@@ -149,7 +149,7 @@ export interface Rendered {
 }
 
 // The object's name where code can read it: a mail the run has seen, or the title the assistant gave a thing it created here, or the title the call itself carries.
-function named(conv: string, tool: string, input: Record<string, unknown>): string | undefined {
+function named(conv: string, _tool: string, input: Record<string, unknown>): string | undefined {
   return createdLabel(conv, input) ?? callLabel(input);
 }
 

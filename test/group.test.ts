@@ -22,7 +22,7 @@ import { compactOptions } from "../src/run/chatsession.ts";
 import { owner } from "../src/conversation/conversation.ts";
 import { NOTES_DIR } from "../src/memory/notes.ts";
 import { LIMITS } from "../src/core/sanitize.ts";
-import { convPaths, groupConvId } from "../src/core/convpaths.ts";
+import { groupConvId } from "../src/core/convpaths.ts";
 
 const OWNER = "+10000000000";
 const GID = "Zm9vYmFyZm9vYmFyZm9vYmFy";
