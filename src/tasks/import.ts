@@ -4,7 +4,7 @@ import { addDays, parseLocal, todayIn, wallToUtc } from "./when.ts";
 
 // The one-time import of tasks from another tool (the owner's Notion table) into the list, in TWO steps with the owner's yes between them. The model reads the other tool in chat (a connector only a model
 // run can reach) and maps each row; `previewImport` has CODE check every row, drop what is already imported (by source_ref), set aside old finished rows and store the checked batch as pending in
-// assistant.db (migration 4) with a code-written preview; only after the owner says yes does `commitImport(batchId)` insert exactly that batch, atomically, as the owner's own items (origin owner,
+// assistant.db (migration 6) with a code-written preview; only after the owner says yes does `commitImport(batchId)` insert exactly that batch, atomically, as the owner's own items (origin owner,
 // source_kind import), each with its "added" history row and ONE journal line for the whole batch. Re-running is harmless: a source_ref already imported is never imported again. Nothing is deleted.
 
 export const MAX_ROWS = 500;
@@ -140,22 +140,26 @@ export interface Committed {
 /** The owner's newest message of the turn, as the turn scope holds it (approvals/turnscope.ts confirmView). */
 export interface TurnView {
   text: string;
-  at: number; // when it arrived (ms)
+  at: number; // when it was SENT (ms), not when its turn started: a message queued behind the preview's turn is older than the preview
   reaction: boolean; // the text is "<owner> reacted <emoji>"
   said: string; // for a reaction: the message it was on
-  others: number; // other owner messages that arrived since the preview was made
+  others: number; // other owner messages that arrived after the preview was last shown
+  shownAt?: number; // when a message showing the preview number was last sent to the owner; none: it never was
 }
-export type TurnLook = (since: number) => TurnView | undefined;
+export type TurnLook = (batchId: string) => TurnView | undefined;
 
 // A short yes, after normalising (lower case, no punctuation, "please" dropped). Anything longer or different is not a confirmation; the owner can say it again.
 const YES = new Set(["yes", "yep", "yeah", "yup", "ja", "jo", "oui", "si", "sí", "ok", "okay", "sure", "go", "go ahead", "do it", "import", "import them", "import it", "import all", "import them all", "import the tasks", "import my tasks", "yes import them", "yes import", "yes go ahead", "ja importieren", "👍"]);
 export const isYes = (t: string): boolean => YES.has(t.toLowerCase().normalize("NFC").replace(/\b(please|bitte)\b/g, "").replace(/[^\p{L}\p{N}\p{Extended_Pictographic} ]/gu, "").replace(/\s+/g, " ").trim());
 
-/** Why this turn does not confirm that preview, or undefined when it does. The model cannot confirm for the owner: the OWNER's message (or 👍 on the preview) must be the newest thing, arrived after the preview, with nothing else from them in between. */
+/** Why this turn does not confirm that preview, or undefined when it does. The model cannot confirm for the owner: the OWNER's message (or 👍 on the preview) must be the newest thing, SENT after the preview was created and shown to them, with nothing else from them since it was last shown. */
 export function unconfirmed(look: TurnLook | undefined, b: { id: string; created: number }): string | undefined {
-  const refuse = `Not imported: ask the owner to confirm the preview ${b.id} first (a yes in chat, or a thumbs-up on the preview message), then call this again.`;
-  const v = look?.(b.created);
-  if (!v || v.at <= b.created || v.others > 0) return refuse; // (no owner message, one from before the preview - the turn that made it - or several since: not an answer to it)
+  const refuse = `Not imported: the owner has not confirmed the preview ${b.id}. Ask them to say yes (or put a thumbs-up on the preview message), then call this again.`;
+  const v = look?.(b.id);
+  if (!v) return refuse;
+  if (v.shownAt === undefined) return `Not imported: the owner has not seen the preview ${b.id} yet. Send them its text (with the number ${b.id}), wait for their yes, then call this again.`;
+  if (v.others > 0) return `Not imported: the owner wrote other things since the preview ${b.id} was shown, so a yes may not be about it. Show the preview again (re-send its text with the number, or call import_tasks_preview), then wait for their yes.`;
+  if (v.at <= b.created || v.at <= v.shownAt) return refuse; // (their message was sent before the preview existed or was shown - the turn that made it, or one queued behind it)
   if (v.reaction) return /👍/u.test(v.text) && v.said.includes(b.id) ? undefined : refuse; // (a 👍 counts only on the message that shows this preview's number)
   return isYes(v.text) ? undefined : refuse;
 }

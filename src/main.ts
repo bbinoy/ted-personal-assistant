@@ -148,9 +148,9 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 const tenantRunner = createTenantRunner({});
 // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
-const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
+const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
-  turn.say(ownerMessage, reactedTo, reactedAt);
+  turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
   return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
 };
 const pipeline: Pipeline = createPipeline({

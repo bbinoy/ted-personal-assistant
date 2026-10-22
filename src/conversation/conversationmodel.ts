@@ -149,7 +149,7 @@ export interface PipelineDeps {
     sendPicture(file: string, caption: string, opts?: { quote?: Quote; kind?: Kind; target?: Target }): Promise<number>;
   };
   record: (target: Target, kind: Kind, ts: number, text: string, extra?: Extra) => void; // into that conversation's log (target: a group id, a person's direct target for a tenant, none for the owner)
-  run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], reactedTo?: string, reactedAt?: number) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)
+  run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], reactedTo?: string, reactedAt?: number, arrivedAt?: number) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)
   picture: (m: IncomingMessage) => Promise<Picture>; // throws a sentence the sender can be told
   longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; // the full text of a long message (the messenger's attachment, by id only); undefined when it cannot be read
   document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/conversation/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported
