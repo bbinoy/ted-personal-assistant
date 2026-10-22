@@ -5,7 +5,7 @@
       "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "c754b39a09e0a69e"
+        "sha": "27f20eb101a94a16"
       },
       "memory": {
         "dir": "<data>/conversations/owner/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "c754b39a09e0a69e"
+        "sha": "27f20eb101a94a16"
       },
       "snapshot": false
     },
@@ -123,7 +123,6 @@
       "mcp__mailbird__get_ui_state",
       "mcp__mailbird__mark_all_as_read",
       "mcp__mailbird__move_conversation",
-      "mcp__mailbird__move_conversation_to_inbox",
       "mcp__mailbird__set_conversation_important",
       "mcp__mailbird__set_conversation_read",
       "mcp__mailbird__set_conversation_spam",

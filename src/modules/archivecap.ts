@@ -27,6 +27,19 @@ export function archivedBy(tool: string, input: Record<string, unknown>): string
   return ids.length ? ids : [""];
 }
 
+// The labels a label call puts on: a label_* call's labelIds, or an add list.
+const added = (name: string, input: Record<string, unknown>): string[] => Object.entries(input).flatMap(([k, v]) => (/^add_?label_?ids$/i.test(k) || (/^label_/.test(name) && /^label_?ids$/i.test(k)) ? asList(v) : []));
+
+// The ids this call puts back in the inbox (the reverse of an archive), or undefined when it is none: Mailbird's move_conversation_to_inbox, or a Gmail label call (the connector's or a
+// friend's) that puts INBOX on. In the owner's chat it runs without the judge (permissions.ts): it only undoes an archive.
+export function restoredBy(tool: string, input: Record<string, unknown>): string[] | undefined {
+  const name = tool.split("__").pop() ?? tool;
+  const isRestore = name === "move_conversation_to_inbox" || (/label/.test(name) && !/^unlabel_/.test(name) && added(name, input).some((l) => l.toUpperCase() === "INBOX") && !removed(input).some((l) => /^(TRASH|SPAM)$/i.test(l)));
+  if (!isRestore) return undefined;
+  const ids = idsNamed(input);
+  return ids.length ? ids : [""];
+}
+
 // An archive call as ONE call per mail, for the gentle first week (approvals/shadow.ts): a proposal is answered mail by mail ("3,5 keep"), so a batch call is split into calls that each name one id and
 // keep every other argument as the model made it (the exact-args replay then runs each as recorded). A call naming several ids under different keys, or an id-less one, is left whole (id: all its ids joined).
 export function splitArchive(tool: string, input: Record<string, unknown>): { input: Record<string, unknown>; id: string }[] {

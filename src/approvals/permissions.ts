@@ -9,7 +9,7 @@ import { clearDeclined, declinedAgo, declinedLine, declinedMinutes, noteDeclined
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
 import { mailSlot, registered } from "../modules/index.ts";
-import { archivedBy } from "../modules/archivecap.ts";
+import { archivedBy, restoredBy } from "../modules/archivecap.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
@@ -138,6 +138,7 @@ export interface JudgeSetup {
   expertBriefs?: () => readonly string[];
   agentTypeOf?: (agentID: string | undefined) => string | undefined;
   unattended?: boolean; // the run answers no live message (UNATTENDED_SKIP): default by source (isUnattended)
+  restoreFree?: boolean; // the owner's own chat: putting mail back in the inbox (archivecap.ts restoredBy) undoes an archive and runs without the judge
 }
 
 // UNATTENDED RUNS NEVER ASK (the owner, 22 Oct: "act when it's sure and stay silent if it's not"). A run that answers no live message of a person (a heartbeat look of the
@@ -235,6 +236,11 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         log(tool, "shadow-proposed", source, idsOf(input));
         return { behavior: "deny", message: held };
       }
+    }
+    // Bringing mail back ("restore 3", "bring back the Digitec mail") in the owner's own chat: the reverse of an archive, so no judge and no question; audited and journaled like an allow.
+    if (base === "ask" && !g && setup.restoreFree && restoredBy(tool, input)) {
+      log(tool, "allow", source, { ...idsOf(input), free: "restore" }, journalable(tool) ? { call: { input }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) } : undefined);
+      return { behavior: "allow", updatedInput: input };
     }
     const verdict = g?.kind === "allow" && base !== "deny" ? "allow" : g?.kind === "ask" && base !== "deny" ? "ask" : base;
     // The call as it must run: what the guard narrowed, or built only now (a card typed by code after the yes), else the model's own.
