@@ -117,7 +117,7 @@ test("the details shown at asking time and the ones re-read before running are t
   ];
   for (const [tool, input] of calls) {
     let asked: string | undefined;
-    const can = makeCanUseTool(async (d) => ((asked = d), { approved: false }), "background", undefined, (async () => ({ decision: "ask", reason: "t" })) as never, undefined, undefined, false, { conversation: "owner" });
+    const can = makeCanUseTool(async (d) => ((asked = d), { approved: false }), "chat", undefined, (async () => ({ decision: "ask", reason: "t" })) as never, undefined, undefined, false, { conversation: "owner" });
     await can(tool, input, { signal: new AbortController().signal } as never);
     assert.ok(asked, `${tool} was asked about`);
     const again = await renderDetails("owner", tool, input);

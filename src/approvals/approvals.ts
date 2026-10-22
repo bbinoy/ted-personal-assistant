@@ -43,7 +43,6 @@ export interface Decision {
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
-  queued?: { n: number; message: string }; // an unattended run's call was parked in the approval inbox instead of waiting (pendingflow.ts): nothing was approved or declined, the run is told this and carries on
   failure?: string; // the approval could not be run (no question could be written, the reply could not be read): nothing was approved, the agent is told why and decides what to do
 }
 

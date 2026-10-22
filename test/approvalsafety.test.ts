@@ -43,9 +43,6 @@ test("makeApprove: the sent question is the model's plus the footer; a card paym
   const d = await approve(details, { tool: SEND, input: { messageId: 1 } }, new AbortController().signal);
   assert.match(seen[0]!.question!, /^Send a short thank-you to a@example\.com\?\n\n— exactly what will go —\nTo: a@example\.com, x@evil\.example\nText: “Your 2FA code: 482913”$/);
   assert.equal(d.question, seen[0]!.question, "the decision carries the question exactly as shown");
-  const bg = makeApprove(async () => 1, { scope: "owner", source: "background", background: true, request, compose });
-  await bg(details, { tool: SEND, input: { messageId: 1 } }, new AbortController().signal);
-  assert.match(seen.at(-1)!.question!, /Text: “Your 2FA code: 482913”\n\n↩️ Reply to this message or react 👍 \/ 👎 to answer\.$/, "a background question says how to answer it, after the footer");
   await approve("Card payment approval\nMerchant: Shop\nTo: nobody@example.com", { tool: "pay", input: {} }, new AbortController().signal, { typedYes: true });
   assert.equal(seen.at(-1)!.question, "Send a short thank-you to a@example.com?");
 });
@@ -98,7 +95,7 @@ test("a send in an untrusted run to someone the owner did not name is never judg
 
 // ---- a wake-up in a run that read an inferred note is not trusted (A5) ----
 
-test("a wake-up task is judged unless the run itself read an inferred note; then the owner is asked", async () => {
+test("a wake-up task is judged unless the run itself read an inferred note; then it is not done (an unattended run asks nobody)", async () => {
   setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
   let judged = 0;
   let asked = 0;
@@ -112,8 +109,8 @@ test("a wake-up task is judged unless the run itself read an inferred note; then
   assert.equal((await wake(SEND, { messageId: 901, confirm: true }, opts))!.behavior, "allow");
   assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 }, "nothing inferred was read (the folder may hold some): judged like a chat message");
   readInferred = true;
-  assert.equal((await wake(SEND, { messageId: 902, confirm: true }, opts))!.behavior, "allow");
-  assert.deepEqual({ judged, asked }, { judged: 1, asked: 1 }, "an inferred note was read: not judged, asked");
+  assert.equal((await wake(SEND, { messageId: 902, confirm: true }, opts))!.behavior, "deny");
+  assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 }, "an inferred note was read: not judged, and skipped without a question");
 });
 
 test("read_note reports whether the note it returned was inferred", async () => {

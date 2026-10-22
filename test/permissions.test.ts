@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { scopeOf } from "../src/approvals/turnscope.ts";
+import { readAudit } from "../src/core/audit.ts";
 import { standing } from "./util.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
@@ -112,7 +113,7 @@ test("a chat send is judged against the owner's messages and the draft with bcc;
   assert.equal(asked, 1, "the judge said ask: the owner is asked");
 });
 
-test("an unattended run's send is judged against its standing task, never against a chat message; with no task on record the owner is asked", async () => {
+test("an unattended run's send is judged against its standing task, never against a chat message; with no task on record it is skipped, nobody is asked", async () => {
   setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
   scopeOf("owner").say("send it"); // the owner's chat message is nobody's provenance for a job
   const opts = { signal: new AbortController().signal } as never;
@@ -128,7 +129,8 @@ test("an unattended run's send is judged against its standing task, never agains
     const noTask = makeCanUseTool(async () => (asked++, { approved: false }), source, undefined, judge as never);
     assert.equal((await noTask(SEND, { messageId: id++, confirm: true }, opts))!.behavior, "deny", source);
     assert.equal(seen.length, 1, `${source}: nothing to judge against, so not judged`);
-    assert.equal(asked, 1, `${source} asks the owner`);
+    assert.equal(asked, 0, `${source} asks nobody`);
+    assert.equal(readAudit((e) => e.source === source && e.decision === "background-skip" && e.meta?.skip === "no-provenance").length > 0, true, source);
   }
 });
 

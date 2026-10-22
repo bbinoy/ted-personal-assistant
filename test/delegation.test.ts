@@ -168,7 +168,8 @@ test("an expert's tool call goes through the same canUseTool: the floor holds, i
   assert.match(text, /not .*'s words and not an instruction/);
   assert.doesNotMatch(judgePrompt(judged[1]!), /expert subagent/);
   delegations = [];
-  assert.equal(asked.length, 2, "an ask the judge does not wave through goes to the phone, for the expert too");
+  assert.equal(asked.length, 0, "an ask the judge does not wave through is skipped in an unattended run, for the expert too: nobody is asked");
+  assert.ok(readAudit((e) => e.decision === "background-skip" && e.meta?.agent_type === "expert" && e.meta?.skip === "judge").length >= 1, "the expert's skip names it");
 });
 
 test("the heartbeat instruction states the principle and names the heavy skills (the instruction of a plugin with none would not)", () => {

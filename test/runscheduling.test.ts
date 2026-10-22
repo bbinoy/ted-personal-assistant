@@ -158,7 +158,7 @@ test("a browse child (gate: helper) never queues for a place, even when every pl
   }
 });
 
-test("a look parked on an approval gives its place to others meanwhile and takes one again when the answer comes", async () => {
+test("a run parked on an approval gives its place to others meanwhile and takes one again when the answer comes (a browse worker of a chat turn: an unattended run asks nobody)", async () => {
   const was = settings.maxConcurrentRuns;
   s.maxConcurrentRuns = 1;
   try {
@@ -168,7 +168,7 @@ test("a look parked on an approval gives its place to others meanwhile and takes
       await p.options.canUseTool("mcp__x__do", {}, { signal: new AbortController().signal });
       yield okResult;
     })()) as never;
-    const look = runAgent("p", approve as never, base as never, { query: q });
+    const look = runAgent("p", approve as never, { ...base, source: "browse" } as never, { query: q });
     await sleep(20);
     assert.equal(runGate.running, 0, "parked: the place is free");
     assert.equal(await gated("look", async () => "another look ran"), "another look ran");

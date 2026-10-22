@@ -18,26 +18,26 @@ function rig(tenants: Record<string, string> = { anna: "to:anna-aci" }) {
   const sent: { to?: string; text: string; ts: number }[] = [];
   let ts = 5000;
   const out = { reply: async (text: string, o: { plain: true; kind: "approval"; target?: string }) => (sent.push({ to: o.target, text, ts: ++ts }), ts) };
-  const made: { scope: string; source: string; background: boolean; mayPay: boolean }[] = [];
+  const made: { scope: string; source: string; mayPay: boolean }[] = [];
   const approverFor = createApprovers(out, {
     target: (id) => tenants[id],
-    make: (send, o) => (made.push({ scope: o.scope, source: o.source, background: !!o.background, mayPay: !!o.mayPay }), makeApprove(send, { ...o, compose: async (q) => ({ text: q.details, ms: 0 }) })),
+    make: (send, o) => (made.push({ scope: o.scope, source: o.source, mayPay: !!o.mayPay }), makeApprove(send, { ...o, compose: async (q) => ({ text: q.details, ms: 0 }) })),
   });
   return { approverFor, sent, made };
 }
 const ask = (approve: ReturnType<ReturnType<typeof rig>["approverFor"]>, what: string) => approve(what, call, new AbortController().signal);
 const judging = (target: string, outcome: "approve" | "decline" | "unrelated", seen: OpenView[][] = []) => ({ judge: async (_t: string, views: OpenView[]) => (seen.push(views), { target, outcome }), recent: () => [] }) as never;
 
-test("the owner's own turn and her unattended runs ask in the owner's chat; a background question is labelled so", async () => {
+test("the owner's own turn asks in the owner's chat; her unattended runs (and a group's or a friend's) ask nobody", async () => {
   const r = rig();
   const fg = ask(r.approverFor("owner"), "Create event one");
-  const bg = ask(r.approverFor("owner", { background: true }), "Create event two");
+  const bgs = await Promise.all(["owner", ANNA, "group-1"].map((k) => ask(r.approverFor(k, { background: true }), "Create event two")));
   await settle();
-  assert.deepEqual(r.sent.map((m) => m.to), [undefined, undefined]); // no group id: her chat
-  assert.deepEqual(r.made.map((m) => [m.scope, m.source, m.background]), [["owner", "chat", false], ["owner", "background", true]]);
+  assert.deepEqual(r.sent.map((m) => m.to), [undefined]); // no group id: her chat; the background approvers sent nothing
+  assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [["owner", "chat"]]);
+  assert.ok(bgs.every((d) => !d.approved && /background work never asks/.test(d.failure ?? "")));
   assert.equal(approvals.answerReaction("👍", r.sent[0]!.ts, "owner"), "approved");
-  assert.equal(approvals.answerReaction("👎", r.sent[1]!.ts, "owner"), "declined");
-  assert.deepEqual([(await fg).approved, (await bg).approved], [true, false]);
+  assert.equal((await fg).approved, true);
 });
 
 test("a tenant's action asks in HER chat, never in the owner's; a group's in the group", async () => {
@@ -103,10 +103,10 @@ test("a card payment is asked in the owner's own foreground chat only: a tenant'
   for (const approve of [r.approverFor(ANNA), r.approverFor("group-1"), r.approverFor("owner", { background: true })]) {
     const d = await approve("💳 Card payment approval", call, new AbortController().signal, { typedYes: true });
     assert.equal(d.approved, false);
-    assert.match(d.failure!, /owner's own chat/);
+    assert.match(d.failure!, /owner's own chat|background work never asks/);
   }
   assert.equal(r.sent.length, 0);
-  assert.deepEqual(r.made.map((m) => m.mayPay), [false, false, true]); // the owner's chat is the one that may pay; the background flag still refuses it
+  assert.deepEqual(r.made.map((m) => m.mayPay), [false, false]); // (the background approver is not even built: it asks nobody)
   // and in her chat a thumbs-up does not pay, only the typed word does
   const pay = r.approverFor("owner")("💳 Card payment approval", call, new AbortController().signal, { typedYes: true });
   await settle();

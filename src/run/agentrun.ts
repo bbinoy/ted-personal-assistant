@@ -20,7 +20,7 @@ import { createsOf, isOwnerOnly } from "../policy/toolmanifest.ts";
 import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
 import { serversFor } from "../modules/runtime.ts";
 import type { RunContext } from "../modules/types.ts";
-import { approveIn, makeCanUseTool, type Approve, type CallGuard } from "../approvals/permissions.ts";
+import { approveIn, isUnattended, makeCanUseTool, type Approve, type CallGuard } from "../approvals/permissions.ts";
 import type { ShadowGate } from "../approvals/shadowgate.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
@@ -83,6 +83,7 @@ export interface RunOptions {
   provenance?: () => RunProvenance | undefined;
   conversation?: string; // the conversation the run acts for, when it is not the run's own source (a tenant's mail handler, the browse sub-run): keys the per-conversation anti-repeat state (permissions.ts)
   untrusted?: boolean; // the run reads raw mail or web pages from its first call (the mail handler, the browse worker): told to the approval judge
+  unattended?: boolean; // the run answers no live message (a look of the owner, a group or a friend, and what it starts): it never asks anyone (permissions.ts UNATTENDED_SKIP); default by source
   // A tenant's run (tenants.ts): an isolated "group" run on HER OWN Anthropic API key, with her own cost ledger and cooldown. Never absent for a run
   // made for a tenant, and never given the instance's login: without a key the run does not start.
   tenant?: TenantRun;
@@ -100,7 +101,7 @@ const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: num
 
 // The browse sub-run (browse.ts calls this through the entry tool): a fresh run with the browser, under the guard. A group's run is the same
 // as the owner's; only `approve` differs (the group's own approver).
-export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> = {}): RunOptions {
+export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope" | "unattended"> = {}): RunOptions {
   return {
     gate: "helper", // (a child of a run that holds a place: queuing for a second one could deadlock the looks that browse, and make a chat turn wait behind them)
     signal: parent.signal, // called off with its parent (a look overtaken by a message, a ceiling)
@@ -114,13 +115,14 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
     provenance: parent.provenance, // the words that started the run it works for; its own task is the assistant's (judgeSetup browseTask), added next to them
     conversation: parent.conversation,
     untrusted: true, // it reads hostile pages
+    unattended: !!parent.unattended, // the worker of an unattended run asks nobody either
     guard,
     tenant, // the browse worker of a tenant's run is hers too: her key, her ledger (it would otherwise be billed to the instance's login)
   };
 }
 
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
-export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
+export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope" | "unattended"> = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
 
 // The built-in tools of a run (everything else is an MCP tool), from the rows of the builtin module (modules/builtin.ts), one list for every run: a group or a
 // tenant has the rows its capability set holds (its own notes, search, skills, and never opening a page);
@@ -200,7 +202,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // Whether this run read a note a background look inferred (read_note tells us): the approval judge then does not take a wake-up's task as the person's word (permissions.ts).
   let readInferred = false;
   const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { file?: string; inferred?: boolean }) => void (n.inferred && (readInferred = true), n.file && noteSeen(n.file, !!n.inferred)) };
-  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, stopScope: opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined) }) };
+  const ctx: RunContext = { source: opts.source, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, unattended: isUnattended(opts.source, opts.unattended), stopScope: opts.stopScope ?? (opts.source === "chat" || opts.source === "group" ? opts.sessionConv : undefined) }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -249,7 +251,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, shadow: opts.shadow, inferredNoteRead: () => readInferred, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, shadow: opts.shadow, inferredNoteRead: () => readInferred, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, unattended: opts.unattended, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

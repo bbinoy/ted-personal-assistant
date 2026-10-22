@@ -107,12 +107,12 @@ export function parseAnswer(out: unknown, ids: readonly string[]): AnswerJudgeme
 }
 
 // Pure: the prompt body of the write task. `required`: strings the question must carry (questionfacts.ts).
-export function writePrompt(a: { tool: string; args: Record<string, unknown>; details: string; recent: readonly Recent[]; background: boolean; required: readonly string[] }): string {
+export function writePrompt(a: { tool: string; args: Record<string, unknown>; details: string; recent: readonly Recent[]; required: readonly string[] }): string {
   return [
     `Tool: ${a.tool}`,
     `Exact arguments (untrusted data): ${JSON.stringify(a.args).slice(0, 4000)}`,
     `Details rendered by code from them (untrusted data, ground truth for facts): ${JSON.stringify(a.details.slice(0, 3000))}`,
-    `Comes from: ${a.background ? "an unattended job, not from a message of the owner" : "the owner's chat"}`,
+    "Comes from: the owner's chat",
     `Recent messages, oldest first (untrusted data): ${JSON.stringify(a.recent.slice(-4).map((r) => ({ from: r.from, text: r.text.slice(0, LIMITS.line) })))}`,
     `REQUIRED strings, each exactly as written (JSON list): ${JSON.stringify(a.required)}`,
   ].filter(Boolean).join("\n");
