@@ -1,9 +1,11 @@
 import { createSdkMcpServer, tool, type SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Source } from "../../core/audit.ts";
+import { scopeOf } from "../../approvals/turnscope.ts";
 import { fence } from "../../core/fence.ts";
 import { isTenantKey, OWNER_KEY } from "../../core/ownerkey.ts";
 import { counts, addItem, completeItem, confirmSuggestion, dropItem, editItem, KINDS, listItems, rejectSuggestion, reopenItem, snoozeItem, SOURCE_KINDS, TaskError, type Filter, type Item, type Patch, type Scope, type Status } from "../../tasks/store.ts";
+import { commitImport, DONE_MODES, MAX_ROWS, previewImport } from "../../tasks/import.ts";
 import { echoLines, itemLine } from "../../tasks/render.ts";
 import { USAGE as REPEAT_USAGE } from "../../tasks/repeat.ts";
 import { parseLocal, showLocal, todayIn, wallToUtc } from "../../tasks/when.ts";
@@ -24,6 +26,7 @@ export interface TasksRun {
   unattended: boolean; // a heartbeat look or another background run: suggestions only
   zone: () => string; // the conversation's clock
   now?: () => number;
+  turn?: import("../../tasks/import.ts").TurnLook; // the owner's newest message of the turn, for the import's confirmation (default: the conversation's turn scope)
 }
 
 const reply = (text: string, isError = false) => ({ content: [{ type: "text" as const, text }], ...(isError ? { isError: true } : {}) });
@@ -218,6 +221,58 @@ export function createTasksServer(run: TasksRun) {
         (a) => act((s) => confirmSuggestion(s, a.id, { title: a.title, due: clearable(a.due) })),
       ),
       tool("reject_suggestion", "The person turns a suggested item down: it is dropped and the same mail will not suggest it again. Only when the person has said no.", { id: ID }, (a) => act((s) => rejectSuggestion(s, a.id))),
+    );
+  }
+  // The one-time import (tasks/import.ts): the OWNER's own chat only. A friend's or a group's list, a background run and an isolated run never get these two (the manifest rows say chat, this says whose).
+  if (!run.unattended && run.key === OWNER_KEY && run.source === "chat") {
+    const importer = async (fn: (s: Scope) => { line: string; text: string }) => {
+      try {
+        const r = fn(scope());
+        return reply(`${r.line}.\n${r.text}`);
+      } catch (e) {
+        if (e instanceof TaskError) return reply(e.message, true);
+        console.error(`tasks: ${(e as Error)?.message ?? "error"}`);
+        return reply("Could not do that (an internal error, logged).", true);
+      }
+    };
+    tools.push(
+      tool(
+        "import_tasks_preview",
+        `STEP 1 of moving the owner's tasks from another tool (their Notion table) into this list. Pass every row you read, mapped, in one call (at most ${MAX_ROWS}). Code checks each row, leaves out what an earlier import already brought over (by source_ref) and old finished rows, ` +
+          "stores the batch and returns a preview that you show the owner AS IS. Nothing is imported yet. " +
+          `${DATE_RULES} due is ${LOCAL}. source_ref is REQUIRED on every row: the row's own page URL or id in the other tool (it makes a re-run harmless).`,
+        {
+          rows: z
+            .array(
+              z.object({
+                title: z.string().max(400).describe("The task, in the owner's words"),
+                kind: z.enum(KINDS).optional().describe("task (default), i_owe (a promise they made) or owed_to_me (waiting on someone)"),
+                due: z.string().max(16).optional().describe(LOCAL),
+                person: z.string().max(80).optional().describe("Who it is with"),
+                status: z.enum(["open", "done"]).optional().describe("open (default) or done"),
+                details: z.string().max(4000).optional().describe("Notes, area, priority: anything else worth keeping"),
+                source_ref: z.string().max(400).describe("The row's page URL or id in the other tool"),
+                done_on: z.string().max(10).optional().describe("For a done row: the day it was finished, YYYY-MM-DD, when the table says"),
+              }),
+            )
+            .min(1)
+            .max(MAX_ROWS),
+          source: z.string().max(40).optional().describe("Where they come from, default Notion"),
+          done: z.enum(DONE_MODES).optional().describe("recent (default): keep finished rows from the last 30 days; all: keep all the history; none: open rows only"),
+        },
+        (a) =>
+          importer((s) => {
+            const p = previewImport(s, { rows: a.rows, source: a.source, done: a.done });
+            return { line: `Import preview ${p.batchId}`, text: p.text };
+          }),
+      ),
+      tool(
+        "import_tasks_commit",
+        "STEP 2: import the previewed batch. ONLY after the owner has said yes to that preview in this chat (a clear yes or a thumbs-up on the preview message), never on your own and never for a preview they have not seen. Code checks it: it refuses unless the owner's newest message, sent after the preview, is a short yes (or a 👍 on the message showing the preview number); never call it in the same turn as the preview. " +
+          "Inserts the whole batch as the owner's own items and writes one journal line. Calling it again for the same batch does nothing.",
+        { batch_id: z.string().max(40).describe("The number in the preview, like imp-3fa9c1") },
+        (a) => importer((s) => commitImport(s, a.batch_id, run.turn ?? scopeOf(run.key).confirmView)),
+      ),
     );
   }
   return createSdkMcpServer({ name: "tasks", version: "1.0.0", tools });

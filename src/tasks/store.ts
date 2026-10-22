@@ -82,7 +82,7 @@ export class TaskError extends Error {
   }
 }
 
-const nowOf = (s: Scope): number => s.now ?? Date.now();
+export const nowOf = (s: Scope): number => s.now ?? Date.now();
 
 // ---- rows ----
 
@@ -130,12 +130,12 @@ const toItem = (r: Row): Item => ({
   ...(r.urgent ? { urgent: true } : {}),
 });
 
-const writeDb = (key: string): Db => {
+export const writeDb = (key: string): Db => {
   const db = liveConvDb(convIdOfKey(key));
   if (!db) throw new TaskError("Tasks cannot be changed right now: this conversation's database is being repaired (the owner has been told).");
   return db;
 };
-const readDb = (key: string): Db | undefined => peekConvDb(convIdOfKey(key));
+export const readDb = (key: string): Db | undefined => peekConvDb(convIdOfKey(key));
 
 export function getItem(key: string, id: number): Item | undefined {
   const r = readDb(key)?.get<Row>("SELECT * FROM items WHERE id = ?", id);
@@ -149,25 +149,25 @@ export function eventsOf(key: string, id: number): TaskEvent[] {
 
 // ---- validation: strict, in words the model can act on ----
 
-const oneText = (label: string, v: string, max: number): string => {
+export const oneText = (label: string, v: string, max: number): string => {
   const t = oneLine(`task ${label}`, v, 100_000).trim();
   if (!t) throw new TaskError(`${label} is empty.`);
   if (t.length > max) throw new TaskError(`${label} is too long (${max} characters at most): shorten it${label === "title" ? " and put the rest in details" : ""}.`);
   return t;
 };
-const optText = (label: string, v: string | null | undefined, max: number): string | null | undefined => (v === undefined ? undefined : v === null || !v.trim() ? null : oneText(label, v, max));
-const cleanDetails = (v: string | null | undefined): string | null | undefined => {
+export const optText = (label: string, v: string | null | undefined, max: number): string | null | undefined => (v === undefined ? undefined : v === null || !v.trim() ? null : oneText(label, v, max));
+export const cleanDetails = (v: string | null | undefined): string | null | undefined => {
   if (v === undefined) return undefined;
   const t = v === null ? "" : clean("task details", v, { max: 100_000 }).trim();
   if (t.length > LIMITS.details) throw new TaskError(`details is too long (${LIMITS.details} characters at most).`);
   return t || null;
 };
-function checkDue(due: string | null | undefined): string | null | undefined {
+export function checkDue(due: string | null | undefined): string | null | undefined {
   if (due === undefined || due === null) return due;
   if (!parseLocal(due)) throw new TaskError(`due "${due.slice(0, 40)}" is not a local date: write YYYY-MM-DD or YYYY-MM-DDTHH:MM (24-hour clock, the person's time zone, no zone suffix), resolving words like "friday" or "tomorrow" from today's date.`);
   return due;
 }
-function checkRepeat(r: string | null | undefined): string | null | undefined {
+export function checkRepeat(r: string | null | undefined): string | null | undefined {
   if (r === undefined || r === null) return r;
   const p = parseRepeat(r);
   if (!p.ok) throw new TaskError(p.error);
@@ -231,7 +231,7 @@ function commit(scope: Scope, id: number, c: Change): { item: Item; line: string
   return { item: out.item, line };
 }
 
-function told(scope: Scope, id: number, action: Action, line: string): void {
+export function told(scope: Scope, id: number, action: Action, line: string): void {
   try {
     emit({ type: "task", id: String(id), state: action, text: line, source: scope.source, conv: scope.key, ...(scope.why ? { why: scope.why } : {}), ...(scope.viaTool ? { viaTool: true } : {}) });
   } catch (e) {
@@ -258,7 +258,7 @@ export interface NewItem {
   sourceRef?: string;
 }
 
-const norm = (t: string): string => t.toLowerCase().replace(/\s+/g, " ").trim();
+export const norm = (t: string): string => t.toLowerCase().replace(/\s+/g, " ").trim();
 
 /** The item this one repeats, if any: the same source (a mail, a message), or the same title, kind and due among the live ones. A repeat is not added again. */
 function duplicateOf(db: Db, title: string, kind: Kind, due: string | undefined, ref: { kind: SourceKind; ref?: string }): Item | undefined {
@@ -269,6 +269,28 @@ function duplicateOf(db: Db, title: string, kind: Kind, due: string | undefined,
   const rows = db.all<Row>("SELECT * FROM items WHERE kind = ? AND status IN ('suggested', 'open', 'snoozed')", kind);
   const hit = rows.find((r) => norm(r.title) === norm(title) && (r.due ?? "") === (due ?? ""));
   return hit && toItem(hit);
+}
+
+/** A row the import (tasks/import.ts) has checked: inserted as the owner's own, open or done, with its "added" history row. Call inside the import's transaction; the caller tells the events after it commits. */
+export interface ImportRow {
+  title: string;
+  kind: Kind;
+  details: string | null;
+  due: string | null;
+  person: string | null;
+  status: "open" | "done";
+  doneAt: number | null;
+  sourceRef: string;
+}
+export function insertImported(db: Db, scope: Scope, r: ImportRow): Item {
+  const now = nowOf(scope);
+  const res = db.run(
+    "INSERT INTO items (kind, title, details, due, due_zone, person, status, origin, source_kind, source_ref, created_at, updated_at, done_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'import', ?, ?, ?, ?)",
+    r.kind, r.title, r.details, r.due, r.due ? scope.zone : null, r.person, r.status, scope.origin, r.sourceRef, now, now, r.status === "done" ? (r.doneAt ?? now) : null,
+  );
+  const after = { kind: r.kind, title: r.title, ...(r.details ? { details: r.details } : {}), ...(r.due ? { due: r.due } : {}), ...(r.person ? { person: r.person } : {}), status: r.status };
+  db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, 'added', NULL, ?)", res.lastInsertRowid, now, scope.by, JSON.stringify(after));
+  return toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", res.lastInsertRowid)!);
 }
 
 export interface Added {

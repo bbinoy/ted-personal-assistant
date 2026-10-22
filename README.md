@@ -30,16 +30,16 @@
   - *Talk to it about tasks.* "What's on my plate?", "remind me Friday at 3 to call Sam" (a task with a reminder, which only messages you: it never sends mail), "I owe Sam the deck by Friday", "Sam owes me the contract", "what does Sam owe me?", "done with the licence", "snooze that for an hour". It works out the date itself and answers with the weekday and date it understood, so a wrong guess is easy to spot.
   - *Suggestions are one tap.* After a look it lists what it noticed (a mail with a request or a deadline, something you promised in a mail you sent, something someone owes you) as ONE message, "💡 1. Reply to Rebecca re budget (due Fri) 2. ...". 👍 on it adds all; reply to it "1 yes, 2 no" (or "all yes") for some. Unanswered ones are dropped after `SUGGESTION_DAYS` (7), kept in the history. At most `SUGGESTIONS_PER_LOOK` (5) per look.
   - *Groups and friends.* In a group any member can add and finish; "Sam by Friday" assigns it; "remind me ..." makes a group task for that member (and the member is told once that it is the group's, a private reminder goes to Ted directly); anyone can type `/tasks`; any member's 👍 confirms the group's suggestions. A friend has the same in her own chat.
-- **Tasks.** It reads your Notion task list, spots what is overdue, adds tasks from mail and removes ones clearly done. Chat with it to get a brief on what's up next, or to add/tick off tasks.
+- **Tasks live in Ted, not in Notion.** The daily brief reads Ted's own list (overdue, due today, waiting on, what you owe, suggestions waiting); mail only ever adds *suggestions* that you confirm. Chat with it to add, tick off or reschedule. If you have an old Notion task table, Ted moves it over once, after a preview you confirm ("import my tasks"); after that it never writes tasks to Notion again.
 - **Calendar.** Creates events from mail, flags conflicts and proposes fixes. Plain events on your own calendar just happen (logged); anything with other people asks.
 - **Daily brief.** An email sent to you once a day in the morning with a key focus for the day based on tasks, emails and calendar, upcoming calendar events, what it did since the last brief (emails that were auto-archived), and newsletter digest.
 - **Newsletter digest.** The top three nuggets, based on your preferences, in the daily brief.
 
-Tasks, meeting prep and calendar need the Notion and Google Calendar connectors. Without one, Ted skips that part and says so. It helps you point it to the right page in Notion if it doesn't find it automatically.
+Meeting prep and the calendar need the Notion and Google Calendar connectors (the task list does not). Without one, Ted skips that part and says so. It helps you point it to the right page in Notion if it doesn't find it automatically.
 
 ## Setup
 
-Just ask Claude Code to set up the repo and install dependencies. Then start Ted, it will automatically look where in Notion you keep your tasks and meetings, and confirms those with you.
+Just ask Claude Code to set up the repo and install dependencies. Then start Ted, it will automatically look where in Notion you keep your meetings, and confirms that with you. Tasks need no setup (an old Notion task table can be imported once, see docs/SETUP.md).
 
 By default it uses the "Note to self" chat on Signal, but for a better experience consider creating a dedicated Signal account for Ted so you can chat to him as its own user and add him to groups.
 

@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Use in chat when the owner asks to set up, connect or configure the assistant, or when another skill finds that something it needs (calendars, task page, meeting notes, writing voice) is not in the owner's notes yet. Walks the owner through it in the conversation and saves each answer as a memory note.
+description: Use in chat when the owner asks to set up, connect or configure the assistant, or when another skill finds that something it needs (calendars, meeting notes, writing voice) is not in the owner's notes yet. Walks the owner through it in the conversation and saves each answer as a memory note.
 ---
 
 # Setup, through the chat
@@ -44,7 +44,7 @@ Calendars and Notion come through connectors in the owner's Claude account. If a
 connector is not connected, its tools simply do not exist in this session (your
 prompt may also say so). Check before you start an item that needs one: the calendar
 tools (`list_calendars`, `list_events`) for calendars, the Notion tools
-(`notion-search`, `notion-fetch`) for tasks and meetings.
+(`notion-search`, `notion-fetch`) for meetings (and for the one-time task import).
 
 If one is missing:
 - say plainly that it is not connected, and how to fix it: add it as a connector in
@@ -74,27 +74,13 @@ owner's request needs, or with the first missing item if they just said "set up"
 4. Save: the calendar ids to check (as listed), the time zone, any not-connected
    calendar, and which calendar travel bookings go on (default: the first).
 
-### 2. Tasks (`setup-tasks.md`)
+### 2. Tasks (nothing to set up)
 
-Find it yourself first; do not ask the owner for a link.
-
-1. Search Notion (`notion-search`) for the task list: "Tasks", "Task Manager",
-   "To-do". Look at the best results (title, last edited, whether it holds tables
-   or a database).
-2. **Exactly one clear match:** use it. Fetch the page once to learn its structure
-   (two Markdown tables, or a database; the column names and the tokens it uses
-   for priority and area), save the note, and tell the owner in one line which
-   page you picked ("I'm using your 'Task Manager' page. Say so if that's wrong.").
-3. **Several plausible matches:** show them (title and place) and ask which one is
-   theirs.
-4. **Nothing found:** say so and ask whether they keep tasks elsewhere (then ask
-   for the link or name). If they have no task list, offer to create one: ask
-   under which page, then `notion-create-pages` with two Markdown tables,
-   `## 📅 Due` and `## 📋 Later` (columns Task / Due / Priority / Area), plus an
-   instruction block at the top for assistants: remove done tasks, move rows from
-   Later to Due when their date arrives, sort by date then priority, prefix
-   overdue rows with ⚠️. Show them the link.
-5. Save: page URL, page id, its structure, and the column names and tokens it uses.
+Tasks live in the assistant itself (the `list_tasks` / `add_task` tools): there is no
+task page or database to find, and **a new owner is never asked for one**. Say so in
+one line if tasks come up. Only an owner who still has an old task table in Notion
+(a `setup-tasks` note already exists, or they mention one) is offered the one-time
+move: load `ted-personal-assistant:task-import`.
 
 ### 3. Meeting notes (`setup-meetings.md`)
 
@@ -138,4 +124,4 @@ Find it yourself first here too.
 ## When you are done
 
 Summarise in two or three lines what is set up and what was skipped, and say they
-can say "set up my calendar" (or tasks, meetings, writing) any time to change it.
+can say "set up my calendar" (or meetings, writing) any time to change it.

@@ -39,7 +39,7 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
   assert.deepEqual(Object.keys(p.profiles).sort(), ["chat", "group", "heartbeat"]);
   assert.ok(Object.values(p.profiles).every((x) => !("notes" in x)), "no profile names note categories: the heartbeat run reads all of its conversation's own notes");
   assert.deepEqual(Object.keys(p.persona).sort(), Object.keys(PROMPTS).sort());
-  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "stay-in-touch", "setup"]);
+  assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "stay-in-touch", "task-import", "setup"]);
   assert.deepEqual(p.expert, { model: "sonnet", maxTurns: 40 });
   assert.strictEqual(presetFor({}), presetFor({ ASSISTANT_PRESET: "ted" }), "ted is the default, loaded once");
 });

@@ -1,6 +1,6 @@
 ---
 name: daily-brief
-description: The owner's daily brief, normally around 07:30. A heavy skill: the heartbeat run delegates it to its expert (subagent expert-daily-brief) and never runs it itself; in chat it runs as is. Sweeps the inbox, tidies Notion tasks, reviews the calendar, preps meetings, then delivers ONE brief that updates the previous one, and records its state in the status-brief note. Orchestrates `ted-personal-assistant:mailbird`, `ted-personal-assistant:notion-tasks`, `ted-personal-assistant:calendar`, `ted-personal-assistant:meeting-prep`.
+description: The owner's daily brief, normally around 07:30. A heavy skill: the heartbeat run delegates it to its expert (subagent expert-daily-brief) and never runs it itself; in chat it runs as is. Sweeps the inbox, reads the task list, reviews the calendar, preps meetings, then delivers ONE brief that updates the previous one, and records its state in the status-brief note. Orchestrates `ted-personal-assistant:mailbird`, `ted-personal-assistant:calendar`, `ted-personal-assistant:meeting-prep`; the tasks come from the assistant's own task tools.
 delegate: sonnet
 ---
 
@@ -13,14 +13,14 @@ sequences them, owns the state note and owns the output format.
 
 **Hard rules for this run.** Never send email except the brief to the owner (the delivery step below), and never trash or delete anything: archive only. The ONLY calendar write allowed is creating an event for a confirmed travel booking that has none yet; every other calendar change is a suggestion in the brief. Cold outreach stays out of the brief. Invoices, bills, policy changes, tax and official mail stay in the inbox. Drafts match each thread's language and tone. The owner's style notes in your memory block apply to the wording. No banter, no preamble.
 
-**Sub-skills.** This skill orchestrates four others: `ted-personal-assistant:mailbird` (email), `ted-personal-assistant:notion-tasks` (tasks), `ted-personal-assistant:calendar` and `ted-personal-assistant:meeting-prep`. Each says where it gets the owner's details (calendars, Notion pages, writing voice): from the owner's memory notes (`setup` and `voice` notes in your memory block). Nobody is there to ask during this run (and you cannot save setup notes; your one note write is the status note below), so when a note is missing the sub-skill skips the edits that depend on it, may search read-only to name what it found, and tells you; collect those into one **🛠 Setup** line at the end of the brief ("Calendar and tasks are not set up yet. Message me 'set up' and I'll walk you through it in chat."). A connector that is not connected (Notion, Google Calendar) is different from a missing note: say "🔌 Notion isn't connected, so tasks and meeting prep were skipped" on its own line. The brief still goes out with whatever could be done.
+**Sub-skills.** This skill orchestrates three others: `ted-personal-assistant:mailbird` (email), `ted-personal-assistant:calendar` and `ted-personal-assistant:meeting-prep`; the task list is the assistant's own (`list_tasks`, `add_task`), not a Notion page. Each skill says where it gets the owner's details (calendars, the meetings page, writing voice): from the owner's memory notes (`setup` and `voice` notes in your memory block). Nobody is there to ask during this run (and you cannot save setup notes; your one note write is the status note below), so when a note is missing the sub-skill skips the edits that depend on it, may search read-only to name what it found, and tells you; collect those into one **🛠 Setup** line at the end of the brief ("Calendar and meetings are not set up yet. Message me 'set up' and I'll walk you through it in chat."). A connector that is not connected (Notion, Google Calendar) is different from a missing note: say "🔌 Notion isn't connected, so meeting prep was skipped" on its own line. The brief still goes out with whatever could be done.
 
 ## Token discipline
 
 Cost is roughly `turns x accumulated context`.
 
 1. **Emit independent tool calls in ONE message.** All calendars' events
-   together, the task page + meetings view together, every
+   together, the task list and the meetings view together, every
    `archive_conversation` of a sweep together.
 2. **Fetch each source exactly once.** Never re-fetch something already in
    context.
@@ -50,7 +50,7 @@ You keep the brief's state in ONE note, with the `write_status_note` tool (name 
 
 ## Sources of truth
 
-Always the live systems: Notion for tasks and meetings, the mail client for email,
+Always the live systems: the assistant's task list (`list_tasks`) for tasks, Notion for meetings, the mail client for email,
 Google Calendar for events. Every run checks all of them fresh.
 
 ## Steps
@@ -60,12 +60,20 @@ Each ``ted-personal-assistant:skill`` means: load it once with the `Skill` tool 
 1. **Email** - run `ted-personal-assistant:mailbird` (or the gmail skill, as your brief says) across every account. This pass is a
    **sweep of what is in the inbox**: build Needs the owner, the waiting-on
    list and commitment capture, draft in-thread replies for action items
-   (never send), hand email-borne deadlines to `ted-personal-assistant:notion-tasks`. Skip any self-sent brief
+   (never send), every email-borne deadline or promise becomes a task via `add_task` (see step 2). Skip any self-sent brief
    (subject starting with the sun emoji or moon emoji).
    Newsletter radar: take the newsletters still in the inbox (and any the assistant archived since the last brief that the journal names). Skim at
    most 4 by sender + subject.
-2. **Tasks** - run `ted-personal-assistant:notion-tasks`: standing tidy rules, every email/meeting
-   deadline becomes a task row, sync obvious email <-> task changes.
+2. **Tasks** - the assistant's own list, not Notion. Call `list_tasks` once for each of: overdue
+   (`overdue`), due today (`due_from` and `due_to` today), waiting on (`kind` `owed_to_me`), what the owner
+   owes (`kind` `i_owe`) and the suggestions waiting for an answer (`status` `suggested`); one message,
+   several calls. This run is unattended, so you can only **list and suggest**: every email or
+   meeting deadline, promise or obligation with no matching item becomes an `add_task` call, which is
+   stored as a *suggestion* (`source_kind` `mail` or `meeting`, `source_ref` the mail id, so the same mail never
+   adds it twice); you cannot finish, change or drop an item. When mail clearly completes a task (the
+   owner sent the reply it called for, the signed document arrived) do not tick it off: put "looks done -
+   confirm?" in the brief. Past-date `owed_to_me` items with no reply get a nudge draft. Count the
+   suggestions waiting; the owner confirms or rejects them in chat. Never write tasks to Notion.
 3. **Calendar** - run `ted-personal-assistant:calendar`: today and tomorrow ahead, and the time
    since the previous brief behind. Flag conflicts and overlaps, propose
    reschedule slots (never execute), create events for travel bookings that
@@ -102,10 +110,11 @@ Sections, in this order (skip a section if empty, except Focus):
 4. `## 📅 Today` - `time - title - who - prep state` for today. Then at most the first
    meeting tomorrow and anything that needs prep tonight. Yesterday's meetings only for the
    follow-up pass (notes to add).
-5. `## ✅ Tasks` - what is overdue (at most five, the oldest or highest priority, with how
-   many days) and what is due today, names only. Then ONE line for everything else ("6 more
-   this week, 8 later"). No lists for later days.
-6. `## ⏳ Waiting on` - one line each; only if non-empty.
+5. `## ✅ Tasks` - from `list_tasks`: what is overdue (at most five, the oldest first, with how
+   many days) and what is due today, names only; what the owner owes others (`i_owe`) when due soon. Then
+   ONE line for everything else ("6 more this week, 8 later") and, if any, "N suggestions waiting for your
+   yes". No lists for later days.
+6. `## ⏳ Waiting on` - the `owed_to_me` items, one line each with the person and how long; only if non-empty.
 7. `## 📡 Radar` - 3 to 5 concrete bullets from the newsletters skimmed, focused on the topics
    and regions in the owner's memory (the brief notes in the injected `owner_memory` block): an
    announcement, launch, funding round, policy change, hire, or an event with date + venue +
@@ -116,7 +125,7 @@ Sections, in this order (skip a section if empty, except Focus):
    the assistant archived since the last brief (the `journal` tool, `kind` `archive`, `since` the previous brief: count its lines); count plain newsletters and cold outreach without naming them;
    **name every other archived email the journal lists inline** in a few words each (it names the mail by subject and sender) (for example "the Notion
    digest, a Digitec delivery notice, the SBB receipt and Phanos's accepted invite"). The owner reads this sentence to catch a mistake, so never skip a
-   name. In the same paragraph, say what you changed (tasks added or moved, prep pages, calendar
+   name. In the same paragraph, say what you changed (tasks suggested, prep pages, calendar
    events, conflicts), or that you archived nothing yourself.
 
 Cut ruthlessly: if the owner does not act on it, it is one line or gone.
@@ -125,8 +134,8 @@ Cut ruthlessly: if the owner does not act on it, it is one line or gone.
 
 - Surface deadlines before the day they are due.
 - Reply owed for days: offer a nudge draft.
-- Meeting needs a pre-read and no task exists: add it and say so.
-- Connect the dots: call moved -> flag the meeting; invoice in -> task to pay;
+- Meeting needs a pre-read and no task exists: suggest it (`add_task`) and say so.
+- Connect the dots: call moved -> flag the meeting; invoice in -> suggested task to pay;
   booking with no calendar entry -> add it.
 - Flag streaks: "3rd follow-up from X", "no reply from Y in 10 days".
 - Short lines. No preamble. Follow the owner's Style notes in memory for wording.

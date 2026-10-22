@@ -56,4 +56,4 @@ export const hasSomethingToLookAt = (conv: Conversation, now: Date): boolean => 
 // The tools of a friend's or a group's heartbeat run: its capability set, less the notes' file tools. Its notes are in the prompt as data and a run that reads mail has no
 // way to change them (the owner's can write only status-* notes, statusnote.ts).
 // And the task tools that change the list (finish, drop, snooze, confirm...): an unattended run may only list and suggest (modules/tasks/module.ts).
-export const unattendedTools = (tools: ReadonlySet<string>): Set<string> => new Set([...tools].filter((t) => entryFor(t)?.action !== "note-file" && entryFor(t)?.action !== "task-write"));
+export const unattendedTools = (tools: ReadonlySet<string>): Set<string> => new Set([...tools].filter((t) => entryFor(t)?.action !== "note-file" && entryFor(t)?.action !== "task-write" && entryFor(t)?.action !== "task-import"));

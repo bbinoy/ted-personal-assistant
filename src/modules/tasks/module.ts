@@ -6,6 +6,7 @@ import { rowsOf, type ToolModule } from "../types.ts";
 // for the owner's, a friend's and a group's chat only (and a friend's or group's own look has them removed from its tool set, run/scope.ts unattendedTools). Nothing here deletes.
 const tasks = rowsOf("mcp__tasks__", "tasks", "tasks");
 const WITH_BACKGROUND = ["chat", "group", "background"] as const;
+// import_tasks_preview / import_tasks_commit (tasks/import.ts): the one-time move of the owner's Notion tasks. Owner chat only: the server hands them to no other key, and an unattended run has them removed (run/scope.ts).
 export const TASK_WRITES = "update_task complete_task drop_task snooze_task confirm_suggestion reject_suggestion";
 export const tasksModule: ToolModule = {
   name: "tasks",
@@ -19,7 +20,7 @@ export const tasksModule: ToolModule = {
       !!(ctx.tenant?.key ?? ctx.groupId ?? ctx.key ?? (ctx.source === "background" ? "owner" : undefined)) &&
       ctx.offers("mcp__tasks__add_task"),
   },
-  rows: [...tasks("read", "list_tasks", { only: WITH_BACKGROUND }), ...tasks("task-add", "add_task", { only: WITH_BACKGROUND }), ...tasks("task-write", TASK_WRITES, { only: ["chat", "group"] })],
+  rows: [...tasks("read", "list_tasks", { only: WITH_BACKGROUND }), ...tasks("task-add", "add_task", { only: WITH_BACKGROUND }), ...tasks("task-write", TASK_WRITES, { only: ["chat", "group"] }), ...tasks("task-import", "import_tasks_preview import_tasks_commit", { only: ["chat"] })],
   free: true,
   trusted: true, // the list is the conversation's own; items that came from mail or a member are fenced as data when listed (tasktools.ts)
 };

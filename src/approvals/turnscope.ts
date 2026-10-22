@@ -67,6 +67,14 @@ export class TurnScope {
   // When the person's newest message of this turn arrived (ms), for the journal's "your message at 09:12" (approvals/journalrender.ts); undefined when there is none.
   lastSaidAt = (): number | undefined => this.#recent.at(-1)?.at;
 
+  // What the owner's newest message of this turn is, as code needs it to check a confirmation (tasks/import.ts): its text, when it arrived, whether it is a reaction and what it was on,
+  // and how many OTHER owner messages arrived since `since` (ms). Undefined: nothing was said (an unattended turn).
+  confirmView = (since: number): { text: string; at: number; reaction: boolean; said: string; others: number } | undefined => {
+    const last = this.#recent.at(-1);
+    if (last === undefined || this.member || this.#derived) return undefined;
+    return { text: last.text, at: last.at, reaction: last.reactedOn !== undefined, said: this.#said, others: this.#recent.slice(0, -1).filter((m) => m.at > since).length };
+  };
+
   read = (now = Date.now()): RunProvenance | undefined => {
     if (this.#derived) return this.#derived;
     const last = this.#recent.at(-1);

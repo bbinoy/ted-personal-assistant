@@ -137,16 +137,16 @@ reply isn't expected.
 
 Scan the owner's **Sent** mail from the last few days for promises they made:
 "I'll send you X", "by <day>", "next week I'll...", "let me get back to
-you on...". If there's no matching task in `ted-personal-assistant:notion-tasks`, add one
-(with the recipient + what was promised + any date), and note it in the
-brief. Don't create duplicates for things already tracked.
+you on...". If there's no matching item on the task list (`list_tasks`), add one with `add_task`
+(kind `i_owe`, the recipient as `person`, what was promised + any date; unattended it is a
+suggestion for the owner to confirm), and note it in the brief. Don't create duplicates for things already tracked.
 
 ### Email-borne deadlines
 
 While triaging, pull any explicit date-bound ask - payment due, RSVP
-by, sign by, respond by, application deadline - and hand it to
-`ted-personal-assistant:notion-tasks` as a task with that Due date (if no matching row
-exists). Every deadline is a task; there is no separate list.
+by, sign by, respond by, application deadline - and add it with
+`add_task` (`source_kind` mail, `source_ref` the mail id) as a task with that due date (if no matching
+item exists; unattended it is a suggestion; see `ted-personal-assistant:notion-tasks`). Every deadline is a task; there is no separate list.
 
 ### Automated runs
 

@@ -273,6 +273,21 @@ export const CONV_SCHEMA: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 6,
+    name: "tasks: pending imports (a preview waiting for the owner's yes, tasks/import.ts)",
+    up: `
+      CREATE TABLE pending_imports (
+        batch_id  TEXT PRIMARY KEY,
+        source    TEXT NOT NULL,                                    -- where the rows came from, as the owner says it ("Notion")
+        state     TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'committed', 'discarded')),
+        created   INTEGER NOT NULL,                                 -- UTC ms
+        rows      TEXT NOT NULL,                                    -- JSON: the checked rows exactly as the preview showed them
+        summary   TEXT NOT NULL,                                    -- JSON: counts, rejected rows, skipped rows
+        committed INTEGER                                           -- UTC ms; with state committed
+      );
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----
