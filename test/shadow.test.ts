@@ -500,10 +500,27 @@ test("an UNQUOTED answer right after the proposal is about it (so the chat model
   assert.equal(await shadowReply(ownerLike(c), { text: "just checking" } as never, say, t0 + 60_000), false, "an ordinary message");
   assert.equal(await shadowReply(ownerLike(c), { text: "keep 2" } as never, say, t0 + 31 * 60_000), false, "half an hour later it is a chat message");
   assert.equal(q.ran.length, 0);
+  for (const bare of ["yes", "ok", "sure", "👍"]) assert.equal(await shadowReply(ownerLike(c), { text: bare } as never, say, t0 + 60_000), false, `an unquoted bare "${bare}" is ordinary chat`);
+  assert.equal(q.ran.length, 0);
   assert.equal(await shadowReply(ownerLike(c), { text: "keep 2" } as never, say, t0 + 60_000), true);
   await S.idle();
   assert.deepEqual(q.ran[0]!.map((r) => r.input.conversationId), ["u1", "u3"]);
   assert.deepEqual(peekConvDb(c.convId)!.all<{ state: string }>("SELECT state FROM shadow_proposals ORDER BY n").map((r) => r.state), ["archived", "kept", "archived"], "no row is left asked");
+});
+
+test("an unquoted \"archive all\" archives; a quoted bare yes still works", async () => {
+  forgetSeenMail();
+  const c = conv();
+  const q = await offerOf(c, ["u1", "u2"]);
+  const say = async () => 1;
+  assert.equal(await shadowReply(ownerLike(c), { text: "archive all" } as never, say, 5010 + 60_000), true);
+  await S.idle();
+  assert.deepEqual(q.ran[0]!.map((r) => r.input.conversationId), ["u1", "u2"]);
+  const c2 = conv();
+  const q2 = await offerOf(c2, ["v1"]);
+  assert.equal(await shadowReply(ownerLike(c2), { text: "yes", quote: { timestamp: 5010 } } as never, say), true);
+  await S.idle();
+  assert.equal(q2.ran.length, 1);
 });
 
 test("the welcome says nothing about starting gently when SHADOW_MODE=off", () => {

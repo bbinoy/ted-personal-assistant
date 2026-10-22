@@ -17,12 +17,15 @@ import type { Conversation, Held } from "./conversationmodel.ts";
 type Say = (text: string) => Promise<unknown>;
 const RIGHT_AFTER_MS = 30 * 60_000; // an unquoted answer counts as about the proposal for this long
 
+const BARE_YES = /(?:^|[^a-z])(?:yes|y|yep|yeah|yup|ok|okay|sure|approve|confirm|do|go|ahead)(?:[^a-z]|$)|👍|✅/i;
+
 export async function shadowReply(conv: Conversation, m: Pick<Held, "text" | "quote" | "picture" | "document" | "edit">, say: Say, now: number = Date.now()): Promise<boolean> {
   if (m.picture || m.document || m.edit) return false; // a caption or an edit never answers
   const quoted = m.quote && m.quote.timestamp !== 0 ? m.quote.timestamp : undefined;
   // An unquoted reply ("3,5 keep") straight after the proposal is about it, unless something else is open to be answered (a question, the approval inbox): otherwise the chat model would
   // read the numbers and rebuild the archive calls itself, outside the exact replay.
-  const ts = quoted ?? (hasOpen(conv.key) || waitingCount(conv.key) > 0 ? undefined : latestProposal(conv.key, now, RIGHT_AFTER_MS));
+  // Only in the proposal's own grammar ("archive all", "all", "3 keep", "no", "keep all"): an unquoted bare "yes" / "ok" / "sure" may be about anything else just said, so it never answers one.
+  const ts = quoted ?? (BARE_YES.test(m.text) || hasOpen(conv.key) || waitingCount(conv.key) > 0 ? undefined : latestProposal(conv.key, now, RIGHT_AFTER_MS));
   if (ts === undefined) return false;
   const done = answerShadow(conv, m.text, ts);
   if (!done) return false;
