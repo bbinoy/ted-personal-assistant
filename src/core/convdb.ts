@@ -167,6 +167,29 @@ export const CONV_SCHEMA: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 2,
+    name: "feedback offers and thumbs-up signals (conversation/feedback.ts)",
+    up: `
+      CREATE TABLE feedback_offers (
+        seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+        on_ts       INTEGER NOT NULL,                               -- the unprompted message the feedback was about: it is offered about once
+        offer_ts    INTEGER,                                        -- the offer message we sent (what a 👍 or a quoted yes points at); NULL: no offer went out
+        state       TEXT NOT NULL,                                  -- offered, saved, declined, none (the model had no usable rule: counts for nothing)
+        file        TEXT,
+        description TEXT,
+        body        TEXT,                                           -- the proposed note, exactly as shown
+        at          INTEGER NOT NULL
+      );
+      CREATE INDEX feedback_offers_on ON feedback_offers (on_ts);
+      CREATE INDEX feedback_offers_offer ON feedback_offers (offer_ts);
+      CREATE TABLE feedback_signals (
+        key     TEXT PRIMARY KEY,                                   -- a note file, or cat:<journal category>: what the 👍 was on
+        up      INTEGER NOT NULL,
+        last_at TEXT NOT NULL                                       -- ISO
+      );
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

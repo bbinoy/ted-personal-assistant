@@ -5,7 +5,7 @@
       "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "840b825c970591e6"
+        "sha": "11d60db4ddad3a2e"
       },
       "memory": {
         "dir": "<data>/conversations/owner/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "840b825c970591e6"
+        "sha": "11d60db4ddad3a2e"
       },
       "snapshot": false
     },
@@ -163,7 +163,7 @@
       "sessionConv": "group-ff36ac23eadd0841",
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "ed917f626ee30139"
+        "sha": "5731d90b3628625e"
       },
       "memory": {
         "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
@@ -206,7 +206,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "ed917f626ee30139"
+        "sha": "5731d90b3628625e"
       },
       "snapshot": false
     },
@@ -259,7 +259,7 @@
       "sessionConv": "friend-<bea>",
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "5e2d469bdfab9356"
+        "sha": "75a4d7b9bab2eb77"
       },
       "memory": {
         "dir": "<data>/conversations/friend-<bea>/notes"
@@ -310,7 +310,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "5e2d469bdfab9356"
+        "sha": "75a4d7b9bab2eb77"
       },
       "snapshot": false
     },

@@ -1,6 +1,7 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
 import "./core/migrateatstart.ts"; // second: an old data folder is moved to the current layout before any module opens a file (core/migrate.ts)
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
+import { createFeedback } from "./conversation/feedback.ts";
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
@@ -163,6 +164,7 @@ const pipeline: Pipeline = createPipeline({
     foreign: (words) => unsupportedForVoice(words, settings.ttsLanguages),
   },
   approvals,
+  feedback: createFeedback({ out }), // a 👎 or "less of this" on something sent unprompted: one offer to save a note, nothing saved until the owner says yes (feedback.ts)
   vouch,
   isOwner: fromOwner,
   admitGroup: (_conv, m) => groupBrain(m),

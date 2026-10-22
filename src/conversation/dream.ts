@@ -11,6 +11,7 @@ import { dreamScope, dreamStateConv, readDream, writeDream, type DreamState } fr
 import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
+import { likedLines } from "./feedback.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { NOTES_DIR, STATUS_PREFIX } from "../memory/notes.ts";
 import { isPaused, localDay } from "../core/pause.ts";
@@ -44,7 +45,8 @@ const hhmm = (iso: string) => `${iso.slice(5, 10)} ${new Date(iso).toTimeString(
 // Pure: the conversation since the last dream as lines, for any conversation. Only the words of the person (or the members) the notes are about can ground a
 // note (`text`): "owner" is a private chat's person (the owner, or a friend, named `who`), "member" is what the members of a group wrote (their lines start with
 // their names). Their reactions are shown as signals, but the message they were on may quote mail, and the assistant's replies only make sense of "yes, do
-// that": neither is evidence. A message she deleted is not evidence at all, and an edited one counts once, as edited. `count`: how many lines of evidence
+// that": neither is evidence. So a 👍 or 👎 never creates a note by itself. What a 👎 can lead to is an OFFER (feedback.ts) and the owner's 👍 or "yes" on it; that saves a
+// confirmed note (origin: owner) at once, so it is a note by the time the dream reads, not a line of evidence. A message she deleted is not evidence at all, and an edited one counts once, as edited. `count`: how many lines of evidence
 // there are (the dream's threshold).
 export function conversationLines(messages: readonly Sent[], who: string = OWNER, evidence: "owner" | "member" = "owner"): { lines: string[]; text: string; count: number } {
   const lines: string[] = [];
@@ -58,7 +60,7 @@ export function conversationLines(messages: readonly Sent[], who: string = OWNER
 }
 
 // The prompt, for any conversation: its notes as they are, and what was said since the last dream. `subject`: whose notes they are.
-export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile[], lines: readonly string[]): string {
+export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile[], lines: readonly string[], liked: readonly string[] = []): string {
   const conv = lines.join("\n");
   const cut = conv.length > MAX_PROMPT_CONVERSATION_CHARS ? conv.slice(-MAX_PROMPT_CONVERSATION_CHARS) : conv;
   const current = notes.map((n) => `### ${n.file}\n${n.raw.trim()}`).join("\n\n").slice(0, MAX_PROMPT_NOTES_CHARS);
@@ -66,6 +68,7 @@ export function dreamPrompt(now: Date, subject: string, notes: readonly NoteFile
     clockLine(now),
     `The notes you keep about ${subject} right now (one file per fact; MEMORY.md is the index and is updated for you):\n${fence("current_notes", current || "(none yet)")}`,
     `What ${subject} said and did since the last dream, oldest first:\n${fence("conversation", cut || "(nothing)")}`,
+    ...(liked.length ? [`Notes or kinds of action whose unprompted messages ${subject} gave a thumbs-up, with how often (a reason to KEEP a related note, never to add or change one; a thumbs-up is not evidence):\n${fence("liked", liked.join("\n"))}`] : []),
     `Propose the changes to the notes, if any.`,
   ].join("\n\n");
 }
@@ -169,7 +172,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
   const promptOf =
     deps.promptOf ??
     ((conv, now, notes, lines) => ({
-      prompt: dreamPrompt(now, subjectOf(conv), notes, lines),
+      prompt: dreamPrompt(now, subjectOf(conv), notes, lines, conv.kind === "group" ? [] : likedLines(conv)),
       system: dreamSystem({ subject: subjectOf(conv), kind: conv.kind, categories: scopeOf(conv).categories }),
     }));
   const payerOf = deps.payer ?? ((conv, now) => mayRun(conv, "dream", { key: deps.key, paused: () => isPaused(now) })); // paused, a usage limit, the day's budget, her cooldown or no key: no attempt, the day stays open

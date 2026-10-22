@@ -61,7 +61,7 @@ const FILE = /^[a-z0-9][a-z0-9-]{0,70}\.md$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Pure: the note file the dream writes (same shape the chat's notes have).
-export function noteContent(file: string, description: string, text: string, expires: string | undefined, now: Date, origin: "dream" | "inferred" = "dream"): string {
+export function noteContent(file: string, description: string, text: string, expires: string | undefined, now: Date, origin: "dream" | "inferred" | "owner" = "dream"): string { // owner: saved from the owner's own confirmed offer (conversation/feedback.ts)
   const name = file.replace(/\.md$/, "");
   return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n${expires ? `expires: ${expires}\n` : ""}metadata:\n  node_type: memory\n  type: user\n  origin: ${origin}\n  modified: ${now.toISOString()}\n---\n\n${text}\n`;
 }
