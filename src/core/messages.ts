@@ -1,5 +1,5 @@
 import { skipForCooldown } from "./cooldown.ts";
-import { statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 import { appendLine, dataPath, readText, writeText } from "./state.ts";
 import { settings } from "./settings.ts";
 import { convPaths, OWNER_CONV } from "./convpaths.ts";
@@ -117,6 +117,28 @@ function readAll(file: string = FILE): { sent: Sent[]; summary?: Summary } {
     while (parsed.size > MAX_CACHED_LOGS) parsed.delete(parsed.keys().next().value!);
   }
   return { sent, summary };
+}
+
+/** The newest messages of a log, read from its last `bytes` only (a cheap look at what was just appended; the whole log is not parsed). Oldest first; the first, possibly cut, line is dropped. */
+export function tailEntries(file: string = FILE, bytes = 64 * 1024): Sent[] {
+  let fd: number | undefined;
+  try {
+    fd = openSync(dataPath(file), "r");
+    const size = fstatSync(fd).size;
+    const len = Math.min(size, bytes);
+    const buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, size - len);
+    const lines = buf.toString("utf8").split("\n");
+    if (size > len) lines.shift();
+    return lines.flatMap((l) => {
+      const e = l ? parse(l) : undefined;
+      return e && !isSummary(e) ? [e] : [];
+    });
+  } catch {
+    return [];
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 
 const compacting = new Set<string>(); // files being compacted: one run at a time per log

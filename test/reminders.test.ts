@@ -280,7 +280,7 @@ test("answers in code: a quoted done, snooze, later; a reaction; nothing else; a
   await tick(rig(), conv, NOW);
   const ts = (id: number) => rows(conv, id)[0]!.ts!;
   const said: string[] = [];
-  const mkAnswers = () => A.createReminderAnswers({ zone: zoneOf, out: { reply: async (t) => (said.push(t), 1) }, now: () => NOW });
+  const mkAnswers = () => A.createReminderAnswers({ isOwner: () => true, zone: zoneOf, out: { reply: async (t) => (said.push(t), 1) }, now: () => NOW });
   const msg = (text: string, quote: number) => ({ text, from: "x", quote: { timestamp: quote, author: "x", text: "" } }) as never;
   let answers = mkAnswers(); // (a new instance: the mapping is in the database, not in memory)
   assert.equal(await answers.message(conv, msg("Done!", ts(a.id))), true);
@@ -299,7 +299,9 @@ test("answers in code: a quoted done, snooze, later; a reaction; nothing else; a
   assert.equal(await answers.reaction(conv, { emoji: "👎", targetTimestamp: ts(c.id), isRemove: false, from: "x" }), false);
   assert.equal(await answers.reaction(conv, { emoji: "👍", targetTimestamp: ts(c.id), isRemove: true, from: "x" }), false, "a taken-back reaction is nothing");
   answers = mkAnswers();
-  assert.equal(await answers.reaction(conv, { emoji: "👍", targetTimestamp: ts(c.id), isRemove: false, from: "x" }), true);
+  assert.equal(await answers.reaction(conv, { emoji: "👍", targetTimestamp: ts(c.id), isRemove: false, from: "x" }), true, "a thumbs-up is noted");
+  assert.equal(S.getItem(conv.key, c.id)!.status, "snoozed", "... and changes nothing");
+  assert.equal(await answers.reaction(conv, { emoji: "✅", targetTimestamp: ts(c.id), isRemove: false, from: "x" }), true);
   assert.equal(S.getItem(conv.key, c.id)!.status, "done");
 });
 
@@ -328,4 +330,93 @@ test("/status says when the next reminder goes", () => {
   const base = { spentUsd: 0, limitUsd: 5, approvals: 0, down: [] };
   assert.match(statusText({ ...base, nextReminder: "Fri 23 Oct 09:00 (#1 Call Sam)" }), /Next reminder: Fri 23 Oct 09:00 \(#1 Call Sam\)\./);
   assert.match(statusText({ ...base, nextReminder: "" }), /Next reminder: none\./);
+});
+
+test("a failed default (due-day) ping is retried: marking it sent does not count as the person touching the item", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Pay rent", due: "2026-10-22" }).item;
+  const at = berlin("2026-10-22", "08:35");
+  const r = rig({ failFirst: 1 });
+  assert.equal(await tick(r, conv, at), 0);
+  assert.equal(S.getItem(conv.key, it.id)!.updatedAt, NOW - 48 * HOUR, "the bookkeeping left updated_at alone");
+  assert.equal(await tick(r, conv, at + 5 * MIN), 1);
+  assert.deepEqual(r.sent, ["⏰ Pay rent (due today)"]);
+  assert.equal(await tick(r, conv, at + 10 * MIN), 0);
+});
+
+test("only the person whose chat it is can make an item urgent: not a group member, not a background look", () => {
+  const conv = fresh();
+  const member = { ...scope(conv.key), origin: "member" as const, by: "Mia" };
+  assert.equal(S.addItem(member, { title: "m", urgent: true }).item.urgent, undefined);
+  const mine = S.addItem(scope(conv.key), { title: "o", urgent: true }).item;
+  assert.equal(mine.urgent, true);
+  assert.equal(S.addItem({ ...scope(conv.key), origin: "friend" as const }, { title: "f", urgent: true }).item.urgent, true);
+  const other = S.addItem(scope(conv.key), { title: "plain" }).item;
+  assert.equal(S.editItem(member, other.id, { urgent: true, details: "x" }).item.urgent, undefined, "a member's edit ignores it");
+  assert.equal(S.editItem(scope(conv.key), other.id, { urgent: true }).item.urgent, true);
+});
+
+test("the task tool says urgent was ignored in a group", async () => {
+  const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
+  const conv = fresh();
+  const tools = (createTasksServer({ key: conv.key, source: "group", unattended: false, zone: () => ZONE, now: () => NOW }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: unknown) => Promise<{ content: { text: string }[] }> }> } }).instance._registeredTools;
+  const r = await tools.add_task!.handler({ title: "Book ferry", urgent: true });
+  assert.match(r.content[0]!.text, /urgent was ignored/);
+  assert.equal(S.listItems(conv.key, {})[0]!.urgent, undefined);
+});
+
+test("one ping a day: an own reminder or a snooze that already told the person today replaces the due-day ping", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Pay rent", due: "2026-10-22", remindAt: berlin("2026-10-22", "07:05") }).item;
+  const r = rig();
+  assert.equal(await tick(r, conv, berlin("2026-10-22", "07:10")), 1, "its own reminder (the quiet window ended at 07:00)");
+  assert.equal(await tick(r, conv, berlin("2026-10-22", "08:35")), 0, "no second ping at 08:30");
+  assert.deepEqual(r.sent, ["⏰ Pay rent (due today)"]);
+  const sn = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Call Sam", due: "2026-10-22" }).item;
+  S.snoozeItem(scope(conv.key, berlin("2026-10-22", "07:05")), sn.id, berlin("2026-10-22", "08:05"));
+  assert.equal(await tick(r, conv, berlin("2026-10-22", "08:06")), 1, "the snooze ends: reminded");
+  assert.equal(await tick(r, conv, berlin("2026-10-22", "08:35")), 0, "and not again at 08:30 (the item is back and was told today)");
+  assert.equal(it.id !== sn.id, true);
+});
+
+test("a reaction in a group closes a reminder only for the assignee or the owner", async () => {
+  const conv = fresh();
+  const mk = (title: string, assignee?: string) => S.addItem(scope(conv.key, NOW - HOUR), { title, remindAt: NOW - MIN, ...(assignee ? { assignee } : {}) }).item;
+  const a = mk("ferry tickets", "Anna");
+  const b = mk("towels", "Anna");
+  const c = mk("snacks");
+  await tick(rig(), conv, NOW);
+  const ts = (id: number) => rows(conv, id)[0]!.ts!;
+  const answers = A.createReminderAnswers({ zone: zoneOf, out: { reply: async () => 1 }, now: () => NOW, isOwner: (w) => w.from === "+owner" });
+  const react = (id: number, from: string, fromName: string) => answers.reaction(conv, { emoji: "✅", targetTimestamp: ts(id), isRemove: false, from, fromName });
+  await react(a.id, "+bob", "Bob");
+  assert.equal(S.getItem(conv.key, a.id)!.status, "open", "another member cannot close Anna's");
+  await react(a.id, "+anna", "anna");
+  assert.equal(S.getItem(conv.key, a.id)!.status, "done", "the assignee can");
+  await react(b.id, "+owner", "Olly");
+  assert.equal(S.getItem(conv.key, b.id)!.status, "done", "the owner can");
+  await react(c.id, "+bob", "Bob");
+  assert.equal(S.getItem(conv.key, c.id)!.status, "open", "an item nobody is assigned is closed by the owner only");
+});
+
+test("a picture or document captioned done is not an answer (the attachment would be lost)", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Pay rent", remindAt: NOW - MIN }).item;
+  await tick(rig(), conv, NOW);
+  const answers = A.createReminderAnswers({ zone: zoneOf, out: { reply: async () => 1 }, now: () => NOW });
+  const quote = { timestamp: rows(conv, it.id)[0]!.ts!, author: "x", text: "" };
+  assert.equal(await answers.message(conv, { text: "done", from: "x", quote, picture: [{}] } as never), false);
+  assert.equal(await answers.message(conv, { text: "done", from: "x", quote, document: {} } as never), false);
+  assert.equal(S.getItem(conv.key, it.id)!.status, "open");
+});
+
+test("stale held and retry rows are pruned when the item is done or moved on", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Water plants", remindAt: berlin("2026-10-22", "23:00") }).item;
+  const r = rig();
+  await tick(r, conv, berlin("2026-10-22", "23:30"));
+  assert.equal(rows(conv, it.id)[0]!.state, "held");
+  S.completeItem(scope(conv.key, berlin("2026-10-22", "23:40")), it.id);
+  await tick(r, conv, berlin("2026-10-23", "07:30"));
+  assert.deepEqual(rows(conv, it.id), []);
 });

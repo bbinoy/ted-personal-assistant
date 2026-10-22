@@ -161,8 +161,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       // A question asked in this group is answered here by ANY member (their message, a quoted reply or a reaction); the model reads it
       // like the owner's. Only this group's approvals can be answered; an edit and a caption never answer.
       if (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target }))) return; // /tasks, and an answer to the suggestions message (taskreplies.ts)
-      if (await approvalAnswer(conv, m, author)) return;
       if (!m.edited && (await deps.reminders?.message(conv, m))) return; // (a quoted "done" on a reminder, tasks/remindanswer.ts)
+      if (await approvalAnswer(conv, m, author)) return;
       forgetDeclined(conv.key);
       if (m.addressedToMe) overtake(conv); // (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
       return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: line, picture: m.picture, document: m.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, voice: m.voice });
@@ -233,8 +233,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     // While an approval is pending, a message may be its answer. That must skip the queue.
     scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
     if (!edited && (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target })))) return; // an answer to the suggestions message (taskreplies.ts)
-    if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
     if (!edited && (await deps.reminders?.message(conv, m))) return; // a quoted "done" / "snooze 1h" on a reminder (tasks/remindanswer.ts)
+    if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
     if (!edited && (await deps.feedback?.message(conv, m))) return void console.log("feedback: a quoted reply to something sent unprompted was handled (an offer, or the answer to one)"); // learning from feedback (feedback.ts); only a short quoted reply, and a group never gets here
     forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
     overtake(conv); // a look of this conversation that is running gives way to the turn

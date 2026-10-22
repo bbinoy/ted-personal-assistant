@@ -31,6 +31,7 @@ export interface PlanOptions {
   zone: string;
   defaultTime: string | "off"; // "08:30"
   done?: ReadonlySet<string>; // `${id}|${key}` of reminders already claimed, sent or folded
+  sentOn?: ReadonlySet<string>; // `${id}|${local date}` of reminders already sent that day: the default ping of that date is then not sent as well
 }
 
 export const doneKey = (id: number, key: string): string => `${id}|${key}`;
@@ -58,7 +59,9 @@ function planOne(it: Item, now: number, o: PlanOptions): Planned | undefined {
   }
   const at = defaultFireAt(it, o);
   if (at === undefined || at > now || now - at >= DROP_AFTER_MS || it.updatedAt > at) return undefined; // (touched after that morning: the person just dealt with it, a "missed" ping would be wrong)
-  const key = `due:${parseLocal(it.due)!.date}`;
+  const date = parseLocal(it.due)!.date;
+  const key = `due:${date}`;
+  if (o.sentOn?.has(`${it.id}|${date}`)) return undefined; // (its own reminder, or a snooze, already told the person today: one ping a day is enough)
   return done(key) ? undefined : { item: it, kind: "default", key, fireAt: at };
 }
 
@@ -142,6 +145,7 @@ interface RemRow {
   key: string;
   state: "held" | "claimed" | "sent" | "retry" | "folded";
   tries: number;
+  at: number;
 }
 
 /** For /status: when the next reminder goes, in words ("Fri 24 Oct 08:30 (#3 Call Sam)"), or undefined when none is scheduled. */

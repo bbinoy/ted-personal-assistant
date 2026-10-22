@@ -110,27 +110,35 @@ export function createWakeups(deps: WakeDeps) {
     noticeDamaged(now); // a conversation whose assistant.db was set aside: the owner is told once a day until a person looks (core/convdb.ts)
     closeIdleConvDbs(now.getTime()); // connections nobody used for a while (a store reopens one at its next use)
     const convs: Conversation[] = [owner()]; // (each conversation asks mayRun: the instance's day budget is the owner's and the groups', a friend's is her own)
-    if (settings.wakeups && deps.groupChats) {
+    const remind: Conversation[] = [convs[0]!]; // who has reminders: every conversation with tasks and a database, whatever its heartbeat or WAKEUPS say (they cost no model); the pause switch above still stops them
+    const wake = settings.wakeups && deps.groupChats;
+    if (deps.groupChats) {
       const ids = (deps.groups ?? (() => listGroups().map((g) => g.id)))();
       const vouched = await Promise.all(ids.map((id) => deps.vouch(id).catch(() => false))); // in parallel; a lookup is cached for minutes
-      ids.forEach((id, i) => vouched[i] && convs.push(group(id)));
-      if (settings.tenants) {
-        for (const id of (deps.tenantIds ?? (() => listTenants().filter((r) => r.status === "active").map((r) => r.id)))()) {
-          try {
-            const conv = tenant(id);
-            if (allows(conv, "heartbeat")) convs.push(conv); // the tick is her heartbeat: without it nothing of hers is touched
-          } catch (e) {
-            console.error("wake: a tenant could not be looked at:", (e as Error).message);
-          }
+      ids.forEach((id, i) => {
+        if (!vouched[i]) return;
+        const g = group(id);
+        remind.push(g);
+        if (wake) convs.push(g);
+      });
+    }
+    if (settings.tenants) {
+      for (const id of (deps.tenantIds ?? (() => listTenants().filter((r) => r.status === "active").map((r) => r.id)))()) {
+        try {
+          const conv = tenant(id);
+          if (allows(conv, "tasks")) remind.push(conv);
+          if (wake && allows(conv, "heartbeat")) convs.push(conv); // the tick is her heartbeat: without it nothing of hers is looked at
+        } catch (e) {
+          console.error("wake: a tenant could not be looked at:", (e as Error).message);
         }
       }
-      for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone
     }
+    if (wake) for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone
+    await Promise.all(remind.map(async (conv) => void (paused(clock()) || (await fireReminders(pipeline, conv, clock()))))); // reminders that have come due (heartbeat/remindtick.ts): a message each, no model, apart from the look
     await Promise.all(
       convs.map(async (conv) => {
         if (paused(clock())) return;
         quietCompact(conv);
-        await fireReminders(pipeline, conv, clock()); // reminders that have come due (tasks/remind.ts): a message each, no model, before and apart from the look
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
         const mine = epoch;

@@ -58,13 +58,13 @@ export function createTasksServer(run: TasksRun) {
   const now = () => run.now?.() ?? Date.now();
   const scope = (): Scope => ({ key: run.key, zone: run.zone(), source: run.source, now: now(), viaTool: true, ...actorOf(run) });
   // Runs a store call, tells the result in the conversation's clock; a TaskError is the model's to fix.
-  const act = async (fn: (s: Scope) => { item: Item; line: string; duplicate?: boolean }) => {
+  const act = async (fn: (s: Scope) => { item: Item; line: string; duplicate?: boolean }, note?: string) => {
     try {
       const s = scope();
       const r = fn(s);
       if ("duplicate" in r && r.duplicate) return reply(`Nothing added: ${r.line}.`, true);
       const echo = echoLines(r.item, s.now!, s.zone);
-      return reply(`${r.line}.${echo ? `\n${echo}` : ""}`);
+      return reply(`${r.line}.${echo ? `\n${echo}` : ""}${note ? `\n${note}` : ""}`);
     } catch (e) {
       if (e instanceof TaskError) return reply(e.message, true);
       console.error(`tasks: ${(e as Error)?.message ?? "error"}`);
@@ -72,6 +72,7 @@ export function createTasksServer(run: TasksRun) {
     }
   };
 
+  const urgentNote = (u: boolean | undefined): string | undefined => (isGroup && u !== undefined ? "Note: urgent was ignored: a reminder in a group never breaks quiet hours." : undefined);
   let suggested = 0; // what THIS run (one look) has suggested: the cap per look is code (SUGGESTIONS_PER_LOOK), whatever the prompt says
   const isGroup = run.key !== OWNER_KEY && !isTenantKey(run.key);
   const unattendedNote = run.unattended ? " You are running unattended: what you add is only a SUGGESTION for the person to confirm; you cannot change, finish or drop anything." : "";
@@ -159,7 +160,7 @@ export function createTasksServer(run: TasksRun) {
           if (note) return { ...added, line: `${added.line}. Tell them, in your own words and their language, exactly this and nothing more about it: "${note}"` };
         }
         return added;
-      });
+      }, urgentNote(a.urgent));
     },
   );
 
@@ -199,7 +200,7 @@ export function createTasksServer(run: TasksRun) {
             };
             if (reopened && Object.values(patch).every((v) => v === undefined)) return reopened;
             return editItem(s, a.id, patch);
-          }),
+          }, urgentNote(a.urgent)),
       ),
       tool("complete_task", "Mark an item done. A repeating item is not finished: it moves to its next due and stays open. Use when the person says it is done (or you did it for them).", { id: ID }, (a) => act((s) => completeItem(s, a.id))),
       tool(

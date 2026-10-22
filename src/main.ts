@@ -168,7 +168,7 @@ const pipeline: Pipeline = createPipeline({
     foreign: (words) => unsupportedForVoice(words, settings.ttsLanguages),
   },
   approvals,
-  reminders: createReminderAnswers({ out, zone: zoneOf }), // a quoted "done" / "snooze 1h" or a ✅ on a reminder is answered in code (tasks/remindanswer.ts)
+  reminders: createReminderAnswers({ out, zone: zoneOf, isOwner: fromOwner }), // a quoted "done" / "snooze 1h" or a ✅ on a reminder is answered in code (tasks/remindanswer.ts)
   feedback: createFeedback({ out }), // a 👎 or "less of this" on something sent unprompted: one offer to save a note, nothing saved until the owner says yes (feedback.ts)
   vouch,
   isOwner: fromOwner,

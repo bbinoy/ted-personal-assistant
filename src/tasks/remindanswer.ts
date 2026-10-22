@@ -61,11 +61,13 @@ export function parseAnswer(text: string, now: number, zone: string): Answer | u
   return until === undefined ? undefined : { kind: "snooze", until };
 }
 
-export const isDoneReaction = (emoji: string): boolean => ["✅", "👍", "✔", "☑"].includes(strip(emoji));
+export const isDoneReaction = (emoji: string): boolean => ["✅", "✔", "☑"].includes(strip(emoji)); // (a 👍 is "noted", not "done")
+const isThumbUp = (emoji: string): boolean => strip(emoji) === "👍";
 
 export interface AnswerDeps {
   out: { reply(text: string, opts?: { plain?: boolean; kind?: "chat" | "notice"; target?: Target }): Promise<number> };
   zone: (conv: Conversation) => string; // the conversation's time zone (tenants/tenants.ts zoneOf)
+  isOwner?: (who: { from: string; fromUuid?: string }) => boolean; // is this the owner? (in a group only the assignee or the owner closes a reminder by reaction)
   now?: () => number;
 }
 export type ReminderAnswers = ReturnType<typeof createReminderAnswers>;
@@ -100,12 +102,19 @@ export function createReminderAnswers(deps: AnswerDeps) {
   }
 
   return {
-    // A reaction on a reminder: ✅ or 👍 is done. true: dealt with (no chat turn).
-    async reaction(conv: Conversation, r: Pick<IncomingReaction, "emoji" | "targetTimestamp" | "isRemove" | "from" | "fromName">): Promise<boolean> {
-      if (r.isRemove || !isDoneReaction(r.emoji)) return false;
+    // A reaction on a reminder: ✅ is done; a 👍 is noted (nothing happens, no chat turn). In a group only the item's assignee, or the owner, can close it by reaction. true: dealt with.
+    async reaction(conv: Conversation, r: Pick<IncomingReaction, "emoji" | "targetTimestamp" | "isRemove" | "from" | "fromName"> & { fromUuid?: string }): Promise<boolean> {
+      if (r.isRemove || !(isDoneReaction(r.emoji) || isThumbUp(r.emoji))) return false;
       try {
         const id = itemOf(conv, r.targetTimestamp);
-        return id !== undefined && (await apply(conv, id, { kind: "done" }, r.fromName || r.from));
+        if (id === undefined) return false;
+        if (isThumbUp(r.emoji)) return true;
+        if (conv.kind === "group") {
+          const it = getItem(conv.key, id);
+          const who = [r.fromName, r.from].filter(Boolean).map((x) => tidy(x!));
+          if (!it || !(deps.isOwner?.(r) || (it.assignee && who.includes(tidy(it.assignee))))) return true; // (seen, not allowed: nothing happens)
+        }
+        return await apply(conv, id, { kind: "done" }, r.fromName || r.from);
       } catch (e) {
         console.error("reminders: reaction failed:", (e as Error).message);
         return false;
@@ -113,8 +122,8 @@ export function createReminderAnswers(deps: AnswerDeps) {
     },
 
     // A message that quotes a reminder and says only done / snooze. true: dealt with (no chat turn).
-    async message(conv: Conversation, m: Pick<IncomingMessage, "text" | "quote" | "edited" | "image" | "file" | "audio" | "from" | "fromName">): Promise<boolean> {
-      if (!m.quote || m.edited || m.image || m.file || m.audio) return false;
+    async message(conv: Conversation, m: Pick<IncomingMessage, "text" | "quote" | "edited" | "image" | "file" | "audio" | "from" | "fromName"> & { picture?: unknown; document?: unknown }): Promise<boolean> {
+      if (!m.quote || m.edited || m.image || m.file || m.audio || m.picture || m.document) return false; // (a caption never answers: the attachment would be lost)
       try {
         const a = parseAnswer(m.text, now(), deps.zone(conv));
         if (!a) return false;
