@@ -179,6 +179,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
   const log = baseLog;
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
+  const doneInRun = new Set<string>(); // the calls a once-only guard (the approval inbox's, the first week's) has let through in THIS run
   const runGates = registered().flatMap((m) => (m.floor?.perRun ? [m.floor.perRun()] : [])); // the modules' limits for THIS run (the archive cap)
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
   return async (tool, input, o) => {
@@ -236,6 +237,14 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
       const reads = isReadTool(tool);
       log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: g?.approval ? undefined : setup.provenance?.(), approval: g?.approval, asked: g?.kind === "allow" && g.done === true }) });
+      if (g?.done) {
+        const k = callKey(tool, input);
+        if (doneInRun.has(k)) {
+          log(tool, "deny-already-done", source);
+          return { behavior: "deny", message: "That exact call was already made in this run. Do not repeat it; check its result once if you need to be sure it went through." };
+        }
+        doneInRun.add(k); // once-only within the run, whatever the guard: a recorded call (a send!) must not run twice because the model called it twice
+      }
       if (g?.done) remember(scoped(conversation, callKey(tool, input))); // a call the guard let through once-only (the approval inbox's) is done: asking for it again within the window is refused
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };

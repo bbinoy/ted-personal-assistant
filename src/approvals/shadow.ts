@@ -75,14 +75,14 @@ const triageNotes = (conv: ShadowConv, now: Date): number => readNotes(now, conv
 /**
  * Is this conversation's look in shadow mode? Counted from the conversation's first message (the first look when it has none), written down at the first answer so the weeks do not restart.
  * An install that was already triaging mail (a seen-mail log) or whose conversation is older than the longest first week is adopted as ended, and not told (nothing changes for it).
- * Called once at the start of a look; false when the database is not usable (background work is refused then anyway).
+ * Called once at the start of a look; true when the database is not usable (fail closed).
  */
 export function shadowActive(conv: ShadowConv, now: Date = new Date()): boolean {
   const mode = settings.shadowMode;
   if (mode === "off") return false;
   if (mode === "on") return true;
   const db = liveConvDb(convIdOfKey(conv.key));
-  if (!db) return false;
+  if (!db) return true; // unusable database: fail closed (propose, never archive)
   const t = now.getTime();
   let st = stateOf(db);
   if (!st) {
@@ -185,6 +185,11 @@ export interface Listed {
 /** The mail a message listed (any state), numbered as it was shown. Empty: no such proposal message. */
 export function listedBy(key: string, ts: number): Listed[] {
   return peekConvDb(convIdOfKey(key))?.all<Row>(`SELECT ${COLS} FROM shadow_proposals WHERE msg_ts = ? ORDER BY n`, ts).map((r) => ({ n: r.n!, line: r.line, state: r.state })) ?? [];
+}
+/** The newest proposal message that still has mail waiting, if it was sent within `withinMs` of `now` (an unquoted reply right after it is about it). */
+export function latestProposal(key: string, now: number, withinMs: number): number | undefined {
+  const ts = peekConvDb(convIdOfKey(key))?.get<{ ts: number | null }>("SELECT MAX(msg_ts) AS ts FROM shadow_proposals WHERE state = 'asked' AND msg_ts IS NOT NULL")?.ts;
+  return ts != null && now - ts <= withinMs && now - ts >= -60_000 ? ts : undefined;
 }
 export const isShadowMessage = (key: string, ts: number): boolean => listedBy(key, ts).length > 0;
 

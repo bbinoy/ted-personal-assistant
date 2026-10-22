@@ -66,11 +66,13 @@ export function parseShadowReply(text: string, n: number): ShadowReply {
   const named = [...new Set(nums)].sort((a, b) => a - b);
   if (yes && (no || (keep && named.length === 0 && !all))) return { kind: "clarify", why: ASK };
   if (named.length === 0) {
+    if (keep && !yes && !all && n === 1) return { kind: "nothing" }; // "keep" on a one-mail proposal: leave it
     if (no || (keep && all)) return { kind: "nothing" }; // "no", "none", "keep all", "leave them all"
     if (yes || all) return { kind: "all" }; // "yes", "archive all", "all", "do it"
     return { kind: "clarify", why: ASK };
   }
-  // numbers named: they are the ones to keep ("3,5 keep", "keep 3", "all except 7", "yes except 2", "3 no"); a plain yes or no with numbers and no keep word is ambiguous
-  if (keep || (no && !yes)) return named.length >= n ? { kind: "nothing" } : { kind: "keep", keep: named };
+  // numbers named: they are the ones to keep ("3,5 keep", "keep 3", "all except 7", "yes except 2", "3 keep"); a plain yes or no with numbers and no keep word is ambiguous
+  if (!keep && no) return { kind: "clarify", why: "Say '2 keep' to leave #2 in your inbox and archive the rest, or 'no' to leave them all. Nothing was done." }; // ("2 no" would read differently in the approval inbox)
+  if (keep) return named.length >= n ? { kind: "nothing" } : { kind: "keep", keep: named };
   return { kind: "clarify", why: ASK };
 }
