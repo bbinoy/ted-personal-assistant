@@ -19,6 +19,8 @@ import { writeFileAtomic } from "./state.ts";
 //   friend_notices   a friend's fixed notices (kind -> last time)
 //   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way, a suggestion; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
+//   suggestion_asks / group_remind_noted   which suggested items each "💡 ..." message listed (message ts -> number -> item: a 👍 or "1 yes" quoting it answers for them), and which group members were told once that
+//                    a reminder said in the group is the group's (src/tasks/suggest.ts). Small, pruned after 60 days.
 //
 // NOT rebuildable. Losing the approval inbox or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
@@ -231,6 +233,24 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE INDEX task_events_item ON task_events (item_id, id);
       CREATE TRIGGER task_events_no_update BEFORE UPDATE ON task_events BEGIN SELECT RAISE(ABORT, 'the task history is append-only'); END;
       CREATE TRIGGER task_events_no_delete BEFORE DELETE ON task_events BEGIN SELECT RAISE(ABORT, 'the task history is append-only'); END;
+    `,
+  },
+  {
+    version: 4,
+    name: "task suggestions: which message listed which suggested items; group members told once about reminders",
+    up: `
+      CREATE TABLE suggestion_asks (
+        msg_ts  INTEGER NOT NULL,                                   -- the timestamp of the "💡 ..." message that listed the item (a reply that quotes it, or a 👍 on it, answers for its items)
+        n       INTEGER NOT NULL,                                   -- the number it had in that message (1, 2, ...)
+        item_id INTEGER NOT NULL REFERENCES items (id),
+        at      INTEGER NOT NULL,                                   -- UTC ms
+        PRIMARY KEY (msg_ts, n)
+      );
+      CREATE INDEX suggestion_asks_item ON suggestion_asks (item_id);
+      CREATE TABLE group_remind_noted (
+        member TEXT PRIMARY KEY,                                    -- a group member's name: told once that a reminder said here is the group's, not private
+        at     INTEGER NOT NULL
+      );
     `,
   },
 ];

@@ -224,6 +224,8 @@ export function loadSettings(env: Env) {
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
     backgroundApprovalTimeoutMinutes: num(env, "BACKGROUND_APPROVAL_TIMEOUT_MINUTES", 120, 1, 2880),
     pendingActionDays: num(env, "PENDING_ACTION_DAYS", 3, 1, 30), // an unattended run's call that needed approval waits this long in the approval inbox (approvals/pending.ts); then it is dropped with one line
+    suggestionsPerLook: num(env, "SUGGESTIONS_PER_LOOK", 5, 1, 20), // an unattended run (a heartbeat look) may suggest at most this many tasks per run (modules/tasks/tasktools.ts); more are refused with a sentence, the next look sees them again
+    suggestionDays: num(env, "SUGGESTION_DAYS", 7, 1, 90), // a suggested task nobody confirms or rejects is dropped (history: rejected by expiry) after this many days (tasks/suggest.ts); never deleted
 
     // The longest one model run may take on the wall clock (src/run/ceiling.ts), so a hung turn cannot block its conversation until a
     // restart. Chat: the owner's chat and every group. Background: the heartbeat run and its expert; the time a background run
