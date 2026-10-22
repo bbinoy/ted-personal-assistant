@@ -83,7 +83,7 @@ export const mailbirdModule: ToolModule = {
     prefix: MB,
     visible: [
       "summarize_all_inboxes", "list_accounts", "list_folders", "list_conversations", "search_conversations", "get_message", "get_conversation",
-      "list_attachments", "get_attachment_content", "archive_conversation", "select_conversation", "reply_to_conversation",
+      "list_attachments", "get_attachment_content", "archive_conversation", "move_conversation_to_inbox", "select_conversation", "reply_to_conversation",
       "reply_all_to_conversation", "create_draft", "update_draft", "discard_draft", "forward_conversation", "send_message_now", "get_send_status", "send_self_briefing",
     ],
     valid: /^[a-z_]+$/,

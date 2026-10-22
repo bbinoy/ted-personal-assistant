@@ -121,7 +121,8 @@ test("run options: what differs between the owner, a group and a tenant, and onl
     "envChanged.ANTHROPIC_API_KEY", "envRemoved", "maxTurns", "run.maxTurns", "run.memory", "run.sessionConv", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
   ]);
   // the invariants the table above must not hide
-  assert.deepEqual([c.owner.envChanged, c.owner.envRemoved, c.group.envChanged, c.group.envRemoved], [{}, [], {}, []], "the owner's and a group's environment is the process's, untouched");
+  const bg = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" }; // (every run: an expert never runs in the background, delegation.ts)
+  assert.deepEqual([c.owner.envChanged, c.owner.envRemoved, c.group.envChanged, c.group.envRemoved], [bg, [], bg, []], "the owner's and a group's environment is the process's, untouched but for no background tasks");
   assert.equal(c.tenant.envChanged.ANTHROPIC_API_KEY, "<instance-key>");
   assert.ok(c.tenant.envRemoved.includes("CLAUDE_CODE_OAUTH_TOKEN"));
   assert.deepEqual([c.owner.run.tenant, c.group.run.tenant], [undefined, undefined]);

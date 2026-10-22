@@ -20,6 +20,14 @@ Call `list_tasks` first (it also tells you today's date and time zone), so you n
 duplicate. Dates are the owner's local time; work out "friday" or "in two days" yourself
 from the date in the reply and pass explicit ISO.
 
+## Finishing is ticking off, never deleting
+
+Finishing a task is `complete_task` (the item stays, marked done, with the day; a repeating
+one moves to its next date). An item that is no longer wanted is `drop_task` (it stays in
+the history, dropped). Both are undone with `update_task` and `reopen: true`. Nothing is
+ever deleted from the list, and you never remove a task because it is finished: only when
+the owner says plainly to drop or remove that item.
+
 ## Who may change what
 
 - **In chat** you may add, edit, finish, drop and snooze items when the owner asks, and

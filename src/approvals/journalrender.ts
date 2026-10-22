@@ -170,7 +170,8 @@ export function render(conv: string, tool: string, input: Record<string, unknown
   if (archived) {
     const ids = archived.filter(Boolean);
     const names = ids.map((id) => mailName(conv, id) ?? `mail ${id}`);
-    return { what: `Archived ${ids.length ? list(names) : "a mail"}`, cat, undo: ids.length ? `npm run restore ${ids[0]}${ids.length > 1 ? " (for each id)" : ""}, or say 'restore that'` : "say 'restore that'" };
+    // (every id is in the undo, so the archive list of the brief can restore each one: journalread.ts archiveItems reads them back)
+    return { what: `Archived ${ids.length ? list(names) : "a mail"}`, cat, undo: ids.length === 1 ? `npm run restore ${ids[0]}, or say 'restore that'` : ids.length ? `npm run restore <id> for each of ${ids.join(" ")}, or say 'restore that'` : "say 'restore that'" };
   }
   const e = entryFor(tool);
   if (e?.action === "restore") {

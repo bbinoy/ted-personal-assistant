@@ -62,11 +62,57 @@ export function journalCounts(lines: readonly Sent[]): [string, number][] {
   return [...n].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
 }
 
-// The text the `journal` tool returns: the newest `limit` lines, oldest first, grouped by day, each with its time in the conversation's zone.
+// ---- the archived mail, numbered, for the brief and for "restore 3" ----
+
+// One archive line of the journal as an item: who sent it (when the run had read it), its subject, and every id it archived (the undo names them, journalrender.ts), so "restore N" can put it back.
+export interface ArchiveItem {
+  n: number; // 1.. in the order they were archived, within the window asked for (the same window gives the same numbers: later archives only add at the end)
+  at: string;
+  subject?: string;
+  from?: string;
+  ids: string[];
+  what: string; // the line's own words, when no subject could be read (an archive of several mails, a mail never read)
+}
+
+export function archiveItems(lines: readonly Sent[]): ArchiveItem[] {
+  return lines
+    .filter((m) => m.cat === "archive" && /^Archived /.test(m.text))
+    .map((m, i) => {
+      const p = splitJournal(m.text);
+      const many = /npm run restore <id> for each of (.+?)(?:, or say|$)/.exec(p.undo)?.[1];
+      const one = /npm run restore (\S+?)(?:,|$)/.exec(p.undo)?.[1];
+      const ids = many ? many.split(/\s+/).filter(Boolean) : one && one !== "<id>" ? [one] : [];
+      const what = p.what.replace(/^Archived /, "");
+      const named = /^“(.*)”(?: from (.+))?$/.exec(what);
+      return { n: i + 1, at: m.at, ids, what, ...(named && ids.length <= 1 ? { subject: named[1], ...(named[2] ? { from: named[2] } : {}) } : {}) };
+    });
+}
+
+// The text of `journal` with kind "archive": the count, then the mail grouped by sender, numbered, each with its id, and how to bring one back. `since` is echoed exactly: "restore 3" means
+// item 3 of the list for that same since.
+export function archiveListText(items: readonly ArchiveItem[], window: string, zone: string): string {
+  if (!items.length) return `No mail archived ${window} (times in ${zone}).`;
+  const groups = new Map<string, ArchiveItem[]>();
+  for (const it of items) {
+    const key = it.from ?? (it.subject ? "unknown sender" : "not named");
+    groups.set(key, [...(groups.get(key) ?? []), it]);
+  }
+  const line = (it: ArchiveItem) => `${it.n}. ${it.subject ? `“${it.subject}”` : it.what} (${dayIn(new Date(it.at), zone).slice(5)} ${timeIn(new Date(it.at), zone)}${it.ids.length ? `, id ${it.ids.join(" ")}` : ""})`;
+  const body = [...groups].sort((x, y) => y[1].length - x[1].length || x[0].localeCompare(y[0])).map(([from, list]) => `${from} (${list.length}): ${list.map(line).join("; ")}`);
+  return [`${items.length} mail${items.length === 1 ? "" : "s"} archived ${window} (times in ${zone}), by sender:`, ...body, `To bring one back: reply 'restore N' (or 'restore 2,5') with the numbers of this list, or run npm run restore <id>.`].join("\n");
+}
+
+// The text the `journal` tool returns: the newest `limit` lines, oldest first, grouped by day, each with its time in the conversation's zone. With kind "archive": the numbered archive list.
 export function readJournal(file: string, a: JournalArgs, o: { now?: number; zone?: string } = {}): string {
   const now = o.now ?? Date.now();
   const zone = o.zone ?? systemZone();
   const hasWindow = a.since !== undefined || a.sinceHours !== undefined;
+  if (a.kind?.trim().toLowerCase() === "archive") {
+    const sel = journalSelect(file, hasWindow ? a : { ...a, sinceHours: 24 * 7 }, now, zone);
+    if (sel.error) return sel.error;
+    const window = a.since !== undefined ? `since ${a.since}${a.until ? ` until ${a.until}` : ""}` : a.sinceHours !== undefined ? `in the last ${a.sinceHours} hours` : "in the last 7 days";
+    return archiveListText(archiveItems(sel.lines).slice(0, MAX_LIMIT), window, zone);
+  }
   const { lines, error } = journalSelect(file, hasWindow ? a : { ...a, sinceHours: 24 * 7 }, now, zone); // no window asked: the last week
   if (error) return error;
   if (!lines.length) return `Nothing in the journal matches${hasWindow ? "" : " in the last 7 days"} (times in ${zone}).`;

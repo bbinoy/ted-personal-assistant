@@ -84,6 +84,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     signal: extra.signal,
     ...(extra.shadow ? { shadow: extra.shadow } : {}),
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too
+    unattended: true, // a look answers nobody's message: it acts when sure and asks nobody (permissions.ts UNATTENDED_SKIP), for the owner, a group and a friend alike
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
   };

@@ -42,7 +42,8 @@ test("opening a web page: in every place the judge may skip the question for a p
     scopeOf("owner").say("what are the opening hours of the post office?");
     assert.equal((await canUse("WebFetch", { url: `https://www.example.com/${source}`, prompt: "hours" }, opts))!.behavior, "allow", source);
     assert.equal(asked, 0, `${source}: a plain page that serves the request is not asked about`);
-    await canUse("WebFetch", { url: "http://127.0.0.1:8080/x", prompt: "hours" }, opts);
-    assert.equal(asked, 1, `${source}: an address the floor refuses is still asked about`);
+    const local = await canUse("WebFetch", { url: "http://127.0.0.1:8080/x", prompt: "hours" }, opts);
+    if (source === "chat") assert.equal(asked, 1, `${source}: an address the floor refuses is still asked about`);
+    else assert.deepEqual([asked, local!.behavior], [0, "deny"], `${source}: an unattended run asks nobody: the floor's ask is a skip`);
   }
 });

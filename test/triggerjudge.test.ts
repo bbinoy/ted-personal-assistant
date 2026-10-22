@@ -33,12 +33,14 @@ test("the same action, judged by the same fake judge, decides the same under a c
     for (const c of cases) {
       const j = fake(decision);
       const asked: string[] = [];
-      const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.source, undefined, j.fn, undefined, c.tools, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} ${decision}` });
+      const unattended = c.source !== "chat"; // (a wake-up is a look: it asks nobody)
+      const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.source, undefined, j.fn, undefined, c.tools, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} ${decision}`, unattended });
       const r = (await can(tool, { ...input }, opts)) as { behavior: string; message?: string };
+      assert.equal(asked.length, decision === "ask" && !unattended ? 1 : 0, `${c.name} ${decision}: only a chat turn asks`);
       assert.equal(j.seen.length, 1, `${c.name}: the judge is asked once`);
       assert.equal(j.seen[0]!.untrustedInput, false, c.name);
       descriptions.push(j.seen[0]!.description);
-      outcomes.push(`${r.behavior}/${asked.length}/${/Not run, nobody was asked/.test(r.message ?? "")}`);
+      outcomes.push(`${r.behavior}/${/Not run, nobody was asked/.test(r.message ?? "")}`);
     }
     assert.equal(new Set(outcomes).size, 1, `${decision}: ${outcomes.join(" | ")}`);
     assert.equal(new Set(descriptions).size, 1, "the judge sees the same action");
@@ -48,9 +50,9 @@ test("the same action, judged by the same fake judge, decides the same under a c
     const j = fake("auto");
     const asked: string[] = [];
     const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.source, undefined, j.fn, undefined, undefined, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} share` });
-    await can("mcp__claude_ai_Google_Drive__share_file", { fileId: "f" }, opts);
+    assert.equal(((await can("mcp__claude_ai_Google_Drive__share_file", { fileId: "f" }, opts)) as { behavior: string }).behavior, "deny", c.name);
     assert.equal(j.seen.length, 0, c.name);
-    assert.equal(asked.length, 1, c.name);
+    assert.equal(asked.length, c.source === "chat" ? 1 : 0, `${c.name}: asked in a chat, not done in a wake-up`);
   }
   // the untrusted-input flag, the real defence, is the same switch under every trigger
   const j = fake("auto");

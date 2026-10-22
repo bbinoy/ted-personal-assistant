@@ -27,7 +27,6 @@ export interface QuestionInput {
   args: Record<string, unknown>;
   details: string; // the code-rendered text: ground truth for the facts the question must carry; never sent
   recent: readonly Recent[];
-  background: boolean;
   source: Source;
 }
 export type Composed = { text: string; ms: number; by?: "model" } | { text?: undefined; failure: string; ms: number; by?: undefined };

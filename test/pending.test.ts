@@ -164,58 +164,24 @@ test("splitExpired is pure; an expired item is dropped and told once, never sile
   assert.ok(readAudit((e) => e.decision === "approval-expired").length > 0);
 });
 
-// ---- parking ----
+// ---- parking: no more (an unattended run asks nobody, test/unattended.test.ts) ----
 
-test("a background ask is parked, not waited on: the run gets 'Queued as #N', nothing is sent, and the exact call is recorded", async () => {
+test("nothing is parked any more: a background run's ask is skipped, the background approvers never ask, and the inbox stays empty", async () => {
+  const scope = scopeName();
   const sent: string[] = [];
-  const scope = scopeName();
-  const approve = makeApprove(async (t) => (sent.push(t), 1), { scope, source: "background", background: true, queue: true, compose: async () => ({ text: "Reply to Rebecca that Thursday works?", ms: 0 }) });
-  const call = { tool: SEND, input: MAIL };
-  const d = await approve("✉️ Reply to Rebecca\nTo: rebecca@example.com\n\nThursday works", call, new AbortController().signal, { queueable: true });
-  assert.equal(d.approved, false);
-  assert.equal(d.queued?.n, 1);
-  assert.match(d.queued!.message, /^Queued for .+'s approval as #1; carry on with the rest; do not retry it/);
-  assert.deepEqual(sent, [], "no question is sent now: the batch is asked when the look ends");
-  const [p] = openItems(scope);
-  assert.deepEqual([p!.tool, p!.input, p!.label, p!.question, p!.source, p!.scope], [SEND, MAIL, "✉️ Reply to Rebecca", "Reply to Rebecca that Thursday works?", "background", scope]);
-  assert.match(p!.footer, /^To: rebecca@example\.com/);
-  const again = await approve("✉️ Reply to Rebecca\nTo: rebecca@example.com\n\nThursday works", call, new AbortController().signal, { queueable: true });
-  assert.equal(again.queued?.n, 1, "the same call keeps its number");
-  assert.ok(readAudit((e) => e.decision === "approval-queued" && e.tool === SEND).length > 0);
-});
-
-test("a guard step, a payment, a foreground ask and a group's background ask are not parked", async () => {
-  const mk = (o: Record<string, unknown>) => makeApprove(async () => 5, { scope: scopeName(), source: "background", compose: async () => ({ text: "ok?", ms: 0 }), request: (async () => ({ approved: false })) as never, ...o } as never);
-  const call = { tool: SEND, input: MAIL };
-  const sig = new AbortController().signal;
-  assert.equal((await mk({ background: true, queue: true })("d", call, sig, { queueable: false })).queued, undefined, "a guard step");
-  assert.match((await mk({ background: true, queue: true })("d", call, sig, { queueable: true, typedYes: true })).failure ?? "", /card payment/);
-  assert.equal((await mk({ background: false, queue: true })("d", call, sig, { queueable: true })).queued, undefined, "foreground");
-  assert.equal((await mk({ background: true })("d", call, sig, { queueable: true })).queued, undefined, "no queue for a group");
-});
-
-test("the approvers park the owner's and a friend's background asks, and not a group's", async () => {
   const made: Record<string, unknown>[] = [];
-  const out = { reply: async () => 1 };
-  const approverFor = createApprovers(out, { target: () => "to:anna", make: (_send, o) => (made.push(o as never), (async () => ({ approved: false })) as never) });
-  approverFor("owner", { background: true });
-  approverFor("owner");
-  approverFor("tenant:anna", { background: true });
-  approverFor("group-1", { background: true });
-  assert.deepEqual(made.map((o) => [o.scope, !!o.background, !!o.queue]), [["owner", true, true], ["owner", false, false], ["tenant:anna", true, true], ["group-1", true, false]]);
-});
-
-test("permissions: a parked call is denied back to the run with the queued text and is not remembered as done", async () => {
-  const scope = scopeName();
-  const approve = makeApprove(async () => 1, { scope, source: "background", background: true, queue: true, compose: async () => ({ text: "Send it?", ms: 0 }) });
-  const can = makeCanUseTool(approve, "background", undefined, (async () => ({ decision: "ask", reason: "t" })) as never, undefined, undefined, false, { conversation: scope });
-  const opts = { signal: new AbortController().signal } as never;
-  const tool = "mcp__claude_ai_Google_Calendar__create_event";
-  const r1 = (await can(tool, { summary: "Dentist", startTime: "2026-10-16T10:00:00" }, opts)) as { behavior: string; message?: string };
-  assert.equal(r1.behavior, "deny");
-  assert.match(r1.message ?? "", /Queued for .+ as #1; carry on/);
-  const r2 = (await can(tool, { summary: "Dentist", startTime: "2026-10-16T10:00:00" }, opts)) as { message?: string };
-  assert.match(r2.message ?? "", /as #1/, "asking again is the same item, not 'already approved'");
+  const approverFor = createApprovers({ reply: async (t: string) => (sent.push(t), 1) }, { target: () => "to:anna", make: (_send, o) => (made.push(o as never), (async () => ({ approved: false })) as never) });
+  for (const key of ["owner", "tenant:anna", "group-1"]) {
+    const d = await approverFor(key, { background: true })("d", { tool: SEND, input: MAIL }, new AbortController().signal);
+    assert.equal(d.approved, false);
+    assert.match(d.failure ?? "", /background work never asks/);
+  }
+  assert.deepEqual(made, [], "no question writer is even built for a background approver");
+  const can = makeCanUseTool(makeApprove(async (t) => (sent.push(t), 1), { scope, source: "chat", compose: async () => ({ text: "Send it?", ms: 0 }) }), "background", undefined, (async () => ({ decision: "ask", reason: "t" })) as never, undefined, undefined, false, { conversation: scope });
+  const r = (await can("mcp__claude_ai_Google_Calendar__create_event", { summary: "Dentist", startTime: "2026-10-16T10:00:00" }, { signal: new AbortController().signal } as never)) as { behavior: string; message?: string };
+  assert.equal(r.behavior, "deny");
+  assert.match(r.message ?? "", /^Not done: not certain enough to act without asking/);
+  assert.deepEqual([sent, openItems(scope)], [[], []]);
 });
 
 // ---- batching ----

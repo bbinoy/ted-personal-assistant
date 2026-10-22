@@ -42,8 +42,8 @@ import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } f
 // chose, something was said, a note that changed), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown, the day's budget, a friend's
 // key and her own budget), ONE run starts under the "heartbeat" profile: a fresh session on HEARTBEAT_MODEL with the conversation's own persona, notes, skills and tools
 // (the owner's connectors; a friend's or a group's are what its capability set holds), the time in its zone and the tail of its chat log up front. It reads what it needs
-// (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge -> phone path, with `standing` provenance (the fixed instruction below is what the
-// judge reads as the reason for the run; no message of anyone's led there) and the conversation's own approver (a question is asked in the chat that triggered it).
+// (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge path, with `standing` provenance (the fixed instruction below is what the
+// judge reads as the reason for the run; no message of anyone's led there). It never asks anyone: what the judge is not sure about is not done (permissions.ts UNATTENDED_SKIP).
 // It answers with a message or [[silent]] and the minutes until its next look.
 // What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
