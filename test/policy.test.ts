@@ -122,7 +122,7 @@ test("hidden tools: the defaults hide exactly what the per-provider lists did, f
   const gmailKeep = ["search_threads", "get_thread", "get_message", "get_draft", "list_drafts", "list_labels", "create_draft", "update_draft", "delete_draft", "reply", "forward", "send_message", "unlabel_thread", "label_thread"];
   const notionKeep = ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"];
   const seen = [...mailbirdKeep.map((t) => MB + t), `${MB}snooze_conversation`, `${MB}trash_conversation`, `${MB}set_sender_blocked`, ...gmailKeep.map((t) => GM + t), `${GM}trash_thread`, `${GM}delete_label`, ...notionKeep.map((t) => `mcp__claude_ai_Notion__${t}`), `${NO}query-data-sources`, `${NO}create-comment`, "mcp__claude_ai_Google_Calendar__list_events"];
-  const base = ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"];
+  const base = ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Claude_Docs"]; // (Google Drive and Docs are visible by default since the people lookup: HIDDEN_CONNECTORS hides them again)
   const oracle = (provider: "mailbird" | "gmail" | "none") => {
     const connectors = [base[0]!, ...(provider === "gmail" ? [] : ["mcp__claude_ai_Gmail"]), ...base.slice(1), ...(provider !== "mailbird" ? ["mcp__mailbird"] : [])];
     const extra = seen.filter((t) => (t.startsWith(MB) && !mailbirdKeep.includes(t.slice(MB.length))) || (t.startsWith(GM) && !gmailKeep.includes(t.slice(GM.length))) || (t.startsWith("mcp__claude_ai_Notion__") && !notionKeep.includes(t.slice("mcp__claude_ai_Notion__".length))) || neverAllowedTool(t));
@@ -132,7 +132,7 @@ test("hidden tools: the defaults hide exactly what the per-provider lists did, f
     const cfg = loadSettings({ MAIL_PROVIDER: provider });
     assert.deepEqual(hiddenTools(seen, cfg), oracle(provider), provider);
   }
-  assert.deepEqual(loadSettings({}).hiddenConnectors, ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"]);
+  assert.deepEqual(loadSettings({}).hiddenConnectors, ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Gmail", "mcp__claude_ai_Claude_Docs"]);
 });
 
 test("hidden tools: Mailbird tools the skills never use are hidden, the ones they use stay", () => {

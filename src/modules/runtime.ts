@@ -4,7 +4,7 @@ import { browseStatus, browserServer } from "./browse/browseserver.ts";
 import { connected, readConnectors } from "./connectors.ts";
 import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "./memory/dreamscope.ts";
-import { googleHub, googleProxy, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
+import { googleHub, googleProxy, searchContacts, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
 import { notionHub, notionProxy } from "./notion/notionmcp.ts";
 import { gmailReaders, putBackInInbox } from "./gmail/gmail.ts";
 import { createIntakeServer } from "../intake/intaketools.ts";
@@ -16,6 +16,7 @@ import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import { createNotesServer } from "./memory/notestools.ts";
+import { createPeopleServer } from "./people/peopletool.ts";
 import { createStatusServer } from "./status/statusnote.ts";
 import { createTasksServer } from "./tasks/tasktools.ts";
 import { createSeenMailServer } from "./seenmail/seenmail.ts";
@@ -26,7 +27,7 @@ import { createVoiceServer } from "./voice/voicetool.ts";
 import { createWeatherServer } from "./weather/weathertools.ts";
 import { loaded, mailModule } from "./index.ts";
 import { setGmailReaders } from "./gmail/module.ts";
-import { GOOGLE_PREFIX, GOOGLE_TOOLS } from "./google/module.ts";
+import { GOOGLE_MAIL_TOOL, GOOGLE_PREFIX, GOOGLE_TOOLS } from "./google/module.ts";
 import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notion/module.ts";
 import { setDraftReader } from "./mailbird/module.ts";
 import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types.ts";
@@ -61,6 +62,17 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   voice: { server: (ctx) => createVoiceServer(ctx.key!) },
   memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }) },
   notes: { server: (ctx) => createNotesServer(ctx.notesRead!, ctx.source) },
+  // find_person: this conversation's people notes and, for a friend whose set has Google, her own Contacts through her own session; a group or the owner has notes only (the owner's Google connectors have no contacts tool).
+  people: {
+    server: (ctx) =>
+      createPeopleServer({
+        notesDir: ctx.memory!.dir,
+        source: ctx.source,
+        zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined,
+        contacts: ctx.tenant && ctx.offers(GOOGLE_MAIL_TOOL) ? (query) => searchContacts(ctx.tenant!.id, query) : undefined,
+        contactsWhy: ctx.tenant ? "she has not connected Google" : ctx.groupId ? "a group has no contacts of its own" : "the Google connectors on the owner's login have no contacts tool",
+      }),
+  },
   status: { server: () => createStatusServer() },
   // The conversation's task list. An unattended run (the owner's background source, or an isolated run with no chat memory: a friend's or a group's look, a mail handler) can only suggest (tasktools.ts).
   tasks: {
