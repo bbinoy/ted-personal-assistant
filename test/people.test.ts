@@ -185,7 +185,8 @@ test("drive and docs: visible by default for the owner, hidden again by the sett
   const D = "mcp__claude_ai_Google_Drive__";
   const DOC = "mcp__claude_ai_Google_Docs__";
   for (const t of [`${D}search_files`, `${D}read_file_content`, `${D}list_recent_files`, `${D}get_file_permissions`, `${DOC}read_doc`]) assert.equal(classify(t, {}, "chat"), "allow", t);
-  for (const t of [`${D}create_file`, `${D}update_file`, `${D}copy_file`, `${D}share_file`, `${D}trash_file`, `${DOC}update_doc`]) assert.equal(classify(t, {}, "chat"), "ask", t);
+  for (const t of [`${D}create_file`, `${D}update_file`, `${D}copy_file`, `${D}share_file`, `${DOC}update_doc`]) assert.equal(classify(t, {}, "chat"), "ask", t);
+  assert.equal(classify(`${D}trash_file`, { fileId: "f" }, "chat"), "deny", "Drive trash is denied like Gmail trash");
   for (const t of [`${D}search_files`, `${D}share_file`, `${DOC}read_doc`]) assert.equal(classify(t, {}, "group"), "deny", `${t}: never a group's`);
 });
 

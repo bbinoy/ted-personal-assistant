@@ -155,7 +155,9 @@ test("connectors: which are reported down comes from the loaded modules' connect
     assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Google Drive"), up("Google Docs"), up("Gmail")])), []);
     assert.equal(NAMES.gmail, "Gmail");
     assert.match(SKIPPED.gmail!, /mail pass/);
-    assert.deepEqual(disconnected(detect([], [up("Notion"), up("Google Calendar"), up("Gmail"), up("Google Docs")])), ["drive"], "Drive is down, Docs is up");
+    const mixed = detect([], [up("Notion"), up("Google Calendar"), up("Gmail"), up("Google Docs")]);
+    assert.deepEqual(disconnected(mixed, []), [], "optional Drive was never seen working: silently absent");
+    assert.deepEqual(disconnected(mixed, ["drive", "docs"]), ["drive"], "Drive was seen working before and is down now; Docs is up");
     s.hiddenConnectors = [...(s.hiddenConnectors as string[]), "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs"]; // the owner hid Drive and Docs again
     assert.deepEqual(keys(), ["notion", "calendar", "gmail"], "a hidden connector is no outage to talk about");
   } finally {

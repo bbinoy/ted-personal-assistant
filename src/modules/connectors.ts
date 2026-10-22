@@ -42,7 +42,15 @@ export function detect(tools: readonly string[], servers?: readonly ServerStatus
   return { at: at.toISOString(), ...Object.fromEntries(seen) };
 }
 
-export const recordConnectors = (tools: readonly string[], servers?: readonly ServerStatus[]) => kvSet(KEY, detect(tools, servers));
+const SEEN = "connectors-seen"; // (the kv row of the keys of connectors some run has seen working: an optional connector is only ever "down" after that)
+export const readSeen = (): string[] => kvGet<string[]>(SEEN, []);
+export function recordConnectors(tools: readonly string[], servers?: readonly ServerStatus[]): void {
+  const now = detect(tools, servers);
+  kvSet(KEY, now);
+  const seen = readSeen();
+  const added = Object.keys(now).filter((k) => now[k] === true && !seen.includes(k));
+  if (added.length) kvSet(SEEN, [...seen, ...added]);
+}
 export const readConnectors = (): Connectors | undefined => kvGet<Connectors | undefined>(KEY, undefined);
 
 // Did the last run see this connector? Undefined: no run has recorded it yet.
@@ -52,6 +60,7 @@ export interface Reported {
   key: string;
   label: string;
   skipped: string;
+  optional: boolean; // an extra (Drive, Docs): never reported down unless a run has seen it working (readSeen); the doctor lists it as optional
   mail: boolean; // the mail provider's own connector: the mail checks (runtime.ts) already say whether it is there
 }
 
@@ -65,7 +74,7 @@ export function reportable(): Reported[] {
     const c = m.connection;
     if (c.kind !== "connector" || !c.key || !c.skipped) return [];
     if (m.slot !== "mail" && settings.hiddenConnectors.some((h) => c.prefix.startsWith(h))) return [];
-    return [{ key: c.key, label: c.label ?? c.key, skipped: c.skipped, mail: m.slot === "mail" }];
+    return [{ key: c.key, label: c.label ?? c.key, skipped: c.skipped, optional: !!c.optional, mail: m.slot === "mail" }];
   });
   const rank = (k: string) => (ORDER.includes(k) ? ORDER.indexOf(k) : ORDER.length);
   return out.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r.key) - rank(b.r.key) || a.i - b.i).map(({ r }) => r);
@@ -80,4 +89,5 @@ export const NAMES = byKey("label");
 export const SKIPPED = byKey("skipped");
 
 // Pure: connectors that were missing in the last run. Unknown (no run yet) counts as fine, and so does a connector the last run did not record (a module added since).
-export const disconnected = (c: Connectors | undefined): Connector[] => (c ? reportable().filter((r) => c[r.key] === false).map((r) => r.key) : []);
+// An optional connector the owner never connected is silently absent: it is down only if some run saw it working before (`seen`).
+export const disconnected = (c: Connectors | undefined, seen: readonly string[] = readSeen()): Connector[] => (c ? reportable().filter((r) => c[r.key] === false && (!r.optional || seen.includes(r.key))).map((r) => r.key) : []);
