@@ -27,7 +27,7 @@ Use the date and weekdays exactly as `CURRENT TIME` gives them. Short lines, `-`
 2. `Tomorrow` - the first meeting (time, title, who) and a count of the rest ("3 more"); then tasks due tomorrow by name (at most 3, then "and N more").
 3. `Still waiting on you` - open approvals ("2 approvals waiting: /approvals"), suggestions waiting for a yes ("3 suggested tasks: /tasks suggestions"), overdue tasks (count and the oldest one). Only what exists.
 
-End with nothing extra. If all three sections are empty, answer `[[silent]]`.
+End with nothing extra. If all three sections are empty, answer with the silent marker your brief names (nothing is sent).
 
 ## Delivery
 

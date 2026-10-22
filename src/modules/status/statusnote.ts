@@ -59,6 +59,12 @@ export function statusFact(name: string, now: Date, zone: string = systemZone(),
   return `${label}: written at ${at} without a clear status; ${attempts}`;
 }
 
+// For /status and the doctor: when a status note was last written and how it ended ("10-22 07:41 (delivered)"), or "not yet".
+export function lastStatusText(name: string, zone: string = systemZone(), dir: string = NOTES_DIR): string {
+  const n = readStatusNote(name, dir);
+  return n ? `${dayAt(n.writtenAt, 0, zone).date.slice(5)} ${timeIn(n.writtenAt, zone)} (${n.status ?? "no status"})` : "not yet";
+}
+
 export type StatusResult = { ok: true; file: string } | { ok: false; error: string };
 
 // Pure but for the file: writes status-<name>.md. `dir`: tests.

@@ -19,7 +19,7 @@ import { writeFileAtomic } from "./state.ts";
 //   friend_notices   a friend's fixed notices (kind -> last time)
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
-//   routine_runs     the last period of each scheduled routine besides the brief (evening, weekly): once per period, retries, skips (src/heartbeat/routines.ts)
+//   routine_runs     the last period of each scheduled routine besides the brief (evening, weekly): once per period, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way, a suggestion; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
 //   suggestion_asks / group_remind_noted   which suggested items each "💡 ..." message listed (message ts -> number -> item: a 👍 or "1 yes" quoting it answers for them), and which group members were told once that
 //                    a reminder said in the group is the group's (src/tasks/suggest.ts). Small, pruned after 60 days.
@@ -381,7 +381,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
   },
   {
     version: 10,
-    name: "routines: the last period of each scheduled routine (evening wrap, weekly review...), so it runs once per period and a sleeping Mac catches up or skips (heartbeat/routines.ts)",
+    name: "routines: the last period of each scheduled routine (evening wrap, weekly review...), so it runs once per period and a sleeping Mac catches up or skips (tasks/routines.ts)",
     up: `
       CREATE TABLE routine_runs (
         name           TEXT PRIMARY KEY,                            -- the routine ("evening", "weekly"); the brief keeps its own status note

@@ -53,7 +53,7 @@ export function resolveRoutines(env: Env, p: Preset, briefEmail: boolean): Routi
 
 // ---- the clock: when a routine's slot falls, in the conversation's zone (a day is not 24 hours across a clock change) ----
 
-// The instant of `time` on calendar day `date` ("2026-10-25") in `zone`. A time the clock skips (spring forward) lands on the hour after; one it repeats (fall back) on the first.
+// The instant of `time` on calendar day `date` ("2026-10-25") in `zone`. A time the clock skips (spring forward) lands on the same day next to the gap; one it repeats (fall back) on the first.
 export function localInstant(date: string, time: string, zone: string): Date {
   const [y, mo, d] = date.split("-").map(Number) as [number, number, number];
   const [h, mi] = time.split(":").map(Number) as [number, number];

@@ -29,7 +29,7 @@ Short lines, `-` bullets, no tables. The chat message must stand alone on a phon
 3. `## Next week` - the 3 priorities that the calendar and the due dates point at, hardest-hitting first, one line each; then the busiest day.
 4. `## Follow up` - people: what they owe the owner (`owed_to_me`, with how long) and what the owner owes them (`i_owe`, due soon first). Name the person and the thing; offer no drafts.
 
-If everything is empty, answer `[[silent]]`.
+If everything is empty, answer with the silent marker your brief names (nothing is sent).
 
 ## Delivery
 

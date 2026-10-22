@@ -1,4 +1,5 @@
-import { routineLines } from "../heartbeat/routines.ts";
+import { routineLines } from "../tasks/routines.ts";
+import { lastStatusText } from "../modules/status/statusnote.ts";
 import { ownerSkills } from "../modules/skills.ts";
 import { PLUGIN } from "../core/preset.ts";
 import { nextReminderText } from "../tasks/remind.ts";
@@ -118,7 +119,7 @@ export interface StatusFacts {
   down: readonly string[]; // connectors down in the last run
   zone?: string;
   nextReminder?: string; // when the next task reminder goes (tasks/remind.ts nextReminderText); none: no reminder is scheduled
-  routines?: readonly string[]; // one line per routine: its schedule, next and last run (heartbeat/routines.ts routineLines); absent: no routines
+  routines?: readonly string[]; // one line per routine: its schedule, next and last run (tasks/routines.ts routineLines); absent: no routines
   damaged?: boolean; // the ledger database is damaged: the agent runs degraded (core/instancedb.ts)
 }
 
@@ -174,7 +175,7 @@ const real: CommandDeps = {
       approvals: openCount(conv.key) + waitingCount(conv.key), // (the questions open in the chat, and the calls parked in the approval inbox)
       lastLook: lastOwnerLook(),
       nextReminder: nextReminderText(conv.key, conv.convId, now.getTime(), zoneOf(conv)) ?? "",
-      routines: routineLines(conv.convId, settings.routines.filter((r) => ownerSkills().includes(`${PLUGIN}:${r.skill}`)), now, zoneOf(conv)),
+      routines: routineLines(conv.convId, settings.routines.filter((r) => ownerSkills().includes(`${PLUGIN}:${r.skill}`)), now, zoneOf(conv), lastStatusText("brief", zoneOf(conv))),
       ...(ledgerDamage() ? { damaged: true } : {}),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };

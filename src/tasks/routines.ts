@@ -2,9 +2,6 @@ import { liveConvDb, peekConvDb } from "../core/convdb.ts";
 import type { ConvRef } from "../core/convpaths.ts";
 import { planRoutine, whenText, nextText, type Plan, type Routine, type RoutineRecord, type RunStatus } from "../core/routines.ts";
 import { dayAt, timeIn } from "../core/timezone.ts";
-import { readStatusNote } from "../modules/status/statusnote.ts";
-import { NOTES_DIR } from "../memory/notes.ts";
-import { variantOf } from "../run/delegation.ts";
 import { PLUGIN } from "../core/preset.ts";
 
 // The scheduling of the routines besides the brief (core/routines.ts plans, this file remembers and words it). The record is one row per routine in the conversation's assistant.db
@@ -76,7 +73,7 @@ export function markTold(conv: ConvRef, names: readonly string[]): void {
 }
 
 // The expert a delegation names -> the routine it runs, if any (variantOf: "expert-<skill>").
-export const routineOfAgent = (routines: readonly Routine[], agent: string): Routine | undefined => routines.find((r) => r.planned && variantOf(r.skill) === agent);
+export const routineOfAgent = (routines: readonly Routine[], agent: string, agentOf: (skill: string) => string): Routine | undefined => routines.find((r) => r.planned && agentOf(r.skill) === agent);
 
 const label = (r: Routine): string => `${r.name} (${whenText(r)})`;
 
@@ -87,7 +84,7 @@ export interface RoutineFacts {
 }
 
 // The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting, done or off is not mentioned). `deliver`: how the full version reaches the owner by email, when it should.
-export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; approvals?: number; emailHow?: () => string }): RoutineFacts {
+export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; agentOf: (skill: string) => string; approvals?: number; emailHow?: () => string }): RoutineFacts {
   const planned = planAll(conv, routines, now, zone, o.catchUpHours);
   const lines: string[] = [];
   let due: RoutineFacts["due"];
@@ -98,7 +95,7 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
     else if (plan.state === "due" && !due) {
       due = p as NonNullable<typeof due>;
       const mail = r.email && o.emailHow ? ` Also email the full version to ${o.who} themself: ${o.emailHow()}` : "";
-      lines.push(`${r.name}: due now (${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}). Delegate it now: call the Agent tool with subagent_type "${variantOf(r.skill)}" and a self-contained brief that names the skill ${PLUGIN}:${r.skill}, today's date, and that this routine only reads and tells ${o.who}: it changes nothing and sends nothing but its result to ${o.who}. Its final answer is the short chat message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${mail}`);
+      lines.push(`${r.name}: due now (${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}). Delegate it now: call the Agent tool with subagent_type "${o.agentOf(r.skill)}" and a self-contained brief that names the skill ${PLUGIN}:${r.skill}, today's date, and that this routine only reads and tells ${o.who}: it changes nothing and sends nothing but its result to ${o.who}. Its final answer is the short chat message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${mail}`);
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look.`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
@@ -112,19 +109,15 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
 }
 
 // "/status" and the doctor: one line per routine with its schedule, next run and last run.
-export function routineLines(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string): string[] {
+export function routineLines(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, briefLast: string): string[] {
   return routines.map((r) => {
-    const last = lastRun(conv, r, zone);
+    const last = r.planned ? lastRun(conv, r, zone) : briefLast;
     return `${r.name}: ${nextText(r, now, zone)}${r.enabled ? `; last ${last}` : ""}${r.email && r.enabled ? "; also by email" : ""}`;
   });
 }
 
-// "Wed 22 18:31 (delivered)", "failed at ...", "not yet": the last run of a routine. The brief's is its status note's, the others' the record's.
+// "10-22 18:31", "failed (2026-10-22)", "not yet": the last run of a planned routine, from the record (the brief's is its status note's: statusnote.ts lastStatusText).
 export function lastRun(conv: ConvRef, r: Routine, zone: string): string {
-  if (!r.planned) {
-    const n = readStatusNote("brief", NOTES_DIR);
-    return n ? `${dayAt(n.writtenAt, 0, zone).date.slice(5)} ${timeIn(n.writtenAt, zone)} (${n.status ?? "no status"})` : "not yet";
-  }
   const rec = readRecord(conv, r.name);
   if (rec?.lastDelivered) return `${dayAt(new Date(rec.lastDelivered), 0, zone).date.slice(5)} ${timeIn(new Date(rec.lastDelivered), zone)}${rec.status === "failed" || rec.status === "skipped" ? `, then ${rec.status} (${rec.period})` : ""}`;
   return rec?.status ? `${rec.status} (${rec.period})` : "not yet";

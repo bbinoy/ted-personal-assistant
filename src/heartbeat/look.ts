@@ -11,7 +11,7 @@ import { logTail } from "../conversation/gate.ts";
 import { lookDue, recordWake, type LookState } from "../conversation/ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
 import { heartbeatInstruction } from "../run/persona.ts";
-import { delegatedText, expertSetup } from "../run/delegation.ts";
+import { delegatedText, expertSetup, variantOf } from "../run/delegation.ts";
 import { mailSlot } from "../modules/index.ts";
 import { PLUGIN, preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
@@ -35,7 +35,7 @@ import { gateSink } from "../modules/send/send.ts";
 import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
 import { offerLearned } from "../conversation/learned.ts";
 import { zoneOf } from "../tenants/tenants.ts";
-import { markFinished, markStarted, markTold, routineFacts, routineOfAgent } from "./routines.ts";
+import { markFinished, markStarted, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown, the day's budget, a friend's
@@ -160,7 +160,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const shadow = looker.mail && shadowActive(conv, now) ? createShadowRun(conv.key) : undefined; // the gentle first week (approvals/shadow.ts): this look proposes its archives
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     // The routines besides the brief (core/routines.ts): only the owner's own look has them (a friend's or a group's skills never include them), and only with experts to delegate to.
-    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, approvals: openCount(conv.key) + waitingCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true) } : {}) }) : undefined;
+    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key) + waitingCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true) } : {}) }) : undefined;
     const started = new Set<string>(); // the routines this look handed to their expert
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
@@ -191,7 +191,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             signal: overtaken.signal,
             onDelegate: (agent) => {
               delegations++;
-              const r = routines?.due && routineOfAgent([routines.due.routine], agent);
+              const r = routines?.due && routineOfAgent([routines.due.routine], agent, variantOf);
               if (r) (started.add(r.name), markStarted(conv.convId, r.name, routines!.due!.plan.slot.date, Date.now()));
             },
             onToolSuccess: (tool) => {
