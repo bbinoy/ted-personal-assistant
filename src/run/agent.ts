@@ -26,6 +26,7 @@ import type { RunProvenance } from "../approvals/autojudge.ts";
 import { PREP_ACTIONS, PREP_MAX_MINUTES, PREP_MAX_TURNS, PREP_SCHEMA, PREP_TASK, readOnlyGuard } from "./prep.ts";
 import { loaded } from "../modules/index.ts";
 import { PLUGIN } from "../modules/skills.ts";
+import type { ShadowGate } from "../approvals/shadowgate.ts";
 
 const down = () => disconnected(readConnectors());
 
@@ -36,6 +37,7 @@ export interface ProfileExtra {
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
   signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
+  shadow?: ShadowGate; // the look is in its first week: its archives are proposals, not actions (approvals/shadow.ts)
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
@@ -80,6 +82,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
     signal: extra.signal,
+    ...(extra.shadow ? { shadow: extra.shadow } : {}),
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),

@@ -27,6 +27,19 @@ export function archivedBy(tool: string, input: Record<string, unknown>): string
   return ids.length ? ids : [""];
 }
 
+// An archive call as ONE call per mail, for the gentle first week (approvals/shadow.ts): a proposal is answered mail by mail ("3,5 keep"), so a batch call is split into calls that each name one id and
+// keep every other argument as the model made it (the exact-args replay then runs each as recorded). A call naming several ids under different keys, or an id-less one, is left whole (id: all its ids joined).
+export function splitArchive(tool: string, input: Record<string, unknown>): { input: Record<string, unknown>; id: string }[] {
+  const ids = archivedBy(tool, input);
+  if (!ids) return [];
+  const keys = Object.keys(input).filter((k) => ID_KEYS.test(k) && asList(input[k]).length > 0);
+  if (keys.length === 1 && Array.isArray(input[keys[0]!]) && ids.length > 1) {
+    const k = keys[0]!;
+    return [...new Set(ids)].map((id) => ({ input: { ...input, [k]: [id] }, id }));
+  }
+  return [{ input: structuredClone(input), id: ids.join(",") }];
+}
+
 export const capReached = (cap: number) => `Archive cap reached for this look (${cap} per look): the rest waits for the next one. Do not look for another way to archive; say in your own words what is left.`;
 
 // One gate per run: it remembers the ids it let through. A call that would take the run past the cap is refused with a message for the model; an id already archived

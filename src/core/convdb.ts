@@ -353,6 +353,31 @@ export const CONV_SCHEMA: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 9,
+    name: "the gentle first week: shadow-mode state and the archives a look proposed instead of making (approvals/shadow.ts)",
+    up: `
+      CREATE TABLE shadow_state (
+        id       INTEGER PRIMARY KEY CHECK (id = 1),
+        since    INTEGER NOT NULL,                                  -- UTC ms: where the first week is counted from (the conversation's first message, else its first look)
+        ended_at INTEGER,                                           -- UTC ms: shadow mode ended (never re-entered, however the notes change afterwards)
+        told     INTEGER NOT NULL DEFAULT 0                         -- 1: the one-time "from now on I'll archive these myself" line has been said (or needs no saying: an install that was already past its first week)
+      );
+      CREATE TABLE shadow_proposals (
+        seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+        tool    TEXT NOT NULL,                                      -- the archive call exactly as the look made it, split to ONE mail (the exact-args replay runs it as recorded)
+        input   TEXT NOT NULL,                                      -- JSON
+        mail_id TEXT NOT NULL,                                      -- the conversation / thread / message id the call names
+        line    TEXT NOT NULL,                                      -- the code-rendered line shown to the person ("“Subject” from Sender")
+        at      INTEGER NOT NULL,
+        state   TEXT NOT NULL DEFAULT 'collected' CHECK (state IN ('collected', 'asked', 'archiving', 'archived', 'kept', 'failed', 'expired')),
+        msg_ts  INTEGER,                                            -- the batch message that listed it (a reply that quotes it, or a 👍 on it, answers for its items)
+        n       INTEGER                                             -- its number in that message
+      );
+      CREATE INDEX shadow_proposals_msg ON shadow_proposals (msg_ts, n);
+      CREATE INDEX shadow_proposals_state ON shadow_proposals (state, mail_id);
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

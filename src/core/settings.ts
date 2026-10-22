@@ -234,6 +234,9 @@ export function loadSettings(env: Env) {
     // The most characters of ONE tool result the model reads (toolclean.ts, in the PostToolUse path of every tool, MCP results included); the rest is cut with a hint to narrow the query.
     toolOutputMaxChars: num(env, "TOOL_OUTPUT_MAX_CHARS", 60_000, 1000, 1_000_000),
     archiveMaxPerRun: num(env, "ARCHIVE_MAX_PER_RUN", 25, 1, 500),
+    // The gentle first week (approvals/shadow.ts): auto = while the conversation is new an unattended look PROPOSES its archives (one batch message, a 👍 archives them) instead of making them;
+    // it ends when 3 days have passed AND the person has a triage note, at the latest after 14 days. on: always propose. off: archive as the notes say from the first look.
+    shadowMode: oneOf(env, "SHADOW_MODE", "auto", ["auto", "on", "off"] as const),
 
     // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
