@@ -42,7 +42,7 @@ test("never allowed: a row's action in NEVER_ACTIONS decides, for every source a
   const expected = [
     `${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`,
     `${GM}trash_message`, `${GM}trash_thread`, `${GM}untrash_message`, `${GM}untrash_thread`, `${GM}mark_message_spam`, `${GM}mark_thread_spam`, `${GM}unmark_message_spam`, `${GM}unmark_thread_spam`, `${GM}delete_label`,
-    "mcp__claude_ai_Claude_Docs__delete",
+    "mcp__claude_ai_Claude_Docs__delete", `${DRIVE}trash_file`,
   ];
   const byRow = allRows().filter((e) => NEVER_ACTIONS.has(e.action)).map((e) => e.tool);
   assert.deepEqual([...byRow].sort(), [...expected].sort());
@@ -114,7 +114,6 @@ test("the five destructive actions the owner allows: ask on every source, judged
     [`${GM}delete_draft`, { draftId: "d1" }, /Delete draft[\s\S]*d1/],
     [`${CAL}delete_event`, { eventId: "e1", calendarId: "primary" }, /Delete calendar event[\s\S]*e1/],
     [`${N}notion-update-page`, { page_id: "p1", properties: { in_trash: true } }, /Move Notion page to the bin[\s\S]*p1/],
-    [`${DRIVE}trash_file`, { fileId: "f1" }, /Move Drive file to the bin[\s\S]*f1/],
   ];
   assert.equal(isJudgeable(`${CAL}delete_event`, { eventId: "e1", attendees: ["a@example.org"] }), false, "a calendar delete that names guests is never judged");
   assert.match(notifyNote(`${CAL}delete_event`, { eventId: "e1" }), /this call names no guests.*guests already on an existing event are not shown/);
@@ -199,7 +198,7 @@ const TABLE: [string, string, string, string][] = [
   [`${DRIVE}read_file_content`, "allow", "allow", "deny"],
   [`${DRIVE}update_file`, "ask", "ask", "deny"],
   [`${DRIVE}share_file`, "ask", "ask", "deny"],
-  [`${DRIVE}trash_file`, "ask", "ask", "deny"],
+  [`${DRIVE}trash_file`, "deny", "deny", "deny"],
   ["mcp__claude_ai_Google_Docs__read_doc", "allow", "allow", "deny"],
   ["mcp__claude_ai_Claude_Docs__read", "allow", "allow", "deny"],
   ["mcp__claude_ai_Claude_Docs__delete", "deny", "deny", "deny"],

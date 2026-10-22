@@ -66,9 +66,9 @@ test("setup: Notion tasks and meetings are found by the agent, saved, and only a
 
 test("connectors: detected from the tools a run saw; a missing one is reported as not connected, not as not set up", async () => {
   const { detect, disconnected, NAMES } = await import("../src/modules/connectors.ts");
-  const all = ["mcp__claude_ai_Notion__notion-fetch", "mcp__claude_ai_Google_Calendar__list_events", "mcp__mailbird__get_message"];
+  const all = ["mcp__claude_ai_Notion__notion-fetch", "mcp__claude_ai_Google_Calendar__list_events", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Drive__search_files", "mcp__claude_ai_Google_Docs__read_doc"];
   assert.deepEqual(disconnected(detect(all)), []);
-  assert.deepEqual(disconnected(detect(["mcp__mailbird__get_message"])), ["notion", "calendar"]);
+  assert.deepEqual(disconnected(detect(["mcp__mailbird__get_message"])), ["notion", "calendar"]); // (Drive and Docs are optional: never seen working, never reported down)
   assert.deepEqual(disconnected(detect(all.slice(1))), ["notion"]);
   assert.deepEqual(disconnected(undefined), []); // nothing recorded yet: say nothing
   // setup items that depend on a down connector are not listed as "missing"
@@ -88,15 +88,27 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
 test("connectors: judged by the server status in the start-up message, so a slow connector is not reported as missing", async () => {
   const { detect, disconnected } = await import("../src/modules/connectors.ts");
   const server = (name: string, status: string) => ({ name, status });
-  const all = [server("mailbird", "connected"), server("claude.ai Notion", "connected"), server("claude.ai Google Calendar", "connected")];
+  const drive = [server("claude.ai Google Drive", "connected"), server("claude.ai Google Docs", "connected")];
+  const all = [server("mailbird", "connected"), server("claude.ai Notion", "connected"), server("claude.ai Google Calendar", "connected"), ...drive];
   assert.deepEqual(disconnected(detect([], all)), []); // hidden or not yet listed tools do not matter
-  assert.deepEqual(disconnected(detect([], [server("mailbird", "pending"), server("claude.ai Notion", "pending"), server("claude.ai Google Calendar", "connected")])), []); // still connecting
-  assert.deepEqual(disconnected(detect([], [server("claude.ai Notion", "needs-auth"), server("claude.ai Google Calendar", "failed")])), ["notion", "calendar"]);
-  assert.deepEqual(disconnected(detect([], [server("mailbird", "connected"), server("claude.ai Gmail", "connected")])), ["notion", "calendar"]); // never added
+  assert.deepEqual(disconnected(detect([], [server("mailbird", "pending"), server("claude.ai Notion", "pending"), server("claude.ai Google Calendar", "connected"), ...drive])), []); // still connecting
+  assert.deepEqual(disconnected(detect([], [server("claude.ai Notion", "needs-auth"), server("claude.ai Google Calendar", "failed"), ...drive])), ["notion", "calendar"]);
+  assert.deepEqual(disconnected(detect([], [server("mailbird", "connected"), server("claude.ai Gmail", "connected"), ...drive])), ["notion", "calendar"]); // never added
 });
 
 test("plugin: follow-through is a private skill the calendar and task skills point to", async () => {
   const { privateSkills } = await import("../src/modules/skills.ts");
   assert.ok(privateSkills().includes("follow-through"));
   for (const s of ["calendar", "notion-tasks"]) assert.match(readFileSync(join(skillsDir, s, "SKILL.md"), "utf8"), /ted-personal-assistant:follow-through/, s);
+});
+
+test("connectors: an optional connector (Drive, Docs) is down only after a run saw it working; the doctor's seen list is recorded by recordConnectors", async () => {
+  const { detect, disconnected, recordConnectors, readSeen } = await import("../src/modules/connectors.ts");
+  const none = detect([], [{ name: "claude.ai Notion", status: "connected" }, { name: "claude.ai Google Calendar", status: "connected" }]);
+  assert.deepEqual(disconnected(none, []), [], "never connected: nothing to nag about");
+  assert.deepEqual(disconnected(none, ["drive", "docs"]), ["drive", "docs"], "it worked once and is gone: reported");
+  const calendarGone = detect([], [{ name: "claude.ai Notion", status: "connected" }]);
+  assert.deepEqual(disconnected(calendarGone, []), ["calendar"], "Notion and Calendar keep reporting as before");
+  recordConnectors([], [{ name: "claude.ai Google Drive", status: "connected" }]);
+  assert.ok(readSeen().includes("drive") && !readSeen().includes("docs"));
 });

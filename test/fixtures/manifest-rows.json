@@ -93,7 +93,7 @@
 {"tool":"mcp__claude_ai_Google_Drive__update_file","provider":"drive","action":"drive-write","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Google_Drive__copy_file","provider":"drive","action":"drive-write","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Google_Drive__share_file","provider":"drive","action":"share","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
-{"tool":"mcp__claude_ai_Google_Drive__trash_file","provider":"drive","action":"delete-confirm","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__claude_ai_Google_Drive__trash_file","provider":"drive","action":"trash","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Google_Docs__read_doc","provider":"docs","action":"read","cap":"drive","only":null,"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__claude_ai_Google_Docs__update_doc","provider":"docs","action":"doc-write","cap":"drive","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Claude_Docs__read","provider":"claudedocs","action":"read","cap":"drive","only":null,"view":null,"free":true,"untrusted":true},
@@ -182,5 +182,9 @@
 {"tool":"mcp__claude_ai_Gmail__unmark_message_spam","provider":"gmail","action":"spam","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Gmail__unmark_thread_spam","provider":"gmail","action":"spam","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
 {"tool":"mcp__claude_ai_Gmail__delete_draft","provider":"gmail","action":"delete-confirm","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
-{"tool":"mcp__claude_ai_Gmail__delete_label","provider":"gmail","action":"delete","cap":"mail","only":null,"view":null,"free":false,"untrusted":false}
+{"tool":"mcp__claude_ai_Gmail__delete_label","provider":"gmail","action":"delete","cap":"mail","only":null,"view":null,"free":false,"untrusted":false},
+{"tool":"mcp__people__find_person","provider":"people","action":"read","cap":"chat","only":["chat","group"],"view":null,"free":true,"untrusted":true},
+{"tool":"mcp__google__search_drive_files","provider":"google","action":"read","cap":"google","only":["group"],"view":null,"free":true,"untrusted":true},
+{"tool":"mcp__google__get_drive_file_content","provider":"google","action":"read","cap":"google","only":["group"],"view":null,"free":true,"untrusted":true},
+{"tool":"mcp__google__list_drive_items","provider":"google","action":"read","cap":"google","only":["group"],"view":null,"free":true,"untrusted":true}
 ]

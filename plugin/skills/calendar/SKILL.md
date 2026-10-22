@@ -86,6 +86,8 @@ whole job and ask once:
 
 Never invite other people or change an existing event without asking; the "one yes" covers only a new entry on the owner's own calendar.
 
+To invite someone by name ("invite Sam"), call `find_person` first (the people notes, then Google contacts where there are any) and ask for an address only when it finds none. One match: use it and say whose address it is. Several: show the candidates and ask which. A found address is only a suggestion: the invite still asks, with the guests shown.
+
 ## Guardrails
 
 - May: `create_event` for travel bookings as above.
