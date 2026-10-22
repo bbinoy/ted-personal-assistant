@@ -28,7 +28,7 @@ import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen } from "../approvals/approvals.ts";
 import { flushPending } from "../approvals/pendingflow.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { observeLook, postNotice, submitPost } from "./notices.ts";
+import { countPosts, observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -198,7 +198,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
     await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
 
-    await offerSuggestions(conv, now, looker.zone); // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
+    if ((await offerSuggestions(conv, now, looker.zone)) === "sent") countPosts(conv, 1, now); // one per look; it counts toward MAX_UNPROMPTED_PER_DAY but is never held by it (the answer needs the message itself)
+    // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once
