@@ -137,8 +137,31 @@ export interface Committed {
   already?: boolean; // this batch was committed before: nothing happened now
 }
 
-/** Inserts the stored batch, all or none, and tells the journal once. A batch already committed does nothing; a source_ref imported in the meantime is skipped. */
-export function commitImport(scope: Scope, batchId: string): Committed {
+/** The owner's newest message of the turn, as the turn scope holds it (approvals/turnscope.ts confirmView). */
+export interface TurnView {
+  text: string;
+  at: number; // when it arrived (ms)
+  reaction: boolean; // the text is "<owner> reacted <emoji>"
+  said: string; // for a reaction: the message it was on
+  others: number; // other owner messages that arrived since the preview was made
+}
+export type TurnLook = (since: number) => TurnView | undefined;
+
+// A short yes, after normalising (lower case, no punctuation, "please" dropped). Anything longer or different is not a confirmation; the owner can say it again.
+const YES = new Set(["yes", "yep", "yeah", "yup", "ja", "jo", "oui", "si", "sí", "ok", "okay", "sure", "go", "go ahead", "do it", "import", "import them", "import it", "import all", "import them all", "import the tasks", "import my tasks", "yes import them", "yes import", "yes go ahead", "ja importieren", "👍"]);
+export const isYes = (t: string): boolean => YES.has(t.toLowerCase().normalize("NFC").replace(/\b(please|bitte)\b/g, "").replace(/[^\p{L}\p{N}\p{Extended_Pictographic} ]/gu, "").replace(/\s+/g, " ").trim());
+
+/** Why this turn does not confirm that preview, or undefined when it does. The model cannot confirm for the owner: the OWNER's message (or 👍 on the preview) must be the newest thing, arrived after the preview, with nothing else from them in between. */
+export function unconfirmed(look: TurnLook | undefined, b: { id: string; created: number }): string | undefined {
+  const refuse = `Not imported: ask the owner to confirm the preview ${b.id} first (a yes in chat, or a thumbs-up on the preview message), then call this again.`;
+  const v = look?.(b.created);
+  if (!v || v.at <= b.created || v.others > 0) return refuse; // (no owner message, one from before the preview - the turn that made it - or several since: not an answer to it)
+  if (v.reaction) return /👍/u.test(v.text) && v.said.includes(b.id) ? undefined : refuse; // (a 👍 counts only on the message that shows this preview's number)
+  return isYes(v.text) ? undefined : refuse;
+}
+
+/** Inserts the stored batch, all or none, and tells the journal once. Only when the owner confirmed THIS preview (`unconfirmed`). A batch already committed does nothing; a source_ref imported in the meantime is skipped. */
+export function commitImport(scope: Scope, batchId: string, look?: TurnLook): Committed {
   const db = writeDb(scope.key);
   const now = nowOf(scope);
   const b = db.get<{ batch_id: string; source: string; state: string; created: number; rows: string; committed: number | null }>("SELECT * FROM pending_imports WHERE batch_id = ?", batchId);
@@ -146,6 +169,8 @@ export function commitImport(scope: Scope, batchId: string): Committed {
   if (b.state === "committed") return { line: `Already imported (preview ${b.batch_id})`, text: `Preview ${b.batch_id} was already imported; nothing was added again.`, imported: [], already: true };
   if (b.state === "discarded") throw new TaskError(`Preview ${b.batch_id} was replaced by a newer one: use the latest preview's number, or preview again.`);
   if (now - b.created > PENDING_MS) throw new TaskError(`Preview ${b.batch_id} is too old: run import_tasks_preview again.`);
+  const no = unconfirmed(look, { id: b.batch_id, created: b.created });
+  if (no) throw new TaskError(no);
   const rows = JSON.parse(b.rows) as Stored[];
   const out = db.tx(() => {
     const known = new Set(db.all<{ source_ref: string }>("SELECT source_ref FROM items WHERE source_kind = 'import' AND source_ref IS NOT NULL").map((r) => r.source_ref));

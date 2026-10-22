@@ -1,6 +1,7 @@
 import { createSdkMcpServer, tool, type SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Source } from "../../core/audit.ts";
+import { scopeOf } from "../../approvals/turnscope.ts";
 import { fence } from "../../core/fence.ts";
 import { isTenantKey, OWNER_KEY } from "../../core/ownerkey.ts";
 import { counts, addItem, completeItem, confirmSuggestion, dropItem, editItem, KINDS, listItems, rejectSuggestion, reopenItem, snoozeItem, SOURCE_KINDS, TaskError, type Filter, type Item, type Patch, type Scope, type Status } from "../../tasks/store.ts";
@@ -23,6 +24,7 @@ export interface TasksRun {
   unattended: boolean; // a heartbeat look or another background run: suggestions only
   zone: () => string; // the conversation's clock
   now?: () => number;
+  turn?: import("../../tasks/import.ts").TurnLook; // the owner's newest message of the turn, for the import's confirmation (default: the conversation's turn scope)
 }
 
 const reply = (text: string, isError = false) => ({ content: [{ type: "text" as const, text }], ...(isError ? { isError: true } : {}) });
@@ -249,10 +251,10 @@ export function createTasksServer(run: TasksRun) {
       ),
       tool(
         "import_tasks_commit",
-        "STEP 2: import the previewed batch. ONLY after the owner has said yes to that preview in this chat (a clear yes or a thumbs-up on the preview message), never on your own and never for a preview they have not seen. " +
+        "STEP 2: import the previewed batch. ONLY after the owner has said yes to that preview in this chat (a clear yes or a thumbs-up on the preview message), never on your own and never for a preview they have not seen. Code checks it: it refuses unless the owner's newest message, sent after the preview, is a short yes (or a 👍 on the message showing the preview number); never call it in the same turn as the preview. " +
           "Inserts the whole batch as the owner's own items and writes one journal line. Calling it again for the same batch does nothing.",
         { batch_id: z.string().max(40).describe("The number in the preview, like imp-3fa9c1") },
-        (a) => importer((s) => commitImport(s, a.batch_id)),
+        (a) => importer((s) => commitImport(s, a.batch_id, run.turn ?? scopeOf(run.key).confirmView)),
       ),
     );
   }

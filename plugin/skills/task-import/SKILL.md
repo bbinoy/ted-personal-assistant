@@ -52,7 +52,7 @@ rejected rows only when the cause is yours (a bad date format); otherwise leave 
 ## 4. Commit, only on a yes
 
 Wait for the owner's answer in this chat. A clear yes ("import them", "go"), or a thumbs-up
-on the preview message, is the confirmation; anything else is not. Then call
+on the preview message, is the confirmation; anything else is not. Code enforces it: the commit refuses unless the owner's newest message, sent after the preview, is a short yes (or a thumbs-up on the message that shows the preview number, so send the preview text with its `imp-` number), so never call it in the same turn as the preview. Then call
 `import_tasks_commit` with the preview's number (`imp-...`). Never commit on your own, for a
 preview the owner has not seen, or after they asked for a change (preview again first).
 Tell them the result in a line: how many came over. The import is recorded in the journal.

@@ -23,6 +23,7 @@ const NOW = Date.parse("2026-10-22T10:00:00Z");
 let n = 0;
 const fresh = () => `import-conv-${++n}`;
 const scope = (key: string): import("../src/tasks/store.ts").Scope => ({ key, zone: ZONE, by: "owner", origin: "owner", source: "chat", now: NOW });
+const yes: import("../src/tasks/import.ts").TurnLook = () => ({ text: "yes", at: NOW + 1000, reaction: false, said: "", others: 0 }); // (the owner said yes after the preview)
 const ALL = ["suggested", "open", "snoozed", "done", "dropped"] as never;
 const row = (i: number, o: Record<string, unknown> = {}) => ({ title: `Task ${i}`, source_ref: `https://notion.so/p${i}`, ...o });
 const journalOf = (key: string) => ledgerEntries(convPaths(convIdOfKey(key)).messages).filter((m) => m.kind === "journal").map((m) => m.text);
@@ -66,8 +67,8 @@ test("import preview: the preview names the first 15 rows and counts the rest; a
   assert.equal(p.text.split("\n").filter((l) => l.startsWith("- ")).length, 15);
   assert.match(p.text, /\.\.\. and 5 more/);
   const q = I.previewImport(scope(k), { rows: [row(1)] });
-  assert.throws(() => I.commitImport(scope(k), p.batchId), /replaced by a newer one/);
-  assert.equal(I.commitImport(scope(k), q.batchId).imported.length, 1);
+  assert.throws(() => I.commitImport(scope(k), p.batchId, yes), /replaced by a newer one/);
+  assert.equal(I.commitImport(scope(k), q.batchId, yes).imported.length, 1);
   assert.throws(() => I.previewImport(scope(k), { rows: [] }), /no rows/);
   assert.throws(() => I.previewImport(scope(k), { rows: Array.from({ length: 501 }, (_, i) => row(i)) }), /more than one import takes/);
 });
@@ -82,7 +83,7 @@ test("import preview: finished rows older than 30 days (or undated) are left out
   assert.deepEqual([none.summary.total, none.summary.skippedDone], [1, 3]);
   const all = I.previewImport(scope(k), { rows, done: "all" });
   assert.deepEqual([all.summary.total, all.summary.done], [4, 3]);
-  const c = I.commitImport(scope(k), all.batchId);
+  const c = I.commitImport(scope(k), all.batchId, yes);
   const done = c.imported.filter((i) => i.status === "done");
   assert.equal(done.length, 3);
   assert.equal(done.find((i) => i.title === "Task 2")!.doneAt, Date.parse("2026-10-01T10:00:00Z"), "done on the day the table says (noon, local)");
@@ -91,40 +92,40 @@ test("import preview: finished rows older than 30 days (or undated) are left out
 test("import commit: inserts as the owner's, source import, one added history row each; the second commit and a re-run add nothing (idempotent by source_ref)", () => {
   const k = fresh();
   const p = I.previewImport(scope(k), { rows: [row(1, { due: "2026-10-25", details: "Area: Work" }), row(2, { kind: "owed_to_me", person: "Sam" })] });
-  const c = I.commitImport(scope(k), p.batchId);
+  const c = I.commitImport(scope(k), p.batchId, yes);
   assert.equal(c.line, "Imported 2 tasks from Notion");
   const items = S.listItems(k, {}, NOW, ZONE);
   assert.deepEqual(items.map((i) => [i.origin, i.sourceKind, i.status, i.sourceRef]), [["owner", "import", "open", "https://notion.so/p1"], ["owner", "import", "open", "https://notion.so/p2"]]);
   assert.equal(items[0]!.details, "Area: Work");
   assert.equal(items[0]!.dueZone, ZONE);
   assert.deepEqual(events(k).map((e) => e.action), ["added", "added"]);
-  const again = I.commitImport(scope(k), p.batchId);
+  const again = I.commitImport(scope(k), p.batchId, yes);
   assert.equal(again.already, true);
   assert.equal(S.listItems(k, { status: ALL }, NOW, ZONE).length, 2);
   // the same table again, plus one new row: only the new one comes
   const p2 = I.previewImport(scope(k), { rows: [row(1), row(2), row(3)] });
   assert.equal(p2.summary.alreadyImported, 2);
   assert.match(p2.text, /Already imported earlier, left out: 2/);
-  assert.equal(I.commitImport(scope(k), p2.batchId).imported.length, 1);
+  assert.equal(I.commitImport(scope(k), p2.batchId, yes).imported.length, 1);
   assert.equal(S.listItems(k, { status: ALL }, NOW, ZONE).length, 3);
   // a ref imported between preview and commit is skipped at commit
   const p3 = I.previewImport(scope(k), { rows: [row(4)] });
   S.addItem(scope(k), { title: "Task 4 by hand", sourceKind: "import", sourceRef: "https://notion.so/p4" });
-  const c3 = I.commitImport(scope(k), p3.batchId);
+  const c3 = I.commitImport(scope(k), p3.batchId, yes);
   assert.equal(c3.imported.length, 0);
   assert.equal(c3.line, "Imported 0 tasks from Notion");
 });
 
 test("import commit: a stale or unknown preview is refused, and the list's size limit stops it whole (nothing half-imported)", () => {
   const k = fresh();
-  assert.throws(() => I.commitImport(scope(k), "imp-nope"), /no import preview/);
+  assert.throws(() => I.commitImport(scope(k), "imp-nope", yes), /no import preview/);
   const p = I.previewImport(scope(k), { rows: [row(1)] });
-  assert.throws(() => I.commitImport({ ...scope(k), now: NOW + 49 * 3_600_000 }, p.batchId), /too old/);
+  assert.throws(() => I.commitImport({ ...scope(k), now: NOW + 49 * 3_600_000 }, p.batchId, yes), /too old/);
   const db = peekConvDb(convIdOfKey(k))!;
   for (let i = 0; i < S.LIMITS.open - 1; i++) db.run("INSERT INTO items (title, created_at, updated_at) VALUES (?, 1, 1)", `f${i}`);
   const q = I.previewImport(scope(k), { rows: [row(1), row(2)] });
   assert.match(q.text, /Too many/);
-  assert.throws(() => I.commitImport(scope(k), q.batchId), /open items at most/);
+  assert.throws(() => I.commitImport(scope(k), q.batchId, yes), /open items at most/);
   assert.equal(db.num("SELECT COUNT(*) FROM items WHERE source_kind = 'import'"), 0);
 });
 
@@ -143,7 +144,8 @@ test("import tools: owner chat only: a friend, a group, an unattended run and a 
 });
 
 test("import tools: preview then commit through the tools; the journal gets ONE line for the whole batch, the items only the audit log", async () => {
-  const t = ownerTools();
+  let turn: ReturnType<typeof yes> = undefined;
+  const t = ownerTools({ turn: () => turn });
   await peek();
   const r = await t.import_tasks_preview!.handler({ rows: [row(1), row(2, { status: "done", done_on: "2026-10-21" }), row(3, { kind: "i_owe", person: "Ida" })] });
   assert.ok(!r.isError, r.content[0]!.text);
@@ -151,6 +153,9 @@ test("import tools: preview then commit through the tools; the journal gets ONE 
   assert.match(r.content[0]!.text, /3 items to import/);
   const bad = await t.import_tasks_commit!.handler({ batch_id: "imp-000000" });
   assert.equal(bad.isError, true);
+  const same = await t.import_tasks_commit!.handler({ batch_id: id });
+  assert.match(same.content[0]!.text, /Not imported: ask the owner to confirm the preview/, "the same turn as the preview: no owner message after it");
+  turn = yes(0);
   const c = await t.import_tasks_commit!.handler({ batch_id: id });
   assert.ok(!c.isError, c.content[0]!.text);
   assert.match(c.content[0]!.text, /^Imported 3 tasks from Notion\./);
@@ -185,4 +190,47 @@ test("skills: tasks live in Ted; no skill tells Ted to write tasks to Notion; th
   const setup = read("setup");
   assert.doesNotMatch(setup, /notion-create-pages/);
   assert.doesNotMatch(setup, /setup-tasks`? note.*save/i);
+});
+
+// ---- the confirmation is code: only the owner's yes (or a 👍 on the preview) after the preview commits it ----
+const view = (o: Partial<import("../src/tasks/import.ts").TurnView>): import("../src/tasks/import.ts").TurnLook => () => ({ text: "yes", at: NOW + 1000, reaction: false, said: "", others: 0, ...o });
+
+test("import confirmation: a short yes after the preview commits; anything else, an earlier message, or several messages do not", () => {
+  const k = fresh();
+  const p = I.previewImport(scope(k), { rows: [row(1)] });
+  const refuse = (look: import("../src/tasks/import.ts").TurnLook | undefined) => assert.throws(() => I.commitImport(scope(k), p.batchId, look), /ask the owner to confirm the preview imp-/);
+  refuse(undefined); // no owner message in this turn (an unattended run, or none given)
+  refuse(view({ at: NOW })); // the message came with the preview: the turn that made it
+  refuse(view({ at: NOW - 5000 }));
+  refuse(view({ text: "what is in it?" }));
+  refuse(view({ text: "yes but only the open ones" }));
+  refuse(view({ others: 1 })); // something else from the owner came in between
+  refuse(view({ reaction: true, text: "owner reacted 👍", said: "some other message" })); // a 👍 on another message
+  refuse(view({ reaction: true, text: "owner reacted 👎", said: p.text }));
+  assert.equal(S.listItems(k, {}, NOW, ZONE).length, 0, "every refusal left the list alone");
+  for (const y of ["Yes", "yes please!", "Import them", "ja", "Go ahead.", "do it", "👍", "OK"]) assert.ok(I.isYes(y), y);
+  for (const n of ["no", "yes and also email Sam", "", "import them tomorrow", "👎"]) assert.ok(!I.isYes(n), n);
+  assert.equal(I.commitImport(scope(k), p.batchId, view({ text: "Import them!" })).imported.length, 1);
+});
+
+test("import confirmation: a 👍 reaction on the message that shows the preview number commits it directly", () => {
+  const k = fresh();
+  const p = I.previewImport(scope(k), { rows: [row(1), row(2)] });
+  const c = I.commitImport(scope(k), p.batchId, view({ reaction: true, text: "owner reacted 👍", said: `Here is the preview:\n${p.text}` }));
+  assert.equal(c.imported.length, 2);
+});
+
+test("import confirmation: through the tool and the real turn scope: a yes that arrives after the preview works, the model's own call in the preview's turn does not", async () => {
+  const { scopeOf } = await import("../src/approvals/turnscope.ts");
+  const t = ownerTools({ now: () => Date.now() });
+  const s = scopeOf("owner");
+  s.say("import my notion tasks");
+  const r = await t.import_tasks_preview!.handler({ rows: [row(11)] });
+  const id = /imp-[0-9a-f]{6}/.exec(r.content[0]!.text)![0];
+  assert.equal((await t.import_tasks_commit!.handler({ batch_id: id })).isError, true, "the owner's last message is the one that asked for the preview");
+  await new Promise((res) => setTimeout(res, 5));
+  s.say("yes");
+  const ok = await t.import_tasks_commit!.handler({ batch_id: id });
+  assert.ok(!ok.isError, ok.content[0]!.text);
+  assert.match(ok.content[0]!.text, /^Imported 1 task from Notion/);
 });
