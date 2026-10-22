@@ -32,7 +32,7 @@ const NOW = Date.parse("2026-10-22T10:00:00Z"); // Thu 22 Oct 12:00 in Berlin
 let n = 0;
 const fresh = () => `tasks-conv-${++n}`; // a group key: its own conversation, its own database
 const scope = (key: string, o: Partial<import("../src/tasks/store.ts").Scope> = {}): import("../src/tasks/store.ts").Scope => ({ key, zone: ZONE, by: "owner", origin: "owner", source: "chat", now: NOW, ...o });
-const events = (key: string) => peekConvDb(convIdOfKey(key))!.all<{ item_id: number; by: string; action: string; before: string | null; after: string | null }>("SELECT * FROM task_events ORDER BY id");
+const events = (key: string) => peekConvDb(convIdOfKey(key))!.all<{ id: number; item_id: number; at: number; by: string; action: string; before: string | null; after: string | null }>("SELECT * FROM task_events ORDER BY id");
 const journalOf = (key: string) => ledgerEntries(convPaths(convIdOfKey(key)).messages).filter((m) => m.kind === "journal").map((m) => m.text);
 
 type Tools = Record<string, { handler: (a: unknown, extra?: unknown) => Promise<{ content: { text: string }[]; isError?: boolean }>; inputSchema: { safeParse: (v: unknown) => { success: boolean } } }>;
