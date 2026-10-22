@@ -1,9 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
 import { owner } from "../src/conversation/conversationmodel.ts";
 import { settings } from "../src/core/settings.ts";
-import { dataPath, readJson, writeJson } from "../src/core/state.ts";
 import { localDay } from "../src/core/pause.ts";
 import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
@@ -15,7 +13,7 @@ import { recordMessage } from "../src/core/messages.ts";
 import { gateSink, sendNow, withSend } from "../src/modules/send/send.ts";
 import { capNoticesTo, reportInstanceCap } from "../src/core/capnotice.ts";
 import { errorLinesSince } from "../src/core/logwindow.ts";
-import { groupConvId, instancePaths } from "../src/core/convpaths.ts";
+import { groupConvId } from "../src/core/convpaths.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;

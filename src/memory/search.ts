@@ -1,6 +1,5 @@
 import { foldEdits, withoutDeleted, type Kind, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
-import { dataPath } from "../core/state.ts";
 import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { FILE } from "../core/messages.ts";
 import { clockIn, dayIn, systemZone, timeIn } from "../core/timezone.ts";

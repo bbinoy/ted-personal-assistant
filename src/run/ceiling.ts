@@ -38,10 +38,12 @@ export interface Ceiling {
   readonly controller: AbortController;
   readonly signal: AbortSignal;
   pause(): () => void; // stops the clock until the returned function is called (nestable)
+  extend(totalMs: number): void; // the whole allowance becomes `totalMs` if that is more than it is now (an expert the heartbeat look delegates to gets more time); never shortens it
 }
 
 export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise<T>, scope?: string): Promise<T> {
   const controller = new AbortController();
+  let total = maxMs;
   let left = maxMs;
   let paused = 0;
   let finished = false;
@@ -54,7 +56,7 @@ export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise
     startedAt = Date.now();
     timer = setTimeout(() => {
       controller.abort();
-      fire(new RunTimeout(maxMs));
+      fire(new RunTimeout(total));
     }, Math.max(1, left));
     timer.unref();
   };
@@ -67,13 +69,21 @@ export async function withCeiling<T>(maxMs: number, run: (c: Ceiling) => Promise
       if (--paused === 0 && !finished && !controller.signal.aborted) arm();
     };
   };
+  const extend = (totalMs: number) => {
+    if (totalMs <= total || finished || controller.signal.aborted) return;
+    const running = paused === 0;
+    if (running) (clearTimeout(timer), (left -= Date.now() - startedAt));
+    left += totalMs - total;
+    total = totalMs;
+    if (running) arm();
+  };
   arm();
   const stop = (e: Error) => {
     controller.abort();
     fire(e);
   };
   if (scope) (live.get(scope) ?? live.set(scope, new Set()).get(scope)!).add(stop);
-  const running = run({ controller, signal: controller.signal, pause });
+  const running = run({ controller, signal: controller.signal, pause, extend });
   running.catch(() => {}); // after a timeout the abandoned run may still fail; that is not news
   try {
     return await Promise.race([running, timedOut]);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { group, owner, type Conversation } from "../src/conversation/conversation.ts";
@@ -13,10 +13,11 @@ import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts
 import { lookState, parseWake } from "../src/conversation/ledger.ts";
 import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
-import { dataPath } from "../src/core/state.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
-import { heldPosts, resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
+import { statusFact, writeStatusNote } from "../src/modules/status/statusnote.ts";
+import { RunTimeout } from "../src/run/ceiling.ts";
+import { resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 import { clearPending, openItems } from "../src/approvals/pending.ts";
 import { queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
@@ -30,7 +31,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => (instanceDb().run("DELETE FROM looks"), resetHeld(owner())); // (the rows, and what quiet hours held)
 
-interface Answer { mail?: string[]; hold?: Promise<unknown>; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; during?: () => void }
+interface Answer { mail?: string[]; hold?: Promise<unknown>; hang?: boolean; timeout?: boolean; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; during?: () => void }
 function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -61,11 +62,13 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
       const a = answer();
       sends = a.sends ?? 0;
       a.during?.();
+      for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
       if (a.hold) await Promise.race([a.hold, new Promise((_, no) => extra.signal?.addEventListener("abort", () => no(new Error("aborted")), { once: true }))]); // a run that goes on until it is called off
+      if (a.hang) await new Promise<never>((_, no) => extra.signal?.addEventListener("abort", () => no(new Error("aborted")), { once: true }));
+      if (a.timeout) throw new RunTimeout(10 * 60_000);
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
       if (a.mail) extra.seenMail?.unseen(a.mail);
-      for (let i = 0; i < (a.delegates ?? 0); i++) extra.onDelegate?.("expert");
       return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30, ...(a.urgent ? { urgent: true } : {}) } };
     },
     notesChangedAt: () => 0,
@@ -191,7 +194,7 @@ test("owner's look: while a chat turn of the conversation is settling, queued or
 });
 
 test("owner's look: the delegations to experts are counted in the row; the expert's cost is in the run's cost", async () => {
-  const { w, conv, seen } = rig(() => ({ delegates: 2, calls: ["Agent", "mcp__claude_ai_Notion__notion-fetch", "Agent"] }));
+  const { w, conv } = rig(() => ({ delegates: 2, calls: ["Agent", "mcp__claude_ai_Notion__notion-fetch", "Agent"] }));
   assert.equal(await w.look(conv, DAY), "silent", "the expert delivered itself; the run answered [[silent]]");
   assert.deepEqual(readRows().map((r) => [r.delegations, r.toolCalls, r.costUsd]), [[2, 3, 0.02]]);
 });
@@ -310,6 +313,97 @@ test("owner's look: a failing run is a failed row and a default next look; it ne
   }
 });
 
+test("a look that times out is a 'timeout' row, posts nothing, and is due again on the next ticks (10 min: the tick within the 10..120 rule), not after the day's 30", async () => {
+  const err = console.error;
+  console.error = () => {};
+  try {
+    for (const [answer, outcome] of [[{ timeout: true }, "timeout"], [{ throws: true }, "failed"]] as const) {
+      const { w, conv, seen, wakeLine, at } = rig(() => answer);
+      assert.equal(await w.look(conv, DAY), outcome);
+      assert.deepEqual(seen.posted, []);
+      const rows = readRows();
+      assert.deepEqual(rows.map((r) => [r.outcome, r.message, r.costUsd, r.nextCheckMinutes]), [[outcome, false, 0, 10]]);
+      assert.equal(Date.parse(wakeLine().next), DAY.getTime() + 10 * 60_000);
+      at(min(DAY, 5));
+      assert.equal(await w.look(conv, min(DAY, 5)), "not-due", "not on the very next minute");
+      assert.equal(await w.look(conv, min(DAY, 10)), outcome, "due again after the retry time");
+    }
+  } finally {
+    console.error = err;
+  }
+});
+
+test("the Mac slept: a look in flight is stopped, ends as a failed row without a message, and is due again at the very next check", async () => {
+  const err = console.error;
+  console.error = () => {};
+  try {
+    const { w, conv, seen, wakeLine } = rig(() => ({ hang: true }));
+    const look = w.look(conv, DAY);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen.runs, ["owner"]);
+    assert.equal(w.slept(), 1, "one run was stopped");
+    assert.equal(await look, "failed");
+    assert.deepEqual(seen.posted, []);
+    assert.deepEqual(readRows().map((r) => [r.outcome, r.costUsd]), [["failed", 0]]);
+    assert.equal(Date.parse(wakeLine().next), DAY.getTime(), "due at once: the normal due-check restarts it, no 10-minute wait");
+    assert.equal(w.slept(), 0, "nothing in flight, nothing to stop");
+  } finally {
+    console.error = err;
+  }
+});
+
+test("after a sleep every conversation takes its staggered first look again, as after a restart; one still napping when the Mac sleeps is dropped and left due", async () => {
+  const naps: number[] = [];
+  let release!: () => void;
+  const { w, seen } = rig(() => ({ message: "[[silent]]" }), { stagger: () => 4000, sleep: (ms) => (naps.push(ms), new Promise<void>((r) => (release = r))) });
+  const tick = w.tick(DAY);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(naps, [4000]);
+  w.slept(); // asleep during the nap
+  release();
+  await tick;
+  assert.deepEqual(seen.runs, [], "dropped: it would have started on dead connections");
+  naps.length = 0;
+  const again = w.tick(DAY); // the next tick: the first look after waking naps again
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(naps, [4000]);
+  release();
+  await again;
+  assert.equal(seen.runs.length, 1, "and then it is looked at");
+  await w.tick(DAY);
+  assert.deepEqual(naps, [4000], "later ticks do not nap");
+  assert.equal(w.slept(), 0, "nothing in flight");
+});
+
+test("a look that is stopped after delegating the brief marks its 'started' note failed at once, for a timeout, a sleep and a failure alike; a delivered note and a look without a delegation are left alone", async () => {
+  const err = console.error;
+  console.error = () => {};
+  try {
+    for (const answer of [{ delegates: 1, timeout: true }, { delegates: 1, hang: true }, { delegates: 1, throws: true }] as const) {
+      const { w, conv, seen } = rig(() => answer);
+      writeStatusNote("brief", "status: started", min(new Date(), -12), conv.notesDir);
+      const look = w.look(conv, new Date());
+      if (answer.hang) (await new Promise((r) => setTimeout(r, 10)), w.slept());
+      await look;
+      assert.match(seen.prompts[0]!, /status-brief: started 12 min ago/, "the instruction carries the fact line from the note");
+      const after = readFileSync(join(conv.notesDir, "status-brief.md"), "utf8");
+      assert.match(after, /status: failed/);
+      assert.match(after, /attempts: 1\n/);
+      assert.match(statusFact("brief", new Date(), undefined, conv.notesDir), /^status-brief: failed at /);
+    }
+    const kept = rig(() => ({ delegates: 1, timeout: true }));
+    writeStatusNote("brief", "status: delivered", min(new Date(), -30), kept.conv.notesDir);
+    await kept.w.look(kept.conv, new Date());
+    assert.match(readFileSync(join(kept.conv.notesDir, "status-brief.md"), "utf8"), /status: delivered/);
+    const plain = rig(() => ({ timeout: true }));
+    writeStatusNote("brief", "status: started", min(new Date(), -12), plain.conv.notesDir);
+    await plain.w.look(plain.conv, new Date());
+    assert.match(readFileSync(join(plain.conv.notesDir, "status-brief.md"), "utf8"), /status: started/, "nothing was delegated: the look did not write it");
+  } finally {
+    console.error = err;
+  }
+});
+
 test("groups get the same heartbeat run: one per look, with their own notes, in their own chat; a group with nothing to look at costs nothing; Note to Self never wakes groups", async () => {
   const G = "hb-group-0123456789abcdef";
   const EMPTY = "hb-empty-group-0123456789ab";
@@ -349,6 +443,9 @@ test("the report: counts per day, messages by day and night, dollars and the nex
   assert.doesNotMatch(text, /by conversation/, "only the owner's rows: no split");
   const mixed = heartbeatReport([...rows, row(new Date(2026, 9, 14, 9, 30), { kind: "tenant", message: true, costUsd: 0.02, outcome: "posted" }), row(new Date(2026, 9, 14, 9, 40), { kind: "group", costUsd: 0.01 })], DAY, 7).join("\n");
   assert.match(mixed, /by conversation: owner 4 look\(s\), 2 message\(s\), \$0\.07; groups 1 look\(s\), 0 message\(s\), \$0\.01; friends 1 look\(s\), 1 message\(s\), \$0\.02/);
+  const timed = heartbeatReport([row(DAY, { outcome: "timeout", costUsd: 0 }), row(min(DAY, 5), { outcome: "failed", costUsd: 0 }), row(min(DAY, 10))], DAY, 7).join("\n");
+  assert.match(timed, /failed looks: 2, of which 1 timed out/);
+  assert.match(timed, /^\d{4}-\d\d-\d\d +3 +0 +0 +2 /m, "the failed column counts timeouts too");
   assert.deepEqual(heartbeatReport([], DAY), ["No heartbeat looks in the last 7 day(s)."]);
 });
 

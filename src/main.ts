@@ -282,6 +282,7 @@ const wakeups = createWakeups({
 // Independent jobs: each starts on every tick in its own try/catch and none waits for another (startJobs, heartbeat.ts; the
 // dream is started by its own job, below).
 startHeartbeat({
+  onSleep: () => void wakeups.slept(),
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
