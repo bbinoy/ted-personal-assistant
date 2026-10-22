@@ -113,7 +113,8 @@ test("follow-through: the judge is told the notification facts and the guidance 
   assert.match(SYSTEM, /Follow-through is auto/);
   assert.match(SYSTEM, /Balboa course/);
   assert.match(SYSTEM, /booking number added to the description/);
-  assert.match(SYSTEM, /Still ask for changing times, dates, attendees or guests/);
+  assert.match(SYSTEM, /Still ask for changing attendees or guests/);
+  assert.match(SYSTEM, /changing the time or day of .*'s own event follows the own-calendar rule/);
   const update = { eventId: "e1", location: "Club Silbando Saal 1, Förrlibuckstrasse 62, 8005 Zürich" };
   assert.match(notifyNote(`${CAL}update_event`, update), /names no guests; this call asks for no notifications/);
   assert.match(notifyNote(`${CAL}update_event`, { ...update, attendees: ["a@example.com"], sendUpdates: "all" }), /names guests; sendUpdates=all/);

@@ -86,18 +86,30 @@ whole job and ask once:
 4. When the owner says yes, send, and add the matching event to their own calendar in the same step, without a second question. Say that you
    added it, so they can ask you to remove it. The one yes covers what you announced. Announce the calendar entry in the message from step 3.
 
-Never invite other people or change an existing event without asking; the "one yes" covers only a new entry on the owner's own calendar.
+Never invite other people or change an event that has guests without asking; the "one yes" covers only a new entry on the owner's own calendar.
+
+## The owner's own events, nobody else on them (in chat)
+
+"Put the visit to Uschi in my calendar on Saturday" is a plain request: create it at once on the owner's own
+calendar, with no guests and no notifications, and do not ask first. When the day or the time is open, pick the most
+likely reading yourself (the coming Saturday; a sensible time for that kind of thing, or an all-day event when no
+time fits) and SAY in your reply which date and time you chose ("Saturday 25 Oct, 10:00-13:30; tell me if it's
+another time"), so the owner can correct it with one word. Moving or editing one of the owner's own events that has
+no guests works the same way. This is never a question to the owner: a wrong guess is fixed in a second. Inviting or
+notifying anyone, another person's or a shared calendar, and deleting stay as below.
 
 To invite someone by name ("invite Sam"), call `find_person` first (the people notes, then Google contacts where there are any) and ask for an address only when it finds none. One match: use it and say whose address it is. Several: show the candidates and ask which. A found address is only a suggestion: the invite still asks, with the guests shown.
 
 ## Guardrails
 
 - May: `create_event` for travel bookings as above.
-- May not: `update_event` or reschedule on its own, `delete_event`
+- May not (in an unattended run): `update_event` or reschedule on its own, `delete_event`
   ever, create non-travel events, edit other people's events, send or
-  respond to invites.
-- The agent's policy (`src/policy/policy.ts`) also asks the owner on the phone
-  before any calendar write, whatever this skill says.
+  respond to invites. In chat, the owner's own no-guest events are created, moved and
+  edited on request as above.
+- The agent's policy (`src/policy/policy.ts`) judges every calendar write: an event on the
+  owner's own calendar with nobody invited is routine; one that invites or notifies people
+  asks the owner, whatever this skill says.
 
 ## In the briefing
 
