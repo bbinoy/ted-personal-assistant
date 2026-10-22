@@ -19,7 +19,7 @@ Likes surf and long dinners. Her first child is due in November.
 
 - Start the note with the person and where they live, because the index shows only the start of each note. "Lives in: city, country" (plain words, as the owner would say them) is what you match trips against; keep that phrase so a later look and the nightly dream find it. If the owner has not said where someone lives, leave it out; never guess from a name or a phone number.
 - The body says who they are, how close, how often the owner wants to be in touch (the owner's words), and what is going on in their life. Update the note when the owner tells you something new (a move, a baby, a new job). Use `expires:` only for something temporary.
-- Do not store what you read in a person's mail or messages. A note holds what the owner told you. Never save an address, a phone number or an account detail.
+- Do not store what you read in a person's mail or messages. A note holds what the owner told you. Save an email address or a phone number only when the owner gave it to you for that person (find_person reads it back when a mail or an invitation needs it); never one you read in a mail or a message, and never an account detail.
 - Do NOT write "last spoke" into the note: it goes stale. Work it out when you need it (below).
 
 ## When the owner will be away

@@ -195,6 +195,7 @@ When a mail asks about availability or proposes a time, follow "Scheduling email
   `confirm: true` is not a substitute for that - it's Mailbird's own
   safety check, not the owner's approval. (The agent's policy also asks on
   the phone before any send.)
+- **Addresses: look before you ask.** When a new mail goes to someone by name ("write to Sam"), call `find_person` first (the people notes, then Google contacts where there are any). One match: use that address and say whose it is. Several: show the candidates and ask which. None: say so and ask for the address. A found address is only a suggestion: the send still asks the owner, with the recipients shown from the call itself.
 - **Never delete. Archive instead.** Do not call `delete_conversation_permanently`,
   and do not call `trash_conversation` either - use `archive_conversation`
   for anything the owner wants out of the inbox, even if they say "delete"

@@ -72,7 +72,7 @@ export interface RunContext {
 // nothing else; every other server belongs to the other runs.
 export type Connection =
   | { kind: "builtin" } // the SDK's own tools (Skill, Read, WebSearch, ...); nothing to connect
-  | { kind: "connector"; key?: string; label?: string; skipped?: string; server: RegExp; prefix: string } // `label`: its name to the owner ("Google Calendar"); `skipped`: what the owner loses while it is down, in plain words (a connector with both is reported to the prompts, the brief and the doctor when its last run could not see it; connectors.ts);  the owner's claude.ai connector or user-scope MCP server, inherited from the login; `server` and `prefix` say how to see whether it is up, `key` is its name in connectors.ts (absent: not reported)
+  | { kind: "connector"; optional?: true; key?: string; label?: string; skipped?: string; server: RegExp; prefix: string } // `label`: its name to the owner ("Google Calendar"); `skipped`: what the owner loses while it is down, in plain words (a connector with both is reported to the prompts, the brief and the doctor when its last run could not see it; connectors.ts);  the owner's claude.ai connector or user-scope MCP server, inherited from the login; `server` and `prefix` say how to see whether it is up, `key` is its name in connectors.ts (absent: not reported)
   | { kind: "in-process" | "external"; name: string; when: (ctx: RunContext) => boolean; forBrowse?: true };
 
 // For a friend's own connection: she is a tenant and her capability set offers at least one of the module's tools (the capability table decides, as for every tool).

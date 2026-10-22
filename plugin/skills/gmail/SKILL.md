@@ -56,6 +56,7 @@ When a mail asks about availability or proposes a time, follow "Scheduling email
   the confirmation. Do not retry a declined send.
 - In `reply`, give the text and the `messageId` of the message you reply to (the latest in the thread).
   Do not add recipients the owner did not ask for; `bcc` and attachments are never added on your own.
+- **Addresses: look before you ask.** When a new mail goes to someone by name ("write to Sam"), call `find_person` first (the people notes, then Google contacts where there are any). One match: use that address and say whose it is. Several: show the candidates and ask which. None: say so and ask for the address. A found address is only a suggestion: the send still asks the owner, with the recipients shown from the call itself.
 - The only mail you may send without a question is the daily brief to the owner's own address (the brief
   instructions say how); never send anything else unattended.
 

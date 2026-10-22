@@ -286,10 +286,10 @@ export function loadSettings(env: Env) {
       command: env.GOOGLE_MCP_COMMAND?.trim() || "uvx",
       // `--exclude-newer <the pin date>`: uv resolves the transitive dependencies to what existed on that day, so the pin of the top package is not undone by a newer
       // dependency release. It reduces the supply-chain risk and does not remove it (docs/SAFETY.md).
-      args: words(env, "GOOGLE_MCP_ARGS", ["--exclude-newer", "2026-10-20T00:00:00Z", "workspace-mcp==2.1.0", "--single-user", "--tools", "gmail", "calendar"]),
+      args: words(env, "GOOGLE_MCP_ARGS", ["--exclude-newer", "2026-10-20T00:00:00Z", "workspace-mcp==2.1.0", "--single-user", "--tools", "gmail", "calendar", "contacts", "drive"]),
       authUrl: env.GOOGLE_OAUTH_AUTH_URL?.trim() || "https://accounts.google.com/o/oauth2/v2/auth",
       tokenUrl: env.GOOGLE_OAUTH_TOKEN_URL?.trim() || "https://oauth2.googleapis.com/token", // tests point this at a fake
-      scopes: words(env, "GOOGLE_OAUTH_SCOPES", ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"]),
+      scopes: words(env, "GOOGLE_OAUTH_SCOPES", ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/contacts.readonly", "https://www.googleapis.com/auth/drive.readonly"]),
       // A friend's server process is closed after this long unused (started again on demand: OpenBao read, temp folder, Python start, token refresh). The default is
       // the heartbeat interval plus a margin (at least 20), so a look within the hour finds her server running; the price is one resident Python process per friend
       // with Google while the heartbeat ticks (it stops after the last tick, at night, and with the app).
@@ -317,13 +317,13 @@ export function loadSettings(env: Env) {
 
 
     // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every model call, so hide what your skills never use. A skill that needs a
-    // hidden tool will fail, so list it here. HIDDEN_CONNECTORS: tool-name prefixes of whole connectors (the Gmail one is shown while MAIL_PROVIDER=gmail, and the mail
+    // hidden tool will fail, so list it here. HIDDEN_CONNECTORS: tool-name prefixes of whole connectors (Google Drive and Google Docs are shown by default: find a file, read it; list them here to hide them again. The Gmail one is shown while MAIL_PROVIDER=gmail, and the mail
     // connector that is not in use is hidden whatever this says). <MODULE>_TOOLS (NOTION_TOOLS, MAILBIRD_TOOLS, GMAIL_TOOLS: the module's name in capitals): the tools
     // of that module's connector to keep, replacing the default list the module declares (src/modules/*.ts `hide`); checked against the module by checkHideSettings.
     hiddenConnectors: list(
       env,
       "HIDDEN_CONNECTORS",
-      ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Docs", "mcp__claude_ai_Claude_Docs"],
+      ["mcp__claude_ai_Interactive_Brokers_IBKR", "mcp__claude_ai_Gmail", "mcp__claude_ai_Claude_Docs"],
       /^mcp__[\w-]+$/,
       "a tool-name prefix like mcp__claude_ai_Gmail",
     ),
