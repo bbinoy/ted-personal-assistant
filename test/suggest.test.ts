@@ -303,6 +303,72 @@ test("the look: what the run suggested goes out as one message at the end of the
   recordMessage("owner", Date.now(), "hi", new Date(), c.logFile);
   assert.equal(await hb.look(c, {} as never, new Date(NOW)), "silent");
   assert.equal(during, 0, "nothing is sent while the run works");
+  assert.equal(peekConvDb("owner")!.num("SELECT posted FROM hold WHERE id = 1"), 1, "it counts as one unprompted post of the day");
   assert.equal(sent.length, 1);
   assert.match(sent[0]!, /^💡 One thing I noticed \(mail\):\n1\. Answer the tax office \(due Fri 30 Oct\)/);
+});
+
+test("the 💡 message has its own kind: replay still replays the owner's next line (it is not an open question), and the readers know the kind", async () => {
+  const { unansweredSince } = await import("../src/conversation/replay.ts");
+  const { noticeLines } = await import("../src/core/messages.ts");
+  const at = (m: number) => new Date(NOW - m * 60_000).toISOString();
+  const line = (kind: string, text: string, m: number, ts: number) => ({ ts, at: at(m), kind, text }) as never;
+  const after = (kind: string) => unansweredSince([line(kind, "q", 5, 1), line("owner", "unrelated message", 4, 2)], NOW, 30 * 60_000).map((x) => x.text);
+  assert.deepEqual(after("suggestions"), ["unrelated message"], "replayed");
+  assert.deepEqual(after("approval"), [], "(control: a real open question still sets the next line aside)");
+  assert.equal(noticeLines([line("suggestions", "💡 One thing I noticed", 5, 1)], new Date(NOW)).length, 1, "the chat is told what it suggested on its own");
+});
+
+test("a group set to answer only when tagged is not sent the 💡 message: it waits, unasked, and expires as usual", async () => {
+  const sent = runtime();
+  const k = fresh();
+  await suggest(k, "Tagged only");
+  const was = settings.groupParticipation;
+  (settings as { groupParticipation: string }).groupParticipation = "tagged";
+  try {
+    assert.equal(await G.offerSuggestions(conv(k), new Date(NOW), ZONE), "held");
+    assert.deepEqual(sent, []);
+    assert.equal(G.unasked(k).length, 1);
+    assert.match((await import("../src/tasks/render.ts")).suggestionsText(k, NOW, ZONE), /Tagged only/, "/tasks suggestions still lists it");
+  } finally {
+    (settings as { groupParticipation: string }).groupParticipation = was;
+  }
+  assert.equal(await G.offerSuggestions(conv(k), new Date(NOW), ZONE), "sent", "untagged again: offered");
+});
+
+test("the names of members are remembered whatever the voice provider, so the task tools name who asked", async () => {
+  const { createPipeline } = await import("../src/conversation/conversation.ts");
+  const { createOutbound } = await import("../src/conversation/outbound.ts");
+  const { askingIn } = await import("../src/modules/voice/voicenote.ts");
+  const { group } = await import("../src/conversation/conversation.ts");
+  const { FULL_CAPABILITIES } = await import("@ted-assistant/messenger/testing");
+  const tts = settings.tts;
+  (settings as { tts: unknown }).tts = { provider: "kokoro", fallback: "none" }; // (not qwen: the names used to be remembered only for it)
+  const messenger = { name: "fake", summary: "fake", self: "+10000000001", capabilities: FULL_CAPABILITIES, react: async () => {}, typing: async () => {}, markRead: async () => {}, send: async () => 1 };
+  const seen: string[] = [];
+  const pipeline = createPipeline({
+    messenger: messenger as never,
+    out: createOutbound(messenger as never, () => {}),
+    record: () => {},
+    run: async () => ({ text: "ok" }),
+    picture: async () => assert.fail("no picture"),
+    document: async () => assert.fail("no document"),
+    transcript: async () => assert.fail("no voice"),
+    speech: { ready: () => false, synth: async () => assert.fail("no speech"), foreign: async () => undefined },
+    approvals: { answer: async () => ({ outcome: "none" }), answerReaction: () => "ignored" },
+    vouch: async () => true,
+    isOwner: () => false,
+    admitGroup: async (c: { key: string }, m: { fromName?: string }) => void seen.push(`${c.key}|${m.fromName}`),
+  } as never);
+  const g = group("names-grp-1-0123456789abcdef");
+  await pipeline.handleIncoming(g, { type: "message", m: { from: "+15555550105", text: "hello", timestamp: 5, direct: false, group: { id: "names-grp-1-0123456789abcdef" }, fromName: "Eve", addressedToMe: true } } as never);
+  setAsking(g.key, { owner: false, author: "+15555550105" });
+  assert.equal(askingIn(g.key)?.authorName, "Eve");
+  setAsking(g.key, undefined);
+  // and so the group reminder is assigned to her and the line is hers alone
+  setAsking(g.key, { owner: false, author: "+15555550105" });
+  const r = await tools(g.key).add_task!.handler({ title: "Call", remind: "2026-10-24T10:00" });
+  setAsking(g.key, undefined);
+  assert.match(text(r), /for Eve/);
+  (settings as { tts: unknown }).tts = tts;
 });

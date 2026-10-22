@@ -7,7 +7,7 @@ import { tenantById, tenantContext } from "../tenants/tenants.ts";
 // assistant told them, oldest first. Approval questions themselves are left out (the judge gets those separately), and so is the
 // message being judged (it is already in the log by then).
 const OWNER_KINDS = new Set(["owner"]);
-const ASSISTANT_KINDS = new Set(["chat", "notice", "draft", "brief"]);
+const ASSISTANT_KINDS = new Set(["chat", "notice", "draft", "brief", "suggestions"]);
 
 export function recentChat(current?: string, keep = 5, logFile?: string): Recent[] {
   const lines = foldEdits(withoutDeleted(ledgerEntries(logFile)))

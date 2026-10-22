@@ -30,7 +30,7 @@ import { flushPending } from "../approvals/pendingflow.ts";
 import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
 import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { observeLook, postNotice, submitPost } from "./notices.ts";
+import { countPosts, observeLook, postNotice, submitPost } from "./notices.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -209,7 +209,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       if (!shadow) await tellShadowEnded(conv, now);
     }
 
-    await offerSuggestions(conv, now, looker.zone); // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
+    if ((await offerSuggestions(conv, now, looker.zone)) === "sent") countPosts(conv, 1, now); // one per look; it counts toward MAX_UNPROMPTED_PER_DAY but is never held by it (the answer needs the message itself)
+    // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once

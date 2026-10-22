@@ -1,5 +1,5 @@
 import { liveConvDb, peekConvDb } from "../core/convdb.ts";
-import { ledgerEntries } from "../core/messages.ts";
+import { tailEntries } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { zoneOf } from "../tenants/tenants.ts";
@@ -19,13 +19,14 @@ interface RemRow {
   key: string;
   state: "held" | "claimed" | "sent" | "retry" | "folded";
   tries: number;
+  at: number;
 }
 
 const scopeOf = (conv: Conversation, zone: string, now: number): Scope => ({ key: conv.key, zone, by: "system", origin: "owner", source: "heartbeat", now, why: { text: "its reminder time came" } });
 
 /** The ts of the notice just sent (the message a quote or a reaction will point at): found in the conversation's log, since the delivery does not hand it back. */
 function sentTs(conv: Conversation, text: string, since: number): number | undefined {
-  const all = ledgerEntries(conv.logFile);
+  const all = tailEntries(conv.logFile); // (the end of the log: what was just appended)
   for (let i = all.length - 1; i >= 0; i--) {
     const e = all[i]!;
     if (e.kind === "notice" && e.text === text && Date.parse(e.at) >= since - 2000) return e.ts;
@@ -52,10 +53,14 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
   const t = now.getTime();
   const zone = zoneOf(conv);
   const items = activeItems(conv.key);
-  if (!items.length) return 0;
-  const rows = peek.all<RemRow>("SELECT item_id, key, state, tries FROM reminders");
+  if (!items.length) {
+    if (peek.num("SELECT COUNT(*) FROM reminders WHERE state IN ('held', 'retry')")) liveConvDb(conv.convId)?.run("DELETE FROM reminders WHERE state IN ('held', 'retry')"); // (nothing is open any more: no mark waits for anything)
+    return 0;
+  }
+  const rows = peek.all<RemRow>("SELECT item_id, key, state, tries, at FROM reminders");
   const done = new Set(rows.filter((r) => r.state === "claimed" || r.state === "sent" || r.state === "folded").map((r) => doneKey(r.item_id, r.key)));
   const excused = new Map(rows.filter((r) => r.state === "held" || r.state === "retry").map((r) => [doneKey(r.item_id, r.key), r]));
+  const sentOn = new Set(rows.filter((r) => r.state === "claimed" || r.state === "sent").map((r) => `${r.item_id}|${localOf(r.at, zone).date}`));
   const sc = scopeOf(conv, zone, t);
   const group = conv.kind === "group";
   const holding = holdingNow(conv, now);
@@ -76,7 +81,8 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
       return true;
     });
 
-  for (const p of dueReminders(items, t, { zone, defaultTime: settings.taskDefaultRemind, done })) {
+  const plan = dueReminders(items, t, { zone, defaultTime: settings.taskDefaultRemind, done, sentOn });
+  for (const p of plan) {
     if (holding && !p.item.urgent) {
       db.run("INSERT OR IGNORE INTO reminders (item_id, key, state, fire_at, at) VALUES (?, ?, 'held', ?, ?)", p.item.id, p.key, p.fireAt, t); // (seen in quiet hours: its delay is excused)
       continue;
@@ -111,7 +117,9 @@ async function fire(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conve
     sent++;
   }
 
-  db.run("DELETE FROM reminders WHERE at < ? AND state IN ('claimed', 'sent', 'folded')", t - KEEP_MS);
+  db.run("DELETE FROM reminders WHERE at < ?", t - KEEP_MS);
+  const planned = new Set(plan.map((p) => doneKey(p.item.id, p.key)));
+  for (const r of rows) if ((r.state === "held" || r.state === "retry") && !planned.has(doneKey(r.item_id, r.key))) db.run("DELETE FROM reminders WHERE item_id = ? AND key = ? AND state IN ('held', 'retry')", r.item_id, r.key); // (the item was done, moved or changed meanwhile: the mark no longer means anything)
   for (const it of activeItems(conv.key)) {
     const r = rolledDue(it, t, zone);
     if (r) editItem(sc, it.id, { due: r.due, ...(r.remindAt !== undefined ? { remindAt: r.remindAt } : {}) });

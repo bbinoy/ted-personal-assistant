@@ -100,6 +100,7 @@ export async function offerSuggestions(conv: SuggestConv, now: Date, zone: strin
     const items = unasked(conv.key).slice(0, MAX_LISTED);
     if (!items.length || !rt) return "none";
     if (rt.holding(conv, now)) return "held";
+    if (conv.kind === "group" && settings.groupParticipation === "tagged") return "held"; // a group set to answer only when tagged is not spoken to unprompted: they wait (listed by /tasks suggestions, expiring as usual)
     const ts = await rt.send(conv, suggestionMessage(items, now.getTime(), zone, conv.kind === "group"));
     const db = liveConvDb(convIdOfKey(conv.key));
     if (!db) return "none";

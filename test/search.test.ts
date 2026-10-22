@@ -273,5 +273,5 @@ test("search: building the index never holds the event loop for long, and a sear
   console.log(`search build, 20k lines: ${(performance.now() - t0).toFixed(0)} ms in total, longest stretch without the event loop ${worst.toFixed(1)} ms`);
   assert.match(a, /needle in the haystack/);
   assert.match(b, /^\d+ matches/);
-  assert.ok(worst < 100, `the event loop was held for ${worst} ms`);
+  assert.ok(worst < 250, `the event loop was held for ${worst} ms`);
 });

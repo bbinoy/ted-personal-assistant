@@ -105,8 +105,8 @@ setPendingRuntime({
   canRun: (scope) => { const r = mayRun(convOf(scope), "approved action"); return isRefusal(r) ? r.refused : undefined; },
   execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
 });
-// The "💡" message of task suggestions (tasks/suggest.ts): one per look, an approval-kind question in the conversation's chat, held in quiet hours.
-setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "approval", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
+// The "💡" message of task suggestions (tasks/suggest.ts): one per look, its own message kind ("suggestions") in the conversation's chat, held in quiet hours.
+setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "suggestions", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // The first week's archive proposals (approvals/shadow.ts): one message per look listing what the look would have archived, held in quiet hours; an approved batch is run exactly as recorded in a small follow-up run (run/shadowrun.ts).
 setShadowRuntime({
   send: (conv, text) => out.reply(text, { plain: true, kind: "approval", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }),
@@ -157,9 +157,9 @@ const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 const tenantRunner = createTenantRunner({});
 // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
-const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt) => {
+const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
-  turn.say(ownerMessage, reactedTo, reactedAt);
+  turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
   return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
 };
 const pipeline: Pipeline = createPipeline({
@@ -177,7 +177,7 @@ const pipeline: Pipeline = createPipeline({
     foreign: (words) => unsupportedForVoice(words, settings.ttsLanguages),
   },
   approvals,
-  reminders: createReminderAnswers({ out, zone: zoneOf }), // a quoted "done" / "snooze 1h" or a ✅ on a reminder is answered in code (tasks/remindanswer.ts)
+  reminders: createReminderAnswers({ out, zone: zoneOf, isOwner: fromOwner }), // a quoted "done" / "snooze 1h" or a ✅ on a reminder is answered in code (tasks/remindanswer.ts)
   feedback: createFeedback({ out }), // a 👎 or "less of this" on something sent unprompted: one offer to save a note, nothing saved until the owner says yes (feedback.ts)
   vouch,
   isOwner: fromOwner,

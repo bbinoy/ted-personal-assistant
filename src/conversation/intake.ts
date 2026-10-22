@@ -134,8 +134,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       if (conv.attention === "always") void messenger.markRead(conv.target, { timestamp: original.timestamp, author: conv.kind === "tenant" ? author : undefined }); // the owner sees it was read, as soon as we have it (a tenant: the receipt goes to her)
       else if (original.addressedToMe && author) void messenger.markRead(conv.target, { timestamp: original.timestamp, author }); // only those who spoke to us see "seen"
     }
+    rememberSender(conv.key, author, original.fromName && oneLine("sender name", original.fromName, 40)); // (memory only, whatever the voice provider: the voice tool and the task tools both name who is asking)
     if (settings.tts.provider === "qwen") {
-      rememberSender(conv.key, author, original.fromName && oneLine("sender name", original.fromName, 40));
       if (original.quotedAudio) holdQuote(conv.key, original.timestamp, original.quotedAudio);
     }
     let m: Held = original;
@@ -162,8 +162,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       // A question asked in this group is answered here by ANY member (their message, a quoted reply or a reaction); the model reads it
       // like the owner's. Only this group's approvals can be answered; an edit and a caption never answer.
       if (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target }))) return; // /tasks, and an answer to the suggestions message (taskreplies.ts)
-      if (await approvalAnswer(conv, m, author)) return;
       if (!m.edited && (await deps.reminders?.message(conv, m))) return; // (a quoted "done" on a reminder, tasks/remindanswer.ts)
+      if (await approvalAnswer(conv, m, author)) return;
       forgetDeclined(conv.key);
       if (m.addressedToMe) overtake(conv); // (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
       return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: line, picture: m.picture, document: m.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, voice: m.voice });
@@ -234,9 +234,9 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     // While an approval is pending, a message may be its answer. That must skip the queue.
     scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
     if (!edited && (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target })))) return; // an answer to the suggestions message (taskreplies.ts)
+    if (!edited && (await deps.reminders?.message(conv, m))) return; // a quoted "done" / "snooze 1h" on a reminder (tasks/remindanswer.ts)
     if (!edited && (await shadowReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target })))) return; // an answer to the first week's archive proposal (shadowreplies.ts)
     if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
-    if (!edited && (await deps.reminders?.message(conv, m))) return; // a quoted "done" / "snooze 1h" on a reminder (tasks/remindanswer.ts)
     if (!edited && (await deps.feedback?.message(conv, m))) return void console.log("feedback: a quoted reply to something sent unprompted was handled (an offer, or the answer to one)"); // learning from feedback (feedback.ts); only a short quoted reply, and a group never gets here
     forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
     overtake(conv); // a look of this conversation that is running gives way to the turn
@@ -252,7 +252,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
           }
           const prompt = ownerPrompt(ms);
           await runTurn(conv, {
-            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document))),
+            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
             target: { author: last.from, timestamp: last.timestamp },
             threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
             hadQuote: ms.some((x) => x.quote),
