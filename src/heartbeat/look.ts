@@ -1,6 +1,6 @@
 import { emit } from "../core/events.ts";
 import { convIdOfKey, convPaths } from "../core/convpaths.ts";
-import { ledgerEntries } from "../core/messages.ts";
+import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
 import { journalable } from "../approvals/journalrender.ts";
 import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
@@ -109,9 +109,23 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
   });
 }
 
-// `overnight`: the block of held posts of an earlier day handed to this look (overnightBlock), or "". It is in the prompt, not in the instruction the judge reads as the run's standing reason.
-export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string, overnight = ""): string =>
-  [clockLine(now, zone), instruction, overnight, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].filter(Boolean).join("\n\n");
+// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
+// (they quote what was posted, which can carry words of a mail or a page).
+export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string, ...facts: string[]): string =>
+  [clockLine(now, zone), instruction, ...facts, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].filter(Boolean).join("\n\n");
+
+export const OWN_POSTS_DAYS = 7;
+export const OWN_POSTS_MAX = 15;
+const OWN_POST_CHARS = 100;
+// What this conversation's own looks posted in the last OWN_POSTS_DAYS (kind `notice` in its log: the looks' posts, the digests), newest first, at most OWN_POSTS_MAX, each its first
+// ~100 characters: the chat tail of a busy log can be shorter than a week, and a daily fact must not come round again. "" when there is none.
+export function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string): string {
+  const since = now.getTime() - OWN_POSTS_DAYS * 86_400_000;
+  const posts = entries.filter((e) => e.kind === "notice" && Date.parse(e.at) >= since && Date.parse(e.at) <= now.getTime()).slice(-OWN_POSTS_MAX).reverse();
+  if (posts.length === 0) return "";
+  const lines = posts.map((e) => `[${dayIn(new Date(e.at), zone)} ${timeIn(new Date(e.at), zone)}] ${oneLine(e.text, OWN_POST_CHARS)}`);
+  return `Your own posts here in the last ${OWN_POSTS_DAYS} days (newest first):\n${fence("own_posts", lines.join("\n"))}\nDo not repeat a fact, joke, quote or idea you posted in the last ${OWN_POSTS_DAYS} days; a recurring post (daily fact, pep talk) must be new each time.`;
+}
 
 export const OVERNIGHT_MAX = 5;
 const OVERNIGHT_CHARS = 400;
@@ -202,7 +216,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, overnight), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
             ...(shadow ? { shadow: shadow.gate } : {}),

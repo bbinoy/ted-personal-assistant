@@ -455,6 +455,33 @@ test("groups get the same heartbeat run: one per look, with their own notes, in 
   assert.deepEqual(nts.seen.runs, ["owner"], "groups are not woken on Note to Self");
 });
 
+test("the repeated fact of the day: yesterday's post is listed once as the group's own post, and still in the tail after a night of looks", async () => {
+  const G = `hb-facts-${Math.random().toString(36).slice(2, 14)}`;
+  mkdirSync(group(G).notesDir, { recursive: true });
+  writeFileSync(join(group(G).notesDir, "scheduling-fact.md"), "Every morning post a fun fact.");
+  const log = group(G).logFile;
+  const YESTERDAY = new Date(2026, 9, 13, 9, 17, 0);
+  recordMessage("notice", 1, "Fun fact: octopuses have three hearts.", YESTERDAY, log);
+  recordMessage("notice", 2, "A post from last month", new Date(2026, 8, 1, 9, 0, 0), log);
+  for (let i = 0; i < 40; i++) {
+    const t = min(YESTERDAY, 30 + i * 40);
+    recordMessage("wake", 10 + i, JSON.stringify({ next: min(t, 40).toISOString(), looked: t.toISOString() }), t, log);
+    recordMessage("journal", 100 + i, `Looked at the notes ${i}. Why: x.`, min(t, 1), log, { cat: "other" });
+  }
+  const { w, seen, at } = rig(() => ({}), { groups: [G] });
+  at(DAY);
+  await w.tick(DAY);
+  await w.idle();
+  const prompt = seen.prompts.find((p) => /do nothing unprompted/.test(p))!;
+  const own = "[2026-10-13 09:17] Fun fact: octopuses have three hearts.";
+  assert.equal(prompt.split(own).length - 1, 1, "listed once among its own posts");
+  assert.match(prompt, /Your own posts here in the last 7 days \(newest first\):\n<own_posts>/);
+  assert.match(prompt, /Do not repeat a fact, joke, quote or idea you posted in the last 7 days; a recurring post \(daily fact, pep talk\) must be new each time\./);
+  assert.doesNotMatch(prompt.split("<own_posts>")[1]!.split("</own_posts>")[0]!, /A post from last month/, "only the last 7 days");
+  assert.match(prompt.split("<chat_log>")[1]!, /octopuses have three hearts/, "and the tail still reaches it");
+  assert.doesNotMatch((seen.provenance[seen.prompts.indexOf(prompt)] as { task: string }).task, /own_posts/, "not in the judge's standing reason");
+});
+
 test("the report: counts per day, messages by day and night, dollars and the next looks it chose, from the rows only", () => {
   const rows = [
     row(new Date(2026, 9, 13, 10, 0), { message: true, costUsd: 0.03, toolCalls: 4, archived: 2, nextCheckMinutes: 30, outcome: "posted" }),
