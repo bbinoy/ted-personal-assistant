@@ -229,3 +229,19 @@ test("deadline: jitter is not a sleep, time left counts the larger clock, and a 
   assert.throws(() => e.check(), (x: { kind: string }) => x.kind === "slept");
   assert.equal(e.remainingMs(), 0);
 });
+
+// The regression of 22-23 Oct: the late-file clean-up ran before the reply's own file was recorded and deleted it, so every voice reply failed with
+// "voice.m4a (No such file or directory)" and went out as text. A file that is made in time must still exist when the messenger reads it.
+test("a voice file made in time is still on disk when the messenger sends it, and is removed afterwards", async () => {
+  let made = "";
+  let existedAtSend = false;
+  const r = rig({
+    synth: async (_l, file) => (made = file()),
+    sendVoice: async () => void (existedAtSend = existsSync(made)),
+  });
+  const logged = await say(r);
+  assert.equal(existedAtSend, true, "the file is there when the messenger reads it");
+  assert.deepEqual(r.voices, [made], "sent as a voice note");
+  assert.equal(logged.some((l) => /voice reply failed|No such file/.test(l)), false, logged.join("\n"));
+  assert.equal(existsSync(dirname(made)), false, "removed after the send");
+});

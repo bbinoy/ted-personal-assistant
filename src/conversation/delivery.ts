@@ -43,10 +43,14 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // ONE deadline (VOICE_TIMEOUT_SECONDS) covers the whole of it, from here to the hand-over of the file to the messenger: the language check, every engine and the
   // fallback, the conversion and the upload. When it runs out, the work is aborted (the engines kill their processes and requests), a file that came too late is never
   // sent, and the words go out as text.
+  const voiceDeadlineMs = (chars: number): number => Math.max(settings.voiceTimeoutSeconds, 30 + Math.ceil(chars * 0.15)) * 1000;
+
   async function speak(conv: Conversation, words: string): Promise<"spoken" | "text" | "failed"> {
-    const ms = deps.speech.timeoutMs ?? settings.voiceTimeoutSeconds * 1000;
+    // The deadline grows with the text: a long pep talk on a busy Mac takes longer than a one-liner (828 characters took 47 s unloaded). VOICE_TIMEOUT_SECONDS is the floor.
+    const ms = deps.speech.timeoutMs ?? voiceDeadlineMs(words.length);
     const deadline = (deps.speech.deadline ?? startDeadline)(ms);
     let file: string | undefined;
+    let gaveUp = false; // set once speak() is over: only a file that finishes AFTER that is late (a file that finishes in time is this reply's own)
     try {
       // Safety net: the voice speaks only TTS_LANGUAGES; text in another language would get a wrong accent, so it goes out as text. A check that fails does not cost the voice (lang.ts).
       const foreign = await deadline.guard(deps.speech.foreign(words, conv.convId));
@@ -55,7 +59,9 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
         return "text";
       }
       const made = deps.speech.synth(words, conv.convId, { signal: deadline.signal, remainingMs: deadline.remainingMs }); // the voice active in THIS conversation (its library: voices/ in its folder)
-      void made.then((f) => f !== file && rmSync(dirname(f), { recursive: true, force: true }), () => {}); // a file that finishes after we gave up is deleted, not kept
+      // A file that finishes after we gave up is deleted, not kept. This handler runs BEFORE the await below assigns `file`, so it must not look at `file`:
+      // it only acts once speak() is over (gaveUp), which a file that arrived in time never sees (it is removed in `finally` after the send).
+      void made.then((f) => gaveUp && rmSync(dirname(f), { recursive: true, force: true }), () => {});
       file = await deadline.guard(made);
       deadline.check(); // a file that arrives after the deadline is stale
       await deadline.guard(out.sendVoice(file, words, conv.target));
@@ -65,6 +71,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
       else console.error("voice reply failed, sending text:", (e as Error).message);
       return "failed";
     } finally {
+      gaveUp = true;
       deadline.stop();
       if (file) rmSync(dirname(file), { recursive: true, force: true });
     }
