@@ -15,7 +15,7 @@ import { delegatedText, expertSetup, variantOf } from "../run/delegation.ts";
 import { mailSlot } from "../modules/index.ts";
 import { PLUGIN, preset } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
-import { dayAt, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
+import { dayAt, dayIn, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
 import { isReadTool } from "../policy/policy.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
@@ -30,7 +30,8 @@ import { flushPending, waitingCount } from "../approvals/pendingflow.ts";
 import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
 import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { countPosts, observeLook, postNotice, submitPost } from "./notices.ts";
+import { countPosts, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
+import { oneLine } from "./digest.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
 import { offerLearned } from "../conversation/learned.ts";
@@ -108,8 +109,21 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
   });
 }
 
-export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string): string =>
-  [clockLine(now, zone), instruction, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].join("\n\n");
+// `overnight`: the block of held posts of an earlier day handed to this look (overnightBlock), or "". It is in the prompt, not in the instruction the judge reads as the run's standing reason.
+export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string, overnight = ""): string =>
+  [clockLine(now, zone), instruction, overnight, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].filter(Boolean).join("\n\n");
+
+export const OVERNIGHT_MAX = 5;
+const OVERNIGHT_CHARS = 400;
+// The held posts of an earlier day (notices.ts takeOvernight, newest first) as a fact block written by code: what was not sent and when it was written, at most OVERNIGHT_MAX, each trimmed.
+// The look says again only what is still true today, in today's words; "" when there is none.
+export function overnightBlock(held: readonly Pick<Held, "text" | "at">[], now: Date, zone: string): string {
+  if (held.length === 0) return "";
+  const yesterday = dayAt(now, -1, zone).date;
+  const when = (at: number | undefined): string => (at === undefined ? "earlier" : `${timeIn(new Date(at), zone)} ${dayIn(new Date(at), zone) === yesterday ? "yesterday" : `on ${dayIn(new Date(at), zone)}`}`);
+  const lines = held.slice(0, OVERNIGHT_MAX).map((h) => `Held overnight and not sent (written ${when(h.at)}): "${oneLine(h.text, OVERNIGHT_CHARS)}"`);
+  return `${fence("held_overnight", lines.join("\n"))}\nThese were not delivered. Say again only what is still true and still matters today, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`;
+}
 
 // How a conversation's recent looks ended, for the starvation guard below.
 export interface LookHistory {
@@ -134,7 +148,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   // One look of one conversation. Returns what happened (for the log and tests).
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
-    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged })) return "not-due";
+    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !overnightWaiting(conv, now)) return "not-due"; // (held posts of an earlier day: due once quiet ends)
     expireSuggestions(conv.key, now.getTime(), zoneOf(conv)); // (tasks/suggest.ts: a suggestion nobody answered in SUGGESTION_DAYS is dropped, kept in the history)
     if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
@@ -166,6 +180,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const finished = new Set<string>(); // those whose expert's result came back with something in it
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
+    const overnight = overnightBlock(takeOvernight(conv, now), now, looker.zone); // (handed over once: taken out of the held posts here)
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -187,7 +202,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, overnight), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
             ...(shadow ? { shadow: shadow.gate } : {}),

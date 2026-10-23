@@ -38,8 +38,8 @@ export type Event =
   | ({ type: "look"; row: HeartbeatRow; source: Source; unjournaled?: number } & Where) // unjournaled: steps it took that wrote no journal line (a browser step), so the look is not silent in the log
   // The nightly dream of a conversation's notes.
   | ({ type: "dream"; result: "changed" | "no-change" | "failed"; source: Source; meta: Meta; text?: string } & Where)
-  // A message the assistant had for the person: held for later (quiet hours, the day's limit) or sent.
-  | ({ type: "notice"; state: "held" | "sent"; text: string; source: Source } & Where)
+  // A message the assistant had for the person: held for later (quiet hours, the day's limit), sent, or dropped (held posts of an earlier day where no look can say them again; `text` says how many).
+  | ({ type: "notice"; state: "held" | "sent" | "dropped"; text: string; source: Source } & Where)
   // A card payment changed status (approved, clicked, confirmed, failed, unconfirmed): the journal line of money moving.
   | ({ type: "payment"; status: string; text: string; source: Source } & Where)
   // Something was forgotten or removed (a group's data, a friend's): the audit row, and a line in the OWNER's journal.

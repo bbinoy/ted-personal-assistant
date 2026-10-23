@@ -17,7 +17,7 @@ import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
 import { statusFact, writeStatusNote } from "../src/modules/status/statusnote.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
-import { resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
+import { heldPosts, resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
 import { clearPending, openItems } from "../src/approvals/pending.ts";
 import { queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
@@ -220,19 +220,46 @@ test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, an
   assert.deepEqual(readRows().map((r) => [r.night, r.nextCheckMinutes]), [[true, 120]]);
 });
 
-test("owner's look at night: the posts are HELD in code, an urgent one goes at once, and the morning tick delivers the rest as one message", async () => {
+test("the incident: a post held at 22:35 is not sent at 07:00; the morning look gets it once as a fact, a second look does not", async () => {
+  const EVENING = new Date(2026, 9, 22, 22, 35, 0);
+  const TEXT = "Evening, Ben. Bit of a bump to report: today's morning brief never made it through. Two attempts ran out of steam, so I'm not retrying tonight.";
+  let message = TEXT;
+  const { w, conv, seen, at } = rig(() => ({ message, nextCheckMinutes: 120 }));
+  at(EVENING);
+  assert.equal(await w.look(conv, EVENING), "silent", "held by quiet hours");
+  message = "[[silent]]";
+  const release = new Date(2026, 9, 23, 7, 0, 0);
+  at(release);
+  await w.tick(release); // the look chose 120 minutes, yet it is due now: something was held overnight for it
+  assert.deepEqual(seen.posted, [], "never delivered verbatim");
+  assert.equal(seen.runs.length, 2, "the morning look ran at once");
+  const block = `Held overnight and not sent (written 22:35 yesterday): "${TEXT}"`;
+  assert.equal(seen.prompts[1]!.split(block).length - 1, 1, "the held text, once");
+  assert.match(seen.prompts[1]!, /These were not delivered\. Say again only what is still true and still matters today, in today's words/);
+  assert.doesNotMatch((seen.provenance[1] as { task: string }).task, /Held overnight/, "not in the standing reason the judge reads");
+  assert.deepEqual(heldPosts(conv), [], "handed over: no longer held");
+  assert.equal(await w.look(conv, min(release, 30)), "not-due", "nothing waits any more: the look keeps the time it chose");
+  const later = min(release, 125);
+  at(later);
+  assert.equal(await w.look(conv, later), "silent");
+  assert.equal(seen.runs.length, 3);
+  assert.doesNotMatch(seen.prompts[2]!, /Held overnight/, "passed exactly once");
+});
+
+test("owner's look at night: the posts are HELD in code, an urgent one goes at once, and the morning tick delivers the rest as one message (held after midnight)", async () => {
   let urgent = false;
   const { w, conv, seen, at } = rig(() => ({ message: `news #${seen.recorded.length + 1}`, nextCheckMinutes: 10, urgent }));
-  at(NIGHT);
-  assert.equal(await w.look(conv, NIGHT), "silent", "held, not posted");
-  const t2 = min(NIGHT, 11);
+  const AFTER = new Date(2026, 9, 15, 0, 30, 0); // (the morning's own day: a post of the day before goes to the look instead, the test above)
+  at(AFTER);
+  assert.equal(await w.look(conv, AFTER), "silent", "held, not posted");
+  const t2 = min(AFTER, 11);
   at(t2);
   assert.equal(await w.look(conv, t2), "silent");
   assert.deepEqual(seen.posted, []);
   const held = ledgerEntries().filter((e) => e.kind === "journal" && e.cat === "notice" && /Held a message for later: news #\d+/.test(e.text) && /quiet hours/.test(e.text));
   assert.ok(held.length >= 2, "the journal says each post was held, with why");
   urgent = true;
-  const t3 = min(NIGHT, 22);
+  const t3 = min(AFTER, 22);
   at(t3);
   assert.equal(await w.look(conv, t3), "posted", "urgent: posted at night");
   assert.equal(seen.posted.length, 1);

@@ -7,7 +7,7 @@ import { clockIn } from "../src/core/timezone.ts";
 import { dedupe, digestDue, digestText, kindOfItem, lastSlotBefore, oneLine, planDigest, subjectOf, zonedInstant } from "../src/heartbeat/digest.ts";
 import { usableLines } from "../src/heartbeat/digestlines.ts";
 import { parseHeartbeatAnswer } from "../src/run/rules.ts";
-import { heldPosts, resetHeld, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
+import { heldPosts, resetHeld, noticeOwner, ownerNotices, releaseHeld, submitPost, takeOvernight } from "../src/heartbeat/notices.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
@@ -138,7 +138,7 @@ test("digestDue: quiet-held items at once, cap-held items once a slot has passed
 
 const reset = () => resetHeld(owner());
 const pipe = (sent: string[]) => ({ enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) }) as any;
-const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
+const NIGHT = new Date(2026, 9, 15, 5, 30, 0); // (the same day as the release: a post of an earlier day goes to the look instead, notices.test.ts)
 const MORNING = new Date(2026, 9, 15, 7, 30, 0);
 
 test("releaseHeld sends ONE grouped digest at the end of quiet hours, with the code's own lines", async () => {
@@ -172,16 +172,17 @@ test("the model's one-liners are used when they fit; a failing, slow or wrong mo
   assert.equal(await run(async () => Promise.reject(new Error("offline"))), code);
 });
 
-test("the cap's items wait for a digest slot: held at 19:00, the next morning is too early, the 12:30 slot is not", async () => {
+test("the cap's posts are yesterday's by the time the cap is free: never a digest slot, they wait for the next look", async () => {
   reset();
   const c = owner();
   const day1 = new Date(2026, 9, 14, 19, 0);
   for (const t of ["one post", "two post", "three post"]) submitPost(c, t, false, day1);
   assert.equal(submitPost(c, "held for the cap", false, day1), "held");
   const sent: string[] = [];
-  assert.equal(await releaseHeld(pipe(sent), c, new Date(2026, 9, 15, 9, 0)), false, "the day turned (the cap is free) but no slot has come since 19:00");
-  assert.equal(await releaseHeld(pipe(sent), c, new Date(2026, 9, 15, 12, 31)), true);
-  assert.deepEqual(sent, ["held for the cap"]);
+  assert.equal(await releaseHeld(pipe(sent), c, new Date(2026, 9, 15, 9, 0)), false);
+  assert.equal(await releaseHeld(pipe(sent), c, new Date(2026, 9, 15, 12, 31)), false, "not at the slot either");
+  assert.deepEqual(sent, []);
+  assert.deepEqual(takeOvernight(c, new Date(2026, 9, 15, 12, 31)).map((h) => h.text), ["held for the cap"], "handed to the look");
 });
 
 test("the look's needsYou flag: parsed (only a literal true), carried on the held item, and it decides the digest group", async () => {
