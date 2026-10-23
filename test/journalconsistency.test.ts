@@ -228,10 +228,12 @@ test("a look that read notes before acting says so: 'per your notes' in reading 
 
 test("delegations and the SDK's own tools are no actions; plumbing is never armed; a run's why is not used by another run and is dropped when the run ends", async () => {
   reset();
-  for (const t of ["Agent", "Task", "TodoWrite", "ToolSearch", "Skill", "mcp__send__send", "mcp__memory__journal", "mcp__memory__search_logs"]) assert.equal(journalable(t), false, t);
+  for (const t of ["Agent", "Task", "TodoWrite", "ToolSearch", "StructuredOutput", "Skill", "mcp__send__send", "mcp__memory__journal", "mcp__memory__search_logs"]) assert.equal(journalable(t), false, t);
   assert.equal(journalable(FORGET), true);
   const key = fresh("owner");
   const before = journal(key).length;
+  await noteDone({ conv: key, source: "background", tool: "StructuredOutput", input: { message: "[[silent]]", nextCheckMinutes: 30 } });
+  assert.equal(journal(key).length, before, "the run handing in its answer is no 'Ran StructuredOutput' line");
   const mk = (run: string) => makeCanUseTool(async () => ({ approved: false }), "chat", undefined, undefined, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "forget it" }), conversation: key, run });
   await mk("run-a")("mcp__send__send", { text: "hello" }, opts);
   await mk("run-a")("mcp__memory__journal", {}, opts);

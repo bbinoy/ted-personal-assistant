@@ -21,12 +21,15 @@ import { scopeOf } from "./turnscope.ts";
 const NOT_ACTIONS = new Set(["send", "seenmail", "status", "draw", "voice", "weather"]);
 const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]), notes: new Set(["write_note"]) }; // (the rest of these servers read: search_logs, journal, read_note)
 const NOTE_WRITES = new Set(["Write", "Edit"]);
-const NOT_TOOLS = new Set(["Agent", "Task", "TodoWrite", "ToolSearch"]); // the SDK's own: a delegation is the expert's actions (each its own line), not an action itself
+// The SDK's own tools that are no action: a delegation is the expert's actions (each its own line), not an action itself; StructuredOutput is how a run hands in its answer; the to-do
+// list and the tool search are its own bookkeeping. The one place: the journal and the look's count of what it did (look.ts) both ask it.
+const NON_ACTIONS: ReadonlySet<string> = new Set(["Agent", "Task", "TodoWrite", "ToolSearch", "StructuredOutput"]);
+export const isNonAction = (tool: string): boolean => NON_ACTIONS.has(tool);
 
 // Pure: does a successful call of this tool belong in the journal? Never a read (a look-up, a search, the journal itself); never plumbing.
 export function journalable(tool: string): boolean {
   if (isReadTool(tool)) return false;
-  if (NOT_TOOLS.has(tool)) return false;
+  if (isNonAction(tool)) return false;
   const e = entryFor(tool);
   if (!e) return true; // a tool the manifest does not know is not a read (the verbs say so): an action
   if (e.provider === "builtin") return NOTE_WRITES.has(tool);

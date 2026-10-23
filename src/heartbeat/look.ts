@@ -1,7 +1,7 @@
 import { emit } from "../core/events.ts";
 import { convIdOfKey, convPaths } from "../core/convpaths.ts";
 import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
-import { journalable } from "../approvals/journalrender.ts";
+import { isNonAction, journalable } from "../approvals/journalrender.ts";
 import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
@@ -234,7 +234,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
                 if (r && started.has(r.name) && resultText(response).trim()) finished.add(r.name); // the expert came back with a result (a run that ran out of turns has none)
               }
               if (tool === "mcp__claude_ai_Gmail__send_message" || tool === "mcp__mailbird__send_self_briefing") selfMailed++;
-              if (!isReadTool(tool) && tool !== "mcp__seenmail__seen_mail") acted++;
+              if (!isReadTool(tool) && !isNonAction(tool) && tool !== "mcp__seenmail__seen_mail") acted++; // (handing in the answer is not acting: a stale post is still dropped)
               if (entryFor(tool)?.action === "archive") archived++;
               if (journalable(tool)) steps++;
             },
