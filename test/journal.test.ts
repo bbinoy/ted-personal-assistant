@@ -108,6 +108,23 @@ test("the gate's tail keeps the newest dozen journal lines, so a busy look canno
   assert.ok(!tail.some((l) => l.includes("Did thing 17.")));
 });
 
+test("the tail counts the conversation, not the bookkeeping: yesterday's post survives a night of looks (the repeated fact of the day)", () => {
+  const file = logOf();
+  recordMessage("notice", 1, "Fun fact: octopuses have three hearts.", T("2026-10-21T07:17:00Z"), file);
+  for (let i = 0; i < 30; i++) {
+    const at = new Date(Date.parse("2026-10-21T08:00:00Z") + i * 40 * 60_000);
+    recordMessage("wake", 100 + i, JSON.stringify({ next: new Date(at.getTime() + 40 * 60_000).toISOString(), looked: at.toISOString() }), at, file);
+    line(file, new Date(at.getTime() + 60_000).toISOString(), "archive", `Archived mail ${i}. Why: x.`);
+  }
+  recordMessage("owner", 200, "morning", T("2026-10-22T00:00:00Z"), file);
+  const tail = logTail({ logFile: file }, 40);
+  assert.ok(tail.some((l) => l.includes("octopuses have three hearts")), "the post of a day ago is still read");
+  assert.equal(tail.filter((l) => l.includes("you looked and planned")).length, 3, "the newest three wake lines");
+  assert.equal(tail.filter((l) => l.includes("(you did:")).length, 12);
+  assert.ok(tail.at(-1)!.includes("morning"), "in time order");
+  assert.equal(logTail({ logFile: file }, 1).filter((l) => !l.includes("(you")).length, 1, "n counts only the conversation");
+});
+
 test("readJournal: filters by day, kind and words, times in the conversation's zone, newest limit, fenced by the tool", () => {
   const file = logOf();
   line(file, "2026-10-20T20:30:00Z", "archive", "Archived “Old news”. Why: your message at 22:30. Undo: npm run restore c-0.");
