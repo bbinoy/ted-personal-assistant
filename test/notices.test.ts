@@ -5,11 +5,16 @@ import { settings } from "../src/core/settings.ts";
 import { localDay } from "../src/core/pause.ts";
 import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { combine, createFailureTracker, heldPosts, resetHeld, noticeBudget, noticeOwner, ownerNotices, planFlush, planPost, releaseHeld, stillTrue, submitPost, countPosts } from "../src/heartbeat/notices.ts";
+import { combine, createFailureTracker, heldPosts, resetHeld, noticeBudget, noticeOwner, ownerNotices, overnightWaiting, planFlush, planPost, releaseHeld, stillTrue, submitPost, countPosts, takeOvernight } from "../src/heartbeat/notices.ts";
+import { overnightBlock, OVERNIGHT_MAX } from "../src/heartbeat/look.ts";
+import { group, type Conversation } from "../src/conversation/conversation.ts";
+import { systemZone } from "../src/core/timezone.ts";
+import { scratchLog } from "./scratch.ts";
+import { friendConvId } from "../src/core/convpaths.ts";
 import { AuthError, causeOf, InstanceKeyError, noticeFor, RateLimitError } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { parseHeartbeatAnswer } from "../src/run/rules.ts";
-import { recordMessage } from "../src/core/messages.ts";
+import { ledgerEntries, recordMessage } from "../src/core/messages.ts";
 import { gateSink, sendNow, withSend } from "../src/modules/send/send.ts";
 import { capNoticesTo, reportInstanceCap } from "../src/core/capnotice.ts";
 import { errorLinesSince } from "../src/core/logwindow.ts";
@@ -22,7 +27,10 @@ s.maxUnpromptedPerDay = 3;
 const DAY = new Date(2026, 9, 14, 14, 0, 0);
 const NIGHT = new Date(2026, 9, 14, 23, 30, 0);
 const MORNING = new Date(2026, 9, 15, 7, 30, 0);
+const EARLY = new Date(2026, 9, 15, 5, 30, 0); // quiet hours on the morning's own day
 const reset = () => resetHeld(owner());
+const pipe = (sent: string[]) => ({ enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) }) as any;
+const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 
 test("planPost: urgent always goes, the quiet window holds, then the day's cap", () => {
   assert.equal(planPost({ urgent: true, night: true, posted: 99, cap: 6 }), "post");
@@ -51,16 +59,16 @@ test("the heartbeat answer's urgent flag: only a literal true on a real message"
   assert.equal(parseHeartbeatAnswer({ message: "[[silent]]", nextCheckMinutes: 30, urgent: true }, "").urgent, false);
 });
 
-test("held posts: night holds, day posts, the cap holds the rest, and one combined message goes out when it may", async () => {
+test("held posts: night holds, day posts, the cap holds the rest, and one combined message goes out when it may (held on the morning's own day)", async () => {
   reset();
   const c = owner();
-  assert.equal(submitPost(c, "mail from the bank", false, NIGHT), "held");
-  assert.equal(submitPost(c, "mail from the bank", false, NIGHT), "held", "the same text is not held twice");
-  assert.equal(submitPost(c, "meeting in 10 minutes", true, NIGHT), "post", "urgent goes at night");
-  assert.equal(submitPost(c, "a reminder", false, NIGHT), "held");
+  assert.equal(submitPost(c, "mail from the bank", false, EARLY), "held");
+  assert.equal(submitPost(c, "mail from the bank", false, EARLY), "held", "the same text is not held twice");
+  assert.equal(submitPost(c, "meeting in 10 minutes", true, EARLY), "post", "urgent goes at night");
+  assert.equal(submitPost(c, "a reminder", false, EARLY), "held");
   const sent: string[] = [];
   const pipeline = { enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) } as any;
-  assert.equal(await releaseHeld(pipeline, c, NIGHT), false, "still the quiet window");
+  assert.equal(await releaseHeld(pipeline, c, EARLY), false, "still the quiet window");
   assert.equal(await releaseHeld(pipeline, c, MORNING), true);
   assert.deepEqual(sent, ["A few things I held back:\n- a reminder\n- mail from the bank"]);
   assert.equal(await releaseHeld(pipeline, c, MORNING), false, "nothing left");
@@ -78,14 +86,59 @@ test("the day's cap: the posts past it are held for the next day, urgent ones ar
   const sent: string[] = [];
   const pipeline = { enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) } as any;
   assert.equal(await releaseHeld(pipeline, c, new Date(2026, 9, 14, 15, 0)), false, "the same day: the cap is still spent");
-  assert.equal(await releaseHeld(pipeline, c, new Date(2026, 9, 15, 9, 0)), true, "the next morning");
-  assert.deepEqual(sent, ["three"]);
+  assert.equal(await releaseHeld(pipeline, c, new Date(2026, 9, 15, 9, 0)), false, "the next morning: yesterday's post is not sent as it was written");
+  assert.deepEqual(sent, []);
+  assert.deepEqual(takeOvernight(c, new Date(2026, 9, 15, 9, 0)).map((h) => h.text), ["three"], "it waits for the next look");
+});
+
+test("a post of an earlier day: kept for the look (not during quiet), taken once newest first, dropped with a journal line where there is no look", async () => {
+  reset();
+  const c = { ...owner(), logFile: scratchLog(`held-${Math.random().toString(36).slice(2)}.jsonl`) };
+  const EVENING = new Date(2026, 9, 14, 22, 35, 0);
+  submitPost(c, "older post", false, EVENING);
+  submitPost(c, "newer post", false, min(EVENING, 20));
+  noticeOwner("something failed", EVENING);
+  const sent: string[] = [];
+  assert.equal(overnightWaiting(c, min(EVENING, 120)), false, "still quiet hours after midnight");
+  assert.deepEqual(takeOvernight(c, min(EVENING, 120)), [], "a night look does not get them");
+  assert.equal(await releaseHeld(pipe(sent), c, MORNING), true);
+  assert.deepEqual(sent, ["something failed"], "a system notice keeps its own rule; the posts are not in it");
+  assert.equal(overnightWaiting(c, MORNING), true, "the look is due");
+  const taken = takeOvernight(c, MORNING);
+  assert.deepEqual(taken.map((h) => h.text), ["newer post", "older post"]);
+  assert.deepEqual(takeOvernight(c, MORNING), [], "exactly once");
+  assert.equal(overnightWaiting(c, MORNING), false);
+  assert.equal(overnightBlock(taken, MORNING, systemZone()), `<held_overnight>\nHeld overnight and not sent (written 22:55 yesterday): "newer post"\nHeld overnight and not sent (written 22:35 yesterday): "older post"\n</held_overnight>\nThese were not delivered. Say again only what is still true and still matters today, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`);
+  assert.equal(overnightBlock([], MORNING, systemZone()), "");
+  assert.equal(overnightBlock(Array.from({ length: 9 }, (_, i) => ({ text: `p${i} ${"x".repeat(600)}`, at: EVENING.getTime() })), MORNING, systemZone()).split("Held overnight").length - 1, OVERNIGHT_MAX, "capped");
+  // a conversation without a look: dropped, never sent verbatim, and the journal says how many
+  reset();
+  submitPost(c, "one", false, EVENING);
+  submitPost(c, "two", false, EVENING);
+  assert.equal(await releaseHeld(pipe(sent), c, MORNING, { looks: false }), false);
+  assert.deepEqual(heldPosts(c), []);
+  assert.ok(ledgerEntries().some((e) => e.kind === "journal" && /Dropped 2 held message\(s\) from yesterday/.test(e.text)), "journaled");
+});
+
+test("overnight posts are each conversation's own: a group's and a friend's are handed to their own look only", () => {
+  reset();
+  const g = { ...group("g-overnight"), logFile: scratchLog(`g-${Math.random().toString(36).slice(2)}.jsonl`) };
+  const f = { ...owner(), kind: "tenant" as const, key: "tenant:mia-o1", convId: friendConvId("mia-o1"), tenantId: "mia-o1", logFile: scratchLog(`f-${Math.random().toString(36).slice(2)}.jsonl`) } as Conversation;
+  const o = { ...owner(), logFile: scratchLog(`o-${Math.random().toString(36).slice(2)}.jsonl`) };
+  for (const c of [g, f]) resetHeld(c);
+  const EVENING = new Date(2026, 9, 14, 22, 35, 0);
+  submitPost(o, "owner's post", false, EVENING);
+  submitPost(g, "group's post", false, EVENING);
+  submitPost(f, "friend's post", false, EVENING);
+  assert.deepEqual(takeOvernight(g, MORNING).map((h) => h.text), ["group's post"]);
+  assert.deepEqual(takeOvernight(f, MORNING).map((h) => h.text), ["friend's post"]);
+  assert.deepEqual(takeOvernight(o, MORNING).map((h) => h.text), ["owner's post"]);
 });
 
 test("a post that fails to go out keeps what was held", async () => {
   reset();
   const c = owner();
-  submitPost(c, "keep me", false, NIGHT);
+  submitPost(c, "keep me", false, EARLY);
   const failing = { enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async () => ({ spoke: false, error: new Error("offline") }) } as any;
   assert.equal(await releaseHeld(failing, c, MORNING), false);
   assert.equal(heldPosts(c).length, 1);
@@ -193,7 +246,6 @@ test("the doctor's error window: dates are rebuilt from the file's time, so yest
   assert.equal(errorLinesSince(log, mtime, mtime - 24 * 3600_000), 3);
 });
 
-const pipe = (sent: string[]) => ({ enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) }) as any;
 
 test("held items are checked before delivery: yesterday's budget notice is dropped, a post is dropped once the owner has written since", async () => {
   reset();

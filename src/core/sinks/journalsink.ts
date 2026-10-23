@@ -92,7 +92,9 @@ export function project(e: Event, why: (conv: string, run: string | undefined, t
     case "dream":
       return e.result === "changed" && e.conv !== undefined ? [{ conv: e.conv, cat: "dream", text: journalText({ what: e.text ?? "Tidied my notes in the nightly dream", why: { text: "the nightly dream, which keeps notes up to date from what was said" }, undo: "say 'undo the dream'" }) }] : [];
     case "notice":
-      return e.state === "held" && e.conv !== undefined ? [{ conv: e.conv, cat: "notice", text: journalText({ what: `Held a message for later: ${flat(e.text, 160)}`, why: { text: "quiet hours or today's limit of unprompted messages" } }) }] : [];
+      if (e.conv === undefined) return [];
+      if (e.state === "dropped") return [{ conv: e.conv, cat: "notice", text: journalText({ what: flat(e.text, 160), why: { text: "they were held overnight and are not sent as they were written; nothing here can say them again in today's words" } }) }];
+      return e.state === "held" ? [{ conv: e.conv, cat: "notice", text: journalText({ what: `Held a message for later: ${flat(e.text, 160)}`, why: { text: "quiet hours or today's limit of unprompted messages" } }) }] : [];
     case "payment":
       return e.conv !== undefined ? [{ conv: e.conv, cat: "payment", text: journalText({ what: `Card payment ${e.status}: ${e.text}` }) }] : [];
     case "removal":

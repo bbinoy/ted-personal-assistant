@@ -121,14 +121,22 @@ export function tailLine(m: Sent, who: string = OWNER): string {
   return `${t} ${settings.assistant}: ${flat}`;
 }
 
-const JOURNAL_IN_TAIL = 12; // a busy look can write dozens of journal lines; the tail keeps the newest few so they do not push the conversation out of it (the journal tool has the rest)
+// The tail the gate and the heartbeat look read: the last `n` lines of the CONVERSATION (what people wrote, the assistant's replies, notices and posts, reactions, edits), and beside them
+// only the newest few bookkeeping lines (a look every 30 minutes writes a wake line and journal lines each time: counted in `n` they pushed yesterday's post out within hours), all in
+// time order. What its author took back is not shown.
+const JOURNAL_IN_TAIL = 12; // what Ted did on his own (journal, and the older "acted without posting" lines); the journal tool has the rest
+const WAKES_IN_TAIL = 3; // when he looked and planned to look again
+const BOOKKEEPING: ReadonlySet<Sent["kind"]> = new Set(["wake", "journal", "action"]);
 export const logTail = (conv: Pick<Conversation, "logFile" | "tenantId">, n = 40): string[] => {
   const who = speakerOf(conv);
   const all = withoutDeleted(ledgerEntries(conv.logFile));
-  const keepFrom = all.filter((m) => m.kind === "journal").length - JOURNAL_IN_TAIL; // how many of the oldest journal lines to leave out
-  let seen = 0;
-  return all.filter((m) => m.kind !== "journal" || ++seen > keepFrom).slice(-n).map((m) => tailLine(m, who));
-}; // what its author took back is not shown
+  const keep = new Set([
+    ...all.filter((m) => !BOOKKEEPING.has(m.kind)).slice(-n),
+    ...all.filter((m) => m.kind === "wake").slice(-WAKES_IN_TAIL),
+    ...all.filter((m) => m.kind === "journal" || m.kind === "action").slice(-JOURNAL_IN_TAIL),
+  ]);
+  return all.filter((m) => keep.has(m)).map((m) => tailLine(m, who));
+};
 
 // "typing…" is already showing while a delay runs, so a long one only makes the answer late; the cap is enforced in parseGate.
 const delayText = (max: number = settings.gateMaxDelaySeconds): string =>
