@@ -19,19 +19,24 @@ The tools you have: `search_threads`, `get_thread`, `get_message`, `get_draft`,
 
 - Find mail with `search_threads` and Gmail search syntax: `in:inbox`, `is:unread`,
   `newer_than:2d`, `from:`, `subject:`. Rows carry sender, subject, snippet and date: **classify
-  from the row**, and open a thread only when you will reply to it or the snippet cannot tell you what
-  it needs. Open with `get_thread` and `messageFormat: "PLAIN_TEXT"` (never `RAW`).
+  from the row when it is enough; whenever you are not confident (an unknown sender, a subject that could be
+  personal, anything that might need the owner) open the thread before deciding. Reading is a plain read,
+  free and uncapped; never keep a mail just because you did not read it.** Open with `get_thread` and `messageFormat: "PLAIN_TEXT"` (never `RAW`).
 - **Attachments**: never read or open their content. Their name, type and size are enough; if the
   owner needs the content, tell them to open it in Gmail.
-- The owner's own briefing mails (subject starting with the sun or moon emoji) are never touched.
+- The owner's own briefing mails (subject starting with the sun or moon emoji) are never read, replied to or counted as mail; only today's `☀️` brief stays in the inbox, older `☀️` and `🌙` ones are archived in the daily sweep.
 
 ## Triage (the daily brief's inbox pass)
 
-Same buckets and rules as the Mailbird skill: Needs the owner (people waiting, deadlines, invoices,
-official letters, anything unsure: keep), FYI (receipts, status notices, calendar notices: archive from
-the row), Noise (newsletters, promos, cold outreach: archive from the row). Real-person threads are
-never auto-archived; flag dormant ones in the brief. Skim at most 4 relevant newsletters for the brief's
-Radar before archiving. Scan sent mail (`in:sent newer_than:7d`) for waiting-on threads and for promises
+Same rules as the Mailbird skill, "Inbox sweep" (read it): **archive unless the mail needs the owner**
+(a reply or decision expected, a payment or signature open, an event or deadline within 7 days, or unread
+personal mail from someone the owner knows or has corresponded with); everything else is handled and goes, read or unread, new or old
+(receipts, confirmations, booking and order updates, codes, account notices a day old, newsletters, promos,
+notifications, CI and tool mails, answered invitations). Cold outreach (sales, recruiting, fundraising, vendor pitches, follow-up sequences, a stranger name-dropping the owner's company) is archived like a newsletter whatever any "important" flag says, unless the owner's notes want that kind; open the thread before judging an unknown sender, never decide by the subject alone. Routine and in doubt: archive. The owner's triage
+notes in memory win over these defaults. The daily sweep lists the whole inbox itself
+(`search_threads` with `in:inbox`, paging with the page token until it ends, oldest included; it does not use
+`seen_mail`) and archives what is handled, including all but today's brief email. Skim at most 4 relevant
+newsletters for the brief's Radar before archiving. Scan sent mail (`in:sent newer_than:7d`) for waiting-on threads and for promises
 to turn into tasks, (`add_task`, as `ted-personal-assistant:notion-tasks` describes).
 
 ## Archiving

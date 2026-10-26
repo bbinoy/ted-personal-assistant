@@ -89,9 +89,36 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
 
 test("daily-brief skill: one archive list read after the sweep, no archiving of its own briefs, no model-written delivery time", () => {
   const s = readFileSync(join(skillsDir, "daily-brief", "SKILL.md"), "utf8");
-  assert.match(s, /never archive the assistant's own brief emails/);
+  assert.match(s, /keep only today's ☀️ brief in the inbox and archive the older ones/);
+  assert.doesNotMatch(s, /never archive the assistant's own brief emails/);
+  assert.match(s, /the daily sweep[\s\S]*WHOLE inbox[\s\S]*do \*\*not\*\* use `seen_mail` here/);
+  assert.match(s, /archive unless the mail needs the owner[\s\S]*Unread is not a reason to keep[\s\S]*in doubt on routine mail, archive/);
+  assert.match(s, /triage notes[\s\S]*win over these defaults/);
+  assert.match(s, /Cold outreach[\s\S]*whatever the provider's "important" flag says[\s\S]*unknown sender[\s\S]*never judge it by the subject alone/);
   assert.match(s, /after the email sweep, just before you write the brief\*\*, so the list includes what this very run archived/);
   assert.match(s, /no time of your own: the code stamps the real write time/);
+});
+
+test("mail skills and the look: archive unless the mail needs the owner, cold outreach archived, notes win, only today's brief kept", async () => {
+  const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
+  const mb = read("mailbird");
+  assert.match(mb, /does not depend on[\s\S]*`seen_mail`/);
+  assert.match(mb, /Keep only today's brief email[\s\S]*older `☀️` daily and `🌙` evening brief is archived/);
+  assert.doesNotMatch(mb, /Old briefs are never archived/);
+  assert.match(mb, /archive unless the mail needs the owner[\s\S]*next 7 days[\s\S]*Unread is not a reason to keep/);
+  assert.match(mb, /Cold outreach is not that[\s\S]*"important" flag[\s\S]*open the mail \(`get_message`, cheap\)\s+before deciding/);
+  assert.match(mb, /triage notes win/);
+  assert.match(read("gmail"), /archive unless the mail needs the owner[\s\S]*"important" flag[\s\S]*triage\s+notes in memory win/);
+  const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "heartbeat.md"), "utf8");
+  assert.match(hb, /default is to archive[\s\S]*next 7 days[\s\S]*Unread is no reason to keep[\s\S]*archive it/);
+  assert.match(hb, /Cold outreach[\s\S]*whatever the provider's "important" flag says/);
+  assert.match(hb, /unknown to \{\{who\}\}[\s\S]*never judge an unknown sender by the subject alone/);
+  assert.match(hb, /whenever you are not confident[\s\S]*open the full mail with the read tool before deciding: reading is free and uncapped[\s\S]*never keep a mail just because you did not read it/);
+  assert.match(mb, /Reading is a plain read: free, not judged, with no cap[\s\S]*not\s+confident, open the full mail[\s\S]*Never keep a mail\s+just because you did not read it/);
+  assert.doesNotMatch(mb, /Do NOT open every email|archive newsletters unopened/);
+  assert.match(read("gmail"), /whenever you are not confident[\s\S]*open the thread before deciding[\s\S]*never keep a mail just because you did not read it/);
+  assert.match(read("daily-brief"), /whenever the row does not let you decide with confidence/);
+  assert.match(hb, /triage notes beats these defaults/);
 });
 
 test("a long overdue pile: the brief offers a clean-up once (remembered in the status note), the task skill says how", () => {
