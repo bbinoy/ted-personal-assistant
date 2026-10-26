@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { delegationHook, expertSetup } from "../src/run/delegation.ts";
@@ -60,6 +60,13 @@ test("the status note: written by the one narrow tool, status-<name>.md only, on
   const long = writeStatusNote("brief", "x".repeat(MAX_STATUS_CHARS + 1), now, dir);
   assert.ok(!long.ok && /too long/.test(long.error));
   assert.deepEqual(readdirSync(dir), ["status-brief.md"]);
+  // `days`: a record that outlasts the day (the clean-up offer), bounded 1 to 30, the narrow name and the length cap unchanged
+  assert.deepEqual(writeStatusNote("overdue-offer", "2026-10-14\noffered", now, dir, 30), { ok: true, file: "status-overdue-offer.md" });
+  assert.match(readFileSync(join(dir, "status-overdue-offer.md"), "utf8"), /^---\nexpires: 2026-11-13\n/);
+  for (const days of [0, 31, 1.5, -1, NaN]) assert.equal(writeStatusNote("overdue-offer", "x", now, dir, days).ok, false, String(days));
+  assert.equal(writeStatusNote("x/y", "x", now, dir, 30).ok, false);
+  assert.equal(writeStatusNote("overdue-offer", "x".repeat(MAX_STATUS_CHARS + 1), now, dir, 30).ok, false);
+  rmSync(join(dir, "status-overdue-offer.md"));
   // protected from the dream (its categories), and never announced as a memory change
   assert.ok(preset().notes.categories.includes("status") && !preset().notes.dream.includes("status"));
   assert.ok(!dreamScope({ kind: "owner" }).categories.includes("status"));

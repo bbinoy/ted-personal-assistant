@@ -45,7 +45,7 @@ You keep the brief's state in ONE note, with the `write_status_note` tool (name 
 
 - the date (today's, as in `CURRENT TIME`), and `status: started | delivered | failed`
 - once delivered: the channel (email, or chat only), and no time of your own: the code stamps the real write time itself (`written:`, which is when the brief went out, because you write `delivered` last) and its own record is what the heartbeat trusts, not any time in your text. Times you do write (a meeting) are exactly as the `CURRENT TIME` line gives them (that zone, no conversion)
-- the 3 to 5 headline items and the open items or decisions the brief raised, and the line `overdue clean-up offered <date>` once it was offered (keep it in every later note)
+- the 3 to 5 headline items and the open items or decisions the brief raised
 - after a failure: `failed: <why>` (the code counts the attempts itself: every `status: started` you write is one)
 
 **Write it FIRST**, before anything else: `status: started` and the date. So a run that dies halfway still leaves a trace and the next look does not start a blind duplicate. **Update it LAST** to `delivered` with the headlines and open items, or to `failed` with the reason. Always keep the date in it. A note left `started` for more than 45 minutes counts as a failed attempt (the run died) and the next look redoes the brief: if you find a stale `started` or `failed` note from today when you begin, just start again and write `status: started` first.
@@ -115,7 +115,7 @@ Sections, in this order (skip a section if empty, except Focus):
 5. `## ✅ Tasks` - from `list_tasks`: what is overdue (at most five, the oldest first, with how
    many days) and what is due today, names only; what the owner owes others (`i_owe`) when due soon. Then
    ONE line for everything else ("6 more this week, 8 later") and, if any, "N suggestions waiting for your
-   yes". No lists for later days. When ten or more are long overdue, follow the task skill's section "A long overdue pile": one friendly line offering a clean-up (reschedule, drop or keep, in chat), once. You cannot save a note in this run, so you remember the offer in the status note (a line `overdue clean-up offered <date>`, carried into every new status note after that); a previous status note that has the line means the offer was made: do not repeat it.
+   yes". No lists for later days. When ten or more are long overdue, follow the task skill's section "A long overdue pile": one friendly line offering a clean-up (reschedule, drop or keep, in chat), once. Before offering, check your notes for `status-overdue-offer`: if it is there, the offer was made, so do not repeat it. When you make the offer, write it with `write_status_note` (name `overdue-offer`, `days` 30, text: the date and that the clean-up was offered).
 6. `## ⏳ Waiting on` - the `owed_to_me` items, one line each with the person and how long; only if non-empty.
 7. `## 📡 Radar` - 3 to 5 concrete bullets from the newsletters skimmed, focused on the topics
    and regions in the owner's memory (the brief notes in the injected `owner_memory` block): an
