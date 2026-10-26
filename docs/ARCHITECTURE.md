@@ -451,7 +451,7 @@ packages/signal/     @ted-assistant/signal: signal-cli JSON-RPC client, daemon s
 packages/speech/     @ted-assistant/speech (private): text to speech (Qwen3-TTS, Kokoro, optional ElevenLabs / HTTP), speech to text (whisper.cpp), voice libraries and reference clips, the Python scripts and docs/remote-tts.md; entry points /tts and /voice
 src/modules/         the tool modules, one file per tool or one folder per feature with module.ts and its code (types.ts: the shape; index.ts: the list and which are loaded; runtime.ts: the servers and mail clients they wrap)
 src/modules/archivecap.ts    the archive cap: at most ARCHIVE_MAX_PER_RUN archives per run, a module floor gate (permissions.ts asks it); which calls archive or restore mail
-src/modules/connectors.ts    which connectors (Notion, Calendar, mail) the last run could see
+src/modules/connectors.ts    which connectors (Notion, Calendar, mail) the last run could see, for the doctor and /status only (never in a prompt; a run that started offline records nothing)
 src/cli.ts           report / restore / doctor
 src/doctor.ts        `npm run doctor`
 src/modules/skills.ts        which bundled skills a conversation may load

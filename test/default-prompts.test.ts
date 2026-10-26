@@ -25,7 +25,6 @@ export function snapshot(): Record<string, unknown> {
   own.signalOwnAccount = undefined; // the chat prompt names the channel from it
   try {
     const missing = missingSetup([]);
-    const down = ["notion", "calendar"] as const;
     return {
       offeredSkills: ownerSkills(settings.mail),
       profileSkills: Object.fromEntries(Object.entries(PROFILES).map(([k, p]) => [k, p.skills])),
@@ -33,9 +32,9 @@ export function snapshot(): Record<string, unknown> {
       hiddenConnectors: settings.hiddenConnectors,
       chat: portable(chatSystem(NOW)),
       chatContext: portable(chatContext({ pings: ["10:00 an alert"] }) ?? ""),
-      chatContextSetup: portable(chatContext({ missing, down }) ?? ""),
-      heartbeat: portable(heartbeatSystem("MEMORY", { missing, down })),
-      expert: portable(expertSystem("MEMORY", { missing, down })),
+      chatContextSetup: portable(chatContext({ missing }) ?? ""),
+      heartbeat: portable(heartbeatSystem("MEMORY", { missing })),
+      expert: portable(expertSystem("MEMORY", { missing })),
       heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", lastLook: "Your last look was at 08:30.", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30", delegated: delegatedText(expertSetup(PROFILES.heartbeat.skills, "")), briefTime: "07:30", briefOverdueHour: "09:00", briefFact: "status-brief: started 12 min ago", briefHow: mailSlot()!.brief.how(), who: settings.owner, own: true, reads: true, mail: true, experts: true, brief: true, sources: "the inbox mail you have not looked at yet (see below), the calendar for the next 36 hours, tasks, and your notes and their schedules", tasks: true, group: false }),
       group: portable(groupSystem()),
       gateGroup: GATE_DEFAULTS.group,

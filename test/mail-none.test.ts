@@ -125,11 +125,10 @@ test("offered skills: without mail the two mail skills are gone, the rest are un
 });
 
 test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no email here' sentence is there", () => {
-  const down = [] as const;
   const missing = missingSetup([], [], false);
   const prompts = {
     chat: chatSystem(new Date("2026-10-12T09:00:00"), false),
-    heartbeat: heartbeatSystem("MEMORY", { missing, down, mail: false }),
+    heartbeat: heartbeatSystem("MEMORY", { missing, mail: false }),
   };
   const sentence = /There is no email in this setup[^\n]*?mail is off here\./;
   for (const [name, p] of Object.entries(prompts)) {
@@ -140,7 +139,7 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
     assert.match(rest, /ted-personal-assistant:daily-brief/, name); // the other skills are still listed
   }
   assert.doesNotMatch(prompts.chat, /how you write|voice \(how/i);
-  const context = chatContext({ missing, down, pings: ["10:00 an alert"] }, false)!; // what moved out of the chat's system prompt
+  const context = chatContext({ missing, pings: ["10:00 an alert"] }, false)!; // what moved out of the chat's system prompt
   assert.doesNotMatch(context, /mailbird|Reply ready|send_message_now|update_draft|get_message|inbox|by email|email drafts|writes email|handled mail/i);
 });
 

@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Note } from "../src/memory/notes.ts";
 import { missingSetup, setupItems } from "../src/modules/index.ts";
-import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
+import { chatContext, chatSystem, expertSystem, heartbeatSystem } from "../src/run/persona.ts";
 import { settings } from "../src/core/settings.ts";
 
 const skillsDir = join(settings.pluginDir, "skills");
@@ -75,14 +75,31 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   const base = missingSetup([]);
   assert.equal(missingSetup([], ["calendar"]).length, base.length - 1);
   assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 2);
-  const chat = chatContext({ down: ["notion"] })!;
-  assert.match(chat, /Not connected right now[\s\S]*Notion[\s\S]*Do not ask them to type in/);
-  assert.match(heartbeatSystem("", { down: ["notion", "calendar"] }), /🔌 Notion and Google Calendar aren't connected/);
-  assert.ok(!chatSystem(new Date()).includes("Not connected") && chatContext({ down: [] }) === undefined);
+  // the recorded state never reaches a prompt (it can be stale): the run is told to trust its own tool list
+  for (const p of [chatSystem(new Date()), heartbeatSystem(""), expertSystem("")]) {
+    assert.doesNotMatch(p, /Not connected right now/);
+    assert.match(p, /not in your tool list, say plainly that it is not connected[\s\S]*never assume a connector is down when its tools are present/);
+  }
+  assert.equal(chatContext({}), undefined);
   assert.equal(NAMES.calendar, "Google Calendar");
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
   assert.match(read("setup"), /do not\*\* ask them to type in what the connector/);
   for (const s of ["calendar", "meeting-prep"]) assert.match(read(s), /🔌/, `${s} reports a missing connector`);
+});
+
+test("connectors: a run that started without a network records nothing", async () => {
+  const { recordConnectors, readConnectors, offline } = await import("../src/modules/connectors.ts");
+  const server = (name: string, status: string) => ({ name, status });
+  recordConnectors([], [server("claude.ai Notion", "connected"), server("claude.ai Google Calendar", "connected")]);
+  const before = readConnectors();
+  assert.equal(before?.notion, true);
+  const woken = [server("mailbird", "connected"), server("claude.ai Notion", "failed"), server("claude.ai Google Calendar", "failed")];
+  assert.equal(offline(woken), true);
+  recordConnectors([], woken);
+  assert.deepEqual(readConnectors(), before, "everything failed together: the Mac was offline, the record stays");
+  assert.equal(offline([server("claude.ai Notion", "needs-auth"), server("claude.ai Google Calendar", "failed")]), false, "one needs sign-in: a real problem");
+  recordConnectors([], [server("claude.ai Notion", "needs-auth"), server("claude.ai Google Calendar", "connected")]);
+  assert.equal(readConnectors()?.notion, false);
 });
 
 test("connectors: judged by the server status in the start-up message, so a slow connector is not reported as missing", async () => {
