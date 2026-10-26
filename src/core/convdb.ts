@@ -411,6 +411,16 @@ export const CONV_SCHEMA: readonly Migration[] = [
   },
   {
     version: 13,
+    name: "retire the first-week proposals (shadow_*) and the numbered replies to the learned list (learned_asks, learned_owed)",
+    up: `
+      DROP TABLE shadow_proposals;
+      DROP TABLE shadow_state;
+      DROP TABLE learned_asks;
+      DROP TABLE learned_owed;
+    `,
+  },
+  {
+    version: 14,
     name: "held posts are handed to the next look as they are written: the digest's flags (notice, needs_you, day, same_day) are dropped",
     up: `
       ALTER TABLE held_posts DROP COLUMN notice;

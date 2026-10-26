@@ -47,7 +47,6 @@ export function convDbRule(L: () => Layout): RetentionRule {
         const old = now.getTime() - 60 * 86_400_000;
         parts.learned += db.num("SELECT COUNT(*) FROM learned_changes WHERE at < ?", old);
         if (!o.dryRun) {
-          db.run("DELETE FROM learned_asks WHERE seq IN (SELECT seq FROM learned_changes WHERE at < ?) OR batch IN (SELECT id FROM learned_batches WHERE at < ?)", old, old);
           db.run("DELETE FROM learned_changes WHERE at < ?", old);
           db.run("DELETE FROM learned_batches WHERE at < ?", old);
         }

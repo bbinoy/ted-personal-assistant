@@ -10,7 +10,7 @@ const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { createPipeline, group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { createOutbound } = await import("../src/conversation/outbound.ts");
-const { checkProposal, createFeedback, helperModel, isProactive, journalAround, likedLines, offerText } = await import("../src/conversation/feedback.ts");
+const { checkProposal, createFeedback, helperModel, isProactive, journalAround, likedLines } = await import("../src/conversation/feedback.ts");
 const { dreamPrompt } = await import("../src/conversation/dream.ts");
 const { recordMessage, FILE } = await import("../src/core/messages.ts");
 const { convDb } = await import("../src/core/convdb.ts");
@@ -19,8 +19,8 @@ const { NOTES_DIR, parseNote } = await import("../src/memory/notes.ts");
 const { dataPath } = await import("../src/core/state.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
 
-// Learning from feedback (src/conversation/feedback.ts): a 👎 or a clear "less of this" on something the assistant sent unprompted gets ONE offer to save a note; nothing is
-// saved until the owner confirms it; a 👍 is only counted.
+// Learning from feedback (src/conversation/feedback.ts): a 👎 or a clear "less of this" on something the assistant sent unprompted SAVES one note (origin owner) and hands the chat turn the fact
+// to mention it in one line; a 👍 is only counted.
 
 (settings as unknown as { tenants: boolean }).tenants = true;
 const OWNER = "+10000000000";
@@ -64,7 +64,7 @@ function rig(over: { classify?: (said: string) => Promise<{ kind: "less_of_this"
     transcript: async () => assert.fail("no voice"),
     speech: { ready: () => false, synth: async () => assert.fail("no speech"), foreign: async () => undefined },
     approvals: { answer: async () => ({ outcome: "none" }), answerReaction: () => "ignored" },
-    feedback: createFeedback({ out, model, payer: () => LOGIN }),
+    feedback: createFeedback({ model, payer: () => LOGIN }),
     vouch: async () => true,
     isOwner: (w) => w.from === OWNER,
     admitGroup: async () => {},
@@ -88,29 +88,34 @@ const fresh = () => {
 // A message the assistant sent (kind notice = on its own, chat = an answer), and the journal line of what it did just before.
 const sentAs = (kind: string, text: string, file = FILE) => recordMessage(kind as any, ++next, text, new Date(), file), lastTs = () => next;
 const journal = (file = FILE) => recordMessage("journal", ++next, "Archived 4 mails from LinkedIn. Why: per your notes: triage-linkedin (inferred). Undo: move them back to the inbox.", new Date(Date.now() - 60_000), file, { cat: "archive" });
-const row = (conv = OWNER_CONV) => convDb(conv).all<{ state: string; offer_ts: number | null }>("SELECT state, offer_ts FROM feedback_offers ORDER BY seq");
+const row = (conv = OWNER_CONV) => convDb(conv).all<{ state: string }>("SELECT state FROM feedback_offers ORDER BY seq");
 
-test("feedback: a 👎 on a message sent unprompted gets exactly one offer, with the journal's why, and nothing is saved", async () => {
+test("feedback: a 👎 on a message sent unprompted saves exactly one note (origin owner, indexed), with the journal's why, and the chat turn is told to mention it", async () => {
   fresh();
   journal();
   sentAs("notice", "📬 LinkedIn: 4 new job alerts and a digest.");
   const ts = lastTs();
   const r = rig();
   await r.pipeline.handleIncoming(owner(), react("👎", ts));
-  assert.equal(r.runs.length, 0, "no chat turn: the offer is the answer");
-  assert.equal(r.sent.length, 1);
-  assert.equal(r.sent[0]!.text, offerText({ file: "triage-linkedin.md", description: "Archive LinkedIn digests quietly", text: LINKEDIN.text }, false));
-  assert.match(r.sent[0]!.text, /Archive LinkedIn digest mails from now on, without telling me\./);
-  assert.match(r.sent[0]!.text, /👍 to save/);
+  assert.equal(r.sent.length, 0, "nothing is asked");
   assert.equal(r.proposes.length, 1);
   assert.match(r.proposes[0]!.journal.join("\n"), /\[archive\] Archived 4 mails from LinkedIn \(per your notes: triage-linkedin/);
   assert.deepEqual(r.proposes[0]!.categories, ["triage", "people", "scheduling", "context", "brief", "style"]);
-  assert.equal(existsSync(join(NOTES_DIR, "triage-linkedin.md")), false, "never saved before the owner confirms");
-  assert.deepEqual(row().map((x) => x.state), ["offered"]);
-  // a second 👎 on the same message: not offered again
+  const raw = readFileSync(join(NOTES_DIR, "triage-linkedin.md"), "utf8");
+  assert.match(raw, /origin: owner/);
+  assert.match(raw, /Archive LinkedIn digest mails from now on, without telling me\./);
+  assert.equal(parseNote("triage-linkedin.md", raw)!.inferred, undefined, "confirmed, not inferred");
+  assert.match(readFileSync(join(NOTES_DIR, "MEMORY.md"), "utf8"), /\(triage-linkedin\.md\) - Archive LinkedIn digests quietly/);
+  assert.equal(r.runs.length, 1, "the ordinary reaction turn runs, with the fact");
+  assert.match(r.runs[0]!, /reacted 👎/);
+  assert.match(r.runs[0]!, /You just saved the note triage-linkedin\.md because of their 👎/);
+  assert.match(r.runs[0]!, /Archive LinkedIn digest mails from now on/);
+  assert.match(r.runs[0]!, /Mention it in one short line/);
+  assert.deepEqual(row().map((x) => x.state), ["saved"]);
+  // a second 👎 on the same message: nothing more is saved, the usual turn
   await r.pipeline.handleIncoming(owner(), react("👎", ts));
-  assert.equal(r.sent.length, 1);
   assert.equal(r.proposes.length, 1);
+  assert.doesNotMatch(r.runs[1]!, /You just saved/);
 });
 
 test("feedback: a 👎 on a normal chat reply, an approval or a memory notice is just a reaction: no offer, the usual turn", async () => {
@@ -130,94 +135,48 @@ test("feedback: a 👎 on a normal chat reply, an approval or a memory notice is
   assert.equal(isProactive(undefined), false);
 });
 
-test("feedback: 👍 on the offer saves a confirmed note (origin owner), indexed and announced with its undo", async () => {
-  fresh();
-  journal();
-  sentAs("notice", "📬 LinkedIn: 4 new job alerts.");
-  const r = rig();
-  await r.pipeline.handleIncoming(owner(), react("👎", lastTs()));
-  const offerTs = row()[0]!.offer_ts!;
-  await r.pipeline.handleIncoming(owner(), react("👍", offerTs));
-  const raw = readFileSync(join(NOTES_DIR, "triage-linkedin.md"), "utf8");
-  assert.match(raw, /origin: owner/);
-  assert.match(raw, /Archive LinkedIn digest mails from now on, without telling me\./);
-  const note = parseNote("triage-linkedin.md", raw)!;
-  assert.equal(note.inferred, undefined, "confirmed, not inferred");
-  assert.match(readFileSync(join(NOTES_DIR, "MEMORY.md"), "utf8"), /\(triage-linkedin\.md\) - Archive LinkedIn digests quietly/);
-  assert.equal(r.sent.length, 2);
-  assert.equal(r.sent[1]!.text, "🧠 Memory\n➕ saved triage-linkedin.md: Archive LinkedIn digests quietly\nWrong? Tell me to undo it.");
-  assert.deepEqual(row().map((x) => x.state), ["saved"]);
-  assert.equal(r.runs.length, 0);
-  // a second 👍 on the same offer saves nothing more (and is an ordinary reaction now)
-  await r.pipeline.handleIncoming(owner(), react("👍", offerTs));
-  assert.equal(r.sent.length, 2);
-});
-
-test("feedback: a short 'yes' quoting the offer saves it too; an existing note is updated, and the notice says so", async () => {
+test("feedback: an existing note is updated, and the fact says so", async () => {
   fresh();
   writeNote("triage-linkedin.md", "Archive LinkedIn digests but tell me.");
   journal();
   sentAs("notice", "📬 LinkedIn: 4 new job alerts.");
   const r = rig();
   await r.pipeline.handleIncoming(owner(), react("👎", lastTs()));
-  assert.match(r.sent[0]!.text, /Update triage-linkedin\.md to say:/);
   assert.equal(r.proposes[0]!.notes[0]!.file, "triage-linkedin.md", "the note the action followed is shown to the model");
-  await r.pipeline.handleIncoming(owner(), say("yes", 5000, row()[0]!.offer_ts!));
   assert.match(readFileSync(join(NOTES_DIR, "triage-linkedin.md"), "utf8"), /without telling me/);
-  assert.match(r.sent[1]!.text, /✏️ updated triage-linkedin\.md/);
-  assert.equal(r.runs.length, 0, "the yes was the answer to the offer, not a chat turn");
+  assert.match(r.runs[0]!, /You just updated the note triage-linkedin\.md/);
 });
 
-test("feedback: 👎, 'no' or ignoring the offer saves nothing, and the message is not offered again", async () => {
-  fresh();
-  sentAs("notice", "📬 LinkedIn: 4 new job alerts.");
-  const a = lastTs();
-  sentAs("notice", "📬 Another thing.");
-  const b = lastTs();
-  sentAs("notice", "📬 And one more.");
-  const c = lastTs();
-  const r = rig();
-  await r.pipeline.handleIncoming(owner(), react("👎", a));
-  await r.pipeline.handleIncoming(owner(), react("👎", row()[0]!.offer_ts!)); // 👎 on the offer
-  await r.pipeline.handleIncoming(owner(), react("👎", b));
-  await r.pipeline.handleIncoming(owner(), say("no thanks", 5001, row()[1]!.offer_ts!));
-  await r.pipeline.handleIncoming(owner(), react("👎", c)); // and c is left unanswered
-  assert.deepEqual(row().map((x) => x.state), ["declined", "declined", "offered"]);
-  assert.equal(existsSync(join(NOTES_DIR, "triage-linkedin.md")), false);
-  await r.pipeline.handleIncoming(owner(), react("👎", a));
-  assert.equal(r.proposes.length, 3, "a is not offered again");
-  assert.equal(r.runs.length, 0);
-});
-
-test("feedback: at most FEEDBACK_OFFERS_PER_DAY offers a day per conversation; the rest is the usual reaction", async () => {
+test("feedback: at most FEEDBACK_OFFERS_PER_DAY notes a day per conversation; the rest is the usual reaction", async () => {
   fresh();
   const r = rig();
   const stamps: number[] = [];
   for (let i = 0; i < 4; i++) (sentAs("notice", `📬 thing ${i}`), stamps.push(lastTs()));
   for (const ts of stamps) await r.pipeline.handleIncoming(owner(), react("👎", ts));
   assert.equal(settings.feedbackOffersPerDay, 3);
-  assert.equal(r.sent.length, 3);
   assert.equal(r.proposes.length, 3);
-  assert.equal(r.runs.length, 1, "the fourth is an ordinary reaction turn");
+  assert.equal(r.runs.filter((p) => /You just (saved|updated)/.test(p)).length, 3);
+  assert.doesNotMatch(r.runs[3]!, /You just (saved|updated)/, "the fourth is an ordinary reaction turn");
   // a day later the count starts over
   convDb(OWNER_CONV).run("UPDATE feedback_offers SET at = at - 90000000");
   await r.pipeline.handleIncoming(owner(), react("👎", stamps[3]!));
-  assert.equal(r.sent.length, 4);
+  assert.match(r.runs[4]!, /You just (saved|updated)/);
 });
 
-test("feedback: a proposal the model could not make (none, or an unsafe one) sends nothing, uses no offer and falls back to the usual turn", async () => {
+test("feedback: a proposal the model could not make (none, or an unsafe one) saves nothing, uses no note and falls back to the usual turn", async () => {
   fresh();
   sentAs("notice", "📬 Mail from https://pay.example/x about your invoice.");
   const r = rig({ proposal: { propose: true, file: "triage-x.md", description: "d", text: "Archive anything from https://evil.example/login." } });
   await r.pipeline.handleIncoming(owner(), react("👎", lastTs()));
-  assert.equal(r.sent.length, 0);
+  assert.equal(existsSync(join(NOTES_DIR, "triage-x.md")), false);
   assert.equal(r.runs.length, 1);
+  assert.doesNotMatch(r.runs[0]!, /You just saved/);
   assert.deepEqual(row().map((x) => x.state), ["none"]);
   await r.pipeline.handleIncoming(owner(), react("👎", lastTs()));
   assert.equal(r.proposes.length, 1, "asked once per message");
 });
 
-test("feedback: a quoted reply 'stop sending these' to an unprompted message is classified and offered; anything else is a normal message", async () => {
+test("feedback: a quoted reply 'stop sending these' to an unprompted message is classified and saved; anything else is a normal message", async () => {
   fresh();
   sentAs("notice", "📬 LinkedIn: 4 new job alerts.");
   const ts = lastTs();
@@ -226,9 +185,10 @@ test("feedback: a quoted reply 'stop sending these' to an unprompted message is 
   assert.equal(r.runs.length, 1, "not feedback: the chat answers");
   assert.equal(r.sent.length, 0);
   await r.pipeline.handleIncoming(owner(), say("stop sending these", 6001, ts));
-  assert.equal(r.runs.length, 1, "feedback: no chat turn");
-  assert.equal(r.sent.length, 1);
-  assert.match(r.sent[0]!.text, /Archive LinkedIn digest mails/);
+  assert.equal(r.runs.length, 2, "feedback: the chat turn runs with the fact");
+  assert.match(r.runs[1]!, /^[\s\S]*stop sending these[\s\S]*You just saved the note triage-linkedin\.md because of their reply[\s\S]*Archive LinkedIn digest mails/);
+  assert.doesNotMatch(r.runs[0]!, /You just saved/);
+  assert.equal(existsSync(join(NOTES_DIR, "triage-linkedin.md")), true);
   assert.equal(r.proposes[0]!.said, "stop sending these");
   // not quoting anything, or quoting a chat reply: the model is not even asked
   sentAs("chat", "Sure, done.");
@@ -236,16 +196,15 @@ test("feedback: a quoted reply 'stop sending these' to an unprompted message is 
   await r.pipeline.handleIncoming(owner(), say("stop sending these", 6002));
   await r.pipeline.handleIncoming(owner(), say("stop sending these", 6003, lastTs()));
   assert.equal(r.classifies.length, before);
-  assert.equal(r.runs.length, 3);
+  assert.equal(r.runs.length, 4);
 });
 
-test("feedback: when the classifier gets no answer in time, it is not feedback: no offer, the chat answers", async () => {
+test("feedback: when the classifier gets no answer in time, it is not feedback: nothing saved, the chat answers", async () => {
   fresh();
   sentAs("notice", "📬 LinkedIn: 4 new job alerts.");
   const r = rig({ classify: async () => undefined });
   await r.pipeline.handleIncoming(owner(), say("stop sending these", 6100, lastTs()));
   assert.equal(r.runs.length, 1);
-  assert.equal(r.sent.length, 0);
   assert.equal(r.proposes.length, 0);
   // the real helper model: a call that never answers gives up at its own timeout and says nothing
   const never = (() => ({ [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) })) as never; // a stream that never says anything
@@ -256,7 +215,7 @@ test("feedback: when the classifier gets no answer in time, it is not feedback: 
   assert.ok(Date.now() - t0 < 5000);
 });
 
-test("feedback: a friend gets the same flow in her own chat, for her own notes only; the owner's notes and offers are untouched", async () => {
+test("feedback: a friend gets the same flow in her own chat, for her own notes only; the owner's notes and rows are untouched", async () => {
   fresh();
   const rec = T.addTenant({ aci: ACI, name: "Anna" })!;
   T.provision(rec);
@@ -266,24 +225,18 @@ test("feedback: a friend gets the same flow in her own chat, for her own notes o
   const ts = lastTs();
   const r = rig({ proposal: { propose: true, file: "context-matches.md", description: "No match reminders", text: "Do not remind me about matches." } });
   await r.pipeline.handleIncoming(conv, react("👎", ts));
-  assert.equal(r.sent.length, 1);
-  assert.equal(r.sent[0]!.target, ctx.target, "in her chat");
   assert.deepEqual(r.proposes[0]!.categories, ["people", "context", "scheduling", "style"], "her categories: no triage notes for a friend");
-  assert.deepEqual(row(), [], "nothing in the owner's database");
-  assert.deepEqual(convDb(friendConvId(rec.id)).all<{ state: string }>("SELECT state FROM feedback_offers").map((x) => x.state), ["offered"]);
-  const offerTs = convDb(friendConvId(rec.id)).get<{ offer_ts: number }>("SELECT offer_ts FROM feedback_offers")!.offer_ts;
-  // the owner's 👍 on a message with that timestamp in HER chat does not touch the owner's; hers confirms into her notes
-  await r.pipeline.handleIncoming(owner(), react("👍", offerTs));
-  assert.equal(existsSync(join(ctx.notesDir, "context-matches.md")), false);
-  await r.pipeline.handleIncoming(conv, react("👍", offerTs));
   assert.match(readFileSync(join(ctx.notesDir, "context-matches.md"), "utf8"), /Do not remind me about matches\./);
   assert.equal(existsSync(join(NOTES_DIR, "context-matches.md")), false);
-  assert.equal(r.sent[1]!.target, ctx.target);
+  assert.deepEqual(row(), [], "nothing in the owner's database");
+  assert.deepEqual(convDb(friendConvId(rec.id)).all<{ state: string }>("SELECT state FROM feedback_offers").map((x) => x.state), ["saved"]);
+  assert.match(r.runs[0]!, /You just saved the note context-matches\.md/);
   // a model that proposes a triage note for her is refused by code
   sentAs("notice", "📬 Another.", ctx.logFile);
   const r2 = rig({ proposal: { propose: true, file: "triage-x.md", description: "d", text: "Archive x." } });
   await r2.pipeline.handleIncoming(conv, react("👎", lastTs()));
-  assert.equal(r2.sent.length, 0);
+  assert.equal(existsSync(join(ctx.notesDir, "triage-x.md")), false);
+  assert.doesNotMatch(r2.runs[0]!, /You just saved/);
 });
 
 test("feedback: groups are off: a reaction there never reaches it", async () => {
@@ -294,9 +247,9 @@ test("feedback: groups are off: a reaction there never reaches it", async () => 
   await r.pipeline.handleIncoming(g, react("👎", lastTs(), { direct: false, group: { id: "R3JvdXBGNEZlZWRiYWNr" } }));
   assert.equal(r.proposes.length, 0);
   assert.equal(r.sent.length, 0);
-  const f = createFeedback({ out: { reply: async () => assert.fail("no message") }, model: { classify: async () => assert.fail("no model"), propose: async () => assert.fail("no model") }, payer: () => LOGIN });
-  assert.equal(await f.reaction(g, { emoji: "👎", targetTimestamp: lastTs() }), false);
-  assert.equal(await f.message(g, { text: "stop", quote: { text: "x", author: "a", timestamp: lastTs() } }), false);
+  const f = createFeedback({ model: { classify: async () => assert.fail("no model"), propose: async () => assert.fail("no model") }, payer: () => LOGIN });
+  assert.equal(await f.reaction(g, { emoji: "👎", targetTimestamp: lastTs() }), undefined);
+  assert.equal(await f.message(g, { text: "stop", quote: { text: "x", author: "a", timestamp: lastTs() } }), undefined);
 });
 
 test("feedback: FEEDBACK_OFFERS_PER_DAY=0 turns it off", async () => {
@@ -323,7 +276,6 @@ test("feedback: a 👍 on an unprompted message is only counted, per note or cat
   await r.pipeline.handleIncoming(owner(), react("👍", ts));
   await r.pipeline.handleIncoming(owner(), react("👍", ts));
   assert.equal(r.runs.length, 2, "the usual turn still judges a 👍 (an acknowledgement)");
-  assert.equal(r.sent.length, 0);
   assert.equal(r.proposes.length, 0);
   assert.deepEqual(convDb(OWNER_CONV).all<{ key: string; up: number }>("SELECT key, up FROM feedback_signals").map((x) => [x.key, x.up]), [["triage-linkedin.md", 2]]);
   assert.deepEqual(likedLines(owner()), ["triage-linkedin.md: 2 thumbs-up"]);

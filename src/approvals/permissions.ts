@@ -17,7 +17,6 @@ import { OWNER_KEY } from "../core/ownerkey.ts";
 import { callKey } from "../core/callkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { journalable, whyOf } from "./journalrender.ts";
-import type { ShadowGate } from "./shadowgate.ts";
 
 // Permissions as code: policy.ts decides allow / ask / deny; "ask" goes to the owner's phone (the Approve callback).
 
@@ -100,7 +99,6 @@ export interface GuardDecision {
   reason?: string;
   description?: string;
   once?: boolean; // an approved call is not repeated
-  done?: boolean; // allow: the call is remembered as done once let through (the first week's follow-up run): the same call within the window is refused without a question
   judge?: boolean; // ask: goes to the approval judge first (a browse commit step); only its "auto" skips the owner. Without it the owner is always asked
   redacted?: Record<string, unknown>; // ask: the call as the question writer, the approval card and the audit see it (a typed secret cut to its length); the real input still runs
   facts?: Record<string, unknown>; // ask: what the judge's audit row records about the step (host, role, name)
@@ -129,7 +127,6 @@ export interface JudgeSetup {
   taint?: Taint;
   conversation?: string;
   run?: string; // this run's id: the journal pairs a call's why with its success within the run only (agentrun.ts)
-  shadow?: ShadowGate; // the gentle first week (approvals/shadow.ts): an archive this look makes is held back and proposed to the person in one batch instead
   seenMail?: { forget: (ids: readonly string[]) => void }; // the look's seen-mail tracker: mail an archive the run cap refused named is not worked through, so it is not marked seen
   notesSeen?: () => readonly { file: string; inferred: boolean }[]; // the notes this run has read so far, in order, for the journal's "per your notes: ..."
   inferredNoteRead?: () => boolean; // this run has read (read_note) a note a background look inferred (origin: inferred): such a note is untrusted text, so a wake-up is not judged
@@ -186,7 +183,6 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
   const log = baseLog;
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
-  const doneInRun = new Set<string>(); // the calls a once-only guard (the first week's) has let through in THIS run
   const runGates = registered().flatMap((m) => (m.floor?.perRun ? [m.floor.perRun()] : [])); // the modules' limits for THIS run (the archive cap)
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
   return async (tool, input, o) => {
@@ -221,15 +217,6 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         return { behavior: "deny", message: limit };
       }
     }
-    // The gentle first week, in code: while a look is in shadow mode (shadowgate.ts) its archives do not happen. The call is collected and refused with a sentence for the model; the look's end
-    // proposes the whole batch to the person. Only a look's own run has this gate: a chat turn's archive (the person asked), and the follow-up run of an archive she then approved, never do.
-    if (base !== "deny" && setup.shadow) {
-      const held = setup.shadow(tool, input);
-      if (held !== undefined) {
-        log(tool, "shadow-proposed", source, idsOf(input));
-        return { behavior: "deny", message: held };
-      }
-    }
     // Bringing mail back ("restore 3", "bring back the Digitec mail") in the owner's own chat: the reverse of an archive, so no judge and no question; audited and journaled like an allow.
     if (base === "ask" && !g && setup.restoreFree && restoredBy(tool, input)) {
       log(tool, "allow", source, { ...idsOf(input), free: "restore" }, journalable(tool) ? { call: { input }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) } : undefined);
@@ -248,16 +235,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       // content), so "what did it archive?" can always be answered from the audit log.
       if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
       const reads = isReadTool(tool);
-      log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.(), asked: g?.kind === "allow" && g.done === true }) });
-      if (g?.done) {
-        const k = callKey(tool, input);
-        if (doneInRun.has(k)) {
-          log(tool, "deny-already-done", source);
-          return { behavior: "deny", message: "That exact call was already made in this run. Do not repeat it; check its result once if you need to be sure it went through." };
-        }
-        doneInRun.add(k); // once-only within the run, whatever the guard: a recorded call (a send!) must not run twice because the model called it twice
-      }
-      if (g?.done) remember(scoped(conversation, callKey(tool, input))); // a call the guard let through once-only (the first week's) is done: asking for it again within the window is refused
+      log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) });
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
       return { behavior: "allow", updatedInput: f.input };

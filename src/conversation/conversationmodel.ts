@@ -157,7 +157,7 @@ export interface PipelineDeps {
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
   speech: { ready: () => boolean; synth: (words: string, conversation: string, limits?: SynthLimits) => Promise<string>; foreign: (words: string, conversation: string) => Promise<string | undefined>; timeoutMs?: number; deadline?: (ms: number) => Deadline }; // spoken replies: local TTS, a file
   approvals: { answer: (text: string, working: () => void, quote: { timestamp: number } | undefined, deps: undefined, ctx: { scope: string; by?: string; voice?: boolean }) => Promise<{ outcome: "none" | "approved" | "modified" | "declined" | "feedback" | "clarify"; changes?: { field: string; value: unknown }[]; reply?: string }>; answerReaction: (emoji: string, ts: number, scope: string, by?: string) => string };
-  feedback?: Pick<Feedback, "reaction" | "message">; // learning from feedback (feedback.ts): a 👎 or "less of this" on something sent unprompted becomes one offer to save a note; off when unset
+  feedback?: Pick<Feedback, "reaction" | "message">; // learning from feedback (feedback.ts): a 👎 or "less of this" on something sent unprompted saves one note and returns the fact for the chat turn to mention
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group?
   isOwner: (who: { from: string; fromUuid?: string }) => boolean;
   admitGroup: (conv: Conversation, m: GroupMessage) => Promise<void>; // the participation gate (group.ts)
