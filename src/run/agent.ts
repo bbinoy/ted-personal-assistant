@@ -4,7 +4,6 @@ import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
 import { runOptionsFor, turnContext, type RunInputs } from "./runoptions.ts";
 import { markShown, unseen } from "./turncontext.ts";
 import { chatResume } from "./chatsession.ts";
-import { disconnected, readConnectors } from "../modules/connectors.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { userInput, type Picture } from "./image.ts";
 import type { Document } from "../conversation/document.ts";
@@ -28,8 +27,6 @@ import { loaded } from "../modules/index.ts";
 import { PLUGIN } from "../modules/skills.ts";
 import type { ShadowGate } from "../approvals/shadowgate.ts";
 
-const down = () => disconnected(readConnectors());
-
 // What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the heartbeat run's look).
 export interface ProfileExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
@@ -46,8 +43,7 @@ const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (
 // expert are told the same notes.
 function heartbeatTexts(conv: Conversation, looker: Looker, now: Date): { run: string; expert: string } {
   if (looker.own) {
-    const off = down(); // (read once)
-    const o = { missing: missingSetup(readNotes(), off), down: off };
+    const o = { missing: missingSetup(readNotes()) };
     const notes = memoryFor(undefined, now, conv.notesDir, looker.zone);
     return { run: heartbeatSystem(notes, o), expert: expertSystem(notes, o) };
   }
@@ -84,6 +80,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     signal: extra.signal,
     ...(extra.shadow ? { shadow: extra.shadow } : {}),
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too
+    gate: looker.own ? "ownerLook" : conv.kind === "tenant" ? "friendLook" : "look", // the owner's look goes first after a wake or a start, then friends, then groups (rungate.ts)
     unattended: true, // a look answers nobody's message: it acts when sure and asks nobody (permissions.ts UNATTENDED_SKIP), for the owner, a group and a friend alike
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
     ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),

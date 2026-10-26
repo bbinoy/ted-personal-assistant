@@ -70,14 +70,17 @@ export function lastStatusText(name: string, zone: string = systemZone(), dir: s
 export type StatusResult = { ok: true; file: string } | { ok: false; error: string };
 
 // Pure but for the file: writes status-<name>.md. `dir`: tests.
-export function writeStatusNote(name: string, text: string, now: Date = new Date(), dir: string = NOTES_DIR): StatusResult {
+// `days`: how long it lives (1 = until tomorrow, the default; at most MAX_STATUS_DAYS, for a record that must outlast a day, like "the clean-up was offered").
+export const MAX_STATUS_DAYS = 30;
+export function writeStatusNote(name: string, text: string, now: Date = new Date(), dir: string = NOTES_DIR, days = 1): StatusResult {
+  if (!Number.isInteger(days) || days < 1 || days > MAX_STATUS_DAYS) return { ok: false, error: `days is a whole number from 1 to ${MAX_STATUS_DAYS}` };
   if (!NAME.test(name)) return { ok: false, error: "the name is lower-case words with dashes, like brief (the file becomes status-brief.md)" };
   const body = text.replace(/[\u0000-\u0008\u000B-\u001F\u007F\u2028\u2029]/g, "").trim();
   if (!body) return { ok: false, error: "the note is empty" };
   if (body.length > MAX_STATUS_CHARS) return { ok: false, error: `too long (${body.length} characters, the most is ${MAX_STATUS_CHARS}): keep the date, the status and the headlines only` };
   const before = readStatusNote(name, dir);
   const carried = before && localDay(before.writtenAt) === localDay(now) ? before.attempts : 0; // the count is the day's
-  const r = put(name, body, now, dir, carried + (statusOf(body) === "started" ? 1 : 0));
+  const r = put(name, body, now, dir, carried + (statusOf(body) === "started" ? 1 : 0), days);
   if (r.ok && name === "brief" && statusOf(body) === "delivered") {
     const conv = dir === NOTES_DIR ? OWNER_CONV : convOfPath(dir);
     if (conv) briefDelivered(conv); // the "learned overnight" list the brief carried is told now, not when the tool handed it out (memory/learned.ts)
@@ -85,9 +88,9 @@ export function writeStatusNote(name: string, text: string, now: Date = new Date
   return r;
 }
 
-function put(name: string, body: string, now: Date, dir: string, attempts: number): StatusResult {
+function put(name: string, body: string, now: Date, dir: string, attempts: number, days = 1): StatusResult {
   const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setDate(tomorrow.getDate() + days);
   const file = `${STATUS_PREFIX}${name}.md`;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   writeFileAtomic(join(dir, file), `---\nexpires: ${localDay(tomorrow)}\nwritten: ${now.toISOString()}\nattempts: ${attempts}\n---\n${body}\n`);
@@ -113,10 +116,10 @@ export function createStatusServer(dir: string = NOTES_DIR) {
     tools: [
       tool(
         "write_status_note",
-        "Write your own record of what you did, as a status note that your later looks read in their notes (for example name 'brief' to record the daily brief: today's date, started/delivered/failed, the headlines). It replaces the note of that name. Write the status as `status: started`, `status: delivered` or `status: failed`, and any time exactly as the clock line gives it (that zone, no conversion; the code stamps the real time itself and its own record is the authority). Keep it short (1200 characters at most); it expires after tomorrow.",
-        { name: z.string().describe("Lower-case words with dashes, like brief; the note is saved as status-<name>.md"), text: z.string().describe("The note: the date, the status and the few facts a later look needs") },
-        async ({ name, text }) => {
-          const r = writeStatusNote(name, text, new Date(), dir);
+        "Write your own record of what you did, as a status note that your later looks read in their notes (for example name 'brief' to record the daily brief: today's date, started/delivered/failed, the headlines). It replaces the note of that name. Write the status as `status: started`, `status: delivered` or `status: failed`, and any time exactly as the clock line gives it (that zone, no conversion; the code stamps the real time itself and its own record is the authority). Keep it short (1200 characters at most); it expires after tomorrow, unless you pass days (1 to 30) for a record that must last longer.",
+        { name: z.string().describe("Lower-case words with dashes, like brief; the note is saved as status-<name>.md"), text: z.string().describe("The note: the date, the status and the few facts a later look needs"), days: z.number().optional().describe("Days the note lives, 1 to 30 (default 1: until tomorrow)") },
+        async ({ name, text, days }) => {
+          const r = writeStatusNote(name, text, new Date(), dir, days);
           emitRecord("status_note", r.ok ? "written" : "refused", "background", { name: String(name).slice(0, 40) });
           return r.ok ? reply(`Saved ${r.file}.`) : reply(r.error, true);
         },

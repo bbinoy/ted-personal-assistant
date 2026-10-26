@@ -426,7 +426,7 @@ test("the prep run's options: its own gate place ahead of the looks, the hard bu
 test("a normal look is not changed by any of this: no guard, the heartbeat gate, the look's own limits", () => {
   const h = heartbeatOptions(conv, LOGIN, {}, new Date(NOW));
   assert.equal(h.callGuard, undefined);
-  assert.equal(h.gate, undefined);
+  assert.equal(h.gate, "ownerLook", "the owner's look keeps its own place in the line (rungate.ts), not the prep run's");
 });
 
 // ---- the look's side: who records, what the instruction says ----

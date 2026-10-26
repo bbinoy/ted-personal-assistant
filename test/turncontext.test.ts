@@ -42,7 +42,7 @@ test("turn context: told at the start of the message once, again when it changes
   forgetShown(conv.convId);
   const r = rig();
   await r.ask("hello");
-  assert.match(r.prompts[0]!, /Not connected right now[\s\S]*Meeting prep: call at 11:00[\s\S]*\n\nhello$/);
+  assert.match(r.prompts[0]!, /Meeting prep: call at 11:00[\s\S]*\n\nhello$/);
   await r.ask("second");
   assert.equal(r.prompts[1], "second", "the session has it: not told again");
   recordMessage("notice", Date.now() + 1, "Meeting prep: call at 15:00", new Date());
