@@ -9,7 +9,7 @@ import { clean, LIMITS } from "../core/sanitize.ts";
 import { settings } from "../core/settings.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import { splitJournal } from "../memory/journalread.ts";
-import { memoryNoticeText } from "../memory/memorynotice.ts";
+import { recordMemoryChange } from "../memory/memorynotice.ts";
 import { upsertIndex } from "../memory/dreamapply.ts";
 import { noteContent } from "../memory/dreamplan.ts";
 import { MAX_NOTE_CHARS, parseNote, readNotes } from "../memory/notes.ts";
@@ -17,20 +17,21 @@ import { dreamScope } from "../modules/memory/dreamscope.ts";
 import { oneShot, withTimeout } from "../tenants/haiku.ts";
 import { isRefusal, mayRun, type Payer, type Refusal } from "../tenants/payer.ts";
 import type { Conversation } from "./conversationmodel.ts";
-import type { IncomingMessage, IncomingReaction, Target } from "@ted-assistant/messenger";
+import type { IncomingMessage, IncomingReaction } from "@ted-assistant/messenger";
 
 // LEARNING FROM FEEDBACK. A 👎 on something the assistant sent on its own (a heartbeat post, a digest, a notice, a brief), or a reply that quotes one and says "less of this / stop
-// sending these / don't archive these", is the clearest signal there is that a rule is missing or wrong. This turns it into ONE concrete note the owner can accept with a 👍:
+// sending these / don't archive these", is the clearest signal there is that a rule is missing or wrong. This turns it into ONE concrete note, saved at once and mentioned:
 //   1. detect (code): a 👎 on an unprompted message of a private chat; or a short quoted reply the helper model classifies as less_of_this / wrong_action (anything else, or no
 //      answer in time, is not feedback: the message goes its normal way). A group never gets here (a reaction in a group is too ambiguous).
 //   2. propose (model, no tools): from the reacted message and the journal lines of what was done around it (their "per your notes: triage-x" says which note drove it) it writes ONE
 //      note in a category the conversation has, so the machinery that already reads notes (triage, notices, the brief, people) uses it. Code checks the shape and that no address,
 //      link or number appears that is not in the reacted message (or the note it edits); the model's text is never trusted further.
-//   3. offer (code): the note, verbatim, as one short message. NOTHING is saved yet. At most FEEDBACK_OFFERS_PER_DAY a day per conversation, one per message, ever.
-//   4. confirm: the owner's 👍 on the offer, or a short "yes" quoting it, saves it as a CONFIRMED note (origin: owner) announced with its undo like any note change (memorynotice.ts).
-//      A 👎, a "no" or silence saves nothing; the message is not offered again.
+//   3. save (code): a valid proposal is saved as the person's own note (origin: owner: it comes from her own 👎 or words). It is reversible (forget it, the dream's snapshots, undo_dream), so
+//      nobody is asked. At most FEEDBACK_OFFERS_PER_DAY a day per conversation, one per message, ever.
+//   4. mention (model): the caller gets back a FACT ("you saved note X because of ..."), and the ordinary chat turn for that 👎 or reply says it in one line in the assistant's own words. If the
+//      reply has no words, the memory notice (memorynotice.ts) says it, with the way back.
 // A 👍 on an unprompted message is only counted (feedback_signals, per note or journal category): the dream may use the count as a reason to KEEP a related note, never to create one.
-// Notes grant nothing (permissions are code, SAFETY.md), so a proposal cannot widen what the assistant may do; the reacted message may quote mail, so it is fenced as data.
+// Notes grant nothing (permissions are code, SAFETY.md), so a note cannot widen what the assistant may do; the reacted message may quote mail, so it is fenced as data.
 
 const PROACTIVE: ReadonlySet<string> = new Set(["notice", "brief", "draft", "suggestions", "proposals"]); // what the assistant says on its own (messages.ts); a chat reply, an approval question, a system line is not
 const JOURNAL_BEFORE_MS = 30 * 60_000; // the actions of the look that wrote the message are logged just before it
@@ -38,7 +39,7 @@ const JOURNAL_AFTER_MS = 2 * 60_000;
 const MAX_JOURNAL = 6;
 const MAX_REPLY_CHARS = 300; // a longer reply is a conversation, not a verdict on one message
 const MAX_RULE_CHARS = 300;
-const KEEP_OFFERS_DAYS = 30;
+const KEEP_ROWS_DAYS = 30;
 const SIGNAL_KEEP_DAYS = 90;
 const CLASSIFY_TIMEOUT_MS = 10_000;
 const PROPOSE_TIMEOUT_MS = 20_000;
@@ -52,10 +53,6 @@ export const isProactive = (m: Sent | undefined): m is Sent => !!m && PROACTIVE.
 const strip = (emoji: string) => emoji.replace(/[\u{1F3FB}-\u{1F3FF}️]/gu, ""); // skin tones and variation selectors
 export const isThumbDown = (emoji: string) => strip(emoji) === "👎";
 export const isThumbUp = (emoji: string) => strip(emoji) === "👍";
-
-// A short plain yes or no to an offer (a quote of it is required by the caller). Anything else is a normal message.
-export const isYes = (text: string) => /^\s*(y|yes|yep|yeah|yup|ok|okay|sure|please do|do it|save it|go ahead|yes please)\s*[.!]*\s*$/i.test(text);
-export const isNo = (text: string) => /^\s*(n|no|nope|nah|no thanks|skip|skip it|never ?mind|cancel|don'?t)\s*[.!]*\s*$/i.test(text);
 
 // The journal lines around a message: what the assistant did just before it was sent, as "[cat] what (why)", and the notes those actions were done "per".
 export function journalAround(file: string, at: string): { lines: string[]; cats: string[]; notes: string[] } {
@@ -101,9 +98,6 @@ export function checkProposal(raw: unknown, o: { categories: readonly string[]; 
   for (const id of `${text}\n${description}`.match(IDENTIFIERS) ?? []) if (!known.includes(trimId(id))) return undefined;
   return { file, description, text };
 }
-
-// The offer, shown verbatim. `edits`: the note already exists (the text replaces it, so the owner is told).
-export const offerText = (p: Proposal, edits: boolean): string => `Got it. ${edits ? `Update ${p.file} to say` : "Save this note"}:\n“${p.text}”\n👍 to save, 👎 to skip.`;
 
 // ---- the helper model ----
 
@@ -165,10 +159,7 @@ export const helperModel = (o: { classifyMs?: number; proposeMs?: number; run?: 
 
 // ---- the flow ----
 
-type Row = { seq: number; on_ts: number; offer_ts: number | null; state: string; file: string | null; description: string | null; body: string | null; at: number };
-
 export interface FeedbackDeps {
-  out: { reply(text: string, opts?: { plain?: boolean; kind?: "chat" | "notice"; target?: Target }): Promise<number> };
   model?: FeedbackModel; // default: the helper model
   payer?: (conv: Conversation) => Payer | Refusal; // who pays (default: payer.ts mayRun, as a chat turn: the person is waiting)
   now?: () => number;
@@ -176,112 +167,84 @@ export interface FeedbackDeps {
 
 export type Feedback = ReturnType<typeof createFeedback>;
 
-export function createFeedback(deps: FeedbackDeps) {
+export function createFeedback(deps: FeedbackDeps = {}) {
   const now = deps.now ?? Date.now;
   const model = deps.model ?? helperModel();
   const payerOf = deps.payer ?? ((conv) => mayRun(conv, "feedback", { chat: true, now: now() }));
   const enabled = (conv: Conversation) => conv.direct && settings.feedbackOffersPerDay > 0; // a private chat only: a reaction in a group is too ambiguous to learn a rule from
   const db = (conv: Conversation) => convDb(conv.convId);
-  const say = (conv: Conversation, text: string) => deps.out.reply(text, { plain: true, kind: "chat", ...(conv.target ? { target: conv.target } : {}) });
 
-  const offerAt = (conv: Conversation, ts: number): Row | undefined => db(conv).get<Row>("SELECT * FROM feedback_offers WHERE offer_ts = ? AND state = 'offered'", ts);
   const aboutBefore = (conv: Conversation, ts: number): boolean => db(conv).get("SELECT 1 AS x FROM feedback_offers WHERE on_ts = ?", ts) !== undefined;
   const offersToday = (conv: Conversation): number => db(conv).get<{ n: number }>("SELECT COUNT(*) AS n FROM feedback_offers WHERE state != 'none' AND at > ?", now() - 86_400_000)?.n ?? 0;
 
-  // ONE offer about this message, if the model has a usable rule. true: handled (an offer went out, or this message was dealt with before); false: nothing was done, the caller goes on as usual.
-  async function offer(conv: Conversation, msg: Sent, said: string | undefined): Promise<boolean> {
-    if (aboutBefore(conv, msg.ts)) return true; // one offer per message, ever: a second 👎, or a later reply, is not asked again
-    if (offersToday(conv) >= settings.feedbackOffersPerDay) return false;
+  // ONE note about this message, if the model has a usable rule: saved as the person's own and handed back as a fact for the chat turn to mention. undefined: nothing was saved, the caller goes on as usual.
+  async function learn(conv: Conversation, msg: Sent, said: string | undefined): Promise<string | undefined> {
+    if (aboutBefore(conv, msg.ts) || offersToday(conv) >= settings.feedbackOffersPerDay) return undefined; // one note per message, ever: a second 👎, or a later reply, is not asked again
     const payer = payerOf(conv);
-    if (isRefusal(payer)) return false;
+    if (isRefusal(payer)) return undefined;
     const scope = dreamScope(conv);
     const around = journalAround(conv.logFile, msg.at);
     const notes = readNotes(new Date(now()), conv.notesDir).filter((n) => around.notes.includes(n.file) && scope.categories.includes(n.category));
     const raw = await model.propose(payer, { reacted: msg.text, ...(said ? { said } : {}), journal: around.lines, categories: scope.categories, notes: notes.map((n) => ({ file: n.file, text: n.text })) }).catch(() => undefined);
     const p = checkProposal(raw, { categories: scope.categories, sources: [msg.text, said ?? "", ...notes.map((n) => n.text)] });
     const at = now();
-    if (!p) {
-      db(conv).run("INSERT INTO feedback_offers (on_ts, state, at) VALUES (?, 'none', ?)", msg.ts, at); // not asked again, and no offer used up
-      return false;
-    }
-    const edits = existsSync(join(conv.notesDir, p.file));
-    const offerTs = await say(conv, offerText(p, edits));
-    db(conv).run("INSERT INTO feedback_offers (on_ts, offer_ts, state, file, description, body, at) VALUES (?, ?, 'offered', ?, ?, ?, ?)", msg.ts, offerTs, p.file, p.description, p.text, at);
-    db(conv).run("DELETE FROM feedback_offers WHERE at < ?", at - KEEP_OFFERS_DAYS * 86_400_000);
-    return true;
-  }
-
-  // The owner said yes: the note is saved as hers (origin: owner), announced with its undo. Checked again here: the shape, the category, room.
-  async function confirm(conv: Conversation, row: Row): Promise<void> {
     const d = db(conv);
-    d.run("UPDATE feedback_offers SET state = 'saved' WHERE seq = ?", row.seq); // (before the write: a second yes cannot save it twice)
-    const scope = dreamScope(conv);
-    const p = checkProposal({ propose: true, file: row.file, description: row.description, text: row.body }, { categories: scope.categories, sources: [row.body ?? "", row.description ?? ""] });
-    if (!p) return void (await say(conv, "I could not save that one. Tell me the rule in your own words and I will."));
-    const path = join(conv.notesDir, p.file);
-    const existing = existsSync(path) ? parseNote(p.file, readFileSync(path, "utf8")) : undefined;
-    if (!existing && readNotes(new Date(now()), conv.notesDir).length >= settings.memoryMaxNotes) return void (await say(conv, "My memory is full, so I did not save that."));
+    d.run("DELETE FROM feedback_offers WHERE at < ?", at - KEEP_ROWS_DAYS * 86_400_000);
+    const path = p && join(conv.notesDir, p.file);
+    const existing = path && existsSync(path) ? parseNote(p.file, readFileSync(path, "utf8")) : undefined;
+    if (!p || !path || (!existing && readNotes(new Date(at), conv.notesDir).length >= settings.memoryMaxNotes)) {
+      d.run("INSERT INTO feedback_offers (on_ts, state, at) VALUES (?, 'none', ?)", msg.ts, at); // not tried again, and no note used up
+      return undefined;
+    }
     mkdirSync(conv.notesDir, { recursive: true, mode: 0o700 });
-    writeFileAtomic(path, noteContent(p.file, p.description, p.text.slice(0, MAX_NOTE_CHARS), undefined, new Date(now()), "owner"));
+    writeFileAtomic(path, noteContent(p.file, p.description, p.text.slice(0, MAX_NOTE_CHARS), undefined, new Date(at), "owner"));
     if (scope.index) upsertIndex(p.file, p.description, scope);
+    d.run("INSERT INTO feedback_offers (on_ts, state, file, description, body, at) VALUES (?, 'saved', ?, ?, ?, ?)", msg.ts, p.file, p.description, p.text, at);
     emitRecord("memory_note", existing ? "edited" : "written", "chat");
-    await say(conv, memoryNoticeText([`${existing ? "✏️ updated" : "➕ saved"} ${p.file}: ${p.description}`]));
+    recordMemoryChange(`${existing ? "✏️ updated" : "➕ saved"} ${p.file}: ${p.description}`); // (the fallback if the turn answers with no words)
+    return `You just ${existing ? "updated" : "saved"} the note ${p.file} because of ${said ? "their reply to" : "their 👎 on"} the message above, so you do this from now on:\n${fence("saved_note", p.text, 600)}\nMention it in one short line in your own words, and that "forget it" takes it back.`;
   }
-
-  const decline = (conv: Conversation, row: Row) => void db(conv).run("UPDATE feedback_offers SET state = 'declined' WHERE seq = ?", row.seq);
 
   // A 👍 on an unprompted message: counted against the note its actions followed, else their journal category. Never creates anything.
-  function signal(conv: Conversation, msg: Sent): void {
+  function signal(conv: Conversation, msg: Sent): undefined {
     const around = journalAround(conv.logFile, msg.at);
     const key = around.notes[0] ?? (around.cats[0] ? `cat:${around.cats[0]}` : undefined);
-    if (!key) return;
+    if (!key) return undefined;
     const d = db(conv);
     const at = new Date(now()).toISOString();
     d.run("INSERT INTO feedback_signals (key, up, last_at) VALUES (?, 1, ?) ON CONFLICT (key) DO UPDATE SET up = up + 1, last_at = excluded.last_at", key, at);
     d.run("DELETE FROM feedback_signals WHERE last_at < ?", new Date(now() - SIGNAL_KEEP_DAYS * 86_400_000).toISOString());
+    return undefined;
   }
 
   return {
-    // A reaction in a private chat that is no approval answer. true: dealt with here (no chat turn is run for it).
-    async reaction(conv: Conversation, r: Pick<IncomingReaction, "emoji" | "targetTimestamp">): Promise<boolean> {
-      if (!enabled(conv)) return false;
+    // A reaction in a private chat that is no approval answer. The fact to hand the chat turn for it when a note was saved; undefined otherwise (the turn runs as usual either way).
+    async reaction(conv: Conversation, r: Pick<IncomingReaction, "emoji" | "targetTimestamp">): Promise<string | undefined> {
+      if (!enabled(conv)) return undefined;
       try {
-        const open = offerAt(conv, r.targetTimestamp);
-        if (open) {
-          if (isThumbUp(r.emoji)) return void (await confirm(conv, open)), true;
-          if (isThumbDown(r.emoji)) return decline(conv, open), true;
-          return false;
-        }
         const msg = findMessage(r.targetTimestamp, conv.logFile);
-        if (!isProactive(msg)) return false;
-        if (isThumbUp(r.emoji)) return signal(conv, msg), false; // counted; the chat's own judgement of a 👍 still applies
-        return isThumbDown(r.emoji) ? await offer(conv, msg, undefined) : false;
+        if (!isProactive(msg)) return undefined;
+        if (isThumbUp(r.emoji)) return signal(conv, msg); // counted; the chat's own judgement of a 👍 still applies
+        return isThumbDown(r.emoji) ? await learn(conv, msg, undefined) : undefined;
       } catch (e) {
         console.error("feedback: reaction failed:", (e as Error).message);
-        return false;
+        return undefined;
       }
     },
 
-    // A message of the owner's that quotes something. true: it was the answer to an offer, or feedback that got its offer (the message is not also a chat turn).
-    async message(conv: Conversation, m: Pick<IncomingMessage, "text" | "quote" | "edited" | "image" | "file" | "audio">): Promise<boolean> {
-      if (!enabled(conv) || !m.quote || m.edited || m.image || m.file || !m.text.trim() || m.text.length > MAX_REPLY_CHARS) return false;
+    // A message of the owner's that quotes something sent unprompted: the fact to hand its chat turn when it was feedback and a note was saved; undefined otherwise.
+    async message(conv: Conversation, m: Pick<IncomingMessage, "text" | "quote" | "edited" | "image" | "file" | "audio">): Promise<string | undefined> {
+      if (!enabled(conv) || !m.quote || m.edited || m.image || m.file || !m.text.trim() || m.text.length > MAX_REPLY_CHARS) return undefined;
       try {
-        const open = offerAt(conv, m.quote.timestamp);
-        if (open) {
-          if (isYes(m.text)) return void (await confirm(conv, open)), true;
-          if (isNo(m.text)) return decline(conv, open), true;
-          return false;
-        }
         const msg = findMessage(m.quote.timestamp, conv.logFile);
-        if (!isProactive(msg) || aboutBefore(conv, msg.ts) || offersToday(conv) >= settings.feedbackOffersPerDay) return false; // (the model is not asked at all when no offer could follow)
+        if (!isProactive(msg) || aboutBefore(conv, msg.ts) || offersToday(conv) >= settings.feedbackOffersPerDay) return undefined; // (the model is not asked at all when no note could follow)
         const payer = payerOf(conv);
-        if (isRefusal(payer)) return false;
+        if (isRefusal(payer)) return undefined;
         const v = await model.classify(payer, { reacted: msg.text, said: m.text }).catch(() => undefined);
-        if (!v || v.kind === "not_feedback") return false;
-        return await offer(conv, msg, m.text);
+        return !v || v.kind === "not_feedback" ? undefined : await learn(conv, msg, m.text);
       } catch (e) {
         console.error("feedback: message failed:", (e as Error).message);
-        return false;
+        return undefined;
       }
     },
   };

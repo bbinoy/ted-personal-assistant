@@ -170,7 +170,7 @@ const isNight = (now: Date, zone: string): boolean => inQuietHours(now, settings
 // Is this conversation being left alone right now: the quiet window, or its own /quiet (conversation/quiet.ts)?
 const holding = (conv: Conversation, now: Date, zone: string): boolean => isNight(now, zone) || isQuiet(conv, now);
 
-// Is the conversation being left alone right now (the quiet window, or its /quiet)? What a look offers in a message of its own (shadow.ts, learned.ts) waits by this.
+// Is the conversation being left alone right now (the quiet window, or its /quiet)? What a look offers in a message of its own waits by this.
 export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneFor(conv));
 
 // A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).

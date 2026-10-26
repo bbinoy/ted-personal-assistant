@@ -409,6 +409,16 @@ export const CONV_SCHEMA: readonly Migration[] = [
     name: "the layout-3 import is retired: its bookkeeping table goes",
     up: "DROP TABLE legacy_imports;",
   },
+  {
+    version: 13,
+    name: "retire the first-week proposals (shadow_*) and the numbered replies to the learned list (learned_asks, learned_owed)",
+    up: `
+      DROP TABLE shadow_proposals;
+      DROP TABLE shadow_state;
+      DROP TABLE learned_asks;
+      DROP TABLE learned_owed;
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

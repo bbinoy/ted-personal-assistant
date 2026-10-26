@@ -11,7 +11,6 @@ import { dreamScope, dreamStateConv, readDream, writeDream, type DreamState } fr
 import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
-import { offerLearned } from "./learned.ts";
 import { recordDream } from "../memory/learned.ts";
 import { likedLines } from "./feedback.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
@@ -47,8 +46,8 @@ const hhmm = (iso: string) => `${iso.slice(5, 10)} ${new Date(iso).toTimeString(
 // Pure: the conversation since the last dream as lines, for any conversation. Only the words of the person (or the members) the notes are about can ground a
 // note (`text`): "owner" is a private chat's person (the owner, or a friend, named `who`), "member" is what the members of a group wrote (their lines start with
 // their names). Their reactions are shown as signals, but the message they were on may quote mail, and the assistant's replies only make sense of "yes, do
-// that": neither is evidence. So a 👍 or 👎 never creates a note by itself. What a 👎 can lead to is an OFFER (feedback.ts) and the owner's 👍 or "yes" on it; that saves a
-// confirmed note (origin: owner) at once, so it is a note by the time the dream reads, not a line of evidence. A message she deleted is not evidence at all, and an edited one counts once, as edited. `count`: how many lines of evidence
+// that": neither is evidence. So a 👍 or 👎 never creates a note by itself. What a 👎 can lead to is a note saved at once (feedback.ts, origin: owner), so it is a note by the time
+// the dream reads, not a line of evidence. A message she deleted is not evidence at all, and an edited one counts once, as edited. `count`: how many lines of evidence
 // there are (the dream's threshold).
 export function conversationLines(messages: readonly Sent[], who: string = OWNER, evidence: "owner" | "member" = "owner"): { lines: string[]; text: string; count: number } {
   const lines: string[] = [];
@@ -166,7 +165,6 @@ export interface DreamerDeps {
   key?: () => string | undefined; // where a friend's instance key comes from (default settings.tenantApiKey; tests)
   busy?: (conv: Conversation) => boolean; // a turn of it is settling, queued or running (pipeline.busy): the conversation is skipped for now (its day stays open, the hourly retry comes back)
   run?: (payer: Payer, conv: Conversation) => Runner; // the model (default runnerFor(payer); tests)
-  told?: (conv: Conversation, now: Date) => unknown; // after a friend's dream: tell her what changed overnight (default offerLearned: one message, held in quiet hours; the owner's goes in the brief, a group's never)
 }
 
 export function createDreamer(deps: DreamerDeps = {}) {
@@ -206,7 +204,6 @@ export function createDreamer(deps: DreamerDeps = {}) {
       console.log(`${label}: ${plan.actions.length} change(s), ${plan.rejected.length} rejected`);
       if (snapshot && conv.kind !== "tenant") console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
       if (snapshot && conv.kind !== "group") recordDream(conv.convId, plan, scope.notesDir, now.getTime()); // not silent to the person: it is listed once in "what I learned overnight" (memory/learned.ts); a group's notes are shared, nothing is listed
-      if (conv.kind === "tenant") await Promise.resolve((deps.told ?? ((c, n) => offerLearned(c, n, { afterDream: true })))(conv, now)).catch(() => undefined);
     } catch (e) {
       console.error(`dream (${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""}): failed:`, (e as Error).message);
       emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: false, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });
