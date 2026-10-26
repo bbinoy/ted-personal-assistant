@@ -17,7 +17,6 @@ export const HEARTBEAT_SCHEMA: Options["outputFormat"] = {
       message: { type: "string" }, // the message to the owner, or [[silent]]
       nextCheckMinutes: { type: "integer", minimum: MIN_LOOK_MINUTES, maximum: MAX_LOOK_MINUTES },
       urgent: { type: "boolean" }, // truly time-critical: code then posts it also in quiet hours and past the day's cap (heartbeat/notices.ts)
-      needsYou: { type: "boolean" }, // the message asks something of the owner (a decision, an answer, an approval): in a held digest it is listed under "Needs you" (heartbeat/digest.ts)
     },
   },
 };
@@ -33,7 +32,6 @@ export interface Answer {
   message: string | undefined; // undefined: silent
   nextCheckMinutes: number;
   urgent: boolean; // the model marked the message time-critical (only a literal true counts)
-  needsYou: boolean; // the model marked it as asking something of the owner (only a literal true counts)
 }
 
 // Pure: the run's answer. The constrained JSON is read first, a JSON text second; anything else is silent (a run that did not follow the format must never post its reasoning).
@@ -46,8 +44,8 @@ export function parseHeartbeatAnswer(structured: unknown, text: string): Answer 
       raw = undefined;
     }
   }
-  const v = (raw && typeof raw === "object" ? raw : {}) as { message?: unknown; nextCheckMinutes?: unknown; urgent?: unknown; needsYou?: unknown };
+  const v = (raw && typeof raw === "object" ? raw : {}) as { message?: unknown; nextCheckMinutes?: unknown; urgent?: unknown };
   const message = typeof v.message === "string" ? v.message.trim() : "";
   const silent = !message || message.toLowerCase().includes(SILENT.toLowerCase());
-  return { message: silent ? undefined : message, nextCheckMinutes: clampLook(v.nextCheckMinutes), urgent: !silent && v.urgent === true, needsYou: !silent && v.needsYou === true };
+  return { message: silent ? undefined : message, nextCheckMinutes: clampLook(v.nextCheckMinutes), urgent: !silent && v.urgent === true };
 }

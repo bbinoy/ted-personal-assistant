@@ -3,9 +3,9 @@ import { convPaths, OWNER_CONV } from "./convpaths.ts";
 import { instanceDb, kvGet, kvSet } from "./instancedb.ts";
 import { settings } from "./settings.ts";
 
-// The welcome: the first thing a new owner hears, once, when a FRESH data folder starts for the first time. Written by code (the persona's name and the owner's, no model), short: what it will do, that it
-// starts gently, the three commands worth knowing, and the offer of the setup skill. At most once ever: the decision is written down (the instance.db kv row "welcome") whichever way it went. An install
-// that already has history, spend or looks, or whose data folder was moved to the current layout, is not new: it is marked skipped at once and never welcomed later, even if its history is deleted.
+// The welcome: a FACT for the owner's first run (her first chat turn or first look) on a fresh data folder: "this is a fresh install, introduce yourself". The run writes the words, in its own voice. At most once
+// ever: the decision is written down at the first start (the instance.db kv row "welcome": pending, told or skipped) and handed over once. An install that already has history, spend or looks, or whose data
+// folder was moved to the current layout, is not new: it is marked skipped at once and never welcomed later, even if its history is deleted.
 
 export const WELCOME_KEY = "welcome";
 
@@ -18,20 +18,11 @@ export interface WelcomeFacts {
 /** Pure: is this a data folder nobody has used? */
 export const isFresh = (f: WelcomeFacts): boolean => f.messages === 0 && f.spend === 0 && f.looks === 0;
 
-export function welcomeText(o: { assistant: string; owner: string; mail: boolean }): string {
-  const watch = o.mail ? "your mail, your calendar and your tasks" : "your calendar and your tasks";
-  return [
-    `Hi${o.owner && o.owner !== "the owner" ? ` ${o.owner}` : ""}, I'm ${o.assistant}. I'm up and running.`,
-    `I'll keep an eye on ${watch}, remind you of what's coming and message you only when something needs you.`,
-    o.mail
-      ? "I archive newsletters and notifications on my own as your notes say; /today lists everything I did and why, and \"restore 3\" brings one back."
-      : "I'm starting gently: I'll tell you what I notice and do nothing without your say-so.",
-    "Three commands worth knowing:",
-    "/status: what I'm up to right now",
-    "/pause 2h: stop all my background work for two hours",
-    "/today: what I did today, and why",
-    "If you'd like, say \"set up\" and I'll walk you through connecting your calendars and how you like to write; it takes a few minutes in this chat.",
-  ].join("\n");
+export function welcomeFact(o: { owner: string; mail: boolean }): string {
+  const watch = o.mail ? "mail, calendar and tasks" : "calendar and tasks";
+  return `This is a fresh install and your first run with ${o.owner}: introduce yourself briefly, in your own voice. Say what you will do (keep an eye on their ${watch}, remind them of what is coming, message only when something needs them)${
+    o.mail ? "; that you archive routine mail (newsletters, notifications) on your own as their notes say, that /today lists everything you did and why, and that \"restore 3\" undoes one" : ""
+  }. Name the commands /status (what you are up to), /pause 2h (stop all background work for two hours) and /today (what you did today, and why). Offer the setup skill: if they say "set up" you walk them through connecting their calendars and how they like to write. If they asked something in this run, answer that first.`;
 }
 
 export function welcomeFacts(): WelcomeFacts {
@@ -51,19 +42,14 @@ export function welcomeFacts(): WelcomeFacts {
   return { messages, spend: count("SELECT COUNT(*) FROM spend"), looks: count("SELECT COUNT(*) FROM looks") };
 }
 
-/**
- * Welcome the owner if this is a fresh data folder's first start, once ever. `send` posts to her chat. Returns what happened: "sent", "skipped" (not a fresh folder; written down so it never is), "already" (done
- * before) or "failed" (the send failed: nothing is written down, the next start tries again while the folder is still fresh).
- */
-export async function welcomeOnce(send: (text: string) => Promise<unknown>, facts: () => WelcomeFacts = welcomeFacts, now: () => number = Date.now): Promise<"sent" | "skipped" | "already" | "failed"> {
-  if (kvGet<{ state?: string } | null>(WELCOME_KEY, null)?.state) return "already";
-  if (!isFresh(facts())) return kvSet(WELCOME_KEY, { state: "skipped", at: now() }), "skipped";
-  try {
-    await send(welcomeText({ assistant: settings.assistant, owner: settings.owner, mail: settings.mail }));
-  } catch (e) {
-    console.error("welcome: could not be sent:", (e as Error).message);
-    return "failed";
-  }
-  kvSet(WELCOME_KEY, { state: "sent", at: now() });
-  return "sent";
+/** At the start: write down whether this data folder is fresh (pending) or not (skipped), once ever. */
+export function welcomeStart(facts: () => WelcomeFacts = welcomeFacts, now: () => number = Date.now): void {
+  if (!kvGet<{ state?: string } | null>(WELCOME_KEY, null)?.state) kvSet(WELCOME_KEY, { state: isFresh(facts()) ? "pending" : "skipped", at: now() });
+}
+
+/** The fact for the owner's first run, once ever (the row turns from pending to told as it is handed over); "" at every other time. */
+export function takeWelcome(now: () => number = Date.now): string {
+  if (kvGet<{ state?: string } | null>(WELCOME_KEY, null)?.state !== "pending") return "";
+  kvSet(WELCOME_KEY, { state: "told", at: now() });
+  return welcomeFact({ owner: settings.owner, mail: settings.mail });
 }

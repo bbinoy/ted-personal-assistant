@@ -18,7 +18,7 @@ const { convDbCheck } = await import("../src/doctor.ts");
 const { owner, group } = await import("../src/conversation/conversationmodel.ts");
 const { createSeenMail, createSeenMailServer, SEEN_MAX, trimSeenMail } = await import("../src/modules/seenmail/seenmail.ts");
 const { holdQuote, holdVoiceNote, MAX_AGE_MS, NOTES_PER_CONVERSATION, pruneVoiceNotes, quotedVoiceNote, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
-const { heldPosts, resetHeld, submitPost, MAX_HELD, noticeDamaged, ownerNotices } = await import("../src/heartbeat/notices.ts");
+const { heldPosts, resetHeld, submitPost, MAX_HELD, noticeDamaged } = await import("../src/heartbeat/notices.ts");
 const { convDbRule } = await import("../src/heartbeat/convretention.ts");
 const { layout } = await import("../src/core/convpaths.ts");
 const { dataRoot } = await import("../src/core/convpaths.ts");
@@ -130,14 +130,13 @@ test("the owner is told once a day while a database stays damaged, and the docto
   } finally {
     console.error = was;
   }
-  const told: string[] = [];
-  ownerNotices.sendTo((t) => told.push(t));
-  const now = new Date(2026, 9, 21, 14, 0, 0); // (daytime: not held)
+  resetHeld(owner());
+  const now = new Date(2026, 9, 21, 14, 0, 0);
   assert.equal(noticeDamaged(now), 1);
   assert.equal(noticeDamaged(now), 0, "once a day");
+  const told = heldPosts(owner()).map((h) => h.text); // (a friend's or a group's file: a fact for the owner's next look)
   assert.equal(told.length, 1);
   assert.match(told[0]!, /group-[0-9a-f]{16}.*was damaged.*set the file aside.*background work.*stopped/s);
-  ownerNotices.sendTo(undefined);
   const lines: [boolean | "warn", string, string][] = [];
   convDbCheck((ok, what, detail = "") => void lines.push([ok, what, detail]), dataRoot());
   const fail = lines.find((l) => l[0] === false && l[1] === `conversation database ${bad}`);
@@ -334,10 +333,9 @@ test("a reset WITH salvage: the mail ids and the session pointer are copied out 
   assert.equal(fresh.num("SELECT COUNT(*) FROM pending_items"), 0, "old approval rows are never copied out of a damaged file");
   assert.ok(fresh.get("SELECT at FROM reset"), "the reset flag is set");
   // the owner is told once that it was set aside
-  const told: string[] = [];
-  ownerNotices.sendTo((t) => told.push(t));
+  resetHeld(owner());
   noticeDamaged(new Date(2026, 9, 21, 14, 0, 0));
-  ownerNotices.sendTo(undefined);
+  const told = heldPosts(owner()).map((h) => h.text);
   assert.match(told.join("\n"), /set the file aside/);
   assert.doesNotMatch(told.join("\n"), /Reply to Anna|approval/i);
   clearDamage(c);
