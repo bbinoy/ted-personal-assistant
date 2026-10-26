@@ -163,7 +163,7 @@ function renderTask(tool: string, response: unknown, cat: string): Rendered {
   const first = (typeof response === "string" ? response : resultText(response)).split("\n")[0]?.trim().replace(/\.$/, "") ?? "";
   const id = /#(\d+)/.exec(first)?.[1];
   const name = tool.split("__").pop() ?? tool;
-  const undo = !id ? undefined : name === "add_task" || name === "confirm_suggestion" ? `say 'drop task #${id}'` : name === "complete_task" || name === "drop_task" || name === "snooze_task" || name === "reject_suggestion" ? `say 'reopen task #${id}'` : undefined;
+  const undo = !id ? undefined : name === "add_task" ? `say 'drop task #${id}'` : name === "complete_task" || name === "drop_task" || name === "snooze_task" || name === "reject_suggestion" ? `say 'reopen task #${id}'` : undefined;
   return { what: first || doneVerb(tool, {}), cat, ...(undo ? { undo } : {}) };
 }
 

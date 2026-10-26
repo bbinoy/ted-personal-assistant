@@ -243,7 +243,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return typeof r === "string" ? { deny: r } : { input: r };
     };
     if (verdict === "allow") {
-      if (readsUntrusted(tool)) markUntrusted();
+      if (readsUntrusted(tool, undefined, conversation)) markUntrusted();
       // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
       if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
@@ -327,7 +327,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         log(tool, "auto-approved", source, { reason: judged.reason }, !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
-        if (readsUntrusted(tool)) markUntrusted();
+        if (readsUntrusted(tool, undefined, conversation)) markUntrusted();
         g?.allowed?.("judge");
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
@@ -372,7 +372,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (d.approved) clearDeclined(conversation, tool, input, Date.now(), g?.description);
     else if (!d.feedback && !d.expired && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a plain no (not a reply, not silence, not an aborted turn)
     if (d.approved && onceOnly) remember(memo);
-    if (d.approved && readsUntrusted(tool)) markUntrusted();
+    if (d.approved && readsUntrusted(tool, undefined, conversation)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && !d.updatedInput) g?.allowed?.("owner");
     if (d.approved && g?.payment && g.resolve) {

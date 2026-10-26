@@ -110,7 +110,7 @@ export function previewImport(scope: Scope, input: { source?: string; rows: read
   const byKind: Record<string, number> = {};
   for (const r of keep) byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
   const summary: Summary = { total: keep.length, open, done: keep.length - open, byKind, rejected, alreadyImported: already, skippedDone, doneMode };
-  const live = db.num("SELECT COUNT(*) FROM items WHERE status IN ('suggested', 'open', 'snoozed')");
+  const live = db.num("SELECT COUNT(*) FROM items WHERE status IN ('open', 'snoozed')");
   const batchId = `imp-${randomBytes(3).toString("hex")}`;
   db.tx(() => {
     db.run("UPDATE pending_imports SET state = 'discarded' WHERE state = 'pending'"); // (a newer preview replaces an older one)
@@ -179,7 +179,7 @@ export function commitImport(scope: Scope, batchId: string, look?: TurnLook): Co
   const out = db.tx(() => {
     const known = new Set(db.all<{ source_ref: string }>("SELECT source_ref FROM items WHERE source_kind = 'import' AND source_ref IS NOT NULL").map((r) => r.source_ref));
     const fresh = rows.filter((r) => !known.has(r.sourceRef));
-    const live = db.num("SELECT COUNT(*) FROM items WHERE status IN ('suggested', 'open', 'snoozed')");
+    const live = db.num("SELECT COUNT(*) FROM items WHERE status IN ('open', 'snoozed')");
     if (live + fresh.filter((r) => r.status === "open").length > LIMITS.open) throw new TaskError(`The list holds ${LIMITS.open} open items at most: finish or drop some first, or import the open rows only.`);
     const items = fresh.map((r) => insertImported(db, { ...scope, viaTool: true }, r));
     db.run("UPDATE pending_imports SET state = 'committed', committed = ? WHERE batch_id = ?", now, batchId);

@@ -14,7 +14,7 @@ function dueText(it: Item, now: number, zone: string, short = false): string {
   return showLocal(it.due!, today);
 }
 
-/** One item for a model or a list: "#4 [task] Call Sam | due Fri 24 Oct 14:30 | with Sam | remind Thu 23 Oct 09:00 | repeats every monday | suggested". */
+/** One item for a model or a list: "#4 [task] Call Sam | due Fri 24 Oct 14:30 | with Sam | remind Thu 23 Oct 09:00 | repeats every monday | inferred from mail". */
 export function itemLine(it: Item, now: number, zone: string): string {
   const parts = [`#${it.id} [${it.kind}] ${it.title}`];
   const due = dueText(it, now, zone);
@@ -57,12 +57,11 @@ function section(title: string, items: readonly Item[], now: number, zone: strin
   return ["", `${title} (${items.length})`, ...shown, ...(items.length > SECTION_MAX ? [`… and ${items.length - SECTION_MAX} more`] : [])];
 }
 
-/** "/tasks": the open items grouped Overdue / Today / Upcoming / No date / Waiting on / I owe, then how many suggestions wait. */
+/** "/tasks": the open items grouped Overdue / Today / Upcoming / No date / Waiting on / I owe. */
 export function tasksText(key: string, now: number, zone: string): string {
   const open = listItems(key, { status: "open", limit: 200 }, now, zone);
   const c = counts(key, now, zone);
-  const tail = c.suggested ? [``, `${c.suggested} suggestion${c.suggested === 1 ? "" : "s"} waiting: /tasks suggestions`] : [];
-  if (!open.length) return ["Nothing open.", ...(c.snoozed ? [`${c.snoozed} snoozed.`] : []), ...tail, ...(c.suggested ? [] : ["Tell me what to add."])].join("\n");
+  if (!open.length) return ["Nothing open.", ...(c.snoozed ? [`${c.snoozed} snoozed.`] : []), "Tell me what to add."].join("\n");
   const cls = (it: Item) => dueClass(it, now, zone);
   const overdue = open.filter((i) => cls(i) === "overdue");
   const rest = open.filter((i) => cls(i) !== "overdue");
@@ -76,19 +75,18 @@ export function tasksText(key: string, now: number, zone: string): string {
     ...section("Waiting on", rest.filter((i) => i.kind === "owed_to_me"), now, zone),
     ...section("I owe", rest.filter((i) => i.kind === "i_owe"), now, zone),
     ...(c.snoozed ? ["", `${c.snoozed} snoozed.`] : []),
-    ...tail,
   ].join("\n");
 }
 
-/** "/tasks suggestions": what the assistant noticed and proposes, each with where it came from. */
-export function suggestionsText(key: string, now: number, zone: string): string {
-  const items = listItems(key, { status: "suggested", limit: 50 }, now, zone);
-  if (!items.length) return "No suggestions waiting.";
-  return [
-    `${items.length} suggestion${items.length === 1 ? "" : "s"} (from ${[...new Set(items.map((i) => i.sourceKind))].join(", ")}):`,
-    ...items.slice(0, 12).map((it) => bullet(it, now, zone)),
-    ...(items.length > 12 ? [`… and ${items.length - 12} more`] : []),
-    "",
-    "Tell me which to keep (e.g. “keep 12”) or drop (“drop 13”).",
-  ].join("\n");
+// ---- what a look is told about the list (a fact block written by code: heartbeat/look.ts) ----
+
+export const ADDED_WINDOW_MS = 24 * 3_600_000;
+
+/** The facts about the list a look gets in its prompt: what was added on the assistant's own (from mail or a meeting) in the last day, with where it came from. "" when there is nothing.
+ *  The titles may carry a mail's words, so it is fenced as data by the caller; `fromMail`: whether any of it came from mail (the run is then told it read untrusted text). */
+export function tasksFacts(key: string, now: number, zone: string): { text: string; fromMail: boolean } {
+  const added = listItems(key, { status: ["open", "snoozed", "done", "dropped"], limit: 50 }, now, zone).filter((it) => it.origin === "inferred" && now - it.createdAt < ADDED_WINDOW_MS);
+  if (!added.length) return { text: "", fromMail: false };
+  const lines = added.map((it) => `${itemLine(it, now, zone)} | added ${showInstant(it.createdAt, zone, now)}${it.sourceRef ? ` | source ${it.sourceRef}` : ""}`);
+  return { text: `Added to the list on your own in the last 24 hours (you or another look did it; the chat log and your own posts show whether it was already mentioned):\n${lines.join("\n")}`, fromMail: added.some((it) => it.sourceKind === "mail") };
 }

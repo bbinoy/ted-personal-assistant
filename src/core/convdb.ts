@@ -20,9 +20,8 @@ import { writeFileAtomic } from "./state.ts";
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
 //   routine_runs     the last period of each scheduled routine besides the brief (evening, weekly): once per period, retries, skips (src/tasks/routines.ts)
-//   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way, a suggestion; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
-//   suggestion_asks / group_remind_noted   which suggested items each "💡 ..." message listed (message ts -> number -> item: a 👍 or "1 yes" quoting it answers for them), and which group members were told once that
-//                    a reminder said in the group is the group's (src/tasks/suggest.ts). Small, pruned after 60 days.
+//   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
+//   group_remind_noted   which group members were told once that a reminder said in the group is the group's (src/tasks/grouptasks.ts). (suggestion_asks: the old one-tap suggestions, emptied by step 11.)
 //
 // NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
@@ -394,6 +393,16 @@ export const CONV_SCHEMA: readonly Migration[] = [
         told           INTEGER NOT NULL DEFAULT 1,                  -- 0: a skipped period the owner has not been told about yet
         last_delivered INTEGER                                      -- UTC ms of the last successful run (the doctor)
       );
+    `,
+  },
+  {
+    version: 11,
+    name: "tasks from mail are added, not suggested: every item still waiting as a suggestion becomes an open task (its origin, source and history kept)",
+    up: `
+      INSERT INTO task_events (item_id, at, by, action, before, after)
+        SELECT id, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 'system (suggestions retired)', 'confirmed', '{"status":"suggested"}', '{"status":"open"}' FROM items WHERE status = 'suggested';
+      UPDATE items SET status = 'open', updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000 WHERE status = 'suggested';
+      DELETE FROM suggestion_asks;
     `,
   },
 ];

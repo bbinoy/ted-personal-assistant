@@ -29,12 +29,11 @@ import { hasOpen, openCount } from "../approvals/approvals.ts";
 import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
 import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { countPosts, failingLooksFact, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
+import { failingLooksFact, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
 import { oneLine } from "./digest.ts";
 import { gateSink } from "../modules/send/send.ts";
-import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
+import { tasksFacts } from "../tasks/render.ts";
 import { offerLearned } from "../conversation/learned.ts";
-import { zoneOf } from "../tenants/tenants.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
 
@@ -48,6 +47,7 @@ import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } f
 // What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
 export interface RunExtra {
+  untrusted?: boolean;
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
@@ -112,7 +112,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
   });
 }
 
-// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock, the owner's failing-looks fact; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
+// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock, the task list's facts, the owner's failing-looks fact; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
 // (they quote what was posted, which can carry words of a mail or a page).
 export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string, ...facts: string[]): string =>
   [clockLine(now, zone), instruction, ...facts, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].filter(Boolean).join("\n\n");
@@ -167,7 +167,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !overnightWaiting(conv, now)) return "not-due"; // (held posts of an earlier day: due once quiet ends)
-    expireSuggestions(conv.key, now.getTime(), zoneOf(conv)); // (tasks/suggest.ts: a suggestion nobody answered in SUGGESTION_DAYS is dropped, kept in the history)
     if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
     // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
@@ -199,6 +198,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
     const overnight = overnightBlock(takeOvernight(conv, now), now, looker.zone); // (handed over once: taken out of the held posts here)
+    const tasks = looker.tasks ? tasksFacts(conv.key, now.getTime(), looker.zone) : { text: "", fromMail: false }; // what was added to the list on its own (tasks/render.ts): the look says it, if no look has yet
     const failing = failingLooksFact(conv); // the owner's own looks have failed for a long awake stretch (notices.ts): a fact this look may mention, never a fixed message
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
@@ -223,8 +223,9 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, failing), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, tasks.text && fence("task_list_facts", tasks.text), failing), {
             provenance: { kind: "standing", task: instruction },
+            ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
             ...(shadow ? { shadow: shadow.gate } : {}),
             signal: overtaken.signal,
@@ -263,8 +264,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     }
 
     if (conv.kind === "tenant") await offerLearned(conv, now); // a friend's "what I learned overnight", when her dream left it held (conversation/learned.ts)
-    if ((await offerSuggestions(conv, now, looker.zone)) === "sent") countPosts(conv, 1, now); // one per look; it counts toward MAX_UNPROMPTED_PER_DAY but is never held by it (the answer needs the message itself)
-    // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), held in quiet hours
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const spannedSleep = clocks.wall() - wall0 - (clocks.mono() - mono0) > SLEEP_DRIFT_MS; // the run spanned a sleep (the tick may not have noticed it yet): a timeout or a dead connection then is the sleep's

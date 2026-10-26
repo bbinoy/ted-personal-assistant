@@ -42,7 +42,6 @@ import { createRegistrar } from "./approvals/registerask.ts";
 import { setShadowRuntime } from "./approvals/shadow.ts";
 import { runShadow } from "./run/shadowrun.ts";
 import { welcomeOnce } from "./core/welcome.ts";
-import { setSuggestRuntime } from "./tasks/suggest.ts";
 import { setLearnedRuntime } from "./conversation/learned.ts";
 import { holdingNow } from "./heartbeat/notices.ts";
 import { mayRun } from "./tenants/payer.ts";
@@ -96,8 +95,6 @@ wire({
 });
 // The conversation a key names (the senders below are handed conversations by key).
 const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
-// The "💡" message of task suggestions (tasks/suggest.ts): one per look, its own message kind ("suggestions") in the conversation's chat, held in quiet hours.
-setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "suggestions", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // The first week's archive proposals (approvals/shadow.ts): one message per look listing what the look would have archived, held in quiet hours; an approved batch is run exactly as recorded in a small follow-up run (run/shadowrun.ts).
 setShadowRuntime({
   send: (conv, text) => out.reply(text, { plain: true, kind: "proposals", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }),
