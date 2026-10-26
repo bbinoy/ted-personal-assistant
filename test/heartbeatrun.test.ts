@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { group, owner, type Conversation } from "../src/conversation/conversation.ts";
@@ -15,7 +15,8 @@ import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
-import { statusFact, writeStatusNote } from "../src/modules/status/statusnote.ts";
+import { readRecord } from "../src/tasks/routines.ts";
+import { liveConvDb } from "../src/core/convdb.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { heldPosts, resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
@@ -370,31 +371,36 @@ test("after a sleep every conversation takes its staggered first look again, as 
   assert.equal(w.slept(), 0, "nothing in flight");
 });
 
-test("a look that is stopped after delegating the brief marks its 'started' note failed at once, for a timeout, a sleep and a failure alike; a delivered note and a look without a delegation are left alone", async () => {
+test("the daily brief is a routine like the others: the look is handed it as a fact, its delegation is recorded as started, a result makes it delivered, a look that dies after delegating makes it failed", async () => {
   const err = console.error;
   console.error = () => {};
+  const BRIEF = "expert-daily-brief";
+  const record = () => readRecord(owner().convId, "brief");
+  const arm = () => liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('brief', ?)", new Date(2026, 9, 1).getTime());
   try {
-    for (const answer of [{ delegates: 1, timeout: true }, { delegates: 1, hang: true }, { delegates: 1, throws: true }] as const) {
-      const { w, conv, seen } = rig(() => answer);
-      writeStatusNote("brief", "status: started", min(new Date(), -12), conv.notesDir);
-      const look = w.look(conv, new Date());
-      if (answer.hang) (await new Promise((r) => setTimeout(r, 10)), w.slept());
-      await look;
-      assert.match(seen.prompts[0]!, /status-brief: started 12 min ago/, "the instruction carries the fact line from the note");
-      const after = readFileSync(join(conv.notesDir, "status-brief.md"), "utf8");
-      assert.match(after, /status: failed/);
-      assert.match(after, /attempts: 1\n/);
-      assert.match(statusFact("brief", new Date(), undefined, conv.notesDir), /^status-brief: failed at /);
+    arm();
+    const ok = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, message: "Morning." }));
+    ok.at(new Date(2026, 9, 14, 8, 0));
+    await ok.w.look(ok.conv, new Date(2026, 9, 14, 8, 0));
+    assert.match(ok.seen.prompts[0]!, /brief: due now \(07:30 daily\)\. Delegate it now: call the Agent tool with subagent_type "expert-daily-brief"/);
+    assert.equal(record()!.status, "delivered");
+    assert.equal(record()!.attempts, 1);
+    const again = rig(() => ({ message: "[[silent]]" }));
+    await again.w.look(again.conv, new Date(2026, 9, 14, 8, 30));
+    assert.doesNotMatch(again.seen.prompts[0] ?? "", /brief: due now/, "once per day: delivered is done");
+
+    for (const answer of [{ agents: [BRIEF], timeout: true }, { agents: [BRIEF], throws: true }] as Answer[]) {
+      arm();
+      const dead = rig(() => answer);
+      await dead.w.look(dead.conv, new Date(2026, 9, 14, 8, 0));
+      assert.deepEqual([record()!.status, record()!.attempts], ["failed", 1], "the look died after delegating: failed at once, the next look redoes it");
     }
-    const kept = rig(() => ({ delegates: 1, timeout: true }));
-    writeStatusNote("brief", "status: delivered", min(new Date(), -30), kept.conv.notesDir);
-    await kept.w.look(kept.conv, new Date());
-    assert.match(readFileSync(join(kept.conv.notesDir, "status-brief.md"), "utf8"), /status: delivered/);
-    const plain = rig(() => ({ timeout: true }));
-    writeStatusNote("brief", "status: started", min(new Date(), -12), plain.conv.notesDir);
-    await plain.w.look(plain.conv, new Date());
-    assert.match(readFileSync(join(plain.conv.notesDir, "status-brief.md"), "utf8"), /status: started/, "nothing was delegated: the look did not write it");
+    arm();
+    const none = rig(() => ({ timeout: true }));
+    await none.w.look(none.conv, new Date(2026, 9, 14, 8, 0));
+    assert.equal(record()!.status, undefined, "nothing was delegated: no attempt is recorded");
   } finally {
+    liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"); // (the record is the conversation's, shared by the tests)
     console.error = err;
   }
 });

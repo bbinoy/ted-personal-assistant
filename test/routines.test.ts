@@ -37,10 +37,10 @@ test("when: a time with daily, weekdays or one weekday; anything else is refused
 });
 
 test("settings: the preset's defaults, ROUTINE_* overrides, off, and a bad value stops the agent", () => {
-  assert.deepEqual(base.map((r) => [r.name, r.time, r.days, r.skill, r.enabled, r.email, r.planned]), [
-    ["brief", "07:30", "daily", "daily-brief", true, false, false],
-    ["evening", "18:30", "weekdays", "evening-wrap", true, false, true],
-    ["weekly", "16:30", 5, "weekly-review", true, false, true],
+  assert.deepEqual(base.map((r) => [r.name, r.time, r.days, r.skill, r.enabled, r.email]), [
+    ["brief", "07:30", "daily", "daily-brief", true, false],
+    ["evening", "18:30", "weekdays", "evening-wrap", true, false],
+    ["weekly", "16:30", 5, "weekly-review", true, false],
   ]);
   const o = R.resolveRoutines({ ROUTINE_EVENING: "19:15", ROUTINE_WEEKLY: "thu 15:00", ROUTINE_WEEKLY_EMAIL: "on" }, preset, true);
   assert.deepEqual([get(o, "evening").time, get(o, "evening").days, get(o, "weekly").days, get(o, "weekly").email, get(o, "brief").email], ["19:15", "weekdays", 4, true, true], "a bare time keeps the preset's days; the brief's email is BRIEF_EMAIL");
@@ -145,7 +145,7 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   assert.equal(f2.due?.routine.name, "evening", "routines are in order; the weekly (2 h late) waits for the next look");
   assert.match(f2.text, /evening: due now \(18:30 on weekdays\)\. Delegate it now: call the Agent tool with subagent_type "expert-evening-wrap"/);
   assert.match(f2.text, /ted-personal-assistant:evening-wrap/);
-  assert.match(f2.text, /changes nothing and sends nothing but its result to Ben/);
+  assert.match(f2.text, /every time it writes is exactly as the clock line gives it/);
   assert.match(f2.text, /Code counted 2 open approvals waiting for Ben/);
   assert.match(f2.text, /weekly: also due, but one routine per look/);
 
@@ -167,10 +167,10 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   S.markFinished(conv, "weekly", false, T2.getTime() + 180_000, true); // (called off by a message: the attempt is refunded)
   assert.equal(S.readRecord(conv, "weekly")!.attempts, 1);
 
-  const asleep = z("2026-10-25T10:00:00Z"); // Sunday: the weekly (failed once) is past its window
+  const asleep = z("2026-10-25T14:00:00Z"); // Sunday afternoon: the weekly (failed once) and that morning's brief are past their window
   const f4 = S.routineFacts(conv, base, asleep, BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` });
   assert.match(f4.text, /weekly: did not run on 2026-10-23 \(the Mac was asleep past its time\); it will not be redone\. Tell Ben in one line/);
-  assert.deepEqual(f4.told, ["weekly"]);
+  assert.deepEqual(f4.told, ["brief", "weekly"]);
   S.markTold(conv, f4.told);
   assert.equal(S.routineFacts(conv, base, new Date(asleep.getTime() + 60_000), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` }).text, "", "told once, then quiet");
   assert.equal(S.readRecord(conv, "weekly")!.status, "skipped");
@@ -181,12 +181,12 @@ test("facts for the email: only when the routine mails and the mail provider say
   const mailing = R.resolveRoutines({ ROUTINE_WEEKLY_EMAIL: "on" }, preset, false);
   const T = z("2026-10-30T15:31:00Z"); // Friday 16:31 local (the clocks went back on the 25th)
   S.routineFacts(conv, mailing, z("2026-10-29T10:00:00Z"), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` });
-  const f = S.routineFacts(conv, mailing, T, BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}`, emailHow: () => "Use send_message once." });
+  const f = S.routineFacts(conv, mailing, T, BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}`, deliver: (r) => (r.email ? "Also email the full version to Ben themself: Use send_message once." : "") });
   assert.match(f.text, /weekly: due now/);
   assert.match(f.text, /Also email the full version to Ben themself: Use send_message once\./);
   S.markStarted(conv, "weekly", "2026-10-30", T.getTime());
   S.markFinished(conv, "weekly", true, T.getTime());
-  const e = S.routineFacts(conv, mailing, z("2026-11-02T10:00:00Z"), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}`, emailHow: () => "x" });
+  const e = S.routineFacts(conv, mailing, z("2026-11-02T10:00:00Z"), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}`, deliver: (r) => (r.email ? "x" : "") });
   assert.doesNotMatch(e.text, /email/, "nothing due on Monday morning");
 });
 
@@ -194,11 +194,10 @@ test("the look: facts are in the instruction only when there are some; the brief
   const looker = lookerOf(owner());
   const now = new Date(2026, 9, 14, 9, 0, 0);
   const plain = lookInstruction(now, undefined, looker);
-  assert.doesNotMatch(plain, /Other routines/);
-  const withFacts = lookInstruction(now, undefined, looker, undefined, "evening: due now (18:30 on weekdays).");
-  assert.match(withFacts, /Other routines \(the evening wrap, the weekly review\) are scheduled by code like the brief/);
-  assert.ok(withFacts.startsWith(plain.slice(0, plain.indexOf("The daily brief"))), "same start");
-  assert.ok(withFacts.includes(plain.slice(plain.indexOf("The daily brief"), plain.indexOf("While you work"))), "the brief's block is untouched");
+  assert.doesNotMatch(plain, /Routines \(the daily brief/);
+  const withFacts = lookInstruction(now, undefined, looker, "brief: due now (07:30 daily).");
+  assert.match(withFacts, /Routines \(the daily brief, the evening wrap, the weekly review\) are heavy skills that code schedules[\s\S]*brief: due now \(07:30 daily\)\./);
+  assert.ok(withFacts.startsWith(plain.slice(0, plain.indexOf("While you work") - 2)) || withFacts.includes("While you work"), "the rest is unchanged");
 });
 
 test("skills: both are in the plugin, the owner is offered them, they are heavy (own expert) and never shared with a friend or a group", () => {
@@ -215,7 +214,7 @@ test("skills: both are in the plugin, the owner is offered them, they are heavy 
 });
 
 test("/status lists the routines and their next run", () => {
-  const lines = S.routineLines("owner", base, z("2026-10-22T09:00:00Z"), BERLIN, "not yet");
+  const lines = S.routineLines("owner", base, z("2026-10-22T09:00:00Z"), BERLIN);
   assert.match(lines[1]!, /^evening: 18:30 on weekdays, next today 18:30; last /);
   const text = statusText({ spentUsd: 1, limitUsd: 20, approvals: 0, down: [], routines: lines });
   assert.match(text, /\nRoutines: brief: 07:30 daily, next tomorrow 07:30; last .* \| evening: 18:30 on weekdays, next today 18:30; last .* \| weekly: Fridays 16:30, next tomorrow 16:30; last .*\.\nConnectors: none down\./);
@@ -240,7 +239,7 @@ test("a second skip in a row is recorded and told too, not only the first", () =
   const two = S.routineFacts(conv, base, z("2026-11-04T12:00:00Z"), BERLIN, opts); // Wednesday noon: Tuesday's was missed too
   assert.match(two.text, /evening: did not run on 2026-11-03/, "the newer skip is a new fact");
   assert.equal(S.readRecord(conv, "evening")!.period, "2026-11-03");
-  assert.deepEqual(two.told, ["evening"]);
+  assert.deepEqual(two.told, ["brief", "evening"]);
 });
 
 test("settling a look: delivered only with the expert's result; an attempt comes back only when the look was called off and nothing reached the owner", () => {

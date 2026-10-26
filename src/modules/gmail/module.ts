@@ -84,7 +84,7 @@ export const gmailModule: ToolModule = {
   ],
   free: ["read"],
   // The brief the heartbeat's expert emails to the owner's own address (BRIEF_EMAIL=on): one plain recipient that IS the configured address, nothing else (gmailrules.ts isSelfSend).
-  freeWhen: { send: (input, source) => source === "background" && active() && (settings.briefEmail || settings.routines.some((r) => r.planned && r.enabled && r.email)) && isSelfSend(`${GMAIL_PREFIX}send_message`, input, settings.mailSelfAddress) },
+  freeWhen: { send: (input, source) => source === "background" && active() && (settings.briefEmail || settings.routines.some((r) => r.enabled && r.email)) && isSelfSend(`${GMAIL_PREFIX}send_message`, input, settings.mailSelfAddress) },
   titles: {
     [`${GMAIL_PREFIX}send_message`]: { icon: "✉️", title: "Send email" },
     [`${GMAIL_PREFIX}forward`]: { icon: "✉️", title: "Forward email" },

@@ -41,7 +41,6 @@ import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, la
 import { readRetentionState, retentionSummary } from "./core/retention.ts";
 import { routineLines } from "./tasks/routines.ts";
 import { systemZone } from "./core/timezone.ts";
-import { lastStatusText } from "./modules/status/statusnote.ts";
 import { noCalendarData } from "./tasks/meetings.ts";
 
 type Line = DoctorLine;
@@ -283,7 +282,7 @@ export function convDbCheck(line: Line, root: string = dataRoot()): void {
   if (ok > 0 || names.length === 0) line(true, "conversation databases", `${ok} assistant.db file(s), quick_check ok`);
 }
 
-/** Meeting prep (heartbeat/preptick.ts) is on but the look has recorded no meetings for over a day: the calendar is not connected, or the look does not run. Read-only like the checks around it. */
+/** Meeting prep (heartbeat/preptick.ts, said by the look) is on but the look has recorded no meetings for over a day: the calendar is not connected, or the look does not run. Read-only like the checks around it. */
 function prepLine(line: Line, path: string): void {
   if (settings.prepMinutes <= 0) return;
   let raw: DatabaseSync | undefined;
@@ -408,7 +407,7 @@ export async function doctor() {
   if (!legacy) {
     // Routines (core/routines.ts): the schedule and the last run of each, from the owner's own record; a routine that failed or was skipped is a warning, not an error.
     for (const r of settings.routines.filter((x) => x.enabled)) {
-      const last = routineLines(OWNER_CONV, [r], new Date(), systemZone(), lastStatusText("brief", systemZone()))[0]!;
+      const last = routineLines(OWNER_CONV, [r], new Date(), systemZone())[0]!;
       line(/\b(failed|skipped)\b/.test(last) ? "warn" : true, `routine ${r.name}`, last.slice(r.name.length + 2));
     }
   }

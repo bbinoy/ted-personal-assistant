@@ -182,7 +182,7 @@ test("prompts: the task tools are explained to the owner, a group and a friend; 
   assert.doesNotMatch(grp, /👍 confirms/);
   const friend = tenantSystem({ name: "Ida", caps: new Set(["chat", "tasks"]) as never });
   assert.match(friend, /Tasks: you keep Ida's own to-do list/);
-  const vars = { now: "Thu 2026-10-22 12:00", timeZone: ZONE, lastLook: "", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30", delegated: "", briefTime: "07:30", briefOverdueHour: "09:00", briefFact: "", briefHow: "", who: "Ben", own: true, reads: true, mail: true, experts: false, brief: false, sources: "x", tasks: true, group: false };
+  const vars = { now: "Thu 2026-10-22 12:00", timeZone: ZONE, lastLook: "", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30", delegated: "", who: "Ben", own: true, reads: true, mail: true, experts: false, sources: "x", tasks: true, group: false };
   const look = heartbeatInstruction(vars);
   assert.match(look, /add it to the list yourself with add_task/);
   assert.match(look, /then tell Ben in your message, in your own words/);

@@ -13,7 +13,7 @@ import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
 import { heartbeatInstruction } from "../run/persona.ts";
 import { delegatedText, expertSetup, variantOf } from "../run/delegation.ts";
 import { mailSlot } from "../modules/index.ts";
-import { PLUGIN, preset } from "../core/preset.ts";
+import { PLUGIN } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
 import { dayAt, dayIn, inQuietHours, systemZone, timeIn } from "../core/timezone.ts";
 import { isReadTool } from "../policy/policy.ts";
@@ -23,8 +23,6 @@ import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
 import { createSeenMail, type SeenMail } from "../modules/seenmail/seenmail.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped, RunTimeout } from "../run/ceiling.ts";
-import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
-import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen, openCount } from "../approvals/approvals.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { failingLooksFact, heldWaiting, observeLook, postNotice, submitPost, takeHeld, type Held } from "./notices.ts";
@@ -34,8 +32,11 @@ import { tasksFacts } from "../tasks/render.ts";
 import { reminderFacts } from "../tasks/remind.ts";
 import { activeItems } from "../tasks/store.ts";
 import { afterLook, remindersWaiting, waitingReminders } from "./remindtick.ts";
-import { learnedFact } from "../memory/learned.ts";
+import { afterPrep, meetingsWaiting, waitingMeetings } from "./preptick.ts";
+import { meetingFacts } from "../tasks/meetings.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
+import { briefDelivered, learnedFact } from "../memory/learned.ts";
+import type { Routine } from "../core/routines.ts";
 import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
 
 // A conversation's heartbeat run: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
@@ -79,12 +80,14 @@ export function lastLookText(looked: string | undefined, now: Date, zone: string
   return `Your last look was at ${timeIn(at, zone)}${sameDay ? "" : " (an earlier day)"}.`;
 }
 
-// How the daily brief reaches the owner, for the instruction: the mail provider's own words, or the chat alone when there is no mail.
-const briefHow = (): string => (settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format.");
+// How a routine reaches the owner, for its fact line. The brief: the mail provider's own words, or the chat alone when there is no mail. Another routine: only when it is also mailed (ROUTINE_<NAME>_EMAIL).
+export const deliverHow = (r: Routine, who: string): string =>
+  r.name === "brief"
+    ? `How to deliver: ${settings.mail ? mailSlot()!.brief.how(r.email) : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format."}`
+    : r.email && settings.mail ? `Also email the full version to ${who} themself: ${mailSlot()!.brief.how(true, true)}` : "";
 
 // The fixed text of one look, as the judge's standing provenance and the start of the prompt. Written by code from the preset and the conversation's capabilities; no mail, no chat in it.
-// `notesDir`: where the conversation's status notes are (the daily brief's state: its fact line is computed from there).
-export function lookInstruction(now: Date, looked: string | undefined, looker: Looker = lookerOf(owner()), notesDir: string = NOTES_DIR, routineFacts = ""): string {
+export function lookInstruction(now: Date, looked: string | undefined, looker: Looker = lookerOf(owner()), routineFacts = ""): string {
   const today = dayAt(now, 0, looker.zone);
   return heartbeatInstruction({
     now: `${WEEKDAYS[today.weekday]} ${today.date} ${timeIn(now, looker.zone)}`,
@@ -94,17 +97,12 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     quietTo: `${String(settings.quietEndHour).padStart(2, "0")}:00`,
     dayMinutes: String(settings.heartbeatDayMinutes),
     delegated: looker.experts ? delegatedText(expertSetup(looker.skills, "")) : "",
-    briefTime: preset().rhythm.heartbeat.briefTime,
-    briefOverdueHour: `${String(preset().rhythm.heartbeat.briefOverdueHour).padStart(2, "0")}:00`,
-    briefFact: looker.brief ? statusFact("brief", now, looker.zone, notesDir) : "",
-    briefHow: looker.brief ? briefHow() : "",
     routineFacts,
     who: looker.who,
     own: looker.own,
     reads: looker.reads,
     mail: looker.mail,
     experts: looker.experts,
-    brief: looker.brief,
     sources: looker.sources,
     tasks: looker.tasks,
     meetings: looker.meetings,
@@ -181,7 +179,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     const looker0 = lookerOf(conv);
-    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !heldWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv))) return "not-due"; // (held posts: due once quiet ends; a reminder that came due: at once)
+    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !heldWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv)) && !(looker0.meetings && meetingsWaiting(conv))) return "not-due"; // (held posts: due once quiet ends; a reminder that came due or a meeting to prepare: at once)
     if (!hasSomethingToLookAt(conv, now) && !(looker0.tasks && waitingReminders(conv).length)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
     // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
@@ -205,17 +203,19 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let delegations = 0;
     const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
-    // The routines besides the brief (core/routines.ts): only the owner's own look has them (a friend's or a group's skills never include them), and only with experts to delegate to.
-    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true, true) } : {}) }) : undefined;
+    // The routines, the daily brief among them (core/routines.ts): those whose skill this conversation has (a friend's or a group's skills never include them today), and only with experts to delegate to.
+    const routines = looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), deliver: (r) => deliverHow(r, looker.who) }) : undefined;
     const started = new Set<string>(); // the routines this look handed to their expert
     const finished = new Set<string>(); // those whose expert's result came back with something in it
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
-    const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
+    const instruction = lookInstruction(now, st.wake?.looked, looker, routines?.text ?? "");
     const handedOver = takeHeld(conv, now); // (pending: deleted below only when this look ends well)
     const heldFacts = [heldBlock(handedOver.held, now, looker.zone), looker.own ? takeWelcome() : ""].filter(Boolean).join("\n\n"); // (handed over once: taken out of the held posts here; the welcome, once ever, on the owner's first run)
     const tasks = looker.tasks ? tasksFacts(conv.key, now.getTime(), looker.zone) : { text: "", fromMail: false }; // what was added to the list on its own (tasks/render.ts): the look says it, if no look has yet
     const handed = looker.tasks ? waitingReminders(conv) : []; // reminders that came due (remindtick.ts): this look says them; only once it has are they journaled
     const dueFacts = looker.tasks ? reminderFacts(handed, activeItems(conv.key), { now: now.getTime(), zone: looker.zone, group: conv.kind === "group" }) : "";
+    const prepping = looker.meetings ? waitingMeetings(conv) : []; // meetings claimed for prep (preptick.ts): this look prepares and says them; only if it did are they sent
+    const prepFacts = meetingFacts(prepping, { now: now.getTime(), zone: looker.zone, skill: looker.skills.includes(`${PLUGIN}:meeting-prep`) ? `${PLUGIN}:meeting-prep` : undefined });
     const taskBlock = [dueFacts, tasks.text].filter(Boolean).join("\n\n");
     let held = false; // something this look said was held for later (quiet hours, the day's cap)
     const failing = failingLooksFact(conv);
@@ -244,7 +244,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), heldFacts, taskBlock && fence("task_list_facts", taskBlock), failing, learned ? fence("notes_changed_facts", learned.text) : ""), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), heldFacts, taskBlock && fence("task_list_facts", taskBlock), prepFacts, failing, learned ? fence("notes_changed_facts", learned.text) : ""), {
             provenance: { kind: "standing", task: instruction },
             ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
@@ -302,17 +302,17 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";
     const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
-    // A look that ended badly after delegating the brief must not leave its note `started` for 45 minutes: the code marks it failed now, so the next look redoes it (heartbeat.md)
-    if (failed && looker.brief && delegations > 0 && failStartedNote("brief", timedOut ? "the run timed out" : interrupted ? "the run was stopped, the Mac slept" : "the run failed", new Date(), conv.notesDir, looker.zone)) console.error("heartbeat: the brief's note was left 'started'; marked failed");
     // The routine this look handed on is delivered or failed now (a look only called off by a message does not count as an attempt); a skip it mentioned counts as told once the look is over and went well.
     // Delivered only when the expert's result came back; an attempt is given back only when nothing of it reached the owner (no result, no send, no email): else the next look would send it again.
     settleRoutines(conv.convId, started, finished, { calledOff: outcome === "preempted" || interrupted, sends: sent + selfMailed }, Date.now());
+    if (finished.has("brief")) briefDelivered(conv.convId); // the "learned overnight" list the brief carried is told now, not when the tool handed it out (memory/learned.ts)
     if (routines?.told.length && !failed && outcome !== "preempted") markTold(conv.convId, routines.told);
     if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
     if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     afterLook(conv, handed, { posted: outcome === "posted", held }, Date.now(), looker.zone);
+    if (outcome !== "preempted" && !interrupted) afterPrep(conv, prepping, outcome === "posted", now.getTime()); // (a look a message overtook leaves them claimed: the next look is handed them)
     if (learned && (outcome === "posted" || held)) learned.told(); // (told only if the look said something)
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives

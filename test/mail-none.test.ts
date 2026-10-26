@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { HEARTBEAT_KEY, startHeartbeat } from "../src/heartbeat/heartbeat.ts";
-import { lookInstruction } from "../src/heartbeat/look.ts";
+import { deliverHow } from "../src/heartbeat/look.ts";
 import { missingSetup, setupItems } from "../src/modules/index.ts";
 import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
@@ -73,11 +73,11 @@ test("heartbeat tick without mail: the jobs start and the liveness line is writt
   });
 });
 
-test("the brief's delivery sentence in the heartbeat instruction: the mail provider's own, or the chat alone without mail", async () => {
-  const at = new Date(2026, 9, 14, 8, 0);
-  await withMail(true, () => assert.match(lookInstruction(at, undefined), /send_self_briefing/));
+test("the brief's delivery sentence in the routine fact: the mail provider's own, or the chat alone without mail", async () => {
+  const brief = { name: "brief", time: "07:30", days: "daily", skill: "daily-brief", email: true, enabled: true } as const;
+  await withMail(true, () => assert.match(deliverHow(brief, "Ben"), /send_self_briefing/));
   await withMail(false, () => {
-    const none = lookInstruction(at, undefined);
+    const none = deliverHow(brief, "Ben");
     assert.doesNotMatch(none, /send_self_briefing|mailbird:/i);
     assert.match(none, /There is no email in this setup: your final answer is the whole brief itself/);
   });

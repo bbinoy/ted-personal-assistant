@@ -32,7 +32,7 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
   const p = loadPreset(TED);
   assert.equal(p.name, "ted");
   assert.deepEqual(p.rhythm, {
-    heartbeat: { everyMinutes: 5, dayMinutes: 30, quietFromHour: 22, quietToHour: 7, briefTime: "07:30", briefOverdueHour: 9 },
+    heartbeat: { everyMinutes: 5, dayMinutes: 30, quietFromHour: 22, quietToHour: 7, briefTime: "07:30" },
     dream: { enabled: true, hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
   });
   assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status"]);
@@ -77,7 +77,6 @@ test("a malformed preset fails with a message that names the file and the proble
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "{{#mail}}never closed")), /chat\.md: \{\{#mail\}\} is never closed/);
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "closes {{/mail}}")), /chat\.md: \{\{\/mail\}\} closes nothing/);
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "a stray {{ brace")), /chat\.md: a stray/);
-  assert.throws(broken((_d, j) => { j.rhythm.heartbeat.briefOverdueHour = 25; }), /rhythm\.heartbeat\.briefOverdueHour: must be a whole number from 0 to 23 \(got 25\)/);
   assert.throws(broken((_d, j) => { j.rhythm.heartbeat.briefTime = "7:30"; }), /rhythm\.heartbeat\.briefTime: must be a time like "07:30"/);
   assert.throws(broken((_d, j) => { delete j.expert; }), /expert: must be an object/);
   assert.throws(broken((_d, j) => { j.rhythm.heartbeat.dayMinutes = 5; }), /rhythm\.heartbeat\.dayMinutes: must be a whole number from 10 to 120/);
