@@ -25,7 +25,6 @@ import type { RunProvenance } from "../approvals/autojudge.ts";
 import { PREP_ACTIONS, PREP_MAX_MINUTES, PREP_MAX_TURNS, PREP_SCHEMA, PREP_TASK, readOnlyGuard } from "./prep.ts";
 import { loaded } from "../modules/index.ts";
 import { PLUGIN } from "../modules/skills.ts";
-import type { ShadowGate } from "../approvals/shadowgate.ts";
 
 // What a job tells the run it starts: the approval judge's provenance, as a value (autojudge.ts RunProvenance): `standing` with the job's fixed text (the heartbeat run's look).
 export interface ProfileExtra {
@@ -34,7 +33,6 @@ export interface ProfileExtra {
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
   signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
-  shadow?: ShadowGate; // the look is in its first week: its archives are proposals, not actions (approvals/shadow.ts)
   untrusted?: boolean; // the prompt itself carries a third party's words (a task made from a mail, look.ts): the judge is told from the first call
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
@@ -79,7 +77,6 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     onToolSuccess: extra.onToolSuccess,
     provenance: fixed(extra.provenance),
     signal: extra.signal,
-    ...(extra.shadow ? { shadow: extra.shadow } : {}),
     ...(extra.untrusted ? { untrusted: true } : {}),
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too
     gate: looker.own ? "ownerLook" : conv.kind === "tenant" ? "friendLook" : "look", // the owner's look goes first after a wake or a start, then friends, then groups (rungate.ts)

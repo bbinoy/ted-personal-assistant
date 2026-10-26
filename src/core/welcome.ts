@@ -20,15 +20,13 @@ export interface WelcomeFacts {
 /** Pure: is this a data folder nobody has used? */
 export const isFresh = (f: WelcomeFacts): boolean => f.messages === 0 && f.spend === 0 && f.looks === 0 && !f.migrated;
 
-export function welcomeText(o: { assistant: string; owner: string; mail: boolean; shadow?: boolean }): string {
+export function welcomeText(o: { assistant: string; owner: string; mail: boolean }): string {
   const watch = o.mail ? "your mail, your calendar and your tasks" : "your calendar and your tasks";
   return [
     `Hi${o.owner && o.owner !== "the owner" ? ` ${o.owner}` : ""}, I'm ${o.assistant}. I'm up and running.`,
     `I'll keep an eye on ${watch}, remind you of what's coming and message you only when something needs you.`,
-    o.mail && !o.shadow
-      ? "I archive newsletters and notifications on my own as your notes say; /today lists everything I did and why."
-      : o.mail
-      ? "I'm starting gently: for the first days I won't archive anything on my own. I'll show you what I would archive and you tap 👍 (or tell me which to keep), and I learn from that."
+    o.mail
+      ? "I archive newsletters and notifications on my own as your notes say; /today lists everything I did and why, and \"restore 3\" brings one back."
       : "I'm starting gently: I'll tell you what I notice and do nothing without your say-so.",
     "Three commands worth knowing:",
     "/status: what I'm up to right now",
@@ -63,7 +61,7 @@ export async function welcomeOnce(send: (text: string) => Promise<unknown>, fact
   if (kvGet<{ state?: string } | null>(WELCOME_KEY, null)?.state) return "already";
   if (!isFresh(facts())) return kvSet(WELCOME_KEY, { state: "skipped", at: now() }), "skipped";
   try {
-    await send(welcomeText({ assistant: settings.assistant, owner: settings.owner, mail: settings.mail, shadow: settings.shadowMode !== "off" }));
+    await send(welcomeText({ assistant: settings.assistant, owner: settings.owner, mail: settings.mail }));
   } catch (e) {
     console.error("welcome: could not be sent:", (e as Error).message);
     return "failed";

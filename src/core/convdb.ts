@@ -405,6 +405,14 @@ export const CONV_SCHEMA: readonly Migration[] = [
       DELETE FROM suggestion_asks;
     `,
   },
+  {
+    version: 12,
+    name: "the gentle first week is gone: drop the shadow-mode tables (an unattended look archives routine mail itself, listed in /today and the brief)",
+    up: `
+      DROP TABLE shadow_proposals;
+      DROP TABLE shadow_state;
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

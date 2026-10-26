@@ -38,12 +38,9 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { setShadowRuntime } from "./approvals/shadow.ts";
-import { runShadow } from "./run/shadowrun.ts";
 import { welcomeOnce } from "./core/welcome.ts";
 import { setLearnedRuntime } from "./conversation/learned.ts";
 import { holdingNow } from "./heartbeat/notices.ts";
-import { mayRun } from "./tenants/payer.ts";
 import { OWNER_KEY, isTenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
@@ -94,12 +91,6 @@ wire({
 });
 // The conversation a key names (the senders below are handed conversations by key).
 const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
-// The first week's archive proposals (approvals/shadow.ts): one message per look listing what the look would have archived, held in quiet hours; an approved batch is run exactly as recorded in a small follow-up run (run/shadowrun.ts).
-setShadowRuntime({
-  send: (conv, text) => out.reply(text, { plain: true, kind: "proposals", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }),
-  holding: (conv, now) => holdingNow(convOf(conv.key), now),
-  execute: (conv, calls) => runShadow(convOf(conv.key), calls, (c, what) => mayRun(c, what)),
-});
 // A friend's "🧠 Learned overnight" (conversation/learned.ts): one message after her dream, a notice (a reply that quotes it answers "undo 2"), held in quiet hours.
 setLearnedRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "notice", target: convOf(conv.key).target }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).

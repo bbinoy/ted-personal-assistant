@@ -26,8 +26,6 @@ import { RunStopped, RunTimeout } from "../run/ceiling.ts";
 import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen, openCount } from "../approvals/approvals.ts";
-import { markShadowEndedTold, offerShadow, shadowActive, shadowEndedFact } from "../approvals/shadow.ts";
-import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { failingLooksFact, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
 import { oneLine } from "./digest.ts";
@@ -56,7 +54,6 @@ export interface RunExtra {
   onDelegate?: (agent: string) => void;
   seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
   signal?: AbortSignal; // the look is called off (a message overtook it): the run stops, or never starts if it still waits for a place (rungate.ts)
-  shadow?: ShadowGate; // the look is in the conversation's gentle first week: its archives are collected as proposals, not made (approvals/shadow.ts)
 }
 
 export interface HeartbeatDeps {
@@ -193,7 +190,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let archived = 0;
     let delegations = 0;
     const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
-    const shadow = looker.mail && shadowActive(conv, now) ? createShadowRun(conv.key) : undefined; // the gentle first week (approvals/shadow.ts): this look proposes its archives
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     // The routines besides the brief (core/routines.ts): only the owner's own look has them (a friend's or a group's skills never include them), and only with experts to delegate to.
     const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true, true) } : {}) }) : undefined;
@@ -208,7 +204,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const taskBlock = [dueFacts, tasks.text].filter(Boolean).join("\n\n");
     let held = false; // something this look said was held for later (quiet hours, the day's cap)
     const failing = failingLooksFact(conv);
-    const weekOver = looker.mail && !shadow ? shadowEndedFact(conv) : ""; // the gentle first week just ended: the look tells it once, in its words // the owner's own looks have failed for a long awake stretch (notices.ts): a fact this look may mention, never a fixed message
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -233,11 +228,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing, weekOver), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing), {
             provenance: { kind: "standing", task: instruction },
             ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
-            ...(shadow ? { shadow: shadow.gate } : {}),
             signal: overtaken.signal,
             onDelegate: (agent) => {
               delegations++;
@@ -267,8 +261,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       inflight.delete(overtaken);
       lease?.end();
     }
-    // The first week's archives, offered as ONE message ("I'd archive these 14"; approvals/shadow.ts). Held in quiet hours; never throws. (That the week is over is a fact in the prompt.)
-    if (looker.mail) await offerShadow(conv, shadow?.proposed() ?? [], now);
 
     if (conv.kind === "tenant") await offerLearned(conv, now); // a friend's "what I learned overnight", when her dream left it held (conversation/learned.ts)
 
@@ -306,7 +298,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     afterLook(conv, handed, { posted: outcome === "posted", held }, Date.now(), looker.zone);
-    if (weekOver && (outcome === "posted" || held)) markShadowEndedTold(conv); // the reminders it was handed are told (and journaled) only if it said something
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
     emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
