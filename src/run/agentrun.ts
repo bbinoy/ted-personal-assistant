@@ -61,6 +61,7 @@ export interface RunOptions {
   mcpTools?: ReadonlySet<string>; // an unattended job's own list of MCP tools (profiles.ts): every other connector tool is out of the model's view (profiletools.ts); default: the owner's whole set
   tools?: ReadonlySet<string>; // an isolated conversation (a group, a tenant): the tools that exist for the run, from its capabilities (capabilities.ts); decides its built-ins, its MCP servers and policy.ts classify
   model?: string; // this run's own model (the heartbeat run's HEARTBEAT_MODEL); default HARNESS_MODEL
+  effort?: Options["effort"]; // this run's reasoning effort (the heartbeat profile: high); default the SDK's
   maxTurns: number;
   maxBudgetUsd: number; // hard per-run spend cap. Per RUN, not per session: the SDK does not count the cost a resumed session already had (checked), so owner and groups alike need no adjustment here. The previous total is subtracted only when reporting cost (consume)
   outputFormat?: Options["outputFormat"]; // constrained JSON output
@@ -212,6 +213,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const env = envFor(payerOf(opts), baseEnv);
   return {
     model: opts.model ?? settings.model,
+    ...(opts.effort ? { effort: opts.effort } : {}),
     outputFormat: opts.outputFormat,
     // Wait for every connector before the first model call. By default they connect in the
     // background, and a slow one (seen: ~30s) means the first call runs without its tools,

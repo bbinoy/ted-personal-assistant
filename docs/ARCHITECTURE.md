@@ -106,7 +106,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 - `RunOptions` (`src/run/agentrun.ts`) carries the policy `source`, prompt, session, memory folder, skills, tools, model, caps, `provenance`, `untrusted`, `unattended` and experts.
 - A session resumes between messages and is compacted in the background after `COMPACT_QUIET_MINUTES` (5) of quiet (`src/run/chatsession.ts`).
 
-**Profiles** (`PROFILES`, `src/run/profiles.ts`; limits from the preset) are fixed in code; no model can name or edit one: `chat` (the owner's turns), `group` (group and friend turns), `heartbeat` (every look; policy source `background` for the owner, `group` otherwise; `HEARTBEAT_MODEL`, Haiku) and `browse` (the browse worker). Chat and group turns use `HARNESS_MODEL` (Sonnet).
+**Profiles** (`PROFILES`, `src/run/profiles.ts`; limits from the preset) are fixed in code; no model can name or edit one: `chat` (the owner's turns), `group` (group and friend turns), `heartbeat` (every look; policy source `background` for the owner, `group` otherwise; `HEARTBEAT_MODEL`, Haiku, effort `high`) and `browse` (the browse worker). Chat and group turns use `HARNESS_MODEL` (Sonnet).
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
 
@@ -131,7 +131,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 - A look never starts while a turn of its conversation is settling, queued or running (`Pipeline.busy`). A message that arrives during a look overtakes it (`preempted`, mail not marked seen) unless it waits on an approval or would starve it (`preemptible`). `/stop` reaches looks too.
 - Ceilings (`src/run/ceiling.ts`): chat runs 40 minutes (`RUN_MAX_MINUTES_CHAT`), other runs 180; a look 10 (`HEARTBEAT_TIMEOUT_MINUTES`), 20 once it delegates. Approval waits do not count.
 
-**Delegation** (`src/run/delegation.ts`). A look hands heavy work to a Sonnet expert (`expert`, or `expert-<skill>` for a skill declaring `delegate: sonnet|opus`).
+**Delegation** (`src/run/delegation.ts`). A look delegates by default whatever needs judgement or careful wording (Haiku keeps the mechanical work) to a Sonnet expert (`expert`, or `expert-<skill>` for a skill declaring `delegate: sonnet|opus`).
 
 - A PreToolUse hook allows only these agents, at most two per look, no nesting, always in the foreground.
 - Only looks of a conversation that can read something have the Agent tool. An expert's calls pass the same permission path.

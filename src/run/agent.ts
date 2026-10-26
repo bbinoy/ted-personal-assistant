@@ -68,6 +68,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     ...base,
     notesRead: { dir: conv.notesDir, ...(looker.own ? {} : { categories: categoriesFor(conv.kind) }), write: preset().notes.background.filter((c) => categoriesFor(conv.kind).includes(c)), maxNotes: settings.memoryMaxNotes, zone: looker.zone },
     model: p.model,
+    effort: p.effort,
     maxMinutes: settings.heartbeatTimeoutMinutes, // short on purpose: a look that hangs frees its conversation and is retried on the next ticks (an expert it delegates to: expertMaxMinutes in all)
     expertMaxMinutes: settings.expertTimeoutMinutes,
     outputFormat: p.outputSchema,
