@@ -1,5 +1,5 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
-import "./core/migrateatstart.ts"; // second: an old data folder is moved to the current layout before any module opens a file (core/migrate.ts)
+import "./core/agentstart.ts"; // second: a data folder in another layout stops the start before any module opens a file (core/requirelayout.ts)
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
 import { createFeedback } from "./conversation/feedback.ts";
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
@@ -41,14 +41,11 @@ import { createRegistrar } from "./approvals/registerask.ts";
 import { welcomeOnce } from "./core/welcome.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
-import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
 import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
-import { writeAgentPid } from "./core/migrateservices.ts";
 import { retentionTrigger, runRetention } from "./core/retention.ts";
 import { registerFileRules } from "./heartbeat/retentionrules.ts";
 import { instancePaths } from "./core/convpaths.ts";
 
-writeAgentPid(settings.dataDir); // so `npm run migrate` knows the agent is up
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
 ensureNotesDir(); // first run: conversations/owner/notes/, where the chat agent keeps its notes
@@ -229,10 +226,6 @@ warmChat();
 if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 void welcomeOnce(say); // a fresh data folder's first start: one short welcome, once ever (core/welcome.ts)
-const reorganised = ownerNotice(settings.dataDir); // the data folder was moved to the current layout at this start (or an earlier one whose notice could not be sent): she is told once
-if (reorganised) void say(reorganised).then(() => markOwnerTold(settings.dataDir)).catch(() => {});
-const late = lateNotice(settings.dataDir); // files an old version wrote after the move: merged or set aside (core/migrate.ts reconcile), named to her once
-if (late) void say(late).then(() => markLateTold(settings.dataDir)).catch(() => {});
 replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).

@@ -18,7 +18,6 @@ import { writeFileAtomic } from "./state.ts";
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   friend_notices   a friend's fixed notices (kind -> last time)
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
-//   legacy_imports   which layout-3 files were imported (core/convimport.ts): a file is imported once, however often the migration runs
 //   routine_runs     the last period of each scheduled routine besides the brief (evening, weekly): once per period, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
 //   group_remind_noted   which group members were told once that a reminder said in the group is the group's (src/tasks/grouptasks.ts). (suggestion_asks: the old one-tap suggestions, emptied by step 11.)
@@ -407,6 +406,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
   },
   {
     version: 12,
+    name: "the layout-3 import is retired: its bookkeeping table goes",
+    up: "DROP TABLE legacy_imports;",
+  },
+  {
+    version: 13,
     name: "retire the first-week proposals (shadow_*) and the numbered replies to the learned list (learned_asks, learned_owed)",
     up: `
       DROP TABLE shadow_proposals;
@@ -489,7 +493,7 @@ export class ConvDbDamagedError extends Error {
   }
 }
 let agentMode = false;
-/** The agent process says so once at start (migrateatstart.ts): only then may a damaged database be set aside and replaced. */
+/** The agent process says so once at start (agentstart.ts): only then may a damaged database be set aside and replaced. */
 export const useConvDbAgentMode = (on = true): void => void (agentMode = on);
 
 function attempt(p: ConvPaths, conv: ConvId): Db {
@@ -566,7 +570,7 @@ function openFor(p: ConvPaths, conv: ConvId): Db {
 
 /** The conversation's database of the current data folder: opened at the first use (made, migrated, checked), the same connection after that. */
 export const convDb = (conv: ConvRef): Db => openFor(convPaths(conv), typeof conv === "string" ? conv : conv.convId);
-/** The same at an explicit data root (the migration and its tests). */
+/** The same at an explicit data root (tests and the doctor). */
 export const convDbAt = (root: string, conv: ConvId): Db => openFor(layout(root).conv(conv), conv);
 /** Is the database there? (A reader that must not make one: the retention rules, the doctor.) */
 export const hasConvDb = (conv: ConvRef): boolean => existsSync(convPaths(conv).db);

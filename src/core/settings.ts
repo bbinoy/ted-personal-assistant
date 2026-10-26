@@ -368,7 +368,6 @@ export function loadSettings(env: Env) {
     spendKeepDays: num(env, "SPEND_KEEP_DAYS", 400, 2, 3650), // spend ledger rows of days older than this are pruned (the budgets look at today only)
     shoreCacheKeep: num(env, "SHORE_CACHE_KEEP", 50, 1, 10000), // cached shore outlines kept (newest by mtime)
     tmpSweepHours: num(env, "TMP_SWEEP_HOURS", 24, 1, 720), // temporary folders of picture, voice and Google work older than this are swept
-    migrationReviewDays: num(env, "MIGRATION_REVIEW_DAYS", 30, 1, 3650), // doctor warns about migration-backup / migration-orphans older than this (never deleted automatically)
 
     // Wake-ups (src/conversation/gate.ts, src/heartbeat/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").

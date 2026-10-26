@@ -144,7 +144,7 @@ Personal agents are having a moment. Ted sits in the middle: hosted products lik
 | **Source** | Open (MIT)| Open, large | Proprietary | Proprietary |
 | **Cost** | Your Claude plan. Measured in October 2026 with Sonnet: about $0.01 for a simple warm reply, $0.03 to $0.08 for a calendar question | Free software plus your model costs | $200/month, or bundled with SuperGrok Heavy and Cursor plans | Free in invite-only beta, pricing not published |
 | **Runs on** | Your Mac | Your machine or server | xAI's cloud | The vendor's cloud |
-| **Where you talk to it** | Signal (Telegram next; other messengers plug into a generic interface) | WhatsApp, Telegram, Signal, Slack, iMessage and more | Desktop and iPhone app | iMessage, WhatsApp, phone calls |
+| **Where you talk to it** | Signal (other messengers plug into a generic interface) | WhatsApp, Telegram, Signal, Slack, iMessage and more | Desktop and iPhone app | iMessage, WhatsApp, phone calls |
 
 **Ted may suit you** if you want a readable assistant for yourself (and, if you like, a few people you know) that comes with personality and personal assistant skills out of the box, that you set up by chatting, and that you can run and change yourself. **OpenClaw** fits a broad, self-hosted agent platform with many channels and community skills, and more technical setup. **Grok Bot or Instinct** fit if you would rather have a hosted product than run anything yourself.
 
@@ -163,7 +163,7 @@ What is built but not switched on yet, and what is planned next. Order and dates
 
 - **Secrets and payments.** A sealed card store (OpenBao), a typed YES in the chat for every payment, spending caps and a ledger. Built, not live yet: it is being tested with fake cards before it is switched on.
 - **Several people.** Friends with their own memory, notes and budget, isolated from you and from each other, exist and are off by default. Their own Google and Notion, signed in from a one-time link, are built and tested against fakes, and the first live run with real accounts is still ahead. Saved details and a card for friends are not built.
-- **A generic messenger layer.** All Signal code moves behind one interface, so other messengers plug in without changes to the assistant. Stubs with setup instructions for WhatsApp and Slack, no full support planned yet.
+- **A generic messenger layer.** All Signal code moves behind one interface, so other messengers plug in without changes to the assistant. Design notes for Telegram, Slack and WhatsApp are in docs/ADAPTING.md; none is built.
 - **Telegram, and an even faster setup.** A Telegram bot as the default: create the bot, paste the token, scan a QR code, and finish the setup in the chat. Signal stays supported and remains the more private choice.
 - **Tools and assistant presets.** Tools as small modules and the personal assistant's persona and routines as data, so it is easier to add a tool or make a different kind of assistant. No marketplace of third-party modules, on purpose.
 

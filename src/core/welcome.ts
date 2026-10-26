@@ -1,6 +1,5 @@
-import { existsSync } from "node:fs";
 import { ledgerEntries } from "./messages.ts";
-import { convPaths, instancePaths, OWNER_CONV } from "./convpaths.ts";
+import { convPaths, OWNER_CONV } from "./convpaths.ts";
 import { instanceDb, kvGet, kvSet } from "./instancedb.ts";
 import { settings } from "./settings.ts";
 
@@ -14,11 +13,10 @@ export interface WelcomeFacts {
   messages: number; // lines of the owner's conversation log that are conversation (not ledger)
   spend: number; // charged runs on record
   looks: number; // heartbeat looks on record
-  migrated: boolean; // the data folder was moved from an older layout (a migration plan exists)
 }
 
 /** Pure: is this a data folder nobody has used? */
-export const isFresh = (f: WelcomeFacts): boolean => f.messages === 0 && f.spend === 0 && f.looks === 0 && !f.migrated;
+export const isFresh = (f: WelcomeFacts): boolean => f.messages === 0 && f.spend === 0 && f.looks === 0;
 
 export function welcomeText(o: { assistant: string; owner: string; mail: boolean }): string {
   const watch = o.mail ? "your mail, your calendar and your tasks" : "your calendar and your tasks";
@@ -50,7 +48,7 @@ export function welcomeFacts(): WelcomeFacts {
   } catch {
     messages = 1;
   }
-  return { messages, spend: count("SELECT COUNT(*) FROM spend"), looks: count("SELECT COUNT(*) FROM looks"), migrated: existsSync(instancePaths().migrationPlan) };
+  return { messages, spend: count("SELECT COUNT(*) FROM spend"), looks: count("SELECT COUNT(*) FROM looks") };
 }
 
 /**

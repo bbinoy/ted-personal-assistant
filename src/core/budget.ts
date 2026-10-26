@@ -89,7 +89,7 @@ export function overBudget(): { over: boolean; firstTime: boolean; usd: number }
   const over = usd >= settings.dailyBudgetUsd;
   return { over, firstTime: over && closed(() => takeCapNotice(OWNER_BUDGET_NOTICE), false), usd };
 }
-export const OWNER_BUDGET_NOTICE = "budget:owner"; // (the notices row that says the owner was told today; the layout-3 import fills it from cost.json's notifiedDay)
+export const OWNER_BUDGET_NOTICE = "budget:owner"; // (the notices row that says the owner was told today)
 
 // Just the question, without the once-a-day "tell the owner" side effect of overBudget (only the code that
 // can tell the owner should use that one, or a group message could use up the notice).

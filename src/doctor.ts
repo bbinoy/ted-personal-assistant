@@ -37,10 +37,8 @@ import { missingSetup } from "./modules/index.ts";
 import { dataPath, readText } from "./core/state.ts";
 import { checkConvDbFile, damagedConvs } from "./core/convdb.ts";
 import { readDream } from "./modules/memory/dreamscope.ts";
-import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, layout, logPaths, OWNER_CONV } from "./core/convpaths.ts";
-import { layoutState, readVersion, refusal, stragglers } from "./core/migrate.ts";
+import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, layout, layoutProblem, logPaths, OWNER_CONV } from "./core/convpaths.ts";
 import { readRetentionState, retentionSummary } from "./core/retention.ts";
-import { staleForReview } from "./heartbeat/retentionrules.ts";
 import { routineLines } from "./tasks/routines.ts";
 import { systemZone } from "./core/timezone.ts";
 import { lastStatusText } from "./modules/status/statusnote.ts";
@@ -372,8 +370,8 @@ export async function doctor() {
   for (const skill of requiredSkills(settings.mail)) {
     line(existsSync(`${settings.pluginDir}/skills/${skill}/SKILL.md`), `skill ${skill} (bundled)`);
   }
-  // On an old data folder doctor still runs (it is what one reaches for when things look wrong): the layout line fails and says what to do, and only the checks that read the new layout are skipped.
-  const legacy = refusal(layoutState(settings.dataDir)) !== null;
+  // On a data folder in another layout doctor still runs (it is what one reaches for when things look wrong): the layout line fails and says what to do, and only the checks that read the new layout are skipped.
+  const legacy = layoutProblem(settings.dataDir);
   if (!legacy) convDbCheck(line);
   const dbOk = !legacy && dbCheck(line); // (instance.db: spend, payments, looks, notices, intake marks, connectors; a damaged one skips the checks that read it)
   const conn = dbOk ? readConnectors() : undefined;
@@ -388,13 +386,8 @@ export async function doctor() {
   const gaps = legacy ? [] : missingSetup(readNotes(), disconnected(conn), settings.mail);
   if (!legacy) line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
 
-  const layoutVersion = readVersion(settings.dataDir);
-  if (legacy) line(false, "data layout", "old data layout: start the agent once or run `npm run migrate`; `npm run migrate -- --dry-run` shows the plan. Checks that need the new layout are skipped");
-  else line(layoutVersion === LAYOUT_VERSION ? true : "warn", "data layout", layoutVersion === LAYOUT_VERSION ? `version ${layoutVersion}: instance/, conversations/<id>/, logs/` : "not stamped yet: the first start does it (or run npm run migrate)");
-  if (!legacy) {
-    const late = stragglers(settings.dataDir).map((o) => o.from.slice(settings.dataDir.length + 1));
-    if (late.length) line(false, "files in the old places", `${late.length} path(s) an older version wrote after the move (${late.slice(0, 5).join(", ")}); restart the agent: it merges the logs and sets the rest aside in instance/migration-orphans/`);
-  }
+  if (legacy) line(false, "data layout", `${legacy} Checks that need layout ${LAYOUT_VERSION} are skipped`);
+  else line(true, "data layout", existsSync(layout(dataRoot()).instance.layoutVersion) ? `version ${LAYOUT_VERSION}: instance/, conversations/<id>/, logs/` : "new folder, not stamped yet: the first start does it");
   for (const [name, dir] of [["instance", instancePaths().dir], ["conversations", conversationsDir()], ["logs", logPaths().dir]] as const) {
     if (legacy || !existsSync(dir)) continue;
     const loose = readdirSync(dir).filter((f) => (statSync(`${dir}/${f}`).mode & 0o077) !== 0 && statSync(`${dir}/${f}`).isFile());
@@ -426,8 +419,6 @@ export async function doctor() {
   if (!legacy) {
     const r = retentionSummary(readRetentionState(instancePaths().retention), settings.retention, localTime);
     line(r.ok, "retention", r.detail);
-    const old = staleForReview(layout(dataRoot()), new Date(), settings.migrationReviewDays);
-    if (old.length) line("warn", "old migration copies", `${old.length} entr${old.length === 1 ? "y" : "ies"} in instance/migration-backup or migration-orphans older than ${settings.migrationReviewDays} days (${old.slice(0, 3).map((o) => o.name).join(", ")}): review and delete them by hand, nothing removes them`);
   }
 
   browseCheck(line, settings.browse, browseStatus());
