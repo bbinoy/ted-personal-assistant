@@ -22,7 +22,7 @@ export interface Looker {
   experts: boolean; // it may delegate heavy work to the expert: whoever has something to read
   brief: boolean; // it has the daily-brief skill
   tasks: boolean; // it has the task list (an unattended look may add to it)
-  meetings: boolean; // meeting prep is on and it has a calendar: its look records the upcoming meetings (modules/meetings, heartbeat/preptick.ts)
+  meetings: boolean; // meeting prep is on and it has a calendar: its look records the upcoming meetings (modules/meetings); heartbeat/preptick.ts claims them and the look says them
   sources: string; // what the instruction lists after the chat log
   skills: readonly string[]; // the skills of its run (plugin-qualified)
 }

@@ -285,7 +285,7 @@ export function convDbCheck(line: Line, root: string = dataRoot()): void {
   if (ok > 0 || names.length === 0) line(true, "conversation databases", `${ok} assistant.db file(s), quick_check ok`);
 }
 
-/** Meeting prep (heartbeat/preptick.ts) is on but the look has recorded no meetings for over a day: the calendar is not connected, or the look does not run. Read-only like the checks around it. */
+/** Meeting prep (heartbeat/preptick.ts, said by the look) is on but the look has recorded no meetings for over a day: the calendar is not connected, or the look does not run. Read-only like the checks around it. */
 function prepLine(line: Line, path: string): void {
   if (settings.prepMinutes <= 0) return;
   let raw: DatabaseSync | undefined;

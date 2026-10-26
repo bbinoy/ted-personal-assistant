@@ -5,7 +5,7 @@ import { readAudit } from "../src/core/audit.ts";
 import { makeCanUseTool, UNATTENDED_SKIP, isUnattended, type CallGuard } from "../src/approvals/permissions.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { noteDeclined } from "../src/approvals/declined.ts";
-import { heartbeatOptions, prepOptions } from "../src/run/agent.ts";
+import { heartbeatOptions } from "../src/run/agent.ts";
 import { buildOptions } from "../src/run/agentrun.ts";
 import { owner } from "../src/conversation/conversationmodel.ts";
 import { LOGIN } from "../src/tenants/payer.ts";
@@ -37,7 +37,6 @@ test("which runs are unattended: the owner's look by its source, a group's and a
   assert.equal(isUnattended("group", true), true, "a group's or a friend's look is marked by its run");
   assert.equal(isUnattended("browse", true), true, "the browse worker of an unattended run");
   assert.equal(heartbeatOptions(owner(), LOGIN).unattended, true);
-  assert.equal(prepOptions(owner(), LOGIN).unattended, true, "meeting prep");
 });
 
 test("the owner's look: the judge's ask is a skip with the fixed text and one audit row; nobody is asked, nothing is parked", async () => {

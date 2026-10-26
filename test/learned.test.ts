@@ -319,10 +319,8 @@ test("quoting the BRIEF answers its list: the brief batch has no message of its 
 
 test("the brief tool is its own manifest action (not a read), and a list handed out for a brief that was never sent is offered again at the next one", async () => {
   const { entryFor } = await import("../src/policy/toolmanifest.ts");
-  const { PREP_ACTIONS } = await import("../src/run/prep.ts");
   const action = entryFor("mcp__notes__memory_changes_since_brief")?.action;
   assert.equal(action, "memory-told");
-  assert.equal(PREP_ACTIONS.has(action!), false, "the meeting prep run cannot consume it");
   const { writeStatusNote } = await import("../src/modules/status/statusnote.ts");
   const c = friend();
   inferred(c, "people-anna.md", "Anna moved to Lisbon");

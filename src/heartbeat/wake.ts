@@ -13,7 +13,7 @@ import { runGate } from "../core/rungate.ts";
 import { noticeBudget, noticeDamaged, releaseHeld } from "./notices.ts";
 import { closeIdleConvDbs } from "../core/convdb.ts";
 import { fireReminders } from "./remindtick.ts";
-import { startPreps, type PrepDeps } from "./preptick.ts";
+import { claimPreps } from "./preptick.ts";
 
 // The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
@@ -36,7 +36,6 @@ interface WakeDeps {
   awaitingApproval?: HeartbeatDeps["awaitingApproval"]; // (tests) default: a question of the conversation open in the chat (approvals.ts)
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
   run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runHeartbeat, with that conversation's approver)
-  prep?: PrepDeps["run"]; // a meeting's prep run (agent.ts runPrep, read-only; preptick.ts): absent, no meeting prep
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
   groups?: () => string[]; // known group ids
   key?: () => string | undefined; // where the instance key comes from for a friend's unattended work (default settings.tenantApiKey; tests)
@@ -80,17 +79,6 @@ export function createWakeups(deps: WakeDeps) {
     );
     running.set(key, job);
     void job.finally(() => running.delete(key));
-  }
-
-  // The prep runs of the meetings that are due: claimed in the tick (at most once), run in the background like a compaction (the tick does not wait; a look of the same conversation is not held up).
-  let preps = 0;
-  function startMeetingPreps(conv: Conversation): void {
-    if (!deps.prep) return;
-    for (const job of startPreps({ pipeline, may, run: (c, payer, prompt) => deps.prep!(c, payer, prompt), now: clock }, conv, clock())) {
-      const key = `prep:${conv.key}:${preps++}`;
-      running.set(key, job);
-      void job.finally(() => running.delete(key));
-    }
   }
 
   // The ledger's reading, remembered while the log file is unchanged (same stat): an idle tick then costs one stat per conversation, not a read and parse of its whole log.
@@ -153,7 +141,7 @@ export function createWakeups(deps: WakeDeps) {
       convs.map(async (conv) => {
         if (paused(clock())) return;
         quietCompact(conv);
-        startMeetingPreps(conv); // meetings the look recorded that start within PREP_MINUTES (preptick.ts): one short read-only run each, in the background
+        claimPreps(conv, clock()); // meetings the look recorded that start within PREP_MINUTES (preptick.ts): claimed, which makes the look due now; the look prepares and says them
         if (busy.has(conv.key)) return;
         busy.add(conv.key);
         const mine = epoch;

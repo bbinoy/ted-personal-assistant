@@ -222,10 +222,9 @@ export function loadSettings(env: Env) {
     digestMaxItems: num(env, "DIGEST_MAX_ITEMS", 8, 1, 50), // lines in one digest; the rest is "and N more, ask me"
     digestSummarize: oneOf(env, "DIGEST_SUMMARIZE", "off", ["on", "off"] as const) === "on", // on: one small helper-model call turns the owner's digest items into one-liners (code's own lines when it fails or times out)
     mailBacklogDays: num(env, "MAIL_BACKLOG_DAYS", 7, 0, 3650), // first run only: inbox mail older than this is marked seen without triage (seenmail.ts)
-    // Timely meeting prep (heartbeat/preptick.ts): PREP_MINUTES before a meeting with other people (the look records upcoming meetings, modules/meetings), ONE short prep message; 0 = off.
+    // Timely meeting prep (heartbeat/preptick.ts): PREP_MINUTES before a meeting with other people (the look records upcoming meetings, modules/meetings), the look is made due and says ONE short prep message; 0 = off.
     prepMinutes: num(env, "PREP_MINUTES", 15, 0, 120),
     prepOnlyExternal: oneOf(env, "PREP_ONLY_EXTERNAL", "off", ["on", "off"] as const) === "on", // on: only meetings with someone outside your own e-mail domain
-    prepBudgetUsd: num(env, "PREP_BUDGET_USD", 0.15, 0.01, 2), // the hard cap of ONE prep run (counted in the day's spend like any run)
 
     // The owner's heartbeat run (src/heartbeat/look.ts): on every look a model (HEARTBEAT_MODEL: haiku, sonnet, or a full model id) reads the chat, mail, calendar and
     // tasks and acts or stays silent. It chooses its next look itself (10 to 120 minutes; `dayMinutes` is the default in the day). How quiet it is at night is its instruction's business, not code's.

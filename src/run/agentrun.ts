@@ -69,7 +69,7 @@ export interface RunOptions {
   // Fires after a tool call succeeds. Used to capture the brief the agent sends.
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
-  callGuard?: CallGuard; // a run that may make only the approved calls (approvals/shadowexec.ts) or only reads (run/prep.ts): sees every call first (permissions.ts)
+  callGuard?: CallGuard; // a run that may make only the approved calls (approvals/shadowexec.ts): sees every call first (permissions.ts)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
   gate?: RunKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
   stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's session file

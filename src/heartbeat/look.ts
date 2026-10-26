@@ -36,6 +36,8 @@ import { tasksFacts } from "../tasks/render.ts";
 import { reminderFacts } from "../tasks/remind.ts";
 import { activeItems } from "../tasks/store.ts";
 import { afterLook, remindersWaiting, waitingReminders } from "./remindtick.ts";
+import { afterPrep, meetingsWaiting, waitingMeetings } from "./preptick.ts";
+import { meetingFacts } from "../tasks/meetings.ts";
 import { offerLearned } from "../conversation/learned.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
@@ -170,7 +172,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     const looker0 = lookerOf(conv);
-    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !overnightWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv))) return "not-due"; // (held posts of an earlier day: due once quiet ends; a reminder that came due: at once)
+    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !overnightWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv)) && !(looker0.meetings && meetingsWaiting(conv))) return "not-due"; // (held posts of an earlier day: due once quiet ends; a reminder that came due or a meeting to prepare: at once)
     if (!hasSomethingToLookAt(conv, now) && !(looker0.tasks && waitingReminders(conv).length)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
     // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
@@ -205,6 +207,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const tasks = looker.tasks ? tasksFacts(conv.key, now.getTime(), looker.zone) : { text: "", fromMail: false }; // what was added to the list on its own (tasks/render.ts): the look says it, if no look has yet
     const handed = looker.tasks ? waitingReminders(conv) : []; // reminders that came due (remindtick.ts): this look says them; only once it has are they journaled
     const dueFacts = looker.tasks ? reminderFacts(handed, activeItems(conv.key), { now: now.getTime(), zone: looker.zone, group: conv.kind === "group" }) : "";
+    const prepping = looker.meetings ? waitingMeetings(conv) : []; // meetings claimed for prep (preptick.ts): this look prepares and says them; only if it did are they sent
+    const prepFacts = meetingFacts(prepping, { now: now.getTime(), zone: looker.zone, skill: looker.skills.includes(`${PLUGIN}:meeting-prep`) ? `${PLUGIN}:meeting-prep` : undefined });
     const taskBlock = [dueFacts, tasks.text].filter(Boolean).join("\n\n");
     let held = false; // something this look said was held for later (quiet hours, the day's cap)
     const failing = failingLooksFact(conv);
@@ -233,7 +237,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing, weekOver), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), prepFacts, failing, weekOver), {
             provenance: { kind: "standing", task: instruction },
             ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
@@ -306,6 +310,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     afterLook(conv, handed, { posted: outcome === "posted", held }, Date.now(), looker.zone);
+    if (outcome !== "preempted" && !interrupted) afterPrep(conv, prepping, outcome === "posted", now.getTime()); // (a look a message overtook leaves them claimed: the next look is handed them)
     if (weekOver && (outcome === "posted" || held)) markShadowEndedTold(conv); // the reminders it was handed are told (and journaled) only if it said something
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
