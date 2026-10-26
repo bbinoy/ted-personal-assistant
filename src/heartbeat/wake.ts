@@ -47,8 +47,9 @@ interface WakeDeps {
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
 }
 
-// The wait before a conversation's first look after a start: random within the tick interval, at most 5 minutes (a spread of work, not a delay of any one look).
-export const startupStagger = (): number => Math.random() * Math.min(settings.heartbeatMinutes * 60_000, 5 * 60_000);
+// The wait before a conversation's first look after a start: random within the tick interval, at most 5 minutes (a spread of work, not a delay of any one look). The owner's
+// look does not wait at all: it goes first (and first in the run gate, rungate.ts), so the daily brief is not held up by the groups' looks after a night of sleep.
+export const startupStagger = (conv?: Conversation): number => conv?.kind === "owner" ? 0 : Math.random() * Math.min(settings.heartbeatMinutes * 60_000, 5 * 60_000);
 
 export function createWakeups(deps: WakeDeps) {
   const { pipeline } = deps;
