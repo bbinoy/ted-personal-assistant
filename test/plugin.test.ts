@@ -94,6 +94,13 @@ test("daily-brief skill: one archive list read after the sweep, no archiving of 
   assert.match(s, /no time of your own: the code stamps the real write time/);
 });
 
+test("a long overdue pile: the brief offers a clean-up once (remembered in the status note), the task skill says how", () => {
+  const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
+  assert.match(read("notion-tasks"), /A long overdue pile[\s\S]*\*\*once\*\*[\s\S]*reschedule, drop or keep[\s\S]*Nothing is dropped without their word/);
+  assert.match(read("daily-brief"), /A long overdue pile[\s\S]*once\. You cannot save a note[\s\S]*overdue clean-up offered <date>/);
+  assert.match(read("daily-brief"), /`overdue clean-up offered <date>` once it was offered/);
+});
+
 test("connectors: a run that started without a network records nothing", async () => {
   const { recordConnectors, readConnectors, offline } = await import("../src/modules/connectors.ts");
   const server = (name: string, status: string) => ({ name, status });

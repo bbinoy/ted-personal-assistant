@@ -53,6 +53,10 @@ the owner says plainly to drop or remove that item.
 Every deadline is a task; the list ordered by date is the deadline view. After you add,
 change or finish a task in chat, load `ted-personal-assistant:follow-through`.
 
+## A long overdue pile
+
+When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Offer a clean-up **once**, in your own words and in one or two lines: reschedule, drop or keep, offering to go through them in chat in a few quick rounds. Remember that you offered with a short note (`overdue-cleanup`, with the date), and never offer again unless the owner asks or the pile grows well past what it was. When they say yes, go through the oldest first in small batches, each task one line with a suggestion ("drop", "move to Friday", "keep"), act on the answers with `update_task`, `snooze_task` or `drop_task`, and mention the result in one line. Nothing is dropped without their word. An unattended run (the daily brief) can only make the offer: it cannot change tasks.
+
 ## If the task tools are not there
 
 Say so plainly and skip the tasks part; never invent task data.
