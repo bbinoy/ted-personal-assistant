@@ -144,45 +144,30 @@ test("a post that fails to go out keeps what was held", async () => {
   assert.equal(heldPosts(c).length, 1);
 });
 
-test("failure tracker: 3 in a row (or an hour of failures) is said ONCE with the cause and the fix, recovery once", () => {
+test("failure tracker: the owner's looks become a fact only after 3 failures over 2 hours AWAKE; sleep does not count; a success ends it without a word", () => {
+  const H = 3_600_000;
+  const T = 1_000_000_000_000;
   const t = createFailureTracker();
-  const T = 1_000_000_000_000;
-  assert.deepEqual(t.observe("owner", "owner", true, "login", T), []);
-  assert.deepEqual(t.observe("owner", "owner", true, "login", T + 600_000), []);
-  const third = t.observe("owner", "owner", true, "login", T + 1_200_000);
-  assert.equal(third.length, 1);
-  assert.match(third[0]!, /failed 3 times in a row/);
-  assert.match(third[0]!, /claude auth login/);
-  assert.deepEqual(t.observe("owner", "owner", true, "login", T + 1_800_000), [], "once per incident");
-  assert.deepEqual(t.observe("owner", "owner", false, undefined, T + 2_400_000), ["My background checks work again."]);
-  assert.deepEqual(t.observe("owner", "owner", false, undefined, T + 3_000_000), [], "no second 'back to normal'");
-  // two failures an hour apart: the hour rule
-  const u = createFailureTracker();
-  assert.deepEqual(u.observe("g", "group", true, "timeout", T), []);
-  const hour = u.observe("g", "group", true, "timeout", T + 3_600_000);
-  assert.equal(hour.length, 1);
-  assert.match(hour[0]!, /in one of your groups/);
-  assert.match(hour[0]!, /RUN_MAX_MINUTES_BACKGROUND/);
-  // a success in between resets the count
-  const v = createFailureTracker();
-  v.observe("o", "owner", true, "other", T);
-  v.observe("o", "owner", true, "other", T + 1);
-  v.observe("o", "owner", false, undefined, T + 2);
-  assert.deepEqual(v.observe("o", "owner", true, "other", T + 3), []);
-});
-
-test("failure tracker: friends are one anonymised count, never a name", () => {
-  const t = createFailureTracker({ count: 2 });
-  const T = 1_000_000_000_000;
-  t.observe("tenant:anna", "tenant", true, "connector", T);
-  t.observe("tenant:bob", "tenant", true, "connector", T);
-  const first = t.observe("tenant:anna", "tenant", true, "connector", T + 1);
-  assert.equal(first.length, 1);
-  assert.match(first[0]!, /2 friend\(s\)/);
-  assert.doesNotMatch(first[0]!, /anna|bob/i);
-  assert.deepEqual(t.observe("tenant:bob", "tenant", true, "connector", T + 2), [], "the second friend adds no second notice");
-  assert.deepEqual(t.observe("tenant:anna", "tenant", false, undefined, T + 3), [], "not back to normal while another is still failing");
-  assert.deepEqual(t.observe("tenant:bob", "tenant", false, undefined, T + 4), ["Background work for friends is back to normal."]);
+  t.observe("owner", "owner", true, "login", T, 0);
+  t.observe("owner", "owner", true, "login", T + 600_000, 0.2 * H);
+  t.observe("owner", "owner", true, "login", T + 1_200_000, 0.4 * H);
+  assert.equal(t.fact("owner"), "", "three failures, but only 24 minutes awake");
+  t.observe("owner", "owner", true, "login", T + 2.5 * H, 2.1 * H);
+  const fact = t.fact("owner");
+  assert.match(fact, /failed 4 times in a row/);
+  assert.match(fact, /claude auth login/);
+  assert.match(fact, /system status/);
+  t.observe("owner", "owner", false, undefined, T + 3 * H, 2.5 * H);
+  assert.equal(t.fact("owner"), "", "a look that works ends it: no 'back to normal' anywhere");
+  // a night asleep between failures: ten hours on the wall clock, minutes on the monotonic one
+  const n = createFailureTracker();
+  for (let i = 0; i < 5; i++) n.observe("owner", "owner", true, "connector", T + i * 2.5 * H, i * 60_000);
+  assert.equal(n.fact("owner"), "", "the Mac slept through most of it");
+  // groups and friends are never tracked for anyone's chat
+  const g = createFailureTracker({ fails: 1, awakeMs: 0 });
+  g.observe("g1", "group", true, "timeout", T, 0);
+  g.observe("tenant:anna", "tenant", true, "timeout", T, 0);
+  assert.equal(g.fact("g1") + g.fact("tenant:anna"), "");
 });
 
 test("causeOf and the owner's failure messages: login, limit, timeout, connector, the rest", () => {

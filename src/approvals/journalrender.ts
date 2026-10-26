@@ -163,7 +163,7 @@ function renderTask(tool: string, response: unknown, cat: string): Rendered {
   const first = (typeof response === "string" ? response : resultText(response)).split("\n")[0]?.trim().replace(/\.$/, "") ?? "";
   const id = /#(\d+)/.exec(first)?.[1];
   const name = tool.split("__").pop() ?? tool;
-  const undo = !id ? undefined : name === "add_task" || name === "confirm_suggestion" ? `say 'drop task #${id}'` : name === "complete_task" || name === "drop_task" || name === "snooze_task" || name === "reject_suggestion" ? `say 'reopen task #${id}'` : undefined;
+  const undo = !id ? undefined : name === "add_task" ? `say 'drop task #${id}'` : name === "complete_task" || name === "drop_task" || name === "snooze_task" || name === "reject_suggestion" ? `say 'reopen task #${id}'` : undefined;
   return { what: first || doneVerb(tool, {}), cat, ...(undo ? { undo } : {}) };
 }
 
@@ -213,11 +213,10 @@ export function ownReasonOf(input: Record<string, unknown>): string | undefined 
 
 export interface WhyInput {
   conv: string;
-  step: "allow" | "auto-approved" | "approved" | "executed";
+  step: "allow" | "auto-approved" | "approved";
   input: Record<string, unknown>;
   provenance?: RunProvenance;
   judge?: string; // the judge's reason (auto-approved)
-  approval?: { n: number }; // the approval inbox's number the person answered yes to
   asked?: boolean;
   notes?: readonly { file: string; inferred: boolean }[]; // the notes the run had read before this call, in order
   now?: number;
@@ -230,7 +229,7 @@ export function notesText(notes: readonly { file: string; inferred: boolean }[] 
   return `per your notes: ${names.join(", ")}${notes.length > 3 ? ` and ${notes.length - 3} more` : ""}`;
 }
 
-// Pure but for the turn scope's clock: the why of a call. First what code knows: the approval they answered, else whose words or which instruction started the run.
+// Pure but for the turn scope's clock: the why of a call. What code knows: whose words or which instruction started the run.
 export function whyOf(o: WhyInput): Why {
   try {
     return whyOfUnsafe(o);
@@ -243,13 +242,12 @@ function whyOfUnsafe(o: WhyInput): Why {
   const at = scopeOf(o.conv).lastSaidAt();
   const p = o.provenance;
   const base =
-    o.approval ? `approval #${o.approval.n}, you answered yes`
-    : p?.kind === "owner" ? `your message${at ? ` at ${hhmm(o.conv, at)}` : ""}`
+    p?.kind === "owner" ? `your message${at ? ` at ${hhmm(o.conv, at)}` : ""}`
     : p?.kind === "member" ? (isTenantKey(o.conv) ? `your message${at ? ` at ${hhmm(o.conv, at)}` : ""}` : `a message in this group${at ? ` at ${hhmm(o.conv, at)}` : ""}`)
     : p?.kind === "standing" ? "a periodic look at your accounts, on its standing instructions"
     : p?.kind === "derived" ? (p.by === "gate" ? "a standing task chosen for this moment" : "a task I wrote for my helper from your message")
     : "no reason was recorded";
-  const how = o.step === "auto-approved" ? `auto-approved by the safety check${o.judge ? ` (${clip(o.judge, 100)})` : ""}` : o.step === "approved" && !o.approval ? "you approved it when asked" : "";
+  const how = o.step === "auto-approved" ? `auto-approved by the safety check${o.judge ? ` (${clip(o.judge, 100)})` : ""}` : o.step === "approved" ? "you approved it when asked" : "";
   const reason = ownReasonOf(o.input);
   return { text: [base, how, notesText(o.notes)].filter(Boolean).join("; "), ...(reason ? { reason } : {}), ...(o.asked || o.step !== "allow" ? { asked: true } : {}) };
 }

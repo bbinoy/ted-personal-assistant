@@ -3,7 +3,7 @@ import type { Conversation } from "./conversationmodel.ts";
 
 // "What I learned overnight" for a friend (she has no daily brief; the owner's list is a section of the brief, the `memory_changes_since_brief` tool): after her dream, and at each look after it, ONE short
 // message with what the dream and the background looks changed in her notes, if anything (memory/learned.ts). Quiet hours and /quiet hold it (the changes stay untold and go out with the next look),
-// and an empty list says nothing. Like the suggestions message (tasks/suggest.ts) the sender is main.ts's, so this file never imports the messenger. A group has none.
+// and an empty list says nothing. The sender is main.ts's, so this file never imports the messenger. A group has none.
 
 export interface LearnedRuntime {
   send(conv: Conversation, text: string): Promise<number>; // the message's timestamp: a reply that quotes it answers for its numbers

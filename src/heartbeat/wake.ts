@@ -12,7 +12,6 @@ import { settings } from "../core/settings.ts";
 import { runGate } from "../core/rungate.ts";
 import { noticeBudget, noticeDamaged, releaseHeld } from "./notices.ts";
 import { closeIdleConvDbs } from "../core/convdb.ts";
-import { flushPending } from "../approvals/pendingflow.ts";
 import { fireReminders } from "./remindtick.ts";
 import { startPreps, type PrepDeps } from "./preptick.ts";
 
@@ -27,7 +26,7 @@ import { startPreps, type PrepDeps } from "./preptick.ts";
 // key) and runs on the Payer it returns: no per-conversation branches here.
 // The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the owner's once-a-day notice; a tenant's own day is her access,
 // tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
-// an unprompted post and the tick delivers what was held as one message); the owner hears of a spent budget once a day and of looks that keep failing (notices.ts).
+// an unprompted post and the tick delivers what was held as one message); the owner hears of a spent budget once a day; looks that keep failing are the log's and the doctor's (the owner's own, after a long awake stretch, a fact for her next look: notices.ts).
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
@@ -45,6 +44,7 @@ interface WakeDeps {
   notesChangedAt?: (dir: string) => number;
   now?: () => Date;
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
+  clocks?: HeartbeatDeps["clocks"]; // tests; default: Date.now and performance.now (look.ts: a run that spanned a sleep)
 }
 
 // The wait before a conversation's first look after a start: random within the tick interval, at most 5 minutes (a spread of work, not a delay of any one look). The owner's
@@ -105,7 +105,7 @@ export function createWakeups(deps: WakeDeps) {
     return st;
   }
 
-  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed, awaitingApproval: deps.awaitingApproval });
+  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed, awaitingApproval: deps.awaitingApproval, clocks: deps.clocks });
 
   // One conversation, one look. Returns what happened (for the log and tests).
   async function look(conv: Conversation, now: Date): Promise<string> {
@@ -148,7 +148,7 @@ export function createWakeups(deps: WakeDeps) {
       }
     }
     if (wake) for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone
-    await Promise.all(remind.map(async (conv) => void (paused(clock()) || (await fireReminders(pipeline, conv, clock()))))); // reminders that have come due (heartbeat/remindtick.ts): a message each, no model, apart from the look
+    await Promise.all(remind.map(async (conv) => void (paused(clock()) || (await fireReminders(pipeline, conv, clock(), { looks: convs.includes(conv) && allows(conv, "heartbeat") && allows(conv, "wake") }))))); // reminders that have come due (heartbeat/remindtick.ts): claimed for the conversation's look, which says them; the fixed line only without a look
     await Promise.all(
       convs.map(async (conv) => {
         if (paused(clock())) return;
@@ -158,7 +158,6 @@ export function createWakeups(deps: WakeDeps) {
         busy.add(conv.key);
         const mine = epoch;
         try {
-          await flushPending(conv.key, { ended: false }).catch((e) => console.error("wake: approval inbox:", (e as Error).message)); // parked approvals: asked once quiet hours end, expired ones told, a cut-short run noticed, even with no look
           await releaseHeld(pipeline, conv, clock()); // what quiet hours or the day's cap held back goes out now, as one message
           if (!started.has(conv.key)) {
             started.add(conv.key);

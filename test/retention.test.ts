@@ -139,7 +139,7 @@ test("audit: nothing but rotated generations are looked at (agent.log, a lookali
 
 // ---- signal-cli attachments ----
 
-test("signal attachments: old files go; a voice note inside its 7-day window, a name in a pending item, a young file, a link and the keys beside the folder stay", () => {
+test("signal attachments: old files go; a voice note inside its 7-day window, a young file, a link and the keys beside the folder stay", () => {
   const { L, dir } = root();
   const att = join(dir, "signal-cli", "attachments");
   const keys = put(join(dir, "signal-cli", "data", "account.d", "keys"), "secret", 400);
@@ -147,13 +147,11 @@ test("signal attachments: old files go; a voice note inside its 7-day window, a 
   const young = put(join(att, "young"), "b", 5);
   const voiceFresh = put(join(att, "voice-fresh"), "c", 45); // a 45 day old file, but its note arrived 3 days ago
   const voiceStale = put(join(att, "voice-stale"), "d", 45); // its note is 20 days old: outside the window
-  const inPending = put(join(att, "needed-by-approval"), "e", 45);
   const otherConv = put(join(att, "note-from-other-conv"), "f", 45);
   const od = convDbAt(L.root, "owner");
   for (const [ts, id] of [[ago(3).getTime(), "voice-fresh"], [ago(20).getTime(), "voice-stale"]] as const) od.run("INSERT INTO voice_notes (ts, id, size, by, snippet) VALUES (?, ?, 0, '', '')", ts, id);
   const ad = convDbAt(L.root, "friend-anna");
   ad.run("INSERT INTO voice_notes (ts, id, size, by, snippet) VALUES (?, 'note-from-other-conv', 0, '', '')", ago(1).getTime());
-  ad.run("INSERT INTO pending_items (n, tool, input, label, question, footer, scope, source, created_at) VALUES (1, 'x', ?, '', '', '', 'tenant:anna', 'background', 0)", JSON.stringify({ file: "needed-by-approval" }));
   symlinkSync(old, join(att, "alink"));
   put(join(att, ".hidden"), "h", 90);
   mkdirSync(join(att, "adir"));
@@ -165,7 +163,7 @@ test("signal attachments: old files go; a voice note inside its 7-day window, a 
   assert.equal(r.removed, 2);
   assert.equal(r.freedBytes, 5);
   assert.deepEqual([old, voiceStale].map(existsSync), [false, false]);
-  assert.deepEqual([young, voiceFresh, inPending, otherConv, keys, join(att, ".hidden"), join(att, "adir")].map(existsSync), Array(7).fill(true));
+  assert.deepEqual([young, voiceFresh, otherConv, keys, join(att, ".hidden"), join(att, "adir")].map(existsSync), Array(6).fill(true));
   assert.ok(lstatSync(join(att, "alink")).isSymbolicLink(), "a link is left alone (it dangles now, but it was not ours to remove)");
 });
 

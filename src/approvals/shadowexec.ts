@@ -2,11 +2,14 @@ import type { Source } from "../core/audit.ts";
 import { emitRecord } from "../core/events.ts";
 import { fence } from "../core/fence.ts";
 import { LIMITS } from "../core/sanitize.ts";
+import { isTenantKey } from "../core/ownerkey.ts";
+import { OWNER } from "../core/settings.ts";
+import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import { isReadTool } from "../policy/policy.ts";
 import { callKey, type CallGuard } from "./permissions.ts";
 
 // Running the archives a person approved in the gentle first week (shadow.ts): EXACTLY the calls the look recorded, never a model's re-creation of them. The follow-up run (run/shadowrun.ts) is a small
-// fresh run whose permission layer has this guard, the exact-args replay of pendingexec.ts for a SET of calls: each recorded call (same tool, same arguments, key order aside) is allowed once without a
+// fresh run whose permission layer has this guard, an exact-args replay for a SET of calls: each recorded call (same tool, same arguments, key order aside) is allowed once without a
 // question because the person just said yes to precisely it; reads are left to the usual rules; every other call is denied. A different argument is refused whatever the model decides. Code, not the model,
 // then decides which calls happened (the tool succeeded with those arguments); the model only carries them out.
 
@@ -44,4 +47,11 @@ export function shadowPrompt(approved: readonly { tool: string; input: Record<st
     "If a call fails, or the mail no longer exists, do not try anything else and do not change the arguments; carry on with the next.",
     'Finish with ONE line and nothing else: "DONE: <how many you archived>" or "FAILED: <why>".',
   ].join("\n\n");
+}
+
+// Who approves in this conversation, by name: the owner in hers, a friend in her own chat (her run and her prompts never name the owner).
+export function approverName(scope: string): string {
+  if (!isTenantKey(scope)) return OWNER;
+  const rec = tenantById(scope.slice("tenant:".length));
+  return (rec && tenantContext(rec).name) || "the person you work for";
 }

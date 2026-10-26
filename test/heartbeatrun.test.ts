@@ -19,8 +19,6 @@ import { statusFact, writeStatusNote } from "../src/modules/status/statusnote.ts
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { heldPosts, resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
 import type { RunProvenance } from "../src/approvals/autojudge.ts";
-import { clearPending, openItems } from "../src/approvals/pending.ts";
-import { queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
 import { scratchLog } from "./scratch.ts";
 
 const s = settings as unknown as Record<string, unknown>;
@@ -32,7 +30,7 @@ const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at:
 const reset = () => (instanceDb().run("DELETE FROM looks"), resetHeld(owner())); // (the rows, and what quiet hours held)
 
 interface Answer { mail?: string[]; hold?: Promise<unknown>; hang?: boolean; timeout?: boolean; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; agents?: string[]; results?: Record<string, string>; mailed?: boolean; during?: () => void }
-function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
+function rig(answer: () => Answer, o: { clocks?: { wall: () => number; mono: () => number }; paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
   mkdirSync(join(dir, "n"));
@@ -80,6 +78,7 @@ function rig(answer: () => Answer, o: { paused?: boolean; spent?: boolean; group
     stagger: o.stagger,
     sleep: o.sleep,
     guards: { paused: () => !!o.paused, budgetSpent: () => !!o.spent },
+    clocks: o.clocks,
   });
   const wakeLine = () => ledgerEntries(conv.logFile).filter((e) => e.kind === "wake").map((e) => parseWake(e.text)!).at(-1)!;
   return { w, conv, seen, at: (d: Date) => (now = d), wakeLine };
@@ -148,40 +147,6 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.doesNotMatch(JSON.stringify(readRows()), /Eve|Friday|waits/, "the row carries no words");
   assert.ok(!seen.recorded.some(([k]) => k === "action"), "no coarse action line any more: what the look did is one journal line per action, written as each call succeeds (core/events.ts)");
   assert.deepEqual(readAudit((e) => e.tool === "wake").map((e) => [e.decision, e.source]).at(-1), ["posted", "background"], "the audit row of the look comes from the same event as the metrics row");
-});
-
-test("owner's look: what the run needed a yes for is parked while it works and asked as ONE numbered message when the look ends", async () => {
-  clearPending("owner");
-  const sent: string[] = [];
-  setPendingRuntime({ send: async (_s, t) => (sent.push(t), 77), holding: () => false, execute: async () => ({ ran: true, line: "ok" }), now: () => DAY });
-  const park = (to: string) => queueCall("owner", { tool: "mcp__gmail__reply", input: { to }, label: `Reply to ${to}`, question: "Send it?", footer: "", source: "background" }, DAY);
-  const { w, conv } = rig(() => ({ message: "[[silent]]", during: () => (park("a@example.com"), park("b@example.com"), assert.equal(sent.length, 0, "nothing is asked while the run works")) }));
-  await w.look(conv, DAY);
-  const batch = sent.filter((t) => t.startsWith("📬"));
-  assert.equal(batch.length, 1);
-  assert.match(batch[0]!, /^📬 2 things are waiting for your approval:\n1\. Reply to a@example\.com Send it\?\n2\. Reply to b@example\.com/);
-  assert.equal(openItems("owner").length, 2, "they wait for the answer");
-  setPendingRuntime(undefined);
-  clearPending("owner");
-});
-
-test("the tick asks what quiet hours kept back and tells what expired, even when no look runs", async () => {
-  clearPending("owner");
-  const sent: string[] = [];
-  let quiet = true;
-  setPendingRuntime({ send: async (_s, t) => (sent.push(t), 78), holding: () => quiet, execute: async () => ({ ran: true, line: "ok" }), now: () => DAY });
-  queueCall("owner", { tool: "mcp__gmail__reply", input: { to: "a@example.com" }, label: "Reply to a", question: "Send it?", footer: "", source: "background" }, DAY);
-  queueCall("owner", { tool: "mcp__gmail__reply", input: { to: "old@example.com" }, label: "Reply to old", question: "Send it?", footer: "", source: "background" }, new Date(DAY.getTime() - 4 * 86_400_000));
-  const { w } = rig(() => ({ message: "[[silent]]" }), { busy: () => true });
-  await w.tick(DAY);
-  assert.deepEqual(sent, [], "quiet: nothing is asked, nothing is told");
-  quiet = false;
-  await w.tick(DAY);
-  assert.equal(sent.length, 2);
-  assert.match(sent[0]!, /^⏳ Dropped, not answered in 3 days: #\d+ Reply to old\./);
-  assert.match(sent[1]!, /^📬 1 thing is waiting for your approval:\n\d+\. Reply to a /);
-  setPendingRuntime(undefined);
-  clearPending("owner");
 });
 
 test("owner's look: while a chat turn of the conversation is settling, queued or running the look waits, records nothing, and runs on the next tick", async () => {
@@ -587,25 +552,77 @@ test("a look that was preempted twice runs to completion the third time, though 
   assert.deepEqual(seen.posted, []);
 });
 
-test("looks that fail again and again: ONE owner notice with the cause and the fix, then one 'back to normal'", async () => {
+test("looks that fail again and again: nothing in the chat; after 2 hours of failing with the Mac AWAKE the owner's next look gets it as a fact, and a look that works ends it silently", async () => {
   const told: string[] = [];
   ownerNotices.sendTo((t) => told.push(t));
+  let wall = DAY.getTime();
+  let mono = 0;
   try {
     let mode: "boom" | "ok" = "boom";
-    const { w, conv, at } = rig(() => (mode === "boom" ? { throws: true } : { message: "[[silent]]" }));
+    const { w, conv, at, seen } = rig(() => (mode === "boom" ? { throws: true } : { message: "[[silent]]" }), { clocks: { wall: () => wall, mono: () => mono } });
     for (let i = 0; i < 4; i++) {
-      const t = min(DAY, i * 35); // (a failed look is retried at the day interval)
+      const t = min(DAY, i * 45);
       at(t);
+      mono = i * 45 * 60_000; // awake all the while
+      wall = t.getTime();
       assert.equal(await w.look(conv, t), "failed");
+      assert.doesNotMatch(seen.prompts.at(-1)!, /background looks have failed/);
     }
-    assert.equal(told.length, 1, "said once, not on every failure");
-    assert.match(told[0]!, /failed 3 times in a row/);
-    assert.match(told[0]!, /npm run doctor/);
+    assert.deepEqual(told, [], "no notice, no fixed text, ever");
     mode = "ok";
-    const t = min(DAY, 140);
+    const t = min(DAY, 180);
     at(t);
+    mono = 180 * 60_000;
     assert.equal(await w.look(conv, t), "silent");
-    assert.deepEqual(told.slice(1), ["My background checks work again."]);
+    assert.match(seen.prompts.at(-1)!, /Your own background looks have failed 4 times in a row since 14:00 \(2\.3 hours of that with the Mac awake/);
+    assert.match(seen.prompts.at(-1)!, /npm run doctor/, "the cause's fix, for the model to pass on if it matters");
+    const t2 = min(DAY, 220);
+    at(t2);
+    mono = 220 * 60_000;
+    await w.look(conv, t2);
+    assert.doesNotMatch(seen.prompts.at(-1)!, /background looks have failed/, "it worked: the streak is over, no 'back to normal'");
+    assert.deepEqual(told, []);
+  } finally {
+    ownerNotices.sendTo(undefined);
+  }
+});
+
+test("a look cut by its ceiling across a sleep is neutral: it counts as no failure, however often", async () => {
+  let wall = DAY.getTime();
+  let mono = 0;
+  const { w, conv, at, seen } = rig(() => ({ timeout: true, during: () => void (wall += 3_600_000) }), { clocks: { wall: () => wall, mono: () => mono } }); // an hour on the wall clock, no time awake
+  for (let i = 0; i < 6; i++) {
+    const t = min(DAY, i * 45);
+    at(t);
+    mono = i * 45 * 60_000;
+    wall = t.getTime();
+    await w.look(conv, t);
+  }
+  assert.equal(readRows().filter((r) => r.outcome === "failed").length, 6, "the rows say what happened (failed, not timeout: the sleep's)");
+  // counted, the 4th look on (3 failures, 2 hours awake) would carry the failing-looks fact: none does
+  assert.equal(seen.prompts.length, 6);
+  assert.ok(seen.prompts.every((p) => !/background looks have failed/.test(p)));
+});
+
+test("a group's and a friend's failing looks never reach the owner's chat, and no group look is told of them", async () => {
+  const told: string[] = [];
+  ownerNotices.sendTo((t) => told.push(t));
+  let mono = 0;
+  try {
+    const G = "hb-failing-group-0123456789";
+    mkdirSync(group(G).notesDir, { recursive: true });
+    writeFileSync(join(group(G).notesDir, "scheduling-fact.md"), "Every morning post a fun fact."); // (something to look at)
+    const { w, at, seen } = rig(() => ({ throws: true }), { groups: [G], clocks: { wall: Date.now, mono: () => mono } });
+    for (let i = 0; i < 6; i++) {
+      const t = min(DAY, i * 45);
+      at(t);
+      mono = i * 45 * 60_000;
+      await w.tick(t);
+      await w.idle();
+    }
+    assert.ok(seen.runs.filter((k) => k === "group").length >= 3, "the group's looks ran and failed");
+    assert.deepEqual(told, []);
+    assert.ok(seen.prompts.filter((_, i) => seen.runs[i] === "group").every((p) => !/background looks have failed/.test(p)));
   } finally {
     ownerNotices.sendTo(undefined);
   }

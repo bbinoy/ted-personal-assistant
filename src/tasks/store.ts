@@ -12,23 +12,25 @@ import { isZone, localOf, parseLocal, showInstant, showLocal, todayIn, wallToUtc
 // changed fields), then tells the event stream (a `task` event: the audit row and the journal line). Nothing is ever deleted: `dropped` is the end state (the tables have triggers that refuse a
 // DELETE, and this file has no path to one). A conversation can only reach its own file: the key names it, there is no other connection (convdb.ts).
 //
-// Who may do what is decided here too, in code, below the tools: an `inferred` origin (a background look, the mail handler) can only ADD, and what it adds is a `suggested` item that the
-// person confirms or rejects; it can neither change nor finish nor drop anything. The tool layer and the permission floor say the same, this is the part that cannot be bypassed.
+// Who may do what is decided here too, in code, below the tools: an `inferred` origin (a background look, the mail handler) can only ADD, at most LIMITS.inferredPerDay a day per conversation
+// (a flood of mail is not a flood of tasks); what it adds is an open task like any other, marked `inferred` with its source (a mail: source_kind mail and the mail id, so the same mail never adds
+// it twice), and the run tells the person in its own words; it can neither change nor finish nor drop anything. Undo is one message ("drop that task"). The tool layer and the permission floor say
+// the same, this is the part that cannot be bypassed. An inferred item's text came from a third party: a run that lists it is told so (modules/tasks/module.ts untrustedWhen).
 //
 // Dates are LOCAL wall times in the conversation's zone ("2026-10-24" or "2026-10-24T14:30", with the zone it was set in); only remind_at and snooze_until are instants (UTC ms).
 
 export const KINDS = ["task", "i_owe", "owed_to_me"] as const;
-export const STATUSES = ["suggested", "open", "done", "dropped", "snoozed"] as const;
+export const STATUSES = ["open", "done", "dropped", "snoozed"] as const; // (the schema still allows "suggested": nothing writes it since step 11 turned the last ones open)
 export const ORIGINS = ["owner", "member", "friend", "inferred"] as const;
 export const SOURCE_KINDS = ["message", "mail", "meeting", "import", "other"] as const;
-export const ACTIONS = ["added", "edited", "done", "reopened", "dropped", "snoozed", "suggested", "confirmed", "rejected", "reminded"] as const;
+export const ACTIONS = ["added", "edited", "done", "reopened", "dropped", "snoozed", "suggested", "confirmed", "rejected", "reminded"] as const; // (suggested, confirmed, rejected: history rows of the retired suggestions)
 export type Kind = (typeof KINDS)[number];
 export type Status = (typeof STATUSES)[number];
 export type Origin = (typeof ORIGINS)[number];
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 export type Action = (typeof ACTIONS)[number];
 
-export const LIMITS = { title: 200, details: 2000, person: 80, assignee: 80, ref: 300, open: 1000, suggestions: 20, list: 200 } as const;
+export const LIMITS = { title: 200, details: 2000, person: 80, assignee: 80, ref: 300, open: 1000, inferredPerDay: 10, list: 200 } as const;
 
 export interface Item {
   id: number;
@@ -193,9 +195,9 @@ export function lineOf(action: Action, it: Item, o: { zone: string; now: number;
   if (action === "snoozed" && it.snoozeUntil !== undefined) bits.push(`until ${showInstant(it.snoozeUntil, o.zone, o.now)}`);
   else if (action === "edited" && o.changed?.length) bits.push(`changed ${o.changed.map((f) => FIELD_NAMES[f] ?? f).join(", ")}`);
   else if (action === "done" && o.next) bits.push(`next: ${showLocal(o.next, today)}`);
-  else if (it.due && (action === "added" || action === "suggested" || action === "confirmed" || action === "reopened")) bits.push(`due ${showLocal(it.due, today)}`);
-  if ((action === "added" || action === "suggested") && it.person) bits.push(it.kind === "i_owe" ? `you owe ${it.person}` : it.kind === "owed_to_me" ? `${it.person} owes you` : `with ${it.person}`);
-  if ((action === "added" || action === "suggested") && it.assignee) bits.push(`for ${it.assignee}`);
+  else if (it.due && (action === "added" || action === "reopened")) bits.push(`due ${showLocal(it.due, today)}`);
+  if (action === "added" && it.person) bits.push(it.kind === "i_owe" ? `you owe ${it.person}` : it.kind === "owed_to_me" ? `${it.person} owes you` : `with ${it.person}`);
+  if (action === "added" && it.assignee) bits.push(`for ${it.assignee}`);
   return `${VERB[action]} ${NOUN[it.kind]} #${it.id} '${title}'${bits.length ? ` (${bits.join(", ")})` : ""}`;
 }
 
@@ -206,6 +208,7 @@ interface Change {
   set: Partial<Record<keyof Row, string | number | null>>;
   next?: string;
   keepUpdated?: boolean; // bookkeeping, not an edit: updated_at stays (a reminder being marked sent is not the person touching the item)
+  silent?: boolean; // the history row only, no event: the journal line comes later (a reminder is journaled when it was TOLD, heartbeat/remindtick.ts)
 }
 
 /** One transaction: the item's changed columns and the history row; then the event. Returns the item as it is now and the line. */
@@ -228,7 +231,7 @@ function commit(scope: Scope, id: number, c: Change): { item: Item; line: string
     return { item: toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", id)!), changed: Object.keys(after).filter((k) => k !== "status" && k !== "updated_at" && k !== "snooze_until" && k !== "done_at") };
   });
   const line = lineOf(c.action, out.item, { zone: scope.zone, now, changed: out.changed, next: c.next });
-  told(scope, out.item.id, c.action, line);
+  if (!c.silent) told(scope, out.item.id, c.action, line);
   return { item: out.item, line };
 }
 
@@ -244,7 +247,7 @@ export function told(scope: Scope, id: number, action: Action, line: string): vo
 export const mayUrgent = (scope: Scope): boolean => scope.origin === "owner" || scope.origin === "friend";
 
 const mayChange = (scope: Scope): void => {
-  if (scope.origin === "inferred") throw new TaskError("A background look can only suggest a task; the person changes, finishes and drops them.");
+  if (scope.origin === "inferred") throw new TaskError("A background look can only add a task; the person changes, finishes and drops them.");
 };
 
 export interface NewItem {
@@ -257,7 +260,6 @@ export interface NewItem {
   person?: string;
   assignee?: string;
   urgent?: boolean; // only the person's own words may set it (never a background look)
-  status?: Status; // open (default) or suggested; an inferred origin is always suggested
   sourceKind?: SourceKind;
   sourceRef?: string;
 }
@@ -270,7 +272,7 @@ function duplicateOf(db: Db, title: string, kind: Kind, due: string | undefined,
     const r = db.get<Row>("SELECT * FROM items WHERE source_kind = ? AND source_ref = ? AND kind = ? ORDER BY id DESC LIMIT 1", ref.kind, ref.ref, kind);
     if (r) return toItem(r);
   }
-  const rows = db.all<Row>("SELECT * FROM items WHERE kind = ? AND status IN ('suggested', 'open', 'snoozed')", kind);
+  const rows = db.all<Row>("SELECT * FROM items WHERE kind = ? AND status IN ('open', 'snoozed')", kind);
   const hit = rows.find((r) => norm(r.title) === norm(title) && (r.due ?? "") === (due ?? ""));
   return hit && toItem(hit);
 }
@@ -297,6 +299,12 @@ export function insertImported(db: Db, scope: Scope, r: ImportRow): Item {
   return toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", res.lastInsertRowid)!);
 }
 
+/** How many items an unattended run (origin inferred) added in this conversation since the start of today, in its zone. */
+function addedToday(db: Db, zone: string, now: number): number {
+  const p = parseLocal(todayIn(now, zone))!;
+  return db.num("SELECT COUNT(*) FROM items WHERE origin = 'inferred' AND created_at >= ?", wallToUtc(zone, p.date, "00:00"));
+}
+
 export interface Added {
   item: Item;
   line: string;
@@ -309,8 +317,7 @@ export function addItem(scope: Scope, n: NewItem): Added {
   const kind = n.kind ?? "task";
   if (!KINDS.includes(kind)) throw new TaskError(`kind must be one of ${KINDS.join(", ")}.`);
   const inferred = scope.origin === "inferred";
-  const status: Status = inferred ? "suggested" : (n.status ?? "open");
-  if (status !== "open" && status !== "suggested") throw new TaskError("A new item is open or suggested.");
+  const status: Status = "open";
   const sourceKind = n.sourceKind ?? "message";
   if (!SOURCE_KINDS.includes(sourceKind)) throw new TaskError(`source_kind must be one of ${SOURCE_KINDS.join(", ")}.`);
   const title = oneText("title", n.title, LIMITS.title);
@@ -325,21 +332,21 @@ export function addItem(scope: Scope, n: NewItem): Added {
   const ref = n.sourceRef === undefined ? null : oneText("source_ref", n.sourceRef, LIMITS.ref);
   const dup = duplicateOf(db, title, kind, due ?? undefined, { kind: sourceKind, ref: ref ?? undefined });
   if (dup) return { item: dup, line: `Already on the list: #${dup.id} '${dup.title}' (${dup.status})`, duplicate: true };
-  const live = db.num("SELECT COUNT(*) FROM items WHERE status IN ('suggested', 'open', 'snoozed')");
+  const live = db.num("SELECT COUNT(*) FROM items WHERE status IN ('open', 'snoozed')");
   if (live >= LIMITS.open) throw new TaskError(`The list is full (${LIMITS.open} open items): finish or drop some first.`);
-  if (status === "suggested" && db.num("SELECT COUNT(*) FROM items WHERE status = 'suggested'") >= LIMITS.suggestions) throw new TaskError(`${LIMITS.suggestions} suggestions are already waiting for an answer; no more until they are confirmed or rejected.`);
+  if (inferred && addedToday(db, scope.zone, now) >= LIMITS.inferredPerDay) throw new TaskError(`${LIMITS.inferredPerDay} tasks were already added on your own today in this conversation (the daily cap against a flood of mail): add no more today; mention the rest in your message if they matter.`);
   const id = db.tx(() => {
     const r = db.run(
       "INSERT INTO items (kind, title, details, due, due_zone, remind_at, repeat, person, assignee, status, origin, source_kind, source_ref, created_at, updated_at, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       kind, title, details, due, due ? scope.zone : null, remindAt, repeat, person, assignee, status, scope.origin, sourceKind, ref, now, now, n.urgent && mayUrgent(scope) ? 1 : null,
     );
     const after = { kind, title, ...(details ? { details } : {}), ...(due ? { due } : {}), ...(remindAt !== null ? { remind_at: remindAt } : {}), ...(repeat ? { repeat } : {}), ...(person ? { person } : {}), ...(assignee ? { assignee } : {}), status };
-    db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, ?, NULL, ?)", r.lastInsertRowid, now, scope.by, status === "suggested" ? "suggested" : "added", JSON.stringify(after));
+    db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, 'added', NULL, ?)", r.lastInsertRowid, now, scope.by, JSON.stringify(after));
     return r.lastInsertRowid;
   });
   const item = toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", id)!);
-  const line = lineOf(status === "suggested" ? "suggested" : "added", item, { zone: scope.zone, now });
-  told(scope, id, status === "suggested" ? "suggested" : "added", line);
+  const line = lineOf("added", item, { zone: scope.zone, now });
+  told(scope, id, "added", line);
   return { item, line };
 }
 
@@ -401,7 +408,6 @@ export function completeItem(scope: Scope, id: number): { item: Item; line: stri
   const it = need(scope, id);
   if (it.status === "done") throw new TaskError(`#${id} is already done.`);
   if (it.status === "dropped") throw new TaskError(`#${id} was dropped; reopen it first if it should be done.`);
-  if (it.status === "suggested") throw new TaskError(`#${id} is only a suggestion: confirm it (confirm_suggestion) or reject it first.`);
   const now = nowOf(scope);
   const rule = it.repeat ? parseRepeat(it.repeat) : undefined;
   if (rule?.ok && (it.due || it.remindAt !== undefined)) {
@@ -449,32 +455,14 @@ export function snoozeItem(scope: Scope, id: number, until: number): { item: Ite
   mayChange(scope);
   const it = need(scope, id);
   live(it, "snooze it");
-  if (it.status === "suggested") throw new TaskError(`#${id} is only a suggestion: confirm or reject it first.`);
   const t = checkInstant("until", until)!;
   if (t <= nowOf(scope)) throw new TaskError("Snooze until a time in the future.");
   return commit(scope, id, { action: "snoozed", set: { status: "snoozed", snooze_until: t } });
 }
 
-/** The person accepts a suggestion (optionally corrected): it becomes an open item. */
-export function confirmSuggestion(scope: Scope, id: number, p: Patch = {}): { item: Item; line: string } {
-  mayChange(scope);
-  const it = need(scope, id);
-  if (it.status !== "suggested") throw new TaskError(`#${id} is not a suggestion (it is ${it.status}).`);
-  if (Object.values(p).some((v) => v !== undefined)) editItem(scope, id, p);
-  return commit(scope, id, { action: "confirmed", set: { status: "open" } });
-}
-
-/** The person turns a suggestion down: dropped, kept in the history so the same mail is not suggested again. */
-export function rejectSuggestion(scope: Scope, id: number): { item: Item; line: string } {
-  mayChange(scope);
-  const it = need(scope, id);
-  if (it.status !== "suggested") throw new TaskError(`#${id} is not a suggestion (it is ${it.status}).`);
-  return commit(scope, id, { action: "rejected", set: { status: "dropped" } });
-}
-
-/** A reminder was sent for this item (the history says so; T2). */
+/** A reminder of this item came due and was claimed (the history row, and its next remind_at). Silent: the journal says "Reminded about ..." only once it was told (heartbeat/remindtick.ts). */
 export function noteReminded(scope: Scope, id: number, remindAt: number | null = null): void {
-  commit(scope, id, { action: "reminded", set: { remind_at: remindAt }, keepUpdated: true });
+  commit(scope, id, { action: "reminded", set: { remind_at: remindAt }, keepUpdated: true, silent: true });
 }
 
 /** Snoozes whose time has come are open again (the history says so). Returns the items woken. */
@@ -524,6 +512,9 @@ export function storeFacts(key: string): { items: number; imported: number } {
   return { items: all.length, imported: all.filter((it) => it.sourceKind === "import").length };
 }
 
+/** Does the list hold a live item the assistant added from a mail (its text is a third party's)? (modules/tasks/module.ts: reading the list then counts as reading untrusted text.) */
+export const hasMailItems = (key: string): boolean => (readDb(key)?.num("SELECT COUNT(*) FROM items WHERE origin = 'inferred' AND source_kind = 'mail' AND status IN ('open', 'snoozed')") ?? 0) > 0;
+
 /** Every open or snoozed item (the reminder tick reads these; no cap, unlike a list). */
 export const activeItems = (key: string): Item[] => allItems(key).filter((it) => it.status === "open" || it.status === "snoozed");
 
@@ -557,14 +548,13 @@ export interface Counts {
   noDate: number;
   waiting: number; // owed_to_me, open
   owe: number; // i_owe, open
-  suggested: number;
   snoozed: number;
   done: number;
   dropped: number;
 }
 
 export function counts(key: string, now = Date.now(), zone = "UTC"): Counts {
-  const c: Counts = { open: 0, overdue: 0, today: 0, upcoming: 0, noDate: 0, waiting: 0, owe: 0, suggested: 0, snoozed: 0, done: 0, dropped: 0 };
+  const c: Counts = { open: 0, overdue: 0, today: 0, upcoming: 0, noDate: 0, waiting: 0, owe: 0, snoozed: 0, done: 0, dropped: 0 };
   for (const it of allItems(key)) {
     const s = effectiveStatus(it, now);
     if (s === "open") {

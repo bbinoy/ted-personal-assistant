@@ -48,7 +48,7 @@ test("failing looks: a warning from three failed or timed-out rows in the last 6
   const bad = collect();
   failedLooksCheck(bad.line, [row(7, "failed"), row(5, "failed"), row(4, "timeout"), row(3, "timeout"), row(1, "silent"), row(0.5, "posted")], AT);
   assert.deepEqual(bad.seen.map((s) => [s[0], s[1]]), [["warn", "looks failing in the last 6 hours"]]);
-  assert.equal(bad.seen[0]![2], '3 of 5 look(s) failed or timed out (2 timed out); likely causes: the Mac sleeping, no network, or the usage limit (npm run heartbeat-report; docs/SETUP.md "Keep it running")');
+  assert.equal(bad.seen[0]![2], '3 of 5 look(s) failed or timed out (2 timed out): yours 3; likely causes: the Mac sleeping, no network, the usage limit, or a look\'s ceiling (HEARTBEAT_TIMEOUT_MINUTES) (npm run heartbeat-report; docs/SETUP.md "Keep it running")');
   const ok = collect();
   failedLooksCheck(ok.line, [row(5, "failed"), row(4, "timeout"), row(1, "silent"), row(8, "failed"), row(9, "failed")], AT);
   assert.deepEqual(ok.seen, [[true, "looks failing in the last 6 hours", "2 of 3 look(s) failed"]]);

@@ -35,21 +35,21 @@ test("every cause maps to one fix, and each cause is recognised from its error",
   assert.equal(causeOf(new Error("she has not connected Notion yet")), "reconnect");
 });
 
-test("the failing-looks notice ends with the cause's fix, for the owner, a group and (as a count) friends", () => {
-  const T = 1_000_000_000_000;
+test("the failing-looks fact carries the cause's what and fix, for the owner only; a friend's or a group's failures give none", () => {
+  const H = 3_600_000;
   for (const c of CAUSES) {
-    const t = createFailureTracker({ count: 2 });
-    t.observe("k", "owner", true, c, T);
-    const said = t.observe("k", "owner", true, c, T + 1);
-    assert.equal(said.length, 1, c);
-    assert.ok(said[0]!.endsWith(FIXES[c].fix), `${c}: ${said[0]}`);
-    assert.ok(said[0]!.includes(FIXES[c].what));
-    const f = createFailureTracker({ count: 2 });
-    f.observe("tenant:anna", "tenant", true, c, T);
-    const fr = f.observe("tenant:anna", "tenant", true, c, T + 1);
-    assert.ok(fr[0]!.endsWith(FIXES[c].fix), c);
-    assert.doesNotMatch(fr[0]!, /anna/i);
+    const t = createFailureTracker();
+    for (let i = 0; i < 3; i++) t.observe("k", "owner", true, c, 1_000 + i, i * H);
+    const fact = t.fact("k");
+    assert.ok(fact.includes(FIXES[c].what) && fact.includes(FIXES[c].fix), `${c}: ${fact}`);
+    for (const scope of ["tenant", "group"] as const) {
+      const f = createFailureTracker();
+      for (let i = 0; i < 3; i++) f.observe("x", scope, true, c, 1_000 + i, i * H);
+      assert.equal(f.fact("x"), "", `${scope} ${c}`);
+    }
   }
+  assert.match(FIXES.timeout.fix, /HEARTBEAT_TIMEOUT_MINUTES/, "a look's ceiling, not RUN_MAX_MINUTES_BACKGROUND");
+  assert.doesNotMatch(FIXES.timeout.fix, /RUN_MAX_MINUTES_BACKGROUND/);
 });
 
 test("the owner's chat failure notices end with the step for their cause; friends and groups are sent to no terminal", () => {

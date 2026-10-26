@@ -104,11 +104,13 @@ export function isFree(tool: string, mail: MailProvider = settings.mailProvider,
 // Reading these shows the run text a third party wrote: mail, a web page, a search result, and any other data kind (an event's description, a Notion page, a
 // Drive file are written by whoever can edit them): every `read` row is untrusted unless its module opts out (`trusted`: public weather data). After one, the
 // run's arguments may be steered by it (permissions.ts tells the judge). A mail provider's reads only count while that provider is loaded; an unlisted tool
-// with a read verb under a connector's prefix counts too, loaded or not (it can only make the judge more careful), and so does anything in the browse run.
-export function readsUntrusted(tool: string, mail: MailProvider = settings.mailProvider): boolean {
+// with a read verb under a connector's prefix counts too, loaded or not (it can only make the judge more careful), and so does anything in the browse run. `conversation`: the run's, for a
+// module whose reads are third-party text only sometimes (`untrustedWhen`: the task list once it holds a task made from a mail).
+export function readsUntrusted(tool: string, mail: MailProvider = settings.mailProvider, conversation?: string): boolean {
   const f = lookup(tool, mail);
   if (!f) return readVerb(tool) && registered().some((m) => m.untrustedPrefix !== undefined && tool.startsWith(m.untrustedPrefix));
-  return covers(f.module.untrusted ?? (f.module.trusted ? undefined : ["read"]), f.entry.action);
+  if (covers(f.module.untrusted ?? (f.module.trusted ? undefined : ["read"]), f.entry.action)) return true;
+  return f.entry.action === "read" && conversation !== undefined && !!f.module.untrustedWhen?.(f.entry.action, conversation);
 }
 
 // Rows that belong to the owner alone (the connectors, the tenant administration, the browser, opening a page): never in a group's or a tenant's tool set.

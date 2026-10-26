@@ -4,22 +4,19 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Reminders on time (src/tasks/remind.ts, remindanswer.ts): the planner, the words, the tick (at most once, quiet hours, urgent, not counted toward the cap, groups, catch-up, repeats, snooze) and
-// answering a reminder in code (a quoted "done" / "snooze 1h", a ✅ reaction), also after a restart.
+// Reminders on time (src/tasks/remind.ts, src/heartbeat/remindtick.ts, src/heartbeat/look.ts): code decides WHEN (the planner, at most once, quiet hours, urgent, repeats, snooze), the conversation's
+// look SAYS it in its own words (a fact in its prompt), and only a reminder that was told is journaled ("Reminded about ..."). The fixed line is only the fallback when no look says it.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "reminders-test-"));
 process.env.TZ = "Europe/Berlin";
 
 const R = await import("../src/tasks/remind.ts");
-const A = await import("../src/tasks/remindanswer.ts");
 const T = await import("../src/heartbeat/remindtick.ts");
-const { zoneOf } = await import("../src/tenants/tenants.ts");
 const S = await import("../src/tasks/store.ts");
 const { group } = await import("../src/conversation/conversationmodel.ts");
 const { settings } = await import("../src/core/settings.ts");
-const { heldPosts, submitPost } = await import("../src/heartbeat/notices.ts");
-const { recordMessage } = await import("../src/core/messages.ts");
+const { ledgerEntries, recordMessage } = await import("../src/core/messages.ts");
 const { peekConvDb } = await import("../src/core/convdb.ts");
-const { setQuiet } = await import("../src/conversation/quiet.ts");
+const { convPaths } = await import("../src/core/convpaths.ts");
 const { statusText } = await import("../src/conversation/ownercommands.ts");
 
 type Conv = ReturnType<typeof group>;
@@ -53,8 +50,168 @@ function rig(o: { failFirst?: number } = {}) {
   } as never;
   return { sent, pipeline };
 }
-const tick = (r: ReturnType<typeof rig>, conv: Conv, at: number) => T.fireReminders(r.pipeline, conv, new Date(at));
-const rows = (conv: Conv, id: number) => peekConvDb(conv.convId)!.all<{ key: string; state: string; ts: number | null; late: number }>("SELECT key, state, ts, late FROM reminders WHERE item_id = ? ORDER BY seq", id);
+const tick = (r: ReturnType<typeof rig>, conv: Conv, at: number, looks = true) => T.fireReminders(r.pipeline, conv, new Date(at), { looks });
+const rows = (conv: Conv, id: number) => peekConvDb(conv.convId)!.all<{ key: string; state: string; late: number; tries: number }>("SELECT key, state, late, tries FROM reminders WHERE item_id = ? ORDER BY seq", id);
+const reminded = (conv: Conv) => ledgerEntries(convPaths(conv.convId).messages).filter((e) => e.kind === "journal" && /^Reminded about/.test(e.text)).map((e) => e.text);
+
+test("the tick CLAIMS a due reminder, once, and says nothing: the look is due now; nothing is journaled before it was told", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW - 2 * MIN, due: "2026-10-22" }).item;
+  const r = rig();
+  assert.equal(await tick(r, conv, NOW), 0);
+  assert.deepEqual(r.sent, [], "no fixed text: the look says it");
+  assert.deepEqual(rows(conv, it.id).map((x) => x.state), ["claimed"]);
+  assert.equal(T.remindersWaiting(conv), true, "the look is due at once");
+  assert.equal(S.getItem(conv.key, it.id)!.remindAt, undefined, "its reminder moved on (cleared for a one-off)");
+  assert.ok(S.eventsOf(conv.key, it.id).some((e) => e.action === "reminded"), "the history row is written at the claim");
+  assert.deepEqual(reminded(conv), [], "but no 'Reminded about' in the journal yet");
+  await tick(r, conv, NOW + MIN);
+  await tick(rig(), conv, NOW + 2 * MIN); // (a restart: the same file)
+  assert.equal(rows(conv, it.id).length, 1, "at most once");
+  assert.deepEqual(T.waitingReminders(conv).map((w) => w.item.title), ["Call Sam"]);
+});
+
+test("a look that posts tells its reminders: sent, journaled ONCE; a look that stays silent does not, and the fallback line comes after 30 minutes", async () => {
+  const conv = fresh();
+  const a = S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW - MIN }).item;
+  const b = S.addItem(scope(conv.key, NOW - HOUR), { title: "Water plants", remindAt: NOW - MIN }).item;
+  const r = rig();
+  await tick(r, conv, NOW);
+  const handed = T.waitingReminders(conv);
+  T.afterLook(conv, handed.filter((w) => w.item.id === a.id), { posted: true, held: false }, NOW + MIN, ZONE);
+  T.afterLook(conv, handed.filter((w) => w.item.id === b.id), { posted: false, held: false }, NOW + MIN, ZONE);
+  assert.deepEqual(rows(conv, a.id).map((x) => x.state), ["sent"]);
+  assert.deepEqual(reminded(conv), ["Reminded about task #1 'Call Sam'. Why: its reminder time came."]);
+  assert.equal(T.remindersWaiting(conv), false, "the silent look's reminder starts no new look");
+  assert.equal(await tick(r, conv, NOW + 10 * MIN), 0, "its look still has time");
+  assert.equal(await tick(r, conv, NOW + 31 * MIN), 1);
+  assert.deepEqual(r.sent, ["⏰ Water plants"], "the fallback, the only fixed text");
+  assert.deepEqual(reminded(conv), ["Reminded about task #1 'Call Sam'. Why: its reminder time came.", "Reminded about task #2 'Water plants'. Why: its reminder time came."]);
+  assert.equal(await tick(r, conv, NOW + 40 * MIN), 0);
+});
+
+test("a send that fails is never journaled as 'Reminded': it is retried, three times at most, then left to the brief", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Never", remindAt: NOW - 2 * MIN }).item;
+  const bad = rig({ failFirst: 99 });
+  for (let i = 0; i < 6; i++) await tick(bad, conv, NOW + i * 5 * MIN, false); // (no look: the fallback at once)
+  assert.equal(bad.sent.length, 0);
+  assert.deepEqual(reminded(conv), [], "no false 'Reminded' line for a send that timed out");
+  assert.deepEqual(rows(conv, it.id).map((x) => [x.state, x.tries]), [["folded", 3]]);
+  const ok = fresh();
+  S.addItem(scope(ok.key, NOW - HOUR), { title: "Once", remindAt: NOW - 2 * MIN });
+  const flaky = rig({ failFirst: 1 });
+  await tick(flaky, ok, NOW, false);
+  await tick(flaky, ok, NOW + 5 * MIN, false);
+  assert.deepEqual(flaky.sent, ["⏰ Once"]);
+  assert.equal(reminded(ok).length, 1, "journaled once, after the send that worked");
+});
+
+test("a held look post tells a plain reminder (it goes out with the held messages) but not an urgent one", async () => {
+  const conv = { ...fresh(), kind: "owner" as const };
+  const plain = S.addItem(scope(conv.key, NOW - HOUR), { title: "Plain", remindAt: NOW - MIN }).item;
+  const urgent = S.addItem(scope(conv.key, NOW - HOUR), { title: "Urgent", remindAt: NOW - MIN, urgent: true }).item;
+  await tick(rig(), conv as never, NOW);
+  T.afterLook(conv, T.waitingReminders(conv), { posted: false, held: true }, NOW + MIN, ZONE);
+  assert.equal(rows(conv as never, plain.id)[0]!.state, "sent");
+  assert.equal(rows(conv as never, urgent.id)[0]!.state, "claimed", "an urgent one must be said now: the fallback comes");
+});
+
+test("quiet hours hold a reminder until they end (then it is claimed for the look); an urgent one is claimed at once", async () => {
+  const conv = fresh();
+  const night = berlin("2026-10-22", "23:30");
+  const it = S.addItem(scope(conv.key, NOW), { title: "Late call", remindAt: berlin("2026-10-22", "23:00") }).item;
+  const u = S.addItem({ ...scope(conv.key, NOW), origin: "owner" }, { title: "Wake me", remindAt: berlin("2026-10-22", "23:10"), urgent: true }).item;
+  const r = rig();
+  await tick(r, conv, night, false);
+  assert.equal(rows(conv, it.id)[0]!.state, "held");
+  assert.deepEqual(r.sent, ["⏰ Wake me"], "urgent, no look: the fallback even at night");
+  await tick(r, conv, berlin("2026-10-23", "07:05"), true);
+  assert.equal(rows(conv, it.id)[0]!.state, "claimed", "quiet is over: the look says it");
+  assert.equal(rows(conv, u.id)[0]!.state, "sent");
+});
+
+test("the facts a look gets: the reminders due now, with when they were due, and the open items due by tomorrow or overdue", () => {
+  const conv = fresh();
+  const a = S.addItem(scope(conv.key), { title: "Call Sam", due: "2026-10-22T14:30", assignee: "Anna" }).item;
+  const b = S.addItem(scope(conv.key), { title: "Pay rent", due: "2026-10-20" }).item;
+  const c = S.addItem(scope(conv.key), { title: "Dentist", due: "2026-10-23" }).item;
+  S.addItem(scope(conv.key), { title: "Far away", due: "2026-11-30" });
+  const text = R.reminderFacts([{ item: a, fireAt: NOW - 3 * HOUR }], S.activeItems(conv.key), { now: NOW, zone: ZONE, group: true });
+  assert.match(text, /^Reminders due now \(the person asked to be reminded: say each one in this look's message, in your own words, naming who it is for;/);
+  assert.match(text, new RegExp(`#${a.id} Call Sam \\(reminder for Thu 22 Oct 09:00; for Anna; due today 14:30\\)`));
+  assert.match(text, /Open items due by tomorrow or overdue \(for your awareness/);
+  assert.match(text, new RegExp(`#${b.id} Pay rent \\(was due Tue 20 Oct\\)`));
+  assert.match(text, new RegExp(`#${c.id} Dentist \\(due tomorrow\\)`));
+  assert.doesNotMatch(text, /Far away/);
+  assert.equal(R.reminderFacts([], [], { now: NOW, zone: ZONE, group: false }), "");
+});
+
+test("the look: a due reminder makes it run now; its prompt carries the reminder as a fact; it is journaled only because the look posted", async () => {
+  const { createHeartbeatLook } = await import("../src/heartbeat/look.ts");
+  const { owner } = await import("../src/conversation/conversation.ts");
+  const { LOGIN } = await import("../src/tenants/payer.ts");
+  const { lookState } = await import("../src/conversation/ledger.ts");
+  const { scratchLog } = await import("./scratch.ts");
+  const c = { ...owner(), logFile: scratchLog(`rem-look-${Math.random().toString(36).slice(2)}.jsonl`) };
+  const it = S.addItem(scope(c.key, Date.now() - HOUR), { title: "Ring the vet", remindAt: Date.now() - MIN }).item;
+  await T.fireReminders(rig().pipeline, c as never, new Date(), { looks: true });
+  const prompts: string[] = [];
+  const posted: string[] = [];
+  const pipeline = { enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(), record: () => {}, busy: () => false, sendWhile: async (_c: unknown, r: () => Promise<unknown>) => r(), runTurn: async (_c: unknown, turn: { run: () => Promise<{ text: string }> }) => (posted.push((await turn.run()).text), { spoke: true }) };
+  const hb = createHeartbeatLook({
+    pipeline: pipeline as never,
+    run: (async (_c: unknown, _p: unknown, prompt: string) => (prompts.push(prompt), { text: "", structured: { message: "Hey, you wanted a nudge to ring the vet now.", nextCheckMinutes: 30 } })) as never,
+    may: () => LOGIN,
+    why: () => "x",
+    notesChangedAt: () => 0,
+  });
+  const st = { ...lookState([]), wake: { looked: new Date().toISOString(), next: new Date(Date.now() + HOUR).toISOString() } } as never; // (not due by its clock: only the reminder makes it due)
+  const outcome = await hb.look(c, st, new Date());
+  assert.equal(outcome, "posted");
+  assert.match(prompts[0] ?? "", /Reminders due now[\s\S]*Ring the vet/);
+  assert.doesNotMatch(prompts[0] ?? "", /⏰/, "a fact for the model, not the code's line");
+  assert.equal(ledgerEntries(convPaths(c.convId).messages).filter((e) => e.kind === "journal" && e.text.startsWith(`Reminded about task #${it.id} 'Ring the vet'`)).length, 1);
+});
+
+test("a repeating reminder is claimed, moves to its next time and stays ONE item; a snooze that ran out wakes the item; a due day that is over rolls", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - 24 * HOUR), { title: "Stretch", remindAt: NOW - MIN, repeat: "every day" }).item;
+  const nap = S.addItem(scope(conv.key, NOW - 5 * HOUR), { title: "Nap" }).item;
+  S.snoozeItem(scope(conv.key, NOW - 4 * HOUR), nap.id, NOW - 2 * MIN);
+  const trash = S.addItem(scope(conv.key, NOW - 24 * HOUR), { title: "Trash", due: "2026-10-21", repeat: "every day" }).item;
+  await tick(rig(), conv, NOW);
+  assert.equal(S.getItem(conv.key, it.id)!.remindAt, berlin("2026-10-23", "11:59"), "tomorrow at the same clock time");
+  assert.equal(S.getItem(conv.key, nap.id)!.status, "open");
+  assert.deepEqual(T.waitingReminders(conv).map((w) => w.item.title).sort(), ["Nap", "Stretch"]);
+  assert.equal(S.getItem(conv.key, trash.id)!.due, "2026-10-23");
+  assert.equal(S.listItems(conv.key, { status: ["open", "snoozed", "done", "dropped"] }).length, 3);
+});
+
+test("one reminder a day: an own reminder already claimed today replaces the due-day one; two days late is only marked; a conversation without a database is left alone", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Pay rent", due: "2026-10-22", remindAt: berlin("2026-10-22", "07:05") }).item;
+  await tick(rig(), conv, berlin("2026-10-22", "07:10"));
+  await tick(rig(), conv, berlin("2026-10-22", "08:35"));
+  assert.deepEqual(rows(conv, it.id).map((x) => x.key), [`at:${berlin("2026-10-22", "07:05")}`], "no second one at 08:30");
+  const old = S.addItem(scope(conv.key, NOW - 72 * HOUR), { title: "Ancient", remindAt: NOW - 50 * HOUR }).item;
+  await tick(rig(), conv, NOW);
+  assert.deepEqual(rows(conv, old.id).map((x) => x.state), ["folded"]);
+  const empty = group("rem-never-opened");
+  assert.equal(await tick(rig(), empty, NOW), 0);
+  assert.equal(peekConvDb(empty.convId), undefined, "no database was made");
+});
+
+test("stale held rows are pruned when the item is done or moved on", async () => {
+  const conv = fresh();
+  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Water plants", remindAt: berlin("2026-10-22", "23:00") }).item;
+  const r = rig();
+  await tick(r, conv, berlin("2026-10-22", "23:30"));
+  assert.equal(rows(conv, it.id)[0]!.state, "held");
+  S.completeItem(scope(conv.key, berlin("2026-10-22", "23:40")), it.id);
+  await tick(r, conv, berlin("2026-10-23", "07:30"));
+  assert.deepEqual(rows(conv, it.id), []);
+});
 
 test("planner: an item's own reminder, a snooze that ran out, and the default morning ping", () => {
   const conv = fresh();
@@ -90,28 +247,6 @@ test("planner: the default ping is at the default time, or the due time when tha
   assert.deepEqual(R.dueReminders([late], NOW, o), [], "made after 08:30 that day: no 'missed' ping for something just written");
 });
 
-test("judgeLate: on time, missed while off, folded into the digest, dropped; quiet hours excuse the delay", () => {
-  const f = 1_000_000_000_000;
-  assert.equal(R.judgeLate(f, f + 4 * MIN, false, 10 * MIN), "ok");
-  assert.equal(R.judgeLate(f, f + 3 * HOUR, false, 10 * MIN), "missed");
-  assert.equal(R.judgeLate(f, f + 8 * HOUR, true, 10 * MIN), "ok");
-  assert.equal(R.judgeLate(f, f + 13 * HOUR, true, 10 * MIN), "fold");
-  assert.equal(R.judgeLate(f, f + 49 * HOUR, false, 10 * MIN), "drop");
-});
-
-test("the words: one short line, the due in the conversation's clock, the assignee in a group", () => {
-  const it = (p: Partial<Item>): Item => ({ id: 1, kind: "task", title: "Call Sam", status: "open", origin: "owner", sourceKind: "message", createdAt: 0, updatedAt: 0, ...p });
-  const o = { now: NOW, zone: ZONE, group: false };
-  assert.equal(R.reminderText(it({ due: "2026-10-22" }), o), "⏰ Call Sam (due today)");
-  assert.equal(R.reminderText(it({ due: "2026-10-23T14:30" }), o), "⏰ Call Sam (due tomorrow 14:30)");
-  assert.equal(R.reminderText(it({ due: "2026-10-30" }), o), "⏰ Call Sam (due Fri 30 Oct)");
-  assert.equal(R.reminderText(it({ due: "2026-10-20" }), o), "⏰ Call Sam (was due Tue 20 Oct)");
-  assert.equal(R.reminderText(it({}), o), "⏰ Call Sam");
-  assert.equal(R.reminderText(it({ title: "ferry tickets", assignee: "Anna", due: "2026-10-22" }), { ...o, group: true }), "⏰ @Anna: ferry tickets (due today)");
-  assert.equal(R.reminderText(it({ assignee: "Anna" }), o), "⏰ Call Sam", "a private chat does not name an assignee");
-  assert.equal(R.reminderText(it({}), { ...o, missed: true }), "⏰ Call Sam (missed while I was off)");
-});
-
 test("repeats: the reminder moves to the next occurrence, one item, nothing piles up; a day that is over rolls the due", () => {
   const conv = fresh();
   const daily = S.addItem(scope(conv.key), { title: "Stretch", remindAt: berlin("2026-10-22", "11:00"), repeat: "every day" }).item;
@@ -126,200 +261,10 @@ test("repeats: the reminder moves to the next occurrence, one item, nothing pile
   assert.equal(R.rolledDue({ ...rule, repeat: undefined }, NOW, ZONE), undefined, "a one-off stays overdue (the brief lists it)");
 });
 
-test("the tick: a reminder goes out once, however many ticks or restarts (at most once), and the item's reminder is cleared", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW - 2 * MIN, due: "2026-10-22" }).item;
-  const r = rig();
-  assert.equal(await tick(r, conv, NOW), 1);
-  assert.deepEqual(r.sent, ["⏰ Call Sam (due today)"]);
-  assert.equal(await tick(r, conv, NOW + MIN), 0);
-  assert.equal(await tick(rig(), conv, NOW + 2 * MIN), 0, "a restart (a new process, the same file) does not send it again");
-  assert.equal(S.getItem(conv.key, it.id)!.remindAt, undefined);
-  assert.deepEqual(rows(conv, it.id).map((x) => [x.state, x.late]), [["sent", 0]]);
-  assert.ok(rows(conv, it.id)[0]!.ts, "the message's timestamp is kept for a quote to find");
-  assert.ok(S.eventsOf(conv.key, it.id).some((e) => e.action === "reminded"), "the history says it");
-  assert.equal(S.getItem(conv.key, it.id)!.status, "open", "an ignored reminder stays open: no loop");
-});
-
-test("the tick: a send that fails outright is given back and tried again, three times at most", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW - 2 * MIN }).item;
-  const r = rig({ failFirst: 1 });
-  assert.equal(await tick(r, conv, NOW), 0);
-  assert.equal(S.getItem(conv.key, it.id)!.remindAt, NOW - 2 * MIN, "given back");
-  assert.equal(await tick(r, conv, NOW + 5 * MIN), 1);
-  assert.deepEqual(r.sent, ["⏰ Call Sam"], "a retry after a failed send is not 'missed'");
-  const bad = rig({ failFirst: 99 });
-  const it2 = S.addItem(scope(conv.key, NOW - HOUR), { title: "Never", remindAt: NOW - 2 * MIN }).item;
-  for (let i = 0; i < 6; i++) await tick(bad, conv, NOW + i * 5 * MIN);
-  assert.equal(rows(conv, it2.id).length, 1);
-  assert.equal(bad.sent.length, 0);
-  assert.equal(peekConvDb(conv.convId)!.num("SELECT tries FROM reminders WHERE item_id = ?", it2.id), 3, "given up after three tries");
-});
-
-test("quiet hours hold a reminder (plain when it goes), urgent ones bypass; none counts toward the day's cap or enters the digest", async () => {
-  const conv = fresh();
-  const night = berlin("2026-10-22", "23:15");
-  const morning = berlin("2026-10-23", "07:05");
-  const a = S.addItem(scope(conv.key, NOW), { title: "Water plants", remindAt: berlin("2026-10-22", "23:00") }).item;
-  const u = S.addItem(scope(conv.key, NOW), { title: "Take pills", remindAt: berlin("2026-10-22", "23:10"), urgent: true }).item;
-  assert.equal(u.urgent, true);
-  const r = rig();
-  assert.equal(await tick(r, conv, night), 1);
-  assert.deepEqual(r.sent, ["⏰ Take pills"], "urgent goes at night, the other waits");
-  assert.equal(rows(conv, a.id)[0]!.state, "held");
-  assert.equal(await tick(r, conv, morning), 1);
-  assert.deepEqual(r.sent, ["⏰ Take pills", "⏰ Water plants"], "plain after the quiet window: the delay was the quiet hours, not 'missed'");
-  assert.deepEqual(heldPosts(conv), [], "never merged into the digest");
-  const day = berlin("2026-10-24", "10:00");
-  for (const t of ["p1", "p2", "p3"]) submitPost(conv, t, false, new Date(day));
-  assert.equal(submitPost(conv, "p4", false, new Date(day)), "held", "the cap is spent");
-  S.addItem(scope(conv.key, day - HOUR), { title: "Still goes", remindAt: day - MIN });
-  const held = heldPosts(conv).length;
-  assert.equal(await tick(r, conv, day), 1);
-  assert.equal(r.sent.at(-1), "⏰ Still goes");
-  assert.equal(heldPosts(conv).length, held);
-  assert.equal(peekConvDb(conv.convId)!.num("SELECT posted FROM hold WHERE id = 1"), 3, "a reminder is not counted as an unprompted post");
-});
-
 test("a background look cannot make an item urgent", () => {
   const conv = fresh();
   const it = S.addItem({ ...scope(conv.key), origin: "inferred", by: "assistant (inferred)" }, { title: "Suggested", urgent: true }).item;
   assert.equal(it.urgent, undefined);
-});
-
-test("/quiet holds a reminder too, until it is lifted", async () => {
-  const conv = fresh();
-  S.addItem(scope(conv.key, NOW - HOUR), { title: "Call Sam", remindAt: NOW - MIN });
-  setQuiet(conv, new Date(NOW + 2 * HOUR).toISOString());
-  const r = rig();
-  assert.equal(await tick(r, conv, NOW), 0);
-  assert.equal(await tick(r, conv, NOW + 3 * HOUR), 1);
-  assert.deepEqual(r.sent, ["⏰ Call Sam"]);
-});
-
-test("in a group the reminder names the assignee", async () => {
-  const conv = fresh();
-  S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "ferry tickets", due: "2026-10-22", assignee: "Anna" });
-  const r = rig();
-  await tick(r, conv, berlin("2026-10-22", "08:35"));
-  assert.deepEqual(r.sent, ["⏰ @Anna: ferry tickets (due today)"]);
-  await tick(r, conv, berlin("2026-10-22", "09:35"));
-  assert.equal(r.sent.length, 1, "once per item per due date");
-});
-
-test("catch-up: a little late is plain, hours late says it was missed, up to 48 hours becomes a digest line, older is only marked", async () => {
-  const conv = fresh();
-  const mk = (title: string, ago: number) => S.addItem(scope(conv.key, NOW - 100 * HOUR), { title, remindAt: NOW - ago }).item;
-  const plain = mk("plain", 4 * MIN);
-  const missed = mk("missed", 5 * HOUR);
-  const folded = mk("folded", 20 * HOUR);
-  const old = mk("old", 60 * HOUR);
-  const r = rig();
-  assert.equal(await tick(r, conv, NOW), 2);
-  assert.deepEqual([...r.sent].sort(), ["⏰ missed (missed while I was off)", "⏰ plain"]);
-  assert.deepEqual(rows(conv, missed.id).map((x) => x.late), [1]);
-  assert.deepEqual(rows(conv, plain.id).map((x) => x.late), [0]);
-  assert.deepEqual(heldPosts(conv).map((h) => h.text.startsWith("⏰ folded")), [true], "folded into the next digest");
-  assert.equal(rows(conv, old.id)[0]!.state, "folded");
-  assert.equal(S.getItem(conv.key, old.id)!.remindAt, undefined);
-  assert.equal(S.getItem(conv.key, folded.id)!.status, "open", "still on the list for the brief");
-});
-
-test("a repeating reminder fires, moves to its next time and stays ONE item", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - 24 * HOUR), { title: "Stretch", remindAt: NOW - MIN, repeat: "every day" }).item;
-  const r = rig();
-  await tick(r, conv, NOW);
-  assert.equal(r.sent.length, 1);
-  assert.equal(S.getItem(conv.key, it.id)!.remindAt, berlin("2026-10-23", "11:59"), "tomorrow at the same clock time");
-  assert.equal(S.listItems(conv.key, { status: ["open", "snoozed", "done", "dropped"] }).length, 1);
-  await tick(r, conv, NOW + 2 * MIN);
-  assert.equal(r.sent.length, 1);
-});
-
-test("a repeating item whose due day is over rolls to the next due, no copies", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - 24 * HOUR), { title: "Trash", due: "2026-10-21", repeat: "every day" }).item;
-  await tick(rig(), conv, NOW);
-  assert.equal(S.getItem(conv.key, it.id)!.due, "2026-10-23");
-  assert.equal(S.listItems(conv.key, {}).length, 1);
-});
-
-test("a snooze that ran out wakes the item and reminds; one still running does not", async () => {
-  const conv = fresh();
-  const a = S.addItem(scope(conv.key, NOW - 5 * HOUR), { title: "Nap" }).item;
-  const b = S.addItem(scope(conv.key, NOW - 5 * HOUR), { title: "Sleep on" }).item;
-  S.snoozeItem(scope(conv.key, NOW - 4 * HOUR), a.id, NOW - 2 * MIN);
-  S.snoozeItem(scope(conv.key, NOW - 4 * HOUR), b.id, NOW + HOUR);
-  const r = rig();
-  await tick(r, conv, NOW);
-  assert.deepEqual(r.sent, ["⏰ Nap"]);
-  assert.equal(S.getItem(conv.key, a.id)!.status, "open");
-  assert.equal(S.getItem(conv.key, b.id)!.status, "snoozed");
-});
-
-test("several default pings in one tick are one message; a conversation without a database is left alone", async () => {
-  const conv = fresh();
-  for (const t of ["a", "b", "c", "d"]) S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: t, due: "2026-10-22" });
-  const r = rig();
-  await tick(r, conv, berlin("2026-10-22", "08:35"));
-  assert.deepEqual(r.sent, ["⏰ Due today: a; b; c; d"]);
-  const empty = group("rem-never-opened");
-  assert.equal(await tick(r, empty, NOW), 0);
-  assert.equal(peekConvDb(empty.convId), undefined, "no database was made");
-});
-
-test("answers in code: a quoted done, snooze, later; a reaction; nothing else; after a restart", async () => {
-  const conv = fresh();
-  const make = (title: string, extra: Record<string, unknown> = {}) => S.addItem(scope(conv.key, NOW - HOUR), { title, remindAt: NOW - MIN, ...extra }).item;
-  const a = make("Call Sam");
-  const b = make("Pay rent");
-  const c = make("Water plants");
-  const d = make("Trash", { repeat: "every day" });
-  await tick(rig(), conv, NOW);
-  const ts = (id: number) => rows(conv, id)[0]!.ts!;
-  const said: string[] = [];
-  const mkAnswers = () => A.createReminderAnswers({ isOwner: () => true, zone: zoneOf, out: { reply: async (t) => (said.push(t), 1) }, now: () => NOW });
-  const msg = (text: string, quote: number) => ({ text, from: "x", quote: { timestamp: quote, author: "x", text: "" } }) as never;
-  let answers = mkAnswers(); // (a new instance: the mapping is in the database, not in memory)
-  assert.equal(await answers.message(conv, msg("Done!", ts(a.id))), true);
-  assert.equal(S.getItem(conv.key, a.id)!.status, "done");
-  assert.equal(await answers.message(conv, msg("snooze 1h", ts(b.id))), true);
-  assert.deepEqual([S.getItem(conv.key, b.id)!.status, S.getItem(conv.key, b.id)!.snoozeUntil], ["snoozed", NOW + HOUR]);
-  assert.equal(await mkAnswers().message(conv, msg("later", ts(c.id))), true);
-  assert.equal(S.getItem(conv.key, c.id)!.snoozeUntil, NOW + HOUR, "later is one hour");
-  assert.equal(await answers.reaction(conv, { emoji: "✅", targetTimestamp: ts(d.id), isRemove: false, from: "x" }), true);
-  assert.equal(S.getItem(conv.key, d.id)!.status, "open", "a repeating item moves on instead");
-  assert.equal(await answers.message(conv, msg("done", ts(a.id))), true, "an item that is already done is said so");
-  assert.match(said.at(-1)!, /already done/);
-  assert.equal(await answers.message(conv, msg("can you move it to friday?", ts(c.id))), false, "anything else goes to the chat turn");
-  assert.equal(await answers.message(conv, msg("snooze whenever", ts(c.id))), false);
-  assert.equal(await answers.message(conv, msg("done", 424242)), false, "not a reminder's timestamp");
-  assert.equal(await answers.reaction(conv, { emoji: "👎", targetTimestamp: ts(c.id), isRemove: false, from: "x" }), false);
-  assert.equal(await answers.reaction(conv, { emoji: "👍", targetTimestamp: ts(c.id), isRemove: true, from: "x" }), false, "a taken-back reaction is nothing");
-  answers = mkAnswers();
-  assert.equal(await answers.reaction(conv, { emoji: "👍", targetTimestamp: ts(c.id), isRemove: false, from: "x" }), true, "a thumbs-up is noted");
-  assert.equal(S.getItem(conv.key, c.id)!.status, "snoozed", "... and changes nothing");
-  assert.equal(await answers.reaction(conv, { emoji: "✅", targetTimestamp: ts(c.id), isRemove: false, from: "x" }), true);
-  assert.equal(S.getItem(conv.key, c.id)!.status, "done");
-});
-
-test("snooze arguments: hours, minutes, days, a clock time today or tomorrow, tomorrow", () => {
-  const z = ZONE;
-  assert.equal(A.snoozeUntil("", NOW, z), NOW + HOUR);
-  assert.equal(A.snoozeUntil("30 min", NOW, z), NOW + 30 * MIN);
-  assert.equal(A.snoozeUntil("2h", NOW, z), NOW + 2 * HOUR);
-  assert.equal(A.snoozeUntil("2 days", NOW, z), NOW + 48 * HOUR);
-  assert.equal(A.snoozeUntil("until 18:00", NOW, z), berlin("2026-10-22", "18:00"));
-  assert.equal(A.snoozeUntil("until 9:00", NOW, z), berlin("2026-10-23", "09:00"), "already past today: tomorrow");
-  assert.equal(A.snoozeUntil("until 6pm", NOW, z), berlin("2026-10-22", "18:00"));
-  assert.equal(A.snoozeUntil("tomorrow", NOW, z), berlin("2026-10-23", "08:30"));
-  assert.equal(A.snoozeUntil("0h", NOW, z), undefined);
-  assert.equal(A.snoozeUntil("400 days", NOW, z), undefined);
-  assert.deepEqual(A.parseAnswer("✅", NOW, z), { kind: "done" });
-  assert.deepEqual(A.parseAnswer("Erledigt.", NOW, z), { kind: "done" });
-  assert.equal(A.parseAnswer("done with the first part, not the second", NOW, z), undefined);
 });
 
 test("/status says when the next reminder goes", () => {
@@ -330,18 +275,6 @@ test("/status says when the next reminder goes", () => {
   const base = { spentUsd: 0, limitUsd: 5, approvals: 0, down: [] };
   assert.match(statusText({ ...base, nextReminder: "Fri 23 Oct 09:00 (#1 Call Sam)" }), /Next reminder: Fri 23 Oct 09:00 \(#1 Call Sam\)\./);
   assert.match(statusText({ ...base, nextReminder: "" }), /Next reminder: none\./);
-});
-
-test("a failed default (due-day) ping is retried: marking it sent does not count as the person touching the item", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Pay rent", due: "2026-10-22" }).item;
-  const at = berlin("2026-10-22", "08:35");
-  const r = rig({ failFirst: 1 });
-  assert.equal(await tick(r, conv, at), 0);
-  assert.equal(S.getItem(conv.key, it.id)!.updatedAt, NOW - 48 * HOUR, "the bookkeeping left updated_at alone");
-  assert.equal(await tick(r, conv, at + 5 * MIN), 1);
-  assert.deepEqual(r.sent, ["⏰ Pay rent (due today)"]);
-  assert.equal(await tick(r, conv, at + 10 * MIN), 0);
 });
 
 test("only the person whose chat it is can make an item urgent: not a group member, not a background look", () => {
@@ -365,58 +298,3 @@ test("the task tool says urgent was ignored in a group", async () => {
   assert.equal(S.listItems(conv.key, {})[0]!.urgent, undefined);
 });
 
-test("one ping a day: an own reminder or a snooze that already told the person today replaces the due-day ping", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Pay rent", due: "2026-10-22", remindAt: berlin("2026-10-22", "07:05") }).item;
-  const r = rig();
-  assert.equal(await tick(r, conv, berlin("2026-10-22", "07:10")), 1, "its own reminder (the quiet window ended at 07:00)");
-  assert.equal(await tick(r, conv, berlin("2026-10-22", "08:35")), 0, "no second ping at 08:30");
-  assert.deepEqual(r.sent, ["⏰ Pay rent (due today)"]);
-  const sn = S.addItem(scope(conv.key, NOW - 48 * HOUR), { title: "Call Sam", due: "2026-10-22" }).item;
-  S.snoozeItem(scope(conv.key, berlin("2026-10-22", "07:05")), sn.id, berlin("2026-10-22", "08:05"));
-  assert.equal(await tick(r, conv, berlin("2026-10-22", "08:06")), 1, "the snooze ends: reminded");
-  assert.equal(await tick(r, conv, berlin("2026-10-22", "08:35")), 0, "and not again at 08:30 (the item is back and was told today)");
-  assert.equal(it.id !== sn.id, true);
-});
-
-test("a reaction in a group closes a reminder only for the assignee or the owner", async () => {
-  const conv = fresh();
-  const mk = (title: string, assignee?: string) => S.addItem(scope(conv.key, NOW - HOUR), { title, remindAt: NOW - MIN, ...(assignee ? { assignee } : {}) }).item;
-  const a = mk("ferry tickets", "Anna");
-  const b = mk("towels", "Anna");
-  const c = mk("snacks");
-  await tick(rig(), conv, NOW);
-  const ts = (id: number) => rows(conv, id)[0]!.ts!;
-  const answers = A.createReminderAnswers({ zone: zoneOf, out: { reply: async () => 1 }, now: () => NOW, isOwner: (w) => w.from === "+owner" });
-  const react = (id: number, from: string, fromName: string) => answers.reaction(conv, { emoji: "✅", targetTimestamp: ts(id), isRemove: false, from, fromName });
-  await react(a.id, "+bob", "Bob");
-  assert.equal(S.getItem(conv.key, a.id)!.status, "open", "another member cannot close Anna's");
-  await react(a.id, "+anna", "anna");
-  assert.equal(S.getItem(conv.key, a.id)!.status, "done", "the assignee can");
-  await react(b.id, "+owner", "Olly");
-  assert.equal(S.getItem(conv.key, b.id)!.status, "done", "the owner can");
-  await react(c.id, "+bob", "Bob");
-  assert.equal(S.getItem(conv.key, c.id)!.status, "open", "an item nobody is assigned is closed by the owner only");
-});
-
-test("a picture or document captioned done is not an answer (the attachment would be lost)", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Pay rent", remindAt: NOW - MIN }).item;
-  await tick(rig(), conv, NOW);
-  const answers = A.createReminderAnswers({ zone: zoneOf, out: { reply: async () => 1 }, now: () => NOW });
-  const quote = { timestamp: rows(conv, it.id)[0]!.ts!, author: "x", text: "" };
-  assert.equal(await answers.message(conv, { text: "done", from: "x", quote, picture: [{}] } as never), false);
-  assert.equal(await answers.message(conv, { text: "done", from: "x", quote, document: {} } as never), false);
-  assert.equal(S.getItem(conv.key, it.id)!.status, "open");
-});
-
-test("stale held and retry rows are pruned when the item is done or moved on", async () => {
-  const conv = fresh();
-  const it = S.addItem(scope(conv.key, NOW - HOUR), { title: "Water plants", remindAt: berlin("2026-10-22", "23:00") }).item;
-  const r = rig();
-  await tick(r, conv, berlin("2026-10-22", "23:30"));
-  assert.equal(rows(conv, it.id)[0]!.state, "held");
-  S.completeItem(scope(conv.key, berlin("2026-10-22", "23:40")), it.id);
-  await tick(r, conv, berlin("2026-10-23", "07:30"));
-  assert.deepEqual(rows(conv, it.id), []);
-});

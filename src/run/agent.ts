@@ -35,6 +35,7 @@ export interface ProfileExtra {
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
   signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
   shadow?: ShadowGate; // the look is in its first week: its archives are proposals, not actions (approvals/shadow.ts)
+  untrusted?: boolean; // the prompt itself carries a third party's words (a task made from a mail, look.ts): the judge is told from the first call
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
 
@@ -79,6 +80,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     provenance: fixed(extra.provenance),
     signal: extra.signal,
     ...(extra.shadow ? { shadow: extra.shadow } : {}),
+    ...(extra.untrusted ? { untrusted: true } : {}),
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too
     gate: looker.own ? "ownerLook" : conv.kind === "tenant" ? "friendLook" : "look", // the owner's look goes first after a wake or a start, then friends, then groups (rungate.ts)
     unattended: true, // a look answers nobody's message: it acts when sure and asks nobody (permissions.ts UNATTENDED_SKIP), for the owner, a group and a friend alike

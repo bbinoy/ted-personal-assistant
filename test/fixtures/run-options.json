@@ -5,7 +5,7 @@
       "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "530c5a6bc03dd3ee"
+        "sha": "08b8c04df82a8dfa"
       },
       "memory": {
         "dir": "<data>/conversations/owner/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "530c5a6bc03dd3ee"
+        "sha": "08b8c04df82a8dfa"
       },
       "snapshot": false
     },
@@ -167,7 +167,7 @@
       "sessionConv": "group-ff36ac23eadd0841",
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "95e8857ce147ca4f"
+        "sha": "36573d91f6af5b69"
       },
       "memory": {
         "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
@@ -197,10 +197,8 @@
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
-        "mcp__tasks__confirm_suggestion",
         "mcp__tasks__drop_task",
         "mcp__tasks__list_tasks",
-        "mcp__tasks__reject_suggestion",
         "mcp__tasks__snooze_task",
         "mcp__tasks__update_task",
         "mcp__voice__voice",
@@ -219,7 +217,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "95e8857ce147ca4f"
+        "sha": "36573d91f6af5b69"
       },
       "snapshot": false
     },
@@ -276,7 +274,7 @@
       "sessionConv": "friend-<bea>",
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "9d8c138758959241"
+        "sha": "471e061e7d8180bd"
       },
       "memory": {
         "dir": "<data>/conversations/friend-<bea>/notes"
@@ -305,10 +303,8 @@
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
-        "mcp__tasks__confirm_suggestion",
         "mcp__tasks__drop_task",
         "mcp__tasks__list_tasks",
-        "mcp__tasks__reject_suggestion",
         "mcp__tasks__snooze_task",
         "mcp__tasks__update_task",
         "mcp__voice__voice",
@@ -336,7 +332,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "9d8c138758959241"
+        "sha": "471e061e7d8180bd"
       },
       "snapshot": false
     },

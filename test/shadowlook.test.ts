@@ -12,7 +12,7 @@ import { resetHeld } from "../src/heartbeat/notices.ts";
 import { peekConvDb } from "../src/core/convdb.ts";
 import { convIdOfKey } from "../src/core/convpaths.ts";
 import { rememberMail } from "../src/approvals/journalrender.ts";
-import { setShadowRuntime, SHADOW_ENDED_TEXT } from "../src/approvals/shadow.ts";
+import { setShadowRuntime, shadowEndedFact } from "../src/approvals/shadow.ts";
 import { scratchLog } from "./scratch.ts";
 
 // The heartbeat look and the gentle first week: a look in shadow mode is handed the floor, its archives end as ONE proposal message, a look after the first week gets no floor and tells the end once,
@@ -24,7 +24,7 @@ const DAY = new Date(2026, 9, 14, 14, 0, 0); // a Wednesday, 14:00 local
 const DAYS = 86_400_000;
 const MB = "mcp__mailbird__";
 
-function rig(run: (extra: { shadow?: (t: string, i: Record<string, unknown>) => string | undefined }) => void, firstMessageDaysAgo: number, triage = false) {
+function rig(run: (extra: { shadow?: (t: string, i: Record<string, unknown>) => string | undefined }, prompt: string) => void | string, firstMessageDaysAgo: number, triage = false) {
   instanceDb().run("DELETE FROM looks");
   resetHeld(owner());
   peekConvDb(convIdOfKey("owner"))?.run("DELETE FROM shadow_state");
@@ -42,7 +42,7 @@ function rig(run: (extra: { shadow?: (t: string, i: Record<string, unknown>) => 
   };
   const w = createWakeups({
     pipeline: pipeline as any, groupChats: false, vouch: async () => true,
-    run: async (_c, _p, _prompt, extra) => (run(extra), { text: "", costUsd: 0.01, structured: { message: "[[silent]]", nextCheckMinutes: 30 } }),
+    run: async (_c, _p, prompt, extra) => ({ text: "", costUsd: 0.01, structured: { message: run(extra, prompt) || "[[silent]]", nextCheckMinutes: 30 } }),
     notesChangedAt: () => 0, now: () => now, guards: { paused: () => false, budgetSpent: () => false },
   });
   return { w, conv, at: (d: Date) => (now = d) };
@@ -89,17 +89,25 @@ test("a look that proposes nothing says nothing, and the first week is not over 
   });
 });
 
-test("after the first week (3 days and a triage note) the look gets no floor and the person is told ONCE", async () => {
+test("after the first week (3 days and a triage note) the look gets no floor, and the end as a fact until a look has spoken; no fixed text", async () => {
   await withMode("auto", async () => {
     const sent = runtime();
     let floor: unknown = "unset";
-    const { w, conv, at } = rig((extra) => void (floor = extra.shadow), 4, true);
+    const prompts: string[] = [];
+    let say = "";
+    const { w, conv, at } = rig((extra, prompt) => ((floor = extra.shadow), prompts.push(prompt), say), 4, true);
     await w.look(conv, DAY);
     assert.equal(floor, undefined, "no floor: it archives as the notes say");
-    assert.deepEqual(sent, [SHADOW_ENDED_TEXT]);
+    assert.match(prompts[0]!, /The gentle first week is over/);
+    assert.deepEqual(sent, [], "code says nothing itself");
     at(new Date(DAY.getTime() + 2 * 3_600_000));
+    say = "Quick one: I'll archive the routine stuff myself from now on.";
     await w.look(conv, new Date(DAY.getTime() + 2 * 3_600_000));
-    assert.deepEqual(sent, [SHADOW_ENDED_TEXT], "told once");
+    assert.match(prompts[1]!, /The gentle first week is over/, "the silent look did not tell it: still a fact");
+    assert.equal(shadowEndedFact(conv), "", "the look that spoke told it");
+    at(new Date(DAY.getTime() + 4 * 3_600_000));
+    await w.look(conv, new Date(DAY.getTime() + 4 * 3_600_000));
+    assert.doesNotMatch(prompts[2] ?? "", /The gentle first week is over/, "told once");
   });
 });
 

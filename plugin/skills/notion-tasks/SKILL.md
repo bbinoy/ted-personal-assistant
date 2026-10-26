@@ -8,7 +8,7 @@ description: Use for anything about the owner's task list - reviewing it, adding
 The owner's tasks, the promises they made (`i_owe`) and what they wait on from others
 (`owed_to_me`) are items in the assistant's own list. Use the task tools: `list_tasks`
 (read), `add_task`, and in chat `update_task`, `complete_task`, `drop_task`,
-`snooze_task`, `confirm_suggestion`, `reject_suggestion`. **Never write a task to
+`snooze_task`. **Never write a task to
 Notion** (no page edit, no new page, no row for a task): after the
 one-time import the Notion table is an archive nobody updates. If the owner still
 has tasks in a Notion table and none are in the list yet, offer
@@ -34,14 +34,14 @@ the owner says plainly to drop or remove that item.
   finish one when concrete evidence says it is done (the owner sent the mail the task
   said to send). Say what you changed. In doubt, ask.
 - **In an unattended run** (the daily brief, a heartbeat look, the mail handler) you can
-  only `list_tasks` and `add_task`, and what you add is a **suggestion** for the owner to
-  confirm or reject: you cannot finish, change or drop anything. So "this looks done"
+  only `list_tasks` and `add_task`: what you add goes straight onto the list (marked as
+  added by you) and you tell the owner in your message; you cannot finish, change or drop anything. So "this looks done"
   and "this task is waiting on a reply that has come" are lines in the brief
   ("looks like 'Foo' may be done - confirm?"), not edits.
 
 ## Email and meeting sync
 
-- **Add** (a suggestion when unattended) when an incoming mail or a meeting creates a
+- **Add** (also when unattended, then say so in your message) when an incoming mail or a meeting creates a
   clear obligation with a deadline or a promised deliverable and nothing matching is on
   the list. Pass `source_kind` `mail` or `meeting` and a `source_ref` (the mail id) so the
   same mail never adds it twice. Keep the owner's own wording for the title.

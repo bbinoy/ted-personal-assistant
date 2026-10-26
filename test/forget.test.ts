@@ -16,7 +16,11 @@ const { forgetGroup, forgetFriend, resolveGroup } = await import("../src/convers
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { recordCost, groupSpentToday } = await import("../src/core/budget.ts");
 const { markCapNotice, capNoticeDue, markNoticeAt, lastNoticeAt } = await import("../src/core/capnotice.ts");
-const { addPending, openItems } = await import("../src/approvals/pending.ts");
+const { convDb: rowDb, peekConvDb: peekRowDb } = await import("../src/core/convdb.ts");
+const { convIdOfKey: rowConv } = await import("../src/core/convpaths.ts");
+// A row of the conversation's own database (a held post): what forgetting must take with it, and leave alone elsewhere.
+const addRow = (key: string): void => void rowDb(rowConv(key)).run("INSERT INTO held_posts (text, why) VALUES ('held', 'quiet')");
+const rowsOf = (key: string): number => peekRowDb(rowConv(key))?.num("SELECT COUNT(*) FROM held_posts") ?? 0;
 const T = await import("../src/tenants/tenants.ts");
 const { recordDone, readDone } = await import("../src/intake/intakelinks.ts");
 const { scopeRoot, saveVoice } = await import("@ted-assistant/speech/tts");
@@ -26,7 +30,7 @@ const GA = "Zm9yZ2V0LUE=";
 const GB = "Zm9yZ2V0LUI=";
 const NOW = 1_700_000_000_000;
 
-// A group as the running agent makes one: its folder with notes and history, a cloned voice, a voice note, a pending approval, today's spend and the notice marks.
+// A group as the running agent makes one: its folder with notes and history, a cloned voice, a voice note, a held post, today's spend and the notice marks.
 function group(id: string, name: string, tag: string) {
   const dir = groupDir(id, name);
   const p = convPaths(groupConvId(id));
@@ -35,7 +39,7 @@ function group(id: string, name: string, tag: string) {
   saveVoice(scopeRoot(conversationsDir(), groupConvId(id)), "kid", { wav: new Uint8Array([1]), text: "t", meta: { created: "x", source: "voice note", seconds: 3 } }, 5);
   writeFileSync(join(attachments, `${tag}.aac`), "audio");
   holdVoiceNote(id, { ts: NOW, id: `${tag}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
-  addPending(id, { tool: "t", input: { a: tag }, label: "l", question: "q?", footer: "f", source: "group" }, NOW);
+  addRow(id);
   recordCost(1.25, groupConvId(id), "chat");
   markCapNotice(`group:${groupConvId(id)}`);
   markCapNotice(`group-budget:${groupConvId(id)}`);
@@ -47,7 +51,7 @@ test("forget group: its folder, voice-note audio, spend and notice marks go; ano
   resetVoiceNotes();
   const a = group(GA, "Family", "a");
   const b = group(GB, "Work", "b");
-  assert.equal(openItems(GA).length, 1);
+  assert.equal(rowsOf(GA), 1);
   const r = forgetGroup("Family", { attachmentsDir: attachments });
   assert.ok(!("error" in r));
   assert.equal(r.conv, groupConvId(GA));
@@ -66,7 +70,7 @@ test("forget group: its folder, voice-note audio, spend and notice marks go; ano
   assert.equal(voiceNotes(GB, NOW).length, 1);
   assert.equal(groupSpentToday(GB), 1.25);
   assert.equal(capNoticeDue(`group:${groupConvId(GB)}`), false);
-  assert.equal(openItems(GB).length, 1);
+  assert.equal(rowsOf(GB), 1);
   // again, by the folder name: nothing is left and nothing fails
   const again = forgetGroup(groupConvId(GA), { attachmentsDir: attachments });
   assert.ok(!("error" in again));
@@ -101,7 +105,7 @@ test("forget friend: her registry entry, folder (voices, pending, history), audi
     saveVoice(scopeRoot(conversationsDir(), friendConvId(rec.id)), "her", { wav: new Uint8Array([1]), text: "t", meta: { created: "x", source: "voice note", seconds: 3 } }, 5);
     writeFileSync(join(attachments, `${rec.id}.aac`), "audio");
     holdVoiceNote(`tenant:${rec.id}`, { ts: NOW, id: `${rec.id}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
-    addPending(`tenant:${rec.id}`, { tool: "t", input: { a: rec.id }, label: "l", question: "q?", footer: "f", source: "group" }, NOW);
+    addRow(`tenant:${rec.id}`);
     recordDone(rec.id, "google", [{ name: "token", chars: 3 }]);
     markCapNotice(`friend:${rec.id}`);
   }
@@ -118,7 +122,7 @@ test("forget friend: her registry entry, folder (voices, pending, history), audi
   assert.equal(existsSync(join(attachments, `${stay.id}.aac`)), true);
   assert.ok(readDone(stay.id, "google"));
   assert.equal(capNoticeDue(`friend:${stay.id}`), false);
-  assert.equal(openItems(`tenant:${stay.id}`).length, 1);
+  assert.equal(rowsOf(`tenant:${stay.id}`), 1);
   assert.ok(T.tenantById(stay.id));
   // again: nothing left; the owner and odd ids are refused
   assert.deepEqual((await forgetFriend(gone.id, { attachmentsDir: attachments }))?.removed, []);
