@@ -19,71 +19,87 @@ heartbeat run already works through new mail all day, so this sweep covers what 
 still in the inbox, plus the owner-facing parts (waiting-on, commitments,
 radar).
 
-1. **Pull what's new - one cheap pass.** Start with
-   `summarize_all_inboxes` (one call, every account, returns rows with
-   sender + subject + a short preview + ids). Only fall back to
-   `list_conversations` on a specific Inbox folder if you need more rows
-   than it returned, and then cap it: `limit: 30`, and ignore anything
-   older than the previous brief's timestamp / already covered by it
-   (the status-brief note and the chat log in your brief say when it went
-   out and what the assistant already handled).
-   **Never touch a briefing email** - a self-sent message from the owner
-   with a `☀️` / `🌙` subject is skipped entirely (no archive, no label,
-   no reply, not counted). Old briefs are never archived by a run of this skill.
+1. **List the whole inbox, once a day.** The daily brief's sweep does not depend on
+   what the heartbeat has already looked at (it does not use `seen_mail`: the
+   heartbeat's memory hides everything it kept once, and the backlog from before
+   it started). Per account (`list_accounts`), list the Inbox itself with
+   `list_conversations` (`limit` high enough for all of it, 200 or the most the
+   tool allows, oldest included; page or batch by date when it is bigger) and
+   classify every row, read or unread, new or years old. `summarize_all_inboxes`
+   may add previews for the newest. Work through a big inbox in batches of
+   about 50 rows, all `archive_conversation` calls of a batch in one turn. A run
+   may archive only so many mails (the tool refuses past the cap): when it does,
+   stop archiving, say nothing about it, and the next day's sweep continues.
+   **Keep only today's brief email.** The owner's own briefing mails (a
+   self-sent message with a `☀️` or `🌙` subject) are never read, replied to,
+   labelled or counted as mail, and the newest `☀️` (today's) stays in the inbox;
+   every older `☀️` daily and `🌙` evening brief is archived in the sweep, like
+   any other handled mail.
 
-**Do NOT open every email.** `get_message` (full body + the entire
-quote chain) is the most expensive thing this routine does. Classify
-from **sender + subject + preview only**, and open a message *only*
-when one of these is true:
-
-- you're going to draft a reply to it, or
-- it plausibly needs an action AND the preview doesn't make the
-  decision clear (a date, an amount, an ask you must read to judge), or
-- it's a real-person thread and you can't tell from the preview whether
-  it's concluded.
-
-Newsletters, promos, cold outreach, job-board digests, social nudges,
-receipts, security/login alerts, shipping and portal-document notices:
-classified and archived **from the row, unopened**. Prefer unread
-conversations; a thread the owner has already read is rarely something
-you need to act on. If a batch of near-identical rows is obviously one
-category, treat them together.
+**Decide per mail whether the row is enough, and read when it is not.**
+Reading is a plain read: free, not judged, with no cap. Where the row (sender,
+subject, preview) makes the call certain, classify and archive from the row
+without opening it: newsletters, promos, job-board digests, social nudges,
+receipts, security/login alerts, shipping and portal-document notices, and a
+batch of near-identical rows that is obviously one category. **Whenever you are
+not confident, open the full mail (`get_message`) before deciding:** an unknown
+sender, a subject that could be personal, anything that might need the owner, a
+date, an amount or an ask you must read to judge, a real-person thread you cannot
+tell is concluded, and every mail you will draft a reply to. **Never keep a mail
+just because you did not read it:** read it, then decide. The cost of one read
+is small next to a mail left in the inbox for weeks. Keep the quote chain out of
+your head: take what decides the case and move on.
 
 **Batch the calls.** Per-account `list_folders` / `list_conversations`
 go in one turn; fire all the `archive_conversation` calls for a sweep
 in one turn, not one per turn.
 
-2. **Triage into three buckets:**
-   - *Needs the owner* - real people, threads awaiting their reply, and
-     anything that might carry an action: a payment, a deadline, a
-     decision, a document to review or dispute. **Invoices, bills,
-     insurance policy changes, tax documents, official letters, and
-     anything where money might be owed or a response might be needed
-     stay here - do not archive them, even when the email is "just" a
-     notice that the document is in a portal.** When unsure whether
-     something needs an action, treat it as Needs the owner and keep it.
-   - *FYI* - purely informational, nothing to do: payment-received /
-     order-confirmed receipts, security and login alerts, shipping
-     updates, past-trip travel, read-only account notices. Archive from
-     the row; open only if sender+subject genuinely leave you unsure.
-   - *Also FYI (archive from the row):* **calendar invitation / update /
-     accepted / declined notices** (the event is already on the calendar
-     - judge the event there, not the email), Notion comment / mention /
-     "made updates" / invite notifications, Google Docs "shared with you"
-     notices, e-signature "viewed" / "completed" status pings, and
-     app/OAuth permission notices.
-   - *Noise* - newsletters, promos, cold outreach of any kind,
-     job-board digests, social nudges, expired invites and event
-     blasts. Archive from the row.
+2. **Triage: archive unless the mail needs the owner.** The default is
+   *archive*. Everything the owner does not have to act on goes, and goes
+   whether it is unread, new or old.
+   - *Needs the owner* (the only reason to keep): a reply or a decision is
+     expected from them; a payment is open or a document waits for their
+     signature; an event or deadline falls in the next 7 days; or it is
+     something they would clearly want to read and have not: unread personal mail
+     from someone the owner knows or has corresponded with (their notes, contacts,
+     earlier threads in the inbox or sent mail, the calendar) or that clearly continues
+     a conversation the owner started. **Cold outreach is not that**: sales,
+     recruiting, fundraising, agency and vendor pitches, "quick question" mails,
+     follow-up sequences, generic personalisation, a stranger name-dropping the
+     owner's company. It is archived like a newsletter, whatever the provider's
+     "important" flag says, unless the owner's notes say they want that kind.
+     **When the sender is unknown to the owner, open the mail (`get_message`, cheap)
+     before deciding;** never judge an unknown sender by the subject alone. **Invoices still to pay, bills, insurance
+     policy changes, tax documents and official letters** stay while something is
+     open; once paid, confirmed or merely informational they are handled.
+   - *Handled, archive from the row:* receipts and payment confirmations, booking
+     and order updates (confirmed, shipped, dispatched, delivered), a receipt for
+     a booking already confirmed, verification and confirmation codes, account and
+     security notices (once a day old, unless suspicious: a login the owner did
+     not make stays), past events and finished trips, calendar invitations /
+     updates / accepted / declined notices (judge the event on the calendar),
+     Notion, Google Docs and e-signature notifications, app/OAuth notices, CI and
+     tool mails (build failures, deploy notices), "RE: Reservation" style booking
+     notifications, review requests, read and concluded threads, and a mail that
+     is now a task (the task holds it).
+   - *Noise, archive from the row:* newsletters, promotions, cold outreach, job-board
+     digests, social nudges, expired invites and event blasts.
+   - **Unread is not a reason to keep.** Neither is "I have not looked at it": decide
+     by what the mail is. **Read** is a signal for the other side: a mail the owner has
+     opened, older than about 3 days, with nothing open for them, is handled.
+   - **In doubt between keep and archive for routine mail: archive.** It is
+     reversible, journaled and listed in the brief. Doubt about a mail from a real
+     person, money or an official deadline is different: keep that one.
+   - **The owner's triage notes win.** Their learned preferences in memory
+     (`triage-` notes: "mail from X is always urgent", "keep the school's mails")
+     override every default in this list, in both directions.
 
-   **Real-person threads are never auto-archived.** If a thread has a
-   reply from an actual person (not a service / no-reply / automated
-   sender) and is not clearly concluded, do not archive it even if it
-   looks dormant. Instead flag it in the brief: "dormant thread with
-   <person> (<subject>, last activity <date>) - reply or archive?" and
-   let the owner decide. Only archive such a thread when the exchange has
-   obviously wrapped up (a clear thanks / sign-off with nothing
-   outstanding).
+   **Real-person threads:** a thread with a person the owner knows (not a service /
+   no-reply sender, not cold outreach) that is unread, or still waits for a reply from either side,
+   stays; flag it in the brief when it has gone dormant ("dormant thread with
+   <person> (<subject>, last activity <date>) - reply or archive?"). A thread
+   that has obviously wrapped up (a thanks, a sign-off, nothing outstanding), or
+   that the owner has read and that needs nothing from them, is handled.
 3. **Tidy.** Archive the FYI + Noise buckets with `archive_conversation`
    (never trash or delete). Track what was archived and the reason.
 4. **Propose actions with drafts ready.** For each "Needs the owner" item
@@ -109,14 +125,14 @@ outreach and is handled normally.
 
 Newsletters are still archived, but a **small, selective** number are
 skimmed first to feed the brief's **Radar** section (`ted-personal-assistant:daily-brief`).
-This is the one exception to "archive newsletters unopened".
+This is the one case where a newsletter is read before it is archived.
 
 - **Which:** newsletters whose sender/subject plausibly covers the topics
   in the owner's **Brief notes** (see the memory block in your system
   prompt; with none, skip the radar entirely). Skip retail promos,
   job-board digests, and anything already covered.
 - **How many:** open at most **4** per daily brief run. Pick the most
-  relevant by sender+subject; archive the rest unopened. Open with
+  relevant by sender+subject; archive the rest from the row. Open with
   `get_message`, extract, then archive as usual.
 - **Extract concrete items, not summaries:** announcements, launches,
   funding rounds, regulatory or policy changes, notable hires/partnerships,
