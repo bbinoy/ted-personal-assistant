@@ -17,8 +17,8 @@ import { MAX_AGE_MS as VOICE_SOURCE_WINDOW_MS } from "../modules/voice/voicenote
 
 // The file-based retention rules (core/retention.ts says how they run). Each is a factory over a data layout and its window, so a test gives a temp folder and a fake clock; `fileRules()` is the set
 // the application registers, built from the settings. What every rule shares: it only looks at the folder it owns, never follows a link, counts what it removes in files and bytes, and in a dry run
-// removes nothing. What NO rule touches (a test pins each): the current audit file, the kill-switch files (instance/paused, card.disabled), the payments ledger, the migration backups and
-// orphans (those only get a warning from the doctor), a conversation's live notes (only the expired ones, and into notes-backup/ first), signal-cli's keys and config.
+// removes nothing. What NO rule touches (a test pins each): the current audit file, the kill-switch files (instance/paused, card.disabled), the payments ledger,
+// a conversation's live notes (only the expired ones, and into notes-backup/ first), signal-cli's keys and config.
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -286,20 +286,6 @@ export function tmpRule(root: () => string, hours: () => number): RetentionRule 
       return { ...total(results), notes: `temporary folders older than ${hours()} h` };
     },
   };
-}
-
-// ---- for the doctor: what only a person may delete ----
-
-/** The entries of instance/migration-backup and migration-orphans older than `days`: never removed by the job, named by the doctor ("review and delete"). */
-export function staleForReview(L: Layout, now: Date, days: number): { dir: string; name: string; ageDays: number }[] {
-  const out: { dir: string; name: string; ageDays: number }[] = [];
-  for (const dir of [L.instance.migrationBackup, L.instance.migrationOrphans]) {
-    for (const name of names(dir)) {
-      const age = (now.getTime() - mtimeOf(join(dir, name))) / DAY;
-      if (age > days) out.push({ dir, name, ageDays: Math.floor(age) });
-    }
-  }
-  return out;
 }
 
 /** The set the application runs, from the settings and the process's data folder. Called once by main.ts and by `npm run retention`; other stores register their own rules next to these. */

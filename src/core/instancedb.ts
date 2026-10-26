@@ -11,7 +11,6 @@ import { Db, LedgerCorruptError, openDb, type Migration } from "./db.ts";
 //   payments   the card payment ledger: one row per status change, never deleted (modules/browse/payments.ts). A LEDGER.
 //   intake     what the intake page stored for a friend (names and counts, never a value) and when a connection stopped working, by tenant and purpose (intake/intakelinks.ts)
 //   kv         small single values: "heartbeat" (the last tick), "connectors" (what the last run saw), "tools-seen"
-//   legacy_imports   which layout-2 files were imported by the layout-3 migration (core/dbimport.ts): a file is imported once, however often the migration runs
 // A database with a ledger in it is not rebuildable: a damaged file stops the start with a message (core/db.ts LedgerCorruptError).
 
 export const INSTANCE_SCHEMA: readonly Migration[] = [
@@ -111,11 +110,16 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
         WHERE NOT EXISTS (SELECT 1 FROM payments q WHERE q.id = p.id AND (q.ts > p.ts OR (q.ts = p.ts AND q.seq > p.seq)));
     `,
   },
+  {
+    version: 3,
+    name: "the layout-2 import is retired: its bookkeeping table goes",
+    up: "DROP TABLE legacy_imports;",
+  },
 ];
 
 const dbs = new Map<string, Db>();
 
-/** Opens (or returns the open) database at an explicit path: for the migration's tests and the doctor. A ledger database: a damaged file is not replaced. */
+/** Opens (or returns the open) database at an explicit path: for tests and the doctor. A ledger database: a damaged file is not replaced. */
 export function openInstanceDbAt(path: string): Db {
   const have = dbs.get(path);
   if (have?.isOpen) return have;
@@ -123,7 +127,7 @@ export function openInstanceDbAt(path: string): Db {
   dbs.set(path, db);
   return db;
 }
-// DEGRADED MODE: a damaged ledger database does not crash-loop the agent under launchd with a message nobody reads. The start (migrateatstart.ts) records the damage, chat goes on, and everything
+// DEGRADED MODE: a damaged ledger database does not crash-loop the agent under launchd with a message nobody reads. The start (agentstart.ts) records the damage, chat goes on, and everything
 // that spends or pays fails closed (budget.ts answers "spent", the card is not opened, background work is refused as if over budget); the owner is told once per start, the doctor and /status say it.
 let damage: LedgerCorruptError | undefined;
 /** The message of the damage, or undefined when the ledger database is fine (or not opened yet). */

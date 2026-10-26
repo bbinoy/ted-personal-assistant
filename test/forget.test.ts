@@ -161,5 +161,5 @@ test("npm run forget: usage, a group by folder name or name, the owner and odd i
   mkdirSync(join(oldDir, "tenants", "zed-1"), { recursive: true });
   const o = run(["group", conv], oldDir);
   assert.equal(o.status, 1);
-  assert.match(o.stderr, /old layout/);
+  assert.match(o.stderr, /older layout/);
 });
