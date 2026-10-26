@@ -19,7 +19,7 @@ import { writeFileAtomic } from "../core/state.ts";
 // the categories it needs (setup and voice notes: where the owner's calendars and Notion pages
 // are, how they write; see plugin/skills); a note with a name we do not recognise is shown to nobody but
 // chat, so a mislabelled note fails closed. A note may carry `expires: YYYY-MM-DD` in its
-// front matter; after that day it is no longer shown.
+// front matter; after that day it is no longer shown. A `routine-` note carries `when:` (a repeat rule) and says what to do then (tasks/routines.ts plans it).
 
 export const NOTES_DIR = convPaths(OWNER_CONV).notes;
 
@@ -49,6 +49,7 @@ export interface Note {
   text: string; // body without front matter
   expires?: string;
   inferred?: boolean; // written by a background look (origin: inferred), not confirmed by the owner
+  when?: string; // a routine note's schedule (front matter `when: every weekday at 18:30`, a repeat rule: tasks/repeat.ts); the body is what to do then
 }
 
 export const categoryOf = (file: string): Category | undefined =>
@@ -61,24 +62,26 @@ export function parseNote(file: string, raw: string): Note | undefined {
   let body = raw.replace(/\r\n/g, "\n");
   let expires: string | undefined;
   let inferred = false;
+  let when: string | undefined;
   const m = /^---\n([\s\S]*?)\n---\n?/.exec(body);
   if (m) {
     const e = /^\s*expires:\s*["']?(\d{4}-\d{2}-\d{2})["']?\s*$/m.exec(m[1]!);
     if (e) expires = e[1];
     inferred = /^\s*origin:\s*inferred\s*$/m.test(m[1]!);
+    when = /^\s*when:[ \t]*["']?(.*?)["']?[ \t]*$/m.exec(m[1]!)?.[1] || undefined;
     body = body.slice(m[0].length);
   }
   const text = body.replace(/[\u0000-\u0008\u000B-\u001F\u007F\u2028\u2029]/g, "").replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "").trim();
-  return text ? { file, category, text, ...(expires ? { expires } : {}), ...(inferred ? { inferred } : {}) } : undefined;
+  return text ? { file, category, text, ...(expires ? { expires } : {}), ...(inferred ? { inferred } : {}), ...(when ? { when } : {}) } : undefined;
 }
 
 const isActive = (n: Note, today: string) => !n.expires || today <= n.expires;
 
 // `zone`: the conversation's own time zone (timezone.ts), the day an `expires:` is compared with; default the Mac's.
-export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: string): Note[] {
+export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: string, prefix = ""): Note[] {
   let files: string[] = [];
   try {
-    files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").sort();
+    files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md" && f.startsWith(prefix)).sort();
   } catch {
     return [];
   }

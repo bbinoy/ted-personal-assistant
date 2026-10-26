@@ -5,10 +5,11 @@
       "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "08b8c04df82a8dfa"
+        "sha": "4c6789cb9092258e"
       },
       "memory": {
         "dir": "<data>/conversations/owner/notes",
+        "zone": "Europe/London",
         "notify": "[fn]"
       },
       "maxTurns": 40,
@@ -20,7 +21,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "08b8c04df82a8dfa"
+        "sha": "4c6789cb9092258e"
       },
       "snapshot": false
     },
@@ -167,10 +168,11 @@
       "sessionConv": "group-ff36ac23eadd0841",
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "36573d91f6af5b69"
+        "sha": "6d2cef15ad693659"
       },
       "memory": {
         "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
+        "zone": "Europe/London",
         "groupId": "g-run-options"
       },
       "skills": [
@@ -217,7 +219,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "36573d91f6af5b69"
+        "sha": "6d2cef15ad693659"
       },
       "snapshot": false
     },
@@ -274,10 +276,11 @@
       "sessionConv": "friend-<bea>",
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "471e061e7d8180bd"
+        "sha": "68ec218e884ee245"
       },
       "memory": {
-        "dir": "<data>/conversations/friend-<bea>/notes"
+        "dir": "<data>/conversations/friend-<bea>/notes",
+        "zone": "Europe/London"
       },
       "skills": [
         "ted-personal-assistant:research-booking",
@@ -332,7 +335,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "471e061e7d8180bd"
+        "sha": "68ec218e884ee245"
       },
       "snapshot": false
     },

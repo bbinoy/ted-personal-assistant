@@ -87,7 +87,7 @@ export function chatSystem(now = new Date(), mail: boolean = settings.mail): str
       mailNote: mail ? mailNote() : "",
       logsDir: logPaths().dir,
       ownerDir: convPaths(OWNER_CONV).dir,
-      selfTimed: SELF_TIMED,
+      routine: ROUTINE_NOTE,
       categories: categoriesFor("owner").join(", "),
     }),
     rules(mail),
@@ -127,9 +127,9 @@ const reactionRules = (who: string) => say("reactions", { who });
 // (group notes: "only reply when tagged", "don't answer so fast"), and the owner's style notes apply too.
 const PARTICIPATION = say("participation");
 
-// Told to the chat model in a private chat and in a group alike: it CAN act later and on a schedule, through notes
-// that the gate (gate.ts) reads. Without this line it assumes it can only speak when someone writes.
-export const SELF_TIMED = say("selfTimed");
+// Told to a chat that has a look (the owner's, a group's, a friend's with `heartbeat` and `wake`): it CAN act later and on a schedule, through a routine note with a `when:` line that code plans
+// (tasks/routines.ts). Without this line it assumes it can only speak when someone writes.
+export const ROUTINE_NOTE = say("routine");
 
 // What the participation gate (gate.ts) is told by default in a group. The group's notes tweak it
 // ("don't reply so fast", "only reply when tagged"); the owner's style notes too.
@@ -153,7 +153,7 @@ export function groupSystem(parts: { style?: string; caps?: ReadonlySet<Capabili
       categories: categoriesFor("group").join(", "),
       personality: PERSONALITY,
       participation: PARTICIPATION,
-      selfTimed: SELF_TIMED,
+      routine: caps.has("heartbeat") && caps.has("wake") ? ROUTINE_NOTE : "",
       sources: SOURCES_RULE,
       reactions: reactionRules("the sender"),
       send: `${SEND_RULE}${voiceRule("group", caps)}`,
@@ -223,12 +223,11 @@ export function tenantSystem(parts: { name: string; caps: ReadonlySet<Capability
       browse: parts.caps.has("browse"), // her own capability set (her tenant.json can turn browsing off): the prompt promises what she has
       weather: parts.caps.has("weather"),
       draw: parts.caps.has("draw"),
-      timed: !!parts.timed,
       google: !!parts.google,
       categories: categoriesFor("tenant").join(", "),
       her,
       personality: PERSONALITY,
-      selfTimed: SELF_TIMED,
+      routine: parts.timed ? ROUTINE_NOTE : "",
       sources: SOURCES_RULE,
       reactions: reactionRules(her),
       send: `${SEND_RULE}${voiceRule("tenant", parts.caps)}`,

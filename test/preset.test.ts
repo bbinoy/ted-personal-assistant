@@ -32,10 +32,10 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
   const p = loadPreset(TED);
   assert.equal(p.name, "ted");
   assert.deepEqual(p.rhythm, {
-    heartbeat: { everyMinutes: 5, dayMinutes: 30, quietFromHour: 22, quietToHour: 7, briefTime: "07:30" },
+    heartbeat: { everyMinutes: 5, dayMinutes: 30, quietFromHour: 22, quietToHour: 7 },
     dream: { enabled: true, hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
   });
-  assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status"]);
+  assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status", "routine"]);
   assert.deepEqual(Object.keys(p.profiles).sort(), ["chat", "group", "heartbeat"]);
   assert.ok(Object.values(p.profiles).every((x) => !("notes" in x)), "no profile names note categories: the heartbeat run reads all of its conversation's own notes");
   assert.deepEqual(Object.keys(p.persona).sort(), Object.keys(PROMPTS).sort());
@@ -77,7 +77,6 @@ test("a malformed preset fails with a message that names the file and the proble
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "{{#mail}}never closed")), /chat\.md: \{\{#mail\}\} is never closed/);
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "closes {{/mail}}")), /chat\.md: \{\{\/mail\}\} closes nothing/);
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "a stray {{ brace")), /chat\.md: a stray/);
-  assert.throws(broken((_d, j) => { j.rhythm.heartbeat.briefTime = "7:30"; }), /rhythm\.heartbeat\.briefTime: must be a time like "07:30"/);
   assert.throws(broken((_d, j) => { delete j.expert; }), /expert: must be an object/);
   assert.throws(broken((_d, j) => { j.rhythm.heartbeat.dayMinutes = 5; }), /rhythm\.heartbeat\.dayMinutes: must be a whole number from 10 to 120/);
   assert.throws(broken((_d, j) => { j.rhythm.dream.enabled = "yes"; }), /rhythm\.dream\.enabled: must be true or false/);

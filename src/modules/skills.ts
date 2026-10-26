@@ -47,9 +47,12 @@ export function ownerSkills(mail: boolean = settings.mail, provider: string = se
 // (heartbeat/delegation.ts). Absent: a light skill, the run does it itself.
 // `tools: [mcp__calendar__*, mcp__send__send, Skill]`: optional, the lean tool set of that skill's expert (tool names as the SDK writes them; `mcp__server__*` is every
 // tool of a server). Absent: the expert has the run's whole tool set.
+// `schedule: every weekday at 18:30`: the skill is a routine, run by the look at that time (the repeat grammar of tasks/repeat.ts, in the conversation's zone; tasks/routines.ts plans it).
+// Kept as written here (modules may not import tasks): the planner parses it and the plugin test checks every file.
 export interface SkillHint {
   readonly delegate?: "sonnet" | "opus";
   readonly tools?: readonly string[];
+  readonly schedule?: string;
 }
 
 const FRONT = /^---\r?\n([\s\S]*?)\r?\n---/;
@@ -64,8 +67,17 @@ export function parseHint(text: string, where = "skill"): SkillHint {
   const rawTools = field("tools");
   const tools = rawTools === undefined ? undefined : rawTools.replace(/^\[|\]$/g, "").split(",").map((t) => t.trim()).filter(Boolean);
   for (const t of tools ?? []) if (!TOOL_NAME.test(t)) throw new Error(`${where}: tools has "${t}", which is not a tool name`);
-  return { ...(delegate ? { delegate } : {}), ...(tools?.length ? { tools } : {}) };
+  const schedule = field("schedule");
+  return { ...(delegate ? { delegate } : {}), ...(tools?.length ? { tools } : {}), ...(schedule ? { schedule } : {}) };
 }
+
+// The scheduled skills among these (plugin-qualified names): [plain name, schedule].
+export const scheduledSkills = (skills: readonly string[], dir: string = settings.pluginDir): [string, string][] =>
+  skills.flatMap((q) => {
+    const name = q.startsWith(`${PLUGIN}:`) ? q.slice(PLUGIN.length + 1) : q;
+    const schedule = skillHint(name, dir).schedule;
+    return schedule ? [[name, schedule] as [string, string]] : [];
+  });
 
 // The hints of a bundled skill (by its plain name, without the plugin prefix); none when it has no file or declares nothing.
 export function skillHint(name: string, dir: string = settings.pluginDir): SkillHint {

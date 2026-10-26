@@ -2,11 +2,11 @@
   "name": "ted",
   "description": "Ted, a personal assistant: mail, calendar, tasks and meetings for one person, in a warm, Ted Lasso kind of voice.",
   "rhythm": {
-    "heartbeat": { "everyMinutes": 5, "dayMinutes": 30, "quietFromHour": 22, "quietToHour": 7, "briefTime": "07:30" },
+    "heartbeat": { "everyMinutes": 5, "dayMinutes": 30, "quietFromHour": 22, "quietToHour": 7 },
     "dream": { "enabled": true, "hour": 4, "minNewLines": { "direct": 1, "group": 3 }, "maxGroupsPerNight": 5 }
   },
   "notes": {
-    "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status"],
+    "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status", "routine"],
     "dream": ["triage", "people", "scheduling", "context", "brief", "style"],
     "group": ["people", "context", "scheduling", "style"],
     "tenant": ["people", "context", "scheduling", "style"],
@@ -16,10 +16,6 @@
     "chat": { "maxTurns": 40, "maxBudgetUsd": 2 },
     "heartbeat": { "maxTurns": 120, "maxBudgetUsd": 2 },
     "group": { "maxTurns": 8, "maxBudgetUsd": 0.5 }
-  },
-  "routines": {
-    "evening": { "when": "18:30 weekdays", "skill": "evening-wrap", "email": false, "enabled": true },
-    "weekly": { "when": "fri 16:30", "skill": "weekly-review", "email": false, "enabled": true }
   },
   "expert": { "model": "sonnet", "maxTurns": 40 },
   "skills": {

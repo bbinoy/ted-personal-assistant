@@ -1,6 +1,5 @@
-import { routineLines } from "../tasks/routines.ts";
+import { scheduleLines } from "../modules/tasks/routinelist.ts";
 import { ownerSkills } from "../modules/skills.ts";
-import { PLUGIN } from "../core/preset.ts";
 import { nextReminderText } from "../tasks/remind.ts";
 import { rmSync } from "node:fs";
 import { openCount } from "../approvals/approvals.ts";
@@ -167,7 +166,7 @@ const real: CommandDeps = {
       approvals: openCount(conv.key), // (the questions open in the chat)
       lastLook: lastOwnerLook(),
       nextReminder: nextReminderText(conv.key, conv.convId, now.getTime(), zoneOf(conv)) ?? "",
-      routines: routineLines(conv.convId, settings.routines.filter((r) => ownerSkills().includes(`${PLUGIN}:${r.skill}`)), now, zoneOf(conv)),
+      routines: scheduleLines(conv.convId, { skills: ownerSkills(), notesDir: conv.notesDir, zone: zoneOf(conv), now }),
       ...(ledgerDamage() ? { damaged: true } : {}),
       down: disconnected(readConnectors()).map((k) => NAMES[k]),
     };

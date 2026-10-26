@@ -15,6 +15,7 @@ import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./cha
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
 import { announceMemoryChanges, noteWritten } from "../memory/memorynotice.ts";
+import { routineNoteReply } from "../modules/tasks/routinelist.ts";
 import { builtinModule } from "../modules/builtin.ts";
 import { createsOf, isOwnerOnly } from "../policy/toolmanifest.ts";
 import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
@@ -52,7 +53,7 @@ export interface RunOptions {
   sessionConv?: ConvId; // chat and groups: continue + save the conversation's session here (its assistant.db); brief and the rest: fresh every run
   // Turns on the SDK's auto-memory: notes in `dir`, the only place the file tools may write (policy.ts).
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
-  memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
+  memory?: { dir: string; zone?: string; groupId?: string; notify?: (text: string) => Promise<void> };
   notesRead?: { dir: string; categories?: readonly string[]; write: readonly string[]; maxNotes: number; zone?: string }; // an unattended run's notes: the prompt holds their index, read_note reads one and write_note saves an inferred one (notestools.ts)
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
   groupId?: string; // a group's unattended run (the heartbeat run) has no memory but is still the group's: its send, its browse approvals and its questions go there (memory.groupId says the same for a chat turn)
@@ -155,6 +156,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
           async (input) => {
             if (input.hook_event_name !== "PostToolUse") return {};
             await afterTool(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, input.tool_response);
+            // A routine note was written: the model is told at once how its schedule was read and when it runs, or that it cannot run (tasks/routines.ts).
+            const additionalContext = routineNoteReply(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, opts.memory?.dir, opts.memory?.zone);
             // The browse run: a page view is read into the result (the server only links its snapshot file), cut to size and remembered
             // by the guard (the refs, the real names of the controls, what was typed) before it is cleaned like any other result.
             let response: unknown = input.tool_response;
@@ -166,9 +169,9 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
             }
             // Clean at the door: the model reads the cleaned result, not the original (counts only in the log).
             const cleaned = cleanToolOutput(input.tool_name, response);
-            if (!cleaned) return response === input.tool_response ? {} : { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: response } };
+            if (!cleaned) return response === input.tool_response && !additionalContext ? {} : { hookSpecificOutput: { hookEventName: "PostToolUse" as const, ...(response === input.tool_response ? {} : { updatedToolOutput: response }), ...(additionalContext ? { additionalContext } : {}) } };
             console.log(`clean: tool result ${input.tool_name}: ${cleaned.removed} hidden character(s) removed, ${cleaned.hidden} hidden HTML part(s) left out, ${cleaned.cut} cut`);
-            return { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: cleaned.output } };
+            return { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: cleaned.output, ...(additionalContext ? { additionalContext } : {}) } };
           },
         ],
       },

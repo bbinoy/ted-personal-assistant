@@ -164,7 +164,7 @@ export interface MailTools {
 // MAIL_PROVIDER=none loads none and every mail path asks `settings.mail` before it asks for the slot.
 export interface MailSlot extends MailTools {
   // How the daily brief reaches the owner with this provider's tools, as a sentence for the heartbeat instruction (the daily-brief skill's delivery step).
-  brief: { how: (email?: boolean, routine?: boolean) => string }; // `email`: another routine wants its result mailed to the owner (default: the brief's own BRIEF_EMAIL switch)
+  brief: { how: () => string }; // how the daily brief reaches the owner (the provider's own words; BRIEF_EMAIL decides whether it is also mailed)
   chat: { skill: string; note: (owner: string) => string }; // the chat prompt: the mail skill it names, and what it says about drafts and sending
 }
 

@@ -449,11 +449,11 @@ test("group dream: nightly, only groups with enough new talk, silently", async (
   assert.equal(calls, 1); // once a day
 });
 
-import { chatSystem, groupSystem, SELF_TIMED } from "../src/run/persona.ts";
+import { chatSystem, groupSystem } from "../src/run/persona.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 test("prompts: Ted is told he can act later and on a schedule, in a private chat and in a group alike", () => {
-  assert.ok(groupSystem({}).includes(SELF_TIMED));
-  assert.ok(chatSystem(new Date()).includes(SELF_TIMED));
+  assert.match(groupSystem({}), /routine-<short-slug>\.md[\s\S]*`when:`/);
+  assert.match(chatSystem(new Date()), /routine-<short-slug>\.md[\s\S]*`when:`/);
   assert.doesNotMatch(groupSystem({}), /cannot do here \([^)]*reminders/);
 });
 

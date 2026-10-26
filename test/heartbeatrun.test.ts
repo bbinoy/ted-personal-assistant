@@ -204,7 +204,7 @@ test("the incident: a post held at 22:35 is not sent at 07:00; the morning look 
   assert.match(seen.prompts[1]!, /These were not delivered\. Say again only what is still true and still matters now, in today's words/);
   assert.doesNotMatch((seen.provenance[1] as { task: string }).task, /Held back/, "not in the standing reason the judge reads");
   assert.deepEqual(heldPosts(conv), [], "handed over: no longer held");
-  assert.equal(await w.look(conv, min(release, 30)), "not-due", "nothing waits any more: the look keeps the time it chose");
+  assert.equal(await w.look(conv, min(release, 20)), "not-due", "nothing waits any more: the look keeps the time it chose");
   const later = min(release, 125);
   at(later);
   assert.equal(await w.look(conv, later), "silent");
@@ -375,19 +375,19 @@ test("the daily brief is a routine like the others: the look is handed it as a f
   const err = console.error;
   console.error = () => {};
   const BRIEF = "expert-daily-brief";
-  const record = () => readRecord(owner().convId, "brief");
-  const arm = () => liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('brief', ?)", new Date(2026, 9, 1).getTime());
+  const record = () => readRecord(owner().convId, "daily-brief");
+  const arm = () => liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('daily-brief', ?)", new Date(2026, 9, 1).getTime());
   try {
     arm();
     const ok = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, message: "Morning." }));
     ok.at(new Date(2026, 9, 14, 8, 0));
     await ok.w.look(ok.conv, new Date(2026, 9, 14, 8, 0));
-    assert.match(ok.seen.prompts[0]!, /brief: due now \(07:30 daily\)\. Delegate it now: call the Agent tool with subagent_type "expert-daily-brief"/);
+    assert.match(ok.seen.prompts[0]!, /daily-brief: due now \(every day at 07:30\)\. Delegate it now: call the Agent tool with subagent_type "expert-daily-brief"/);
     assert.equal(record()!.status, "delivered");
     assert.equal(record()!.attempts, 1);
     const again = rig(() => ({ message: "[[silent]]" }));
     await again.w.look(again.conv, new Date(2026, 9, 14, 8, 30));
-    assert.doesNotMatch(again.seen.prompts[0] ?? "", /brief: due now/, "once per day: delivered is done");
+    assert.doesNotMatch(again.seen.prompts[0] ?? "", /daily-brief: due now/, "once per day: delivered is done");
 
     for (const answer of [{ agents: [BRIEF], timeout: true }, { agents: [BRIEF], throws: true }] as Answer[]) {
       arm();
@@ -663,12 +663,12 @@ async function eveningLook(a: Answer, day = 14) { // (a day of its own for each 
   const at = new Date(2026, 9, day, 18, 35, 0); // after 18:30
   r.at(at);
   const out = await r.w.look(r.conv, at);
-  return { out, rec: readRecord(r.conv.convId, "evening")!, seen: r.seen };
+  return { out, rec: readRecord(r.conv.convId, "evening-wrap")!, seen: r.seen };
 }
 
 test("routines: delivered when the expert's result came back; delegating twice is one attempt", async () => {
   const done = await eveningLook({ agents: ["expert-evening-wrap", "expert-evening-wrap"], results: { "expert-evening-wrap": "A quiet one." } });
-  assert.match(done.seen.prompts.at(-1)!, /evening: due now/);
+  assert.match(done.seen.prompts.at(-1)!, /evening-wrap: due now/);
   assert.equal(done.rec.status, "delivered");
   assert.equal(done.rec.attempts, 1, "the same routine handed on twice in one look is one attempt");
 });
