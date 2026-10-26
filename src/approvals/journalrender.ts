@@ -80,7 +80,7 @@ const seenMail = new Map<string, Map<string, { subject: string; from?: string; a
 export const forgetSeenMail = (): void => seenMail.clear(); // tests
 
 const ID_KEYS = ["conversationId", "conversation_id", "threadId", "thread_id", "messageId", "message_id", "id"];
-const FROM_KEYS = ["from", "sender", "senderName", "fromName", "from_name", "sender_name", "senderEmail", "fromAddress"];
+const FROM_KEY = /^(?:last_?)?(?:from|sender)(?:_?name|_?email|_?address)?$/i; // (Mailbird's list rows say `lastSender`)
 const textOf = (v: unknown): string | undefined => {
   if (typeof v === "string") return v.trim() || undefined;
   if (v && typeof v === "object") {
@@ -107,7 +107,7 @@ export function rememberMail(conv: string, response: unknown, now = Date.now()):
     const o = v as Record<string, unknown>;
     const subject = textOf(o.subject);
     const id = ID_KEYS.map((k) => o[k]).find((x) => (typeof x === "string" && x) || typeof x === "number");
-    if (subject && id !== undefined) found.push([String(id), { subject, from: FROM_KEYS.map((k) => textOf(o[k])).find(Boolean) }]);
+    if (subject && id !== undefined) found.push([String(id), { subject, from: Object.keys(o).filter((k) => FROM_KEY.test(k)).map((k) => textOf(o[k])).find(Boolean) }]);
     for (const x of Object.values(o)) walk(x, depth + 1);
   };
   walk(root, 0);

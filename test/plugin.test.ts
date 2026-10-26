@@ -87,6 +87,13 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   for (const s of ["calendar", "meeting-prep"]) assert.match(read(s), /🔌/, `${s} reports a missing connector`);
 });
 
+test("daily-brief skill: one archive list read after the sweep, no archiving of its own briefs, no model-written delivery time", () => {
+  const s = readFileSync(join(skillsDir, "daily-brief", "SKILL.md"), "utf8");
+  assert.match(s, /never archive the assistant's own brief emails/);
+  assert.match(s, /after the email sweep, just before you write the brief\*\*, so the list includes what this very run archived/);
+  assert.match(s, /no time of your own: the code stamps the real write time/);
+});
+
 test("connectors: a run that started without a network records nothing", async () => {
   const { recordConnectors, readConnectors, offline } = await import("../src/modules/connectors.ts");
   const server = (name: string, status: string) => ({ name, status });

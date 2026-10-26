@@ -207,6 +207,16 @@ test("an archive names the mail the run had seen and says how to undo it", async
   assert.match(lines[0]!.text, /Undo: npm run restore c-9001, or say 'restore that'\.$/);
 });
 
+test("an archive names the sender of a Mailbird list row (`lastSender`), so the brief's list is not 'unknown sender'", async () => {
+  reset();
+  const key = fresh("owner");
+  const before = journal(key).length;
+  rememberMail(key, JSON.stringify({ conversations: [{ conversationId: "c-7001", subject: "Your order shipped", lastSender: "Shop Example", lastMessageId: "m-1" }] }));
+  const tool = `${MB}archive_conversation`;
+  await noteDone({ conv: key, source: "background", tool, input: { conversationId: "c-7001" } });
+  assert.match(journal(key).slice(before)[0]!.text, /^Archived “Your order shipped” from Shop Example\. /);
+});
+
 test("a look that read notes before acting says so: 'per your notes' in reading order, at most three names, inferred ones marked; one that read none keeps the generic line", async () => {
   reset();
   const key = fresh("owner");
