@@ -101,11 +101,11 @@ test("while quiet: unprompted posts are held (urgent goes), the heartbeat's cap 
   assert.equal(heldWaiting(c, new Date(NOW.getTime() + 3_600_000)), false, "still quiet an hour later");
   const after = new Date(NOW.getTime() + 2 * 3_600_000 + 60_000);
   assert.equal(heldWaiting(c, after), true, "quiet is over: the look is due");
-  assert.deepEqual(takeHeld(c, after).map((h) => h.text), ["the dentist moved to Friday?", "mail from the bank about your card"]);
+  assert.deepEqual(takeHeld(c, after).held.map((h) => h.text), ["the dentist moved to Friday?", "mail from the bank about your card"]);
   // /unquiet ends it at once
   setQuiet(ownerConv, "");
   assert.equal(submitPost(c, "later news", false, NOW), "held");
   clearQuiet(ownerConv);
-  assert.deepEqual(takeHeld(c, NOW).map((h) => h.text), ["later news"]);
+  assert.deepEqual(takeHeld(c, NOW).held.map((h) => h.text), ["later news"]);
   clean();
 });

@@ -215,7 +215,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const finished = new Set<string>(); // those whose expert's result came back with something in it
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
-    const heldFacts = [heldBlock(takeHeld(conv, now), now, looker.zone), looker.own ? takeWelcome() : ""].filter(Boolean).join("\n\n"); // (handed over once: taken out of the held posts here; the welcome, once ever, on the owner's first run)
+    const handedOver = takeHeld(conv, now); // (pending: deleted below only when this look ends well)
+    const heldFacts = [heldBlock(handedOver.held, now, looker.zone), looker.own ? takeWelcome() : ""].filter(Boolean).join("\n\n"); // (handed over once: taken out of the held posts here; the welcome, once ever, on the owner's first run)
     const tasks = looker.tasks ? tasksFacts(conv.key, now.getTime(), looker.zone) : { text: "", fromMail: false }; // what was added to the list on its own (tasks/render.ts): the look says it, if no look has yet
     const handed = looker.tasks ? waitingReminders(conv) : []; // reminders that came due (remindtick.ts): this look says them; only once it has are they journaled
     const dueFacts = looker.tasks ? reminderFacts(handed, activeItems(conv.key), { now: now.getTime(), zone: looker.zone, group: conv.kind === "group" }) : "";
@@ -305,6 +306,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
         outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
       }
     }
+    if (outcome === "posted" || outcome === "silent") handedOver.done(); // (a failed or called-off look leaves the held posts for the next one)
     if (outcome === "preempted") h.preempted++;
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";

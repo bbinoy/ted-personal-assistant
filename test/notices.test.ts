@@ -5,7 +5,7 @@ import { settings } from "../src/core/settings.ts";
 import { localDay } from "../src/core/pause.ts";
 import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { createFailureTracker, dropUnreachable, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, countPosts, takeHeld } from "../src/heartbeat/notices.ts";
+import { createFailureTracker, dropUnreachable, holdFact, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, countPosts, takeHeld } from "../src/heartbeat/notices.ts";
 import { heldBlock, HELD_MAX } from "../src/heartbeat/look.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
@@ -61,10 +61,14 @@ test("held posts: night holds, day posts, the cap holds the rest; at the end of 
   assert.equal(submitPost(c, "meeting in 10 minutes", true, EARLY), "post", "urgent goes at night");
   assert.equal(submitPost(c, "a reminder", false, EARLY), "held");
   assert.equal(heldWaiting(c, EARLY), false, "still the quiet window");
-  assert.deepEqual(takeHeld(c, EARLY), [], "a night look does not get them");
+  assert.deepEqual(takeHeld(c, EARLY).held, [], "a night look does not get them");
   assert.equal(heldWaiting(c, MORNING), true, "quiet is over: the look is due");
-  assert.deepEqual(takeHeld(c, MORNING).map((h) => h.text), ["a reminder", "mail from the bank"]);
-  assert.deepEqual(takeHeld(c, MORNING), [], "exactly once");
+  const first = takeHeld(c, MORNING);
+  assert.deepEqual(first.held.map((h) => h.text), ["a reminder", "mail from the bank"]);
+  assert.equal(heldPosts(c).length, 2, "pending while the look runs: a failed look leaves them for the next");
+  assert.deepEqual(takeHeld(c, MORNING).held.map((h) => h.text), ["a reminder", "mail from the bank"]);
+  first.done(); // (the look ended well)
+  assert.deepEqual(takeHeld(c, MORNING).held, [], "exactly once");
   assert.equal(heldWaiting(c, MORNING), false);
   assert.deepEqual(heldPosts(c), []);
 });
@@ -77,8 +81,8 @@ test("the day's cap: the posts past it are held for the next day, urgent ones ar
   assert.equal(submitPost(c, "three", false, DAY), "held", "3 a day in this test");
   assert.equal(submitPost(c, "urgent", true, DAY), "post");
   assert.equal(heldWaiting(c, new Date(2026, 9, 14, 15, 0)), false, "the same day: the cap is still spent");
-  assert.deepEqual(takeHeld(c, new Date(2026, 9, 14, 15, 0)), []);
-  assert.deepEqual(takeHeld(c, new Date(2026, 9, 15, 9, 0)).map((h) => h.text), ["three"], "the next day it goes to the look");
+  assert.deepEqual(takeHeld(c, new Date(2026, 9, 14, 15, 0)).held, []);
+  assert.deepEqual(takeHeld(c, new Date(2026, 9, 15, 9, 0)).held.map((h) => h.text), ["three"], "the next day it goes to the look");
 });
 test("held posts as facts: written-when wording, capped, trimmed; a conversation without a look drops them with a journal line", () => {
   reset();
@@ -86,7 +90,7 @@ test("held posts as facts: written-when wording, capped, trimmed; a conversation
   const EVENING = new Date(2026, 9, 14, 22, 35, 0);
   submitPost(c, "older post", false, EVENING);
   submitPost(c, "newer post", false, min(EVENING, 20));
-  const taken = takeHeld(c, MORNING);
+  const taken = takeHeld(c, MORNING).held;
   assert.deepEqual(taken.map((h) => h.text), ["newer post", "older post"]);
   assert.equal(heldBlock(taken, MORNING, systemZone()), `<held_posts>\nHeld back and not sent (written 22:55 yesterday): "newer post"\nHeld back and not sent (written 22:35 yesterday): "older post"\n</held_posts>\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`);
   assert.match(heldBlock([{ text: "x", at: MORNING.getTime() - 3_600_000 }], MORNING, systemZone()), /written 06:30 today/);
@@ -109,9 +113,9 @@ test("held posts are each conversation's own: a group's and a friend's are hande
   submitPost(o, "owner's post", false, EVENING);
   submitPost(g, "group's post", false, EVENING);
   submitPost(f, "friend's post", false, EVENING);
-  assert.deepEqual(takeHeld(g, MORNING).map((h) => h.text), ["group's post"]);
-  assert.deepEqual(takeHeld(f, MORNING).map((h) => h.text), ["friend's post"]);
-  assert.deepEqual(takeHeld(o, MORNING).map((h) => h.text), ["owner's post"]);
+  assert.deepEqual(takeHeld(g, MORNING).held.map((h) => h.text), ["group's post"]);
+  assert.deepEqual(takeHeld(f, MORNING).held.map((h) => h.text), ["friend's post"]);
+  assert.deepEqual(takeHeld(o, MORNING).held.map((h) => h.text), ["owner's post"]);
 });
 
 test("failure tracker: the owner's looks become a fact only after 3 failures over 2 hours AWAKE; sleep does not count; a success ends it without a word", () => {
@@ -224,7 +228,19 @@ test("the send tool of an unattended look is held at 02:00 unless urgent; a chat
   assert.deepEqual(chat, ["hello"], "no gate on another run's sink");
 });
 
-test("the instance-cap notice to the owner is a fixed text sent at once; a group's budget line survives a restart", async () => {
+test("a system matter for the owner (the shared key, a friend's damaged file) is a fact for her next look, never a ping at night", () => {
+  reset();
+  holdFact("The shared API key was refused.", NIGHT);
+  holdFact("The shared API key was refused.", NIGHT);
+  assert.equal(heldPosts(owner()).length, 1, "once");
+  assert.deepEqual(takeHeld(owner(), NIGHT).held, [], "not during quiet");
+  const t = takeHeld(owner(), MORNING);
+  assert.match(t.held[0]!.text, /^System status for .*The shared API key was refused\.$/);
+  t.done();
+  reset();
+});
+
+test("the instance-cap notice is handed to the owner's sender; a group's budget line survives a restart", async () => {
   instanceDb().run("DELETE FROM notices");
   const told: string[] = [];
   capNoticesTo((t) => told.push(t));

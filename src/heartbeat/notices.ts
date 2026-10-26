@@ -169,18 +169,32 @@ export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv
 
 // What is held at the end of quiet goes to the conversation's next look as facts (look.ts), not out as text code wrote. Ready when quiet is over (the window, or /quiet) and the day's cap has room (a
 // cap-held post therefore waits for the next day).
-const ready = (conv: Conversation, now: Date, st: HoldState): boolean => planFlush({ night: holding(conv, now, zoneFor(conv)), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: st.held.length });
+const ready = (conv: Conversation, now: Date, st: HoldState): boolean => planFlush({ night: holding(conv, now, zoneFor(conv)), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: stillTrue(st.held, now.getTime()).length });
 
-// All the held posts, newest first, for the conversation's next look. Taken out of the held posts as they are handed over, so they are passed exactly once (a look that then fails has lost them: they
-// were news of the hour). Nothing while the conversation is still being left alone (a night look would only hold them again), nothing that is stale (stillTrue). Only this conversation's own database.
-export function takeHeld(conv: Conversation, now: Date): Held[] {
-  if (heldCount(conv) === 0) return [];
+// All the held posts, newest first, for the conversation's next look. They are PENDING while that look runs (like seen_mail): `done()` deletes them (and what was stale), and the look calls it only
+// when it ended well (posted or silent); a failed or called-off look leaves them for the next one, so each is told at most once yet not lost (the 36 hours of stillTrue end a stuck item).
+// Nothing while the conversation is still being left alone (a night look would only hold them again). Only this conversation's own database.
+export function takeHeld(conv: Conversation, now: Date): { held: Held[]; done: () => void } {
+  const none = { held: [], done: () => {} };
+  if (heldCount(conv) === 0) return none;
   const st = load(conv, now, zoneFor(conv));
-  if (!ready(conv, now, st)) return [];
-  const take = stillTrue(st.held, now.getTime());
-  st.held = [];
-  save(conv, st);
-  return take.reverse();
+  if (!ready(conv, now, st)) return none;
+  const db = convDb(conv.convId);
+  const upTo = db.num("SELECT COALESCE(MAX(seq), 0) FROM held_posts"); // (posts held while the look runs are not part of it)
+  return { held: stillTrue(st.held, now.getTime()).reverse(), done: () => void db.run("DELETE FROM held_posts WHERE seq <= ?", upTo) };
+}
+
+// A system matter for the owner's NEXT look as a fact (the owner's own look can still run): held like a post, handed over like one. Never throws.
+export function holdFact(text: string, now: Date = new Date()): void {
+  try {
+    const conv = owner();
+    const st = load(conv, now, zoneFor(conv));
+    const fact = `System status for ${OWNER}: say it in one short line in your own words, only if ${OWNER} has to do something. ${text}`;
+    if (!st.held.some((h) => h.text === fact)) st.held.push({ text: fact, why: "quiet", at: now.getTime() });
+    save(conv, st);
+  } catch (e) {
+    console.error("notices: could not keep a fact for the owner:", (e as Error).message);
+  }
 }
 
 // Is something held that may be handed over now? The look is then due at once (look.ts), not at the time it chose at night.
@@ -222,12 +236,15 @@ export function noticeBudget(now: Date = new Date()): boolean {
 // 1b. A conversation's database (assistant.db, core/convdb.ts) was damaged and set aside: once a day, until a person looks (npm run doctor says which file and what to do). Chat in it goes on with a fresh
 // start; its background work is stopped (payer.ts mayRun). Returns how many notices it made.
 export function noticeDamaged(now: Date = new Date()): number {
-  if (holdingNow(owner(), now)) return 0; // (quiet: asked again at the next tick)
+  const quiet = holdingNow(owner(), now);
   let n = 0;
   for (const d of damagedConvs()) {
+    if (d.conv === "owner" && quiet) continue; // (her own file: a fixed text, after quiet; asked again at the next tick)
     if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`);
+    const text = `The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`;
+    if (d.conv === "owner") noticeOwner(text);
+    else holdFact(text, now); // (the owner's own look can still run: a fact for it)
     n++;
   }
   return n;

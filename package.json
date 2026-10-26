@@ -27,7 +27,6 @@
     "openbao": "node --conditions=workspace-source --env-file-if-exists=.env scripts/openbao.ts",
     "intake": "node --conditions=workspace-source --env-file-if-exists=.env scripts/intake.ts",
     "tenants": "node --conditions=workspace-source --env-file-if-exists=.env scripts/tenants.ts",
-    "migrate": "node --conditions=workspace-source --env-file-if-exists=.env scripts/migrate.ts",
     "retention": "node --conditions=workspace-source --env-file-if-exists=.env scripts/retention.ts",
     "convdb": "node --conditions=workspace-source --env-file-if-exists=.env scripts/convdb.ts",
     "forget": "node --conditions=workspace-source --env-file-if-exists=.env scripts/forget.ts",

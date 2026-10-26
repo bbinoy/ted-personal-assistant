@@ -73,26 +73,26 @@ const mbArchive = (id: string, addr = false) => ({ tool: `${MB}archive_conversat
 // ---- the welcome ----
 
 test("welcome: a fresh data folder hands the owner's first run ONE fact (name-free, the commands, the setup offer); never again", () => {
-  const fresh = { messages: 0, spend: 0, looks: 0, migrated: false };
+  const fresh = { messages: 0, spend: 0, looks: 0 };
   W.welcomeStart(() => fresh);
   assert.equal(kvGet<{ state: string }>(W.WELCOME_KEY, { state: "" }).state, "pending");
   const fact = W.takeWelcome();
   assert.match(fact, /fresh install/);
   for (const c of ["/status", "/pause 2h", "/today"]) assert.ok(fact.includes(c), c);
   assert.match(fact, /set up/);
-  assert.match(fact, /starts? gently|start gently/);
+  assert.match(fact, /restore 3/);
   assert.equal(W.takeWelcome(), "", "handed over once");
   W.welcomeStart(() => fresh);
   assert.equal(kvGet<{ state: string }>(W.WELCOME_KEY, { state: "" }).state, "told", "a later start does not bring it back");
   instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
 });
 
-test("welcome: an install with history, spend, looks or a migrated data folder is never welcomed, not even later", () => {
-  for (const [name, facts] of [["history", { messages: 3, spend: 0, looks: 0, migrated: false }], ["spend", { messages: 0, spend: 2, looks: 0, migrated: false }], ["looks", { messages: 0, spend: 0, looks: 1, migrated: false }], ["migrated", { messages: 0, spend: 0, looks: 0, migrated: true }]] as const) {
+test("welcome: an install with history, spend, looks is never welcomed, not even later", () => {
+  for (const [name, facts] of [["history", { messages: 3, spend: 0, looks: 0 }], ["spend", { messages: 0, spend: 2, looks: 0 }], ["looks", { messages: 0, spend: 0, looks: 1 }], ["migrated", { messages: 0, spend: 0, looks: 0 }]] as const) {
     instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
     W.welcomeStart(() => facts);
     assert.equal(W.takeWelcome(), "", name);
-    W.welcomeStart(() => ({ messages: 0, spend: 0, looks: 0, migrated: false }));
+    W.welcomeStart(() => ({ messages: 0, spend: 0, looks: 0 }));
     assert.equal(W.takeWelcome(), "", `${name}: even if the history is deleted afterwards`);
   }
   instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
@@ -100,7 +100,7 @@ test("welcome: an install with history, spend, looks or a migrated data folder i
 
 test("welcome: the real facts of an empty data folder are fresh (nothing said, spent or looked at)", () => {
   assert.equal(W.isFresh(W.welcomeFacts()), true);
-  assert.equal(W.isFresh({ messages: 1, spend: 0, looks: 0, migrated: false }), false);
+  assert.equal(W.isFresh({ messages: 1, spend: 0, looks: 0 }), false);
 });
 
 // ---- when shadow mode is on, and when it ends ----
@@ -520,13 +520,6 @@ test("an unquoted \"archive all\" archives; a quoted bare yes still works", asyn
   assert.equal(await shadowReply(ownerLike(c2), { text: "yes", quote: { timestamp: 5010 } } as never, say), true);
   await S.idle();
   assert.equal(q2.ran.length, 1);
-});
-
-test("the welcome fact says nothing about starting gently when SHADOW_MODE=off", () => {
-  assert.match(W.welcomeFact({ owner: "Sam", mail: true, shadow: true }), /start gently/);
-  const off = W.welcomeFact({ owner: "Sam", mail: true, shadow: false });
-  assert.doesNotMatch(off, /start gently|nothing on your own/);
-  assert.match(off, /archive newsletters/);
 });
 
 test("shadowActive fails closed: a conversation whose database was found damaged is still in shadow mode", async () => {

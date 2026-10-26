@@ -1,6 +1,5 @@
-import { existsSync } from "node:fs";
 import { ledgerEntries } from "./messages.ts";
-import { convPaths, instancePaths, OWNER_CONV } from "./convpaths.ts";
+import { convPaths, OWNER_CONV } from "./convpaths.ts";
 import { instanceDb, kvGet, kvSet } from "./instancedb.ts";
 import { settings } from "./settings.ts";
 
@@ -14,16 +13,15 @@ export interface WelcomeFacts {
   messages: number; // lines of the owner's conversation log that are conversation (not ledger)
   spend: number; // charged runs on record
   looks: number; // heartbeat looks on record
-  migrated: boolean; // the data folder was moved from an older layout (a migration plan exists)
 }
 
 /** Pure: is this a data folder nobody has used? */
-export const isFresh = (f: WelcomeFacts): boolean => f.messages === 0 && f.spend === 0 && f.looks === 0 && !f.migrated;
+export const isFresh = (f: WelcomeFacts): boolean => f.messages === 0 && f.spend === 0 && f.looks === 0;
 
-export function welcomeFact(o: { owner: string; mail: boolean; shadow?: boolean }): string {
+export function welcomeFact(o: { owner: string; mail: boolean }): string {
   const watch = o.mail ? "mail, calendar and tasks" : "calendar and tasks";
   return `This is a fresh install and your first run with ${o.owner}: introduce yourself briefly, in your own voice. Say what you will do (keep an eye on their ${watch}, remind them of what is coming, message only when something needs them)${
-    o.mail ? (o.shadow ? "; that you start gently: for the first days you archive nothing on your own, you show what you would archive and they tap 👍 or tell you which to keep" : "; that you archive newsletters and notifications on your own as their notes say") : ""
+    o.mail ? "; that you archive routine mail (newsletters, notifications) on your own as their notes say, that /today lists everything you did and why, and that \"restore 3\" undoes one" : ""
   }. Name the commands /status (what you are up to), /pause 2h (stop all background work for two hours) and /today (what you did today, and why). Offer the setup skill: if they say "set up" you walk them through connecting their calendars and how they like to write. If they asked something in this run, answer that first.`;
 }
 
@@ -41,7 +39,7 @@ export function welcomeFacts(): WelcomeFacts {
   } catch {
     messages = 1;
   }
-  return { messages, spend: count("SELECT COUNT(*) FROM spend"), looks: count("SELECT COUNT(*) FROM looks"), migrated: existsSync(instancePaths().migrationPlan) };
+  return { messages, spend: count("SELECT COUNT(*) FROM spend"), looks: count("SELECT COUNT(*) FROM looks") };
 }
 
 /** At the start: write down whether this data folder is fresh (pending) or not (skipped), once ever. */
@@ -53,5 +51,5 @@ export function welcomeStart(facts: () => WelcomeFacts = welcomeFacts, now: () =
 export function takeWelcome(now: () => number = Date.now): string {
   if (kvGet<{ state?: string } | null>(WELCOME_KEY, null)?.state !== "pending") return "";
   kvSet(WELCOME_KEY, { state: "told", at: now() });
-  return welcomeFact({ owner: settings.owner, mail: settings.mail, shadow: settings.shadowMode !== "off" });
+  return welcomeFact({ owner: settings.owner, mail: settings.mail });
 }
