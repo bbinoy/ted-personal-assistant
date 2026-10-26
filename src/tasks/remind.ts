@@ -99,7 +99,7 @@ export function reminderFacts(waiting: readonly { item: Item; fireAt: number }[]
   const at = (ms: number): string => showLocal(`${localOf(ms, o.zone).date}T${localOf(ms, o.zone).time}`, today);
   const tag = (it: Item): string => [o.group && it.assignee ? `for ${it.assignee}` : "", duePhrase(it, o.now, o.zone), it.urgent ? "URGENT: may break quiet hours, set urgent" : ""].filter(Boolean).join("; ");
   const out: string[] = [];
-  if (waiting.length) out.push(`Reminders due now (the person asked to be reminded: say each one in this look's message, in your own words${o.group ? ", naming who it is for" : ""}; it was due at the time given, so say so if that was a while ago):\n${waiting.map((w) => `#${w.item.id} ${w.item.title} (reminder for ${at(w.fireAt)}${tag(w.item) ? `; ${tag(w.item)}` : ""})`).join("\n")}`);
+  if (waiting.length) out.push(`Reminders due now (the person asked to be reminded: say each one in your message now, in your own words${o.group ? ", naming who it is for" : ""}; it was due at the time given, so say so if that was a while ago):\n${waiting.map((w) => `#${w.item.id} ${w.item.title} (reminder for ${at(w.fireAt)}${tag(w.item) ? `; ${tag(w.item)}` : ""})`).join("\n")}`);
   const shown = new Set(waiting.map((w) => w.item.id));
   const dueSoon = open.filter((it) => !shown.has(it.id) && it.due && parseLocal(it.due)!.date <= addDays(today, 1)).slice(0, 12);
   if (dueSoon.length) out.push(`Open items due by tomorrow or overdue (for your awareness: mention one only when it helps now and your recent posts did not already):\n${dueSoon.map((it) => `#${it.id} ${it.title} (${tag(it)})`).join("\n")}`);

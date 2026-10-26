@@ -170,19 +170,22 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - It is also the judge's standing provenance, so it holds no mail and no chat.
 - The run answers `{ message, nextCheckMinutes, urgent? }`; the next look is clamped to 10..120 minutes (`clampLook`); `[[silent]]` means nothing to say.
 
-**Facts handed to the look.** Code builds these blocks and puts them in the prompt next to the instruction (`lookPrompt`). The run decides what to say, in Ted's voice.
+**Facts handed to the run.** One builder, `factsFor(conversation, now, "look" | "chat")` (`src/heartbeat/facts.ts`), gives the look and every chat turn (owner, friend, group) the same facts for their conversation, so the same agent answers whichever run comes first. The run decides what to say, in Ted's voice. A look puts them in the prompt next to the instruction (`lookPrompt`) and its experts get them too; a chat turn gets them in front of its message (`chatTurn`, `src/run/agent.ts`), registered by `wire()`.
 
 | fact | built by | handed over |
 |---|---|---|
-| chat log tail; the look's own posts of the last 7 days | `logTail`, `ownPostsBlock` | every look |
-| held posts (quiet hours, `/quiet`, the day's cap) | `takeHeld`, `heldBlock` | when quiet is over and the cap has room; deleted only if the look ends posted or silent; nothing older than 36 h |
-| system status for the owner (shared key refused or missing, shared daily cap, a friend's or group's damaged file) | `holdFact` | held like a post |
-| the owner's own looks failing (3 in a row over 2 h awake) | `failingLooksFact` | next look; a look that works ends the streak silently |
-| reminders due, items due soon or overdue, tasks added on its own in the last 24 h | `reminderFacts`, `tasksFacts` | `task_list_facts` block |
-| meetings claimed for prep | `meetingFacts` | `PREP_MINUTES` before the start |
-| routines due, running or skipped | `routineFacts` | the instruction |
-| a friend's notes that changed on their own | `learnedFact` | after her dream |
+| the conversation's own posts of the last 7 days; tasks added on their own in the last 24 h; the owner's own looks failing (3 in a row over 2 h awake) | `ownPostsBlock`, `tasksFacts`, `failingLooksFact` | information, not claimed; a chat session is told only when it changed |
+| held posts (quiet hours, `/quiet`, the day's cap), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over and the cap has room; deleted only when the run ends well; nothing older than 36 h |
+| reminders due | `waitingReminders`, `reminderFacts` | claimed by the tick; told when the run said something (a look: or held, unless urgent) |
+| meetings claimed for prep | `waitingMeetings`, `meetingFacts` | `PREP_MINUTES` before the start; told when the run said something |
+| routines: status (due, running, delivered with the time, skipped, next) | `routineStatus` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction and it delegates to the expert |
+| a friend's notes that changed on their own | `learnedFact` | after her dream; told when the run said something or held it |
 | welcome (`welcomeStart` marks a fresh data folder in `kv`) | `takeWelcome` | the owner's first run, once ever |
+
+- **At most once.** What a run takes is pending in memory while it runs, so a chat turn and a look never get the same reminder, meeting, held post, change or routine. `done` settles it when the run ends: a look as before (held posts when it posted or stayed silent; reminders when it posted, or held and the item is not urgent; learned when it posted or held; a prep only when it posted, a routine only when its expert came back). A chat turn counts as having told when its reply carries words; a `[[silent]]` or reaction-only turn, or a failed one, settles nothing and leaves the facts for the next run (the fallback line for a reminder still comes after 30 minutes).
+- **Routines are the look's.** A chat turn sees their status (so it can answer "did my brief go out?") and never starts or records one; starting, `routine_runs` and settling stay with the look.
+- **The expert.** What the look is handed (these facts and the chat tail it reads) is appended by code to every brief it gives an expert (`delegationHook`'s `context`, `expertContext` of the look); the approval judge still reads only the look's own brief.
+- **Prompt cache.** The claimed facts and the information facts are each told to a chat session only when their text differs from what it was last told (`src/run/turncontext.ts`); the system prompt stays stable.
 
 **New mail.** The run lists the inbox and passes the ids to `seen_mail`, which returns those this conversation has not worked through; they are committed only when the look ends well.
 
@@ -196,7 +199,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 **Routines** (`src/core/routines.ts`, `src/tasks/routines.ts`). A routine is `{name, time, days, skill, email, enabled}`. The daily brief (`briefTime` 07:30, skill `daily-brief`), the evening wrap (18:30 weekdays) and the weekly review (Friday 16:30) are routines (`ROUTINE_<NAME>`, `ROUTINE_<NAME>_EMAIL`, `ROUTINE_CATCHUP_HOURS` 4).
 
 - `planRoutine` says waiting, due, running, done or skipped from the clock in the conversation's zone and the `routine_runs` record. At most one run per period; a run `started` for 45 minutes is dead and retried once. A Mac that slept through the time runs it once on waking within the catch-up window; otherwise the period is skipped and the next look tells the owner once.
-- A routine's skill is `delegate: sonnet`, so the look hands it to `expert-<skill>`; code marks it started when the look delegates and delivered or failed when the look ends. Only the owner's look has routines.
+- A routine's skill is `delegate: sonnet`, so the look hands it to `expert-<skill>`; code marks it started when the look delegates and delivered or failed when the look ends. Only the owner's look has routines, and only a look runs them.
 - The brief keeps its state in `status-<name>` notes (`write_status_note`, `src/modules/status/statusnote.ts`), sends the full brief by the mail provider (`BRIEF_EMAIL=on` for Gmail) and answers with the short chat message. Once a day its expert also sweeps the whole inbox, lists archived mail by number and reports what the dream and the looks changed in the notes.
 
 **Reminders** (`src/tasks/remind.ts`, `src/heartbeat/remindtick.ts`).
@@ -365,7 +368,8 @@ The tick and the look of every conversation.
 src/heartbeat/convretention.ts  retention rule for every assistant.db
 src/heartbeat/dbretention.ts  retention rules for instance.db
 src/heartbeat/heartbeat.ts  the free tick, sleep detection, liveness
-src/heartbeat/look.ts  a conversation's heartbeat run and its fact blocks
+src/heartbeat/look.ts  a conversation's heartbeat run
+src/heartbeat/facts.ts  the facts a look and a chat turn are handed, delivered once (factsFor)
 src/heartbeat/notices.ts  held posts, quiet hours, the cap, owner notices
 src/heartbeat/preptick.ts  claims meetings for prep: skip and night rules
 src/heartbeat/remindtick.ts  claims due reminders; the fallback line

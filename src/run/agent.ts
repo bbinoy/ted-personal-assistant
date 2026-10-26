@@ -2,8 +2,8 @@ import { query, startup } from "@anthropic-ai/claude-agent-sdk";
 import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
 import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
 import { runOptionsFor, turnContext, type RunInputs } from "./runoptions.ts";
-import { markShown, unseen } from "./turncontext.ts";
-import { chatResume } from "./chatsession.ts";
+import { markShown, spoke, turnFacts, unseen } from "./turncontext.ts";
+import { chatResume, sessionTaint } from "./chatsession.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { userInput, type Picture } from "./image.ts";
 import type { Document } from "../conversation/document.ts";
@@ -30,6 +30,7 @@ export interface ProfileExtra {
   onDelegate?: (agent: string) => void; // the heartbeat run: told each accepted delegation to an expert
   seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
   signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
+  expertContext?: string; // the look's facts and chat tail, appended by code to every brief it hands an expert (delegation.ts)
   untrusted?: boolean; // the prompt itself carries a third party's words (a task made from a mail, look.ts): the judge is told from the first call
 }
 const fixed = (p: RunProvenance | undefined): RunOptions["provenance"] => p && (() => p);
@@ -80,7 +81,7 @@ export function heartbeatOptions(conv: Conversation, payer: Payer, extra: Profil
     gate: looker.own ? "ownerLook" : conv.kind === "tenant" ? "friendLook" : "look", // the owner's look goes first after a wake or a start, then friends, then groups (rungate.ts)
     unattended: true, // a look answers nobody's message: it acts when sure and asks nobody (permissions.ts UNATTENDED_SKIP), for the owner, a group and a friend alike
     ...(looker.mail && extra.seenMail ? { seenMail: extra.seenMail } : {}),
-    ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent) } } : {}),
+    ...(looker.experts ? { experts: { setup: expertSetup(looker.skills, texts.expert), onDelegate: (d) => extra.onDelegate?.(d.agent), context: () => extra.expertContext } } : {}),
   };
 }
 
@@ -103,10 +104,30 @@ async function chatTurn(conv: Conversation, inputs: RunInputs, build: TurnBuilde
   const r = chatResume(conv.convId);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const o = { ...runOptionsFor(conv, inputs), seenAt, onFirstOutput };
-  const context = unseen(conv.convId, r.resume, turnContext(conv, inputs)); // what changed since the session was last told (runoptions.ts), in front of the message
-  const input = userInput(context ? `${context}\n\n${prompt}` : prompt, pictures, documents);
-  const reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume, abortController.signal), abortController } }));
-  if (context) markShown(conv.convId, chatResume(conv.convId).resume, context); // the turn went through: the session has it now
+  // What the session is told in front of the message: what is set up and the recent notices (turnContext), the claimed facts and the information facts (heartbeat/facts.ts, the look's too), each only when it
+  // differs from what the session was last told. A claimed fact is settled when the turn ends: told if the reply said something, else left for the next run (the look or the next turn).
+  const facts = turnFacts(conv, inputs.now ?? new Date());
+  const told = [
+    [conv.convId, turnContext(conv, inputs)],
+    [`${conv.convId}:status`, facts?.status.join("\n\n")],
+    [`${conv.convId}:facts`, facts?.blocks.join("\n\n")],
+  ] as const;
+  const shown = told.flatMap(([key, text]) => {
+    const fresh = unseen(key, r.resume, text);
+    return fresh ? [{ key, text: fresh }] : [];
+  });
+  if (facts?.untrusted && shown.some((s) => s.key.endsWith(":status"))) sessionTaint(conv.convId, r.resume).mark(); // (the session now holds a mail's words: the judge is told from here on)
+  const input = userInput(shown.length ? `${shown.map((s) => s.text).join("\n\n")}\n\n${prompt}` : prompt, pictures, documents);
+  let reply: AgentReply;
+  try {
+    reply = await runWarmOrCold(conv, o, r, input, (abortController) => (io.query ?? query)({ prompt: input, options: { ...buildOptions(approveIn(conv.key), o, r.resume, abortController.signal), abortController } }));
+  } catch (e) {
+    facts?.done({ ended: false, said: false, abandoned: true });
+    throw e;
+  }
+  for (const s of shown) markShown(s.key, chatResume(conv.convId).resume, s.text); // the turn went through: the session has it now
+  const said = spoke(reply.text);
+  facts?.done({ ended: said, said, abandoned: !said });
   return reply;
 }
 

@@ -7,7 +7,6 @@ import { readNotes } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
 import { importOffer } from "../modules/tasks/taskfacts.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
-import { takeWelcome } from "../core/welcome.ts";
 import { chatContext, chatSystem, FIRST_CONTACT, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, groupTools, toolsFor } from "../policy/capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
@@ -84,11 +83,11 @@ const SHAPES: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) =>
 
 // What changes between two turns of a conversation and so is NOT in its system prompt (a spare process is built from the system prompt, and a resumed session is
 // cached from it on: any change would throw both away): told at the start of the turn's message instead, and only when it differs from what the session was last
-// told (turncontext.ts). The same hook for every kind; a group has nothing of the sort.
+// told (turncontext.ts). The same hook for every kind; a group has nothing of the sort. (The facts that a look gets too, held posts to a due routine, are handed to the turn by agent.ts from heartbeat/facts.ts.)
 const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) => string | undefined> = {
   owner: () => {
     const notes = readNotes();
-    return chatContext({ welcome: takeWelcome(), missing: missingSetup(notes), pings: recentNotices(), tasks: importOffer(OWNER_KEY, notes.some((n) => n.file.startsWith("setup-task"))) });
+    return chatContext({ missing: missingSetup(notes), pings: recentNotices(), tasks: importOffer(OWNER_KEY, notes.some((n) => n.file.startsWith("setup-task"))) });
   },
   group: () => undefined,
   // Her first turn after the owner let her in (tenantrun.ts marks it with the first reply): she is new here. (Her mail is read by her heartbeat run and her tools when she asks: there is no digest to show.)

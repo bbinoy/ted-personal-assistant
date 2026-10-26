@@ -2,6 +2,8 @@ import { capNoticesTo } from "../core/capnotice.ts";
 import { setApprovers } from "../approvals/permissions.ts";
 import { keyNotices } from "../tenants/keynotice.ts";
 import { holdFact, ownerNotices } from "./notices.ts";
+import { factsFor } from "./facts.ts";
+import { turnFactsFrom } from "../run/turncontext.ts";
 import { removeFriend } from "../conversation/tenantremoval.ts";
 import { tenantHooks } from "../tenants/tenanttools.ts";
 
@@ -25,6 +27,7 @@ export function wire(ctx: AppContext): void {
   keyNotices.sendTo(holdFact); // (the owner's own look can run on the login: a fact for it, never a ping at night)
   capNoticesTo(holdFact);
   ownerNotices.sendTo(ctx.notifyOwner);
+  turnFactsFrom((conv, now) => factsFor(conv, now, "chat")); // every chat turn gets the facts a look gets (facts.ts)
   tenantHooks.sendFirst = ctx.sendFirst;
   tenantHooks.drop = ctx.dropTenant;
   tenantHooks.remove = removeFriend;
