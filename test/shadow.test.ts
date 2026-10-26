@@ -550,13 +550,12 @@ test("shadowActive fails closed: a conversation whose database was found damaged
   });
 });
 
-test("a once-only guard (the first week's batch guard, the approval inbox's exact guard) lets a recorded call through ONCE per run: the model calling it twice does not run it twice", async () => {
-  const { exactGuard } = await import("../src/approvals/pendingexec.ts");
+test("a once-only guard (the first week's batch guard) lets a recorded call through ONCE per run: the model calling it twice does not run it twice", async () => {
   const prev = s.autoApprove;
   s.autoApprove = "auto";
   try {
     const call = { tool: `${MB}archive_conversation`, input: { conversationId: "once-1" } };
-    for (const guard of [batchGuard([call], "background"), exactGuard(call, "background")]) {
+    for (const guard of [batchGuard([call], "background")]) {
       const can = makeCanUseTool(async () => ({ approved: false }), "background", undefined, autoJudge as never, guard, undefined, false, { provenance: () => ({ kind: "standing", task: "approved" }) as never, conversation: `once-${Math.random()}` });
       assert.equal(((await can(call.tool, call.input, opts)) as Out).behavior, "allow");
       const again = (await can(call.tool, { ...call.input }, opts)) as Out;

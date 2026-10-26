@@ -16,7 +16,6 @@ const { clearQuiet, isQuiet, quietValue, setQuiet } = await import("../src/conve
 const { mayRun, isRefusal } = await import("../src/tenants/payer.ts");
 const { convDbCheck } = await import("../src/doctor.ts");
 const { owner, group } = await import("../src/conversation/conversationmodel.ts");
-const { addPending, markExecuting, openItems, pruneBlocked, recordDone, sweepExpired, takeExpired } = await import("../src/approvals/pending.ts");
 const { createSeenMail, createSeenMailServer, SEEN_MAX, trimSeenMail } = await import("../src/modules/seenmail/seenmail.ts");
 const { holdQuote, holdVoiceNote, MAX_AGE_MS, NOTES_PER_CONVERSATION, pruneVoiceNotes, quotedVoiceNote, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { heldPosts, resetHeld, submitPost, MAX_HELD, noticeDamaged, ownerNotices } = await import("../src/heartbeat/notices.ts");
@@ -48,13 +47,12 @@ test("isolation: what one conversation writes is in its file only; a store asks 
   assert.equal(readSession(G2).sessionId, "two");
   assert.equal(isQuiet({ kind: "group", convId: G1 }, new Date()), true);
   assert.equal(isQuiet({ kind: "group", convId: G2 }, new Date()), false);
-  assert.equal(addPending(`k-${G1}`, { tool: "t", input: { a: 1 }, label: "l", question: "q", footer: "", source: "background" }, 1) !== undefined, true);
   holdVoiceNote(G1, { ts: Date.now(), id: "g1.aac", size: 1, by: "x", snippet: "one" });
   assert.equal(voiceNotes(G1).length, 1);
   assert.equal(voiceNotes(G2).length, 0, "a lookup in another conversation never sees it");
   // the databases are separate files: nothing of G1 is in G2's
   const other = convDb(G2);
-  for (const t of ["session", "quiet", "voice_notes", "pending_items"]) assert.equal(other.num(`SELECT COUNT(*) FROM ${t}`) > 0 && t !== "session", false, t);
+  for (const t of ["session", "quiet", "voice_notes"]) assert.equal(other.num(`SELECT COUNT(*) FROM ${t}`) > 0 && t !== "session", false, t);
   assert.equal(other.get<{ session_id: string }>("SELECT session_id FROM session")?.session_id, "two");
   assert.throws(() => convPaths("../" + G1), /not a conversation id/);
   // a conversation id never reaches another folder
@@ -230,35 +228,6 @@ test("/quiet: no row = off; '' = until /unquiet; a time; cleared", () => {
   removeConvDir(c.convId);
 });
 
-test("the approval inbox is transactional: a change that fails half way changes nothing (numbering included), and a restart finds the executing mark", () => {
-  const scope = "tenant:parity-2";
-  const circular: Record<string, unknown> = {};
-  circular.self = circular;
-  assert.throws(() => addPending(scope, { tool: "t", input: circular, label: "l", question: "q", footer: "", source: "background" }, 1));
-  assert.deepEqual(openItems(scope), []);
-  const a = addPending(scope, { tool: "t", input: { a: 1 }, label: "l", question: "q", footer: "", source: "background" }, 1);
-  assert.deepEqual(a, { n: 1, duplicate: false }, "the failed attempt did not use up a number");
-  assert.equal(markExecuting(scope, [1], 50).length, 1);
-  closeConvDb(friendConvId("parity-2")); // a crash: only the file is left
-  assert.deepEqual(openItems(scope).map((p) => [p.n, p.executing]), [[1, { at: 50 }]]);
-  removeConvDir(friendConvId("parity-2"));
-});
-
-test("the approval inbox's block list is a retention query: past its window and past 100, with a dry run that removes nothing", () => {
-  const scope = "tenant:parity-3";
-  for (let i = 0; i < 120; i++) recordDone(scope, "t", { i }, i, 1_000 + i);
-  const db = convDb(friendConvId("parity-3"));
-  assert.equal(db.num("SELECT COUNT(*) FROM pending_blocked"), 100, "bounded where it is written");
-  db.run("INSERT INTO pending_blocked (key, n, at, until, kind) VALUES ('x', 1, 1, 5, 'done')");
-  assert.equal(pruneBlocked(db, 10_000_000_000, true), 101, "dry run: all are past their window");
-  assert.equal(db.num("SELECT COUNT(*) FROM pending_blocked"), 101);
-  assert.equal(pruneBlocked(db, 10_000_000_000), 101);
-  assert.equal(db.num("SELECT COUNT(*) FROM pending_blocked"), 0);
-  sweepExpired(scope, 1);
-  assert.deepEqual(takeExpired(scope), []);
-  removeConvDir(friendConvId("parity-3"));
-});
-
 test("seen mail: the bound is a retention query, newest kept; a dry run counts only", () => {
   const c = groupConvId("parity-seen");
   const db = convDb(c);
@@ -340,14 +309,10 @@ test("damage found MID-LOOK (the idle connection was closed during a long look):
   const fresh = convDb(c);
   assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail WHERE id IN ('new-1','new-2')"), 0, "nothing of the look was written into the replacement");
   assert.equal(running.pending(), 0);
-  // the pending approvals of a follow-up run are not written either
-  assert.deepEqual(markExecuting(`tenant:midlook-1`, [1], 5), []);
-  assert.deepEqual(addPending("tenant:midlook-1", { tool: "t", input: {}, label: "l", question: "q", footer: "", source: "background" }, 1), { full: true });
-  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_items"), 0);
   clearDamage(c);
 });
 
-test("a reset WITH salvage: the mail ids and the session pointer are copied out of the damaged copy; its approvals are listed, not copied; the flag is set", async () => {
+test("a reset WITH salvage: the mail ids and the session pointer are copied out of the damaged copy, nothing else; the flag is set", async () => {
   const c = friendConvId("salvage-1");
   const db = convDb(c);
   for (let i = 0; i < 30; i++) db.run("INSERT INTO seen_mail (id) VALUES (?)", `kept-${i}`);
@@ -362,20 +327,19 @@ test("a reset WITH salvage: the mail ids and the session pointer are copied out 
   const d = convDamage(c)!;
   assert.ok(d, "marked");
   assert.deepEqual(d.salvaged, { seenMail: 30, session: true });
-  assert.deepEqual(d.pendingLost, [{ n: 7, label: "Reply to Anna" }]);
   const fresh = convDb(c);
   assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail"), 30, "the ids are preserved, in order");
   assert.equal(fresh.get<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq LIMIT 1")?.id, "kept-0");
   assert.equal(readSession(c).sessionId, "sess-kept");
-  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_items"), 0, "approvals are never copied out of a damaged file");
-  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_lost"), 1);
+  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_items"), 0, "old approval rows are never copied out of a damaged file");
   assert.ok(fresh.get("SELECT at FROM reset"), "the reset flag is set");
-  // the owner is told what is gone
+  // the owner is told once that it was set aside
   const told: string[] = [];
   ownerNotices.sendTo((t) => told.push(t));
   noticeDamaged(new Date(2026, 9, 21, 14, 0, 0));
   ownerNotices.sendTo(undefined);
-  assert.match(told.join("\n"), /#7 Reply to Anna/);
+  assert.match(told.join("\n"), /set the file aside/);
+  assert.doesNotMatch(told.join("\n"), /Reply to Anna|approval/i);
   clearDamage(c);
 });
 
@@ -464,7 +428,6 @@ test("reads make nothing: a tick over a conversation that has no database (or wa
   assert.deepEqual(readSession(ghost), { costUsd: 0 });
   assert.equal(quietValue({ kind: "tenant", convId: ghost }), undefined);
   assert.equal(voiceNotes(`tenant:ghost-1`).length, 0);
-  assert.deepEqual(openItems("tenant:ghost-1"), []);
   assert.equal(createSeenMail(ghost).unseen(["a"]).length, 1);
   assert.equal(hasConvDb(ghost), false);
   assert.equal(existsSync(dir), false, "no folder was made by any read");

@@ -4,9 +4,6 @@ import * as approvals from "../src/approvals/approvals.ts";
 import { armedCount, forgetArmed } from "../src/core/sinks/journalsink.ts";
 import { endRun } from "../src/core/events.ts";
 import { forgetSeenMail, journalable, noteDone, rememberMail } from "../src/approvals/journalrender.ts";
-import { exactGuard } from "../src/approvals/pendingexec.ts";
-import { flushPending, idle, queueCall, setPendingRuntime } from "../src/approvals/pendingflow.ts";
-import { compactFooter } from "../src/approvals/pendingbatch.ts";
 import { resetDeclined } from "../src/approvals/declined.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
@@ -121,41 +118,20 @@ test("an allowed call that never succeeds leaves the audit row and no journal li
   assert.equal(journal(key).length - before, 1);
 });
 
-test("background: queued, answered 'yes' by number, executed from the inbox: one journal line in the right conversation, 'approval #N, you answered yes'", async () => {
+test("a question nobody answers lapses SILENTLY: nothing more is said in the chat, one journal line in that conversation and an approval-expired audit row", async () => {
   reset();
   const key = fresh("owner");
   const before = journal(key).length;
-  const input = calendarCall("Team lunch");
   const tool = `${CAL}create_event`;
-  const executed: string[] = [];
-  setPendingRuntime({
-    send: async () => 5001,
-    holding: () => false,
-    now: () => new Date(),
-    // the follow-up run (run/pendingrun.ts): the real permission layer with the exact guard, then the tool "succeeds"
-    execute: async (scope, item) => {
-      const can = makeCanUseTool(async () => ({ approved: false }), "background", undefined, undefined, exactGuard(item, "background"), undefined, false, { provenance: () => ({ kind: "standing", task: "approved action" }), conversation: scope });
-      const r = (await can(item.tool, item.input, opts)) as Out;
-      if (r.behavior === "allow") {
-        executed.push(item.tool);
-        await noteDone({ conv: scope, source: "background", tool: item.tool, input: r.updatedInput ?? item.input, response: "{}" });
-      }
-      return { ran: r.behavior === "allow", line: "created" };
-    },
-  });
-  const q = queueCall(key, { tool, input, label: "📅 Create Team lunch", question: "Add the team lunch?", footer: compactFooter("📅 Create event"), source: "background" }, new Date());
-  assert.ok(q);
-  await flushPending(key, { ended: true });
-  assert.equal(journal(key).length, before, "queued is not done");
-  assert.equal((await approvals.answer("all yes", () => {}, undefined, { judge: async () => undefined, recent: () => [] }, { scope: key })).outcome, "approved");
-  await idle();
-  setPendingRuntime(undefined);
-  assert.deepEqual(executed, [tool]);
-  for (const d of ["approval-queued", "approval-queue-approved", "approval-queue-executed"]) assert.equal(audit(tool, (e) => e.decision === d).length, 1, d);
-  assert.equal(audit(tool, (e) => e.decision === "allow").length, 1, "the follow-up run's permission layer");
+  const said: string[] = [];
+  const d = await approvals.request(async (t) => (said.push(t), 6001), "📅 Create Team lunch\nWhen: Fri", { tool, input: calendarCall("Team lunch") }, undefined, { scope: key, source: "chat", question: "Add the team lunch?", minutes: 0.001 });
+  assert.equal(d.approved, false);
+  assert.equal(d.expired, true);
+  assert.deepEqual(said, ["Add the team lunch?"], "only the question itself: no expiry line in the chat");
   const lines = journal(key).slice(before);
   assert.equal(lines.length, 1);
-  assert.match(lines[0]!.text, /Why: approval #1, you answered yes\./);
+  assert.match(lines[0]!.text, /^Asked about 📅 Create Team lunch; no answer within 0 min, so nothing was done\./);
+  assert.equal(audit(tool, (e) => e.decision === "approval-expired").length, 1);
 });
 
 test("a friend: her audit rows carry no words, her journal line (in HER log, not the owner's) has them", async () => {

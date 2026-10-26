@@ -4,7 +4,6 @@ import { memoryNoticeText } from "../memory/memorynotice.ts";
 import { emitRecord } from "../core/events.ts";
 import { askOf, batchFor, isGroupConv, isStillInferred, settleChange } from "../memory/learned.ts";
 import { hasOpen } from "../approvals/approvals.ts";
-import { openItems } from "../approvals/pending.ts";
 import { findMessage } from "../core/messages.ts";
 import { briefBatchFor } from "../memory/learned.ts";
 import type { Conversation, Held } from "./conversationmodel.ts";
@@ -35,7 +34,7 @@ export async function learnedReply(conv: Pick<Conversation, "kind" | "convId" | 
   const cmd = parseLearned(m.text);
   if (!cmd) return false;
   const ts = m.quote && m.quote.timestamp !== 0 ? m.quote.timestamp : undefined;
-  if (!ts && conv.key && (hasOpen(conv.key) || openItems(conv.key).length > 0)) return false; // an open approval owns an unquoted "confirm 2" / "yes": it goes on to the approvals
+  if (!ts && conv.key && hasOpen(conv.key)) return false; // an open approval owns an unquoted "confirm 2" / "yes": it goes on to the approvals
   let batch = ts ? batchFor(conv.convId, ts, now, WITHIN_MS) : batchFor(conv.convId, undefined, now, RIGHT_AFTER_MS);
   if (!batch && ts && conv.logFile) {
     // the brief has no message id of its own for the list: a reply that quotes a BRIEF message sent after the list was made is about it

@@ -272,15 +272,13 @@ export function convDbCheck(line: Line, root: string = dataRoot()): void {
     const p = L.conv(conv);
     const marker = damaged.get(conv);
     const verdict = existsSync(p.db) ? checkConvDbFile(p.db) : "ok";
-    if (marker) line(false, `conversation database ${conv}`, `was damaged${marker.at ? ` at ${localTime(marker.at)}` : ""} and set aside as ${marker.keptAs || "assistant.db.corrupt-*"}${marker.salvaged ? ` (the mail already handled${marker.salvaged.session ? " and the session" : ""} were copied into the fresh one: ${marker.salvaged.seenMail} id(s))` : ""}; its background work (looks, dream, approvals) is stopped, chat goes on with a fresh start${marker.pendingLost?.length ? `; approvals that were waiting and are NOT restored: ${marker.pendingLost.map((x) => `#${x.n}${x.label ? ` ${x.label}` : ""}`).join("; ")}` : ""}. Restore the set-aside file with the agent stopped (or sqlite3 .recover), then run: npm run convdb -- accept ${conv}; accepting without restoring keeps the fresh start (the first look then skips what is in the inbox, it does not triage it again)`);
+    if (marker) line(false, `conversation database ${conv}`, `was damaged${marker.at ? ` at ${localTime(marker.at)}` : ""} and set aside as ${marker.keptAs || "assistant.db.corrupt-*"}${marker.salvaged ? ` (the mail already handled${marker.salvaged.session ? " and the session" : ""} were copied into the fresh one: ${marker.salvaged.seenMail} id(s))` : ""}; its background work (looks, dream) is stopped, chat goes on with a fresh start. Restore the set-aside file with the agent stopped (or sqlite3 .recover), then run: npm run convdb -- accept ${conv}; accepting without restoring keeps the fresh start (the first look then skips what is in the inbox, it does not triage it again)`);
     else if (verdict !== "ok") line(false, `conversation database ${conv}`, `${verdict}; restore ${p.db} from your backup with the agent stopped, or the agent will set it aside at its next use`);
     else if (existsSync(p.db)) {
       ok++;
       const late = lateReminders(p.db);
       if (late) line("warn", `reminders sent late in ${conv}`, `${late} in the last 7 days (the Mac asleep or the agent down at their time; npm run heartbeat-report, docs/SETUP.md "Keep it running")`);
       if (conv === OWNER_CONV) prepLine(line, p.db);
-      const lost = lostApprovals(p.db);
-      if (lost.length) line("warn", `approvals not restored in ${conv}`, `${lost.map((x) => `#${x.n}${x.label ? ` ${x.label}` : ""}`).join("; ")}; they are not run, ask again if wanted (listed for 30 days)`);
     }
   }
   if (ok > 0 || names.length === 0) line(true, "conversation databases", `${ok} assistant.db file(s), quick_check ok`);
@@ -318,18 +316,6 @@ function lateReminders(path: string): number {
   }
 }
 
-/** The approvals that could not be restored into this database (a late pending.json, a damaged file): read-only, never opens it the normal way. */
-function lostApprovals(path: string): { n: number; label: string }[] {
-  let raw: DatabaseSync | undefined;
-  try {
-    raw = new DatabaseSync(path, { readOnly: true });
-    return (raw.prepare("SELECT n, label FROM pending_lost ORDER BY seq").all() as { n: number; label: string }[]).slice(0, 20);
-  } catch {
-    return [];
-  } finally {
-    try { raw?.close(); } catch { /* closed */ }
-  }
-}
 
 export function dbCheck(line: Line, path: string = instancePaths().db): boolean {
   try {

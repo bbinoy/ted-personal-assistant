@@ -26,7 +26,7 @@ Use the date and weekdays exactly as `CURRENT TIME` gives them. Short lines, `-`
 
 1. `Today` - 1 to 4 bullets: what got done (tasks finished, anything notable in the journal). If nothing: "A quiet one." and nothing more.
 2. `Tomorrow` - the first meeting (time, title, who) and a count of the rest ("3 more"); then tasks due tomorrow by name (at most 3, then "and N more").
-3. `Still waiting on you` - open approvals ("2 approvals waiting: /approvals"), suggestions waiting for a yes ("3 suggested tasks: /tasks suggestions"), overdue tasks (count and the oldest one). Only what exists.
+3. `Still waiting on you` - open approvals, suggestions waiting for a yes ("3 suggested tasks: /tasks suggestions"), overdue tasks (count and the oldest one). Only what exists.
 
 End with nothing extra. If all three sections are empty, answer with the silent marker your brief names (nothing is sent).
 

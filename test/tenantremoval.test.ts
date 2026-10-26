@@ -17,7 +17,11 @@ const { conversationsDir, convPaths, friendConvId } = await import("../src/core/
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { recordDone, markNeedsReconnect, readDone, connectionState } = await import("../src/intake/intakelinks.ts");
 const { deleteTenantItems } = await import("../src/secrets/secrets.ts");
-const { addPending, openItems } = await import("../src/approvals/pending.ts");
+const { convDb: rowDb, peekConvDb: peekRowDb } = await import("../src/core/convdb.ts");
+const { convIdOfKey: rowConv } = await import("../src/core/convpaths.ts");
+// A row of the conversation's own database (a held post): what forgetting must take with it, and leave alone elsewhere.
+const addRow = (key: string): void => void rowDb(rowConv(key)).run("INSERT INTO held_posts (text, why) VALUES ('held', 'quiet')");
+const rowsOf = (key: string): number => peekRowDb(rowConv(key))?.num("SELECT COUNT(*) FROM held_posts") ?? 0;
 const { tenantKey } = await import("../src/core/ownerkey.ts");
 const { OpenBao } = await import("../src/secrets/openbao.ts");
 
@@ -34,7 +38,7 @@ function friend(name: string, n: number) {
   holdVoiceNote(key, { ts: Date.now(), id: `${rec.id}-note.aac`, size: 5, by: ACI(n), snippet: "secret words" });
   recordDone(rec.id, "google", [{ name: "token", chars: 3 }]);
   markNeedsReconnect(rec.id, "notion");
-  addPending(key, { tool: "mcp__mail__send", input: { to: "a@example.com" }, label: "mail", question: "q", footer: "", source: "background" }, 1000);
+  addRow(key);
   return { rec, key };
 }
 
@@ -60,7 +64,7 @@ test("removal: her folder (voices, pending approvals), voice-note index and audi
   assert.equal(voiceNotes(stay.key).length, 1);
   assert.ok(existsSync(join(attachmentsDir, `${stay.rec.id}-note.aac`)));
   assert.ok(readDone(stay.rec.id, "google"));
-  assert.equal(openItems(stay.key).length, 1, "her pending approvals");
+  assert.equal(rowsOf(stay.key), 1, "her held posts");
   assert.ok(T.tenantById(stay.rec.id));
 });
 

@@ -7,14 +7,14 @@ import { isInside } from "./contain.ts";
 import { writeFileAtomic } from "./state.ts";
 
 // <conversation>/assistant.db: the small mutable state of ONE conversation, one SQLite file in its folder (docs/ARCHITECTURE.md "assistant.db"). It replaced one little JSON file per kind of
-// state (layout 4): the resumed session, the dream's day, the posts held for quiet hours, the mail ids already worked through, /quiet, the approval inbox, the voice notes received, a friend's bookkeeping.
+// state (layout 4): the resumed session, the dream's day, the posts held for quiet hours, the mail ids already worked through, /quiet, the voice notes received, a friend's bookkeeping.
 // A conversation's state is in ITS file and nowhere else: a query cannot reach another conversation's rows because it has no connection to them (test/convdb.test.ts), and forgetting a conversation is
 // still deleting its folder (the connection is closed first: forgetConv / closeConvDb).
 //
-//   session / dream / hold / quiet / friend / pending_state   ONE row each (id = 1): a CHECK keeps it so
+//   session / dream / hold / quiet / friend / pending_state (old)   ONE row each (id = 1): a CHECK keeps it so
 //   held_posts       the posts quiet hours or the day's cap kept back, oldest first (bounded where they are written)
 //   seen_mail        the mail ids the heartbeat has worked through, oldest first: seq orders them, the bound (2000) is a query (trimSeenMail), also a retention rule
-//   pending_*        the approval inbox: items (numbered, never reused), the ones expired and not yet told, the calls not to park again for a while
+//   pending_*        the old approval inbox: nothing writes it since 26 Oct (unattended runs never ask); the nightly retention empties it (heartbeat/convretention.ts)
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   friend_notices   a friend's fixed notices (kind -> last time)
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
@@ -24,10 +24,10 @@ import { writeFileAtomic } from "./state.ts";
 //   suggestion_asks / group_remind_noted   which suggested items each "💡 ..." message listed (message ts -> number -> item: a 👍 or "1 yes" quoting it answers for them), and which group members were told once that
 //                    a reminder said in the group is the group's (src/tasks/suggest.ts). Small, pruned after 60 days.
 //
-// NOT rebuildable. Losing the approval inbox or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
+// NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
 // and a fresh empty database starts, so CHAT KEEPS WORKING (a fresh session; the person can still talk to it). While the marker is there that conversation's BACKGROUND work is refused (payer.ts mayRun:
-// the heartbeat look, the dream, quiet compaction, approved actions), the owner is told once a day (heartbeat/notices.ts) and the doctor fails with the file's name. A person restores the set-aside file
+// the heartbeat look, the dream, quiet compaction, approved archives), the owner is told once a day (heartbeat/notices.ts) and the doctor fails with the file's name. A person restores the set-aside file
 // (or `sqlite3 .recover`) and deletes the marker; deleting only the marker accepts the fresh start. The other conversations are not affected: each has its own file.
 //
 // How to add state (version 3, the tasks, is the example): append ONE numbered step to CONV_SCHEMA below (version n+1, `CREATE TABLE ...`). Steps run in order, each in
@@ -411,7 +411,6 @@ const IDLE_MS = 10 * 60_000;
 export interface Damage {
   at: string; // ISO
   keptAs: string; // the set-aside file
-  pendingLost?: { n: number; label: string }[]; // approvals that were waiting in the damaged file and are NOT copied (a damaged page could replay damaged arguments): the owner can ask again
   salvaged?: { seenMail: number; session: boolean }; // what was copied out of the damaged file into the fresh one
 }
 
@@ -424,7 +423,6 @@ export const convDamage = (c: ConvRef | ConvPaths): Damage | undefined => {
     return {
       at: typeof m.at === "string" ? m.at : "",
       keptAs: typeof m.keptAs === "string" ? m.keptAs : "",
-      ...(Array.isArray(m.pendingLost) ? { pendingLost: m.pendingLost } : {}),
       ...(m.salvaged ? { salvaged: m.salvaged } : {}),
     };
   } catch {
@@ -480,7 +478,7 @@ function attempt(p: ConvPaths, conv: ConvId): Db {
   return openDb(p.db, { migrations: CONV_SCHEMA, rebuildable: false, verify: true, label: `${conv}'s assistant.db` });
 }
 
-/** Copies what can still be read out of the damaged copy into the fresh database, table by table, each in its own try/catch: the mail ids (so the inbox is not triaged again) and the session pointer. Approvals are NOT copied: they are listed. */
+/** Copies what can still be read out of the damaged copy into the fresh database, table by table, each in its own try/catch: the mail ids (so the inbox is not triaged again) and the session pointer. */
 function salvage(kept: string, fresh: Db, damage: Damage): void {
   let raw: DatabaseSync | undefined;
   try {
@@ -512,17 +510,7 @@ function salvage(kept: string, fresh: Db, damage: Damage): void {
     } catch {
       /* not readable */
     }
-    const lost: { n: number; label: string }[] = [];
-    try {
-      for (const r of raw.prepare("SELECT n, label FROM pending_items ORDER BY n").all() as { n: unknown; label: unknown }[]) if (typeof r.n === "number") lost.push({ n: r.n, label: typeof r.label === "string" ? r.label.slice(0, 120) : "" });
-    } catch {
-      /* not readable */
-    }
     damage.salvaged = { seenMail: keep.length, session };
-    if (lost.length) {
-      damage.pendingLost = lost.slice(0, 40);
-      for (const l of damage.pendingLost) fresh.run("INSERT INTO pending_lost (n, label, why, at) VALUES (?, ?, 'damaged', ?)", l.n, l.label, damage.at);
-    }
   } finally {
     try { raw.close(); } catch { /* closed */ }
   }

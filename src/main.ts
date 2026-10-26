@@ -7,7 +7,7 @@ import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat, runPrep } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
-import { approveIn, renderDetails } from "./approvals/permissions.ts";
+import { approveIn } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
@@ -39,17 +39,15 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { recoverAtStart, setPendingRuntime } from "./approvals/pendingflow.ts";
 import { setShadowRuntime } from "./approvals/shadow.ts";
 import { runShadow } from "./run/shadowrun.ts";
 import { welcomeOnce } from "./core/welcome.ts";
 import { setSuggestRuntime } from "./tasks/suggest.ts";
 import { setLearnedRuntime } from "./conversation/learned.ts";
-import { runPending } from "./run/pendingrun.ts";
 import { holdingNow } from "./heartbeat/notices.ts";
-import { isRefusal, mayRun } from "./tenants/payer.ts";
-import { OWNER_KEY, isTenantKey, tenantKey } from "./core/ownerkey.ts";
-import { ensureOwner, learnOwnerAci, listTenants, zoneOf, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { mayRun } from "./tenants/payer.ts";
+import { OWNER_KEY, isTenantKey } from "./core/ownerkey.ts";
+import { ensureOwner, learnOwnerAci, zoneOf, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
 import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
@@ -96,16 +94,8 @@ wire({
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });
-// The approval inbox (approvals/pendingflow.ts): what an unattended run needed a yes for is asked as one numbered message in that conversation, held in quiet hours (notices.ts), and
-// an approved call is run exactly as recorded in a small follow-up run (run/pendingrun.ts). The conversation is found from the key the item was parked under.
+// The conversation a key names (the senders below are handed conversations by key).
 const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
-setPendingRuntime({
-  send: (scope, text) => out.reply(text, { plain: true, kind: "approval", ...(scope === OWNER_KEY ? {} : { target: convOf(scope).target }) }),
-  holding: (scope, now) => holdingNow(convOf(scope), now),
-  details: (scope, item) => renderDetails(scope, item.tool, item.input),
-  canRun: (scope) => { const r = mayRun(convOf(scope), "approved action"); return isRefusal(r) ? r.refused : undefined; },
-  execute: (scope, item) => runPending(convOf(scope), item, (conv, what) => mayRun(conv, what)),
-});
 // The "💡" message of task suggestions (tasks/suggest.ts): one per look, its own message kind ("suggestions") in the conversation's chat, held in quiet hours.
 setSuggestRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "suggestions", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // The first week's archive proposals (approvals/shadow.ts): one message per look listing what the look would have archived, held in quiet hours; an approved batch is run exactly as recorded in a small follow-up run (run/shadowrun.ts).
@@ -265,7 +255,6 @@ if (reorganised) void say(reorganised).then(() => markOwnerTold(settings.dataDir
 const late = lateNotice(settings.dataDir); // files an old version wrote after the move: merged or set aside (core/migrate.ts reconcile), named to her once
 if (late) void say(late).then(() => markLateTold(settings.dataDir)).catch(() => {});
 replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
-void recoverAtStart([OWNER_KEY, ...(settings.tenants ? listTenants().filter((r) => r.status === "active").map((r) => tenantKey(r.id)) : [])]); // an approved item whose run was cut short by the stop is told once (pendingflow.ts recoverStuck)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));

@@ -167,7 +167,7 @@ const isNight = (now: Date, zone: string): boolean => inQuietHours(now, settings
 // Is this conversation being left alone right now: the quiet window, or its own /quiet (conversation/quiet.ts)?
 const holding = (conv: Conversation, now: Date, zone: string): boolean => isNight(now, zone) || isQuiet(conv, now);
 
-// Is the conversation being left alone right now (the quiet window, or its /quiet)? The approval inbox (approvals/pendingflow.ts) keeps its own batch back by this, never in the held posts.
+// Is the conversation being left alone right now (the quiet window, or its /quiet)? What a look offers in a message of its own (shadow.ts, learned.ts) waits by this.
 export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneFor(conv));
 
 // A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).
@@ -302,8 +302,7 @@ export function noticeDamaged(now: Date = new Date()): number {
   for (const d of damagedConvs()) {
     if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    const lost = d.pendingLost?.length ? ` Approvals that were waiting there are not restored (they could have been damaged), ask me again if you still want them: ${d.pendingLost.slice(0, 8).map((p) => `#${p.n}${p.label ? ` ${p.label}` : ""}`).join("; ")}${d.pendingLost.length > 8 ? "; ..." : ""}.` : "";
-    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream, approvals) is stopped until you check: run npm run doctor on the Mac.${lost}`, now);
+    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now);
     n++;
   }
   return n;

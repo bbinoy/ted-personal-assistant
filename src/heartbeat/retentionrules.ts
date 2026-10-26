@@ -106,21 +106,14 @@ export function auditRule(L: () => Layout, days: () => number): RetentionRule {
 
 // ---- signal-cli's saved attachments ----
 
-/** The attachment file names something still needs: a voice note or audio file in any conversation's assistant.db inside its own look-back, and any name mentioned in a pending approval. */
-export function neededAttachments(L: Layout, now: number, candidates: ReadonlySet<string>): Set<string> {
+/** The attachment file names something still needs: a voice note or audio file in any conversation's assistant.db inside its own look-back. */
+export function neededAttachments(L: Layout, now: number): Set<string> {
   const needed = new Set<string>();
   for (const conv of names(L.conversations)) {
     if (!isConvId(conv)) continue;
-    if (!existsSync(L.conv(conv).db)) continue; // (a conversation with no database has no voice notes and no approvals; none is made here)
+    if (!existsSync(L.conv(conv).db)) continue; // (a conversation with no database has no voice notes; none is made here)
     const db = convDbAt(L.root, conv);
     for (const n of db.all<{ id: string; ts: number }>("SELECT id, ts FROM voice_notes")) if (now - n.ts < VOICE_SOURCE_WINDOW_MS) needed.add(n.id);
-    // every text of the approval inbox as one string: whatever shape an item has, a mention keeps the file
-    const pending = [
-      ...db.all<Record<string, unknown>>("SELECT tool, input, label, question, footer, details_hash FROM pending_items").flatMap((r) => Object.values(r)),
-      ...db.all<{ label: string }>("SELECT label FROM pending_expired").map((r) => r.label),
-      ...db.all<{ key: string }>("SELECT key FROM pending_blocked").map((r) => r.key),
-    ].join("\n");
-    for (const c of candidates) if (pending.includes(c)) needed.add(c);
   }
   return needed;
 }
@@ -141,9 +134,9 @@ export function signalAttachmentRule(L: () => Layout, dir: () => string, days: (
           return false;
         }
       });
-      const needed = neededAttachments(L(), now.getTime(), new Set(old));
+      const needed = neededAttachments(L(), now.getTime());
       const results = old.filter((f) => !needed.has(f)).map((f) => ({ removed: 1, freedBytes: drop(join(d, f), o) }));
-      return { ...total(results), notes: `attachments older than ${days()} days not needed by a voice note or a pending item${needed.size ? ` (${old.filter((f) => needed.has(f)).length} kept)` : ""}` };
+      return { ...total(results), notes: `attachments older than ${days()} days not needed by a voice note${needed.size ? ` (${old.filter((f) => needed.has(f)).length} kept)` : ""}` };
     },
   };
 }
@@ -322,5 +315,5 @@ export function registerFileRules(): void {
     tmpRule(() => tmpdir(), () => settings.tmpSweepHours),
   ]) registerRetention(r);
   registerDbRules(); // the tables of instance.db (looks, spend, notices; payments only if PAYMENTS_KEEP_YEARS is set)
-  registerConvRules(); // the bounded tables of every conversation's assistant.db (seen mail, held posts, the approval inbox's block list, voice notes)
+  registerConvRules(); // the bounded tables of every conversation's assistant.db (seen mail, held posts, the old approval inbox, voice notes)
 }

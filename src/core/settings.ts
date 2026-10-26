@@ -242,16 +242,13 @@ export function loadSettings(env: Env) {
     // it ends when 3 days have passed AND the person has a triage note, at the latest after 14 days. on: always propose. off: archive as the notes say from the first look.
     shadowMode: oneOf(env, "SHADOW_MODE", "auto", ["auto", "on", "off"] as const),
 
-    // How long an approval waits before it counts as declined: one asked in a chat turn, and one asked by an unattended run.
+    // How long a question asked in a chat turn waits before it lapses (silently: a journal line, approvals.ts). Unattended runs ask nobody; a stranger's registration waits a day.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
-    backgroundApprovalTimeoutMinutes: num(env, "BACKGROUND_APPROVAL_TIMEOUT_MINUTES", 120, 1, 2880),
-    pendingActionDays: num(env, "PENDING_ACTION_DAYS", 3, 1, 30), // an unattended run's call that needed approval waits this long in the approval inbox (approvals/pending.ts); then it is dropped with one line
     suggestionsPerLook: num(env, "SUGGESTIONS_PER_LOOK", 5, 1, 20), // an unattended run (a heartbeat look) may suggest at most this many tasks per run (modules/tasks/tasktools.ts); more are refused with a sentence, the next look sees them again
     suggestionDays: num(env, "SUGGESTION_DAYS", 7, 1, 90), // a suggested task nobody confirms or rejects is dropped (history: rejected by expiry) after this many days (tasks/suggest.ts); never deleted
 
     // The longest one model run may take on the wall clock (src/run/ceiling.ts), so a hung turn cannot block its conversation until a
-    // restart. Chat: the owner's chat and every group. Background: the heartbeat run and its expert; the time a background run
-    // spends waiting for an approval is not counted, so BACKGROUND_APPROVAL_TIMEOUT_MINUTES never cuts into it.
+    // restart. Chat: the owner's chat and every group. Background: every other run without a ceiling of its own (a heartbeat look has HEARTBEAT_TIMEOUT_MINUTES below).
     compactMaxMinutes: num(env, "COMPACT_MAX_MINUTES", 10, 1, 120), // a compaction that takes longer is abandoned (chatsession.ts); the failure backoff applies
     runMaxMinutesChat: num(env, "RUN_MAX_MINUTES_CHAT", 40, 1, 1440),
     runMaxMinutesBackground: num(env, "RUN_MAX_MINUTES_BACKGROUND", 180, 1, 2880),

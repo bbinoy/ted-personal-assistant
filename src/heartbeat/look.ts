@@ -26,7 +26,6 @@ import { RunStopped, RunTimeout } from "../run/ceiling.ts";
 import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen, openCount } from "../approvals/approvals.ts";
-import { flushPending, waitingCount } from "../approvals/pendingflow.ts";
 import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
 import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
@@ -189,7 +188,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const shadow = looker.mail && shadowActive(conv, now) ? createShadowRun(conv.key) : undefined; // the gentle first week (approvals/shadow.ts): this look proposes its archives
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     // The routines besides the brief (core/routines.ts): only the owner's own look has them (a friend's or a group's skills never include them), and only with experts to delegate to.
-    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key) + waitingCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true, true) } : {}) }) : undefined;
+    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true, true) } : {}) }) : undefined;
     const started = new Set<string>(); // the routines this look handed to their expert
     const finished = new Set<string>(); // those whose expert's result came back with something in it
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
@@ -249,9 +248,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       inflight.delete(overtaken);
       lease?.end();
     }
-    // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
-    await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
-
     // The first week's archives, offered as ONE message ("I'd archive these 14"), then, once, that the week is over (approvals/shadow.ts). Held in quiet hours; never throws.
     if (looker.mail) {
       await offerShadow(conv, shadow?.proposed() ?? [], now);
@@ -260,7 +256,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
 
     if (conv.kind === "tenant") await offerLearned(conv, now); // a friend's "what I learned overnight", when her dream left it held (conversation/learned.ts)
     if ((await offerSuggestions(conv, now, looker.zone)) === "sent") countPosts(conv, 1, now); // one per look; it counts toward MAX_UNPROMPTED_PER_DAY but is never held by it (the answer needs the message itself)
-    // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
+    // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), held in quiet hours
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once

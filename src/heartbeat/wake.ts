@@ -12,7 +12,6 @@ import { settings } from "../core/settings.ts";
 import { runGate } from "../core/rungate.ts";
 import { noticeBudget, noticeDamaged, releaseHeld } from "./notices.ts";
 import { closeIdleConvDbs } from "../core/convdb.ts";
-import { flushPending } from "../approvals/pendingflow.ts";
 import { fireReminders } from "./remindtick.ts";
 import { startPreps, type PrepDeps } from "./preptick.ts";
 
@@ -157,7 +156,6 @@ export function createWakeups(deps: WakeDeps) {
         busy.add(conv.key);
         const mine = epoch;
         try {
-          await flushPending(conv.key, { ended: false }).catch((e) => console.error("wake: approval inbox:", (e as Error).message)); // parked approvals: asked once quiet hours end, expired ones told, a cut-short run noticed, even with no look
           await releaseHeld(pipeline, conv, clock()); // what quiet hours or the day's cap held back goes out now, as one message
           if (!started.has(conv.key)) {
             started.add(conv.key);

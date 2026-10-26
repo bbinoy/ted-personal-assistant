@@ -15,7 +15,7 @@ import type { Proposed } from "./shadowgate.ts";
 //   * the look's end offers everything collected as ONE message, "I'd archive these 14: 👍 to archive all, or reply '3,5 keep'" (offerShadow). Which message listed which mail is written down here
 //     (shadow_proposals in the conversation's assistant.db). Then CODE, not a model, reads the answer (conversation/shadowreplies.ts, shadowparse.ts): a 👍 archives every listed mail, "3,5 keep"
 //     leaves those and archives the rest. The archives run EXACTLY as the look recorded them, in one small follow-up run whose permission layer allows those calls and no others (shadowexec.ts,
-//     run/shadowrun.ts), like the approval inbox's replay: the model never re-creates a call.
+//     run/shadowrun.ts): the model never re-creates a call.
 //   * WHEN IT ENDS (SHADOW_MODE=auto): when 3 days have passed since the conversation's first message AND the person has at least one confirmed triage note ("what to archive": the thing the first
 //     week exists to collect), and at the latest after 14 days whatever the notes say. Once ended it stays ended (it is written down, deleting notes does not bring it back) and the person is told
 //     once. SHADOW_MODE=on never ends, off never starts. An install that is already past its first week (a mail log, or a conversation older than 14 days) is adopted silently, as ended.

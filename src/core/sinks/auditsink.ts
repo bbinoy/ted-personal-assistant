@@ -28,6 +28,8 @@ export function project(e: Event): AuditRow[] {
       return [row(e.tool, e.decision, e.source, e.meta, false)];
     case "task":
       return [row("task", e.state, e.source, { id: e.id }, isFriend(e))];
+    case "expired":
+      return [row(e.tool, "approval-expired", e.source, { wait: e.wait, label: e.label }, isFriend(e))];
     case "record":
       return [row(e.tool, e.decision, e.source, e.meta, false)];
     default:
