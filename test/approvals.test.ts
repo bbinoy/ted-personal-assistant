@@ -70,7 +70,7 @@ test("three chat approvals: answered independently by reaction and quoted reply"
   assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "none" });
 });
 
-test("timeouts per kind; the message has no header or footer", async (t) => {
+test("a question lapses after APPROVAL_TIMEOUT_MINUTES, a background one too, both SILENTLY; the message has no header or footer", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   sent.length = 0;
   let chatDone = false;
@@ -83,15 +83,10 @@ test("timeouts per kind; the message has no header or footer", async (t) => {
   assert.equal(chatDone, false);
   t.mock.timers.tick(1);
   assert.deepEqual(await chat, { approved: false, expired: true });
-  assert.equal(bgDone, false);
-  assert.equal(answerReaction("👍", 1401), "ignored"); // expired
-  t.mock.timers.tick(105 * 60_000 - 1);
-  await Promise.resolve();
-  assert.equal(bgDone, false);
-  t.mock.timers.tick(1);
   assert.deepEqual(await bg, { approved: false, expired: true });
-  assert.equal(sent.length, 3); // a chat question expires silently; a background one says so, once, with the code's label
-  assert.equal(sent[2], "⏳ Didn't hear back, so I left it: Create event 1402. Say 'do it' if you still want it.");
+  assert.equal(bgDone, true);
+  assert.equal(answerReaction("👍", 1401), "ignored"); // expired
+  assert.equal(sent.length, 2, "only the two questions: an expiry says nothing in the chat (a journal line, journalconsistency.test.ts)");
 });
 
 test("a late yes to a question that timed out is told so, and runs nothing", async (t) => {

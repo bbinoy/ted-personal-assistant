@@ -5,7 +5,6 @@ import { readAudit } from "../src/core/audit.ts";
 import { makeCanUseTool, UNATTENDED_SKIP, isUnattended, type CallGuard } from "../src/approvals/permissions.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { noteDeclined } from "../src/approvals/declined.ts";
-import { waitingCount } from "../src/approvals/pendingflow.ts";
 import { heartbeatOptions, prepOptions } from "../src/run/agent.ts";
 import { buildOptions } from "../src/run/agentrun.ts";
 import { owner } from "../src/conversation/conversationmodel.ts";
@@ -47,7 +46,6 @@ test("the owner's look: the judge's ask is a skip with the fixed text and one au
   assert.deepEqual(res, { behavior: "deny", message: UNATTENDED_SKIP });
   assert.equal(UNATTENDED_SKIP, "Not done: not certain enough to act without asking, and background work never asks. Leave it; do not mention it unless it truly matters, then say it in your message as information, not as a question.");
   assert.deepEqual(r.asked, []);
-  assert.equal(waitingCount(r.conversation), 0, "no approval-inbox item");
   const rows = skips(r);
   assert.equal(rows.length, 1);
   assert.deepEqual([rows[0]!.tool, rows[0]!.source, rows[0]!.meta], [CAL, "background", { skip: "judge" }], "tool and reason class, no words");

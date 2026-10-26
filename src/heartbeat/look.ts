@@ -26,16 +26,17 @@ import { RunStopped, RunTimeout } from "../run/ceiling.ts";
 import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen, openCount } from "../approvals/approvals.ts";
-import { flushPending, waitingCount } from "../approvals/pendingflow.ts";
-import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
+import { markShadowEndedTold, offerShadow, shadowActive, shadowEndedFact } from "../approvals/shadow.ts";
 import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { countPosts, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
+import { failingLooksFact, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
 import { oneLine } from "./digest.ts";
 import { gateSink } from "../modules/send/send.ts";
-import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
+import { tasksFacts } from "../tasks/render.ts";
+import { reminderFacts } from "../tasks/remind.ts";
+import { activeItems } from "../tasks/store.ts";
+import { afterLook, remindersWaiting, waitingReminders } from "./remindtick.ts";
 import { offerLearned } from "../conversation/learned.ts";
-import { zoneOf } from "../tenants/tenants.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
 
@@ -49,6 +50,7 @@ import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } f
 // What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
 export interface RunExtra {
+  untrusted?: boolean;
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
@@ -64,7 +66,11 @@ export interface HeartbeatDeps {
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
   notesChangedAt: (dir: string) => number;
+  clocks?: { wall: () => number; mono: () => number }; // (tests) the wall clock and the monotonic one (on macOS it stands still while the Mac sleeps)
 }
+
+// A run whose wall time exceeds its monotonic time by more than this spanned a sleep: whatever it ended with (a timeout, a dead connection) is the sleep's, not a failure.
+export const SLEEP_DRIFT_MS = 60_000;
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -109,7 +115,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
   });
 }
 
-// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
+// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock, the task list's facts, the owner's failing-looks fact; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
 // (they quote what was posted, which can carry words of a mail or a page).
 export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string, ...facts: string[]): string =>
   [clockLine(now, zone), instruction, ...facts, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].filter(Boolean).join("\n\n");
@@ -155,6 +161,7 @@ export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: numb
 
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
+  const clocks = deps.clocks ?? { wall: Date.now, mono: () => performance.now() };
   const history = new Map<string, LookHistory>(); // per conversation, in memory (a restart starts fresh)
   const inflight = new Set<AbortController>(); // the looks that are running now (abortAll)
   const slept = new WeakSet<AbortController>(); // those stopped because the Mac slept
@@ -162,9 +169,9 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   // One look of one conversation. Returns what happened (for the log and tests).
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
-    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !overnightWaiting(conv, now)) return "not-due"; // (held posts of an earlier day: due once quiet ends)
-    expireSuggestions(conv.key, now.getTime(), zoneOf(conv)); // (tasks/suggest.ts: a suggestion nobody answered in SUGGESTION_DAYS is dropped, kept in the history)
-    if (!hasSomethingToLookAt(conv, now)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
+    const looker0 = lookerOf(conv);
+    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !overnightWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv))) return "not-due"; // (held posts of an earlier day: due once quiet ends; a reminder that came due: at once)
+    if (!hasSomethingToLookAt(conv, now) && !(looker0.tasks && waitingReminders(conv).length)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
     // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
     // a message to the conversation OVERTAKES it: the look is called off unless it waits on an approval, and a closing message-only post is dropped when news came meanwhile.
@@ -189,12 +196,19 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const shadow = looker.mail && shadowActive(conv, now) ? createShadowRun(conv.key) : undefined; // the gentle first week (approvals/shadow.ts): this look proposes its archives
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     // The routines besides the brief (core/routines.ts): only the owner's own look has them (a friend's or a group's skills never include them), and only with experts to delegate to.
-    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key) + waitingCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true, true) } : {}) }) : undefined;
+    const routines = looker.own && looker.experts ? routineFacts(conv.convId, settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`)), now, looker.zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), ...(settings.mail ? { emailHow: () => mailSlot()!.brief.how(true, true) } : {}) }) : undefined;
     const started = new Set<string>(); // the routines this look handed to their expert
     const finished = new Set<string>(); // those whose expert's result came back with something in it
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
     const overnight = overnightBlock(takeOvernight(conv, now), now, looker.zone); // (handed over once: taken out of the held posts here)
+    const tasks = looker.tasks ? tasksFacts(conv.key, now.getTime(), looker.zone) : { text: "", fromMail: false }; // what was added to the list on its own (tasks/render.ts): the look says it, if no look has yet
+    const handed = looker.tasks ? waitingReminders(conv) : []; // reminders that came due (remindtick.ts): this look says them; only once it has are they journaled
+    const dueFacts = looker.tasks ? reminderFacts(handed, activeItems(conv.key), { now: now.getTime(), zone: looker.zone, group: conv.kind === "group" }) : "";
+    const taskBlock = [dueFacts, tasks.text].filter(Boolean).join("\n\n");
+    let held = false; // something this look said was held for later (quiet hours, the day's cap)
+    const failing = failingLooksFact(conv);
+    const weekOver = looker.mail && !shadow ? shadowEndedFact(conv) : ""; // the gentle first week just ended: the look tells it once, in its words // the owner's own looks have failed for a long awake stretch (notices.ts): a fact this look may mention, never a fixed message
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -205,6 +219,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       else console.log(`heartbeat: a message came while the ${conv.kind} look ran; it is not called off (${h.preempted} preempted in a row, or the last full look is old)`);
     };
     inflight.add(overtaken);
+    const wall0 = clocks.wall();
+    const mono0 = clocks.mono();
     const lease = pipeline.lease?.(conv, callOff, () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
     try {
       reply = await pipeline.sendWhile(
@@ -213,11 +229,13 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           // What the run sends with the send tool is held like its final answer (quiet hours, the day's cap) unless it says urgent (notices.ts).
           gateSink(conv.key, (text, urgent) => {
             if (submitPost(conv, text, urgent, now) !== "held") return undefined;
+            held = true;
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing, weekOver), {
             provenance: { kind: "standing", task: instruction },
+            ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
             ...(shadow ? { shadow: shadow.gate } : {}),
             signal: overtaken.signal,
@@ -249,21 +267,14 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       inflight.delete(overtaken);
       lease?.end();
     }
-    // What the run needed a yes for did not hold it up (approvals/pendingflow.ts): the look is over, so it is asked now, as one numbered message (held in quiet hours).
-    await flushPending(conv.key, { ended: true }).catch((e) => console.error("heartbeat: could not ask the parked approvals:", (e as Error).message));
-
-    // The first week's archives, offered as ONE message ("I'd archive these 14"), then, once, that the week is over (approvals/shadow.ts). Held in quiet hours; never throws.
-    if (looker.mail) {
-      await offerShadow(conv, shadow?.proposed() ?? [], now);
-      if (!shadow) await tellShadowEnded(conv, now);
-    }
+    // The first week's archives, offered as ONE message ("I'd archive these 14"; approvals/shadow.ts). Held in quiet hours; never throws. (That the week is over is a fact in the prompt.)
+    if (looker.mail) await offerShadow(conv, shadow?.proposed() ?? [], now);
 
     if (conv.kind === "tenant") await offerLearned(conv, now); // a friend's "what I learned overnight", when her dream left it held (conversation/learned.ts)
-    if ((await offerSuggestions(conv, now, looker.zone)) === "sent") countPosts(conv, 1, now); // one per look; it counts toward MAX_UNPROMPTED_PER_DAY but is never held by it (the answer needs the message itself)
-    // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), after the approvals' batch, held in quiet hours
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
-    const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once
+    const spannedSleep = clocks.wall() - wall0 - (clocks.mono() - mono0) > SLEEP_DRIFT_MS; // the run spanned a sleep (the tick may not have noticed it yet): a timeout or a dead connection then is the sleep's
+    const interrupted = !reply && (slept.has(overtaken) || spannedSleep); // the Mac slept: the connections are dead; a failed row, neutral for the failure tracker, due again at once
     const timedOut = !reply && failure instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
     const calledOff = !interrupted && (overtaken.signal.aborted || failure instanceof RunStopped); // a message overtook it, or the owner said /stop: not a failure
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : interrupted ? "failed" : calledOff ? "preempted" : timedOut ? "timeout" : "failed";
@@ -273,7 +284,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (answer?.message && !stale) {
       const message = answer.message;
       // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
-      if (submitPost(conv, message, answer.urgent, now, answer.needsYou) === "held") emit({ type: "notice", state: "held", conv: conv.key, text: message, source: onLogin(conv) ? "background" : "group" });
+      if (submitPost(conv, message, answer.urgent, now, answer.needsYou) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: onLogin(conv) ? "background" : "group" });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);
@@ -290,10 +301,12 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     // Delivered only when the expert's result came back; an attempt is given back only when nothing of it reached the owner (no result, no send, no email): else the next look would send it again.
     settleRoutines(conv.convId, started, finished, { calledOff: outcome === "preempted" || interrupted, sends: sent + selfMailed }, Date.now());
     if (routines?.told.length && !failed && outcome !== "preempted") markTold(conv.convId, routines.told);
-    if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now);
+    if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
     if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
+    afterLook(conv, handed, { posted: outcome === "posted", held }, Date.now(), looker.zone);
+    if (weekOver && (outcome === "posted" || held)) markShadowEndedTold(conv); // the reminders it was handed are told (and journaled) only if it said something
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
     emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });

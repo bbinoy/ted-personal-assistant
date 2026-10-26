@@ -7,7 +7,6 @@ import { answerShadow, latestProposal, listedBy, reactShadow, type Listed } from
 import { messagesSince } from "../core/messages.ts";
 import { parseShadowReply } from "../approvals/shadowparse.ts";
 import { hasOpen } from "../approvals/approvals.ts";
-import { waitingCount } from "../approvals/pendingflow.ts";
 import { dreamScope } from "../modules/memory/dreamscope.ts";
 import { checkProposal, isThumbDown, isThumbUp, offerText } from "./feedback.ts";
 import type { Conversation, Held } from "./conversationmodel.ts";
@@ -24,7 +23,7 @@ const VERB = /(?:^|[^a-z])(?:keep|archive)(?:[^a-z]|$)/i;
 const NOT_ASSISTANT = new Set(["owner", "reaction", "member"]);
 
 function unquotedTarget(conv: Conversation, text: string, now: number): number | undefined {
-  if (!VERB.test(text) || BARE_YES.test(text) || hasOpen(conv.key) || waitingCount(conv.key) > 0) return undefined;
+  if (!VERB.test(text) || BARE_YES.test(text) || hasOpen(conv.key)) return undefined;
   const ts = latestProposal(conv.key, now, RIGHT_AFTER_MS);
   if (ts === undefined) return undefined;
   const lastSaid = messagesSince(undefined, conv.logFile).filter((e) => !NOT_ASSISTANT.has(e.kind)).reduce((mx, e) => Math.max(mx, e.ts), 0);
@@ -36,7 +35,7 @@ function unquotedTarget(conv: Conversation, text: string, now: number): number |
 export async function shadowReply(conv: Conversation, m: Pick<Held, "text" | "quote" | "picture" | "document" | "edit">, say: Say, now: number = Date.now()): Promise<boolean> {
   if (m.picture || m.document || m.edit) return false; // a caption or an edit never answers
   const quoted = m.quote && m.quote.timestamp !== 0 ? m.quote.timestamp : undefined;
-  // An unquoted reply ("3,5 keep") straight after the proposal is about it, unless something else is open to be answered (a question, the approval inbox): otherwise the chat model would
+  // An unquoted reply ("3,5 keep") straight after the proposal is about it, unless something else is open to be answered (a question): otherwise the chat model would
   // read the numbers and rebuild the archive calls itself, outside the exact replay.
   // An unquoted reply counts only as the proposal's own grammar, and only while the proposal is the LAST thing the assistant said here (a reply to anything else is about that): it must say "keep" or
   // "archive" ("archive all", "3,5 keep", "keep all", "all except 2 archive"); a bare "all" / "no" / "none" / "yes" is ordinary chat, and a half-understood one is left to the chat, never answered with a clarify.

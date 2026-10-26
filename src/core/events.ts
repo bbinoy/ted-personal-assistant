@@ -30,8 +30,10 @@ interface Where {
 type Meta = Record<string, unknown>;
 
 export type Event =
-  // A permission decision or a step on the way to one (approvals/permissions.ts, approvalask.ts, approvals.ts, pendingflow.ts). `call` + `why` on the steps that let a call run: the journal keeps them until the call succeeds.
+  // A permission decision or a step on the way to one (approvals/permissions.ts, approvalask.ts, approvals.ts). `call` + `why` on the steps that let a call run: the journal keeps them until the call succeeds.
   | ({ type: "tool"; run?: string; tool: string; decision: string; source: Source; meta?: Meta; call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why } & Where)
+  // A question nobody answered in time (approvals.ts request): nothing was done and nothing is said in the chat. The audit row, and one journal line in that conversation.
+  | ({ type: "expired"; tool: string; label: string; wait: string; source: Source } & Where)
   // A tool call that SUCCEEDED (the SDK's PostToolUse, run/agentrun.ts): the journal line of an action. `what`, `cat` and `undo` are rendered by code (approvals/journalrender.ts). No audit row: the decision rows say it ran.
   | ({ type: "done"; run?: string; tool: string; source: Source; input: Record<string, unknown>; what: string; cat: string; undo?: string; why?: Why } & Where)
   // One heartbeat look: the audit row "wake" and the metrics row.

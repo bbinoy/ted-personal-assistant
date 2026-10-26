@@ -186,6 +186,7 @@ export interface ToolModule {
   freeWhen?: Readonly<Record<string, (input: Record<string, unknown>, source: Source) => boolean>>; // a call of this action that is free though the action is not (the Gmail brief to the owner's own address)
   untrusted?: true | readonly string[]; // reading these shows the run text a third party wrote (mail, a web page): after one, the run's arguments may be steered. Default: the module's `read` rows (every data kind is someone's text) unless `trusted`
   trusted?: true; // opt OUT of the default: its reads show nothing a third party wrote (public weather data)
+  untrustedWhen?: (action: string, conversation: string) => boolean; // a trusted module's read that shows a third party's words only sometimes (a task list holding a task made from a mail): looked at per call, in the run's conversation
   untrustedPrefix?: string; // an unlisted tool with a read verb under this prefix counts as untrusted too
   never?: true; // every tool of the connector (its prefix) is never allowed, for everyone (the trading connector)
   ownerOnly?: true | readonly string[]; // all rows, or the rows with these actions, belong to the owner alone: never in the tool set of a group or a tenant (capabilities.ts)

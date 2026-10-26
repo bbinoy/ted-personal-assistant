@@ -31,8 +31,8 @@ const line = (file: string, at: string, cat: string, text: string) => recordMess
 
 test("events: the steps an audit decision stands for", () => {
   const steps: Record<string, string | undefined> = {
-    allow: "allow", "ask-sent": "ask", "deny-policy": "deny", "deny-error": "deny", "auto-approved": "auto-approved", "ask-approved": "approved", "ask-approved-modified": "approved", "approval-queue-approved": "approved",
-    "ask-declined": "declined", "approval-queue-declined": "declined", "ask-queued": "queued", "approval-queued": "queued", "approval-queue-executed": "executed", "approval-queue-failed": "failed", "ask-failed": "failed",
+    allow: "allow", "ask-sent": "ask", "deny-policy": "deny", "deny-error": "deny", "auto-approved": "auto-approved", "ask-approved": "approved", "ask-approved-modified": "approved",
+    "ask-declined": "declined", "ask-failed": "failed", "approval-queue-approved": undefined, "approval-queued": undefined,
     "judge-ask": undefined, "approval-asked": undefined, "answer-fast": undefined,
   };
   for (const [d, s] of Object.entries(steps)) assert.equal(stepOf(d), s, d);

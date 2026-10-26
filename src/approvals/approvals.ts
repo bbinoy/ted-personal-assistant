@@ -8,7 +8,6 @@ import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
 import { recentIn } from "./recentchat.ts";
 import { sameCall } from "./declined.ts";
-import { answerPending } from "./pendingflow.ts";
 import { isTypedYes, TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 
 // Human-in-the-loop approvals over Signal. Several questions may be open at once; each is
@@ -125,9 +124,6 @@ export interface Ctx {
   voice?: boolean;
 }
 export async function answer(text: string, onJudging: () => void, quote: { timestamp: number } | undefined, deps: AnswerDeps = {}, ctx: Ctx): Promise<Answer> {
-  // The approval inbox first (pendingflow.ts): a numbered answer ("1,3 yes", "all yes") or a reply to its batch. A bare unquoted yes is never one.
-  const parked = await answerPending(text, quote, ctx);
-  if (parked) return parked;
   const mine = [...open.values()].filter((o) => o.scope === ctx.scope && !o.done);
   // A plain yes that quotes a question which has ended (timed out, answered): nothing is run from it. Said so, not passed on as a chat message.
   if (mine.length === 0 && quote && quote.timestamp !== 0 && closed.has(slot(ctx.scope, quote.timestamp)) && YES.has(normalise(text))) return { outcome: "clarify", reply: endedReply(ctx.scope, quote.timestamp) };
@@ -278,17 +274,17 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
 
 // Ask in `opts.scope`, the conversation that triggered the action, and nowhere else. Resolves "not approved" on no, timeout, or an aborted turn.
 // Several may be open at once.
-// A chat approval waits APPROVAL_TIMEOUT_MINUTES, a background one BACKGROUND_APPROVAL_TIMEOUT_MINUTES.
+// It waits APPROVAL_TIMEOUT_MINUTES (or `minutes`: a stranger's registration). A question nobody answers lapses SILENTLY: no line in the chat, one line in that conversation's journal.
 export function request(
   send: (text: string) => Promise<number>, // returns the sent message's timestamp
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal | undefined,
-  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number; quietExpiry?: boolean },
+  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
-  const minutes = opts.minutes ?? (background ? settings.backgroundApprovalTimeoutMinutes : settings.approvalTimeoutMinutes);
+  const minutes = opts.minutes ?? settings.approvalTimeoutMinutes;
   return new Promise<Decision>((resolve) => {
     const label = description.split("\n")[0] ?? "";
     const named = isTenantKey(opts.scope) ? `(${opts.scope})` : label;
@@ -312,8 +308,8 @@ export function request(
     const onAbort = () => finish({ approved: false });
     const timer = setTimeout(() => {
       finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`);
-      // A background question nobody answered is not silent (a registration says so itself: it is asked again, "do it" would mean nothing there): one line in that conversation, with the code's label (never model text). A chat question is not: the owner is in that conversation.
-      if (background && !opts.quietExpiry && entry.ts) send(`⏳ Didn't hear back, so I left it: ${label}. Say 'do it' if you still want it.`).catch(() => {});
+      // Silent in the chat (CLAUDE.md: expiries are system status): the journal says it, so "what happened to X?" has an answer; a chat turn's model is told it was not answered in time.
+      if (entry.ts) emit({ type: "expired", tool: call.tool, label, wait: formatWait(minutes), source: opts.source, conv: opts.scope });
     }, minutes * 60_000);
     signal?.addEventListener("abort", onAbort);
     console.log(`approval requested${background ? " (background)" : ""}: ${named}`);

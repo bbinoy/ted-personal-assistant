@@ -10,7 +10,6 @@ import { closeAllConvDbs, convDbAt } from "../src/core/convdb.ts";
 import { closeInstanceDb } from "../src/core/instancedb.ts";
 import { convImportItems, describeConvImport, forgetConvInBackups, hasConvLegacyFiles, importConvLegacy } from "../src/core/convimport.ts";
 import { lateNotice, migrate, readVersion, stragglers } from "../src/core/migrate.ts";
-import { convDbCheck } from "../src/doctor.ts";
 import { migrateSafely } from "../src/core/migrateservices.ts";
 import { buildOld, GID_A, FRIENDS } from "./oldlayout.ts";
 
@@ -231,12 +230,9 @@ test("late files from an older process: the database wins for a one-record store
   assert.deepEqual(o.all<{ text: string }>("SELECT text FROM held_posts ORDER BY seq").map((x) => x.text), ["p1", "p2", "late post"]);
   assert.deepEqual(plain(o.get("SELECT day, posted FROM hold")), { day: "2026-10-20", posted: 3 }, "the day's count stays");
   assert.equal(o.num("SELECT COUNT(*) FROM pending_items WHERE tool = 'late-tool'"), 0, "an approval inbox that has items is not mixed with another");
-  // ... and the approvals that were dropped are not silent: listed for the doctor, and told to the owner
+  // ... and the approvals that were dropped are not silent: recorded, and told to the owner
   assert.deepEqual(plain(o.all("SELECT n, label, why FROM pending_lost")), [{ n: 1, label: "L1", why: "late-file" }]);
   assert.match(lateNotice(root) ?? "", /approvals an older version of me had parked could not be restored.*your chat #1 L1/s);
-  const lines: [boolean | "warn", string, string][] = [];
-  convDbCheck((ok, what, detail = "") => void lines.push([ok, what, detail]), root);
-  assert.ok(lines.some((l) => l[0] === "warn" && l[1] === "approvals not restored in owner" && /#1 L1/.test(l[2])), JSON.stringify(lines));
   assert.equal(o.get<{ until: string }>("SELECT until FROM quiet")?.until, "", "the switch stays as it is");
   const notes = o.all<{ name: string; note: string | null; backup: string }>("SELECT name, note, backup FROM legacy_imports WHERE note IS NOT NULL");
   assert.deepEqual(notes.map((n) => n.name).sort(), ["conversations/owner/pending.json", "conversations/owner/quiet.json", "conversations/owner/session.json"]);

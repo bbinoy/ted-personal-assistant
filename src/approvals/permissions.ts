@@ -100,7 +100,7 @@ export interface GuardDecision {
   reason?: string;
   description?: string;
   once?: boolean; // an approved call is not repeated
-  done?: boolean; // allow: the call is remembered as done once let through (the approval inbox's follow-up run): the same call within the window is refused without a question
+  done?: boolean; // allow: the call is remembered as done once let through (the first week's follow-up run): the same call within the window is refused without a question
   judge?: boolean; // ask: goes to the approval judge first (a browse commit step); only its "auto" skips the owner. Without it the owner is always asked
   redacted?: Record<string, unknown>; // ask: the call as the question writer, the approval card and the audit see it (a typed secret cut to its length); the real input still runs
   facts?: Record<string, unknown>; // ask: what the judge's audit row records about the step (host, role, name)
@@ -110,7 +110,6 @@ export interface GuardDecision {
   approved?: (question: string) => void; // ask: told the owner's question after they approve it (the guard keeps it for the rest of the run)
   allowed?: (by: "judge" | "owner") => void; // defer: told when this very call was let through by the judge's auto or by the owner's yes (the guard learns which site the run has been cleared for)
   skipped?: { reason: string; host: string }; // allow: the judge was skipped on purpose and code says why (a navigate to a site the run was already cleared for); recorded as judge-skipped
-  approval?: { n: number }; // allow: the call is the one the person approved as this number in the approval inbox (pendingexec.ts): the journal says "approval #3, you answered yes"
   resolve?: () => Promise<Record<string, unknown> | string>; // the call as it must run, built only now that it is allowed (the card is opened here, after the owner said yes); a string: the call is refused with that reason
 }
 export interface CallGuard {
@@ -156,8 +155,7 @@ const PAYMENT_UNATTENDED = "A payment is never made by background work, and nobo
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
 const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not retry it; tell the owner in your own words what you could not do.";
 
-// The ONE place the code-rendered details of a call are built, for the ask path below (shown to the owner, judged, hashed) and for the approval inbox's re-read before it runs an approved call
-// (renderDetails, pendingflow.ts): identical by construction. A mail send is shown as the mail client holds it right now, not as the model says it is sending (a send of a draft), the same view for
+// The ONE place the code-rendered details of a call are built, for the ask path below (shown to the owner, judged). A mail send is shown as the mail client holds it right now, not as the model says it is sending (a send of a draft), the same view for
 // every provider; if that cannot be read the owner would be approving blind, so there is no view and no details (`unreadable`). A call on an object by its id names the object (describe.ts);
 // a guard-built step and a payment have their own text (`own`) and no object line.
 export async function renderCall(conversation: string | undefined, tool: string, input: Record<string, unknown>, own?: { description?: string; payment?: boolean }): Promise<{ description: string; view?: MailView } | { unreadable: true }> {
@@ -171,12 +169,6 @@ export async function renderCall(conversation: string | undefined, tool: string,
   }
   if (!own?.payment && !own?.description) description += await objectLines(conversation ?? OWNER_KEY, tool, input);
   return { description, view };
-}
-
-// The details as the owner was shown them, read again now. undefined = they cannot be read (the draft is gone).
-export async function renderDetails(conversation: string, tool: string, input: Record<string, unknown>): Promise<string | undefined> {
-  const r = await renderCall(conversation, tool, input);
-  return "unreadable" in r ? undefined : r.description;
 }
 
 export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
@@ -194,7 +186,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
   const log = baseLog;
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
-  const doneInRun = new Set<string>(); // the calls a once-only guard (the approval inbox's, the first week's) has let through in THIS run
+  const doneInRun = new Set<string>(); // the calls a once-only guard (the first week's) has let through in THIS run
   const runGates = registered().flatMap((m) => (m.floor?.perRun ? [m.floor.perRun()] : [])); // the modules' limits for THIS run (the archive cap)
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
   return async (tool, input, o) => {
@@ -251,12 +243,12 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       return typeof r === "string" ? { deny: r } : { input: r };
     };
     if (verdict === "allow") {
-      if (readsUntrusted(tool)) markUntrusted();
+      if (readsUntrusted(tool, undefined, conversation)) markUntrusted();
       // Reads log tool + decision only (a public lookup adds its inputs). Writes also log the ids they touch (ids, never
       // content), so "what did it archive?" can always be answered from the audit log.
       if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
       const reads = isReadTool(tool);
-      log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: g?.approval ? undefined : setup.provenance?.(), approval: g?.approval, asked: g?.kind === "allow" && g.done === true }) });
+      log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.(), asked: g?.kind === "allow" && g.done === true }) });
       if (g?.done) {
         const k = callKey(tool, input);
         if (doneInRun.has(k)) {
@@ -265,7 +257,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         }
         doneInRun.add(k); // once-only within the run, whatever the guard: a recorded call (a send!) must not run twice because the model called it twice
       }
-      if (g?.done) remember(scoped(conversation, callKey(tool, input))); // a call the guard let through once-only (the approval inbox's) is done: asking for it again within the window is refused
+      if (g?.done) remember(scoped(conversation, callKey(tool, input))); // a call the guard let through once-only (the first week's) is done: asking for it again within the window is refused
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
       return { behavior: "allow", updatedInput: f.input };
@@ -335,7 +327,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
         log(tool, "auto-approved", source, { reason: judged.reason }, !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
-        if (readsUntrusted(tool)) markUntrusted();
+        if (readsUntrusted(tool, undefined, conversation)) markUntrusted();
         g?.allowed?.("judge");
         return { behavior: "allow", updatedInput: g?.input ?? input };
       }
@@ -380,7 +372,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     if (d.approved) clearDeclined(conversation, tool, input, Date.now(), g?.description);
     else if (!d.feedback && !d.expired && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a plain no (not a reply, not silence, not an aborted turn)
     if (d.approved && onceOnly) remember(memo);
-    if (d.approved && readsUntrusted(tool)) markUntrusted();
+    if (d.approved && readsUntrusted(tool, undefined, conversation)) markUntrusted();
     if (d.approved && !d.updatedInput && d.question) g?.approved?.(d.question);
     if (d.approved && !d.updatedInput) g?.allowed?.("owner");
     if (d.approved && g?.payment && g.resolve) {

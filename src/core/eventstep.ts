@@ -1,9 +1,9 @@
 // Kept apart from events.ts so that the sinks can use it without importing the module that imports them.
 
 // What a permission decision came to, in the words of the approval path: the call is allowed, asked, denied, approved by the judge ("auto-approved") or by a person ("approved"), declined,
-// parked in the approval inbox ("queued") and later run ("executed") or not ("failed"). The decision strings of the audit log say more (ask-sent, judge-ask, deny-policy...); this is the
+// or failed. The decision strings of the audit log say more (ask-sent, judge-ask, deny-policy...); this is the
 // part the journal cares about.
-export type ToolStep = "allow" | "ask" | "deny" | "auto-approved" | "approved" | "declined" | "queued" | "executed" | "failed";
+export type ToolStep = "allow" | "ask" | "deny" | "auto-approved" | "approved" | "declined" | "failed";
 
 // Pure: the step an audit decision string stands for, or undefined for the bookkeeping rows between steps (judge-ask, approval-asked, answer-fast...).
 export function stepOf(decision: string): ToolStep | undefined {
@@ -11,10 +11,8 @@ export function stepOf(decision: string): ToolStep | undefined {
   if (decision === "ask-sent") return "ask";
   if (decision.startsWith("deny-")) return "deny";
   if (decision === "auto-approved") return "auto-approved";
-  if (decision === "ask-approved" || decision === "ask-approved-modified" || decision === "approval-queue-approved") return "approved";
-  if (decision === "ask-declined" || decision === "ask-feedback" || decision === "approval-queue-declined") return "declined";
-  if (decision === "ask-queued" || decision === "approval-queued") return "queued";
-  if (decision === "approval-queue-executed") return "executed";
-  if (decision === "approval-queue-failed" || decision === "ask-failed") return "failed";
+  if (decision === "ask-approved" || decision === "ask-approved-modified") return "approved";
+  if (decision === "ask-declined" || decision === "ask-feedback") return "declined";
+  if (decision === "ask-failed") return "failed";
   return undefined;
 }

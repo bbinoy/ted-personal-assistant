@@ -75,7 +75,7 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
       }),
   },
   status: { server: () => createStatusServer() },
-  // The conversation's task list. An unattended run (the owner's background source, or an isolated run with no chat memory: a friend's or a group's look, a mail handler) can only suggest (tasktools.ts).
+  // The conversation's task list. An unattended run (the owner's background source, or an isolated run with no chat memory: a friend's or a group's look, a mail handler) can only list and add (tasktools.ts).
   tasks: {
     server: (ctx) =>
       createTasksServer({
