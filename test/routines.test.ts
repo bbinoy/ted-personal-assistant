@@ -1,77 +1,73 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Routines (core/routines.ts, tasks/routines.ts): the planner is pure and tested with fixed instants in named zones; the record is the owner's assistant.db in a temp data root.
+// ONE schedule mechanism (tasks/routines.ts): skills declare `schedule:` in SKILL.md, a person's routine is a `routine-` note with a `when:` line; the planner is pure and tested with fixed instants in
+// named zones; the record is the conversation's assistant.db in a temp data root.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "routines-"));
-const { parseWhen, presetFor } = await import("../src/core/preset.ts");
-const R = await import("../src/core/routines.ts");
+process.env.TZ = "Europe/Berlin";
 const S = await import("../src/tasks/routines.ts");
+const { readRecord } = S;
+const { parseRepeat } = await import("../src/tasks/repeat.ts");
 const { useConvDbAgentMode } = await import("../src/core/convdb.ts");
 useConvDbAgentMode(true);
-const { settings } = await import("../src/core/settings.ts");
-const { ownerSkills, privateSkills, skillsFor, PLUGIN } = await import("../src/modules/skills.ts");
+const { settings, loadSettings } = await import("../src/core/settings.ts");
+const { ownerSkills, privateSkills, skillsFor, scheduledSkills, PLUGIN } = await import("../src/modules/skills.ts");
 const { expertSetup } = await import("../src/run/delegation.ts");
 const { lookInstruction } = await import("../src/heartbeat/look.ts");
 const { lookerOf } = await import("../src/run/scope.ts");
-const { owner } = await import("../src/conversation/conversation.ts");
+const { owner, group } = await import("../src/conversation/conversation.ts");
 const { statusText } = await import("../src/conversation/ownercommands.ts");
 const { capabilitiesOf } = await import("../src/policy/capabilities.ts");
+const { scheduledIn, scheduleLines, routineNoteReply } = await import("../src/modules/tasks/routinelist.ts");
+const F = await import("../src/heartbeat/facts.ts");
+const { chatSystem, groupSystem, tenantSystem } = await import("../src/run/persona.ts");
+const { GROUP_CAPABILITIES } = await import("../src/policy/capabilities.ts");
 
 const BERLIN = "Europe/Berlin";
-const preset = presetFor({});
-const base = R.resolveRoutines({}, preset, false);
-const get = (routines: readonly import("../src/core/routines.ts").Routine[], n: string) => routines.find((r) => r.name === n)!;
-const evening = get(base, "evening");
-const weekly = get(base, "weekly");
 const z = (iso: string) => new Date(iso);
+const rule = (text: string) => {
+  const p = parseRepeat(text);
+  assert.ok(p.ok, text);
+  return p.rule;
+};
+const skill = (name: string, skillName: string, text: string): import("../src/tasks/routines.ts").Routine => ({ name, skill: skillName, rule: rule(text) });
+const brief = skill("daily-brief", "daily-brief", "every day at 07:30");
+const evening = skill("evening-wrap", "evening-wrap", "every weekday at 18:30");
+const weekly = skill("weekly-review", "weekly-review", "every fri at 16:30");
+const all = [brief, evening, weekly];
+const opts = { catchUpHours: 4, who: "Ben", agentOf: (k: string) => `expert-${k}` };
+const anchor = "2026-10-01";
 
-test("when: a time with daily, weekdays or one weekday; anything else is refused", () => {
-  assert.deepEqual(parseWhen("18:30 weekdays"), { time: "18:30", days: "weekdays" });
-  assert.deepEqual(parseWhen("fri 16:30"), { time: "16:30", days: 5 });
-  assert.deepEqual(parseWhen("Sunday 9:05"), { time: "09:05", days: 0 });
-  assert.deepEqual(parseWhen("07:30"), { time: "07:30", days: undefined });
-  for (const bad of ["", "fri", "25:00", "fri sat 10:00", "tomorrow 10:00", "10:60"]) assert.equal(parseWhen(bad), undefined, bad);
+test("skills declare their schedule in SKILL.md frontmatter, in the repeat grammar, and every one parses with a time", () => {
+  const skills = readdirSync(join(settings.pluginDir, "skills")).map((d) => `${PLUGIN}:${d}`);
+  const found = scheduledSkills(skills);
+  assert.deepEqual(found, [["daily-brief", "every day at 07:30"], ["evening-wrap", "every weekday at 18:30"], ["weekly-review", "every fri at 16:30"]]);
+  for (const [name, text] of found) {
+    const p = parseRepeat(text);
+    assert.ok(p.ok && p.rule.time, `${name}: ${text}`);
+    assert.ok(expertSetup(skills, "").agents[`expert-${name}`], `${name}: a scheduled skill has an expert to delegate to`);
+  }
 });
 
-test("settings: the preset's defaults, ROUTINE_* overrides, off, and a bad value stops the agent", () => {
-  assert.deepEqual(base.map((r) => [r.name, r.time, r.days, r.skill, r.enabled, r.email]), [
-    ["brief", "07:30", "daily", "daily-brief", true, false],
-    ["evening", "18:30", "weekdays", "evening-wrap", true, false],
-    ["weekly", "16:30", 5, "weekly-review", true, false],
-  ]);
-  const o = R.resolveRoutines({ ROUTINE_EVENING: "19:15", ROUTINE_WEEKLY: "thu 15:00", ROUTINE_WEEKLY_EMAIL: "on" }, preset, true);
-  assert.deepEqual([get(o, "evening").time, get(o, "evening").days, get(o, "weekly").days, get(o, "weekly").email, get(o, "brief").email], ["19:15", "weekdays", 4, true, true], "a bare time keeps the preset's days; the brief's email is BRIEF_EMAIL");
-  const off = R.resolveRoutines({ ROUTINE_EVENING: "off" }, preset, false);
-  assert.equal(get(off, "evening").enabled, false);
-  assert.equal(get(off, "weekly").enabled, true);
-  assert.throws(() => R.resolveRoutines({ ROUTINE_WEEKLY: "whenever" }, preset, false), /ROUTINE_WEEKLY must be off/);
-  assert.throws(() => R.resolveRoutines({ ROUTINE_WEEKLY_EMAIL: "yes" }, preset, false), /ROUTINE_WEEKLY_EMAIL must be on or off/);
-  assert.deepEqual(settings.routines.map((r) => r.name), ["brief", "evening", "weekly"]);
-});
-
-test("the clock: a slot is local wall time, across both clock changes", () => {
-  assert.equal(R.localInstant("2026-10-24", "18:30", BERLIN).toISOString(), "2026-10-24T16:30:00.000Z", "summer time, +2");
-  assert.equal(R.localInstant("2026-10-25", "18:30", BERLIN).toISOString(), "2026-10-25T17:30:00.000Z", "the day the clocks went back, +1");
-  assert.equal(R.localInstant("2026-03-29", "18:30", BERLIN).toISOString(), "2026-03-29T16:30:00.000Z", "the day they went forward, +2");
-  assert.ok([0, 1].includes(R.localInstant("2026-03-29", "02:30", BERLIN).getUTCHours()), "a time the clock skips lands next to the gap, never a day off");
-  assert.equal(R.localInstant("2026-10-22", "18:30", "America/New_York").toISOString(), "2026-10-22T22:30:00.000Z");
-});
-
-test("slots: weekdays skip the weekend, a weekly one finds its day", () => {
-  const sat = z("2026-10-24T09:00:00Z"); // Saturday
-  const w = R.slotsAround(evening, sat, BERLIN);
+test("slots: a weekday rule skips the weekend, a weekly one finds its day, and the slot is wall time across both clock changes", () => {
+  const w = S.slotsAround(evening, z("2026-10-24T09:00:00Z"), BERLIN, anchor); // Saturday
   assert.deepEqual([w.last?.date, w.next?.date], ["2026-10-23", "2026-10-26"], "Friday's slot behind, Monday's ahead");
-  const f = R.slotsAround(weekly, z("2026-10-22T10:00:00Z"), BERLIN); // Thursday
+  const f = S.slotsAround(weekly, z("2026-10-22T10:00:00Z"), BERLIN, anchor); // Thursday
   assert.deepEqual([f.last?.date, f.next?.date], ["2026-10-16", "2026-10-23"]);
-  assert.equal(R.slotsAround({ time: "07:30", days: "daily" }, z("2026-10-25T06:29:00Z"), BERLIN).next?.at.toISOString(), "2026-10-25T06:30:00.000Z", "07:30 on the day the clocks go back is 06:30Z");
+  assert.equal(S.slotsAround(brief, z("2026-10-25T06:29:00Z"), BERLIN, anchor).next?.at.toISOString(), "2026-10-25T06:30:00.000Z", "07:30 on the day the clocks go back is 06:30Z");
+  assert.equal(S.slotsAround(evening, z("2026-10-24T20:00:00Z"), BERLIN, anchor).last?.at.toISOString(), "2026-10-23T16:30:00.000Z", "summer time, +2");
+  assert.equal(S.slotsAround(brief, z("2026-10-26T12:00:00Z"), BERLIN, anchor).last?.at.toISOString(), "2026-10-26T06:30:00.000Z", "winter time, +1");
+  assert.equal(S.slotsAround(evening, z("2026-03-30T12:00:00Z"), BERLIN, anchor).last?.at.toISOString(), "2026-03-27T17:30:00.000Z", "before the clocks went forward");
+  assert.equal(S.slotsAround(brief, z("2026-03-30T12:00:00Z"), BERLIN, anchor).last?.at.toISOString(), "2026-03-30T05:30:00.000Z", "after: 07:30 is still 07:30 on the wall, +2");
+  assert.equal(S.slotsAround(evening, z("2026-10-22T23:00:00Z"), "America/New_York", anchor).last?.at.toISOString(), "2026-10-22T22:30:00.000Z", "another zone");
 });
 
-const rec = (o: Partial<import("../src/core/routines.ts").RoutineRecord> = {}): import("../src/core/routines.ts").RoutineRecord => ({ since: z("2026-10-01T00:00:00Z").getTime(), attempts: 0, told: true, ...o });
+const rec = (o: Partial<import("../src/tasks/routines.ts").RoutineRecord> = {}): import("../src/tasks/routines.ts").RoutineRecord => ({ since: z("2026-10-01T00:00:00Z").getTime(), attempts: 0, told: true, ...o });
 const before = (date: string) => rec({ period: date, status: "delivered", at: 1, attempts: 1 }); // the previous period's slot was served
-const plan = (r: import("../src/core/routines.ts").Routine, iso: string, record = rec(), catchUp = 4) => R.planRoutine(r, z(iso), BERLIN, record, catchUp);
+const plan = (r: import("../src/tasks/routines.ts").Routine, iso: string, record = rec(), catchUp = 4) => S.planRoutine(r, z(iso), BERLIN, record, catchUp);
 
 test("plan: waiting, then due at its time, then done, once per period", () => {
   assert.equal(plan(evening, "2026-10-22T16:29:00Z", before("2026-10-21")).state, "done", "18:29 local on Thursday: not yet; the last slot (Wednesday) was served, so nothing is due");
@@ -83,24 +79,29 @@ test("plan: waiting, then due at its time, then done, once per period", () => {
   assert.equal(plan(evening, "2026-10-22T20:00:00Z", done).state, "done", "still done later the same day: never twice");
   assert.equal(plan(evening, "2026-10-23T05:00:00Z", done).state, "done", "Friday morning: Thursday's was the last slot, and it was served");
   assert.equal(plan(evening, "2026-10-23T16:31:00Z", done).state, "due", "Friday's slot is a new period");
-  assert.equal(plan({ ...evening, enabled: false }, "2026-10-22T16:31:00Z").state, "off");
+});
+
+test("plan: the brief is due at 07:30 and caught up on waking", () => {
+  assert.equal(plan(brief, "2026-10-22T05:29:00Z", before("2026-10-21")).state, "done", "07:29 local: not yet");
+  assert.equal(plan(brief, "2026-10-22T05:31:00Z").state, "due");
+  assert.equal(plan(brief, "2026-10-22T09:00:00Z").state, "due", "11:00 local, 3.5 h late: still within the window");
+  assert.equal(plan(brief, "2026-10-22T10:00:00Z").state, "skipped", "12:00 local, 4.5 h late");
 });
 
 test("plan: the weekly one runs once in its week, on the day", () => {
   assert.equal(plan(weekly, "2026-10-23T14:29:00Z", before("2026-10-16")).state, "done");
   assert.equal(plan(weekly, "2026-10-23T14:31:00Z").state, "due");
   const done = rec({ period: "2026-10-23", status: "delivered", at: z("2026-10-23T14:40:00Z").getTime(), attempts: 1 });
-  for (const t of ["2026-10-23T18:00:00Z", "2026-10-24T09:00:00Z"]) assert.notEqual(plan(weekly, t, done).state, "due", t);
   assert.equal(plan(weekly, "2026-10-24T09:00:00Z", done).state, "done", "Saturday morning: this week's is still the Friday one, and done");
   assert.equal(plan(weekly, "2026-10-30T15:31:00Z", done).state, "due", "next Friday is a new period");
 });
 
-test("plan: a run in progress waits, a dead one is retried, two failures give up", () => {
-  const started = (min: number, attempts = 1) => rec({ period: "2026-10-22", status: "started", at: z("2026-10-22T16:31:00Z").getTime() + min * 0, attempts });
-  assert.equal(plan(evening, "2026-10-22T16:50:00Z", started(0)).state, "running", "19 min: the expert is working");
-  const dead = plan(evening, "2026-10-22T17:20:00Z", started(0));
+test("plan: a run in progress waits, a dead one is retried once, two failures give up", () => {
+  const started = (attempts = 1) => rec({ period: "2026-10-22", status: "started", at: z("2026-10-22T16:31:00Z").getTime(), attempts });
+  assert.equal(plan(evening, "2026-10-22T16:50:00Z", started()).state, "running", "19 min: the expert is working");
+  const dead = plan(evening, "2026-10-22T17:20:00Z", started());
   assert.deepEqual([dead.state, dead.state === "due" && dead.retry], ["due", true], "49 min: it died, redo");
-  const second = plan(evening, "2026-10-22T17:40:00Z", started(0, 2));
+  const second = plan(evening, "2026-10-22T17:40:00Z", started(2));
   assert.deepEqual([second.state, second.state === "skipped" && second.why], ["skipped", "failed"], "a second dead attempt is the last");
   const failed = rec({ period: "2026-10-22", status: "failed", at: z("2026-10-22T16:40:00Z").getTime(), attempts: 1 });
   assert.equal(plan(evening, "2026-10-22T16:45:00Z", failed).state, "due");
@@ -111,169 +112,271 @@ test("plan: the Mac slept through the time: it runs on waking within the window,
   const late = plan(evening, "2026-10-22T20:45:00Z");
   assert.deepEqual([late.state, late.state === "skipped" && late.why], ["skipped", "asleep"], "22:45 local, 4 h 15 late");
   assert.equal(plan(evening, "2026-10-22T20:45:00Z", rec(), 6).state, "due", "the window is a setting");
-  assert.equal(plan(weekly, "2026-10-23T20:00:00Z").state, "skipped", "Friday 22:00, 5.5 h late");
   assert.equal(plan(weekly, "2026-10-25T09:00:00Z").state, "skipped", "woken on Sunday: Friday's review is not redone");
-  assert.equal(plan(evening, "2026-10-24T09:00:00Z").state, "skipped", "Saturday morning: Friday's wrap was missed (the weekend has no slot)");
 });
 
-test("plan: a routine switched on after its slot owes nothing for it", () => {
-  const fresh = rec({ since: z("2026-10-22T18:00:00Z").getTime() });
-  assert.equal(plan(evening, "2026-10-22T18:30:00Z", fresh).state, "waiting");
-  assert.equal(R.planRoutine(evening, z("2026-10-22T18:30:00Z"), BERLIN, undefined, 4).state, "waiting", "no record yet");
+test("plan: a routine first seen after its slot owes nothing for it; the day the clocks go back the slot is 18:30 local", () => {
+  assert.equal(plan(evening, "2026-10-22T18:30:00Z", rec({ since: z("2026-10-22T18:00:00Z").getTime() })).state, "waiting");
+  assert.equal(S.planRoutine(evening, z("2026-10-22T18:30:00Z"), BERLIN, undefined, 4).state, "waiting", "no record yet");
+  assert.equal(plan(skill("d", "d", "every day at 18:30"), "2026-10-25T17:29:00Z", before("2026-10-24")).state, "done");
+  assert.equal(plan(skill("d", "d", "every day at 18:30"), "2026-10-25T17:31:00Z").state, "due");
 });
 
-test("plan: the day the clocks go back, the slot is 18:30 local, not 24 h after yesterday's", () => {
-  assert.equal(plan({ ...evening, days: "daily" }, "2026-10-25T17:29:00Z", before("2026-10-24")).state, "done");
-  assert.equal(plan({ ...evening, days: "daily" }, "2026-10-25T17:31:00Z").state, "due");
-});
-
-test("next run text for /status", () => {
-  assert.equal(R.nextText(evening, z("2026-10-22T09:00:00Z"), BERLIN), "18:30 on weekdays, next today 18:30");
-  assert.equal(R.nextText(weekly, z("2026-10-22T09:00:00Z"), BERLIN), "Fridays 16:30, next tomorrow 16:30");
-  assert.equal(R.nextText(evening, z("2026-10-23T17:00:00Z"), BERLIN), "18:30 on weekdays, next Mon 10-26 18:30");
-  assert.equal(R.nextText({ ...evening, enabled: false }, z("2026-10-22T09:00:00Z"), BERLIN), "off");
+test("an interval counts from the day the routine was first seen; editing the rule moves the next occurrence, and what ran today does not run again", () => {
+  const every2 = { name: "routine-x", rule: rule("every 2 weeks on monday at 09:00"), instruction: "x" };
+  const first = rec({ since: z("2026-10-19T06:00:00Z").getTime() }); // seen on a Monday
+  assert.equal(S.nextText(every2, z("2026-10-20T06:00:00Z"), BERLIN, first), "every 2 weeks on monday at 09:00, next Mon 2 Nov 09:00");
+  const at9 = { name: "routine-x", rule: rule("every day at 09:00"), instruction: "x" };
+  const at10 = { name: "routine-x", rule: rule("every day at 10:00"), instruction: "x" };
+  const ranToday = rec({ period: "2026-10-22", status: "delivered", at: z("2026-10-22T07:05:00Z").getTime(), attempts: 1 });
+  assert.match(S.nextText(at9, z("2026-10-22T07:30:00Z"), BERLIN, ranToday), /next tomorrow 09:00/);
+  assert.match(S.nextText(at10, z("2026-10-22T07:30:00Z"), BERLIN, ranToday), /next today 10:00/, "the edit moved the next occurrence to 10:00 today");
+  assert.equal(S.planRoutine(at10, z("2026-10-22T08:30:00Z"), BERLIN, ranToday, 4).state, "done", "10:30 local: the 10:00 slot is today's, which was served at 09:05; the edit starts at the next occurrence");
+  assert.equal(S.planRoutine(at10, z("2026-10-23T08:30:00Z"), BERLIN, ranToday, 4).state, "due", "the next day it runs at the new time");
 });
 
 test("the record: first sight, started, delivered; a retry counts; a skip is noted once and told once", () => {
   const conv = "owner";
   const T = z("2026-10-22T16:31:00Z");
-  const f1 = S.routineFacts(conv, base, T, BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` });
+  const f1 = S.routineFacts(conv, all, T, BERLIN, opts);
   assert.equal(f1.text, "", "the first sight starts the record: nothing is owed for a slot already gone");
-  assert.ok(S.readRecord(conv, "evening"));
-  const T2 = z("2026-10-23T16:31:00Z"); // Friday: the evening wrap's slot and the weekly's (14:30Z) are both behind it... the weekly was first seen at T, after nothing: its Friday slot is 14:30Z, in range
-  const f2 = S.routineFacts(conv, base, T2, BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}`, approvals: 2 });
-  assert.equal(f2.due?.routine.name, "evening", "routines are in order; the weekly (2 h late) waits for the next look");
-  assert.match(f2.text, /evening: due now \(18:30 on weekdays\)\. Delegate it now: call the Agent tool with subagent_type "expert-evening-wrap"/);
-  assert.match(f2.text, /ted-personal-assistant:evening-wrap/);
-  assert.match(f2.text, /every time it writes is exactly as the clock line gives it/);
-  assert.match(f2.text, /Code counted 2 open approvals waiting for Ben/);
-  assert.match(f2.text, /weekly: also due, but one routine per look/);
+  assert.ok(S.readRecord(conv, "evening-wrap"));
+  const T2 = z("2026-10-23T16:31:00Z"); // Friday: the evening wrap's slot and the weekly's (14:30Z) are both behind it; the brief's (05:30Z) is 11 h gone
+  assert.match(S.routineFacts(conv, all, T2, BERLIN, opts).text, /daily-brief: did not run on 2026-10-23 \(the Mac was asleep past its time\)/, "the brief is past its window: skipped, told once");
+  const f2c = S.routineFacts(conv, [evening, weekly], T2, BERLIN, { ...opts, approvals: 2 });
+  assert.equal(f2c.due?.routine.name, "evening-wrap", "routines are in order; the weekly (2 h late) waits for the next look");
+  assert.match(f2c.text, /evening-wrap: due now \(every weekday at 18:30\)\. Delegate it now: call the Agent tool with subagent_type "expert-evening-wrap"/);
+  assert.match(f2c.text, /ted-personal-assistant:evening-wrap/);
+  assert.match(f2c.text, /every time it writes is exactly as the clock line gives it/);
+  assert.match(f2c.text, /Code counted 2 open approvals waiting for Ben/);
+  assert.match(f2c.text, /weekly-review: also due, but one routine per look/);
 
-  S.markStarted(conv, "evening", f2.due!.plan.slot.date, T2.getTime());
-  assert.match(S.routineFacts(conv, base, new Date(T2.getTime() + 10 * 60_000), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` }).text, /evening: started 10 min ago, the expert is still working; wait\./);
-  S.markFinished(conv, "evening", true, T2.getTime() + 5 * 60_000);
-  const f3 = S.routineFacts(conv, base, new Date(T2.getTime() + 20 * 60_000), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` });
-  assert.equal(f3.due?.routine.name, "weekly", "the evening wrap is done today; the weekly goes next");
-  assert.doesNotMatch(f3.text, /evening/, "a done routine is not mentioned");
-  assert.equal(S.readRecord(conv, "evening")!.attempts, 1);
-  assert.ok(S.readRecord(conv, "evening")!.lastDelivered);
+  S.markStarted(conv, "evening-wrap", f2c.due!.plan.slot.date, T2.getTime());
+  assert.match(S.routineFacts(conv, [evening, weekly], new Date(T2.getTime() + 10 * 60_000), BERLIN, opts).text, /evening-wrap: started 10 min ago, the expert is still working; wait\./);
+  S.markFinished(conv, "evening-wrap", true, T2.getTime() + 5 * 60_000);
+  const f3 = S.routineFacts(conv, [evening, weekly], new Date(T2.getTime() + 20 * 60_000), BERLIN, opts);
+  assert.equal(f3.due?.routine.name, "weekly-review", "the evening wrap is done today; the weekly goes next");
+  assert.doesNotMatch(f3.text, /evening-wrap/, "a done routine is not mentioned");
+  assert.ok(S.readRecord(conv, "evening-wrap")!.lastDelivered);
 
-  // a retry: started, died (failed), started again: two attempts; the weekly slept past its window on a later look
-  S.markStarted(conv, "weekly", "2026-10-23", T2.getTime());
-  S.markFinished(conv, "weekly", false, T2.getTime() + 60_000);
-  assert.equal(S.readRecord(conv, "weekly")!.status, "failed");
-  S.markStarted(conv, "weekly", "2026-10-23", T2.getTime() + 120_000);
-  assert.equal(S.readRecord(conv, "weekly")!.attempts, 2);
-  S.markFinished(conv, "weekly", false, T2.getTime() + 180_000, true); // (called off by a message: the attempt is refunded)
-  assert.equal(S.readRecord(conv, "weekly")!.attempts, 1);
+  // a retry: started, died (failed), started again: two attempts; a message calling the look off gives one back
+  S.markStarted(conv, "weekly-review", "2026-10-23", T2.getTime());
+  S.markFinished(conv, "weekly-review", false, T2.getTime() + 60_000);
+  assert.equal(S.readRecord(conv, "weekly-review")!.status, "failed");
+  S.markStarted(conv, "weekly-review", "2026-10-23", T2.getTime() + 120_000);
+  assert.equal(S.readRecord(conv, "weekly-review")!.attempts, 2);
+  S.markFinished(conv, "weekly-review", false, T2.getTime() + 180_000, true);
+  assert.equal(S.readRecord(conv, "weekly-review")!.attempts, 1);
 
-  const asleep = z("2026-10-25T14:00:00Z"); // Sunday afternoon: the weekly (failed once) and that morning's brief are past their window
-  const f4 = S.routineFacts(conv, base, asleep, BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` });
-  assert.match(f4.text, /weekly: did not run on 2026-10-23 \(the Mac was asleep past its time\); it will not be redone\. Tell Ben in one line/);
-  assert.deepEqual(f4.told, ["brief", "weekly"]);
+  const asleep = z("2026-10-25T14:00:00Z"); // Sunday afternoon: the weekly (failed once) is past its window
+  const f4 = S.routineFacts(conv, [weekly], asleep, BERLIN, opts);
+  assert.match(f4.text, /weekly-review: did not run on 2026-10-23 \(the Mac was asleep past its time\); it will not be redone\. Tell Ben in one line/);
   S.markTold(conv, f4.told);
-  assert.equal(S.routineFacts(conv, base, new Date(asleep.getTime() + 60_000), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` }).text, "", "told once, then quiet");
-  assert.equal(S.readRecord(conv, "weekly")!.status, "skipped");
+  assert.equal(S.routineFacts(conv, [weekly], new Date(asleep.getTime() + 60_000), BERLIN, opts).text, "", "told once, then quiet");
+  assert.equal(S.readRecord(conv, "weekly-review")!.status, "skipped");
 });
 
-test("facts for the email: only when the routine mails and the mail provider says how", () => {
-  const conv = "owner";
-  const mailing = R.resolveRoutines({ ROUTINE_WEEKLY_EMAIL: "on" }, preset, false);
-  const T = z("2026-10-30T15:31:00Z"); // Friday 16:31 local (the clocks went back on the 25th)
-  S.routineFacts(conv, mailing, z("2026-10-29T10:00:00Z"), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` });
-  const f = S.routineFacts(conv, mailing, T, BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}`, deliver: (r) => (r.email ? "Also email the full version to Ben themself: Use send_message once." : "") });
-  assert.match(f.text, /weekly: due now/);
-  assert.match(f.text, /Also email the full version to Ben themself: Use send_message once\./);
-  S.markStarted(conv, "weekly", "2026-10-30", T.getTime());
-  S.markFinished(conv, "weekly", true, T.getTime());
-  const e = S.routineFacts(conv, mailing, z("2026-11-02T10:00:00Z"), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}`, deliver: (r) => (r.email ? "x" : "") });
-  assert.doesNotMatch(e.text, /email/, "nothing due on Monday morning");
+test("settling a look: delivered only when it finished; an attempt comes back only when the look was called off and nothing reached the person", () => {
+  const conv = "friend-settle000000000";
+  const start = () => S.markStarted(conv, "evening-wrap", "2026-11-02", 1_000);
+  const none = new Set<string>();
+  const readOf = () => S.readRecord(conv, "evening-wrap")!;
+  S.routineFacts(conv, [evening], z("2026-11-02T09:00:00Z"), BERLIN, opts); // creates the record
+  start();
+  S.settleRoutines(conv, new Set(["evening-wrap"]), none, { calledOff: false, sends: 0 }, 2_000);
+  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 1]);
+  start();
+  S.settleRoutines(conv, new Set(["evening-wrap"]), none, { calledOff: true, sends: 0 }, 3_000);
+  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 1], "called off before anything left: the attempt is given back");
+  start();
+  S.settleRoutines(conv, new Set(["evening-wrap"]), none, { calledOff: true, sends: 1 }, 4_000);
+  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 2], "called off after a send: not given back");
+  start();
+  S.settleRoutines(conv, new Set(["evening-wrap"]), new Set(["evening-wrap"]), { calledOff: true, sends: 0 }, 5_000);
+  assert.equal(readOf().status, "delivered");
 });
 
-test("the look: facts are in the instruction only when there are some; the brief's words are unchanged", () => {
+// ---- routine notes ----
+let n = 0;
+const groupWith = (when: string | undefined, body = "Post a fun fact for the group.", file = "routine-fun-fact.md") => {
+  const conv = group(`routine-group-${++n}-0123456789abcdef`);
+  mkdirSync(conv.notesDir, { recursive: true });
+  writeFileSync(join(conv.notesDir, file), `---\n${when === undefined ? "" : `when: ${when}\n`}---\n${body}\n`);
+  return conv;
+};
+const ZONE = BERLIN;
+const at = (iso: string) => z(iso);
+
+test("a routine note in a group fires once at its time, is done when the look posted, and is due again the next day", () => {
+  const conv = groupWith("every day at 08:00");
+  const seen = F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look"); // 07:00: first sight
+  assert.equal(seen.routines, "");
+  seen.done({ ended: true, said: false });
+  const look = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "look"); // 08:05
+  assert.match(look.routines, /due now: Post a fun fact for the group\. \(routine routine-fun-fact, every day at 08:00\)\. Do it now yourself/);
+  assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "started");
+  assert.equal(F.factsFor(conv, at("2026-10-22T06:06:00Z"), "look").routines, "", "pending in the look that has it: another look is not handed it too");
+  look.done({ ended: true, said: true });
+  assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "delivered");
+  assert.equal(F.factsFor(conv, at("2026-10-22T06:40:00Z"), "look").routines, "", "not again today");
+  const next = F.factsFor(conv, at("2026-10-23T06:05:00Z"), "look");
+  assert.match(next.routines, /due now: Post a fun fact/);
+  next.done({ ended: true, said: true });
+});
+
+test("a routine note counts as done when the look sent or acted, not when it stayed silent without doing anything; it is retried once, then given up", () => {
+  const conv = groupWith("every day at 08:00");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  const a = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "look");
+  a.done({ ended: true, said: false }); // silent, nothing done
+  assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "failed");
+  const b = F.factsFor(conv, at("2026-10-22T06:20:00Z"), "look");
+  assert.match(b.routines, /the earlier attempt died/);
+  b.done({ ended: true, said: false, sends: 1 }); // it sent something while it worked
+  assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "delivered");
+  const c = groupWith("every day at 08:00", "Do x", "routine-x.md");
+  F.factsFor(c, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  F.factsFor(c, at("2026-10-22T06:05:00Z"), "look").done({ ended: true, said: false, acted: 2 });
+  assert.equal(readRecord(c.convId, "routine-x")?.status, "delivered", "ended silent having acted");
+  const d = groupWith("every day at 08:00", "Do y", "routine-y.md");
+  F.factsFor(d, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  for (const m of [5, 15]) F.factsFor(d, at(`2026-10-22T06:${String(m).padStart(2, "0")}:00Z`), "look").done({ ended: true, said: false });
+  assert.match(F.factsFor(d, at("2026-10-22T06:30:00Z"), "look").status.join("\n"), /routine-y: did not run on 2026-10-22 \(two attempts failed\)/);
+});
+
+test("a chat turn sees a routine note's status and never starts or records it; only the look runs it", () => {
+  const conv = groupWith("every day at 08:00");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  const chat = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "chat");
+  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-fun-fact: due now; the next look runs it/);
+  assert.equal(chat.routines, "");
+  chat.done({ ended: true, said: true });
+  assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, undefined);
+  const look = F.factsFor(conv, at("2026-10-22T06:06:00Z"), "look");
+  assert.match(look.routines, /due now: Post a fun fact/);
+  look.done({ ended: true, said: true });
+  assert.match(F.factsFor(conv, at("2026-10-22T06:30:00Z"), "chat").status.join("\n"), /routine-fun-fact: delivered /);
+});
+
+test("an unparseable when: is never silent: the status says so, the tool reply says so when the note is written, and the doctor line says it never runs", () => {
+  const conv = groupWith("whenever you feel like it");
+  const o = { skills: [] as string[], notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
+  const s = scheduledIn(o);
+  assert.deepEqual(s.routines, []);
+  assert.match(s.broken[0]!, /routine-fun-fact\.md has a when: line that cannot be read \(Cannot read the repeat rule "whenever you feel like it"/);
+  assert.match(F.factsFor(conv, o.now, "chat").status.join("\n"), /Routine notes that will never run, fix their when: line[\s\S]*routine-fun-fact\.md has a when: line that cannot be read/);
+  assert.match(F.factsFor(conv, o.now, "look").status.join("\n"), /will never run/);
+  assert.match(scheduleLines(conv.convId, o)[0]!, /never runs/);
+  const file = join(conv.notesDir, "routine-fun-fact.md");
+  const bad = routineNoteReply("Write", { file_path: file }, conv.notesDir, ZONE, o.now)!;
+  assert.match(bad, /This routine will NOT run: routine-fun-fact\.md has a when: line that cannot be read/);
+  const none = groupWith(undefined);
+  assert.match(routineNoteReply("Write", { file_path: join(none.notesDir, "routine-fun-fact.md") }, none.notesDir, ZONE, o.now)!, /has no `when:` line/);
+  assert.match(scheduledIn({ ...o, notesDir: none.notesDir }).broken[0]!, /no `when:` line/);
+  writeFileSync(file, "---\nwhen: every mon and thu at 9\n---\nSummarise my week.\n");
+  assert.equal(routineNoteReply("Edit", { file_path: file }, conv.notesDir, ZONE, o.now), "Routine saved: every monday, thursday at 09:00, next today 09:00 (Europe/Berlin). Tell the person this schedule and when it runs next, in your own words.");
+  assert.equal(routineNoteReply("Write", { file_path: join(conv.notesDir, "people-anna.md") }, conv.notesDir, ZONE, o.now), undefined, "only routine notes");
+  assert.equal(routineNoteReply("Read", { file_path: file }, conv.notesDir, ZONE, o.now), undefined, "only writes");
+  assert.equal(routineNoteReply("Write", { file_path: "/etc/routine-x.md" }, conv.notesDir, ZONE, o.now), undefined, "only inside the notes folder");
+  assert.equal(scheduledIn({ ...o, notesDir: conv.notesDir }).routines[0]!.name, "routine-fun-fact");
+});
+
+test("editing a note's when: moves the next occurrence from then on", () => {
+  const conv = groupWith("every day at 08:00");
+  const o = { skills: [] as string[], notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  F.factsFor(conv, o.now, "look").done({ ended: true, said: true });
+  assert.match(scheduleLines(conv.convId, o)[0]!, /^routine-fun-fact: every day at 08:00, next tomorrow 08:00; last \d\d-\d\d \d\d:\d\d/);
+  writeFileSync(join(conv.notesDir, "routine-fun-fact.md"), "---\nwhen: every weekday at 18:30\n---\nPost a fun fact for the group.\n");
+  assert.match(scheduleLines(conv.convId, o)[0]!, /every weekday at 18:30, next today 18:30/);
+  assert.equal(F.factsFor(conv, at("2026-10-22T06:30:00Z"), "look").routines, "", "nothing is due before the new time");
+  assert.equal(F.factsFor(conv, at("2026-10-22T16:35:00Z"), "look").routines, "", "it already ran today (at the old time): the edit starts with the next occurrence");
+  const next = F.factsFor(conv, at("2026-10-23T16:35:00Z"), "look");
+  assert.match(next.routines, /due now: Post a fun fact[\s\S]*every weekday at 18:30/);
+  next.done({ ended: true, said: true });
+});
+
+test("a note routine is for a conversation that has a look; skills are for the owner; the cap and an expired or inferred note", () => {
+  const conv = groupWith("every day at 08:00");
+  assert.equal(lookerOf(conv).skills.some((s) => /daily-brief/.test(s)), false, "a group has no scheduled skill");
+  const o = { skills: lookerOf(owner()).skills, notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
+  assert.deepEqual(scheduledIn(o).routines.map((r) => r.name), ["daily-brief", "evening-wrap", "weekly-review", "routine-fun-fact"]);
+  writeFileSync(join(conv.notesDir, "routine-old.md"), "---\nwhen: every day at 08:00\nexpires: 2026-10-01\n---\nOld.\n");
+  assert.ok(!scheduledIn(o).routines.some((r) => r.name === "routine-old"), "past its expires: day");
+  for (let i = 0; i < 25; i++) writeFileSync(join(conv.notesDir, `routine-z${String(i).padStart(2, "0")}.md`), "---\nwhen: every day at 08:00\n---\nz\n");
+  assert.equal(scheduledIn({ ...o, skills: [] }).routines.length, 20);
+});
+
+test("ROUTINES_OFF switches a scheduled skill off; a bad name stops the agent", () => {
+  assert.deepEqual(settings.routinesOff, []);
+  assert.deepEqual(loadSettings({ ROUTINES_OFF: "evening-wrap, weekly-review" }).routinesOff, ["evening-wrap", "weekly-review"]);
+  assert.throws(() => loadSettings({ ROUTINES_OFF: "Evening Wrap" }), /ROUTINES_OFF/);
+  const mutable = settings as unknown as { routinesOff: string[] };
+  mutable.routinesOff = ["evening-wrap"];
+  try {
+    assert.deepEqual(scheduledIn({ skills: lookerOf(owner()).skills, notesDir: join(process.env.HARNESS_DATA_DIR!, "none"), zone: ZONE, now: new Date() }).routines.map((r) => r.name), ["daily-brief", "weekly-review"]);
+  } finally {
+    mutable.routinesOff = [];
+  }
+});
+
+test("the selfTimed text is gone from every prompt; the promise points at the when: note where the conversation has a look", () => {
+  const OLD = /A check reads the notes every hour or so/;
+  const withLook = new Set(GROUP_CAPABILITIES);
+  const noLook = new Set([...GROUP_CAPABILITIES].filter((c) => c !== "wake" && c !== "heartbeat"));
+  for (const [name, text] of [["chat", chatSystem(new Date())], ["group", groupSystem({ caps: withLook as never })], ["tenant", tenantSystem({ name: "Eve", caps: withLook as never, timed: true })]] as const) {
+    assert.doesNotMatch(text, OLD, name);
+    assert.match(text, /routine-<short-slug>\.md[\s\S]*`when:`/, `${name}: the when: note`);
+  }
+  assert.doesNotMatch(groupSystem({ caps: noLook as never }), /routine-<short-slug>/, "a group without a look is not promised one");
+  assert.match(tenantSystem({ name: "Eve", caps: noLook as never, timed: false }), /You cannot act on your own later or on a schedule/);
+  assert.doesNotMatch(lookInstruction(new Date(2026, 9, 14, 9, 0), undefined, lookerOf(owner())), /a note says is due|note asks for it and it is due/);
+});
+
+test("the look: facts are in the instruction only when there are some", () => {
   const looker = lookerOf(owner());
   const now = new Date(2026, 9, 14, 9, 0, 0);
   const plain = lookInstruction(now, undefined, looker);
-  assert.doesNotMatch(plain, /Routines \(the daily brief/);
-  const withFacts = lookInstruction(now, undefined, looker, "brief: due now (07:30 daily).");
-  assert.match(withFacts, /Routines \(the daily brief, the evening wrap, the weekly review\) are heavy skills that code schedules[\s\S]*brief: due now \(07:30 daily\)\./);
-  assert.ok(withFacts.startsWith(plain.slice(0, plain.indexOf("While you work") - 2)) || withFacts.includes("While you work"), "the rest is unchanged");
+  assert.doesNotMatch(plain, /Routines are things that happen at a set time/);
+  const withFacts = lookInstruction(now, undefined, looker, "daily-brief: due now (every day at 07:30).");
+  assert.match(withFacts, /Routines are things that happen at a set time[\s\S]*routine notes[\s\S]*daily-brief: due now \(every day at 07:30\)\./);
 });
 
-test("skills: both are in the plugin, the owner is offered them, they are heavy (own expert) and never shared with a friend or a group", () => {
+test("skills: all three are in the plugin, the owner is offered them, they are heavy (own expert) and never shared with a friend or a group", () => {
   const owned = ownerSkills();
   for (const s of ["evening-wrap", "weekly-review"]) {
     assert.ok(owned.includes(`${PLUGIN}:${s}`), `${s}: offered to the owner`);
     assert.ok(privateSkills().includes(s), `${s}: private`);
-    assert.ok(!skillsFor(capabilitiesOf(owner())).includes(`${PLUGIN}:${s}`) || true);
     assert.ok(expertSetup(owned, "").delegated.has(s), `${s}: delegated to expert-${s}`);
   }
-  const all = new Set(["chat", "mail", "calendar", "notion", "tasks", "weather", "draw", "browse"] as const);
-  for (const s of skillsFor(all as never)) assert.ok(!/evening-wrap|weekly-review/.test(s), `a friend or group never gets ${s}`);
+  const everything = new Set(["chat", "mail", "calendar", "notion", "tasks", "weather", "draw", "browse"] as const);
+  for (const s of skillsFor(everything as never)) assert.ok(!/evening-wrap|weekly-review/.test(s), `a friend or group never gets ${s}`);
   assert.equal(lookerOf(owner()).skills.includes(`${PLUGIN}:evening-wrap`), true);
+  assert.ok(capabilitiesOf(owner()).has("heartbeat"));
 });
 
-test("/status lists the routines and their next run", () => {
-  const lines = S.routineLines("owner", base, z("2026-10-22T09:00:00Z"), BERLIN);
-  assert.match(lines[1]!, /^evening: 18:30 on weekdays, next today 18:30; last /);
+test("/status lists every scheduled item with its next and last run", () => {
+  const lines = S.routineLines("owner", all, z("2026-10-22T09:00:00Z"), BERLIN);
+  assert.match(lines[1]!, /^evening-wrap: every weekday at 18:30, next today 18:30; last /);
   const text = statusText({ spentUsd: 1, limitUsd: 20, approvals: 0, down: [], routines: lines });
-  assert.match(text, /\nRoutines: brief: 07:30 daily, next tomorrow 07:30; last .* \| evening: 18:30 on weekdays, next today 18:30; last .* \| weekly: Fridays 16:30, next tomorrow 16:30; last .*\.\nConnectors: none down\./);
-  assert.doesNotMatch(statusText({ spentUsd: 1, limitUsd: 20, approvals: 0, down: [] }), /Routines/, "no facts, no line (the existing text is unchanged)");
+  assert.match(text, /\nRoutines: daily-brief: every day at 07:30, next tomorrow 07:30; last .* \| evening-wrap: every weekday at 18:30, next today 18:30; last .* \| weekly-review: every friday at 16:30, next tomorrow 16:30; last .*\.\nConnectors: none down\./);
+  assert.doesNotMatch(statusText({ spentUsd: 1, limitUsd: 20, approvals: 0, down: [] }), /Routines/, "no facts, no line");
 });
 
-test("the catch-up window is at least an hour: 0 would make every routine late the moment its time passes", async () => {
-  const { loadSettings } = await import("../src/core/settings.ts");
+test("the catch-up window is at least an hour: 0 would make every routine late the moment its time passes", () => {
   assert.throws(() => loadSettings({ ROUTINE_CATCHUP_HOURS: "0" }), /ROUTINE_CATCHUP_HOURS must be a number from 1 to 24/);
   assert.equal(loadSettings({ ROUTINE_CATCHUP_HOURS: "1" }).routineCatchUpHours, 1);
   assert.equal(loadSettings({}).routineCatchUpHours, 4);
 });
 
-test("a second skip in a row is recorded and told too, not only the first", () => {
-  const conv = "friend-skips0000000000";
-  const opts = { catchUpHours: 4, who: "Ben", agentOf: (k: string) => `expert-${k}` };
-  S.routineFacts(conv, base, z("2026-11-02T09:00:00Z"), BERLIN, opts); // Monday morning: first sight
-  const one = S.routineFacts(conv, base, z("2026-11-03T12:00:00Z"), BERLIN, opts); // Tuesday noon: Monday's 18:30 is long gone
-  assert.match(one.text, /evening: did not run on 2026-11-02/);
-  S.markTold(conv, one.told);
-  assert.equal(S.routineFacts(conv, base, z("2026-11-03T12:30:00Z"), BERLIN, opts).text.includes("evening"), false, "told once, then quiet");
-  const two = S.routineFacts(conv, base, z("2026-11-04T12:00:00Z"), BERLIN, opts); // Wednesday noon: Tuesday's was missed too
-  assert.match(two.text, /evening: did not run on 2026-11-03/, "the newer skip is a new fact");
-  assert.equal(S.readRecord(conv, "evening")!.period, "2026-11-03");
-  assert.deepEqual(two.told, ["brief", "evening"]);
-});
-
-test("settling a look: delivered only with the expert's result; an attempt comes back only when the look was called off and nothing reached the owner", () => {
-  const conv = "friend-settle000000000";
-  const start = () => S.markStarted(conv, "evening", "2026-11-02", 1_000);
-  const none = new Set<string>();
-  const readOf = () => S.readRecord(conv, "evening")!;
-  S.routineFacts(conv, base, z("2026-11-02T09:00:00Z"), BERLIN, { catchUpHours: 4, who: "Ben", agentOf: (k) => `expert-${k}` }); // creates the records
-
-  start(); // the look ended well but the expert never came back with a result
-  S.settleRoutines(conv, new Set(["evening"]), none, { calledOff: false, sends: 0 }, 2_000);
-  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 1]);
-
-  start(); // called off before anything left: the attempt is given back (2 started, 1 refunded)
-  S.settleRoutines(conv, new Set(["evening"]), none, { calledOff: true, sends: 0 }, 3_000);
-  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 1]);
-
-  start(); // called off after a send or the self-email went out: not given back, or the next look would send it again
-  S.settleRoutines(conv, new Set(["evening"]), none, { calledOff: true, sends: 1 }, 4_000);
-  assert.deepEqual([readOf().status, readOf().attempts], ["failed", 2]);
-
-  start(); // the expert finished, then the look was called off: delivered
-  S.settleRoutines(conv, new Set(["evening"]), new Set(["evening"]), { calledOff: true, sends: 0 }, 5_000);
-  assert.equal(readOf().status, "delivered");
-});
-
-test("the wrap and the review: their experts have exactly the read tools, the calendar reads, Skill and the sends; no write_note, status note, task writes or seen_mail", () => {
+test("the wrap and the review: their experts have exactly the read tools, the calendar reads, Skill and the chat send; no email, no write_note, status note, task writes or seen_mail", () => {
   const set = expertSetup(ownerSkills(), "");
   for (const s of ["evening-wrap", "weekly-review"]) {
     const tools = set.agents[`expert-${s}`]!.tools;
     assert.ok(tools, `${s}: a tool allowlist, not the run's whole set`);
     assert.deepEqual([...tools].sort(), [
-      "Skill", "mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Google_Calendar__get_event", "mcp__claude_ai_Google_Calendar__list_calendars", "mcp__claude_ai_Google_Calendar__list_events",
-      "mcp__claude_ai_Google_Calendar__search_events", "mcp__mailbird__send_self_briefing", "mcp__notes__journal", "mcp__send__send", "mcp__tasks__list_tasks",
+      "Skill", "mcp__claude_ai_Google_Calendar__get_event", "mcp__claude_ai_Google_Calendar__list_calendars", "mcp__claude_ai_Google_Calendar__list_events",
+      "mcp__claude_ai_Google_Calendar__search_events", "mcp__notes__journal", "mcp__send__send", "mcp__tasks__list_tasks",
     ]);
     for (const banned of ["mcp__notes__write_note", "mcp__status__write_status_note", "mcp__tasks__add_task", "mcp__tasks__complete_task", "mcp__tasks__update_task", "mcp__meetings__note_upcoming_meetings", "mcp__seenmail__seen_mail", "Bash", "Write", "Edit"]) {
       assert.ok(!tools.includes(banned), `${s}: cannot call ${banned}`);

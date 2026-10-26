@@ -11,18 +11,18 @@ import { briefDelivered, learnedFact } from "../memory/learned.ts";
 import { variantOf } from "../run/delegation.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
-import type { Routine } from "../core/routines.ts";
+import { scheduledIn } from "../modules/tasks/routinelist.ts";
 import { reminderFacts } from "../tasks/remind.ts";
 import { meetingFacts } from "../tasks/meetings.ts";
 import { tasksFacts } from "../tasks/render.ts";
 import { activeItems } from "../tasks/store.ts";
-import { markStarted, markTold, routineFacts, routineOfAgent, routineStatus, settleRoutines } from "../tasks/routines.ts";
+import { markStarted, markTold, routineFacts, routineOfAgent, routineStatus, settleRoutines, type Routine } from "../tasks/routines.ts";
 import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
 import { afterLook, waitingReminders } from "./remindtick.ts";
 import { afterPrep, waitingMeetings } from "./preptick.ts";
 
 // THE FACTS CODE HANDS A RUN (CLAUDE.md §2: one agent, whatever started it). The heartbeat look and every chat turn (the owner's, a friend's, a group's) call `factsFor` and get the same
-// facts for their conversation: held posts, reminders due, meetings to prepare, a friend's learned changes, the welcome, a due routine, and as information the own posts of the last days,
+// facts for their conversation: held posts, reminders due, meetings to prepare, a friend's learned changes, the welcome, a due routine or routine note, and as information the own posts of the last days,
 // what was added to the list on its own and a long run of failing looks. Whichever run comes first says them; each is delivered AT MOST ONCE:
 //   * the claimed ones (held posts, reminders, meetings, learned, routines) are PENDING while the run that took them is going (`busy`, in memory): another run of the conversation does not get
 //     them. `done` settles them when the run ends: the same rule as before for a look (reminders: posted, or held and not urgent; learned: posted or held; prep: posted only; held posts and a skipped
@@ -70,11 +70,9 @@ export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date,
   return `${fence("held_posts", lines.join("\n"))}\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`;
 }
 
-// How a routine reaches the owner, for its fact line. The brief: the mail provider's own words, or the chat alone when there is no mail. Another routine: only when it is also mailed (ROUTINE_<NAME>_EMAIL).
-export const deliverHow = (r: Routine, who: string): string =>
-  r.name === "brief"
-    ? `How to deliver: ${settings.mail ? mailSlot()!.brief.how(r.email) : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format."}`
-    : r.email && settings.mail ? `Also email the full version to ${who} themself: ${mailSlot()!.brief.how(true, true)}` : "";
+// How the daily brief reaches the owner, for its fact line: the mail provider's own words, or the chat alone when there is no mail. Any other routine: the chat message alone.
+export const deliverHow = (r: Routine): string =>
+  r.skill === "daily-brief" ? `How to deliver: ${settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format."}` : "";
 
 // What is pending in a run right now, per conversation (memory only: a restart ends every run, so nothing can be stuck).
 const busy = new Map<string, Set<string>>();
@@ -89,12 +87,13 @@ export interface End {
   held?: boolean;
   abandoned?: boolean;
   sends?: number;
+  acted?: number; // tool calls of the run that were not reads
 }
 
 export interface Facts {
   blocks: string[]; // the claimed facts, delivered once (in the prompt, fenced where they quote anything)
   status: string[]; // information that is not claimed: own posts, what was added to the list, failing looks (a chat session is told only when these change)
-  routines: string; // a look: the routines section of its instruction (what to delegate now); a chat turn: "" (it only sees their status)
+  routines: string; // a look: the routines section of its instruction (what to delegate or do now); a chat turn: "" (it only sees their status)
   untrusted: boolean; // a block carries a mail's words (a task made from mail): acting on it is judged like acting on the mail
   onDelegate(agent: string): void; // the run handed a task to its expert
   onTool(tool: string, input: unknown, response?: unknown): void; // a tool of the run succeeded
@@ -128,21 +127,23 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const skill = `${PLUGIN}:meeting-prep`;
   const prepFacts = meetingFacts(prepping, { now: t, zone, skill: looker.skills.includes(skill) ? skill : undefined });
 
-  // The routines, the daily brief among them: those whose skill this conversation has. EVERY run sees their status; only a look acts on them: it delegates the due one to its expert (recorded as started at the delegation) and a chat
-  // turn never starts one. A routine the look is handed is pending (`busy`), and the record says started once delegated, so no second look runs it.
+  // The routines (tasks/routines.ts): the scheduled skills this conversation has (the daily brief among them) and its routine notes. EVERY run sees their status; only a look acts on them, one per look: a skill is delegated to its
+  // expert (recorded as started at the delegation), a note is done by the look itself (started when it is handed, done when the look posted, sent or acted). A chat turn never starts one. A routine the look is handed is pending
+  // (`busy`), and the record says started, so no second look runs it.
   const started = new Set<string>();
   const finished = new Set<string>();
   let selfMailed = 0; // routine emails sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
-  const ownRoutines = settings.routines.filter((r) => looker.skills.includes(`${PLUGIN}:${r.skill}`));
-  const routines = looker.experts && kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), deliver: (r) => deliverHow(r, looker.who) }) : undefined;
+  const { routines: ownRoutines, broken } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone, now });
+  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => (!r.skill || looker.experts) && !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), deliver: deliverHow }) : undefined;
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
   for (const n of routineNames) grab(`routine:${n}`);
   const start = (name: string): void => {
     if (!started.has(name) && routines?.due?.routine.name === name) (started.add(name), markStarted(conv.convId, name, routines.due.plan.slot.date, Date.now())); // (a second delegation of the same routine is not another attempt)
   };
+  if (routines?.due && !routines.due.routine.skill) start(routines.due.routine.name);
 
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts, learned ? fence("notes_changed_facts", learned.text) : "" ].filter(Boolean);
-  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines, now, zone, settings.routineCatchUpHours), failingLooksFact(conv)].filter(Boolean);
+  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines, now, zone, settings.routineCatchUpHours), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.join("; ")}.` : "", failingLooksFact(conv)].filter(Boolean);
   let settled = false;
   return {
     blocks,
@@ -166,8 +167,10 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
       const sends = (end.sends ?? 0) + selfMailed;
       try {
         if (end.ended) held.done(); // (a failed or called-off run leaves the held posts for the next one)
+        const note = routines?.due && !routines.due.routine.skill ? routines.due.routine.name : undefined;
+        if (note && end.ended && (end.said || end.held || sends > 0 || (end.acted ?? 0) > 0)) finished.add(note); // (a routine note is done once the look posted, sent or acted; silent without acting is a failed attempt)
         settleRoutines(conv.convId, started, finished, { calledOff: abandoned, sends }, Date.now());
-        if (finished.has("brief")) briefDelivered(conv.convId); // the "learned overnight" list the brief carried is told now, not when the tool handed it out (memory/learned.ts)
+        if (finished.has("daily-brief")) briefDelivered(conv.convId); // the "learned overnight" list the brief carried is told now, not when the tool handed it out (memory/learned.ts)
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
         if (handed.length && (kind === "look" || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
         if (prepping.length && (kind === "look" ? !abandoned : end.said)) afterPrep(conv, prepping, end.said, t); // (a look a message overtook leaves them claimed: the next run is handed them)

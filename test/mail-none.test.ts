@@ -74,10 +74,10 @@ test("heartbeat tick without mail: the jobs start and the liveness line is writt
 });
 
 test("the brief's delivery sentence in the routine fact: the mail provider's own, or the chat alone without mail", async () => {
-  const brief = { name: "brief", time: "07:30", days: "daily", skill: "daily-brief", email: true, enabled: true } as const;
-  await withMail(true, () => assert.match(deliverHow(brief, "Ben"), /send_self_briefing/));
+  const brief = { name: "daily-brief", skill: "daily-brief", rule: { unit: "day", interval: 1, time: "07:30" } } as const;
+  await withMail(true, () => assert.match(deliverHow(brief), /send_self_briefing/));
   await withMail(false, () => {
-    const none = deliverHow(brief, "Ben");
+    const none = deliverHow(brief);
     assert.doesNotMatch(none, /send_self_briefing|mailbird:/i);
     assert.match(none, /There is no email in this setup: your final answer is the whole brief itself/);
   });

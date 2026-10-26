@@ -37,9 +37,9 @@ import { missingSetup } from "./modules/index.ts";
 import { dataPath, readText } from "./core/state.ts";
 import { checkConvDbFile, damagedConvs } from "./core/convdb.ts";
 import { readDream } from "./modules/memory/dreamscope.ts";
-import { conversationsDir, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, layout, layoutProblem, logPaths, OWNER_CONV } from "./core/convpaths.ts";
+import { conversationsDir, convPaths, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, layout, layoutProblem, logPaths, OWNER_CONV } from "./core/convpaths.ts";
 import { readRetentionState, retentionSummary } from "./core/retention.ts";
-import { routineLines } from "./tasks/routines.ts";
+import { scheduleLines } from "./modules/tasks/routinelist.ts";
 import { systemZone } from "./core/timezone.ts";
 import { noCalendarData } from "./tasks/meetings.ts";
 
@@ -405,10 +405,10 @@ export async function doctor() {
   line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
 
   if (!legacy) {
-    // Routines (core/routines.ts): the schedule and the last run of each, from the owner's own record; a routine that failed or was skipped is a warning, not an error.
-    for (const r of settings.routines.filter((x) => x.enabled)) {
-      const last = routineLines(OWNER_CONV, [r], new Date(), systemZone())[0]!;
-      line(/\b(failed|skipped)\b/.test(last) ? "warn" : true, `routine ${r.name}`, last.slice(r.name.length + 2));
+    // Scheduled items (tasks/routines.ts): every scheduled skill and routine note with its schedule, next and last run, from the owner's own record; one that failed, was skipped or cannot run is a warning, not an error.
+    for (const last of scheduleLines(OWNER_CONV, { skills: ownerSkills(), notesDir: convPaths(OWNER_CONV).notes, zone: systemZone(), now: new Date() })) {
+      const name = /^[^\s:]+/.exec(last)![0];
+      line(/\b(failed|skipped|never runs)\b/.test(last) ? "warn" : true, `routine ${name}`, last.slice(name.length).replace(/^:?\s*/, ""));
     }
   }
 

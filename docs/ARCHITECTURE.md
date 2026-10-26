@@ -71,7 +71,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `hold`, `held_posts` | day's count of unprompted posts; posts held for quiet hours or the cap (newest 30) |
 | `seen_mail` | mail ids the look has worked through (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
-| `routine_runs` | last period of each routine, the brief included |
+| `routine_runs` | last period of each routine (scheduled skill or routine note), keyed by skill name or note file name |
 | `items`, `task_events`, `reminders`, `pending_imports`, `group_remind_noted` | tasks, append-only history, claimed reminders, an import preview, a group notice mark |
 | `learned_changes`, `learned_batches`, `feedback_*`, `voice_*`, `friend*` | quiet note changes and the lists that told them; notes saved after a 👎 and 👍 counts; voice notes received; a friend's bookkeeping |
 | `pending_*`, `suggestion_asks` | unused; a shipped migration is never edited; `pending_*` is emptied nightly |
@@ -116,7 +116,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 
 **The preset** (`assistants/<name>/`, default `ted`, `ASSISTANT_PRESET`; `src/core/preset.ts`).
 
-- `preset.json` holds the rhythm (tick, day interval, quiet hours, brief time, dream), the `routines`, note categories, profile limits, the expert and the core skills.
+- `preset.json` holds the rhythm (tick, day interval, quiet hours, dream), note categories, profile limits, the expert and the core skills.
 - `persona/*.md` holds every prompt as a template filled by `src/run/persona.ts`.
 - A preset changes how Ted talks and when it wakes, never what it may do: policy, the approval path, isolation and payments stay in code.
 
@@ -178,12 +178,12 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 | held posts (quiet hours, `/quiet`, the day's cap), and system status for the owner (`holdFact`) | `takeHeld`, `heldBlock` | when quiet is over and the cap has room; deleted only when the run ends well; nothing older than 36 h |
 | reminders due | `waitingReminders`, `reminderFacts` | claimed by the tick; told when the run said something (a look: or held, unless urgent) |
 | meetings claimed for prep | `waitingMeetings`, `meetingFacts` | `PREP_MINUTES` before the start; told when the run said something |
-| routines: status (due, running, delivered with the time, skipped, next) | `routineStatus` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction and it delegates to the expert |
+| routines, skill or note: status (due, running, delivered with the time, skipped, next); notes whose `when:` cannot be read | `routineStatus`, `scheduledIn` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction (a skill: it delegates to the expert; a note: it does it or delegates) |
 | a friend's notes that changed on their own | `learnedFact` | after her dream; told when the run said something or held it |
 | welcome (`welcomeStart` marks a fresh data folder in `kv`) | `takeWelcome` | the owner's first run, once ever |
 
-- **At most once.** What a run takes is pending in memory while it runs, so a chat turn and a look never get the same reminder, meeting, held post, change or routine. `done` settles it when the run ends: a look as before (held posts when it posted or stayed silent; reminders when it posted, or held and the item is not urgent; learned when it posted or held; a prep only when it posted, a routine only when its expert came back). A chat turn counts as having told when its reply carries words; a `[[silent]]` or reaction-only turn, or a failed one, settles nothing and leaves the facts for the next run (the fallback line for a reminder still comes after 30 minutes).
-- **Routines are the look's.** A chat turn sees their status (so it can answer "did my brief go out?") and never starts or records one; starting, `routine_runs` and settling stay with the look.
+- **At most once.** What a run takes is pending in memory while it runs, so a chat turn and a look never get the same reminder, meeting, held post, change or routine. `done` settles it when the run ends: a look as before (held posts when it posted or stayed silent; reminders when it posted, or held and the item is not urgent; learned when it posted or held; a prep only when it posted, a skill routine only when its expert came back, a routine note when the look posted, sent or acted). A chat turn counts as having told when its reply carries words; a `[[silent]]` or reaction-only turn, or a failed one, settles nothing and leaves the facts for the next run (the fallback line for a reminder still comes after 30 minutes).
+- **Routines are the look's.** A chat turn sees their status, notes included (so it can answer "did my brief go out?") and never starts or records one; starting, `routine_runs` and settling stay with the look.
 - **The expert.** What the look is handed (these facts and the chat tail it reads) is appended by code to every brief it gives an expert (`delegationHook`'s `context`, `expertContext` of the look); the approval judge still reads only the look's own brief.
 - **Prompt cache.** The claimed facts and the information facts are each told to a chat session only when their text differs from what it was last told (`src/run/turncontext.ts`); the system prompt stays stable.
 
@@ -196,11 +196,14 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 - Code never rewrites a held post. The only fixed texts here are the budget notice and the notice about the owner's own damaged database, once a day and not during quiet.
 
-**Routines** (`src/core/routines.ts`, `src/tasks/routines.ts`). A routine is `{name, time, days, skill, email, enabled}`. The daily brief (`briefTime` 07:30, skill `daily-brief`), the evening wrap (18:30 weekdays) and the weekly review (Friday 16:30) are routines (`ROUTINE_<NAME>`, `ROUTINE_<NAME>_EMAIL`, `ROUTINE_CATCHUP_HOURS` 4).
+**Routines** (`src/tasks/routines.ts`, `src/modules/tasks/routinelist.ts`). One mechanism for everything the assistant does at set times: a routine is a name, a repeat rule (`src/tasks/repeat.ts`, the grammar tasks use) and what to do. Code computes "is it due" and "was it done"; the model does the work. There are two sources, planned the same way:
 
-- `planRoutine` says waiting, due, running, done or skipped from the clock in the conversation's zone and the `routine_runs` record. At most one run per period; a run `started` for 45 minutes is dead and retried once. A Mac that slept through the time runs it once on waking within the catch-up window; otherwise the period is skipped and the next look tells the owner once.
-- A routine's skill is `delegate: sonnet`, so the look hands it to `expert-<skill>`; code marks it started when the look delegates and delivered or failed when the look ends. Only the owner's look has routines, and only a look runs them.
+- **A scheduled skill.** `schedule: every weekday at 18:30` in the skill's `SKILL.md` frontmatter: the daily brief (`every day at 07:30`), the evening wrap and the weekly review (`every fri at 16:30`). It exists in conversations whose skills include it (the owner's), and `ROUTINES_OFF=evening-wrap,weekly-review` switches some off. Only the brief is also mailed (`BRIEF_EMAIL`).
+- **A routine note.** A person asks in chat ("every Monday at 9 summarise my week", "every morning at 8 send Anna a pep talk") and the model saves `routine-<slug>.md` in that conversation's notes: front matter `when: <repeat rule>`, body the instruction. Owner, friends and groups all can, wherever the conversation has a look (`heartbeat` and `wake`; the persona says so only there). A write of such a note is answered at once by a `PostToolUse` hook (`routineNoteReply`): how the schedule was read and when it runs next, or that the `when:` line cannot be read and the routine will never run; an unreadable one is also in every run's status and `npm run doctor`. The `routine` category is not in the dream's lists, so the dream never touches it, and an unattended run cannot write one. At most 20 per conversation.
+- `scheduledIn` lists both for a conversation; `planRoutine` says waiting, due, running, done or skipped from `nextInstant` in the conversation's zone (wall time across clock changes) and the `routine_runs` record, keyed by the skill name or the note's file name. At most one run per occurrence (the slot's date); a run `started` for 45 minutes is dead and retried once. A Mac that slept through the time runs it once on waking within the catch-up window (`ROUTINE_CATCHUP_HOURS` 4); otherwise the occurrence is skipped and the next look tells the person once. A routine first seen after its slot owes nothing for it, and an interval counts from the day it was first seen. Editing a note's `when:` takes effect from the next occurrence: what ran today does not run again today.
+- One routine per look. A skill's expert is `expert-<skill>` (`delegate: sonnet`); code marks it started when the look delegates and delivered or failed when the look ends. A note is handed to the look as the fact `due now: <instruction> (routine <name>)`: it does it or delegates it, and the routine counts as done when the look posted, sent something, or ended silent having acted. Only a look runs a routine; a chat turn sees the status.
 - The brief keeps its state in `status-<name>` notes (`write_status_note`, `src/modules/status/statusnote.ts`), sends the full brief by the mail provider (`BRIEF_EMAIL=on` for Gmail) and answers with the short chat message. Once a day its expert also sweeps the whole inbox, lists archived mail by number and reports what the dream and the looks changed in the notes.
+- `/status` and `npm run doctor` list every scheduled item (skill or note) with its schedule, next and last run.
 
 **Reminders** (`src/tasks/remind.ts`, `src/heartbeat/remindtick.ts`).
 
@@ -252,7 +255,7 @@ Everything the assistant does or decides is told once as a typed event (`src/cor
 
 Working memory is the conversation's resumed session. Episodic memory is `logs/audit.jsonl`, the conversation log and the `looks` table. Procedural memory is the bundled skills in `plugin/skills/` (no personal details). Semantic memory is the notes.
 
-- **Notes** live in `conversations/<convId>/notes/`: one markdown note per fact plus `MEMORY.md`, kept by the SDK's auto-memory. The category is the start of the file name (`triage-`, `people-`, `scheduling-`, `context-`, `brief-`, `style-`, `setup-`, `voice-`, `status-`); a note may carry `expires:` and `origin: inferred`.
+- **Notes** live in `conversations/<convId>/notes/`: one markdown note per fact plus `MEMORY.md`, kept by the SDK's auto-memory. The category is the start of the file name (`triage-`, `people-`, `scheduling-`, `context-`, `brief-`, `style-`, `setup-`, `voice-`, `status-`, `routine-`); a note may carry `expires:` and `origin: inferred`; a `routine-` note carries `when:` (see Routines).
 - Containment (`isInside`, `src/core/contain.ts`) is the only write gate. Every note written, edited or forgotten is mentioned in the reply and audited. `status-<name>.md` notes (the brief's state) hold at most 1,200 characters, expire after 1 to 30 days and are never touched by the dream.
 - **Unattended runs** see an index of their notes in the prompt (fenced data) and have two narrow tools (`src/modules/memory/notestools.ts`): `read_note`, and `write_note`, which saves only `origin: inferred` facts in the preset's `notes.background` categories. It is free of the judge and audited (`memory_note`). The file tools stay denied to every unattended run.
 - **Tools and search** (`src/modules/memory/memory-tools.ts`): `forget_note`, `search_logs`, `journal`, `undo_dream`. Search (`src/memory/search*.ts`) uses a rebuildable SQLite FTS5 index per conversation, scored with BM25 in TypeScript (`Ranker.score` is the seam for another ranker).
@@ -502,6 +505,7 @@ src/modules/send/shots.ts  pictures of a turn, delivered via send
 src/modules/status/module.ts  status tool declaration
 src/modules/status/statusnote.ts  `write_status_note`: the brief's state
 src/modules/tasks/module.ts  task tool rows
+src/modules/tasks/routinelist.ts  the scheduled skills and routine notes of a conversation; the reply to a routine note write
 src/modules/tasks/taskfacts.ts  code facts about the list for the judge and chat
 src/modules/tasks/tasktools.ts  the task tools and import tools
 src/modules/voice/module.ts  voice
@@ -619,7 +623,7 @@ src/tasks/meetings.ts  recorded meetings and prep rules
 src/tasks/remind.ts  reminder planner and facts (pure)
 src/tasks/render.ts  items as lines, `/tasks`, task facts
 src/tasks/repeat.ts  repeat rules (pure, DST-safe)
-src/tasks/routines.ts  routine records and the look's routine facts
+src/tasks/routines.ts  the one planner and record of scheduled skills and routine notes, and the look's routine facts
 src/tasks/store.ts  items and task_events: all mutations
 src/tasks/when.ts  local dates and wall times
 ```
@@ -676,7 +680,6 @@ src/core/redact.ts  keeps numbers and credentials out of logs
 src/core/requirelayout.ts  layout guard for CLIs and the intake page
 src/core/retention.ts  retention registry and scheduler
 src/core/rotate.ts  size-based log rotation
-src/core/routines.ts  routines as data; the pure planner
 src/core/rungate.ts  the gate of model runs
 src/core/sanitize.ts  text sanitiser and `LIMITS`
 src/core/settings.ts  every tunable, validated at start

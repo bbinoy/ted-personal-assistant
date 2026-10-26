@@ -44,7 +44,7 @@ export function lookerOf(conv: Conversation): Looker {
     experts: reads,
     tasks: caps.has("tasks"),
     meetings: settings.prepMinutes > 0 && conv.kind !== "group" && caps.has("calendar"),
-    sources: [...parts, "and your notes and their schedules"].join(", "),
+    sources: [...parts, "and your notes"].join(", "),
     skills,
   };
 }

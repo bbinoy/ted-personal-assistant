@@ -30,11 +30,9 @@ const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you (or a backgr
 // How the brief is delivered (the daily-brief skill, step 6): the mail pass uses the gmail skill and the Gmail connector. With BRIEF_EMAIL=on the brief is also emailed to
 // the owner's own address with send_message (the one send a background run may do without asking, gmailrules.ts); otherwise the chat message is the brief.
 const BRIEF_GMAIL = "The mail is Gmail: wherever the skill says to run 'ted-personal-assistant:mailbird', load 'ted-personal-assistant:gmail' instead and use the Gmail tools it names; the mailbird tools do not exist here.";
-const briefHow = (email: boolean = settings.briefEmail, routine = false): string =>
-  email && settings.mailSelfAddress
-    ? `${BRIEF_GMAIL} Deliver the full ${routine ? "version" : "brief"} with the Gmail send_message tool, exactly once, to ${JSON.stringify([settings.mailSelfAddress])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete ${routine ? "version" : "brief"} as plain text (body, not htmlBody).`
-    : routine
-    ? `${BRIEF_GMAIL} There is no address to email the owner at, so do not email anything: your final answer is the short chat message, in the skill's format.`
+const briefHow = (): string =>
+  settings.briefEmail && settings.mailSelfAddress
+    ? `${BRIEF_GMAIL} Deliver the full brief with the Gmail send_message tool, exactly once, to ${JSON.stringify([settings.mailSelfAddress])} and nobody else (no cc, no bcc, no attachments, no draftId): subject starting with the emoji the skill names, body the complete brief as plain text (body, not htmlBody).`
     : `${BRIEF_GMAIL} Do not deliver by email: your final answer is the whole brief itself, in the skill's format.`;
 
 const mail: MailSlot = {
@@ -84,7 +82,7 @@ export const gmailModule: ToolModule = {
   ],
   free: ["read"],
   // The brief the heartbeat's expert emails to the owner's own address (BRIEF_EMAIL=on): one plain recipient that IS the configured address, nothing else (gmailrules.ts isSelfSend).
-  freeWhen: { send: (input, source) => source === "background" && active() && (settings.briefEmail || settings.routines.some((r) => r.enabled && r.email)) && isSelfSend(`${GMAIL_PREFIX}send_message`, input, settings.mailSelfAddress) },
+  freeWhen: { send: (input, source) => source === "background" && active() && settings.briefEmail && isSelfSend(`${GMAIL_PREFIX}send_message`, input, settings.mailSelfAddress) },
   titles: {
     [`${GMAIL_PREFIX}send_message`]: { icon: "✉️", title: "Send email" },
     [`${GMAIL_PREFIX}forward`]: { icon: "✉️", title: "Forward email" },

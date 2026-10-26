@@ -37,7 +37,7 @@ test("the heartbeat instruction names the heavy skills, and the routine fact (ti
   const text = lookInstruction(new Date(2026, 9, 14, 8, 0), undefined);
   assert.match(text, /These skills are heavy: never load them yourself[^.]*ted-personal-assistant:daily-brief \(subagent_type "expert-daily-brief"\), ted-personal-assistant:meeting-prep/);
   assert.doesNotMatch(text, /status-brief|overdue/, "no brief timing or state in the words: the routine line carries it");
-  assert.match(lookInstruction(new Date(2026, 9, 14, 8, 0), undefined, undefined, "brief: due now (07:30 daily)."), /Routines \(the daily brief[\s\S]*brief: due now \(07:30 daily\)\./);
+  assert.match(lookInstruction(new Date(2026, 9, 14, 8, 0), undefined, undefined, "daily-brief: due now (every day at 07:30)."), /Routines are things that happen at a set time[\s\S]*daily-brief: due now \(every day at 07:30\)\./);
 });
 
 test("the status note: written by the one narrow tool, status-<name>.md only, one note's worth, expiring tomorrow; the dream and the memory notices leave it alone", () => {

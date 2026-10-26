@@ -12,7 +12,7 @@ import { allows, capabilitiesOf, groupTools, toolsFor } from "../policy/capabili
 import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
 import { PROFILES } from "./profiles.ts";
 import { skillsFor } from "../modules/skills.ts";
-import { tenantById, tenantContext, wasDisclosed, type TenantContext } from "../tenants/tenants.ts";
+import { tenantById, tenantContext, wasDisclosed, zoneOf, type TenantContext } from "../tenants/tenants.ts";
 
 // The ONE builder of the options of a conversation's run: the owner's chat, a group and a tenant. What a run is made of comes from the
 // conversation's record (conversationmodel.ts: kind, source, notes folder, session file, the group's id) and, for a person with a registry record,
@@ -38,14 +38,14 @@ type Shape = Pick<RunOptions, "systemPrompt" | "maxTurns" | "maxBudgetUsd" | "me
 
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: chatSystem(i.now), // (only what is stable: what changes between two messages is turnContext below)
-  memory: { dir: conv.notesDir, ...(i.notify ? { notify: i.notify } : {}) },
+  memory: { dir: conv.notesDir, zone: zoneOf(conv), ...(i.notify ? { notify: i.notify } : {}) },
   maxTurns: PROFILES.chat.maxTurns,
   maxBudgetUsd: PROFILES.chat.maxBudgetUsd, // (the preset's: a cold prompt cache alone can cost most of a dollar)
 });
 
 const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: groupSystem({ style: i.style, caps: capabilitiesOf(conv) }),
-  memory: { dir: conv.notesDir, groupId: conv.groupId },
+  memory: { dir: conv.notesDir, zone: zoneOf(conv), groupId: conv.groupId },
   skills: PROFILES.group.skills,
   tools: groupTools(),
   maxTurns: PROFILES.group.maxTurns,
@@ -62,7 +62,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   const caps = capabilitiesOf(conv);
   return {
     systemPrompt: tenantSystem({ name: ctx.name, caps, timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: toolsFor(caps).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
-    memory: { dir: ctx.notesDir },
+    memory: { dir: ctx.notesDir, zone: zoneOf(conv) },
     skills: skillsFor(caps),
     tools: toolsFor(caps),
     maxTurns: ctx.maxTurns,
