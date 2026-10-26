@@ -14,7 +14,7 @@ import { dreamScope } from "../src/modules/memory/dreamscope.ts";
 import { ownerSkills, skillHint } from "../src/modules/skills.ts";
 import { writeStatusNote } from "../src/modules/status/statusnote.ts";
 
-// The daily brief is a skill the heartbeat run delegates to its expert; its state is the status-brief note (no code schedules or tracks the brief).
+// The daily brief is a skill the heartbeat run delegates to its expert; code schedules and records it like the other routines (routine_runs); the status-brief note is only its content for the next brief.
 
 const signal = new AbortController().signal;
 
@@ -33,21 +33,18 @@ test("the bundled daily-brief and meeting-prep skills are heavy: the heartbeat r
   assert.deepEqual(await call({ skill: "ted-personal-assistant:meeting-prep" }, { agent_id: "a", agent_type: "expert-daily-brief" }), {}, "and the sub-skill meeting-prep");
 });
 
-test("the heartbeat instruction carries the brief rules: usual time, overdue hour, the status-brief note, how to deliver", () => {
+test("the heartbeat instruction names the heavy skills, and the routine fact (time, state, how to deliver) is code's line", () => {
   const text = lookInstruction(new Date(2026, 9, 14, 8, 0), undefined);
-  assert.match(text, /usual time is 07:30/);
-  assert.match(text, /From 09:00 on it is overdue/);
-  assert.match(text, /status-brief/);
-  assert.match(text, /expert-daily-brief/);
   assert.match(text, /These skills are heavy: never load them yourself[^.]*ted-personal-assistant:daily-brief \(subagent_type "expert-daily-brief"\), ted-personal-assistant:meeting-prep/);
-  assert.match(text, /send_self_briefing/);
+  assert.doesNotMatch(text, /status-brief|overdue/, "no brief timing or state in the words: the routine line carries it");
+  assert.match(lookInstruction(new Date(2026, 9, 14, 8, 0), undefined, undefined, "brief: due now (07:30 daily)."), /Routines \(the daily brief[\s\S]*brief: due now \(07:30 daily\)\./);
 });
 
 test("the status note: written by the one narrow tool, status-<name>.md only, one note's worth, expiring tomorrow; the dream and the memory notices leave it alone", () => {
   const dir = mkdtempSync(join(tmpdir(), "status-"));
   const now = new Date(2026, 9, 14, 9, 0);
   assert.deepEqual(writeStatusNote("brief", "2026-10-14\nstatus: started", now, dir), { ok: true, file: "status-brief.md" });
-  assert.match(readFileSync(join(dir, "status-brief.md"), "utf8"), /^---\nexpires: 2026-10-15\nwritten: 2026-10-14T[\d:.]+Z\nattempts: 1\n---\n2026-10-14\nstatus: started\n$/);
+  assert.match(readFileSync(join(dir, "status-brief.md"), "utf8"), /^---\nexpires: 2026-10-15\nwritten: 2026-10-14T[\d:.]+Z\n---\n2026-10-14\nstatus: started\n$/);
   assert.equal(categoryOf("status-brief.md"), "status");
   assert.deepEqual(readNotes(now, dir).map((n) => [n.file, n.category, n.text]), [["status-brief.md", "status", "2026-10-14\nstatus: started"]]);
   assert.deepEqual(readNotes(new Date(2026, 9, 16, 9, 0), dir), [], "expired after tomorrow");

@@ -122,7 +122,7 @@ test("a friend's run passes the same permission path: it asks nobody, outside he
 test("a friend on an instance without Google has no expert and no mail in her instruction; a group the same, in its own words", () => {
   const id = friend("Cy");
   const looker = withoutGoogle(() => lookerOf(tenant(id)));
-  assert.deepEqual([looker.reads, looker.mail, looker.experts, looker.brief, looker.own, looker.group], [false, false, false, false, false, false]);
+  assert.deepEqual([looker.reads, looker.mail, looker.experts, looker.own, looker.group], [false, false, false, false, false]);
   const o = withoutGoogle(() => heartbeatOptions(tenant(id), payerOf(id), {}, NOW));
   assert.equal(o.experts, undefined);
   const b = withoutGoogle(() => buildOptions(async () => ({ approved: false }), o, undefined));
@@ -156,7 +156,7 @@ test("the owner's run is unchanged by all of it: the login, the background sourc
   assert.equal(o.tenant, undefined);
   assert.ok(o.experts);
   const l = lookerOf(owner());
-  assert.deepEqual([l.own, l.reads, l.mail, l.experts, l.brief], [true, true, true, true, true]);
+  assert.deepEqual([l.own, l.reads, l.mail, l.experts], [true, true, true, true]);
   assert.match(l.sources, /^the inbox mail you have not looked at yet \(see below\), the calendar for the next 36 hours, tasks, and your notes and their schedules$/);
 });
 

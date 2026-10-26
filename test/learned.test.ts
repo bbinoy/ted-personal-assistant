@@ -321,7 +321,6 @@ test("the brief tool is its own manifest action (not a read), and a list handed 
   const { entryFor } = await import("../src/policy/toolmanifest.ts");
   const action = entryFor("mcp__notes__memory_changes_since_brief")?.action;
   assert.equal(action, "memory-told");
-  const { writeStatusNote } = await import("../src/modules/status/statusnote.ts");
   const c = friend();
   inferred(c, "people-anna.md", "Anna moved to Lisbon");
   const first = L.briefLearned(c.convId, c.notesDir, NOW);
@@ -331,15 +330,13 @@ test("the brief tool is its own manifest action (not a read), and a list handed 
   assert.ok(first.includes("people-anna"));
   L.briefDelivered(c.convId);
   assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 30 * HOUR), "", "delivered: told");
-  // the real trigger: the brief's status note saying delivered, for the owner
+  // the real trigger is code's: the brief routine's expert came back with its result (look.ts), for the owner
   mkdirSync(NOTES_DIR, { recursive: true });
   rmSync(NOTES_DIR, { recursive: true, force: true });
   mkdirSync(NOTES_DIR, { recursive: true });
   inferred({ convId: OWNER_CONV, notesDir: NOTES_DIR }, "people-di.md", "Di moved");
   assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW), /people-di/);
   assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + HOUR), /people-di/, "still offered");
-  assert.ok(writeStatusNote("brief", "status: started", new Date(NOW), NOTES_DIR).ok);
-  assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + 2 * HOUR), /people-di/, "started is not delivered");
-  assert.ok(writeStatusNote("brief", "status: delivered", new Date(NOW), NOTES_DIR).ok);
+  L.briefDelivered(OWNER_CONV);
   assert.equal(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + 3 * HOUR), "");
 });

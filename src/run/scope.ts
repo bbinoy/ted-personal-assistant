@@ -6,7 +6,7 @@ import { capabilitiesOf } from "../policy/capabilities.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import { PROFILES } from "./profiles.ts";
 import { OWNER, settings } from "../core/settings.ts";
-import { PLUGIN, skillsFor } from "../modules/skills.ts";
+import { skillsFor } from "../modules/skills.ts";
 
 // What a heartbeat run is made of for ONE conversation, read from its capability set (capabilities.ts capabilitiesOf) and nothing else: the owner, a group and a friend
 // are asked the same way and differ only in data. A conversation that can read mail, a calendar or tasks is told to be proactive and may delegate heavy work to the
@@ -20,7 +20,6 @@ export interface Looker {
   reads: boolean; // it can read mail, a calendar or tasks of its own
   mail: boolean; // it has mail tools
   experts: boolean; // it may delegate heavy work to the expert: whoever has something to read
-  brief: boolean; // it has the daily-brief skill
   tasks: boolean; // it has the task list (an unattended look may add to it)
   meetings: boolean; // meeting prep is on and it has a calendar: its look records the upcoming meetings (modules/meetings); heartbeat/preptick.ts claims them and the look says them
   sources: string; // what the instruction lists after the chat log
@@ -43,7 +42,6 @@ export function lookerOf(conv: Conversation): Looker {
     reads,
     mail: caps.has("mail"),
     experts: reads,
-    brief: skills.includes(`${PLUGIN}:daily-brief`),
     tasks: caps.has("tasks"),
     meetings: settings.prepMinutes > 0 && conv.kind !== "group" && caps.has("calendar"),
     sources: [...parts, "and your notes and their schedules"].join(", "),

@@ -1,12 +1,11 @@
 import { parseWhen, type Days, type Preset } from "./preset.ts";
 import { clockIn, dayAt, systemZone, timeIn } from "./timezone.ts";
 
-// Routines: what the assistant does on a schedule, as DATA. The daily brief was the one special case (a time in the preset, a fact line from its status note, words in the heartbeat
-// prompt); a routine generalises it: {name, when (local time + days), skill (a plugin skill), delivery (the chat message, and optionally an email to the owner themself), enabled}.
+// Routines: what the assistant does on a schedule, as DATA: {name, when (local time + days), skill (a plugin skill), delivery (the chat message, and optionally an email to the owner themself), enabled}.
 // This file is the PLANNER, pure: given the clock, the conversation's zone and the record of the last run it says whether a routine is due, running, done or skipped, so the model never
-// compares a date or a time (the look hands it the line). At most one run per period: the day for a daily or weekdays routine, the week's occurrence for a weekly one. If the Mac slept
+// compares a date or a time (the look hands it the line). The daily brief is a routine like the others (its time is the preset's rhythm, its email BRIEF_EMAIL); routine_runs is the one record
+// of started / delivered / failed. At most one run per period: the day for a daily or weekdays routine, the week's occurrence for a weekly one. If the Mac slept
 // through the time the routine still runs once when it wakes, within `catchUpHours` of its time; after that the period is skipped and the next brief says so in one line.
-// The brief keeps its own record (the model-written status-brief note, statusnote.ts) and its own fact line; it is listed here only so /status and the doctor can show it.
 
 export type Name = string;
 export interface Routine {
@@ -16,7 +15,6 @@ export interface Routine {
   readonly skill: string; // plain plugin skill name
   readonly email: boolean; // also mailed to the owner themself (the chat message is always sent)
   readonly enabled: boolean;
-  readonly planned: boolean; // false: the brief, which has its own record and fact line
 }
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -26,7 +24,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 // ROUTINE_<NAME>=off | 18:30 | "18:30 weekdays" | "fri 16:30" (a bare time keeps the preset's days), ROUTINE_<NAME>_EMAIL=on|off. The brief: its time is the preset's rhythm, its email BRIEF_EMAIL.
 export function resolveRoutines(env: Env, p: Preset, briefEmail: boolean): Routine[] {
-  const brief: Routine = { name: "brief", time: p.rhythm.heartbeat.briefTime, days: "daily", skill: "daily-brief", email: briefEmail, enabled: true, planned: false };
+  const brief: Routine = { name: "brief", time: p.rhythm.heartbeat.briefTime, days: "daily", skill: "daily-brief", email: briefEmail, enabled: true };
   const out: Routine[] = [brief];
   for (const [name, d] of Object.entries(p.routines)) {
     const key = `ROUTINE_${name.toUpperCase().replace(/-/g, "_")}`;
@@ -46,7 +44,7 @@ export function resolveRoutines(env: Env, p: Preset, briefEmail: boolean): Routi
     }
     const mail = env[`${key}_EMAIL`]?.trim().toLowerCase();
     if (mail && mail !== "on" && mail !== "off") throw new Error(`${key}_EMAIL must be on or off (got "${mail}")`);
-    out.push({ name, time, days, skill: d.skill, email: mail ? mail === "on" : d.email, enabled, planned: true });
+    out.push({ name, time, days, skill: d.skill, email: mail ? mail === "on" : d.email, enabled });
   }
   return out;
 }
@@ -90,7 +88,7 @@ export function slotsAround(r: Pick<Routine, "time" | "days">, now: Date, zone: 
   return { ...(last ? { last } : {}), ...(next ? { next } : {}) };
 }
 
-// ---- the record of a routine's last period (assistant.db routine_runs; routinestore.ts) ----
+// ---- the record of a routine's last period (assistant.db routine_runs; tasks/routines.ts) ----
 
 export type RunStatus = "started" | "delivered" | "failed" | "skipped";
 export interface RoutineRecord {

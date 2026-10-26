@@ -4,7 +4,7 @@ import { planRoutine, whenText, nextText, type Plan, type Routine, type RoutineR
 import { dayAt, timeIn } from "../core/timezone.ts";
 import { PLUGIN } from "../core/preset.ts";
 
-// The scheduling of the routines besides the brief (core/routines.ts plans, this file remembers and words it). The record is one row per routine in the conversation's assistant.db
+// The scheduling of the routines, the daily brief among them (core/routines.ts plans, this file remembers and words it). The record is one row per routine in the conversation's assistant.db
 // (routine_runs): code writes it, never the model. A look asks `routineFacts` for its instruction; the run that delegates a due routine's expert is marked started at that moment
 // (`started`), and when the look ends it is marked delivered or failed. So a routine runs once per period whatever the model does, a dead run is retried (twice), and a Mac that slept
 // through the time runs it on waking (within the catch-up window) or skips it and says so once.
@@ -41,7 +41,7 @@ export interface Planned { readonly routine: Routine; readonly plan: Plan }
 export function planAll(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, catchUpHours: number): Planned[] {
   const out: Planned[] = [];
   for (const routine of routines) {
-    if (!routine.planned || !routine.enabled) continue;
+    if (!routine.enabled) continue;
     const rec = ensure(conv, routine.name, now.getTime());
     const plan = planRoutine(routine, now, zone, rec, catchUpHours);
     if (plan.state === "skipped" && (rec?.status !== "skipped" || rec.period !== plan.slot.date)) liveConvDb(conv)?.run("UPDATE routine_runs SET period = ?, status = 'skipped', at = ?, told = 0 WHERE name = ?", plan.slot.date, now.getTime(), routine.name);
@@ -79,7 +79,7 @@ export function markTold(conv: ConvRef, names: readonly string[]): void {
 }
 
 // The expert a delegation names -> the routine it runs, if any (variantOf: "expert-<skill>").
-export const routineOfAgent = (routines: readonly Routine[], agent: string, agentOf: (skill: string) => string): Routine | undefined => routines.find((r) => r.planned && agentOf(r.skill) === agent);
+export const routineOfAgent = (routines: readonly Routine[], agent: string, agentOf: (skill: string) => string): Routine | undefined => routines.find((r) => agentOf(r.skill) === agent);
 
 
 export interface RoutineFacts {
@@ -89,7 +89,7 @@ export interface RoutineFacts {
 }
 
 // The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting, done or off is not mentioned). `deliver`: how the full version reaches the owner by email, when it should.
-export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; agentOf: (skill: string) => string; approvals?: number; emailHow?: () => string }): RoutineFacts {
+export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; agentOf: (skill: string) => string; approvals?: number; deliver?: (r: Routine) => string }): RoutineFacts {
   const planned = planAll(conv, routines, now, zone, o.catchUpHours);
   const lines: string[] = [];
   let due: RoutineFacts["due"];
@@ -99,8 +99,8 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
     if (plan.state === "running") lines.push(`${r.name}: started ${Math.round((now.getTime() - plan.since.getTime()) / 60_000)} min ago, the expert is still working; wait.`);
     else if (plan.state === "due" && !due) {
       due = p as NonNullable<typeof due>;
-      const mail = r.email && o.emailHow ? ` Also email the full version to ${o.who} themself: ${o.emailHow()}` : "";
-      lines.push(`${r.name}: due now (${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}). Delegate it now: call the Agent tool with subagent_type "${o.agentOf(r.skill)}" and a self-contained brief that names the skill ${PLUGIN}:${r.skill}, today's date, and that this routine only reads and tells ${o.who}: it changes nothing and sends nothing but its result to ${o.who}. Its final answer is the short chat message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${mail}`);
+      const how = o.deliver?.(r);
+      lines.push(`${r.name}: due now (${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}). Delegate it now: call the Agent tool with subagent_type "${o.agentOf(r.skill)}" and a self-contained brief that names the skill ${PLUGIN}:${r.skill}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${how ? ` ${how}` : ""}`);
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look.`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
@@ -114,14 +114,13 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
 }
 
 // "/status" and the doctor: one line per routine with its schedule, next run and last run.
-export function routineLines(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, briefLast: string): string[] {
+export function routineLines(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string): string[] {
   return routines.map((r) => {
-    const last = r.planned ? lastRun(conv, r, zone) : briefLast;
-    return `${r.name}: ${nextText(r, now, zone)}${r.enabled ? `; last ${last}` : ""}${r.email && r.enabled ? "; also by email" : ""}`;
+    return `${r.name}: ${nextText(r, now, zone)}${r.enabled ? `; last ${lastRun(conv, r, zone)}` : ""}${r.email && r.enabled ? "; also by email" : ""}`;
   });
 }
 
-// "10-22 18:31", "failed (2026-10-22)", "not yet": the last run of a planned routine, from the record (the brief's is its status note's: statusnote.ts lastStatusText).
+// "10-22 18:31", "failed (2026-10-22)", "not yet": the last run of a routine, from the record.
 export function lastRun(conv: ConvRef, r: Routine, zone: string): string {
   const rec = readRecord(conv, r.name);
   if (rec?.lastDelivered) return `${dayAt(new Date(rec.lastDelivered), 0, zone).date.slice(5)} ${timeIn(new Date(rec.lastDelivered), zone)}${rec.status === "failed" || rec.status === "skipped" ? `, then ${rec.status} (${rec.period})` : ""}`;
