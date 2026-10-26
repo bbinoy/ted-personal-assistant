@@ -2,7 +2,6 @@ import "./core/log.ts"; // first: timestamps, redaction and owner-only files for
 import "./core/migrateatstart.ts"; // second: an old data folder is moved to the current layout before any module opens a file (core/migrate.ts)
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
 import { createFeedback } from "./conversation/feedback.ts";
-import { createReminderAnswers } from "./tasks/remindanswer.ts";
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runHeartbeat, runPrep } from "./run/agent.ts";
@@ -46,7 +45,7 @@ import { setLearnedRuntime } from "./conversation/learned.ts";
 import { holdingNow } from "./heartbeat/notices.ts";
 import { mayRun } from "./tenants/payer.ts";
 import { OWNER_KEY, isTenantKey } from "./core/ownerkey.ts";
-import { ensureOwner, learnOwnerAci, zoneOf, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
+import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
 import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
@@ -167,7 +166,6 @@ const pipeline: Pipeline = createPipeline({
     foreign: createVoiceLanguage(settings.ttsLanguages), // the language the voice does not speak, if any; a failed check falls back to the conversation's last known language
   },
   approvals,
-  reminders: createReminderAnswers({ out, zone: zoneOf, isOwner: fromOwner }), // a quoted "done" / "snooze 1h" or a ✅ on a reminder is answered in code (tasks/remindanswer.ts)
   feedback: createFeedback({ out }), // a 👎 or "less of this" on something sent unprompted: one offer to save a note, nothing saved until the owner says yes (feedback.ts)
   vouch,
   isOwner: fromOwner,

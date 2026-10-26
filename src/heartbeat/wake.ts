@@ -148,7 +148,7 @@ export function createWakeups(deps: WakeDeps) {
       }
     }
     if (wake) for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone
-    await Promise.all(remind.map(async (conv) => void (paused(clock()) || (await fireReminders(pipeline, conv, clock()))))); // reminders that have come due (heartbeat/remindtick.ts): a message each, no model, apart from the look
+    await Promise.all(remind.map(async (conv) => void (paused(clock()) || (await fireReminders(pipeline, conv, clock(), { looks: convs.includes(conv) && allows(conv, "heartbeat") && allows(conv, "wake") }))))); // reminders that have come due (heartbeat/remindtick.ts): claimed for the conversation's look, which says them; the fixed line only without a look
     await Promise.all(
       convs.map(async (conv) => {
         if (paused(clock())) return;

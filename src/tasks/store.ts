@@ -208,6 +208,7 @@ interface Change {
   set: Partial<Record<keyof Row, string | number | null>>;
   next?: string;
   keepUpdated?: boolean; // bookkeeping, not an edit: updated_at stays (a reminder being marked sent is not the person touching the item)
+  silent?: boolean; // the history row only, no event: the journal line comes later (a reminder is journaled when it was TOLD, heartbeat/remindtick.ts)
 }
 
 /** One transaction: the item's changed columns and the history row; then the event. Returns the item as it is now and the line. */
@@ -230,7 +231,7 @@ function commit(scope: Scope, id: number, c: Change): { item: Item; line: string
     return { item: toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", id)!), changed: Object.keys(after).filter((k) => k !== "status" && k !== "updated_at" && k !== "snooze_until" && k !== "done_at") };
   });
   const line = lineOf(c.action, out.item, { zone: scope.zone, now, changed: out.changed, next: c.next });
-  told(scope, out.item.id, c.action, line);
+  if (!c.silent) told(scope, out.item.id, c.action, line);
   return { item: out.item, line };
 }
 
@@ -459,9 +460,9 @@ export function snoozeItem(scope: Scope, id: number, until: number): { item: Ite
   return commit(scope, id, { action: "snoozed", set: { status: "snoozed", snooze_until: t } });
 }
 
-/** A reminder was sent for this item (the history says so; T2). */
+/** A reminder of this item came due and was claimed (the history row, and its next remind_at). Silent: the journal says "Reminded about ..." only once it was told (heartbeat/remindtick.ts). */
 export function noteReminded(scope: Scope, id: number, remindAt: number | null = null): void {
-  commit(scope, id, { action: "reminded", set: { remind_at: remindAt }, keepUpdated: true });
+  commit(scope, id, { action: "reminded", set: { remind_at: remindAt }, keepUpdated: true, silent: true });
 }
 
 /** Snoozes whose time has come are open again (the history says so). Returns the items woken. */
