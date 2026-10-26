@@ -113,6 +113,17 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
   return { text: lines.join(" "), ...(due ? { due } : {}), told };
 }
 
+// The routines as STATUS for any run (a chat turn, a look, an expert): due, running, delivered at, skipped, or when next. Read-only: only the look starts, records and settles a routine.
+export function routineStatus(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, catchUpHours: number): string {
+  const at = (d: Date): string => `${dayAt(d, 0, zone).date === dayAt(now, 0, zone).date ? "today" : dayAt(d, 0, zone).date} ${timeIn(d, zone)}`;
+  const lines = routines.filter((r) => r.enabled).map((r) => {
+    const plan = planRoutine(r, now, zone, readRecord(conv, r.name), catchUpHours);
+    const what = plan.state === "due" ? `due now${plan.retry ? " (the earlier attempt died)" : ""}; the next look runs it` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"})` : `next: ${nextText(r, now, zone)}`;
+    return `${r.name}: ${what}`;
+  });
+  return lines.length ? `Routines, status only (code schedules them and only a look runs them: never start one yourself; use this to answer "did my brief go out?" or to avoid repeating what one is about to say):\n${lines.join("\n")}` : "";
+}
+
 // "/status" and the doctor: one line per routine with its schedule, next run and last run.
 export function routineLines(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string): string[] {
   return routines.map((r) => {

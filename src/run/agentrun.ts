@@ -87,7 +87,7 @@ export interface RunOptions {
   tenant?: TenantRun;
   // A heartbeat run whose conversation has something to read (heartbeat/scope.ts): experts it may delegate heavy work to (heartbeat/delegation.ts). Gives the run the Agent tool, the SDK `agents` and the PreToolUse hook that
   // allows only these agents, at most two per look and no nesting, and keeps a `delegate:` skill out of the run's own hands. `onDelegate` is told each accepted delegation.
-  experts?: { setup: ExpertSetup; onDelegate?: (d: Delegation) => void };
+  experts?: { setup: ExpertSetup; onDelegate?: (d: Delegation) => void; context?: () => string | undefined }; // context: code-written, appended to every brief (the facts and the recent chat the look has)
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
@@ -146,7 +146,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     void noteDone({ conv: conversation, run, source: opts.source, tool, input, response }); // the journal line of an action, with the why the permission layer recorded (core/events.ts)
     opts.onToolSuccess?.(tool, input, response);
   };
-  const delegation = opts.experts ? delegationHook(opts.experts.setup, opts.source, { onDelegate: opts.experts.onDelegate }) : undefined;
+  const delegation = opts.experts ? delegationHook(opts.experts.setup, opts.source, { onDelegate: opts.experts.onDelegate, context: opts.experts.context }) : undefined;
   const hooks: Partial<Record<"PreToolUse" | "PostToolUse", HookCallbackMatcher[]>> = {
     ...(delegation ? { PreToolUse: [{ hooks: [delegation.hook] }] } : {}),
     PostToolUse: [

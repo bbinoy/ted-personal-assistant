@@ -87,7 +87,7 @@ export interface Delegation {
 //   Agent / Task   from the main run only (a subagent carries an `agent_id`), only `expert` or a variant of this run, at most MAX_DELEGATIONS; its brief is kept
 //                  (`briefs`) for the approval judge, which reads it as derived data next to the run's provenance; it always runs in the foreground (foreground())
 //   Skill          a `delegate:` skill is denied to the main run: it must go through its expert; the expert may load it
-export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: number; onDelegate?: (d: Delegation) => void } = {}) {
+export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: number; onDelegate?: (d: Delegation) => void; context?: () => string | undefined } = {}) {
   const max = o.max ?? MAX_DELEGATIONS;
   const delegations: Delegation[] = [];
   const types = new Map<string, string>(); // subagent id -> its agent type (the audit log gets it, permissions.ts)
@@ -106,7 +106,8 @@ export function delegationHook(setup: ExpertSetup, source: Source, o: { max?: nu
       delegations.push(d);
       emitRecord(input.tool_name, "delegate", source, { agent_type: agent, n: delegations.length, briefChars: brief.length, ...(args.run_in_background !== false ? { foreground: "forced" } : {}) });
       o.onDelegate?.(d);
-      return allowForeground(args); // (the Agent call is not asked about by canUseTool: the checks above are the whole gate; what the expert does is judged call by call)
+      const context = o.context?.(); // code adds the conversation's context (facts, recent chat) to what the expert is told: the judge still reads only the look's own brief
+      return allowForeground(context ? { ...args, prompt: `${brief}\n\n${context}` } : args); // (the Agent call is not asked about by canUseTool: the checks above are the whole gate; what the expert does is judged call by call)
     }
     if (input.tool_name === "Skill" && !input.agent_id) {
       const skill = String(args.skill ?? args.name ?? "").replace(`${PLUGIN}:`, "");

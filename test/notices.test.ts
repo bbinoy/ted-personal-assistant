@@ -6,7 +6,7 @@ import { localDay } from "../src/core/pause.ts";
 import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createFailureTracker, dropUnreachable, holdFact, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, countPosts, takeHeld } from "../src/heartbeat/notices.ts";
-import { heldBlock, HELD_MAX } from "../src/heartbeat/look.ts";
+import { heldBlock, HELD_MAX } from "../src/heartbeat/facts.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
 import { scratchLog } from "./scratch.ts";

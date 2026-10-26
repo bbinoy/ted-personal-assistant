@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { heartbeatDetail, mailCheck, requiredSkills } from "../src/doctor.ts";
 import { mailbirdCheck } from "../src/modules/runtime.ts";
 import { HEARTBEAT_KEY, startHeartbeat } from "../src/heartbeat/heartbeat.ts";
-import { deliverHow } from "../src/heartbeat/look.ts";
+import { deliverHow } from "../src/heartbeat/facts.ts";
 import { missingSetup, setupItems } from "../src/modules/index.ts";
 import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
 import { hiddenTools } from "../src/policy/policy.ts";
