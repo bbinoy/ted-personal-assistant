@@ -279,19 +279,22 @@ test("a friend's held list is owed in her assistant.db, not in memory: it surviv
   setLearnedRuntime(undefined);
 });
 
-test("an UNQUOTED 'confirm 2' belongs to an open approval (the inbox), a quoted one to the list; unquoted replies count only right after the list", async () => {
-  const { addPending } = await import("../src/approvals/pending.ts");
+test("an UNQUOTED 'confirm 2' belongs to an open approval, a quoted one to the list; unquoted replies count only right after the list", async () => {
+  const { request } = await import("../src/approvals/approvals.ts");
   const c = friend();
   inferred(c, "people-anna.md", "Anna moved to Lisbon");
   inferred(c, "people-bo.md", "Bo has a new job");
   L.commitBatch(c.convId, L.planBatch(c.convId, c.notesDir, NOW)!, NOW, 8_000);
-  addPending(c.key, { tool: "t", input: { a: 1 }, label: "l", question: "q", footer: "", source: "background" }, NOW);
+  const asking = new AbortController(); // a question open in her chat (ended at the close of the test)
+  void request(async () => 4242, "Create event", { tool: "t", input: { a: 1 } }, asking.signal, { scope: c.key, source: "chat" });
+  await new Promise((r) => setImmediate(r));
   const s = said();
   assert.equal(await learnedReply(c, msg("confirm 2"), s.say, NOW + 60_000), false, "an approval is open: the inbox gets it");
   assert.equal(await learnedReply(c, msg("confirm"), s.say, NOW + 60_000), false, "a bare confirm never takes a yes from an open approval");
   assert.equal(originOf(c.notesDir, "people-bo.md"), "inferred");
   assert.equal(await learnedReply(c, msg("confirm 2", 8_000), s.say, NOW + 3 * HOUR), true, "quoted: the list, whatever is open");
   assert.equal(originOf(c.notesDir, "people-bo.md"), "owner");
+  asking.abort();
   const d = friend();
   inferred(d, "people-cy.md", "Cy moved");
   L.commitBatch(d.convId, L.planBatch(d.convId, d.notesDir, NOW)!, NOW, 9_000);

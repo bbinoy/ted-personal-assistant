@@ -21,7 +21,7 @@ export interface Looker {
   mail: boolean; // it has mail tools
   experts: boolean; // it may delegate heavy work to the expert: whoever has something to read
   brief: boolean; // it has the daily-brief skill
-  tasks: boolean; // it has the task list (an unattended look may suggest to it)
+  tasks: boolean; // it has the task list (an unattended look may add to it)
   meetings: boolean; // meeting prep is on and it has a calendar: its look records the upcoming meetings (modules/meetings, heartbeat/preptick.ts)
   sources: string; // what the instruction lists after the chat log
   skills: readonly string[]; // the skills of its run (plugin-qualified)
@@ -57,5 +57,5 @@ export const hasSomethingToLookAt = (conv: Conversation, now: Date): boolean => 
 
 // The tools of a friend's or a group's heartbeat run: its capability set, less the notes' file tools. Its notes are in the prompt as data and a run that reads mail has no
 // way to change them (the owner's can write only status-* notes, statusnote.ts).
-// And the task tools that change the list (finish, drop, snooze, confirm...): an unattended run may only list and suggest (modules/tasks/module.ts).
+// And the task tools that change the list (finish, drop, snooze...): an unattended run may only list and add (modules/tasks/module.ts).
 export const unattendedTools = (tools: ReadonlySet<string>): Set<string> => new Set([...tools].filter((t) => entryFor(t)?.action !== "note-file" && entryFor(t)?.action !== "task-write" && entryFor(t)?.action !== "task-import"));

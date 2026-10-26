@@ -1,8 +1,7 @@
 import { emitRecord } from "../core/events.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { DENY_ALL } from "../approvals/permissions.ts";
-import { approverName } from "../approvals/pendingexec.ts";
-import { batchGuard, shadowPrompt, shadowSystem } from "../approvals/shadowexec.ts";
+import { approverName, batchGuard, shadowPrompt, shadowSystem } from "../approvals/shadowexec.ts";
 import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
 import { heartbeatOptions } from "./agent.ts";
 import { runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";

@@ -11,7 +11,7 @@ import type { Event, Sink, Why } from "../events.ts";
 // the answer from what was recorded, not from the model's memory. Reads never get a line. A friend's lines are in HER log (her own words are fine there, never in the audit log), a group's in its own.
 //
 // A line is written when a call SUCCEEDED (the "done" event, from the SDK's PostToolUse), with the why the permission layer recorded when it let the call run (the "tool" event of the allow,
-// auto-approved, approved or executed step). So a call that was refused, declined, or failed after being allowed leaves no line: the journal says what was done, the audit log what was decided.
+// auto-approved or approved step). So a call that was refused, declined, or failed after being allowed leaves no line: the journal says what was done, the audit log what was decided.
 
 const ARM_TTL_MS = 30 * 60_000; // an allowed call that never reports success (it failed, the run ended) is forgotten after this
 const MAX_ARMED = 50;
@@ -95,6 +95,8 @@ export function project(e: Event, why: (conv: string, run: string | undefined, t
       if (e.conv === undefined) return [];
       if (e.state === "dropped") return [{ conv: e.conv, cat: "notice", text: journalText({ what: flat(e.text, 160), why: { text: "they were held overnight and are not sent as they were written; nothing here can say them again in today's words" } }) }];
       return e.state === "held" ? [{ conv: e.conv, cat: "notice", text: journalText({ what: `Held a message for later: ${flat(e.text, 160)}`, why: { text: "quiet hours or today's limit of unprompted messages" } }) }] : [];
+    case "expired":
+      return e.conv !== undefined ? [{ conv: e.conv, cat: "approval", text: journalText({ what: `Asked about ${flat(e.label, 160)}; no answer within ${e.wait}, so nothing was done`, why: { text: "a question nobody answered lapses on its own, without a message" } }) }] : [];
     case "payment":
       return e.conv !== undefined ? [{ conv: e.conv, cat: "payment", text: journalText({ what: `Card payment ${e.status}: ${e.text}` }) }] : [];
     case "removal":
@@ -107,7 +109,7 @@ export function project(e: Event, why: (conv: string, run: string | undefined, t
 }
 
 // Which steps let a call run: the ones whose why the journal keeps for the success.
-const LETS_RUN = new Set(["allow", "auto-approved", "approved", "executed"]);
+const LETS_RUN = new Set(["allow", "auto-approved", "approved"]);
 
 export const journalSink: Sink = {
   name: "journal",

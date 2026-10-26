@@ -68,14 +68,13 @@ Each ``ted-personal-assistant:skill`` means: load it once with the `Skill` tool 
    most 4 by sender + subject.
 2. **Tasks** - the assistant's own list, not Notion. Call `list_tasks` once for each of: overdue
    (`overdue`), due today (`due_from` and `due_to` today), waiting on (`kind` `owed_to_me`), what the owner
-   owes (`kind` `i_owe`) and the suggestions waiting for an answer (`status` `suggested`); one message,
-   several calls. This run is unattended, so you can only **list and suggest**: every email or
-   meeting deadline, promise or obligation with no matching item becomes an `add_task` call, which is
-   stored as a *suggestion* (`source_kind` `mail` or `meeting`, `source_ref` the mail id, so the same mail never
-   adds it twice); you cannot finish, change or drop an item. When mail clearly completes a task (the
+   owes (`kind` `i_owe`); one message, several calls. This run is unattended, so you can only **list
+   and add**: every email or meeting deadline, promise or obligation with no matching item becomes an
+   `add_task` call, which goes straight onto the list (`source_kind` `mail` or `meeting`, `source_ref` the
+   mail id, so the same mail never adds it twice; a few a day at most); you cannot finish, change or drop an item. When mail clearly completes a task (the
    owner sent the reply it called for, the signed document arrived) do not tick it off: put "looks done -
-   confirm?" in the brief. Past-date `owed_to_me` items with no reply get a nudge draft. Count the
-   suggestions waiting; the owner confirms or rejects them in chat. Never write tasks to Notion.
+   confirm?" in the brief. Past-date `owed_to_me` items with no reply get a nudge draft. What you added
+   goes in the Tasks section (step 5). Never write tasks to Notion.
 3. **Calendar** - run `ted-personal-assistant:calendar`: today and tomorrow ahead, and the time
    since the previous brief behind. Flag conflicts and overlaps, propose
    reschedule slots (never execute), create events for travel bookings that
@@ -114,8 +113,8 @@ Sections, in this order (skip a section if empty, except Focus):
    follow-up pass (notes to add).
 5. `## ✅ Tasks` - from `list_tasks`: what is overdue (at most five, the oldest first, with how
    many days) and what is due today, names only; what the owner owes others (`i_owe`) when due soon. Then
-   ONE line for everything else ("6 more this week, 8 later") and, if any, "N suggestions waiting for your
-   yes". No lists for later days. When ten or more are long overdue, follow the task skill's section "A long overdue pile": one friendly line offering a clean-up (reschedule, drop or keep, in chat), once. Before offering, check your notes for `status-overdue-offer`: if it is there, the offer was made, so do not repeat it. When you make the offer, write it with `write_status_note` (name `overdue-offer`, `days` 30, text: the date and that the clean-up was offered).
+   ONE line for everything else ("6 more this week, 8 later"), and one line per task you added from mail
+   in this run: what it is, from which mail, the due date, and a hint if it depends on something. No lists for later days. When ten or more are long overdue, follow the task skill's section "A long overdue pile": one friendly line offering a clean-up (reschedule, drop or keep, in chat), once. Before offering, check your notes for `status-overdue-offer`: if it is there, the offer was made, so do not repeat it. When you make the offer, write it with `write_status_note` (name `overdue-offer`, `days` 30, text: the date and that the clean-up was offered).
 6. `## ⏳ Waiting on` - the `owed_to_me` items, one line each with the person and how long; only if non-empty.
 7. `## 📡 Radar` - 3 to 5 concrete bullets from the newsletters skimmed, focused on the topics
    and regions in the owner's memory (the brief notes in the injected `owner_memory` block): an
@@ -129,7 +128,7 @@ Sections, in this order (skip a section if empty, except Focus):
    every mail exactly as the list gives it** (the owner's 'restore 3' is read against those numbers for that since; never
    renumber, merge or drop one; a long newsletter group may be one line with its numbers, "Newsletters (6): 3, 5, 7-10"),
    then its last line (how to bring one back). Nothing archived: one line saying so. Then ONE short sentence of what else you
-   changed (tasks suggested, prep pages, calendar events, conflicts), if anything.
+   changed (prep pages, calendar events, conflicts), if anything.
 
 Cut ruthlessly: if the owner does not act on it, it is one line or gone.
 
@@ -137,8 +136,8 @@ Cut ruthlessly: if the owner does not act on it, it is one line or gone.
 
 - Surface deadlines before the day they are due.
 - Reply owed for days: offer a nudge draft.
-- Meeting needs a pre-read and no task exists: suggest it (`add_task`) and say so.
-- Connect the dots: call moved -> flag the meeting; invoice in -> suggested task to pay;
+- Meeting needs a pre-read and no task exists: add it (`add_task`) and say so.
+- Connect the dots: call moved -> flag the meeting; invoice in -> a task to pay it (paying stays the owner's);
   booking with no calendar entry -> add it.
 - Flag streaks: "3rd follow-up from X", "no reply from Y in 10 days".
 - Short lines. No preamble. Follow the owner's Style notes in memory for wording.

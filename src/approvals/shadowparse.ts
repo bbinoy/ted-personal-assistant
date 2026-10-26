@@ -1,4 +1,4 @@
-// Reading a reply to a shadow-mode proposal ("3,5 keep", "keep 2-4", "yes", "all except 7", "no"), in CODE, with no model. Pure. Like the approval inbox's grammar (pendingparse.ts) it is deliberately small:
+// Reading a reply to a shadow-mode proposal ("3,5 keep", "keep 2-4", "yes", "all except 7", "no"), in CODE, with no model. Pure. It is deliberately small:
 // a message is an answer only when EVERY word of it belongs to the vocabulary; anything else is an ordinary message for the chat. What it can say: archive them all, leave all of them, or leave the named
 // ones and archive the rest. A number list with a plain yes ("1,2 yes") is ambiguous (just those? all of them?) and is asked again, never guessed.
 

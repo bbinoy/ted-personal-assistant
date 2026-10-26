@@ -64,7 +64,7 @@ const idOf = (c: ConvRef): ConvId => {
 
 export interface ConvPaths {
   dir: string;
-  db: string; // assistant.db: SQLite, WAL (core/convdb.ts): the conversation's small mutable state (session pointer, dream day, held posts, seen mail, /quiet, the approval inbox, voice-note sources, a friend's bookkeeping)
+  db: string; // assistant.db: SQLite, WAL (core/convdb.ts): the conversation's small mutable state (session pointer, dream day, held posts, seen mail, /quiet, voice-note sources, a friend's bookkeeping)
   dbDamaged: string; // written when assistant.db was damaged and set aside: the conversation's background work stops until a person looks (core/convdb.ts)
   messages: string; // the conversation's history (jsonl, size-bounded)
   notes: string; // its notes (the SDK's auto-memory folder, MEMORY.md); the only place its file tools reach

@@ -5,20 +5,15 @@ import { nextDue, nextInstant, parseRepeat } from "./repeat.ts";
 import { activeItems, type Item } from "./store.ts";
 import { addDays, localOf, parseLocal, showLocal, todayIn, wallToUtc } from "./when.ts";
 
-// REMINDERS ON TIME (docs/ARCHITECTURE.md "Tasks"): the pure part. The tick that sends them is heartbeat/remindtick.ts. Code only, no model: on every wake tick (heartbeat/wake.ts) each conversation that HAS an assistant.db (none is created) is asked what is due:
+// REMINDERS ON TIME (docs/ARCHITECTURE.md "Tasks"): the pure part, WHEN. The tick that claims them is heartbeat/remindtick.ts, and the conversation's look says them (CLAUDE.md: Ted speaks, code doesn't).
+// On every wake tick each conversation that HAS an assistant.db (none is created) is asked what is due:
 //   at       an open item whose remind_at has passed
 //   snooze   a snoozed item whose snooze_until has passed: it is open again, and reminded
-//   default  an open item with a due date and no reminder of its own: ONE ping on the morning of the due date at TASK_DEFAULT_REMIND (08:30), in the conversation's zone
-// Each is ONE short message of its own ("⏰ Call Sam (due today)"; in a group "⏰ @Anna: ferry tickets (due today)"), sent as a notice. It is a message only: a reminder never acts (SAFETY.md).
-// The quiet window and /quiet hold it (it goes out when they end, plain: the delay was asked for) unless the item is urgent; it is NOT an unprompted post (the person asked for it): it does not count toward
-// MAX_UNPROMPTED_PER_DAY and is never merged into the digest. It is at-most-once: the `reminders` row (UNIQUE per item and key) and the item's new remind_at are written in ONE transaction BEFORE the send, so a
-// restart or a second tick cannot send it twice; the price is that a crash between the mark and the send loses it (the item stays open, so the brief lists it). A send that fails outright is released and
-// retried up to 3 times. Too late: under a tick it is plain; up to 12 hours it says "(missed while I was off)"; up to 48 hours it becomes a line of the next digest; older is only marked (the brief shows it).
+//   default  an open item with a due date and no reminder of its own: ONE reminder on the morning of the due date at TASK_DEFAULT_REMIND (08:30), in the conversation's zone
+// A reminder never acts (SAFETY.md). Too late (48 hours) it is only marked; the item stays open and the look's due list shows it.
 
 const HOUR = 3_600_000;
-export const MISSED_AFTER_MS = 12 * HOUR;
 export const DROP_AFTER_MS = 48 * HOUR;
-export const tolerance = (): number => Math.max(10, 2 * settings.heartbeatMinutes) * 60_000; // ~a tick or two: on time
 
 export type Kind = "at" | "default" | "snooze";
 export interface Planned {
@@ -79,15 +74,6 @@ export function nextReminder(items: readonly Item[], now: number, o: PlanOptions
   return best;
 }
 
-export type Verdict = "ok" | "missed" | "fold" | "drop";
-/** How late a reminder is, in what it may say. `excused`: it was held by quiet hours (or retried), so the delay was asked for. Pure. */
-export function judgeLate(fireAt: number, now: number, excused: boolean, tol = tolerance()): Verdict {
-  const late = now - fireAt;
-  if (late >= DROP_AFTER_MS) return "drop";
-  if (late >= MISSED_AFTER_MS) return "fold";
-  return excused || late <= tol ? "ok" : "missed";
-}
-
 // ---- the words ----
 
 /** "due today" / "due tomorrow" / "due Fri 24 Oct 14:30" / "was due Wed 21 Oct". */
@@ -100,13 +86,25 @@ function duePhrase(it: Item, now: number, zone: string): string {
   return `${p.date < today ? "was due" : "due"} ${showLocal(it.due!, today)}`;
 }
 
-/** The one short message. A group names the assignee (the reminder is for them). */
-export function reminderText(it: Item, o: { now: number; zone: string; group: boolean; missed?: boolean }): string {
+/** The fixed line of the fallback (no look said it in time, or the conversation has no look): the one place a reminder is code's words. A group names the assignee. */
+export function fallbackText(it: Item, o: { now: number; zone: string; group: boolean }): string {
   const who = o.group && it.assignee ? `@${it.assignee}: ` : "";
   const due = duePhrase(it, o.now, o.zone);
-  return `⏰ ${who}${it.title}${due ? ` (${due})` : ""}${o.missed ? " (missed while I was off)" : ""}`;
+  return `⏰ ${who}${it.title}${due ? ` (${due})` : ""}`;
 }
-export const combinedText = (items: readonly Item[], o: { now: number; zone: string; group: boolean }): string => `⏰ Due today: ${items.map((it) => `${o.group && it.assignee ? `@${it.assignee} ` : ""}${it.title}`).join("; ")}`;
+
+/** The reminder and due facts for a look's prompt (heartbeat/look.ts): what is due to be said now, and the open items due or overdue, in the conversation's clock. "" when there is nothing. */
+export function reminderFacts(waiting: readonly { item: Item; fireAt: number }[], open: readonly Item[], o: { now: number; zone: string; group: boolean }): string {
+  const today = todayIn(o.now, o.zone);
+  const at = (ms: number): string => showLocal(`${localOf(ms, o.zone).date}T${localOf(ms, o.zone).time}`, today);
+  const tag = (it: Item): string => [o.group && it.assignee ? `for ${it.assignee}` : "", duePhrase(it, o.now, o.zone), it.urgent ? "URGENT: may break quiet hours, set urgent" : ""].filter(Boolean).join("; ");
+  const out: string[] = [];
+  if (waiting.length) out.push(`Reminders due now (the person asked to be reminded: say each one in this look's message, in your own words${o.group ? ", naming who it is for" : ""}; it was due at the time given, so say so if that was a while ago):\n${waiting.map((w) => `#${w.item.id} ${w.item.title} (reminder for ${at(w.fireAt)}${tag(w.item) ? `; ${tag(w.item)}` : ""})`).join("\n")}`);
+  const shown = new Set(waiting.map((w) => w.item.id));
+  const dueSoon = open.filter((it) => !shown.has(it.id) && it.due && parseLocal(it.due)!.date <= addDays(today, 1)).slice(0, 12);
+  if (dueSoon.length) out.push(`Open items due by tomorrow or overdue (for your awareness: mention one only when it helps now and your recent posts did not already):\n${dueSoon.map((it) => `#${it.id} ${it.title} (${tag(it)})`).join("\n")}`);
+  return out.join("\n\n");
+}
 
 // ---- what an item does after it has fired ----
 

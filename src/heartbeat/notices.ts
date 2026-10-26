@@ -2,7 +2,7 @@ import { overBudget } from "../core/budget.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
-import { settings } from "../core/settings.ts";
+import { OWNER, settings } from "../core/settings.ts";
 import { ledgerEntries } from "../core/messages.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
@@ -18,14 +18,13 @@ import { onLogin } from "../core/ownerkey.ts";
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Three small, separate mechanisms, all pure planners over a little state:
 //   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat; in a group once per group per day
 //      and only when someone addressed it.
-//   2. the failure notice: looks that fail on and on (3 in a row, or failures for an hour) are said ONCE per incident with the cause class and the fix, and "back to normal" when one works.
-//      The owner's own and a group's look are told as such; friends' only as a count (no names, no words of theirs).
+//   2. looks that fail: no message at all. A group's or a friend's go to the log and the doctor; the owner's own become a FACT for her next look after a long awake stretch (below).
 //   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY,
 //      is HELD (state, per conversation) and goes out as ONE curated digest (digest.ts: grouped needs you / FYI / system, deduplicated, newest first, capped) when quiet ends, and at the
 //      DIGEST_TIMES slots for what the cap held. The run marks a post `urgent` (rules.ts) only when it is time-critical: that is exempt from all of it.
 //      A held POST from an earlier day of the conversation is never delivered as it was written ("Evening, ..." read at 07:00): it is handed, once, to the conversation's next look (look.ts),
 //      which says again in today's words only what is still true; a conversation without a look drops it (a journal line says how many).
-// The system notices of 1 and 2 respect the quiet window too (held, then delivered with the rest), and are exempt from the cap. Every failure notice ENDS with the one step to take (errors.ts FIXES).
+// The system notice of 1 respects the quiet window too (held, then delivered with the rest), and is exempt from the cap.
 
 // ---- the pure planners ----
 
@@ -73,45 +72,49 @@ export const combine = (held: readonly Held[]): string => digestText(planDigest(
 
 // ---- the failure tracker ----
 
+// Looks that fail are SYSTEM STATUS (CLAUDE.md: log, doctor, not the chat). A group's or a friend's failures are only logged (look.ts) and counted for `npm run doctor` (the looks table).
+// The owner's own background is the one exception, and only as a FACT for her next look, never as a fixed message: when her looks have failed at least LONG_FAILS times in a row for
+// at least LONG_AWAKE_MS of time the Mac was AWAKE. Awake time is the monotonic clock (on macOS it stands still while the Mac sleeps, heartbeat.ts sleptFor), so a night of sleep between
+// two failures adds nothing; a look stopped by a sleep, or cut by its ceiling across one, is not a failure at all (look.ts). The look that then runs reads the fact and decides whether it is
+// worth one line. A look that works ends the streak, with no "back to normal".
+export const LONG_FAILS = 3;
+export const LONG_AWAKE_MS = 2 * 3_600_000;
 export type Scope = "owner" | "group" | "tenant";
-const HOUR = 3_600_000;
 interface Streak {
   n: number;
-  since: number;
-  told: boolean;
-  scope: Scope;
+  since: number; // wall clock (ms) of the first failure: what the fact says
+  monoSince: number; // the monotonic clock then: how long the Mac has been awake since
+  mono: number; // the monotonic clock at the latest failure
+  cause: Cause;
 }
 
 export interface FailureTracker {
-  // One finished look of a conversation. Returns the notices to send now (none, one, or the "back to normal").
-  observe(key: string, scope: Scope, failed: boolean, cause: Cause | undefined, now: number, zone?: string): string[];
+  // One finished look that was neither called off nor stopped by a sleep. Groups and friends are not tracked here (log and doctor only).
+  observe(key: string, scope: Scope, failed: boolean, cause: Cause | undefined, now: number, mono: number): void;
+  // The fact for the conversation's next look, or "" while its failures are not a long awake stretch.
+  fact(key: string, zone?: string): string;
 }
 
-export function createFailureTracker(o: { count?: number; windowMs?: number } = {}): FailureTracker {
-  const count = o.count ?? 3;
-  const window = o.windowMs ?? HOUR;
+export function createFailureTracker(o: { fails?: number; awakeMs?: number } = {}): FailureTracker {
+  const fails = o.fails ?? LONG_FAILS;
+  const awake = o.awakeMs ?? LONG_AWAKE_MS;
   const streaks = new Map<string, Streak>();
-  const toldFriends = () => [...streaks.values()].filter((s) => s.scope === "tenant" && s.told).length;
   return {
-    observe(key, scope, failed, cause, now, zone) {
-      const s = streaks.get(key);
-      if (!failed) {
-        streaks.delete(key);
-        if (!s?.told) return [];
-        if (scope === "tenant") return toldFriends() === 0 ? ["Background work for friends is back to normal."] : [];
-        return [scope === "owner" ? "My background checks work again." : "My background checks in one of your groups work again."];
-      }
-      const st = s ?? { n: 0, since: now, told: false, scope };
-      streaks.set(key, st);
+    observe(key, scope, failed, cause, now, mono) {
+      if (scope !== "owner") return;
+      if (!failed) return void streaks.delete(key);
+      const st = streaks.get(key) ?? { n: 0, since: now, monoSince: mono, mono, cause: cause ?? "other" };
       st.n++;
-      if (st.told || !(st.n >= count || (st.n >= 2 && now - st.since >= window))) return [];
-      const first = scope !== "tenant" || toldFriends() === 0; // friends: one notice for all of them while the incident lasts
-      st.told = true;
-      if (!first) return [];
-      const c = FIXES[cause ?? "other"];
-      const when = timeIn(new Date(st.since), zone);
-      if (scope === "tenant") return [`Background work for ${[...streaks.values()].filter((x) => x.scope === "tenant" && x.n > 0).length} friend(s) keeps failing (since ${when}): ${c.what}. ${c.fix}`];
-      return [`My background checks${scope === "group" ? " in one of your groups" : ""} have failed ${st.n} times in a row (since ${when}): ${c.what}. ${c.fix}`];
+      st.mono = mono;
+      st.cause = cause ?? "other";
+      streaks.set(key, st);
+    },
+    fact(key, zone) {
+      const st = streaks.get(key);
+      if (!st || st.n < fails || st.mono - st.monoSince < awake) return "";
+      const c = FIXES[st.cause];
+      const hours = Math.round(((st.mono - st.monoSince) / 3_600_000) * 10) / 10;
+      return `Your own background looks have failed ${st.n} times in a row since ${timeIn(new Date(st.since), zone)} (${hours} hours of that with the Mac awake; time asleep does not count). Cause as code classifies it: ${c.what}. What would fix it: ${c.fix} This is system status: say it only if it still matters to ${OWNER} and they have to do something, in one short line in your own words; otherwise say nothing about it.`;
     },
   };
 }
@@ -167,7 +170,7 @@ const isNight = (now: Date, zone: string): boolean => inQuietHours(now, settings
 // Is this conversation being left alone right now: the quiet window, or its own /quiet (conversation/quiet.ts)?
 const holding = (conv: Conversation, now: Date, zone: string): boolean => isNight(now, zone) || isQuiet(conv, now);
 
-// Is the conversation being left alone right now (the quiet window, or its /quiet)? The approval inbox (approvals/pendingflow.ts) keeps its own batch back by this, never in the held posts.
+// Is the conversation being left alone right now (the quiet window, or its /quiet)? What a look offers in a message of its own (shadow.ts, learned.ts) waits by this.
 export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneFor(conv));
 
 // A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).
@@ -302,20 +305,21 @@ export function noticeDamaged(now: Date = new Date()): number {
   for (const d of damagedConvs()) {
     if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    const lost = d.pendingLost?.length ? ` Approvals that were waiting there are not restored (they could have been damaged), ask me again if you still want them: ${d.pendingLost.slice(0, 8).map((p) => `#${p.n}${p.label ? ` ${p.label}` : ""}`).join("; ")}${d.pendingLost.length > 8 ? "; ..." : ""}.` : "";
-    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream, approvals) is stopped until you check: run npm run doctor on the Mac.${lost}`, now);
+    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now);
     n++;
   }
   return n;
 }
 
-// 2. Looks that fail on and on. Called by look.ts with each finished look; `error` is what the run threw, if it did.
+// 2. Looks that fail. Called by look.ts with each finished look (not one called off or stopped by a sleep); `error` is what the run threw, if it did; `mono`: the monotonic clock now.
 const tracker = createFailureTracker();
-export function observeLook(conv: Conversation, outcome: "posted" | "silent" | "failed", error: unknown, now: Date): void {
+const scopeOf = (conv: Pick<Conversation, "kind">): Scope => (conv.kind === "tenant" ? "tenant" : conv.kind === "group" ? "group" : "owner");
+export function observeLook(conv: Conversation, outcome: "posted" | "silent" | "failed", error: unknown, now: Date, mono: number = performance.now()): void {
   try {
-    const scope: Scope = conv.kind === "tenant" ? "tenant" : conv.kind === "group" ? "group" : "owner";
-    for (const text of tracker.observe(conv.key, scope, outcome === "failed", outcome === "failed" ? causeOf(error) : undefined, now.getTime(), zoneFor(conv))) noticeOwner(text, now);
+    tracker.observe(conv.key, scopeOf(conv), outcome === "failed", outcome === "failed" ? causeOf(error) : undefined, now.getTime(), mono);
   } catch (e) {
     console.error("notices: could not track a look:", (e as Error).message);
   }
 }
+/** The fact block for the conversation's next look: its long awake stretch of failures, or "" (always "" for a group or a friend). */
+export const failingLooksFact = (conv: Conversation): string => tracker.fact(conv.key, zoneFor(conv));

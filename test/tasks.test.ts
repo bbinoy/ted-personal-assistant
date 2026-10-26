@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tasks-test-"));
 
 const S = await import("../src/tasks/store.ts");
-const { itemLine, suggestionsText, tasksText } = await import("../src/tasks/render.ts");
+const { itemLine, tasksText } = await import("../src/tasks/render.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { allows, groupCapabilities, groupTools, toolsFor, capabilitiesOf } = await import("../src/policy/capabilities.ts");
@@ -116,39 +116,19 @@ test("tasks: a repeating item is not finished, it moves to its next due (and kee
   assert.throws(() => S.editItem(scope(k2), 1, { remindAt: null }), /needs a due date or a reminder/);
 });
 
-test("tasks: suggestions are confirmed or rejected by a person; a rejected one is remembered so the same mail does not come back", () => {
-  const k = fresh();
-  const bg = scope(k, { by: "assistant (inferred)", origin: "inferred", source: "background" });
-  const s = S.addItem(bg, { title: "Reply to the landlord", sourceKind: "mail", sourceRef: "m-17", status: "open" });
-  assert.deepEqual([s.item.status, s.item.origin, s.item.sourceKind, s.item.sourceRef], ["suggested", "inferred", "mail", "m-17"], "forced, whatever was asked");
-  assert.equal(s.line, "Suggested task #1 'Reply to the landlord'");
-  assert.equal(S.addItem(bg, { title: "Reply to the landlord again", sourceKind: "mail", sourceRef: "m-17" }).duplicate, true, "the same mail is not suggested twice");
-  assert.equal(S.addItem(bg, { title: "reply  to the LANDLORD" }).duplicate, true, "nor the same words");
-  assert.equal(S.counts(k, NOW, ZONE).suggested, 1);
-  assert.throws(() => S.completeItem(scope(k), 1), /only a suggestion/);
-  assert.throws(() => S.snoozeItem(scope(k), 1, NOW + 1e6), /only a suggestion/);
-  const c = S.confirmSuggestion(scope(k), 1, { due: "2026-10-23" });
-  assert.deepEqual([c.item.status, c.item.due], ["open", "2026-10-23"]);
-  assert.equal(c.line, "Confirmed the suggested task #1 'Reply to the landlord' (due Fri 23 Oct)");
-  assert.deepEqual(S.eventsOf(k, 1).map((x) => x.action), ["suggested", "edited", "confirmed"]);
-  const t = S.addItem(bg, { title: "Sign up for the newsletter", sourceKind: "mail", sourceRef: "m-18" });
-  const rj = S.rejectSuggestion(scope(k), t.item.id);
-  assert.equal(rj.item.status, "dropped");
-  assert.equal(rj.line, "Rejected the suggested task #2 'Sign up for the newsletter'");
-  const again = S.addItem(bg, { title: "Newsletter!", sourceKind: "mail", sourceRef: "m-18" });
-  assert.equal(again.duplicate, true, "a rejected suggestion keeps the mail from coming back");
-  assert.throws(() => S.confirmSuggestion(scope(k), 1), /not a suggestion/);
-  assert.throws(() => S.rejectSuggestion(scope(k), 99), /no item #99/);
-});
-
-test("tasks: an inferred origin can only ADD (the store's own floor, below the tools), and only so many suggestions can wait", () => {
+test("tasks: what an inferred origin adds is an ordinary open item marked inferred; the same mail, or the same words, are not added twice; it can only ADD (the store's own floor)", () => {
   const k = fresh();
   S.addItem(scope(k), { title: "Mine" });
   const bg = scope(k, { by: "assistant (inferred)", origin: "inferred", source: "background" });
-  for (const f of [() => S.completeItem(bg, 1), () => S.dropItem(bg, 1), () => S.editItem(bg, 1, { title: "x" }), () => S.snoozeItem(bg, 1, NOW + 1e6), () => S.reopenItem(bg, 1), () => S.confirmSuggestion(bg, 1), () => S.rejectSuggestion(bg, 1)]) assert.throws(f, /can only suggest/);
+  const s = S.addItem(bg, { title: "Reply to the landlord", sourceKind: "mail", sourceRef: "m-17" });
+  assert.deepEqual([s.item.status, s.item.origin, s.item.sourceKind, s.item.sourceRef], ["open", "inferred", "mail", "m-17"]);
+  assert.equal(s.line, "Added task #2 'Reply to the landlord'");
+  assert.equal(S.addItem(bg, { title: "Reply to the landlord again", sourceKind: "mail", sourceRef: "m-17" }).duplicate, true, "the same mail is not added twice");
+  assert.equal(S.addItem(bg, { title: "reply  to the LANDLORD" }).duplicate, true, "nor the same words");
+  for (const f of [() => S.completeItem(bg, 1), () => S.dropItem(bg, 1), () => S.editItem(bg, 1, { title: "x" }), () => S.snoozeItem(bg, 1, NOW + 1e6), () => S.reopenItem(bg, 1)]) assert.throws(f, /can only add/);
   assert.equal(S.getItem(k, 1)?.status, "open");
-  for (let i = 0; i < S.LIMITS.suggestions; i++) S.addItem(bg, { title: `Idea ${i}` });
-  assert.throws(() => S.addItem(bg, { title: "One too many" }), /suggestions are already waiting/);
+  for (let i = 0; i < S.LIMITS.inferredPerDay - 1; i++) S.addItem(bg, { title: `Idea ${i}` });
+  assert.throws(() => S.addItem(bg, { title: "One too many" }), /10 tasks were already added on your own today/);
   assert.equal(S.addItem(scope(k), { title: "The person can still add" }).item.status, "open");
 });
 
@@ -179,7 +159,7 @@ test("tasks: lists, filters and counts: overdue, today, upcoming, no date, snooz
   assert.deepEqual(titles({ status: "done" }), ["Finished"]);
   assert.deepEqual(titles({ status: "snoozed" }), ["Snoozed"]);
   assert.deepEqual(titles({ limit: 2 }), ["Overdue day", "Overdue time"]);
-  assert.deepEqual(S.counts(k, NOW, ZONE), { open: 8, overdue: 2, today: 2, upcoming: 2, noDate: 2, waiting: 1, owe: 1, suggested: 0, snoozed: 1, done: 1, dropped: 0 });
+  assert.deepEqual(S.counts(k, NOW, ZONE), { open: 8, overdue: 2, today: 2, upcoming: 2, noDate: 2, waiting: 1, owe: 1, snoozed: 1, done: 1, dropped: 0 });
   // two hours later the snooze has run out: it is open again for every reader, and wakeSnoozed writes it down
   const later = NOW + 2 * 3_600_000;
   assert.ok(S.listItems(k, {}, later, ZONE).some((i) => i.title === "Snoozed"));
@@ -204,7 +184,6 @@ test("tasks: strict validation, in words the model can act on", () => {
   bad({ kind: "chore" as never }, /kind must be one of/);
   bad({ sourceKind: "dream" as never }, /source_kind must be one of/);
   bad({ remindAt: 5 }, /not a sensible time/);
-  bad({ status: "done" as never }, /open or suggested/);
   bad({ details: "lorem ipsum ".repeat(200) }, /details is too long/);
   assert.throws(() => S.editItem(scope(k), 1, {}), /no item #1/);
   S.addItem(scope(k), { title: "ok" });
@@ -220,7 +199,7 @@ test("tasks: one conversation never sees another's list: each has its own file, 
   const [a, b] = [fresh(), fresh()];
   S.addItem(scope(a), { title: "Alpha secret" });
   S.addItem(scope(b), { title: "Beta secret" });
-  assert.deepEqual(S.listItems(a, { status: ["open", "suggested", "done", "dropped", "snoozed"] }, NOW, ZONE).map((i) => i.title), ["Alpha secret"]);
+  assert.deepEqual(S.listItems(a, { status: ["open", "done", "dropped", "snoozed"] }, NOW, ZONE).map((i) => i.title), ["Alpha secret"]);
   assert.deepEqual(S.listItems(b, {}, NOW, ZONE).map((i) => i.title), ["Beta secret"]);
   assert.equal(S.getItem(a, 1)?.title, "Alpha secret");
   assert.equal(S.getItem(b, 1)?.title, "Beta secret");
@@ -242,7 +221,7 @@ test("tasks: the tools, in the person's clock: a reply echoes what was understoo
   const t = chat(k);
   const added = await t.add_task!.handler({ title: "Call Sam", due: "2026-10-24T14:30", remind: "2026-10-24T09:00", person: "Sam" });
   assert.equal(added.isError, undefined);
-  assert.equal(text(added).replace(/\. Tell them, in your own words[^\n]*/, "."), "Added task #1 'Call Sam' (due Sat 24 Oct 14:30, with Sam, for a member).\nDue: Sat 24 Oct 14:30 (2026-10-24T14:30, Europe/Berlin)\nReminder: Sat 24 Oct 09:00 (Europe/Berlin)");
+  assert.equal(text(added).replace(/\. This is .*'s first reminder here[^\n]*/, "."), "Added task #1 'Call Sam' (due Sat 24 Oct 14:30, with Sam, for a member).\nDue: Sat 24 Oct 14:30 (2026-10-24T14:30, Europe/Berlin)\nReminder: Sat 24 Oct 09:00 (Europe/Berlin)");
   assert.equal(S.getItem(k, 1)!.remindAt, Date.parse("2026-10-24T07:00:00Z"), "09:00 in Berlin is 07:00 UTC (summer time)");
   const bare = await t.add_task!.handler({ title: "Bare day reminder", remind: "2026-11-02" });
   assert.match(text(bare), /Reminder: Mon 2 Nov 09:00 \(Europe\/Berlin\)/, "a bare day means 09:00");
@@ -267,8 +246,6 @@ test("tasks: the tools, in the person's clock: a reply echoes what was understoo
     ["complete_task", { id: 99 }, /no item #99/],
     ["snooze_task", { id: 1, until: "2020-01-01" }, /future/],
     ["snooze_task", { id: 1, until: "soon" }, /not a local time/],
-    ["confirm_suggestion", { id: 1 }, /not a suggestion/],
-    ["reject_suggestion", { id: 1 }, /not a suggestion/],
   ] as const) {
     const r = await t[tool]!.handler(args);
     assert.equal(r.isError, true, tool);
@@ -281,7 +258,7 @@ test("tasks: the tools, in the person's clock: a reply echoes what was understoo
   assert.match(text(await t.update_task!.handler({ id: 1, reopen: true, title: "Call Sam back" })), /^Edited task #1 'Call Sam back'/);
   assert.match(text(await t.drop_task!.handler({ id: 1 })), /^Dropped task #1 'Call Sam back'/);
   const list = text(await t.list_tasks!.handler({}));
-  assert.match(list, /^<tasks>\nToday is Thu 22 Oct \(2026-10-22\), time zone Europe\/Berlin\. 2 items shown \(2 open, 0 overdue, 0 suggested\)\./, "fenced as data, with today's date and the zone");
+  assert.match(list, /^<tasks>\nToday is Thu 22 Oct \(2026-10-22\), time zone Europe\/Berlin\. 2 items shown \(2 open, 0 overdue\)\./, "fenced as data, with today's date and the zone");
   assert.match(list, /#2 \[task\] Bare day reminder \| for a member \| remind Mon 2 Nov 09:00/);
   assert.match(list, /#3 \[task\] Standup \| due Mon 26 Oct 09:30 \| repeats every weekday at 09:30/);
   assert.match(text(await t.list_tasks!.handler({ status: "dropped" })), /#1 \[task\] Call Sam back \| .*dropped/);
@@ -299,7 +276,6 @@ test("tasks: the tools' schemas reject what they should before the handler sees 
   assert.equal(ok("add_task", { title: "x", kind: "owed_to_me", person: "Anna" }), true);
   assert.equal(ok("add_task", { title: "x", source_kind: "import" }), false, "import is for code");
   assert.equal(ok("add_task", { title: "x", source_kind: "mail", source_ref: "m1" }), true);
-  assert.equal(ok("add_task", { title: "x", status: "done" }), false);
   assert.equal(ok("update_task", { id: 0 }), false);
   assert.equal(ok("update_task", { id: 1.5 }), false);
   assert.equal(ok("update_task", { id: 1, due: null }), true, "null clears");
@@ -333,23 +309,22 @@ test("tasks: who acted and where it came from: the owner, a friend, a group memb
   assert.deepEqual([S.getItem(friendKey, 1)!.origin, events(friendKey)[0]!.by], ["friend", "friend"]);
 });
 
-test("tasks: an unattended run has only list and add, and what it adds is a suggestion whatever it passes", async () => {
+test("tasks: an unattended run has only list and add, and what it adds is open, inferred, with its mail as the source", async () => {
   const k = fresh();
   const bg = toolsOf({ key: k, source: "background", unattended: true, zone: () => ZONE, now: () => NOW });
   assert.deepEqual(Object.keys(bg).sort(), ["add_task", "list_tasks"], "the server itself has no tool that changes anything");
-  assert.match((createTasksServer({ key: k, source: "background", unattended: true, zone: () => ZONE }) as unknown as { instance: { _registeredTools: Record<string, { description: string }> } }).instance._registeredTools.add_task!.description, /only a SUGGESTION/);
-  const r = await bg.add_task!.handler({ title: "Pay the invoice", status: "open", source_kind: "mail", source_ref: "mail-9", due: "2026-10-30" });
-  assert.match(text(r), /^Suggested task #1 'Pay the invoice' \(due Fri 30 Oct\)/);
+  assert.match((createTasksServer({ key: k, source: "background", unattended: true, zone: () => ZONE }) as unknown as { instance: { _registeredTools: Record<string, { description: string }> } }).instance._registeredTools.add_task!.description, /goes straight onto the list[\s\S]*tell the person in your message/);
+  const r = await bg.add_task!.handler({ title: "Pay the invoice", source_kind: "mail", source_ref: "mail-9", due: "2026-10-30" });
+  assert.match(text(r), /^Added task #1 'Pay the invoice' \(due Fri 30 Oct\)/);
   const it = S.getItem(k, 1)!;
-  assert.deepEqual([it.status, it.origin, it.sourceKind, it.sourceRef], ["suggested", "inferred", "mail", "mail-9"]);
+  assert.deepEqual([it.status, it.origin, it.sourceKind, it.sourceRef], ["open", "inferred", "mail", "mail-9"]);
   assert.equal(events(k)[0]!.by, "assistant (inferred)");
-  assert.equal(events(k)[0]!.action, "suggested");
-  assert.match(text(await bg.list_tasks!.handler({})), /^<tasks>\nToday is /, "it can list (a read) to avoid suggesting twice");
-  assert.match(text(await bg.list_tasks!.handler({ status: "suggested" })), /#1 \[task\] Pay the invoice \| due Fri 30 Oct \| suggested \| inferred from mail/);
+  assert.equal(events(k)[0]!.action, "added");
+  assert.match(text(await bg.list_tasks!.handler({})), /#1 \[task\] Pay the invoice \| due Fri 30 Oct \| inferred from mail/, "it can list (a read) to avoid adding twice");
 });
 
 test("tasks: the permission floor: own-data writes in chat are free; a background run can only list and add; nothing else reaches the tools", () => {
-  const MUTATORS = ["update_task", "complete_task", "drop_task", "snooze_task", "confirm_suggestion", "reject_suggestion"].map((x) => `mcp__tasks__${x}`);
+  const MUTATORS = ["update_task", "complete_task", "drop_task", "snooze_task"].map((x) => `mcp__tasks__${x}`);
   const READ = "mcp__tasks__list_tasks";
   const ADD = "mcp__tasks__add_task";
   for (const tool of [READ, ADD, ...MUTATORS]) {
@@ -388,8 +363,8 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {};
   const toolNames = (o: Parameters<typeof buildOptions>[1]) => Object.keys(((servers(o) as Record<string, { instance?: { _registeredTools: object } }>).tasks?.instance?._registeredTools ?? {}) as object);
-  assert.equal(toolNames({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).length, 10) // (the owner's chat also has the two import tools);
-  assert.equal(toolNames({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 8);
+  assert.equal(toolNames({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).length, 8) // (the owner's chat also has the two import tools);
+  assert.equal(toolNames({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 6);
   assert.deepEqual(toolNames({ ...base, source: "background" }).sort(), ["add_task", "list_tasks"], "the owner's look");
   assert.deepEqual(toolNames({ ...base, source: "group", groupId: "g", tools: groupTools() }).sort(), ["add_task", "list_tasks"], "a group's look has no chat memory");
   for (const source of ["radar", "handler", "browse"] as const) assert.equal("tasks" in servers({ ...base, source }), false, source);
@@ -397,9 +372,8 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
 });
 
 test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, grouped; a group has no commands", () => {
-  assert.deepEqual(parseCommand("/tasks"), { kind: "tasks", suggestions: false });
-  assert.deepEqual(parseCommand(" /Tasks  Suggestions "), { kind: "tasks", suggestions: true });
-  for (const t of ["tasks", "/tasks please", "show /tasks", "/task"]) assert.equal(parseCommand(t), undefined, t);
+  assert.deepEqual(parseCommand("/tasks"), { kind: "tasks" });
+  for (const t of ["tasks", "/tasks please", "show /tasks", "/task", "/tasks suggestions"]) assert.equal(parseCommand(t), undefined, t);
   const k = fresh();
   assert.equal(tasksText(k, NOW, ZONE), "Nothing open.\nTell me what to add.");
   const add = (title: string, o: Partial<import("../src/tasks/store.ts").NewItem> = {}) => S.addItem(scope(k), { title, ...o });
@@ -415,7 +389,7 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
   assert.equal(
     tasksText(k, NOW, ZONE),
     [
-      "Tasks: 7 open, 1 overdue",
+      "Tasks: 9 open, 1 overdue",
       "",
       "Overdue (1)",
       "• #1 Overdue thing · Tue 20 Oct",
@@ -427,20 +401,18 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
       "• #7 Water plants · Fri 23 Oct ↻",
       "• #3 Dentist · Tue 27 Oct 10:00",
       "",
-      "No date (1)",
+      "No date (3)",
       "• #4 Someday",
+      "• #8 Maybe reply to Bo",
+      "• #9 Maybe call Cy",
       "",
       "Waiting on (1)",
       "• #5 Contract back · Wed 28 Oct · Anna",
       "",
       "I owe (1)",
       "• #6 Send photos · Lena",
-      "",
-      "2 suggestions waiting: /tasks suggestions",
     ].join("\n"),
   );
-  assert.equal(suggestionsText(k, NOW, ZONE), "2 suggestions (from mail):\n• #8 Maybe reply to Bo\n• #9 Maybe call Cy\n\nTell me which to keep (e.g. “keep 12”) or drop (“drop 13”).");
-  assert.equal(suggestionsText(fresh(), NOW, ZONE), "No suggestions waiting.");
   assert.ok(tasksText(k, NOW, ZONE).split("\n").every((l) => l.length <= 60), "phone width");
   // more than eight in a section are counted, not all listed
   const many = fresh();
@@ -449,8 +421,7 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
   // the command, through the same door as /status
   const now = new Date(NOW);
   const owner = { kind: "owner" as const, key: k, convId: "owner" };
-  assert.match(commandReply(owner, "/tasks", { now: () => now, tasks: (c, sug) => (sug ? "S" : `T ${c.key}`) })!, new RegExp(`^T ${k}$`));
-  assert.equal(commandReply(owner, "/tasks suggestions", { now: () => now, tasks: (_c, sug) => (sug ? "S" : "T") }), "S");
+  assert.match(commandReply(owner, "/tasks", { now: () => now, tasks: (c) => `T ${c.key}` })!, new RegExp(`^T ${k}$`));
   const group = { kind: "group" as const, key: k, convId: convIdOfKey(k) };
   assert.equal(commandReply(group, "/tasks", { now: () => now, tasks: () => "never" }), undefined, "a group has no commands: it is a message like any other");
 });
@@ -531,7 +502,7 @@ test("tasks: forgetting a group or a friend deletes the folder, and the list goe
   assert.equal(existsSync(dbFile), false, "the file, with its items and their history");
   assert.equal(existsSync(convPaths(groupConvId(GID)).dir), false);
   assert.equal(hasConvDb(groupConvId(GID)), false);
-  assert.deepEqual(S.listItems(gk, { status: ["open", "done", "dropped", "suggested", "snoozed"] }, NOW, ZONE), []);
+  assert.deepEqual(S.listItems(gk, { status: ["open", "done", "dropped", "snoozed"] }, NOW, ZONE), []);
   assert.equal(statSafe(dbFile), false);
   (settings as { tenants: boolean }).tenants = true;
   const rec = T.addTenant({ aci: "22222222-3333-4444-8555-666666666666", name: "Kai" })!;
@@ -543,7 +514,7 @@ test("tasks: forgetting a group or a friend deletes the folder, and the list goe
   assert.ok(gone?.registry);
   assert.equal(existsSync(fdb), false);
   assert.equal(existsSync(convPaths(friendConvId(rec.id)).dir), false);
-  assert.deepEqual(S.listItems(fk, { status: ["open", "done", "dropped", "suggested", "snoozed"] }, NOW, ZONE), []);
+  assert.deepEqual(S.listItems(fk, { status: ["open", "done", "dropped", "snoozed"] }, NOW, ZONE), []);
   // and the list of another conversation is untouched
   const other = fresh();
   S.addItem(scope(other), { title: "Stays" });

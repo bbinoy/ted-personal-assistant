@@ -93,11 +93,11 @@ For meetings that already happened in the look-back window:
 1. Find the Meetings DB row (by name / attendee / date).
 2. **If it has real notes / a Summary:** read them, pull out follow-ups
    (a promise the owner made, a next step, a doc to send). For each, add a
-   task with `add_task` (a suggestion when unattended) if none exists and list it in the brief;
+   task with `add_task` (also when unattended: then say so) if none exists and list it in the brief;
    draft any follow-up email in-thread via `ted-personal-assistant:mailbird`.
 3. **If there are no notes:** in the brief, ask "add notes from your
    <meeting> with <person>?" and, if the meeting type usually needs a
-   follow-up, suggest a placeholder task.
+   follow-up, add a placeholder task and say so.
 
 ## Guardrails
 
