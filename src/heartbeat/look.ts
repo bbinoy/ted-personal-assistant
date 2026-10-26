@@ -29,7 +29,7 @@ import { hasOpen, openCount } from "../approvals/approvals.ts";
 import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
 import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { countPosts, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
+import { countPosts, failingLooksFact, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
 import { oneLine } from "./digest.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { expireSuggestions, offerSuggestions } from "../tasks/suggest.ts";
@@ -63,7 +63,11 @@ export interface HeartbeatDeps {
   may: (conv: Conversation, what: string) => Payer | Refusal;
   why: (r: Refusal) => string;
   notesChangedAt: (dir: string) => number;
+  clocks?: { wall: () => number; mono: () => number }; // (tests) the wall clock and the monotonic one (on macOS it stands still while the Mac sleeps)
 }
+
+// A run whose wall time exceeds its monotonic time by more than this spanned a sleep: whatever it ended with (a timeout, a dead connection) is the sleep's, not a failure.
+export const SLEEP_DRIFT_MS = 60_000;
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -108,7 +112,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
   });
 }
 
-// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
+// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock, the owner's failing-looks fact; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
 // (they quote what was posted, which can carry words of a mail or a page).
 export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string, ...facts: string[]): string =>
   [clockLine(now, zone), instruction, ...facts, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].filter(Boolean).join("\n\n");
@@ -154,6 +158,7 @@ export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: numb
 
 export function createHeartbeatLook(deps: HeartbeatDeps) {
   const { pipeline } = deps;
+  const clocks = deps.clocks ?? { wall: Date.now, mono: () => performance.now() };
   const history = new Map<string, LookHistory>(); // per conversation, in memory (a restart starts fresh)
   const inflight = new Set<AbortController>(); // the looks that are running now (abortAll)
   const slept = new WeakSet<AbortController>(); // those stopped because the Mac slept
@@ -194,6 +199,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
     const instruction = lookInstruction(now, st.wake?.looked, looker, conv.notesDir, routines?.text ?? "");
     const overnight = overnightBlock(takeOvernight(conv, now), now, looker.zone); // (handed over once: taken out of the held posts here)
+    const failing = failingLooksFact(conv); // the owner's own looks have failed for a long awake stretch (notices.ts): a fact this look may mention, never a fixed message
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -204,6 +210,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       else console.log(`heartbeat: a message came while the ${conv.kind} look ran; it is not called off (${h.preempted} preempted in a row, or the last full look is old)`);
     };
     inflight.add(overtaken);
+    const wall0 = clocks.wall();
+    const mono0 = clocks.mono();
     const lease = pipeline.lease?.(conv, callOff, () => (deps.awaitingApproval ?? ((c) => hasOpen(c.key)))(conv));
     try {
       reply = await pipeline.sendWhile(
@@ -215,7 +223,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, failing), {
             provenance: { kind: "standing", task: instruction },
             seenMail,
             ...(shadow ? { shadow: shadow.gate } : {}),
@@ -259,7 +267,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     // what the look suggested goes out as ONE message with a one-tap answer (tasks/suggest.ts), held in quiet hours
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
-    const interrupted = !reply && slept.has(overtaken); // the Mac slept: the connections are dead; a failed row without a notice, due again at once
+    const spannedSleep = clocks.wall() - wall0 - (clocks.mono() - mono0) > SLEEP_DRIFT_MS; // the run spanned a sleep (the tick may not have noticed it yet): a timeout or a dead connection then is the sleep's
+    const interrupted = !reply && (slept.has(overtaken) || spannedSleep); // the Mac slept: the connections are dead; a failed row, neutral for the failure tracker, due again at once
     const timedOut = !reply && failure instanceof RunTimeout; // aborted at its ceiling (ceiling.ts): the query and its subagents are stopped and the conversation's busy state is released
     const calledOff = !interrupted && (overtaken.signal.aborted || failure instanceof RunStopped); // a message overtook it, or the owner said /stop: not a failure
     let outcome: HeartbeatRow["outcome"] = reply ? "silent" : interrupted ? "failed" : calledOff ? "preempted" : timedOut ? "timeout" : "failed";
@@ -286,7 +295,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     // Delivered only when the expert's result came back; an attempt is given back only when nothing of it reached the owner (no result, no send, no email): else the next look would send it again.
     settleRoutines(conv.convId, started, finished, { calledOff: outcome === "preempted" || interrupted, sends: sent + selfMailed }, Date.now());
     if (routines?.told.length && !failed && outcome !== "preempted") markTold(conv.convId, routines.told);
-    if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now);
+    if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
     if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add

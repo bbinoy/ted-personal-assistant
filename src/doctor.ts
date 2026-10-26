@@ -250,7 +250,7 @@ export function sleepCheck(line: Line, pmset: (args: string[]) => string | undef
 export const FAILED_LOOKS_WARN = 3; // this many failed or timed-out looks in the window is a warning
 export const FAILED_LOOKS_HOURS = 6;
 
-// The heartbeat's own record says the looks are failing: counts from the looks table only, no words.
+// The heartbeat's own record says the looks are failing: counts from the looks table only, no words. This is where a group's or a friend's failing looks are reported (never in a chat).
 export function failedLooksCheck(line: Line, rows: readonly HeartbeatRow[], now: Date = new Date()): void {
   const since = now.getTime() - FAILED_LOOKS_HOURS * 3600_000;
   const recent = rows.filter((r) => Date.parse(r.at) >= since);
@@ -258,7 +258,8 @@ export function failedLooksCheck(line: Line, rows: readonly HeartbeatRow[], now:
   const timeouts = failed.filter((r) => r.outcome === "timeout").length;
   const what = `looks failing in the last ${FAILED_LOOKS_HOURS} hours`;
   if (failed.length < FAILED_LOOKS_WARN) return line(true, what, `${failed.length} of ${recent.length} look(s) failed`);
-  line("warn", what, `${failed.length} of ${recent.length} look(s) failed or timed out${timeouts ? ` (${timeouts} timed out)` : ""}; likely causes: the Mac sleeping, no network, or the usage limit (npm run heartbeat-report; docs/SETUP.md "Keep it running")`);
+  const kinds = (["owner", "group", "tenant"] as const).map((k) => [k, failed.filter((r) => r.kind === k).length] as const).filter(([, n]) => n > 0).map(([k, n]) => `${k === "tenant" ? "friends" : k === "group" ? "groups" : "yours"} ${n}`);
+  line("warn", what, `${failed.length} of ${recent.length} look(s) failed or timed out${timeouts ? ` (${timeouts} timed out)` : ""}: ${kinds.join(", ")}; likely causes: the Mac sleeping, no network, the usage limit, or a look's ceiling (HEARTBEAT_TIMEOUT_MINUTES) (npm run heartbeat-report; docs/SETUP.md "Keep it running")`);
 }
 
 // instance.db opens, is in WAL mode, has the schema this code knows, and passes SQLite's quick check; the row counts say whether the ledgers are there (never what is in them).

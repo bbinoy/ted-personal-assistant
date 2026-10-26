@@ -10,7 +10,7 @@ import { tenantHooks } from "../tenants/tenanttools.ts";
 // main.ts builds an AppContext and calls wire(). A hook missing here stops the start with its name, instead of a notice or a question silently going nowhere later.
 export interface AppContext {
   approvers: Parameters<typeof setApprovers>[0]; // who is asked about a call, in the conversation that triggered it (approvers.ts)
-  notifyOwner: (text: string) => void; // a plain notice in the owner's chat: the shared-key notice (keynotice.ts), the daily cap line (capnotice.ts), the budget / failing-looks notices (heartbeat/notices.ts)
+  notifyOwner: (text: string) => void; // a plain notice in the owner's chat: the shared-key notice (keynotice.ts), the daily cap line (capnotice.ts), the budget notice (heartbeat/notices.ts)
   dropTenant: (id: string) => void; // a suspended or removed tenant: her warm process and every connection of hers stop (tenanttools.ts)
   sendFirst?: NonNullable<typeof tenantHooks.sendFirst>; // the owner's hello to a number or username (invite_person); absent where the platform has none, by design
 }

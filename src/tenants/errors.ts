@@ -25,14 +25,14 @@ export type Audience = "owner" | "group" | "friend";
 // What went wrong, in the classes a person can act on (also what the background-failure notice says, heartbeat/notices.ts). A connector's failure reaches us only as text from the SDK, hence the words.
 export type Cause = "login" | "limit" | "billing" | "refused" | "timeout" | "connector" | "reconnect" | "other";
 // THE table from a cause to what the OWNER is told and the ONE next step she can take (the exact command, the exact setting, or the exact place in the Claude app). Every owner-facing failure
-// text ends with `fix`: the chat notices below and the failing-looks notice (heartbeat/notices.ts). No secret, token or word of a friend's: a fixed sentence per cause. A friend's reconnect puts
+// text ends with `fix`: the chat notices below; the failing-looks FACT for the owner's next look carries it too (heartbeat/notices.ts). No secret, token or word of a friend's: a fixed sentence per cause. A friend's reconnect puts
 // no minted link in the message (a link is a secret that works once): the fix is the sentence that makes the assistant send HER one, in her own chat.
 export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
   login: { what: "my Claude login expired", fix: "On the Mac, run `claude auth login`." },
   limit: { what: "the plan's usage limit is hit", fix: "It lifts by itself; message me again after it resets." },
   billing: { what: "the shared API key has no credit left", fix: "Add credit to the account behind TENANT_ANTHROPIC_API_KEY in .env, then restart." },
   refused: { what: "the shared API key was refused", fix: "Check TENANT_ANTHROPIC_API_KEY in .env, then restart." },
-  timeout: { what: "the runs are timing out", fix: "Raise RUN_MAX_MINUTES_BACKGROUND in .env, then restart." },
+  timeout: { what: "the looks are timing out", fix: "Raise HEARTBEAT_TIMEOUT_MINUTES (or EXPERT_TIMEOUT_MINUTES, for a look that delegates) in .env, then restart." },
   connector: { what: "a connector (Notion, Calendar or Gmail) is not answering", fix: "Reconnect it in the Claude app under Settings > Connectors (`npm run doctor` says which)." },
   reconnect: { what: "a friend's Notion or Google permission expired", fix: 'Ask her to message me "reconnect Google" (or Notion): I send her a new one-time link in her own chat (`npm run doctor` lists who).' },
   other: { what: "the model run keeps failing", fix: "Run `npm run doctor`; it reads the errors in logs/agent.log." },

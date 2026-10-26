@@ -26,7 +26,7 @@ import { startPreps, type PrepDeps } from "./preptick.ts";
 // key) and runs on the Payer it returns: no per-conversation branches here.
 // The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the owner's once-a-day notice; a tenant's own day is her access,
 // tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
-// an unprompted post and the tick delivers what was held as one message); the owner hears of a spent budget once a day and of looks that keep failing (notices.ts).
+// an unprompted post and the tick delivers what was held as one message); the owner hears of a spent budget once a day; looks that keep failing are the log's and the doctor's (the owner's own, after a long awake stretch, a fact for her next look: notices.ts).
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
@@ -44,6 +44,7 @@ interface WakeDeps {
   notesChangedAt?: (dir: string) => number;
   now?: () => Date;
   guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
+  clocks?: HeartbeatDeps["clocks"]; // tests; default: Date.now and performance.now (look.ts: a run that spanned a sleep)
 }
 
 // The wait before a conversation's first look after a start: random within the tick interval, at most 5 minutes (a spread of work, not a delay of any one look).
@@ -103,7 +104,7 @@ export function createWakeups(deps: WakeDeps) {
     return st;
   }
 
-  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed, awaitingApproval: deps.awaitingApproval });
+  const heartbeat = createHeartbeatLook({ pipeline, run: deps.run, may, why, notesChangedAt: changed, awaitingApproval: deps.awaitingApproval, clocks: deps.clocks });
 
   // One conversation, one look. Returns what happened (for the log and tests).
   async function look(conv: Conversation, now: Date): Promise<string> {
