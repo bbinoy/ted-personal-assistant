@@ -1,6 +1,6 @@
 // The Messenger interface: everything the assistant needs from a chat platform, and nothing about any one of them.
 //
-// The app (src/) talks to ONE Messenger. A platform package (packages/signal, later telegram, whatsapp, slack) implements it and maps
+// The app (src/) talks to ONE Messenger. A platform package (packages/signal) implements it and maps
 // to and from its own protocol; the app never sees an envelope, a phone number format or a platform call. Which one runs is
 // MESSENGER=<name> (default signal), loaded by name with loadMessenger.
 //

@@ -24,7 +24,7 @@
 ## Personal assistant
 
 - **Inbox.** Every 15 minutes it checks for new mail. Newsletters, notifications and cold outreach are archived (never deletes). Anything that needs you arrives as one short message on Signal. When appropriate a reply is drafted automatically for you to review.
-- **A gentle first week.** On its very first start Ted says hello once (what it does, that it starts gently, `/status`, `/pause 2h`, `/today`, and "set up" if you want to walk through connecting things). For the first days it does not archive anything on its own: at the end of a look it sends ONE message, "I'd archive these 14", with the sender and subject of each; 👍 archives them all, "3,5 keep" leaves those two in your inbox (and offers to remember that as a rule). Once 3 days have passed and you have told it what to archive (at the latest after 14 days) it says so and from then on archives those kinds of mail itself, listed in `/today`. A friend's own mail starts the same way. `SHADOW_MODE=off` skips it, `on` keeps it for good.
+- **A short hello.** On its very first start Ted says hello once (what it does, `/status`, `/pause 2h`, `/today`, and "set up" if you want to walk through connecting things). It archives routine mail from the start, as your notes say; every archive is listed in `/today` and the brief, and "restore 3" brings one back.
 - **Meeting prep** from your Notion meeting database and past threads, in the daily brief and again as one short message 15 minutes before each meeting with other people (who, what it is about, your last thread with them, what you owe each other, the Notion page; `PREP_MINUTES`).
 - **People.** "Invite Sam" or "write to Anna" does not mean guessing or asking for an address: `find_person` looks in your people notes and, for a friend, her Google Contacts, and only asks when it finds none or several. Google Drive and Docs are on by default: it can find and read your files.
 - **Its own task list.** Say "remind me to call Sam on Friday" and it keeps a list per chat (yours, each friend's, each group's): tasks, promises you made and things you wait on, with repeat rules (`every monday at 09:00`), snoozing and a full history, never deleting anything. What a mail asks of you it adds by itself and tells you in a line ("drop that task" undoes it). `/tasks` shows the list.
@@ -144,7 +144,7 @@ Personal agents are having a moment. Ted sits in the middle: hosted products lik
 | **Source** | Open (MIT)| Open, large | Proprietary | Proprietary |
 | **Cost** | Your Claude plan. Measured in October 2026 with Sonnet: about $0.01 for a simple warm reply, $0.03 to $0.08 for a calendar question | Free software plus your model costs | $200/month, or bundled with SuperGrok Heavy and Cursor plans | Free in invite-only beta, pricing not published |
 | **Runs on** | Your Mac | Your machine or server | xAI's cloud | The vendor's cloud |
-| **Where you talk to it** | Signal (Telegram next; other messengers plug into a generic interface) | WhatsApp, Telegram, Signal, Slack, iMessage and more | Desktop and iPhone app | iMessage, WhatsApp, phone calls |
+| **Where you talk to it** | Signal (other messengers plug into a generic interface) | WhatsApp, Telegram, Signal, Slack, iMessage and more | Desktop and iPhone app | iMessage, WhatsApp, phone calls |
 
 **Ted may suit you** if you want a readable assistant for yourself (and, if you like, a few people you know) that comes with personality and personal assistant skills out of the box, that you set up by chatting, and that you can run and change yourself. **OpenClaw** fits a broad, self-hosted agent platform with many channels and community skills, and more technical setup. **Grok Bot or Instinct** fit if you would rather have a hosted product than run anything yourself.
 
@@ -163,7 +163,7 @@ What is built but not switched on yet, and what is planned next. Order and dates
 
 - **Secrets and payments.** A sealed card store (OpenBao), a typed YES in the chat for every payment, spending caps and a ledger. Built, not live yet: it is being tested with fake cards before it is switched on.
 - **Several people.** Friends with their own memory, notes and budget, isolated from you and from each other, exist and are off by default. Their own Google and Notion, signed in from a one-time link, are built and tested against fakes, and the first live run with real accounts is still ahead. Saved details and a card for friends are not built.
-- **A generic messenger layer.** All Signal code moves behind one interface, so other messengers plug in without changes to the assistant. Stubs with setup instructions for WhatsApp and Slack, no full support planned yet.
+- **A generic messenger layer.** All Signal code moves behind one interface, so other messengers plug in without changes to the assistant. Design notes for Telegram, Slack and WhatsApp are in docs/ADAPTING.md; none is built.
 - **Telegram, and an even faster setup.** A Telegram bot as the default: create the bot, paste the token, scan a QR code, and finish the setup in the chat. Signal stays supported and remains the more private choice.
 - **Tools and assistant presets.** Tools as small modules and the personal assistant's persona and routines as data, so it is easier to add a tool or make a different kind of assistant. No marketplace of third-party modules, on purpose.
 

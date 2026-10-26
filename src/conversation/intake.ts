@@ -12,7 +12,6 @@ import { TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 import { reactionMessage, reactionPrompt } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { taskReply } from "./taskreplies.ts";
-import { shadowReaction, shadowReply } from "./shadowreplies.ts";
 import { forgetDeclined } from "../approvals/declined.ts";
 import { voiceOption } from "./voicereply.ts";
 import { settings } from "../core/settings.ts";
@@ -161,7 +160,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     if (!conv.approvals) {
       // A question asked in this group is answered here by ANY member (their message, a quoted reply or a reaction); the model reads it
       // like the owner's. Only this group's approvals can be answered; an edit and a caption never answer.
-      if (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target }))) return; // /tasks in a group, an answer to the learned list (taskreplies.ts)
+      if (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target }))) return; // /tasks in a group (taskreplies.ts)
       if (await approvalAnswer(conv, m, author)) return;
       forgetDeclined(conv.key);
       if (m.addressedToMe) overtake(conv); // (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
@@ -232,10 +231,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     }
     // While an approval is pending, a message may be its answer. That must skip the queue.
     scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
-    if (!edited && (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target })))) return; // an answer to the learned list (taskreplies.ts)
-    if (!edited && (await shadowReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target })))) return; // an answer to the first week's archive proposal (shadowreplies.ts)
     if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
-    if (!edited && (await deps.feedback?.message(conv, m))) return void console.log("feedback: a quoted reply to something sent unprompted was handled (an offer, or the answer to one)"); // learning from feedback (feedback.ts); only a short quoted reply, and a group never gets here
+    const learned = edited ? undefined : await deps.feedback?.message(conv, m); // learning from feedback (feedback.ts): a short quoted reply to something sent unprompted may save a note; the turn below mentions it
     forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
     overtake(conv); // a look of this conversation that is running gives way to the turn
     await burst(conv, m, async (b) => {
@@ -248,7 +245,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
             console.log(`owner message (${x.text.length} chars)`);
             if (x.quote) console.log(`owner is replying to an earlier message (${x.quote.text.length} chars)`);
           }
-          const prompt = ownerPrompt(ms);
+          const prompt = learned ? `${ownerPrompt(ms)}\n\n${learned}` : ownerPrompt(ms);
           await runTurn(conv, {
             run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
             target: { author: last.from, timestamp: last.timestamp },
@@ -267,7 +264,6 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   // Any reaction that is not an approval answer is feedback on a message. The model is told which message
   // it was on (looked up by timestamp in the log) and decides what, if anything, it means.
   async function ownerReaction(conv: Conversation, r: IncomingReaction): Promise<void> {
-    if (await shadowReaction(conv, r, (t) => out.reply(t, { plain: true, target: conv.target }))) return; // a 👍 / 👎 on the first week's archive proposal (shadowreplies.ts)
     const outcome = deps.approvals.answerReaction(r.emoji, r.targetTimestamp, conv.key, r.from || r.fromUuid);
     if (outcome === "needs_text") return void (await out.reply(TYPED_YES_NEEDED, { plain: true })); // a payment is not approved by a reaction
     if (outcome !== "ignored") return void console.log(`approval ${outcome} (by reaction)`);
@@ -276,8 +272,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       console.log(`owner reacted ${r.emoji}`);
       const on = findMessage(r.targetTimestamp, conv.logFile);
       record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
-      if (await deps.feedback?.reaction(conv, r)) return void console.log("feedback: a reaction was handled (an offer, or the answer to one)"); // a 👎 on something sent unprompted, or the 👍 / 👎 on an offer: no chat turn (feedback.ts)
-      const prompt = reactionPrompt(r.emoji, on);
+      const learned = await deps.feedback?.reaction(conv, r); // a 👎 on something sent unprompted may save a note (feedback.ts); the turn below mentions it
+      const prompt = reactionPrompt(r.emoji, on) + (learned ? `\n\n${learned}` : "");
       // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
       await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text, on ? Date.parse(on.at) || 0 : 0), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
     });

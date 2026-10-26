@@ -3,11 +3,9 @@ import { join } from "node:path";
 import { emit } from "../core/events.ts";
 import { forgetNotices } from "../core/capnotice.ts";
 import { forgetSpend } from "../core/budget.ts";
-import { forgetInBackups } from "../core/dbimport.ts";
-import { forgetConvInBackups } from "../core/convimport.ts";
 import { isInside } from "../core/contain.ts";
 import { removeConvDir } from "../core/convdb.ts";
-import { dataRoot, friendConvId } from "../core/convpaths.ts";
+import { friendConvId } from "../core/convpaths.ts";
 import { forgetTenantConnections } from "../intake/intakelinks.ts";
 import { TENANT_ID } from "../secrets/secrets.ts";
 import { tenantKey } from "../core/ownerkey.ts";
@@ -16,7 +14,7 @@ import { deleteTenant, OWNER_ID, tenantById } from "./tenants.ts";
 
 // Removing a friend takes EVERYTHING of hers. Her data is ONE folder now (conversations/friend-<id>/: notes, history, session, cost, pending approvals, cloned voices and the index of
 // her voice notes, search index), so most of it goes with deleteTenant (tenants.ts) alongside her registry entry. What is not in her folder is the audio files signal-cli saved for her
-// voice notes (found through her index, which is read BEFORE the folder goes), her marks in the `intake` and `notices` tables of instance.db, her spend rows (unnamed, not deleted), her name in the layout-3 import's backups (instance/migration-backup/<time>/: her cost file deleted, intake and notice backups rewritten without her),
+// voice notes (found through her index, which is read BEFORE the folder goes), her marks in the `intake` and `notices` tables of instance.db, her spend rows (unnamed, not deleted),
 // and her items in the secret store (tenants/<id>/*). Idempotent: run again after a failure (or for a friend whose registry entry is already gone) and it removes what is left.
 // It reports what it removed; it never throws for one step failing, so the rest still happens.
 // Not reached, and said so in docs/SAFETY.md: attachments signal-cli saved for her other messages (the app's log keeps no attachment id for them), the SDK's own
@@ -83,8 +81,6 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
   step("her saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));
   step("her connection marks", () => forgetTenantConnections(id));
   step("her spend rows (unnamed; the totals stay)", () => forgetSpend(conv));
-  step("her name in the import's backups", () => forgetInBackups(dataRoot(), id, conv) > 0);
-  step("her files in the assistant.db import's backups", () => forgetConvInBackups(dataRoot(), conv) > 0);
   step("her notice marks", () => forgetNotices((k) => k === `friend:${id}` || k === `warn:${conv}`));
   for (const secrets of d.secrets ?? []) {
     try {

@@ -237,9 +237,6 @@ export function loadSettings(env: Env) {
     // The most characters of ONE tool result the model reads (toolclean.ts, in the PostToolUse path of every tool, MCP results included); the rest is cut with a hint to narrow the query.
     toolOutputMaxChars: num(env, "TOOL_OUTPUT_MAX_CHARS", 60_000, 1000, 1_000_000),
     archiveMaxPerRun: num(env, "ARCHIVE_MAX_PER_RUN", 25, 1, 500),
-    // The gentle first week (approvals/shadow.ts): auto = while the conversation is new an unattended look PROPOSES its archives (one batch message, a 👍 archives them) instead of making them;
-    // it ends when 3 days have passed AND the person has a triage note, at the latest after 14 days. on: always propose. off: archive as the notes say from the first look.
-    shadowMode: oneOf(env, "SHADOW_MODE", "auto", ["auto", "on", "off"] as const),
 
     // How long a question asked in a chat turn waits before it lapses (silently: a journal line, approvals.ts). Unattended runs ask nobody; a stranger's registration waits a day.
     approvalTimeoutMinutes: num(env, "APPROVAL_TIMEOUT_MINUTES", 15, 1, 1440),
@@ -356,7 +353,7 @@ export function loadSettings(env: Env) {
     memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 2000, 10, 20000), // how many notes a run reads (each is cut at MAX_NOTE_CHARS); far above normal use, so it only guards against runaway growth
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
     dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
-    feedbackOffersPerDay: num(env, "FEEDBACK_OFFERS_PER_DAY", 3, 0, 20), // learning from feedback (conversation/feedback.ts): at most this many "save this note?" offers a day per conversation, after a 👎 or a clear "less of this" on something sent unprompted (0: off)
+    feedbackOffersPerDay: num(env, "FEEDBACK_OFFERS_PER_DAY", 3, 0, 20), // learning from feedback (conversation/feedback.ts): at most this many notes a day saved from a 👎 or "less of this" per conversation (0: off)
 
     // The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window. RETENTION=off disables all of it; each window is a setting (0 where noted: that rule off).
     retention: oneOf(env, "RETENTION", "on", ["on", "off"] as const) === "on",
@@ -370,7 +367,6 @@ export function loadSettings(env: Env) {
     spendKeepDays: num(env, "SPEND_KEEP_DAYS", 400, 2, 3650), // spend ledger rows of days older than this are pruned (the budgets look at today only)
     shoreCacheKeep: num(env, "SHORE_CACHE_KEEP", 50, 1, 10000), // cached shore outlines kept (newest by mtime)
     tmpSweepHours: num(env, "TMP_SWEEP_HOURS", 24, 1, 720), // temporary folders of picture, voice and Google work older than this are swept
-    migrationReviewDays: num(env, "MIGRATION_REVIEW_DAYS", 30, 1, 3650), // doctor warns about migration-backup / migration-orphans older than this (never deleted automatically)
 
     // Wake-ups (src/conversation/gate.ts, src/heartbeat/wake.ts): on every heartbeat tick a small model looks at each conversation whose
     // "next look" has come and decides whether to do something unprompted ("every morning post a fun fact").

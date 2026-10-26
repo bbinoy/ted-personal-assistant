@@ -20,8 +20,7 @@ import { createsOf, isOwnerOnly } from "../policy/toolmanifest.ts";
 import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
 import { serversFor } from "../modules/runtime.ts";
 import type { RunContext } from "../modules/types.ts";
-import { approveIn, isUnattended, makeCanUseTool, type Approve, type CallGuard } from "../approvals/permissions.ts";
-import type { ShadowGate } from "../approvals/shadowgate.ts";
+import { approveIn, isUnattended, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { groupCapabilities, groupTools } from "../policy/capabilities.ts";
@@ -56,7 +55,6 @@ export interface RunOptions {
   memory?: { dir: string; groupId?: string; notify?: (text: string) => Promise<void> };
   notesRead?: { dir: string; categories?: readonly string[]; write: readonly string[]; maxNotes: number; zone?: string }; // an unattended run's notes: the prompt holds their index, read_note reads one and write_note saves an inferred one (notestools.ts)
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
-  shadow?: ShadowGate; // a heartbeat look in its first week: its archives become proposals (approvals/shadow.ts)
   groupId?: string; // a group's unattended run (the heartbeat run) has no memory but is still the group's: its send, its browse approvals and its questions go there (memory.groupId says the same for a chat turn)
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
   skills?: readonly string[]; // the skills offered (default: the owner's, skills.ts ownerSkills);a group's or tenant's are the shared ones its capabilities allow (skills.ts)
@@ -69,7 +67,6 @@ export interface RunOptions {
   // Fires after a tool call succeeds. Used to capture the brief the agent sends.
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   onFirstOutput?: () => void; // the model's first message arrived (timing only)
-  callGuard?: CallGuard; // a run that may make only the approved calls (approvals/shadowexec.ts): sees every call first (permissions.ts)
   guard?: BrowseGuard; // the browse run: decides each browser call and remembers the page (browse.ts)
   gate?: RunKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
   stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's session file
@@ -251,7 +248,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : [...new Set([...hiddenTools(toolsSeen()), ...(opts.mcpTools ? hiddenOutside(opts.mcpTools, toolsSeen()) : [])])], // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.callGuard ?? opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, shadow: opts.shadow, inferredNoteRead: () => readInferred, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, unattended: opts.unattended, restoreFree: opts.source === "chat" && conversation === OWNER_KEY, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, opts.source, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, unattended: opts.unattended, restoreFree: opts.source === "chat" && conversation === OWNER_KEY, taint: sessionTaint(opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

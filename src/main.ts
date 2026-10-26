@@ -1,5 +1,5 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
-import "./core/migrateatstart.ts"; // second: an old data folder is moved to the current layout before any module opens a file (core/migrate.ts)
+import "./core/agentstart.ts"; // second: a data folder in another layout stops the start before any module opens a file (core/requirelayout.ts)
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
 import { createFeedback } from "./conversation/feedback.ts";
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
@@ -38,23 +38,14 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { setShadowRuntime } from "./approvals/shadow.ts";
-import { runShadow } from "./run/shadowrun.ts";
 import { welcomeOnce } from "./core/welcome.ts";
-import { setLearnedRuntime } from "./conversation/learned.ts";
-import { holdingNow } from "./heartbeat/notices.ts";
-import { mayRun } from "./tenants/payer.ts";
-import { OWNER_KEY, isTenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
-import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
 import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
-import { writeAgentPid } from "./core/migrateservices.ts";
 import { retentionTrigger, runRetention } from "./core/retention.ts";
 import { registerFileRules } from "./heartbeat/retentionrules.ts";
 import { instancePaths } from "./core/convpaths.ts";
 
-writeAgentPid(settings.dataDir); // so `npm run migrate` knows the agent is up
 applyCredentialMode();
 checkHideSettings(); // a NOTION_TOOLS, MAILBIRD_TOOLS or GMAIL_TOOLS typo stops the start with a message naming the setting
 ensureNotesDir(); // first run: conversations/owner/notes/, where the chat agent keeps its notes
@@ -92,16 +83,6 @@ wire({
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });
-// The conversation a key names (the senders below are handed conversations by key).
-const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
-// The first week's archive proposals (approvals/shadow.ts): one message per look listing what the look would have archived, held in quiet hours; an approved batch is run exactly as recorded in a small follow-up run (run/shadowrun.ts).
-setShadowRuntime({
-  send: (conv, text) => out.reply(text, { plain: true, kind: "proposals", ...(conv.kind === "owner" ? {} : { target: convOf(conv.key).target }) }),
-  holding: (conv, now) => holdingNow(convOf(conv.key), now),
-  execute: (conv, calls) => runShadow(convOf(conv.key), calls, (c, what) => mayRun(c, what)),
-});
-// A friend's "🧠 Learned overnight" (conversation/learned.ts): one message after her dream, a notice (a reply that quotes it answers "undo 2"), held in quiet hours.
-setLearnedRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "notice", target: convOf(conv.key).target }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
@@ -166,7 +147,7 @@ const pipeline: Pipeline = createPipeline({
     foreign: createVoiceLanguage(settings.ttsLanguages), // the language the voice does not speak, if any; a failed check falls back to the conversation's last known language
   },
   approvals,
-  feedback: createFeedback({ out }), // a 👎 or "less of this" on something sent unprompted: one offer to save a note, nothing saved until the owner says yes (feedback.ts)
+  feedback: createFeedback(), // a 👎 or "less of this" on something sent unprompted: one note saved, mentioned by the chat turn that follows (feedback.ts)
   vouch,
   isOwner: fromOwner,
   admitGroup: (_conv, m) => groupBrain(m),
@@ -245,10 +226,6 @@ warmChat();
 if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 void welcomeOnce(say); // a fresh data folder's first start: one short welcome, once ever (core/welcome.ts)
-const reorganised = ownerNotice(settings.dataDir); // the data folder was moved to the current layout at this start (or an earlier one whose notice could not be sent): she is told once
-if (reorganised) void say(reorganised).then(() => markOwnerTold(settings.dataDir)).catch(() => {});
-const late = lateNotice(settings.dataDir); // files an old version wrote after the move: merged or set aside (core/migrate.ts reconcile), named to her once
-if (late) void say(late).then(() => markLateTold(settings.dataDir)).catch(() => {});
 replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
