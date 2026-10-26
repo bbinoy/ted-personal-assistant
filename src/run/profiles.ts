@@ -20,6 +20,7 @@ interface RunProfile {
   readonly skills: readonly string[];
   readonly mcpTools?: ReadonlySet<string>; // the connector tools the job sees; absent: the owner's whole set (profiletools.ts)
   readonly model?: string; // the run's own model (default: HARNESS_MODEL)
+  readonly effort?: Options["effort"]; // the run's reasoning effort (default: the SDK's)
   readonly outputSchema?: Options["outputFormat"];
 }
 // The limits of each profile are the assistant preset's (assistants/<name>/preset.json "profiles"); the policy source, the output
@@ -31,7 +32,7 @@ export const PROFILES: Readonly<Record<ProfileName, RunProfile>> = {
   // A conversation's heartbeat run (heartbeat/look.ts): one look at everything it can see, a fresh session each time, on HEARTBEAT_MODEL (Haiku by default). The owner's has every
   // connector tool she has (policy source "background"); a friend's or a group's has the tools of its capability set (policy source "group", agent.ts heartbeatOptions). Every call
   // passes the same floor, judge and phone as anywhere; it answers with constrained JSON.
-  heartbeat: { source: "background", ...data.heartbeat, get skills() { return ownerSkills(); }, get model() { return settings.heartbeatModel; }, outputSchema: HEARTBEAT_SCHEMA },
+  heartbeat: { source: "background", ...data.heartbeat, get skills() { return ownerSkills(); }, get model() { return settings.heartbeatModel; }, effort: "high", outputSchema: HEARTBEAT_SCHEMA },
   // A group's run: its own resumed session, its own notes folder as memory, nothing of the owner's (policy source "group"). Its skills are the shared
   // ones its capability set allows (skills.ts); a tenant's come from her record in the same way (runoptions.ts).
   group: { source: "group", ...data.group, get skills() { return skillsFor(groupCapabilities()); } },
