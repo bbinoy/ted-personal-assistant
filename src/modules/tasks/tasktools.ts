@@ -148,11 +148,9 @@ export function createTasksServer(run: TasksRun) {
           sourceKind: a.source_kind as (typeof SOURCE_KINDS)[number] | undefined,
           sourceRef: a.source_ref,
         });
-        // A reminder said in a group is the group's task (everyone sees it, assigned to who asked): the first time for each member, the reply carries one sentence saying so (persisted, suggest.ts).
-        if (isGroup && !run.unattended && !added.duplicate && a.remind !== undefined) {
-          const note = groupReminderNote(s.key, s.by, s.now ?? Date.now());
-          if (note) return { ...added, line: `${added.line}. Tell them, in your own words and their language, exactly this and nothing more about it: "${note}"` };
-        }
+        // A reminder said in a group is the group's task (everyone sees it, assigned to who asked): the first time for each member, the reply tells the model to say so (persisted, grouptasks.ts).
+        if (isGroup && !run.unattended && !added.duplicate && a.remind !== undefined && groupReminderNote(s.key, s.by, s.now ?? Date.now()))
+          return { ...added, line: `${added.line}. This is ${s.by}'s first reminder here: tell them once, in your own words and their language, that it is saved for the whole group (everyone sees it) and that a private reminder goes to you in a direct chat` };
         return added;
       }, urgentNote(a.urgent)),
   );

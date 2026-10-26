@@ -27,7 +27,6 @@ const PROPOSAL_DAYS = 7; // a proposal nobody answers lapses after this (nothing
 const KEEP_ROWS_DAYS = 60;
 const RUN_CALLS = 40; // the most archive calls one follow-up run is given
 
-export const SHADOW_ENDED_TEXT = "From now on I'll archive these kinds of mail myself; you'll see them in /today.";
 
 /** The parts of a Conversation this file needs. */
 export interface ShadowConv {
@@ -99,21 +98,23 @@ export function shadowActive(conv: ShadowConv, now: Date = new Date()): boolean 
   return false;
 }
 
-/** Shadow mode has ended and the person has not been told yet: say it once (not in quiet hours; the next look does). Never throws. */
-export async function tellShadowEnded(conv: ShadowConv, now: Date = new Date()): Promise<"sent" | "held" | "none"> {
+/** Shadow mode has ended and the person has not been told yet: a FACT for the look (CLAUDE.md: Ted speaks, code doesn't), "" otherwise. The look says it in its own words; markShadowEndedTold once it spoke. */
+export function shadowEndedFact(conv: ShadowConv): string {
   try {
-    if (settings.shadowMode !== "auto" || !rt) return "none";
+    if (settings.shadowMode !== "auto") return "";
     const db = peekConvDb(convIdOfKey(conv.key));
     const st = db && stateOf(db);
-    if (!db || !st || st.ended_at == null || st.told) return "none";
-    if (rt.holding(conv, now)) return "held";
-    await rt.send(conv, SHADOW_ENDED_TEXT);
-    db.run("UPDATE shadow_state SET told = 1 WHERE id = 1");
-    return "sent";
+    if (!db || !st || st.ended_at == null || st.told) return "";
+    return "The gentle first week is over: from now on you archive routine mail yourself as the triage notes say, instead of only proposing it (each archive is listed in /today and the brief, and can be brought back). Tell them once, in a short line in your own words, in this look's message.";
   } catch (e) {
-    console.error("shadow: could not say that the first week is over:", (e as Error).message);
-    return "none";
+    console.error("shadow: could not read whether the first week is over:", (e as Error).message);
+    return "";
   }
+}
+
+/** The look that carried shadowEndedFact said something: the end has been told (never again). */
+export function markShadowEndedTold(conv: ShadowConv): void {
+  liveConvDb(convIdOfKey(conv.key))?.run("UPDATE shadow_state SET told = 1 WHERE id = 1");
 }
 
 // ---- offering ----

@@ -26,7 +26,7 @@ import { RunStopped, RunTimeout } from "../run/ceiling.ts";
 import { failStartedNote, statusFact } from "../modules/status/statusnote.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { hasOpen, openCount } from "../approvals/approvals.ts";
-import { offerShadow, shadowActive, tellShadowEnded } from "../approvals/shadow.ts";
+import { markShadowEndedTold, offerShadow, shadowActive, shadowEndedFact } from "../approvals/shadow.ts";
 import { createShadowRun, type ShadowGate } from "../approvals/shadowgate.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { failingLooksFact, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
@@ -207,7 +207,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const dueFacts = looker.tasks ? reminderFacts(handed, activeItems(conv.key), { now: now.getTime(), zone: looker.zone, group: conv.kind === "group" }) : "";
     const taskBlock = [dueFacts, tasks.text].filter(Boolean).join("\n\n");
     let held = false; // something this look said was held for later (quiet hours, the day's cap)
-    const failing = failingLooksFact(conv); // the owner's own looks have failed for a long awake stretch (notices.ts): a fact this look may mention, never a fixed message
+    const failing = failingLooksFact(conv);
+    const weekOver = looker.mail && !shadow ? shadowEndedFact(conv) : ""; // the gentle first week just ended: the look tells it once, in its words // the owner's own looks have failed for a long awake stretch (notices.ts): a fact this look may mention, never a fixed message
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -232,7 +233,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing, weekOver), {
             provenance: { kind: "standing", task: instruction },
             ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
@@ -266,11 +267,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       inflight.delete(overtaken);
       lease?.end();
     }
-    // The first week's archives, offered as ONE message ("I'd archive these 14"), then, once, that the week is over (approvals/shadow.ts). Held in quiet hours; never throws.
-    if (looker.mail) {
-      await offerShadow(conv, shadow?.proposed() ?? [], now);
-      if (!shadow) await tellShadowEnded(conv, now);
-    }
+    // The first week's archives, offered as ONE message ("I'd archive these 14"; approvals/shadow.ts). Held in quiet hours; never throws. (That the week is over is a fact in the prompt.)
+    if (looker.mail) await offerShadow(conv, shadow?.proposed() ?? [], now);
 
     if (conv.kind === "tenant") await offerLearned(conv, now); // a friend's "what I learned overnight", when her dream left it held (conversation/learned.ts)
 
@@ -307,7 +305,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
-    afterLook(conv, handed, { posted: outcome === "posted", held }, Date.now(), looker.zone); // the reminders it was handed are told (and journaled) only if it said something
+    afterLook(conv, handed, { posted: outcome === "posted", held }, Date.now(), looker.zone);
+    if (weekOver && (outcome === "posted" || held)) markShadowEndedTold(conv); // the reminders it was handed are told (and journaled) only if it said something
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
     emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });

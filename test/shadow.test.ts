@@ -157,7 +157,7 @@ test("shadowActive: counted from the conversation's FIRST message; an install al
     const old = conv();
     at(old, 30);
     assert.equal(S.shadowActive(old, NOW), false, "a 30-day-old conversation");
-    assert.equal(await S.tellShadowEnded(old, NOW), "none", "nothing changes for it, so nothing is said");
+    assert.equal(S.shadowEndedFact(old), "", "nothing changes for it, so nothing is said");
     const triaging = conv();
     at(triaging, 1);
     const seen = createSeenMail(triaging.convId);
@@ -181,19 +181,17 @@ test("SHADOW_MODE: off never proposes, on never ends, auto is the default", asyn
   assert.throws(() => loadSettings({ SHADOW_MODE: "maybe" }), /SHADOW_MODE/);
 });
 
-test("the end is told ONCE: after it has ended, not in quiet hours, then never again", async () => {
+test("the end is a FACT for the look, until a look that carried it has spoken; no fixed text", async () => {
   await withMode("auto", async () => {
-    const q = runtime({ holding: true });
+    const sent = runtime();
     const c = conv(undefined, true);
     at(c, 4);
     assert.equal(S.shadowActive(c, NOW), false, "4 days and a triage note");
-    assert.equal(await S.tellShadowEnded(c, NOW), "held", "quiet hours: the next look says it");
-    assert.deepEqual(q.sent, []);
-    const loud = runtime();
-    assert.equal(await S.tellShadowEnded(c, NOW), "sent");
-    assert.deepEqual(loud.sent, ["From now on I'll archive these kinds of mail myself; you'll see them in /today."]);
-    assert.equal(await S.tellShadowEnded(c, NOW), "none");
-    assert.equal(loud.sent.length, 1);
+    assert.match(S.shadowEndedFact(c), /The gentle first week is over[\s\S]*Tell them once, in a short line in your own words/);
+    assert.equal(S.shadowEndedFact(c), S.shadowEndedFact(c), "until it was told");
+    S.markShadowEndedTold(c);
+    assert.equal(S.shadowEndedFact(c), "");
+    assert.deepEqual(sent.sent, [], "code sends nothing");
   });
 });
 

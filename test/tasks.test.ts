@@ -221,7 +221,7 @@ test("tasks: the tools, in the person's clock: a reply echoes what was understoo
   const t = chat(k);
   const added = await t.add_task!.handler({ title: "Call Sam", due: "2026-10-24T14:30", remind: "2026-10-24T09:00", person: "Sam" });
   assert.equal(added.isError, undefined);
-  assert.equal(text(added).replace(/\. Tell them, in your own words[^\n]*/, "."), "Added task #1 'Call Sam' (due Sat 24 Oct 14:30, with Sam, for a member).\nDue: Sat 24 Oct 14:30 (2026-10-24T14:30, Europe/Berlin)\nReminder: Sat 24 Oct 09:00 (Europe/Berlin)");
+  assert.equal(text(added).replace(/\. This is .*'s first reminder here[^\n]*/, "."), "Added task #1 'Call Sam' (due Sat 24 Oct 14:30, with Sam, for a member).\nDue: Sat 24 Oct 14:30 (2026-10-24T14:30, Europe/Berlin)\nReminder: Sat 24 Oct 09:00 (Europe/Berlin)");
   assert.equal(S.getItem(k, 1)!.remindAt, Date.parse("2026-10-24T07:00:00Z"), "09:00 in Berlin is 07:00 UTC (summer time)");
   const bare = await t.add_task!.handler({ title: "Bare day reminder", remind: "2026-11-02" });
   assert.match(text(bare), /Reminder: Mon 2 Nov 09:00 \(Europe\/Berlin\)/, "a bare day means 09:00");

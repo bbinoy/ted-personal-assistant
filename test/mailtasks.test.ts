@@ -144,20 +144,21 @@ test("groups: 'Sam by Friday' sets the assignee; 'remind me' makes a GROUP task 
   const t = tools(k);
   const by = await t.add_task!.handler({ title: "Bring the cake", assignee: "Sam", due: "2026-10-23" });
   assert.match(text(by), /for Sam/);
-  assert.doesNotMatch(text(by), /Saved for the group/, "no reminder, no line");
+  assert.doesNotMatch(text(by), /first reminder here/, "no reminder, no line");
   const r1 = await t.add_task!.handler({ title: "Call the venue", remind: "2026-10-23T15:00" });
   assert.match(text(r1), /for Mia/, "assigned to whoever said it");
-  assert.match(text(r1), /"Saved for the group\. For a private reminder, message me directly\."/);
+  assert.match(text(r1), /This is Mia's first reminder here: tell them once, in your own words and their language, that it is saved for the whole group/);
+  assert.doesNotMatch(text(r1), /"Saved for the group/, "no sentence for the model to copy: it says it in its words");
   const r2 = await t.add_task!.handler({ title: "Email the band", remind: "2026-10-24T15:00" });
-  assert.doesNotMatch(text(r2), /Saved for the group/, "once per member");
+  assert.doesNotMatch(text(r2), /first reminder here/, "once per member");
   setAsking(k, { owner: false, author: "+492", authorName: "Ben" });
-  assert.match(text(await t.add_task!.handler({ title: "Pack chairs", remind: "2026-10-24T10:00" })), /Saved for the group/);
+  assert.match(text(await t.add_task!.handler({ title: "Pack chairs", remind: "2026-10-24T10:00" })), /first reminder here/);
   setAsking(k, undefined);
   assert.equal(S.getItem(k, 2)!.origin, "member");
   assert.equal(peekConvDb(convIdOfKey(k))!.num("SELECT COUNT(*) FROM group_remind_noted"), 2, "persisted, not in memory");
   // a friend's and the owner's chat never get the group line
   const own = tools("tenant:ida");
-  assert.doesNotMatch(text(await own.add_task!.handler({ title: "Mine", remind: "2026-10-24T10:00" })), /Saved for the group/);
+  assert.doesNotMatch(text(await own.add_task!.handler({ title: "Mine", remind: "2026-10-24T10:00" })), /first reminder here/);
 });
 
 test("friends: the same tools in their own chat, on their own list; their looks add from their mail the same way", async () => {
