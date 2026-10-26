@@ -407,10 +407,12 @@ export const CONV_SCHEMA: readonly Migration[] = [
   },
   {
     version: 12,
-    name: "the gentle first week is gone: drop the shadow-mode tables (an unattended look archives routine mail itself, listed in /today and the brief)",
+    name: "retire the first-week proposals (shadow_*) and the numbered replies to the learned list (learned_asks, learned_owed)",
     up: `
       DROP TABLE shadow_proposals;
       DROP TABLE shadow_state;
+      DROP TABLE learned_asks;
+      DROP TABLE learned_owed;
     `,
   },
 ];

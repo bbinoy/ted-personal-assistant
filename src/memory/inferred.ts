@@ -38,22 +38,3 @@ export function writeInferredNote(
   upsertIndex(a.file, `${description} (inferred)`, { notesDir: dir } as never);
   return { ok: true, file: a.file, created: !existing, gist: description };
 }
-
-// The owner (or a friend) said "confirm N" to a line of the learned list (conversation/learnedreplies.ts): the assistant's own guess becomes a confirmed note (origin: owner, the index line loses its "(inferred)"). Only a note that is still inferred.
-export function confirmInferredNote(file: string, dir: string, now: Date = new Date()): { ok: true; gist: string } | { ok: false; error: string } {
-  const path = join(dir, file);
-  if (!/^[\w.-]+\.md$/.test(file) || !existsSync(path)) return { ok: false, error: `${file} is gone` };
-  const raw = readFileSync(path, "utf8");
-  if (!parseNote(file, raw)?.inferred) return { ok: false, error: `${file} is not an inferred note (already yours)` };
-  const head = /^description:\s*(.+)$/m.exec(raw)?.[1] ?? '""';
-  let gist = "";
-  try {
-    gist = String(JSON.parse(head));
-  } catch {
-    gist = head.replace(/^["']|["']$/g, "");
-  }
-  const next = raw.replace(/^(\s*)origin:\s*inferred\s*$/m, "$1origin: owner").replace(/^(\s*)modified:.*$/m, `$1modified: ${now.toISOString()}`);
-  writeFileAtomic(path, next);
-  upsertIndex(file, gist, { notesDir: dir } as never);
-  return { ok: true, gist };
-}

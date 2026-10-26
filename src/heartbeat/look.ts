@@ -34,7 +34,7 @@ import { tasksFacts } from "../tasks/render.ts";
 import { reminderFacts } from "../tasks/remind.ts";
 import { activeItems } from "../tasks/store.ts";
 import { afterLook, remindersWaiting, waitingReminders } from "./remindtick.ts";
-import { offerLearned } from "../conversation/learned.ts";
+import { learnedFact } from "../memory/learned.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { markStarted, settleRoutines, markTold, routineFacts, routineOfAgent } from "../tasks/routines.ts";
 
@@ -204,6 +204,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const taskBlock = [dueFacts, tasks.text].filter(Boolean).join("\n\n");
     let held = false; // something this look said was held for later (quiet hours, the day's cap)
     const failing = failingLooksFact(conv);
+    const learned = conv.kind === "tenant" ? learnedFact(conv.convId, conv.notesDir, now.getTime()) : undefined; // a friend's notes that changed on their own (memory/learned.ts): the look says it, in its words
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;
     let failure: unknown; // what the run threw (notices.ts names the cause when looks keep failing)
     const overtaken = new AbortController();
@@ -228,7 +229,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), failing, learned ? fence("notes_changed_facts", learned.text) : ""), {
             provenance: { kind: "standing", task: instruction },
             ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
@@ -261,8 +262,6 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
       inflight.delete(overtaken);
       lease?.end();
     }
-
-    if (conv.kind === "tenant") await offerLearned(conv, now); // a friend's "what I learned overnight", when her dream left it held (conversation/learned.ts)
 
     const answer = reply ? parseHeartbeatAnswer(reply.structured, reply.text) : undefined;
     const spannedSleep = clocks.wall() - wall0 - (clocks.mono() - mono0) > SLEEP_DRIFT_MS; // the run spanned a sleep (the tick may not have noticed it yet): a timeout or a dead connection then is the sleep's
@@ -298,6 +297,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     afterLook(conv, handed, { posted: outcome === "posted", held }, Date.now(), looker.zone);
+    if (learned && (outcome === "posted" || held)) learned.told(); // (told only if the look said something)
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
     emit({ type: "look", conv: conv.key, unjournaled, source: onLogin(conv) ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });

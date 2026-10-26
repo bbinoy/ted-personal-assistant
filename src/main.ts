@@ -39,9 +39,6 @@ import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
 import { welcomeOnce } from "./core/welcome.ts";
-import { setLearnedRuntime } from "./conversation/learned.ts";
-import { holdingNow } from "./heartbeat/notices.ts";
-import { OWNER_KEY, isTenantKey } from "./core/ownerkey.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 import { lateNotice, markLateTold, markOwnerTold, ownerNotice } from "./core/migrate.ts";
@@ -89,10 +86,6 @@ wire({
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });
-// The conversation a key names (the senders below are handed conversations by key).
-const convOf = (scope: string) => (scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope));
-// A friend's "🧠 Learned overnight" (conversation/learned.ts): one message after her dream, a notice (a reply that quotes it answers "undo 2"), held in quiet hours.
-setLearnedRuntime({ send: (conv, text) => out.reply(text, { plain: true, kind: "notice", target: convOf(conv.key).target }), holding: (conv, now) => holdingNow(convOf(conv.key), now) });
 // `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
 const warmChat = () => prepare(owner(), { notify: say });
@@ -157,7 +150,7 @@ const pipeline: Pipeline = createPipeline({
     foreign: createVoiceLanguage(settings.ttsLanguages), // the language the voice does not speak, if any; a failed check falls back to the conversation's last known language
   },
   approvals,
-  feedback: createFeedback({ out }), // a 👎 or "less of this" on something sent unprompted: one offer to save a note, nothing saved until the owner says yes (feedback.ts)
+  feedback: createFeedback(), // a 👎 or "less of this" on something sent unprompted: one note saved, mentioned by the chat turn that follows (feedback.ts)
   vouch,
   isOwner: fromOwner,
   admitGroup: (_conv, m) => groupBrain(m),
