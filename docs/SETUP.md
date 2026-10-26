@@ -41,7 +41,7 @@ Send yourself a message on Signal. The first heartbeat look works through the in
 
 ### Choosing a messenger
 
-Signal is the messenger that works, and the default (`MESSENGER=signal`, or leave it unset). Telegram, WhatsApp and Slack exist only as skeletons under `packages/telegram`, `packages/whatsapp` and `packages/slack`: each has a `SETUP.md` with the design, and choosing one today ends in a "not built yet" message. Only the chosen package is ever loaded; a platform other than Signal is installed with `npm install -w packages/<name>`. `npm run doctor` names the active messenger first, then the checks of that platform.
+Signal is the messenger that works, and the default (`MESSENGER=signal`, or leave it unset). No other platform is built (design notes for Telegram, Slack and WhatsApp are in docs/ADAPTING.md). Only the chosen package is ever loaded; a platform other than Signal is installed with `npm install -w packages/<name>`. `npm run doctor` names the active messenger first, then the checks of that platform.
 
 ### Chat only (no mail)
 
