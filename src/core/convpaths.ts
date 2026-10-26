@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { dataDirOf } from "./paths.ts";
 
@@ -19,8 +20,6 @@ import { dataDirOf } from "./paths.ts";
 export type ConvId = string;
 export const OWNER_CONV: ConvId = "owner";
 export const LAYOUT_VERSION = 4;
-export const MOVES_VERSION = 2; // the version the file moves (core/migrate.ts planMigration) end at; version 3 adds the import into instance.db (core/dbimport.ts), version 4 the import into each conversation's assistant.db (core/convimport.ts)
-export const INSTANCE_DB_VERSION = 3; // the stamp between the two imports: instance.db is filled, the conversations' files are still files
 
 const TENANT_ID = /^[a-z][a-z0-9_-]{0,31}$/; // (the same pattern as secrets.ts TENANT_ID, which this file may not import)
 const CONV_ID = /^(?:owner|friend-[a-z][a-z0-9_-]{0,31}|group-[0-9a-f]{16})$/;
@@ -78,12 +77,6 @@ export interface ConvPaths {
 export interface InstancePaths {
   dir: string;
   layoutVersion: string;
-  migrationPlan: string;
-  migrationOrphans: string;
-  migrationLate: string; // files an old version wrote after the move: merged or set aside, and told to the owner once
-  agentPid: string; // the running agent's pid (so a migration knows it must not run under it)
-  migrationBackup: string; // byte-identical copies of the files the migration REWRITES (not the ones it moves), under a timestamped folder
-  migrationLock: string;
   db: string; // instance.db: SQLite, WAL (core/db.ts, core/instancedb.ts): spend, cap notices, heartbeat looks, payments, intake marks, kv (heartbeat tick, connectors, tools seen)
   tenants: string; // the friends list (the registry)
   registrations: string;
@@ -118,7 +111,7 @@ export interface Layout {
   conv: (c: ConvRef) => ConvPaths;
 }
 
-/** Pure: every path under a data root. The bound accessors below use the process's data root; the migration and tests give their own. */
+/** Pure: every path under a data root. The bound accessors below use the process's data root; tests give their own. */
 export function layout(root: string): Layout {
   const r = resolve(root);
   const inst = join(r, "instance");
@@ -131,12 +124,6 @@ export function layout(root: string): Layout {
     instance: {
       dir: inst,
       layoutVersion: join(inst, "layout-version"),
-      migrationPlan: join(inst, "migration-plan.json"),
-      migrationOrphans: join(inst, "migration-orphans"),
-      migrationBackup: join(inst, "migration-backup"),
-      migrationLate: join(inst, "migration-late.json"),
-      agentPid: join(inst, "agent.pid"),
-      migrationLock: join(inst, "migration.lock"),
       db: join(inst, "instance.db"),
       tenants: join(inst, "tenants.json"),
       registrations: join(inst, "registrations.json"),
@@ -199,176 +186,25 @@ export const conversationsDir = (): string => here().conversations;
 export const convPaths = (conv: ConvRef): ConvPaths => here().conv(conv);
 export const convDir = (conv: ConvRef): string => here().conv(conv).dir;
 
-// ---- the per-conversation files of layout version 3 that assistant.db replaced (layout version 4): ONLY for the migration (src/core/migrate.ts, core/convimport.ts) ----
-//
-//   conversations/<convId>/   session.json dream.json held-posts.json seen-mail.json quiet.json pending.json voices/sources.json meta.json (a friend's; a group's stays a file)
-//   The older layouts' moves land on these names, so the one import (core/convimport.ts) reads them wherever a file came from.
+// ---- the layout guard (core/requirelayout.ts for the tools, core/agentstart.ts for the agent) ----
 
-export interface Layout3Conv {
-  session: string;
-  dream: string;
-  heldPosts: string;
-  seenMail: string;
-  quiet: string;
-  pending: string;
-  voiceSources: string;
-  friendMeta: string;
-}
-export interface Layout3 {
-  conv: (c: ConvRef) => Layout3Conv;
-}
-export function layout3(root: string): Layout3 {
-  const conversations = join(resolve(root), "conversations");
-  return {
-    conv(c) {
-      const dir = join(conversations, idOf(c));
-      return {
-        session: join(dir, "session.json"),
-        dream: join(dir, "dream.json"),
-        heldPosts: join(dir, "held-posts.json"),
-        seenMail: join(dir, "seen-mail.json"),
-        quiet: join(dir, "quiet.json"),
-        pending: join(dir, "pending.json"),
-        voiceSources: join(dir, "voices", "sources.json"),
-        friendMeta: join(dir, "meta.json"),
-      };
-    },
-  };
+const OLDER = "This data folder uses an older layout. Check out the git tag last-migration, run `npm run migrate`, then come back to this version.";
+
+/** The sentence that says why this code must not use the data folder, or null when it may: layout version 4, or a new folder with no stamp yet and nothing of an older layout in it. */
+export function layoutProblem(root: string): string | null {
+  const L = layout(root);
+  const filled = (d: string): boolean => existsSync(d) && readdirSync(d).length > 0;
+  let v: number | undefined;
+  try { v = Number(readFileSync(L.instance.layoutVersion, "utf8").trim()); } catch { /* no stamp */ }
+  if (v === undefined) return filled(L.conversations) || filled(join(L.root, "memory")) || filled(join(L.root, "tenants")) || existsSync(L.instance.tenants) || existsSync(join(L.root, "state", "tenants.json")) ? OLDER : null;
+  if (v > LAYOUT_VERSION) return `This data folder is in a newer layout (version ${v}) than this code understands (${LAYOUT_VERSION}): update the code; it will not touch the data.`;
+  return v === LAYOUT_VERSION ? null : OLDER;
 }
 
-// ---- the process-wide files of layout version 2 that instance.db replaced (layout version 3): ONLY for the migration (src/core/migrate.ts, core/dbimport.ts) ----
-//
-//   instance/   cost.json (the owner's day: login spend, notifiedDay) key-cost.json (all friends on the instance key) group-cost.json (per group, keyed by convId) cap-notices.json
-//               heartbeat.json (liveness) heartbeat.jsonl(.1 .2) (the looks) connectors.json tools-seen.json payments.jsonl and payments-<year>[-n].jsonl (archives)
-//               intake-status.json intake-problems.json      conversations/<convId>/cost.json (a friend's day on the key)
-
-export interface Layout2 {
-  cost: string;
-  keyCost: string;
-  groupCost: string;
-  capNotices: string;
-  heartbeat: string;
-  heartbeatRows: string;
-  connectors: string;
-  toolsSeen: string;
-  payments: string;
-  intakeStatus: string;
-  intakeProblems: string;
-  friendCost: (c: ConvRef) => string;
-  /** The names (not paths) of the payment ledger's yearly archives, and of a file's rotated generations, are told apart by these patterns (inside instance/). */
-  paymentArchive: RegExp;
-}
-
-export function layout2(root: string): Layout2 {
-  const r = resolve(root);
-  const inst = join(r, "instance");
-  const conversations = join(r, "conversations");
-  return {
-    cost: join(inst, "cost.json"),
-    keyCost: join(inst, "key-cost.json"),
-    groupCost: join(inst, "group-cost.json"),
-    capNotices: join(inst, "cap-notices.json"),
-    heartbeat: join(inst, "heartbeat.json"),
-    heartbeatRows: join(inst, "heartbeat.jsonl"),
-    connectors: join(inst, "connectors.json"),
-    toolsSeen: join(inst, "tools-seen.json"),
-    payments: join(inst, "payments.jsonl"),
-    intakeStatus: join(inst, "intake-status.json"),
-    intakeProblems: join(inst, "intake-problems.json"),
-    friendCost: (c) => join(conversations, idOf(c), "cost.json"),
-    paymentArchive: /^payments-\d{4}(?:-\d+)?\.jsonl$/,
-  };
-}
-
-// ---- the layout before version 2: ONLY for the migration (src/core/migrate.ts), so that this file stays the one that spells a path out ----
-//
-//   state/            session.json held-posts.json seen-mail.json dream.json quiet.json pending-<owner|hash>.json search.sqlite notes-backup/ (the owner's)
-//                     tenants.json registrations.json intake/ intake-status.json intake-problems.json cap-notices.json cost.json key-cost.json group-cost.json
-//                     heartbeat.json heartbeat.jsonl connectors.json tools-seen.json notion-client.json payments.jsonl card.disabled paused shore/ browse/ openbao/ tts-qwen/
-//                     voice/ (active.json voices/<name>/ sources.json groups/<hash of the key>/{active.json,voices/<name>/}; the default voice's reference clip may be here too)
-//   memory/           notes/ (the owner's), groups/<first 12 hex of sha256(group id)>/{notes,backup,meta.json,session.json,dream.json,held-posts.json,seen-mail.json,quiet.json}
-//   tenants/<id>/     tenant.json notes/ backup/ messages.jsonl session.json cost.json meta.json dream.json held-posts.json seen-mail.json quiet.json
-//   logs/             messages.jsonl (the owner's) group-<12 hex>.jsonl audit.jsonl agent.log signal-daemon.log launchd-stderr.log intake-launchd-stderr.log
-
-export interface LegacyLayout {
-  state: string;
-  memory: string;
-  tenants: string;
-  logs: string;
-  groupsDir: string;
-  groupLog: (key12: string) => string;
-  groupMeta: (key12: string) => string; // memory/groups/<key>/meta.json: the group's id and name, the only place its id is written down
-  registry: string; // state/tenants.json: the friends list
-  /** The owner's own files in state/, memory/ and logs/, each with where it goes (folders and sqlite's side files included). */
-  owner: { from: string; to: string }[];
-  /** Process-wide files and folders of state/, each with where it goes in instance/ (and the optional rewrite of its keys: group ids to folder names). */
-  instance: { from: string; to: string; rekey?: "group-cost" | "cap-notices" }[];
-  /** state/ entries that stay where they are: installed software, whose paths are baked in, and the voice folder (its default reference clip is yours, named in .env). */
-  staysInState: string[];
-  /** A conversation folder's old names that changed: [old, new] relative to the folder (the rest keeps its name). */
-  renamedInFolder: [string, string][];
-  pendingOwner: string;
-  pendingOf: (hash16: string) => string;
-  voice: { dir: string; active: string; library: string; sources: string; groups: string };
-}
-
-export function legacyLayout(root: string): LegacyLayout {
-  const r = resolve(root);
-  const state = join(r, "state");
-  const memory = join(r, "memory");
-  const logs = join(r, "logs");
-  const L = layout(r);
-  const o = { ...L.conv(OWNER_CONV), ...layout3(r).conv(OWNER_CONV) }; // (the old moves land on the layout-3 names; core/convimport.ts imports them into assistant.db)
-  const i = L.instance;
-  const v2 = layout2(r);
-  const withSide = (from: string, to: string) => ["", "-journal", "-wal", "-shm"].map((x) => ({ from: from + x, to: to + x }));
-  const s = (name: string) => join(state, name);
-  return {
-    state,
-    memory,
-    tenants: join(r, "tenants"),
-    logs,
-    groupsDir: join(memory, "groups"),
-    groupLog: (key12) => join(logs, `group-${key12}.jsonl`),
-    groupMeta: (key12) => join(memory, "groups", key12, "meta.json"),
-    registry: s("tenants.json"),
-    owner: [
-      { from: join(memory, "notes"), to: o.notes },
-      { from: s("session.json"), to: o.session },
-      { from: s("held-posts.json"), to: o.heldPosts },
-      { from: s("seen-mail.json"), to: o.seenMail },
-      { from: s("dream.json"), to: o.dream },
-      { from: s("quiet.json"), to: o.quiet },
-      { from: s("notes-backup"), to: o.notesBackup },
-      ...withSide(s("search.sqlite"), o.search),
-      { from: join(logs, "messages.jsonl"), to: o.messages },
-    ],
-    instance: [
-      { from: s("tenants.json"), to: i.tenants },
-      { from: s("registrations.json"), to: i.registrations },
-      { from: s("intake"), to: i.intakeDir },
-      { from: s("intake-status.json"), to: v2.intakeStatus },
-      { from: s("intake-problems.json"), to: v2.intakeProblems },
-      { from: s("cap-notices.json"), to: v2.capNotices, rekey: "cap-notices" },
-      { from: s("cost.json"), to: v2.cost },
-      { from: s("key-cost.json"), to: v2.keyCost },
-      { from: s("group-cost.json"), to: v2.groupCost, rekey: "group-cost" },
-      { from: s("heartbeat.json"), to: v2.heartbeat },
-      { from: s("heartbeat.jsonl"), to: v2.heartbeatRows },
-      { from: s("connectors.json"), to: v2.connectors },
-      { from: s("tools-seen.json"), to: v2.toolsSeen },
-      { from: s("notion-client.json"), to: i.notionClient },
-      { from: s("notion-client.lock"), to: i.notionClientLock },
-      { from: s("payments.jsonl"), to: v2.payments },
-      { from: s("card.disabled"), to: i.cardDisabled },
-      { from: s("paused"), to: i.paused },
-      { from: s("shore"), to: i.shore },
-      { from: s("browse"), to: i.browse },
-    ],
-    staysInState: [s("openbao"), s("tts-qwen"), s("voice")],
-    renamedInFolder: [["backup", "notes-backup"]],
-    pendingOwner: s("pending-owner.json"),
-    pendingOf: (hash16) => s(`pending-${hash16}.json`),
-    voice: { dir: s("voice"), active: join(state, "voice", "active.json"), library: join(state, "voice", "voices"), sources: join(state, "voice", "sources.json"), groups: join(state, "voice", "groups") },
-  };
+/** A new, empty data folder gets the current layout version (an already stamped one is left alone). */
+export function stampLayout(root: string): void {
+  const f = layout(root).instance;
+  if (existsSync(f.layoutVersion)) return;
+  mkdirSync(f.dir, { recursive: true, mode: 0o700 });
+  writeFileSync(f.layoutVersion, `${LAYOUT_VERSION}\n`, { mode: 0o600 });
 }

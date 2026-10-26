@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { ROOT } from "../src/core/paths.ts";
 import {
-  convDir, convIdOf, convIdOfKey, convOfPath, convPaths, friendConvId, groupConvId, hashOf, instancePaths, isConvId, layout, layout2, legacyLayout, logPaths, OWNER_CONV, tenantIdOfConv, useDataRoot,
+  convDir, convIdOf, convIdOfKey, convOfPath, convPaths, friendConvId, groupConvId, hashOf, instancePaths, isConvId, layout, logPaths, OWNER_CONV, tenantIdOfConv, useDataRoot,
 } from "../src/core/convpaths.ts";
 import { scopeRoot } from "@ted-assistant/speech/tts";
 
@@ -82,27 +82,6 @@ test("bound accessors follow the data root the settings registered; convOfPath n
   }
 });
 
-test("the old layout, described once for the migration: every old place has exactly one new one, and no two share a destination", () => {
-  const old = legacyLayout("/data");
-  const dests = [...old.owner, ...old.instance].map((m) => m.to);
-  assert.equal(new Set(dests).size, dests.length);
-  const froms = [...old.owner, ...old.instance].map((m) => m.from);
-  assert.equal(new Set(froms).size, froms.length);
-  assert.deepEqual(old.renamedInFolder, [["backup", "notes-backup"]]);
-  assert.equal(old.pendingOf("0123456789abcdef"), "/data/state/pending-0123456789abcdef.json");
-  assert.ok(old.owner.some((m) => m.from === "/data/memory/notes" && m.to === "/data/conversations/owner/notes"));
-  assert.ok(old.instance.find((m) => m.from === "/data/state/group-cost.json")?.rekey === "group-cost");
-});
-
-test("layout 2's process-wide files, described once for the migration: they are in instance/ (and a friend's cost file in her folder), and instance.db is the one file that replaced them", () => {
-  const V2 = layout2("/data");
-  const L = layout("/data");
-  for (const [k, v] of Object.entries(V2)) if (typeof v === "string") assert.equal(v.startsWith("/data/instance/"), true, k);
-  assert.equal(V2.friendCost("friend-anna"), "/data/conversations/friend-anna/cost.json");
-  assert.equal(L.instance.db, "/data/instance/instance.db");
-  assert.deepEqual(["payments-2025.jsonl", "payments-2025-2.jsonl", "payments-2025-x.jsonl", "payments.jsonl"].map((n) => V2.paymentArchive.test(n)), [true, true, false, false]);
-});
-
 // ---- nothing else builds a path ----
 
 // The string literals of a TypeScript source, comments left out (a small scanner: quotes, template literals, // and /* */).
@@ -143,7 +122,7 @@ const walk = (dir: string, out: string[] = []): string[] => {
 const NAMES = [
   "messages.jsonl", "session.json", "dream.json", "held-posts.json", "seen-mail.json", "quiet.json", "pending.json", "assistant.db", "assistant.db.damaged", "search.sqlite", "notes-backup", "tenant.json", "meta.json", "cost.json",
   "tenants.json", "registrations.json", "intake-status.json", "intake-problems.json", "cap-notices.json", "key-cost.json", "group-cost.json", "heartbeat.json", "heartbeat.jsonl",
-  "connectors.json", "tools-seen.json", "instance.db", "notion-client.json", "notion-client.lock", "payments.jsonl", "card.disabled", "layout-version", "migration-plan.json", "migration-orphans",
+  "connectors.json", "tools-seen.json", "instance.db", "notion-client.json", "notion-client.lock", "payments.jsonl", "card.disabled", "layout-version",
   "retention.json", "audit.jsonl", "agent.log", "signal-daemon.log", "launchd-stderr.log", "intake-launchd-stderr.log",
 ];
 const FOLDERS = ["state", "instance", "conversations", "memory", "logs"];

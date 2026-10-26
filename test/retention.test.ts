@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { layout, type Layout } from "../src/core/convpaths.ts";
 import { clearRetention, isDue, readRetentionState, registerRetention, retentionRules, retentionSummary, retentionTrigger, runRetention } from "../src/core/retention.ts";
-import { auditRule, expiredNotesRule, expiryOf, notesBackupRule, openbaoRule, pruneAuditText, shoreRule, signalAttachmentRule, staleForReview, tmpRule } from "../src/heartbeat/retentionrules.ts";
+import { auditRule, expiredNotesRule, expiryOf, notesBackupRule, openbaoRule, pruneAuditText, shoreRule, signalAttachmentRule, tmpRule } from "../src/heartbeat/retentionrules.ts";
 import { snapshotsOf, undoLatest } from "../src/memory/dreamapply.ts";
 import { loadSettings } from "../src/core/settings.ts";
 
@@ -300,7 +300,7 @@ test("tmp leftovers: our prefixes older than a day go; young ones, other names a
 
 // ---- the things nothing may delete ----
 
-test("never: every rule, a century on, leaves the current audit file, the kill switches, the payments ledger, the tenant list, the migration copies and live notes alone", () => {
+test("never: every rule, a century on, leaves the current audit file, the kill switches, the payments ledger, the tenant list and live notes alone", () => {
   const { L, dir } = root();
   const att = join(dir, "signal-cli", "attachments");
   const keep = [
@@ -310,8 +310,6 @@ test("never: every rule, a century on, leaves the current audit file, the kill s
     put(L.instance.cardDisabled, "off", 900),
     put(L.instance.db, "the database file: payments are in it", 900),
     put(L.instance.tenants, "{}", 900),
-    put(join(L.instance.migrationBackup, "2025-01-01", "tenants.json"), "{}", 900),
-    put(join(L.instance.migrationOrphans, "old.json"), "{}", 900),
     put(join(L.conv("owner").notes, "people-live.md"), note(undefined), 900),
     put(join(L.conv("owner").notes, "MEMORY.md"), "- [Live](people-live.md) - y\n", 900),
     put(L.conv("owner").messages, "{}\n", 900),
@@ -324,9 +322,6 @@ test("never: every rule, a century on, leaves the current audit file, the kill s
   for (const rule of rules) rule.run(later, { dryRun: false });
   assert.deepEqual(keep.map(existsSync), keep.map(() => true));
   assert.equal(existsSync(join(att, "x")), false, "(the attachment rule did run)");
-  const stale = staleForReview(L, later, 30);
-  assert.deepEqual(stale.map((s) => s.name).sort(), ["2025-01-01", "old.json"], "the doctor names what only a person may delete");
-  assert.deepEqual(staleForReview(L, NOW, 100_000), []);
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -347,7 +342,7 @@ test("dream undo ignores the expired/ holding folder (it sorts after every snaps
 
 test("settings: the windows have the documented defaults and RETENTION=off", () => {
   const s = loadSettings({});
-  assert.deepEqual([s.retention, s.auditRetentionDays, s.expiredNoteDeleteDays, s.notesBackupKeep, s.openbaoLogMb, s.openbaoBackupKeep, s.shoreCacheKeep, s.tmpSweepHours, s.migrationReviewDays], [true, 90, 30, 7, 20, 7, 50, 24, 30]);
+  assert.deepEqual([s.retention, s.auditRetentionDays, s.expiredNoteDeleteDays, s.notesBackupKeep, s.openbaoLogMb, s.openbaoBackupKeep, s.shoreCacheKeep, s.tmpSweepHours], [true, 90, 30, 7, 20, 7, 50, 24]);
   assert.equal(s.signalAttachmentDays, process.platform === "darwin" ? 30 : 0);
   const t = loadSettings({ RETENTION: "off", AUDIT_RETENTION_DAYS: "30", SIGNAL_ATTACHMENT_DAYS: "14" });
   assert.deepEqual([t.retention, t.auditRetentionDays, t.signalAttachmentDays], [false, 30, 14]);

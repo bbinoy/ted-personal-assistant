@@ -75,7 +75,7 @@ const mbArchive = (id: string, addr = false) => ({ tool: `${MB}archive_conversat
 test("welcome: a fresh data folder is welcomed ONCE, with the persona's name and the three commands; never again", async () => {
   const sent: string[] = [];
   const send = async (t: string) => void sent.push(t);
-  const fresh = { messages: 0, spend: 0, looks: 0, migrated: false };
+  const fresh = { messages: 0, spend: 0, looks: 0 };
   assert.equal(await W.welcomeOnce(send, () => fresh), "sent");
   assert.equal(sent.length, 1);
   assert.match(sent[0]!, new RegExp(`I'm ${settings.assistant}`));
@@ -87,12 +87,12 @@ test("welcome: a fresh data folder is welcomed ONCE, with the persona's name and
   assert.equal(kvGet<{ state: string }>(W.WELCOME_KEY, { state: "" }).state, "sent");
 });
 
-test("welcome: an install with history, spend, looks or a migrated data folder is never welcomed, not even later", async () => {
-  for (const [name, facts] of [["history", { messages: 3, spend: 0, looks: 0, migrated: false }], ["spend", { messages: 0, spend: 2, looks: 0, migrated: false }], ["looks", { messages: 0, spend: 0, looks: 1, migrated: false }], ["migrated", { messages: 0, spend: 0, looks: 0, migrated: true }]] as const) {
+test("welcome: an install with history, spend, looks is never welcomed, not even later", async () => {
+  for (const [name, facts] of [["history", { messages: 3, spend: 0, looks: 0 }], ["spend", { messages: 0, spend: 2, looks: 0 }], ["looks", { messages: 0, spend: 0, looks: 1 }]] as const) {
     instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
     const sent: string[] = [];
     assert.equal(await W.welcomeOnce(async (t) => void sent.push(t), () => facts), "skipped", name);
-    assert.equal(await W.welcomeOnce(async (t) => void sent.push(t), () => ({ messages: 0, spend: 0, looks: 0, migrated: false })), "already", `${name}: even if the history is deleted afterwards`);
+    assert.equal(await W.welcomeOnce(async (t) => void sent.push(t), () => ({ messages: 0, spend: 0, looks: 0 })), "already", `${name}: even if the history is deleted afterwards`);
     assert.deepEqual(sent, [], name);
   }
   instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
@@ -100,7 +100,7 @@ test("welcome: an install with history, spend, looks or a migrated data folder i
 
 test("welcome: a send that fails writes nothing down, so the next start tries again", async () => {
   instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
-  const fresh = { messages: 0, spend: 0, looks: 0, migrated: false };
+  const fresh = { messages: 0, spend: 0, looks: 0 };
   assert.equal(await W.welcomeOnce(async () => { throw new Error("signal is down"); }, () => fresh), "failed");
   assert.equal(kvGet(W.WELCOME_KEY, null), null);
   assert.equal(await W.welcomeOnce(async () => {}, () => fresh), "sent");
@@ -109,7 +109,7 @@ test("welcome: a send that fails writes nothing down, so the next start tries ag
 
 test("welcome: the real facts of an empty data folder are fresh (nothing said, spent or looked at)", () => {
   assert.equal(W.isFresh(W.welcomeFacts()), true);
-  assert.equal(W.isFresh({ messages: 1, spend: 0, looks: 0, migrated: false }), false);
+  assert.equal(W.isFresh({ messages: 1, spend: 0, looks: 0 }), false);
 });
 
 // ---- when shadow mode is on, and when it ends ----
