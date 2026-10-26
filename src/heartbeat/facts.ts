@@ -16,7 +16,7 @@ import { reminderFacts } from "../tasks/remind.ts";
 import { meetingFacts } from "../tasks/meetings.ts";
 import { tasksFacts } from "../tasks/render.ts";
 import { activeItems } from "../tasks/store.ts";
-import { markStarted, markTold, routineFacts, routineOfAgent, routineStatus, settleRoutines, type Routine } from "../tasks/routines.ts";
+import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineOfAgent, routineStatus, settleRoutines, type Routine } from "../tasks/routines.ts";
 import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
 import { afterLook, waitingReminders } from "./remindtick.ts";
 import { afterPrep, waitingMeetings } from "./preptick.ts";
@@ -168,7 +168,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
       try {
         if (end.ended) held.done(); // (a failed or called-off run leaves the held posts for the next one)
         const note = routines?.due && !routines.due.routine.skill ? routines.due.routine.name : undefined;
-        if (note && end.ended && (end.said || end.held || sends > 0 || (end.acted ?? 0) > 0)) finished.add(note); // (a routine note is done once the look posted, sent or acted; silent without acting is a failed attempt)
+        if (note && end.ended) finished.add(note); // (a routine note is done once the look ended well, whether it posted, sent, acted or decided to say nothing; a failed or called-off look leaves it for the retry)
         settleRoutines(conv.convId, started, finished, { calledOff: abandoned, sends }, Date.now());
         if (finished.has("daily-brief")) briefDelivered(conv.convId); // the "learned overnight" list the brief carried is told now, not when the tool handed it out (memory/learned.ts)
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
@@ -180,6 +180,13 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
       }
     },
   };
+}
+
+// Is a routine due right now (inside its slot and catch-up window, not started)? Then the conversation's look is due at once, like a claimed reminder: the 5-minute tick asks, no timer of its own.
+export function routinesWaiting(conv: Conversation, now: Date): boolean {
+  const looker = lookerOf(conv);
+  const { routines } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone: looker.zone, now });
+  return routines.some((r) => (!r.skill || looker.experts) && planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), settings.routineCatchUpHours).state === "due");
 }
 
 // Used by tests: forget every pending claim.

@@ -204,7 +204,7 @@ test("the incident: a post held at 22:35 is not sent at 07:00; the morning look 
   assert.match(seen.prompts[1]!, /These were not delivered\. Say again only what is still true and still matters now, in today's words/);
   assert.doesNotMatch((seen.provenance[1] as { task: string }).task, /Held back/, "not in the standing reason the judge reads");
   assert.deepEqual(heldPosts(conv), [], "handed over: no longer held");
-  assert.equal(await w.look(conv, min(release, 30)), "not-due", "nothing waits any more: the look keeps the time it chose");
+  assert.equal(await w.look(conv, min(release, 20)), "not-due", "nothing waits any more: the look keeps the time it chose");
   const later = min(release, 125);
   at(later);
   assert.equal(await w.look(conv, later), "silent");

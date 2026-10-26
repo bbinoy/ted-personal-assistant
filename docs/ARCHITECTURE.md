@@ -160,7 +160,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **A sleeping Mac.** The tick compares the Date clock with a monotonic clock (`sleptFor`). On a sleep it aborts looks in flight and starts jobs after a 20 s settle; a look cut off by a sleep is a `failed` row, neutral for the failure tracker, due again at once.
 
-**Is a look due?** `lookDue` (`src/conversation/ledger.ts`): the next look the model chose has come, something was said or a note changed. Also due: held posts that can be handed over, a claimed reminder, a claimed meeting.
+**Is a look due?** `lookDue` (`src/conversation/ledger.ts`): the next look the model chose has come, something was said or a note changed. Also due: held posts that can be handed over, a claimed reminder, a claimed meeting, a routine whose time has come (`routinesWaiting`, the planner's own "due now"; the tick asks, no timer).
 
 - `hasSomethingToLookAt` (`src/run/scope.ts`) wants the capability `mail`, `calendar` or `notion`, or an active note; otherwise no model call is made.
 - Then `mayRun` must allow it and the conversation must not be busy.

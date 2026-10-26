@@ -24,7 +24,7 @@ import { hasOpen } from "../approvals/approvals.ts";
 import { fence } from "../core/fence.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 import { heldWaiting, observeLook, postNotice, submitPost } from "./notices.ts";
-import { factsFor } from "./facts.ts";
+import { factsFor, routinesWaiting } from "./facts.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { waitingReminders, remindersWaiting } from "./remindtick.ts";
 import { meetingsWaiting } from "./preptick.ts";
@@ -125,7 +125,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     const looker0 = lookerOf(conv);
-    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !heldWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv)) && !(looker0.meetings && meetingsWaiting(conv))) return "not-due"; // (held posts: due once quiet ends; a reminder that came due or a meeting to prepare: at once)
+    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !heldWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv)) && !(looker0.meetings && meetingsWaiting(conv)) && !routinesWaiting(conv, now)) return "not-due"; // (held posts: due once quiet ends; a reminder that came due, a meeting to prepare or a routine whose time has come: at once)
     if (!hasSomethingToLookAt(conv, now) && !(looker0.tasks && waitingReminders(conv).length)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
     // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)

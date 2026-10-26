@@ -224,24 +224,33 @@ test("a routine note in a group fires once at its time, is done when the look po
   next.done({ ended: true, said: true });
 });
 
-test("a routine note counts as done when the look sent or acted, not when it stayed silent without doing anything; it is retried once, then given up", () => {
+test("a routine note is done when the look ended well, silent or not; a failed or called-off look leaves it for the retry, then it is given up", () => {
   const conv = groupWith("every day at 08:00");
   F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  const a = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "look");
-  a.done({ ended: true, said: false }); // silent, nothing done
-  assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "failed");
-  const b = F.factsFor(conv, at("2026-10-22T06:20:00Z"), "look");
-  assert.match(b.routines, /the earlier attempt died/);
-  b.done({ ended: true, said: false, sends: 1 }); // it sent something while it worked
+  F.factsFor(conv, at("2026-10-22T06:05:00Z"), "look").done({ ended: true, said: false }); // it decided there was nothing to say
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "delivered");
   const c = groupWith("every day at 08:00", "Do x", "routine-x.md");
   F.factsFor(c, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  F.factsFor(c, at("2026-10-22T06:05:00Z"), "look").done({ ended: true, said: false, acted: 2 });
-  assert.equal(readRecord(c.convId, "routine-x")?.status, "delivered", "ended silent having acted");
+  F.factsFor(c, at("2026-10-22T06:05:00Z"), "look").done({ ended: false, said: false });
+  assert.equal(readRecord(c.convId, "routine-x")?.status, "failed");
+  assert.match(F.factsFor(c, at("2026-10-22T06:20:00Z"), "look").routines, /the earlier attempt died/);
   const d = groupWith("every day at 08:00", "Do y", "routine-y.md");
   F.factsFor(d, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  for (const m of [5, 15]) F.factsFor(d, at(`2026-10-22T06:${String(m).padStart(2, "0")}:00Z`), "look").done({ ended: true, said: false });
+  for (const m of [5, 15]) F.factsFor(d, at(`2026-10-22T06:${String(m).padStart(2, "0")}:00Z`), "look").done({ ended: false, said: false });
   assert.match(F.factsFor(d, at("2026-10-22T06:30:00Z"), "look").status.join("\n"), /routine-y: did not run on 2026-10-22 \(two attempts failed\)/);
+});
+
+test("a due routine makes the conversation's look due on the next tick: at its time, until handed over, and not once done", () => {
+  const conv = groupWith("every day at 08:00");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false }); // first sight
+  assert.equal(F.routinesWaiting(conv, at("2026-10-22T05:59:00Z")), false, "07:59: not yet");
+  assert.equal(F.routinesWaiting(conv, at("2026-10-22T06:01:00Z")), true, "08:01: due");
+  const look = F.factsFor(conv, at("2026-10-22T06:02:00Z"), "look");
+  assert.equal(F.routinesWaiting(conv, at("2026-10-22T06:03:00Z")), false, "started: not due");
+  look.done({ ended: true, said: true });
+  assert.equal(F.routinesWaiting(conv, at("2026-10-22T06:10:00Z")), false, "done");
+  assert.equal(F.routinesWaiting(conv, at("2026-10-22T11:00:00Z")), false);
+  assert.equal(F.routinesWaiting(conv, at("2026-10-23T06:01:00Z")), true, "the next day");
 });
 
 test("a chat turn sees a routine note's status and never starts or records it; only the look runs it", () => {

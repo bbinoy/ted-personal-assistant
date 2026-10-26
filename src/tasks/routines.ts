@@ -185,7 +185,7 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
       lines.push(r.skill
         ? `${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "${o.agentOf(r.skill)}" and a self-contained brief that names the skill ${PLUGIN}:${r.skill}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${how ? ` ${how}` : ""}`
         : `due now: ${clean(r.instruction ?? "")} (routine ${r.name}, ${when}). Do it now yourself, or delegate it when it needs judgement or careful wording, and post the result for ${o.who}; it counts as done once you posted, sent something or acted.`);
-    } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look and ask for that look in about 10 minutes.`);
+    } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look (code makes it due again by itself).`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
       if (row && !row.told) {
