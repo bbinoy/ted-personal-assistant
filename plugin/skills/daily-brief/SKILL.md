@@ -115,7 +115,7 @@ Sections, in this order (skip a section if empty, except Focus):
 5. `## ✅ Tasks` - from `list_tasks`: what is overdue (at most five, the oldest first, with how
    many days) and what is due today, names only; what the owner owes others (`i_owe`) when due soon. Then
    ONE line for everything else ("6 more this week, 8 later") and, if any, "N suggestions waiting for your
-   yes". No lists for later days. When ten or more are long overdue, follow "A long overdue pile" in `ted-personal-assistant:notion-tasks`: one friendly line offering a clean-up (reschedule, drop or keep, in chat), once. You cannot save a note in this run, so you remember the offer in the status note (a line `overdue clean-up offered <date>`, carried into every new status note after that); a previous status note that has the line means the offer was made: do not repeat it.
+   yes". No lists for later days. When ten or more are long overdue, follow the task skill's section "A long overdue pile": one friendly line offering a clean-up (reschedule, drop or keep, in chat), once. You cannot save a note in this run, so you remember the offer in the status note (a line `overdue clean-up offered <date>`, carried into every new status note after that); a previous status note that has the line means the offer was made: do not repeat it.
 6. `## ⏳ Waiting on` - the `owed_to_me` items, one line each with the person and how long; only if non-empty.
 7. `## 📡 Radar` - 3 to 5 concrete bullets from the newsletters skimmed, focused on the topics
    and regions in the owner's memory (the brief notes in the injected `owner_memory` block): an

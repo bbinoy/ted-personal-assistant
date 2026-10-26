@@ -5,7 +5,7 @@
       "sessionConv": "owner",
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "43ed9a6ea6cdecd7"
+        "sha": "530c5a6bc03dd3ee"
       },
       "memory": {
         "dir": "<data>/conversations/owner/notes",
@@ -20,7 +20,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "43ed9a6ea6cdecd7"
+        "sha": "530c5a6bc03dd3ee"
       },
       "snapshot": false
     },
