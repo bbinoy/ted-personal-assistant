@@ -10,7 +10,7 @@ import { KEEP_MS as MEETING_KEEP_MS } from "../tasks/meetings.ts";
 // The retention rule for the tables of every conversation's assistant.db (core/convdb.ts; core/retention.ts says how rules run). Each table is bounded where it is written already; this is the
 // nightly guarantee that the bound holds (a changed bound, a crash between a write and its trim) and the sweep of what has only an age:
 //   seen_mail       the newest SEEN_MAX (2000) ids; older ones are forgotten (the mail they name is long past the look-back)
-//   held_posts      the newest MAX_HELD (30): a morning digest, not an archive
+//   held_posts      the newest MAX_HELD (30): a handover to the next look, not an archive
 //   pending_*       the old approval inbox (unattended runs parked calls there until 22 Oct; nothing writes it since 26 Oct): emptied, its rows hold call arguments nobody will run
 //   voice_notes / voice_quotes   notes outside the 7-day look-back, and the 50 / 100 newest
 //   learned_*       the "learned overnight" rows (memory/learned.ts) older than 60 days, told or not (the lists prune themselves as they are made; this is for a conversation that never makes one)

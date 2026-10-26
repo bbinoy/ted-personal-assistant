@@ -171,7 +171,7 @@ function importFile(db: Db, it: ConvImportItem, text: string): Counted {
       }
       for (const h of held) {
         if (late && db.get("SELECT 1 FROM held_posts WHERE text = ?", h.text as string)) { expect--; continue; } // (a late file: not repeated)
-        db.run("INSERT INTO held_posts (text, why, notice, needs_you, at, day, same_day) VALUES (?, ?, ?, ?, ?, ?, ?)", h.text as string, h.why === "cap" ? "cap" : "quiet", flag(h.notice), flag(h.needsYou), int(h.at), str(h.day), flag(h.sameDay));
+        db.run("INSERT INTO held_posts (text, why, at) VALUES (?, ?, ?)", h.text as string, h.why === "cap" ? "cap" : "quiet", int(h.at));
         rows++;
       }
       return { rows, expect };

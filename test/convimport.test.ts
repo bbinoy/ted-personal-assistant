@@ -92,9 +92,9 @@ test("migrate from layout 3: every file imported in one transaction, counts veri
   });
   assert.deepEqual(oneRow(root, "owner", "SELECT day, last_run_at FROM dream"), { day: "2026-10-19", last_run_at: "2026-10-19T21:00:00.000Z" });
   assert.deepEqual(oneRow(root, "owner", "SELECT day, posted FROM hold"), { day: "2026-10-20", posted: 3 });
-  assert.deepEqual(plain(convDbAt(root, "owner").all("SELECT text, why, notice, needs_you, at, day, same_day FROM held_posts ORDER BY seq")), [
-    { text: "p1", why: "quiet", notice: null, needs_you: null, at: 5, day: "2026-10-20", same_day: null },
-    { text: "p2", why: "cap", notice: 1, needs_you: 1, at: null, day: null, same_day: 1 },
+  assert.deepEqual(plain(convDbAt(root, "owner").all("SELECT text, why, at FROM held_posts ORDER BY seq")), [
+    { text: "p1", why: "quiet", at: 5 },
+    { text: "p2", why: "cap", at: null },
   ]);
   assert.deepEqual(convDbAt(root, "owner").all<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq").map((x) => x.id), ["m1", "m3", "m2"], "distinct, the last occurrence counts, a number is no id");
   assert.deepEqual(oneRow(root, "owner", "SELECT until FROM quiet"), { until: "" });

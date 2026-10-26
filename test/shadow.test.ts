@@ -72,38 +72,29 @@ const mbArchive = (id: string, addr = false) => ({ tool: `${MB}archive_conversat
 
 // ---- the welcome ----
 
-test("welcome: a fresh data folder is welcomed ONCE, with the persona's name and the three commands; never again", async () => {
-  const sent: string[] = [];
-  const send = async (t: string) => void sent.push(t);
+test("welcome: a fresh data folder hands the owner's first run ONE fact (name-free, the commands, the setup offer); never again", () => {
   const fresh = { messages: 0, spend: 0, looks: 0, migrated: false };
-  assert.equal(await W.welcomeOnce(send, () => fresh), "sent");
-  assert.equal(sent.length, 1);
-  assert.match(sent[0]!, new RegExp(`I'm ${settings.assistant}`));
-  for (const c of ["/status", "/pause 2h", "/today"]) assert.ok(sent[0]!.includes(c), c);
-  assert.match(sent[0]!, /set up/);
-  assert.match(sent[0]!, /starting gently/);
-  assert.equal(await W.welcomeOnce(send, () => fresh), "already", "the second start says nothing");
-  assert.equal(sent.length, 1);
-  assert.equal(kvGet<{ state: string }>(W.WELCOME_KEY, { state: "" }).state, "sent");
+  W.welcomeStart(() => fresh);
+  assert.equal(kvGet<{ state: string }>(W.WELCOME_KEY, { state: "" }).state, "pending");
+  const fact = W.takeWelcome();
+  assert.match(fact, /fresh install/);
+  for (const c of ["/status", "/pause 2h", "/today"]) assert.ok(fact.includes(c), c);
+  assert.match(fact, /set up/);
+  assert.match(fact, /starts? gently|start gently/);
+  assert.equal(W.takeWelcome(), "", "handed over once");
+  W.welcomeStart(() => fresh);
+  assert.equal(kvGet<{ state: string }>(W.WELCOME_KEY, { state: "" }).state, "told", "a later start does not bring it back");
+  instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
 });
 
-test("welcome: an install with history, spend, looks or a migrated data folder is never welcomed, not even later", async () => {
+test("welcome: an install with history, spend, looks or a migrated data folder is never welcomed, not even later", () => {
   for (const [name, facts] of [["history", { messages: 3, spend: 0, looks: 0, migrated: false }], ["spend", { messages: 0, spend: 2, looks: 0, migrated: false }], ["looks", { messages: 0, spend: 0, looks: 1, migrated: false }], ["migrated", { messages: 0, spend: 0, looks: 0, migrated: true }]] as const) {
     instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
-    const sent: string[] = [];
-    assert.equal(await W.welcomeOnce(async (t) => void sent.push(t), () => facts), "skipped", name);
-    assert.equal(await W.welcomeOnce(async (t) => void sent.push(t), () => ({ messages: 0, spend: 0, looks: 0, migrated: false })), "already", `${name}: even if the history is deleted afterwards`);
-    assert.deepEqual(sent, [], name);
+    W.welcomeStart(() => facts);
+    assert.equal(W.takeWelcome(), "", name);
+    W.welcomeStart(() => ({ messages: 0, spend: 0, looks: 0, migrated: false }));
+    assert.equal(W.takeWelcome(), "", `${name}: even if the history is deleted afterwards`);
   }
-  instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
-});
-
-test("welcome: a send that fails writes nothing down, so the next start tries again", async () => {
-  instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
-  const fresh = { messages: 0, spend: 0, looks: 0, migrated: false };
-  assert.equal(await W.welcomeOnce(async () => { throw new Error("signal is down"); }, () => fresh), "failed");
-  assert.equal(kvGet(W.WELCOME_KEY, null), null);
-  assert.equal(await W.welcomeOnce(async () => {}, () => fresh), "sent");
   instanceDb().run("DELETE FROM kv WHERE key = ?", W.WELCOME_KEY);
 });
 
@@ -531,10 +522,10 @@ test("an unquoted \"archive all\" archives; a quoted bare yes still works", asyn
   assert.equal(q2.ran.length, 1);
 });
 
-test("the welcome says nothing about starting gently when SHADOW_MODE=off", () => {
-  assert.match(W.welcomeText({ assistant: "Ted", owner: "Sam", mail: true, shadow: true }), /starting gently/);
-  const off = W.welcomeText({ assistant: "Ted", owner: "Sam", mail: true, shadow: false });
-  assert.doesNotMatch(off, /starting gently|won't archive/);
+test("the welcome fact says nothing about starting gently when SHADOW_MODE=off", () => {
+  assert.match(W.welcomeFact({ owner: "Sam", mail: true, shadow: true }), /start gently/);
+  const off = W.welcomeFact({ owner: "Sam", mail: true, shadow: false });
+  assert.doesNotMatch(off, /start gently|nothing on your own/);
   assert.match(off, /archive newsletters/);
 });
 

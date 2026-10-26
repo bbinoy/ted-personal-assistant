@@ -1,7 +1,7 @@
 import { capNoticesTo } from "../core/capnotice.ts";
 import { setApprovers } from "../approvals/permissions.ts";
 import { keyNotices } from "../tenants/keynotice.ts";
-import { noticeOwner, ownerNotices } from "./notices.ts";
+import { ownerNotices } from "./notices.ts";
 import { removeFriend } from "../conversation/tenantremoval.ts";
 import { tenantHooks } from "../tenants/tenanttools.ts";
 
@@ -23,7 +23,7 @@ export function wire(ctx: AppContext): void {
   wired = true;
   setApprovers(ctx.approvers);
   keyNotices.sendTo(ctx.notifyOwner);
-  capNoticesTo((text) => noticeOwner(text, new Date(), { sameDay: true })); // (held in quiet hours like the other owner notices)
+  capNoticesTo(ctx.notifyOwner); // (a fixed text: the shared key is spent, once a day)
   ownerNotices.sendTo(ctx.notifyOwner);
   tenantHooks.sendFirst = ctx.sendFirst;
   tenantHooks.drop = ctx.dropTenant;

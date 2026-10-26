@@ -405,6 +405,16 @@ export const CONV_SCHEMA: readonly Migration[] = [
       DELETE FROM suggestion_asks;
     `,
   },
+  {
+    version: 12,
+    name: "held posts are handed to the next look as they are written: the digest's flags (notice, needs_you, day, same_day) are dropped",
+    up: `
+      ALTER TABLE held_posts DROP COLUMN notice;
+      ALTER TABLE held_posts DROP COLUMN needs_you;
+      ALTER TABLE held_posts DROP COLUMN day;
+      ALTER TABLE held_posts DROP COLUMN same_day;
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

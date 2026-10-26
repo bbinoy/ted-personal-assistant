@@ -3,28 +3,22 @@ import { takeCapNotice } from "../core/capnotice.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { OWNER, settings } from "../core/settings.ts";
-import { ledgerEntries } from "../core/messages.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
 import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
 import { isQuiet } from "../conversation/quiet.ts";
-import { askLines, type LineWriter } from "./digestlines.ts";
-import { digestDue, digestText, oneLine, planDigest } from "./digest.ts";
 import { zoneOf } from "../tenants/tenants.ts";
-import { allows } from "../policy/capabilities.ts";
 import { emit } from "../core/events.ts";
 import { onLogin } from "../core/ownerkey.ts";
 
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Three small, separate mechanisms, all pure planners over a little state:
-//   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat; in a group once per group per day
-//      and only when someone addressed it.
+//   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat, as a fixed text: over budget no model
+//      run is possible (CLAUDE.md allows exactly this). It waits for the end of quiet. The damaged-database notice (1b) is the same kind: the owner's own look cannot run when her own file is the damaged one.
 //   2. looks that fail: no message at all. A group's or a friend's go to the log and the doctor; the owner's own become a FACT for her next look after a long awake stretch (below).
-//   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY,
-//      is HELD (state, per conversation) and goes out as ONE curated digest (digest.ts: grouped needs you / FYI / system, deduplicated, newest first, capped) when quiet ends, and at the
-//      DIGEST_TIMES slots for what the cap held. The run marks a post `urgent` (rules.ts) only when it is time-critical: that is exempt from all of it.
-//      A held POST from an earlier day of the conversation is never delivered as it was written ("Evening, ..." read at 07:00): it is handed, once, to the conversation's next look (look.ts),
-//      which says again in today's words only what is still true; a conversation without a look drops it (a journal line says how many).
-// The system notice of 1 respects the quiet window too (held, then delivered with the rest), and is exempt from the cap.
+//   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY, is HELD
+//      (state, per conversation). Code never words it again: when quiet is over (and the cap has room) the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts),
+//      each handed over exactly once, and says again in today's words only what is still true. A conversation without a look drops what it held (dropUnreachable). The run marks a post `urgent`
+//      (rules.ts) only when it is time-critical: that is exempt from all of it.
 
 // ---- the pure planners ----
 
@@ -43,32 +37,13 @@ export const planFlush = (i: { night: boolean; posted: number; cap: number; held
 export interface Held {
   text: string;
   why: "quiet" | "cap";
-  notice?: boolean; // a system notice (exempt from the cap)
-  needsYou?: boolean; // the look said this post asks something of the owner (digest.ts kindOfItem)
   at?: number; // when it was held (epoch ms); older rows have none and are kept as they were
-  day?: string; // the conversation's day it was held on
-  sameDay?: boolean; // true only for the day it was written (the budget notice: "paused until midnight" is false the next morning)
 }
 
 const STALE_MS = 36 * 3_600_000; // nothing held is delivered after this: it is no longer news
 
-// Pure: what of the held items is still true at `now`? A same-day notice from an earlier day is dropped; a held POST is dropped if someone wrote in the conversation after it was
-// held (`wroteAt`: the times of what people wrote, epoch ms; the owner has moved on and the post may contradict it); anything older than 36 hours is dropped.
-export function stillTrue(held: readonly Held[], now: number, today: string, wroteAt: readonly number[]): Held[] {
-  return held.filter((h) => {
-    if (h.at === undefined) return true;
-    if (now - h.at > STALE_MS) return false;
-    if (h.sameDay && h.day !== today) return false;
-    if (!h.notice && wroteAt.some((t) => t > h.at!)) return false;
-    return true;
-  });
-}
-
-// Pure: a held post from another day than `today` (the conversation's own). It is not delivered as it was written: the next look gets it (takeOvernight), or it is dropped.
-export const fromEarlierDay = (h: Held, today: string): boolean => !h.notice && h.day !== undefined && h.day !== today;
-
-// The one message that holds everything, as the digest the owner gets (digest.ts): a single item as it is, several grouped, deduplicated, newest first and capped.
-export const combine = (held: readonly Held[]): string => digestText(planDigest(held, settings.digestMaxItems));
+// Pure: what of the held items is still news at `now`? Anything older than 36 hours is dropped. (Whether the owner has moved on is the look's judgement: it has the chat log.)
+export const stillTrue = (held: readonly Held[], now: number): Held[] => held.filter((h) => h.at === undefined || now - h.at <= STALE_MS);
 
 // ---- the failure tracker ----
 
@@ -127,34 +102,26 @@ interface HoldState {
   held: Held[];
 }
 
-type HeldRow = { text: string; why: string; notice: number | null; needs_you: number | null; at: number | null; day: string | null; same_day: number | null };
-const heldOf = (r: HeldRow): Held => ({
-  text: r.text,
-  why: r.why === "cap" ? "cap" : "quiet",
-  ...(r.notice !== null ? { notice: !!r.notice } : {}),
-  ...(r.needs_you !== null ? { needsYou: !!r.needs_you } : {}),
-  ...(r.at !== null ? { at: r.at } : {}),
-  ...(r.day !== null ? { day: r.day } : {}),
-  ...(r.same_day !== null ? { sameDay: !!r.same_day } : {}),
-});
-const flag = (b: boolean | undefined): number | null => (typeof b === "boolean" ? (b ? 1 : 0) : null);
+type HeldRow = { text: string; why: string; at: number | null };
+const heldOf = (r: HeldRow): Held => ({ text: r.text, why: r.why === "cap" ? "cap" : "quiet", ...(r.at !== null ? { at: r.at } : {}) });
+const HELD_SQL = "SELECT text, why, at FROM held_posts ORDER BY seq";
 
 /** How many posts are held (the usual tick: one small query, nothing more). */
 export const heldCount = (conv: Pick<Conversation, "convId">): number => peekConvDb(conv.convId)?.num("SELECT COUNT(*) FROM held_posts") ?? 0; // (a tick asks every conversation: it makes no database)
 /** The held posts, oldest first (a read for the tests and the doctor). */
-export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<HeldRow>("SELECT text, why, notice, needs_you, at, day, same_day FROM held_posts ORDER BY seq").map(heldOf);
+export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<HeldRow>(HELD_SQL).map(heldOf);
 /** Forget the day's count and everything held (tests). */
 export function resetHeld(conv: Pick<Conversation, "convId">): void {
   const db = convDb(conv.convId);
   db.tx(() => (db.run("DELETE FROM held_posts"), db.run("DELETE FROM hold")));
 }
 
-export const MAX_HELD = 30; // a flood is dropped oldest first: this is a morning digest, not an archive (a retention rule, heartbeat/convretention.ts, keeps the same bound)
+export const MAX_HELD = 30; // a flood is dropped oldest first: this is a handover to the next look, not an archive (a retention rule, heartbeat/convretention.ts, keeps the same bound)
 function load(conv: Conversation, now: Date, zone: string): HoldState {
   const db = convDb(conv.convId);
   const raw = db.get<{ day: string; posted: number }>("SELECT day, posted FROM hold WHERE id = 1");
   const day = dayIn(now, zone);
-  return { day, posted: raw?.day === day ? raw.posted : 0, held: db.all<HeldRow>("SELECT text, why, notice, needs_you, at, day, same_day FROM held_posts ORDER BY seq").map(heldOf) };
+  return { day, posted: raw?.day === day ? raw.posted : 0, held: db.all<HeldRow>(HELD_SQL).map(heldOf) };
 }
 // The whole state in one transaction (the file was one atomic write): the count, and the held posts, newest MAX_HELD.
 function save(conv: Conversation, st: HoldState): void {
@@ -162,7 +129,7 @@ function save(conv: Conversation, st: HoldState): void {
   db.tx(() => {
     db.run("INSERT INTO hold (id, day, posted) VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET day = excluded.day, posted = excluded.posted", st.day, st.posted);
     db.run("DELETE FROM held_posts");
-    for (const h of st.held.slice(-MAX_HELD)) db.run("INSERT INTO held_posts (text, why, notice, needs_you, at, day, same_day) VALUES (?, ?, ?, ?, ?, ?, ?)", h.text, h.why, flag(h.notice), flag(h.needsYou), h.at ?? null, h.day ?? null, flag(h.sameDay));
+    for (const h of st.held.slice(-MAX_HELD)) db.run("INSERT INTO held_posts (text, why, at) VALUES (?, ?, ?)", h.text, h.why, h.at ?? null);
   });
 }
 const zoneFor = (conv: Conversation): string => zoneOf(conv);
@@ -174,7 +141,7 @@ const holding = (conv: Conversation, now: Date, zone: string): boolean => isNigh
 export const holdingNow = (conv: Conversation, now: Date): boolean => holding(conv, now, zoneFor(conv));
 
 // A heartbeat post that is about to go out unprompted. "post": go ahead (counted); "held": kept for later (the caller says nothing, the conversation's log notes it).
-export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date, needsYou?: boolean): "post" | "held" {
+export function submitPost(conv: Conversation, text: string, urgent: boolean, now: Date): "post" | "held" {
   const zone = zoneFor(conv);
   const st = load(conv, now, zone);
   const plan = planPost({ urgent, night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay });
@@ -183,16 +150,9 @@ export function submitPost(conv: Conversation, text: string, urgent: boolean, no
     save(conv, st);
     return "post";
   }
-  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: plan === "hold-quiet" ? "quiet" : "cap", at: now.getTime(), day: st.day, ...(typeof needsYou === "boolean" ? { needsYou } : {}) });
+  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: plan === "hold-quiet" ? "quiet" : "cap", at: now.getTime() });
   save(conv, st);
   return "held";
-}
-
-// A line for the next digest that is not a post: a system notice (exempt from the cap) kept for when quiet ends or a digest slot comes (a reminder too late to send, tasks/remind.ts).
-export function holdLine(conv: Conversation, text: string, now: Date): void {
-  const st = load(conv, now, zoneFor(conv));
-  if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: "quiet", notice: true, at: now.getTime(), day: st.day });
-  save(conv, st);
 }
 
 // Pieces the run sent with the send tool while it worked count toward the day's cap (they are not held: they are out).
@@ -207,64 +167,31 @@ export function countPosts(conv: Conversation, n: number, now: Date): void {
 export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, text: string, costUsd?: number) =>
   pipeline.enqueue(conv, async () => pipeline.runTurn(conv, { run: async () => ({ text, costUsd }), background: true, announce: false, kind: "notice" })).catch((e) => ({ error: e as unknown, spoke: false }));
 
-// On every tick: if quiet is over (the window, or /quiet) and something is held, or a digest slot has passed for what the cap held, post it as ONE digest (digest.ts). Kept if the post fails.
-// `lines`: the optional model that shortens the owner's items (digestlines.ts; the code's own lines when it is absent, fails, times out or answers wrongly). Returns whether it posted.
-// `looks`: the conversation has a heartbeat look to hand a post of an earlier day to (default: its capabilities, as wake.ts asks them); without one such a post is dropped.
-const hasLook = (conv: Conversation): boolean => allows(conv, "heartbeat") && allows(conv, "wake");
-const wroteAt = (conv: Conversation): number[] => ledgerEntries(conv.logFile).filter((e) => e.kind === "owner" || e.kind === "member" || e.kind === "edit").map((e) => Date.parse(e.at));
-export async function releaseHeld(pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, now: Date, o: { lines?: LineWriter; looks?: boolean } = {}): Promise<boolean> {
-  if (heldCount(conv) === 0) return false; // the usual tick: one small read, nothing more
-  const zone = zoneFor(conv);
-  const st = load(conv, now, zone);
-  let keep = stillTrue(st.held, now.getTime(), st.day, wroteAt(conv));
-  const old = keep.filter((h) => fromEarlierDay(h, st.day));
-  if (old.length > 0 && !(o.looks ?? hasLook(conv))) {
-    keep = keep.filter((h) => !old.includes(h)); // no look to say it again in today's words: never sent as it was written
-    emit({ type: "notice", state: "dropped", conv: conv.key, text: `Dropped ${old.length} held message(s) from yesterday`, source: onLogin(conv) ? "background" : "group" });
-  }
-  if (keep.length !== st.held.length) {
-    st.held = keep; // what is no longer true is dropped, not delivered
-    save(conv, st);
-  }
-  const batch = st.held.filter((h) => !fromEarlierDay(h, st.day)); // (a post of an earlier day waits for the look: takeOvernight)
-  if (!planFlush({ night: holding(conv, now, zone), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: batch.length })) return false;
-  if (!digestDue({ held: batch, now: now.getTime(), zone, slots: settings.digestMinutes })) return false;
-  const plan = planDigest(batch, settings.digestMaxItems);
-  const shown = plan.groups.flatMap((g) => g.items);
-  let lines: string[] | undefined;
-  const write = o.lines ?? (settings.digestSummarize && conv.kind === "owner" ? askLines : undefined); // (the model reads the owner's items only: a friend's run is paid by the shared key)
-  if (write && shown.length > 1) lines = await write(shown.map((h) => h.text)).catch(() => undefined); // (a failed or slow model is just the code's lines)
-  const text = digestText(plan, (h) => lines?.[shown.indexOf(h)] ?? oneLine(h.text));
-  const res = await postNotice(pipeline, conv, text);
-  if (res.error) return false;
-  const now2 = load(conv, now, zone); // (re-read: a look may have held more meanwhile)
-  now2.held = now2.held.filter((h) => !batch.some((b) => b.text === h.text));
-  now2.posted++;
-  save(conv, now2);
-  return true;
-}
+// What is held at the end of quiet goes to the conversation's next look as facts (look.ts), not out as text code wrote. Ready when quiet is over (the window, or /quiet) and the day's cap has room (a
+// cap-held post therefore waits for the next day).
+const ready = (conv: Conversation, now: Date, st: HoldState): boolean => planFlush({ night: holding(conv, now, zoneFor(conv)), posted: st.posted, cap: settings.maxUnpromptedPerDay, held: st.held.length });
 
-// The held posts of an earlier day, for the conversation's next look (look.ts), newest first. Taken out of the held posts as they are handed over, so they are passed exactly once (a
-// look that then fails has lost them: they were yesterday's news). Nothing while the conversation is still being left alone (a night look would only hold them again), nothing that is
-// no longer true (stillTrue). Only this conversation's own rows: its own database.
-export function takeOvernight(conv: Conversation, now: Date): Held[] {
+// All the held posts, newest first, for the conversation's next look. Taken out of the held posts as they are handed over, so they are passed exactly once (a look that then fails has lost them: they
+// were news of the hour). Nothing while the conversation is still being left alone (a night look would only hold them again), nothing that is stale (stillTrue). Only this conversation's own database.
+export function takeHeld(conv: Conversation, now: Date): Held[] {
   if (heldCount(conv) === 0) return [];
-  const zone = zoneFor(conv);
-  if (holding(conv, now, zone)) return [];
-  const st = load(conv, now, zone);
-  const old = st.held.filter((h) => fromEarlierDay(h, st.day));
-  if (old.length === 0) return [];
-  const take = stillTrue(old, now.getTime(), st.day, wroteAt(conv));
-  st.held = st.held.filter((h) => !old.includes(h));
+  const st = load(conv, now, zoneFor(conv));
+  if (!ready(conv, now, st)) return [];
+  const take = stillTrue(st.held, now.getTime());
+  st.held = [];
   save(conv, st);
   return take.reverse();
 }
 
-// Is a held post of an earlier day waiting for this conversation's look, and may it be handed over now? The look is then due at once (look.ts), not at the time it chose at night.
-export function overnightWaiting(conv: Conversation, now: Date): boolean {
-  if (heldCount(conv) === 0) return false;
-  const zone = zoneFor(conv);
-  return !holding(conv, now, zone) && heldPosts(conv).some((h) => fromEarlierDay(h, dayIn(now, zone)));
+// Is something held that may be handed over now? The look is then due at once (look.ts), not at the time it chose at night.
+export const heldWaiting = (conv: Conversation, now: Date): boolean => heldCount(conv) > 0 && ready(conv, now, load(conv, now, zoneFor(conv)));
+
+// A conversation with no look (its capabilities, as wake.ts asks them) has nobody to hand held posts to: they are dropped, never sent as they were written.
+export function dropUnreachable(conv: Conversation): void {
+  const n = heldCount(conv);
+  if (n === 0) return;
+  convDb(conv.convId).run("DELETE FROM held_posts");
+  emit({ type: "notice", state: "dropped", conv: conv.key, text: `Dropped ${n} held message(s): this conversation has no look`, source: onLogin(conv) ? "background" : "group" });
 }
 
 // ---- the owner's notices ----
@@ -274,16 +201,9 @@ export const ownerNotices = {
   sendTo: (fn: ((text: string) => void) | undefined): void => void (send = fn), // main.ts: the owner's chat
 };
 
-// A system notice for the owner: now, or held until the quiet window (or /quiet) ends, then in the digest. `urgent` goes at once. Never throws.
-export function noticeOwner(text: string, now: Date = new Date(), o: { sameDay?: boolean; urgent?: boolean } = {}): void {
+// A fixed text to the owner's chat now. Never throws.
+function noticeOwner(text: string): void {
   try {
-    const conv = owner();
-    const zone = zoneFor(conv);
-    if (!o.urgent && holding(conv, now, zone)) {
-      const st = load(conv, now, zone);
-      if (!st.held.some((h) => h.text === text)) st.held.push({ text, why: "quiet", notice: true, at: now.getTime(), day: st.day, sameDay: o.sameDay });
-      return save(conv, st);
-    }
     send?.(text);
   } catch (e) {
     console.error("notices: could not tell the owner:", (e as Error).message);
@@ -293,19 +213,21 @@ export function noticeOwner(text: string, now: Date = new Date(), o: { sameDay?:
 // 1. The budget: once a day, from the tick (wake.ts), when the day's spend has reached the ceiling.
 export const budgetText = (): string => `Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. To lift it today, raise DAILY_BUDGET_USD in .env and restart.`;
 export function noticeBudget(now: Date = new Date()): boolean {
+  if (holdingNow(owner(), now)) return false; // (not asked, so the day's one notice is not used up: it comes when quiet is over)
   const b = overBudget(); // (the only caller: asking elsewhere never uses up the day's one notice)
-  if (b.firstTime) noticeOwner(budgetText(), now, { sameDay: true });
+  if (b.firstTime) noticeOwner(budgetText());
   return b.firstTime;
 }
 
 // 1b. A conversation's database (assistant.db, core/convdb.ts) was damaged and set aside: once a day, until a person looks (npm run doctor says which file and what to do). Chat in it goes on with a fresh
 // start; its background work is stopped (payer.ts mayRun). Returns how many notices it made.
 export function noticeDamaged(now: Date = new Date()): number {
+  if (holdingNow(owner(), now)) return 0; // (quiet: asked again at the next tick)
   let n = 0;
   for (const d of damagedConvs()) {
     if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now);
+    noticeOwner(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`);
     n++;
   }
   return n;

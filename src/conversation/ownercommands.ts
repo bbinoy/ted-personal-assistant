@@ -23,7 +23,7 @@ import { tasksText } from "../tasks/render.ts";
 
 // The owner's hands on the machine, handled in code before any model sees the message (like /card, conversation.ts): "/stop" (or "stop!") aborts the conversation's running turn,
 // "/pause 2h" / "/pause until 18:00" / "/pause" / "/resume" write and remove the pause switch (core/pause.ts), "/status" answers in a phone-sized summary, "/today" what the assistant did today and why (the journal), "/quiet 2h" / "/quiet until 18:00" /
-// "/quiet" / "/unquiet" hold the conversation's unprompted posts and notices for the digest while chat and the heartbeat's work go on (quiet.ts). The message must be EXACTLY the command, so a
+// "/quiet" / "/unquiet" hold the conversation's unprompted posts for the next look while chat and the heartbeat's work go on (quiet.ts). The message must be EXACTLY the command, so a
 // sentence that merely contains the word is a message like any other. "/tasks" the open tasks grouped by when they are due (tasks/render.ts). /stop, /quiet and /tasks work in the owner's chat and a friend's own chat; pause, status and today are the owner's only.
 
 export type Command =
@@ -65,11 +65,11 @@ export function untilTime(arg: string, now: Date, zone: string): { at: Date; whe
 // Pure: "/quiet" (until /unquiet), "/quiet 2h", "/quiet until 18:00", "/unquiet"; undefined when the message is none of them.
 export function parseQuiet(t: string, now: Date, zone: string): Command | undefined {
   if (t === "/unquiet") return { kind: "unquiet" };
-  if (t === "/quiet") return { kind: "quiet", until: "", text: "Quiet until you say /unquiet. I'll hold what I'd post unprompted and send it as one digest then; urgent things still come through." };
+  if (t === "/quiet") return { kind: "quiet", until: "", text: "Quiet until you say /unquiet. I'll hold what I'd post unprompted and tell you what still matters then; urgent things still come through." };
   if (!t.startsWith("/quiet ")) return undefined;
   const r = untilTime(t.slice("/quiet ".length), now, zone);
   if (!r || r === "usage") return { kind: "quiet-usage" };
-  return { kind: "quiet", until: r.at.toISOString(), text: `Quiet until ${r.when}. I'll hold what I'd post unprompted and send it as one digest then; urgent things still come through. /unquiet to undo.` };
+  return { kind: "quiet", until: r.at.toISOString(), text: `Quiet until ${r.when}. I'll hold what I'd post unprompted and tell you what still matters then; urgent things still come through. /unquiet to undo.` };
 }
 
 // Pure: the message as a command, or undefined (it is just a message). `now` and `zone` matter for "until 18:00".
@@ -122,7 +122,7 @@ export interface StatusFacts {
 export function statusText(f: StatusFacts): string {
   return [
     f.pause ? `Paused: ${f.pause}.` : "Running (not paused).",
-    ...(f.quiet ? [`Quiet: ${f.quiet} (held items go out in the digest).`] : []),
+    ...(f.quiet ? [`Quiet: ${f.quiet} (held items are looked at again when it ends).`] : []),
     f.damaged ? "Ledger damaged (instance/instance.db): background work and payments are off, chat works. See `npm run doctor`." : `Budget today: $${f.spentUsd.toFixed(2)} of $${f.limitUsd}${f.spentUsd >= f.limitUsd ? " (reached, background work is paused)" : ""}.`,
     f.lastLook ? `Last look: ${timeIn(f.lastLook.at, f.zone)} (${f.lastLook.outcome}).` : "Last look: none yet.",
     `Open approvals: ${f.approvals}.`,
@@ -180,7 +180,7 @@ const real: CommandDeps = {
 function quietReply(conv: QuietConv, cmd: Command, d: CommandDeps): string | undefined {
   if (conv.kind === "group") return undefined;
   if (cmd.kind === "quiet") return d.setQuiet(conv, cmd.until), cmd.text;
-  if (cmd.kind === "unquiet") return d.clearQuiet(conv), "Back to normal. What I held goes out in the next digest.";
+  if (cmd.kind === "unquiet") return d.clearQuiet(conv), "Back to normal. What I held, I will look at again and tell you what still matters.";
   return QUIET_USAGE;
 }
 
