@@ -174,3 +174,28 @@ test("something to look at: mail or a calendar (her own Google, once the instanc
   assert.equal(hasSomethingToLookAt(owner(), NOW), true);
   assert.equal(hasSomethingToLookAt(group("hb-conv-empty-0123456789abcdef"), NOW), false);
 });
+
+test("the owner's look goes first in the run gate, then a friend's, then a group's; the owner's startup stagger is none", async () => {
+  const { gated, runGate } = await import("../src/core/rungate.ts");
+  const { startupStagger } = await import("../src/heartbeat/wake.ts");
+  const id = friend("Bea");
+  const gateOf = (conv: ReturnType<typeof owner>) => heartbeatOptions(conv, payerOf(id), {}, NOW).gate;
+  assert.deepEqual([gateOf(owner()), gateOf(tenant(id)), gateOf(group("g1"))], ["ownerLook", "friendLook", "look"]);
+  assert.equal(startupStagger(owner()), 0);
+  const was = settings.maxConcurrentRuns;
+  on.maxConcurrentRuns = 1;
+  try {
+    const started: string[] = [];
+    let free: () => void = () => {};
+    const holder = gated("look", () => new Promise<void>((r) => (free = r)));
+    const hold = (name: string) => () => (started.push(name), Promise.resolve());
+    // after a long sleep the groups' looks are asked for first
+    const all = [gated("look", hold("group1")), gated("look", hold("group2")), gated("friendLook", hold("friend")), gated("ownerLook", hold("owner")), gated("dream", hold("dream"))];
+    free();
+    await Promise.all([holder, ...all]);
+    assert.deepEqual(started, ["owner", "friend", "group1", "group2", "dream"]);
+    assert.equal(runGate.running, 0);
+  } finally {
+    on.maxConcurrentRuns = was;
+  }
+});

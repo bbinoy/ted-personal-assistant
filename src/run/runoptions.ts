@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type { RunOptions } from "./agentrun.ts";
 import { tenantOverBudget } from "../core/budget.ts";
-import { disconnected, readConnectors } from "../modules/connectors.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { recentNotices } from "../core/messages.ts";
 import { readNotes } from "../memory/notes.ts";
@@ -87,9 +86,8 @@ const SHAPES: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) =>
 // told (turncontext.ts). The same hook for every kind; a group has nothing of the sort.
 const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) => string | undefined> = {
   owner: () => {
-    const off = disconnected(readConnectors()); // (read once)
     const notes = readNotes();
-    return chatContext({ missing: missingSetup(notes, off), down: off, pings: recentNotices(), tasks: importOffer(OWNER_KEY, notes.some((n) => n.file.startsWith("setup-task"))) });
+    return chatContext({ missing: missingSetup(notes), pings: recentNotices(), tasks: importOffer(OWNER_KEY, notes.some((n) => n.file.startsWith("setup-task"))) });
   },
   group: () => undefined,
   // Her first turn after the owner let her in (tenantrun.ts marks it with the first reply): she is new here. (Her mail is read by her heartbeat run and her tools when she asks: there is no digest to show.)

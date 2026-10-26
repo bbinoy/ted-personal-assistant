@@ -2,11 +2,8 @@ import { loaded, registered } from "./index.ts";
 import { kvGet, kvSet } from "../core/instancedb.ts";
 import { settings } from "../core/settings.ts";
 
-// Which connectors the last run could actually see. Notion and Google Calendar come through the
-// owner's Claude account (settings, then connectors); if one is not connected its tools simply do
-// not exist. Knowing that lets the prompts and the brief say "Notion isn't connected" instead of
-// the misleading "tasks are not set up", and stops the agent asking the owner to type in what the
-// connector would have told it.
+// Which connectors the last run could actually see, for the doctor and /status only. Notion and Google Calendar come through the owner's Claude account; if one is not
+// connected its tools simply do not exist, and the run sees that itself. This record is never put in a prompt (it can be stale) and never hides a tool.
 //
 // Which connectors there are is the tool modules' business (src/modules): each one with a connector connection and a `key` is recorded under that key; one that also says
 // what the owner calls it (`label`) and what is lost without it (`skipped`) is reported while it is down. Adding a connector module adds it here, to the prompts, the brief
@@ -44,7 +41,16 @@ export function detect(tools: readonly string[], servers?: readonly ServerStatus
 
 const SEEN = "connectors-seen"; // (the kv row of the keys of connectors some run has seen working: an optional connector is only ever "down" after that)
 export const readSeen = (): string[] => kvGet<string[]>(SEEN, []);
+// Pure. Every connector of the owner's Claude account failed at once: the Mac has no network (it is waking from sleep); the connectors are not all broken.
+export const offline = (servers: readonly ServerStatus[] | undefined): boolean => {
+  const remote = (servers ?? []).filter((s) => /^claude\.ai\s/i.test(s.name));
+  return remote.length > 0 && remote.every((s) => s.status === "failed");
+};
+
+// This is for the doctor and /status ("not available in the last run"), never for the prompts: a run sees its own tools. A run that started without a network records nothing,
+// so one bad moment does not stand for the connectors until the next run.
 export function recordConnectors(tools: readonly string[], servers?: readonly ServerStatus[]): void {
+  if (offline(servers)) return;
   const now = detect(tools, servers);
   kvSet(KEY, now);
   const seen = readSeen();
