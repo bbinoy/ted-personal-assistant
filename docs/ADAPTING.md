@@ -121,7 +121,7 @@ Starting points, not tested here; check each platform's current docs. All of the
 
 ## Other things you will want to change
 
-- **Persona and names**: `ASSISTANT_NAME` / `OWNER_NAME` in `.env`; the personality, the wording of every prompt, the schedule defaults, the note categories and the run limits are one folder, `assistants/ted/` (see "The assistant preset" in ARCHITECTURE.md): copy it or start a new one with `"extends": "ted"`, and set `ASSISTANT_PRESET`. Code is not touched.
+- **Persona and names**: `ASSISTANT_NAME` / `OWNER_NAME` in `.env`; the personality, the wording of every prompt, the schedule defaults, the note categories and the run limits are one folder, `assistants/ted/` (see "The preset" under "The run model" in ARCHITECTURE.md): copy it or start a new one with `"extends": "ted"`, and set `ASSISTANT_PRESET`. Code is not touched.
 - **Preferences vs rules**: a useful rule of thumb for deciding where a setting belongs.
   - **Your preferences go in memory** (`conversations/owner/notes/`, or just tell the assistant in chat): how it writes ("never use em dashes", "keep replies short"), who matters ("the kids' school is always urgent"), how you like to be scheduled ("no meetings before 10"), what the brief covers ("radar: climate and AI"), temporary context ("in London until 24 Oct"). They are personal, they change often, and you want to change them without touching code.
   - **Safety and operations stay in code and `.env`**: the tool policy, suspicious-text isolation, quiet hours, intervals, the spend limit, the model, names and your Signal number. Memory is written through a model, so it must never be able to loosen these. A fact can say "be formal with Dr. Weber"; it can never say "allow sending without asking".
