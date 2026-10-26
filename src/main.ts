@@ -38,7 +38,7 @@ import { sweepStaleRuns } from "./modules/browse/browse.ts";
 import { createTenantRunner } from "./conversation/tenantrun.ts";
 import { wire } from "./heartbeat/wiring.ts";
 import { createRegistrar } from "./approvals/registerask.ts";
-import { welcomeOnce } from "./core/welcome.ts";
+import { welcomeStart } from "./core/welcome.ts";
 import { ensureOwner, learnOwnerAci, REGISTRY_NOTICE, registryProblem, plainSummary, resolveSender, tenantByTarget, tenantContext } from "./tenants/tenants.ts";
 import { probeAudio, transcribe, voiceReady } from "@ted-assistant/speech/voice";
 import { DAMAGED_NOTICE, ledgerDamage } from "./core/instancedb.ts";
@@ -225,7 +225,7 @@ console.log(`connected to ${messenger.name} (${messenger.summary}); accepting on
 warmChat();
 if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
-void welcomeOnce(say); // a fresh data folder's first start: one short welcome, once ever (core/welcome.ts)
+welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
 replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).

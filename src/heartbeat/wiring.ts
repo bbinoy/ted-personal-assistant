@@ -1,7 +1,7 @@
 import { capNoticesTo } from "../core/capnotice.ts";
 import { setApprovers } from "../approvals/permissions.ts";
 import { keyNotices } from "../tenants/keynotice.ts";
-import { noticeOwner, ownerNotices } from "./notices.ts";
+import { holdFact, ownerNotices } from "./notices.ts";
 import { removeFriend } from "../conversation/tenantremoval.ts";
 import { tenantHooks } from "../tenants/tenanttools.ts";
 
@@ -22,8 +22,8 @@ export function wire(ctx: AppContext): void {
   if (wired) throw new Error("startup wiring runs once");
   wired = true;
   setApprovers(ctx.approvers);
-  keyNotices.sendTo(ctx.notifyOwner);
-  capNoticesTo((text) => noticeOwner(text, new Date(), { sameDay: true })); // (held in quiet hours like the other owner notices)
+  keyNotices.sendTo(holdFact); // (the owner's own look can run on the login: a fact for it, never a ping at night)
+  capNoticesTo(holdFact);
   ownerNotices.sendTo(ctx.notifyOwner);
   tenantHooks.sendFirst = ctx.sendFirst;
   tenantHooks.drop = ctx.dropTenant;

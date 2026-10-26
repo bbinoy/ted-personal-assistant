@@ -31,21 +31,6 @@ function quietHours(env: Env, from: number, to: number): { from: number; to: num
   return { from: Number(m[1]), to: Number(m[2]) };
 }
 
-// DIGEST_TIMES="12:30,18:30": the clock times (in each conversation's own zone) at which what was held back goes out as ONE digest, besides the end of quiet hours. "H" or "H:MM", comma
-// separated; "off" means no slots (a held item then waits only for the end of the quiet window or the day's cap). Returns minutes since midnight, sorted, unique.
-export function digestTimes(raw: string | undefined): number[] {
-  const t = raw?.trim();
-  if (t === undefined || t === "") return [12 * 60 + 30, 18 * 60 + 30];
-  if (t.toLowerCase() === "off") return [];
-  const out = new Set<number>();
-  for (const part of t.split(",")) {
-    const m = /^(\d{1,2})(?::(\d{2}))?$/.exec(part.trim());
-    if (!m || Number(m[1]) > 23 || Number(m[2] ?? 0) > 59) throw new Error(`DIGEST_TIMES must look like 12:30,18:30 (clock times, or "off"; got "${t}")`);
-    out.add(Number(m[1]) * 60 + Number(m[2] ?? 0));
-  }
-  return [...out].sort((a, b) => a - b);
-}
-
 // TASK_DEFAULT_REMIND="08:30": the clock time (the conversation's own zone) of the default ping on the morning of a due date, for an open task with a due and no reminder of its own. "off" = no default pings.
 export function remindTime(raw: string | undefined): string | "off" {
   const t = raw?.trim();
@@ -218,9 +203,6 @@ export function loadSettings(env: Env) {
     quietEndHour: quiet.to,
     maxUnpromptedPerDay: num(env, "MAX_UNPROMPTED_PER_DAY", 6, 1, 100), // unprompted heartbeat posts per conversation per day; past it they are held for the next day's one combined message (urgent ones are exempt)
     taskDefaultRemind: remindTime(env.TASK_DEFAULT_REMIND), // the morning ping for a task due that day with no reminder of its own (tasks/remind.ts)
-    digestMinutes: digestTimes(env.DIGEST_TIMES), // when held posts and notices go out as one digest (minutes since midnight, the conversation's own zone), besides the end of quiet hours (heartbeat/digest.ts)
-    digestMaxItems: num(env, "DIGEST_MAX_ITEMS", 8, 1, 50), // lines in one digest; the rest is "and N more, ask me"
-    digestSummarize: oneOf(env, "DIGEST_SUMMARIZE", "off", ["on", "off"] as const) === "on", // on: one small helper-model call turns the owner's digest items into one-liners (code's own lines when it fails or times out)
     mailBacklogDays: num(env, "MAIL_BACKLOG_DAYS", 7, 0, 3650), // first run only: inbox mail older than this is marked seen without triage (seenmail.ts)
     // Timely meeting prep (heartbeat/preptick.ts): PREP_MINUTES before a meeting with other people (the look records upcoming meetings, modules/meetings), the look is made due and says ONE short prep message; 0 = off.
     prepMinutes: num(env, "PREP_MINUTES", 15, 0, 120),

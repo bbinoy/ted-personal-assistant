@@ -8,15 +8,13 @@ import { settings } from "../src/core/settings.ts";
 import { dataPath } from "../src/core/state.ts";
 import { isPaused } from "../src/core/pause.ts";
 import { systemZone } from "../src/core/timezone.ts";
-import { resetHeld, noticeOwner, ownerNotices, releaseHeld, submitPost } from "../src/heartbeat/notices.ts";
+import { heldWaiting, resetHeld, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
 import { groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
 s.quietEndHour = 7;
 s.maxUnpromptedPerDay = 6;
-s.digestMinutes = [12 * 60 + 30, 18 * 60 + 30];
-s.digestMaxItems = 8;
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
 const ownerConv = { kind: "owner", key: "owner", convId: OWNER_CONV } as const;
@@ -83,7 +81,7 @@ test("the switch is a file per conversation: set, read, expire, clear; /status s
   assert.equal(isQuiet(ownerConv, NOW), true);
   assert.equal(isQuiet(ownerConv, new Date(NOW.getTime() + 2 * 3_600_000 + 60_000)), false, "the time has come");
   assert.equal(quietText(ownerConv, NOW, Z), "quiet until 16:30");
-  assert.match(statusText({ quiet: "quiet until 16:30", spentUsd: 0, limitUsd: 20, approvals: 0, down: [] }), /Running \(not paused\)\.\nQuiet: quiet until 16:30 \(held items go out in the digest\)\.\nBudget/);
+  assert.match(statusText({ quiet: "quiet until 16:30", spentUsd: 0, limitUsd: 20, approvals: 0, down: [] }), /Running \(not paused\)\.\nQuiet: quiet until 16:30 \(held items are looked at again when it ends\)\.\nBudget/);
   assert.doesNotMatch(statusText({ spentUsd: 0, limitUsd: 20, approvals: 0, down: [] }), /Quiet/);
   commandReply(ownerConv, "/quiet", { now: () => NOW });
   assert.equal(quietValue(ownerConv), "");
@@ -93,32 +91,23 @@ test("the switch is a file per conversation: set, read, expire, clear; /status s
   clean();
 });
 
-test("while quiet: unprompted posts and notices are held (urgent goes), the heartbeat's cap is untouched, and the digest goes out when quiet ends", async () => {
+test("while quiet: unprompted posts are held (urgent goes), the heartbeat's cap is untouched, and when quiet ends the look is due and gets them all", () => {
   clean();
   const c = owner();
-  const told: string[] = [];
-  ownerNotices.sendTo((t) => told.push(t));
   setQuiet(ownerConv, new Date(NOW.getTime() + 2 * 3_600_000).toISOString());
   assert.equal(submitPost(c, "mail from the bank about your card", false, NOW), "held", "14:30 is no quiet hour: /quiet holds");
   assert.equal(submitPost(c, "the dentist moved to Friday?", false, NOW), "held");
   assert.equal(submitPost(c, "fire at the neighbours", true, NOW), "post", "urgent goes");
-  noticeOwner("My login expired. On the Mac, run `claude auth login`.", NOW);
-  assert.deepEqual(told, [], "the notice is held too");
-  noticeOwner("urgent notice", NOW, { urgent: true });
-  assert.deepEqual(told, ["urgent notice"]);
-  const sent: string[] = [];
-  const pipeline = { enqueue: <T>(_c: unknown, job: () => Promise<T>) => job(), runTurn: async (_c: unknown, t: any) => (sent.push((await t.run()).text), { spoke: true }) } as any;
-  assert.equal(await releaseHeld(pipeline, c, new Date(NOW.getTime() + 3_600_000)), false, "still quiet an hour later");
+  assert.equal(heldWaiting(c, new Date(NOW.getTime() + 3_600_000)), false, "still quiet an hour later");
   const after = new Date(NOW.getTime() + 2 * 3_600_000 + 60_000);
-  assert.equal(await releaseHeld(pipeline, c, after), true, "quiet is over: one digest");
-  assert.equal(sent.length, 1);
-  assert.match(sent[0]!, /^A few things I held back:\nNeeds you\n- the dentist moved to Friday\?\nFYI\n- mail from the bank about your card\nSystem\n- My login expired/);
+  assert.equal(heldWaiting(c, after), true, "quiet is over: the look is due");
+  const taken = takeHeld(c, after);
+  assert.deepEqual(taken.held.map((h) => h.text), ["the dentist moved to Friday?", "mail from the bank about your card"]);
+  taken.done();
   // /unquiet ends it at once
   setQuiet(ownerConv, "");
   assert.equal(submitPost(c, "later news", false, NOW), "held");
   clearQuiet(ownerConv);
-  assert.equal(await releaseHeld(pipeline, c, NOW), true);
-  assert.equal(sent[1], "later news");
-  ownerNotices.sendTo(undefined);
+  assert.deepEqual(takeHeld(c, NOW).held.map((h) => h.text), ["later news"]);
   clean();
 });

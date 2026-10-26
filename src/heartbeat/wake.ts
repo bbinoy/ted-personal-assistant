@@ -10,7 +10,7 @@ import { isPaused } from "../core/pause.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
 import { runGate } from "../core/rungate.ts";
-import { noticeBudget, noticeDamaged, releaseHeld } from "./notices.ts";
+import { dropUnreachable, noticeBudget, noticeDamaged } from "./notices.ts";
 import { closeIdleConvDbs } from "../core/convdb.ts";
 import { fireReminders } from "./remindtick.ts";
 import { claimPreps } from "./preptick.ts";
@@ -136,7 +136,12 @@ export function createWakeups(deps: WakeDeps) {
       }
     }
     if (wake) for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone
-    await Promise.all(remind.map(async (conv) => void (paused(clock()) || (await fireReminders(pipeline, conv, clock(), { looks: convs.includes(conv) && allows(conv, "heartbeat") && allows(conv, "wake") }))))); // reminders that have come due (heartbeat/remindtick.ts): claimed for the conversation's look, which says them; the fixed line only without a look
+    await Promise.all(remind.map(async (conv) => {
+      if (paused(clock())) return;
+      const looks = convs.includes(conv) && allows(conv, "heartbeat") && allows(conv, "wake");
+      if (!looks) dropUnreachable(conv); // held posts have no look to be handed to (notices.ts)
+      await fireReminders(pipeline, conv, clock(), { looks });
+    })); // reminders that have come due (heartbeat/remindtick.ts): claimed for the conversation's look, which says them; the fixed line only without a look
     await Promise.all(
       convs.map(async (conv) => {
         if (paused(clock())) return;
@@ -146,7 +151,6 @@ export function createWakeups(deps: WakeDeps) {
         busy.add(conv.key);
         const mine = epoch;
         try {
-          await releaseHeld(pipeline, conv, clock()); // what quiet hours or the day's cap held back goes out now, as one message
           if (!started.has(conv.key)) {
             started.add(conv.key);
             const ms = deps.stagger?.(conv) ?? 0;

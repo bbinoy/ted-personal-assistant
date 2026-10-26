@@ -25,8 +25,8 @@ import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped, RunTimeout } from "../run/ceiling.ts";
 import { hasOpen, openCount } from "../approvals/approvals.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
-import { failingLooksFact, observeLook, overnightWaiting, postNotice, submitPost, takeOvernight, type Held } from "./notices.ts";
-import { oneLine } from "./digest.ts";
+import { failingLooksFact, heldWaiting, observeLook, postNotice, submitPost, takeHeld, type Held } from "./notices.ts";
+import { takeWelcome } from "../core/welcome.ts";
 import { gateSink } from "../modules/send/send.ts";
 import { tasksFacts } from "../tasks/render.ts";
 import { reminderFacts } from "../tasks/remind.ts";
@@ -110,7 +110,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
   });
 }
 
-// `facts`: code-built blocks for this look (ownPostsBlock, overnightBlock, the task list's facts, the owner's failing-looks fact; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
+// `facts`: code-built blocks for this look (ownPostsBlock, heldBlock, the task list's facts, the owner's failing-looks fact; "" when empty). They are in the prompt, not in the instruction the judge reads as the run's standing reason
 // (they quote what was posted, which can carry words of a mail or a page).
 export const lookPrompt = (now: Date, instruction: string, tail: readonly string[], zone?: string, ...facts: string[]): string =>
   [clockLine(now, zone), instruction, ...facts, `The recent chat and what you already did on your own (data, do not repeat it):\n${fence("chat_log", tail.join("\n") || "(none)")}`].filter(Boolean).join("\n\n");
@@ -118,7 +118,7 @@ export const lookPrompt = (now: Date, instruction: string, tail: readonly string
 export const OWN_POSTS_DAYS = 7;
 export const OWN_POSTS_MAX = 15;
 const OWN_POST_CHARS = 100;
-// What this conversation's own looks posted in the last OWN_POSTS_DAYS (kind `notice` in its log: the looks' posts, the digests), newest first, at most OWN_POSTS_MAX, each its first
+// What this conversation's own looks posted in the last OWN_POSTS_DAYS (kind `notice` in its log: the looks' posts, a held post handed on), newest first, at most OWN_POSTS_MAX, each its first
 // ~100 characters: the chat tail of a busy log can be shorter than a week, and a daily fact must not come round again. "" when there is none.
 export function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string): string {
   const since = now.getTime() - OWN_POSTS_DAYS * 86_400_000;
@@ -128,16 +128,30 @@ export function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string)
   return `Your own posts here in the last ${OWN_POSTS_DAYS} days (newest first):\n${fence("own_posts", lines.join("\n"))}\nDo not repeat a fact, joke, quote or idea you posted in the last ${OWN_POSTS_DAYS} days; a recurring post (daily fact, pep talk) must be new each time.`;
 }
 
-export const OVERNIGHT_MAX = 5;
-const OVERNIGHT_CHARS = 400;
-// The held posts of an earlier day (notices.ts takeOvernight, newest first) as a fact block written by code: what was not sent and when it was written, at most OVERNIGHT_MAX, each trimmed.
-// The look says again only what is still true today, in today's words; "" when there is none.
-export function overnightBlock(held: readonly Pick<Held, "text" | "at">[], now: Date, zone: string): string {
+export const HELD_MAX = 8;
+const HELD_CHARS = 400;
+// Whitespace collapsed, cut at a word boundary: a post quoted in a fact block.
+export function oneLine(text: string, max = 160): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > max / 2 ? cut.slice(0, at) : cut).replace(/[\s,;:.-]+$/, "")}…`;
+}
+
+// Everything held back (notices.ts takeHeld, newest first: quiet hours, /quiet or the day's cap) as a fact block written by code: what was written when and that it was not delivered, at most HELD_MAX,
+// each trimmed. The look says again only what is still true today, in today's words; "" when there is none.
+export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date, zone: string): string {
   if (held.length === 0) return "";
+  const today = dayIn(now, zone);
   const yesterday = dayAt(now, -1, zone).date;
-  const when = (at: number | undefined): string => (at === undefined ? "earlier" : `${timeIn(new Date(at), zone)} ${dayIn(new Date(at), zone) === yesterday ? "yesterday" : `on ${dayIn(new Date(at), zone)}`}`);
-  const lines = held.slice(0, OVERNIGHT_MAX).map((h) => `Held overnight and not sent (written ${when(h.at)}): "${oneLine(h.text, OVERNIGHT_CHARS)}"`);
-  return `${fence("held_overnight", lines.join("\n"))}\nThese were not delivered. Say again only what is still true and still matters today, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`;
+  const when = (at: number | undefined): string => {
+    if (at === undefined) return "earlier";
+    const day = dayIn(new Date(at), zone);
+    return `${timeIn(new Date(at), zone)} ${day === today ? "today" : day === yesterday ? "yesterday" : `on ${day}`}`;
+  };
+  const lines = held.slice(0, HELD_MAX).map((h) => `Held back and not sent (written ${when(h.at)}): "${oneLine(h.text, HELD_CHARS)}"`);
+  return `${fence("held_posts", lines.join("\n"))}\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`;
 }
 
 // How a conversation's recent looks ended, for the starvation guard below.
@@ -165,7 +179,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
   async function look(conv: Conversation, st: LookState, now: Date): Promise<string> {
     const tagged = conv.kind === "group" && settings.groupParticipation === "tagged"; // there only a tag counts as news
     const looker0 = lookerOf(conv);
-    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !overnightWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv)) && !(looker0.meetings && meetingsWaiting(conv))) return "not-due"; // (held posts of an earlier day: due once quiet ends; a reminder that came due or a meeting to prepare: at once)
+    if (!lookDue(st, now, { notesChangedMs: deps.notesChangedAt(conv.notesDir), messagesCount: !tagged }) && !heldWaiting(conv, now) && !(looker0.tasks && remindersWaiting(conv)) && !(looker0.meetings && meetingsWaiting(conv))) return "not-due"; // (held posts: due once quiet ends; a reminder that came due or a meeting to prepare: at once)
     if (!hasSomethingToLookAt(conv, now) && !(looker0.tasks && waitingReminders(conv).length)) return "nothing-to-look-at"; // no mail, calendar or tasks to read and no note: a model call for nothing
     // The conversation's lease (conversation.ts): a look never STARTS while a turn of it is settling, queued or running (the owner has just written and is being answered); it
     // waits, nothing is recorded or dropped, it is still due and the next tick (a few minutes) looks again. Once it runs (outside the queue: it may wait hours on an approval)
@@ -195,7 +209,8 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const finished = new Set<string>(); // those whose expert's result came back with something in it
     let selfMailed = 0; // routine emails the expert sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
     const instruction = lookInstruction(now, st.wake?.looked, looker, routines?.text ?? "");
-    const overnight = overnightBlock(takeOvernight(conv, now), now, looker.zone); // (handed over once: taken out of the held posts here)
+    const handedOver = takeHeld(conv, now); // (pending: deleted below only when this look ends well)
+    const heldFacts = [heldBlock(handedOver.held, now, looker.zone), looker.own ? takeWelcome() : ""].filter(Boolean).join("\n\n"); // (handed over once: taken out of the held posts here; the welcome, once ever, on the owner's first run)
     const tasks = looker.tasks ? tasksFacts(conv.key, now.getTime(), looker.zone) : { text: "", fromMail: false }; // what was added to the list on its own (tasks/render.ts): the look says it, if no look has yet
     const handed = looker.tasks ? waitingReminders(conv) : []; // reminders that came due (remindtick.ts): this look says them; only once it has are they journaled
     const dueFacts = looker.tasks ? reminderFacts(handed, activeItems(conv.key), { now: now.getTime(), zone: looker.zone, group: conv.kind === "group" }) : "";
@@ -229,7 +244,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             emit({ type: "notice", state: "held", conv: conv.key, text, source: onLogin(conv) ? "background" : "group" });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
-          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), overnight, taskBlock && fence("task_list_facts", taskBlock), prepFacts, failing, learned ? fence("notes_changed_facts", learned.text) : ""), {
+          return deps.run(conv, access, lookPrompt(now, instruction, logTail(conv, 40), looker.zone, ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, looker.zone), heldFacts, taskBlock && fence("task_list_facts", taskBlock), prepFacts, failing, learned ? fence("notes_changed_facts", learned.text) : ""), {
             provenance: { kind: "standing", task: instruction },
             ...(tasks.fromMail ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
             seenMail,
@@ -275,13 +290,14 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (answer?.message && !stale) {
       const message = answer.message;
       // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
-      if (submitPost(conv, message, answer.urgent, now, answer.needsYou) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: onLogin(conv) ? "background" : "group" });
+      if (submitPost(conv, message, answer.urgent, now) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: onLogin(conv) ? "background" : "group" });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);
         outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
       }
     }
+    if (outcome === "posted" || outcome === "silent") handedOver.done(); // (a failed or called-off look leaves the held posts for the next one)
     if (outcome === "preempted") h.preempted++;
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";
