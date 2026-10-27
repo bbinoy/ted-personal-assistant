@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "27217810ec5c8bc9"
+        "sha": "4f30c55843f27693"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -163,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "27217810ec5c8bc9"
+        "sha": "4f30c55843f27693"
       },
       "snapshot": false
     },
@@ -564,7 +564,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "27217810ec5c8bc9"
+        "sha": "4f30c55843f27693"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -574,6 +574,7 @@
       },
       "sessionConv": "owner",
       "sessionTrack": "look",
+      "freshSession": true,
       "conversation": "owner",
       "stopScope": "owner",
       "tools": [
@@ -723,7 +724,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "27217810ec5c8bc9"
+        "sha": "4f30c55843f27693"
       },
       "snapshot": false
     },
@@ -888,6 +889,7 @@
       },
       "sessionConv": "group-ff36ac23eadd0841",
       "sessionTrack": "look",
+      "freshSession": true,
       "conversation": "g-run-options",
       "stopScope": "group-ff36ac23eadd0841",
       "groupId": "g-run-options",
@@ -1018,6 +1020,7 @@
       },
       "sessionConv": "friend-<bea>",
       "sessionTrack": "look",
+      "freshSession": true,
       "conversation": "tenant:<bea>",
       "stopScope": "friend-<bea>",
       "tools": [

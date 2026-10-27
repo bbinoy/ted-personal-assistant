@@ -49,7 +49,7 @@ interface Wiring {
 async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder, w: Wiring): Promise<AgentReply> {
   const t = TRIGGERS[trigger];
   const now = w.inputs.now ?? new Date();
-  const r = chatResume(conv.convId, t.track);
+  const r = t.fresh ? { resume: undefined, seenAt: undefined } as ReturnType<typeof chatResume> : chatResume(conv.convId, t.track);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const built = runFor(conv, trigger, w.inputs);
   const o: RunOptions = { ...built, ...w.extra?.(built), seenAt, onFirstOutput: w.onFirstOutput };
@@ -79,7 +79,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
     if (own) facts?.done({ ended: false, said: false, abandoned: true });
     throw e;
   }
-  for (const s of shown) markShown(s.key, chatResume(conv.convId, t.track).resume, s.text); // the run went through: the session has it now
+  if (!t.fresh) for (const s of shown) markShown(s.key, chatResume(conv.convId, t.track).resume, s.text); // the run went through: the session has it now
   if (own) {
     const said = spoke(reply.text);
     facts?.done({ ended: said, said, abandoned: !said });
