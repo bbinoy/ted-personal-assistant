@@ -115,7 +115,7 @@ export async function runWarmOrCold(conv: Who, o: RunOptions, r: Resume, input: 
     }, undefined, o.sessionConv);
   } catch (e) {
     if ((e instanceof RunTimeout || e instanceof RunStopped) && slot?.holder === conv.key) slot.drop(); // after an abort the conversation gets no spare built meanwhile
-    if (o.sessionConv) forgetUnresumable(o.sessionConv, e, auditSource(o.kind), o.sessionTrack);
+    if (o.sessionConv) forgetUnresumable(o.sessionConv, e, auditSource(o.kind));
     throw e;
   }
 }

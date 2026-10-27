@@ -13,7 +13,6 @@ const { settings } = await import("../src/core/settings.ts");
 const { owner, group } = await import("../src/conversation/conversationmodel.ts");
 const { runConversation, runLook } = await import("../src/run/agent.ts");
 const { readSession, writeSession } = await import("../src/run/sessionstore.ts");
-const { forgetShown } = await import("../src/run/turncontext.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 const { logSince } = await import("../src/conversation/gate.ts");
@@ -32,23 +31,22 @@ const fake = (sessionId: string, fail?: string) =>
   )) as never;
 const approve = async () => ({ approved: false });
 const noFacts = (over: Record<string, unknown> = {}) => ({ blocks: [] as string[], status: [] as string[], untrusted: false, done: () => {}, onDelegate: () => {}, onTool: () => {}, routines: "", ...over }) as never;
-const seed = (conv: { convId: string }, track: "chat" | "look", sessionId: string) => writeSession(conv.convId as never, { sessionId, costUsd: 0, lastTurnAt: new Date().toISOString(), lastContextTokens: 1000, baseTokens: 1000 }, track);
+const seed = (conv: { convId: string }, sessionId: string) => writeSession(conv.convId as never, { sessionId, costUsd: 0, lastTurnAt: new Date().toISOString(), lastContextTokens: 1000, baseTokens: 1000 });
 const look = (conv: ReturnType<typeof owner>, o: { sid: string; fail?: string; facts?: unknown; build?: (since?: string) => { prompt: string; seenAt?: string } }) =>
   runLook(conv, LOGIN, o.build ?? (() => ({ prompt: "Background check" })), approve, { facts: (o.facts ?? noFacts()) as never }, { io: { query: fake(o.sid, o.fail) } });
 const chat = (conv: ReturnType<typeof owner>, sid: string, text = "hello") => runConversation(conv, {}, () => ({ prompt: text }), undefined, { query: fake(sid) });
 
-test("a look resumes the conversation's look session and a chat turn its chat session; the two never mix", async () => {
+test("a look never resumes or saves a session; a chat turn resumes and saves its chat session", async () => {
   calls = [];
   const conv = group("oneagent-sessions");
-  seed(conv, "chat", "chat-1");
-  seed(conv, "look", "look-1");
+  seed(conv, "chat-1");
   await look(conv, { sid: "look-2" });
   await chat(conv, "chat-2");
-  assert.equal(calls[0]!.options.resume, "look-1", "the look resumes the look session");
+  await look(conv, { sid: "look-3" });
+  assert.equal(calls[0]!.options.resume, undefined, "the look starts a fresh session");
   assert.equal(calls[1]!.options.resume, "chat-1", "the chat resumes the chat session");
-  assert.equal(readSession(conv.convId, "look").sessionId, "look-2");
-  assert.equal(readSession(conv.convId, "chat").sessionId, "chat-2");
-  // each session is on its own model
+  assert.equal(calls[2]!.options.resume, undefined, "and the next look is fresh again, whatever the chat holds");
+  assert.equal(readSession(conv.convId).sessionId, "chat-2", "only the chat turn saved a session");
   assert.equal(calls[0]!.options.model, settings.heartbeatModel);
   assert.equal(calls[1]!.options.model, settings.model);
 });
@@ -73,48 +71,40 @@ test("a conversation's chat and look have ONE system prompt; the owner's look ha
   }
 });
 
-test("a look is told the context once per session and the chat lines it has not seen; the first look of a fresh session gets the tail", async () => {
+test("a look is told the full context and the whole chat tail every time", async () => {
   calls = [];
   const conv = group("oneagent-told");
-  forgetShown(conv.convId, "look");
   const seen: (string | undefined)[] = [];
   const build = (since?: string) => (seen.push(since), { prompt: `check (since ${since ?? "never"})`, seenAt: logSince(conv, since).seenAt });
   recordMessage("owner", Date.now() - 5000, "first line", new Date(), conv.logFile);
-  const facts = (claimed: string) => noFacts({ status: ["STATUS: three open tasks"], blocks: [claimed] });
-  await look(conv, { sid: "l1", facts: facts("CLAIMED: water the plants"), build });
-  assert.match(calls[0]!.prompt, /STATUS: three open tasks[\s\S]*CLAIMED: water the plants[\s\S]*check \(since never\)/);
-  assert.equal(seen[0], undefined, "a fresh look session has seen nothing");
-  assert.ok(readSession(conv.convId, "look").seenAt, "and remembers how far it has seen");
-  recordMessage("member", Date.now() + 10, "second line", new Date(), conv.logFile);
-  await look(conv, { sid: "l2", facts: facts("CLAIMED: water the ferns"), build });
-  assert.doesNotMatch(calls[1]!.prompt, /STATUS: three open tasks/, "the same information is not told twice to the same session");
-  assert.match(calls[1]!.prompt, /CLAIMED: water the ferns/, "a new claimed fact is told");
-  assert.ok(seen[1], "the second look is built from the line its session last saw");
-  assert.deepEqual(logSince(conv, seen[1]).lines.filter((l) => /first line/.test(l)), [], "what the look already saw is not shown again");
+  const facts = noFacts({ status: ["STATUS: three open tasks"], blocks: ["CLAIMED: water the plants"] });
+  await look(conv, { sid: "l1", facts, build });
+  await look(conv, { sid: "l2", facts, build });
+  for (const c of calls) assert.match(c.prompt, /STATUS: three open tasks[\s\S]*CLAIMED: water the plants[\s\S]*check \(since never\)/, "the same information is told again: no session remembers it");
+  assert.deepEqual(seen, [undefined, undefined], "every look is built from the start of the chat tail");
+  assert.equal(readSession(conv.convId).seenAt, undefined, "and saves nothing about how far it has seen");
 });
 
-test("a failed look leaves its session as it was; a session the SDK cannot resume is dropped and the next look starts fresh; the chat session is untouched", async () => {
+test("a failed look leaves the chat session untouched, even when the error looks like an unresumable session", async () => {
   calls = [];
   const conv = group("oneagent-fail");
-  seed(conv, "chat", "chat-keep");
-  seed(conv, "look", "look-keep");
+  seed(conv, "chat-keep");
+  const before = readSession(conv.convId);
   await assert.rejects(look(conv, { sid: "x", fail: "down" }), /down/);
-  assert.equal(readSession(conv.convId, "look").sessionId, "look-keep");
-  await assert.rejects(look(conv, { sid: "x", fail: "No conversation found with session ID: look-keep" }), /No conversation found/);
-  assert.equal(readSession(conv.convId, "look").sessionId, undefined, "dropped");
-  assert.equal(readSession(conv.convId, "chat").sessionId, "chat-keep", "the chat session is not the look's business");
+  await assert.rejects(look(conv, { sid: "x", fail: "No conversation found with session ID: chat-keep" }), /No conversation found/);
+  assert.deepEqual(readSession(conv.convId), before, "the chat session is not the look's business");
   await look(conv, { sid: "look-new" });
-  assert.equal(calls.at(-1)!.options.resume, undefined, "a fresh look session");
-  assert.equal(readSession(conv.convId, "look").sessionId, "look-new");
+  assert.equal(calls.at(-1)!.options.resume, undefined);
+  assert.deepEqual(readSession(conv.convId), before);
 });
 
-test("a look that read a task made from mail marks its own session untrusted, which persists; the chat session stays clean", async () => {
+test("a look that read a task made from mail is untrusted for that run only; the chat session stays clean", async () => {
   const conv = group("oneagent-taint");
-  seed(conv, "chat", "chat-clean");
-  seed(conv, "look", "look-1");
+  seed(conv, "chat-clean");
+  const before = readSession(conv.convId);
   await look(conv, { sid: "look-1", facts: noFacts({ untrusted: true, status: ["task list with a mail's words"] }) });
-  assert.equal(readSession(conv.convId, "look").untrustedIn, "look-1");
-  assert.equal(readSession(conv.convId, "chat").untrustedIn, undefined);
+  assert.deepEqual(readSession(conv.convId), before, "nothing of the look's mail is written to the chat session");
+  assert.equal(readSession(conv.convId).untrustedIn, undefined);
 });
 
 test("the owner's look gets browse like any look, but never her card or saved details: payment is a typed YES in her attended chat only", async () => {

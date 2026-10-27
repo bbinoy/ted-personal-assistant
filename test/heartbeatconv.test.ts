@@ -63,7 +63,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   const conv = tenant(id);
   const o = lookOptions(conv, payerOf(id), { provenance: { kind: "standing", task: "THE LOOK" } }, NOW);
   assert.deepEqual(o.kind, { who: "tenant", attended: false }, "an isolated, unattended run: none of the owner's data, asks nobody");
-  assert.deepEqual([o.sessionConv, o.sessionTrack, o.memory, o.seenAt], [conv.convId, "look", { dir: conv.notesDir, zone: "Europe/London" }, undefined], "her look session, and the same auto-memory as her chat");
+  assert.deepEqual([o.sessionConv, o.freshSession, o.memory, o.seenAt], [conv.convId, true, { dir: conv.notesDir, zone: "Europe/London" }, undefined], "a look keeps no session, and the same auto-memory as her chat");
   assert.equal(o.model, settings.heartbeatModel);
   assert.ok(o.outputFormat);
   assert.deepEqual(o.provenance?.(), { kind: "standing", task: "THE LOOK" });
@@ -145,7 +145,7 @@ test("a friend on an instance without Google has no mail in her instruction; a g
   assert.deepEqual(go.kind, { who: "group", attended: false });
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
   assert.deepEqual([...go.tools!].sort(), [...groupTools(GROUP_LOOK)].sort(), "the group's capability set, less what needs a person waiting");
-  assert.deepEqual([go.sessionConv, go.sessionTrack, go.memory?.dir, go.tenant], [g.convId, "look", g.notesDir, undefined]);
+  assert.deepEqual([go.sessionConv, go.freshSession, go.memory?.dir, go.tenant], [g.convId, true, g.notesDir, undefined]);
   assert.ok(go.maxBudgetUsd <= 0.5);
   assert.match(system(go), /group chat on Signal/);
   assert.equal(system(go), system(runFor(g, "message", {})), "the group's one prompt");
@@ -163,7 +163,7 @@ test("the owner's run is unchanged by all of it: the login, the background sourc
   assert.ok(o.experts);
   const l = lookerOf(owner());
   assert.deepEqual([l.own, l.reads, l.mail], [true, true, true]);
-  assert.match(l.sources, /^the inbox mail you have not looked at yet \(see below\), the calendar for the next 36 hours, tasks, and your notes$/);
+  assert.match(l.sources, /^the inbox \(list it with the mail tools and ask seen_mail which mail is new\), the calendar for the next 36 hours, tasks, and your notes$/);
 });
 
 test("something to look at: mail or a calendar (her own Google, once the instance has the OAuth client), or a note; nothing else opens a look", () => {

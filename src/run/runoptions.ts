@@ -17,7 +17,6 @@ import { settings } from "../core/settings.ts";
 import { HEARTBEAT_SCHEMA } from "./rules.ts";
 import { expertSetup } from "./delegation.ts";
 import { lookerOf } from "./scope.ts";
-import type { Track } from "./sessionstore.ts";
 
 // THE builder of the options of a run (CLAUDE.md §2: one agent): `runFor(conv, trigger)` for the owner's chat, a group, a friend, whatever starts it: a message that was written, or
 // a look (a background check the assistant starts itself). What a run is made of comes from the conversation's record (conversationmodel.ts: kind, notes folder, session file,
@@ -32,7 +31,7 @@ import type { Track } from "./sessionstore.ts";
 // What a message and a look differ in is THIS table and nothing else (the code that reads it never asks which trigger it is):
 //   attended  who is waiting: a message's person is, a look's nobody. It decides the tools the manifest marks `attended` (the edits of the person's list for a message, the look's bookkeeping
 //             for a look: toolmanifest.ts), and that an unattended run never asks (permissions.ts)
-//   track     the session it resumes: the conversation's chat, or its looks' (sessionstore.ts); different models never share a session
+//   fresh     the session: a message resumes the conversation's chat session, a look starts a fresh one every time and keeps none (continuity is the shared context)
 //   model     HARNESS_MODEL, or HEARTBEAT_MODEL (a look is a cheap model that decides and delegates)
 //   answer    a reply, or the look's JSON (message, nextCheckMinutes, urgent)
 // Not in the table, on purpose: the limits. A look has the conversation's own turn cap, budget, ceiling (RUN_MAX_MINUTES_CHAT) and place in the run gate, exactly as a message has.
@@ -44,17 +43,15 @@ export type Trigger = "message" | "look";
 
 interface TriggerRow {
   attended: boolean;
-  track: Track;
   model: () => string | undefined; // undefined: HARNESS_MODEL
   effort?: Options["effort"];
   fresh?: boolean; // never resume or save a session: each run starts clean, continuity comes from the shared context
   answer?: Options["outputFormat"]; // constrained JSON; absent: a normal reply
 }
 export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
-  message: { attended: true, track: "chat", model: () => undefined },
+  message: { attended: true, model: () => undefined },
   look: {
     attended: false,
-    track: "look",
     fresh: true, // a new session every look: a resumed Haiku session saw its earlier checks and skipped the work (27 Oct)
     model: () => settings.heartbeatModel,
     effort: "high",
@@ -139,7 +136,6 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
     ...rest,
     kind,
     sessionConv: conv.convId,
-    sessionTrack: t.track,
     ...(t.fresh ? { freshSession: true } : {}),
     conversation: conv.key,
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too

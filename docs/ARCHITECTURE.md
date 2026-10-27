@@ -67,7 +67,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 
 | table(s) | holds |
 |---|---|
-| `session`, `look_session`, `dream`, `quiet`, `reset` | the two resumed SDK sessions (chat and looks), cost, untrusted taint, what each was shown; the dream's day; `/quiet`; the mark after a damaged file was replaced |
+| `session`, `dream`, `quiet`, `reset` | the resumed SDK chat session, cost, untrusted taint, what it was shown; the dream's day; `/quiet`; the mark after a damaged file was replaced |
 | `hold`, `held_posts` | day's count of unprompted posts; posts held for quiet hours or the cap (newest 30) |
 | `seen_mail` | mail ids the look has worked through (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
@@ -110,14 +110,14 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | | message | look |
 |---|---|---|
 | model | `HARNESS_MODEL` (Sonnet) | `HEARTBEAT_MODEL` (Haiku), effort `high` |
-| session | the conversation's chat session (`session`), resumed | the conversation's look session (`look_session`), resumed |
-| message | the person's words (quote, pictures, documents) | "Background check at HH:MM, nothing new from X", why it is due, the routines due, and the chat lines since the look session last saw the log (a fresh one: the last 40) |
+| session | the conversation's chat session (`session`), resumed | a fresh session every time, none saved (continuity is the shared context: facts, chat tail, journal, its own posts) |
+| message | the person's words (quote, pictures, documents) | "Background check at HH:MM, nothing new from X", why it is due, the routines due, and the last 40 chat lines |
 | attended | yes | no |
 | answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
 
-- `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
+- `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session (`freshSession` for a look), the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
 - **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail`. `note_upcoming_meetings` is not attended-gated: any run whose capability set has the calendar has it. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
-- The session of a conversation's chat and its look session never mix (different models, different caches). Each resumes between runs and is compacted in the background after 5 of quiet (`src/run/chatsession.ts`, one code for both tracks).
+- A conversation has one session, its chat: it resumes between runs and is compacted in the background after 5 of quiet (`src/run/chatsession.ts`). A look resumes and saves none, and marks nothing in the chat session.
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
 
@@ -204,14 +204,14 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - `hasSomethingToLookAt` (`src/run/scope.ts`) wants the capability `mail`, `calendar` or `notion`, or an active note; otherwise no model call is made.
 - Then `mayRun` must allow it and the conversation must not be busy.
 
-**What a look is told.** The standing instruction for what to do on its own when woken (what to read, mail triage, tasks, meetings, quiet hours, delegation, the answer format) is part of every conversation's one system prompt (`persona/background.md`, appended by `chatSystem`, `groupSystem` and `tenantSystem` from the capability set via `lookerOf`), so a chat turn and a look have the same prompt and the cache holds. What changes per look is the message (`persona/heartbeat.md`, `lookInstruction`): the clock and zone, the last check, the quiet window, why it is due and the routine facts, followed by the chat lines the look session has not seen.
+**What a look is told.** The standing instruction for what to do on its own when woken (what to read, mail triage, tasks, meetings, quiet hours, delegation, the answer format) is part of every conversation's one system prompt (`persona/background.md`, appended by `chatSystem`, `groupSystem` and `tenantSystem` from the capability set via `lookerOf`), so a chat turn and a look have the same prompt and the cache holds. What changes per look is the message (`persona/heartbeat.md`, `lookInstruction`): the clock and zone, the last check, the quiet window, why it is due and the routine facts, followed by the chat tail.
 
 - The message is also the judge's standing provenance, so it holds no mail and no chat.
 - The run answers `{ message, nextCheckMinutes, urgent? }`; the next look is clamped to 10..120 minutes (`clampLook`); `[[silent]]` means nothing to say.
 
-**The look session.** Each conversation has a second SDK session for its looks (`look_session` in `assistant.db`), resumed by every look and compacted by the same code as the chat session (quiet compaction, `COMPACT_TOKENS` in `src/run/chatsession.ts`). It is told the context, the notes index and the facts only when they differ from what it was last shown (`unseen` / `markShown`, per session) and the chat lines since it last saw the log. A look that read mail marks the session untrusted (the judge is told from then on), which persists with it; one that fails leaves the session as it was, and a session the SDK cannot resume is dropped and started fresh. Forgetting a conversation removes both sessions with its folder.
+**A look starts fresh.** Every look is a new SDK session (`freshSession`, `TRIGGERS.look.fresh`): it neither resumes nor saves one, and the chat session is never touched by it, not even to drop it or mark it untrusted. It is told the full context, the notes index, the facts and the chat tail every time. Continuity comes from the shared context (facts, chat tail, journal, its own posts). A look that read mail is untrusted for that run only. An earlier design resumed one Haiku session per conversation and its later looks answered from their memory of earlier checks without opening the inbox.
 
-**Facts handed to the run.** One builder, `factsFor(conversation, now, "look" | "chat")` (`src/heartbeat/facts.ts`), gives the look and every chat turn (owner, friend, group) the same facts for their conversation, so the same agent answers whichever run comes first. The run decides what to say, in Ted's voice. Both are told by the same function (`runTurn`, `src/run/agent.ts`) in front of the trigger's message, each only when that session was not told it already; a look's experts get them too; a chat turn's come from the provider registered by `wire()`.
+**Facts handed to the run.** One builder, `factsFor(conversation, now, "look" | "chat")` (`src/heartbeat/facts.ts`), gives the look and every chat turn (owner, friend, group) the same facts for their conversation, so the same agent answers whichever run comes first. The run decides what to say, in Ted's voice. Both are told by the same function (`runTurn`, `src/run/agent.ts`) in front of the trigger's message, a chat turn only when its session was not told it already, a look every time; a look's experts get them too; a chat turn's come from the provider registered by `wire()`.
 
 | fact | built by | handed over |
 |---|---|---|
@@ -475,7 +475,7 @@ src/run/rules.ts  the look's answer schema, clamp and parser
 src/run/runoptions.ts  runFor and the message/look table: one builder for every run
 src/run/scope.ts  what a look is made of; "anything to look at?"
 src/run/session.ts  when a session resumes, restarts or compacts
-src/run/sessionstore.ts  the `session` and `look_session` rows of assistant.db
+src/run/sessionstore.ts  the `session` row of assistant.db
 src/run/turncontext.ts  what a session is told at the start of a turn
 ```
 

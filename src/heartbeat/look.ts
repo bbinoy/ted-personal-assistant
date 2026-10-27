@@ -33,7 +33,7 @@ import { meetingsWaiting } from "./preptick.ts";
 // A conversation's look: the ONLY way anything acts on its own, for the owner, every group and every friend alike. When a look is due (the next look the model
 // chose, something was said, a note that changed, a claimed reminder, meeting or routine), there is something to look at (scope.ts) and mayRun allows it (payer.ts: pause, cooldown,
 // the day's budget, a friend's key and her own budget), ONE run of the same agent as the conversation's chat starts (agent.ts runLook): the same prompt, tools and skills, on HEARTBEAT_MODEL, in the
-// conversation's look session (resumed: it is told only what it has not seen, and the chat lines since its last look). The message is the background check: the time in the conversation's zone, why
+// fresh session (every look starts one; continuity is the shared context: facts, the chat tail, the journal, its own posts). The message is the background check: the time in the conversation's zone, why
 // it is due and the routines due. It reads what it needs (mail, calendar, Notion tasks, older chat) and acts through the unchanged floor -> judge path, with `standing` provenance (the check's fixed
 // text is what the judge reads as the reason for the run; no message of anyone's led there). It never asks anyone: what the judge is not sure about is not done (permissions.ts UNATTENDED_SKIP).
 // It answers with a message or [[silent]] and the minutes until its next look.
@@ -91,7 +91,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
   });
 }
 
-// The look's message: the clock, the check's text and the chat lines the look session has not seen (the facts and the context are told in front of it by agent.ts, each once per session).
+// The look's message: the clock, the check's text and the chat tail (the facts and the context are told in front of it by agent.ts, every time).
 export const lookPrompt = (now: Date, instruction: string, lines: readonly string[], zone?: string, resumed = false): string =>
   [clockLine(now, zone), instruction, `${resumed ? "The chat since your last check" : "The recent chat"} and what you already did on your own (data, do not repeat it):\n${fence("chat_log", lines.join("\n") || "(nothing new)")}`].filter(Boolean).join("\n\n");
 

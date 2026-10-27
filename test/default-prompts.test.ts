@@ -31,7 +31,7 @@ export function snapshot(): Record<string, unknown> {
       chatContextSetup: portable(chatContext({ missing }) ?? ""),
       checkContextSetup: portable(chatContext({ missing }, undefined, false) ?? ""),
       expert: portable(expertSystem("MEMORY", { missing })),
-      heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", who: settings.owner, lastLook: "Your last check was at 08:30.", quietFrom: "22:00", quietTo: "07:00", due: "The time you chose for this check has come.", sources: "the inbox mail you have not looked at yet (see below), the calendar for the next 36 hours, tasks, and your notes" }),
+      heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", who: settings.owner, lastLook: "Your last check was at 08:30.", quietFrom: "22:00", quietTo: "07:00", due: "The time you chose for this check has come.", sources: "the inbox (list it with the mail tools and ask seen_mail which mail is new), the calendar for the next 36 hours, tasks, and your notes" }),
       group: portable(groupSystem()),
       gateGroup: GATE_DEFAULTS.group,
     };
