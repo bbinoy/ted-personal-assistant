@@ -45,7 +45,7 @@ One data folder (`HARNESS_DATA_DIR`, default the repo folder; owner-only, git-ig
   instance/                process-wide
     layout-version         4 (another layout stops the agent, the CLIs and the intake page)
     instance.db            SQLite (WAL): spend, notices, looks, payments, intake, kv
-    tenants.json  registrations.json  intake/  notion-client.json  card.disabled  paused  retention.json  shore/  browse/
+    tenants.json  registrations.json  intake/  notion-client.json  card.disabled  retention.json  shore/  browse/
   conversations/<convId>/  ONE folder per conversation, the same shape for everyone
     messages.jsonl         history, size-bounded, append-only
     notes/  notes-backup/  its notes (MEMORY.md, one fact per file) and the dream's snapshots
@@ -94,7 +94,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 | `kv` | last tick, connectors the last run saw, tool names seen, the welcome state |
 
 - **A ledger is never reset.** A damaged `instance.db` makes the agent start degraded (`ledgerDamage()`): chat works, every budget reads as spent, so background work, browse and friends' runs are refused and no card is opened.
-- **Stays a file:** `tenants.json` (repaired by hand), `registrations.json`, `intake/` (a rename is the single-use guarantee), `paused` and `card.disabled` (kill switches that must work when everything else is broken).
+- **Stays a file:** `tenants.json` (repaired by hand), `registrations.json`, `intake/` (a rename is the single-use guarantee), `card.disabled` (a kill switch that must work when everything else is broken). The pause is a `paused` row in `kv` that fails safe (unreadable = paused); an old `paused` file is converted once at start.
 - **Retention** (`src/heartbeat/dbretention.ts`): `looks` and `spend` older than 400 days, stale notices; payments only by `PAYMENTS_KEEP_YEARS` (0 = never).
 
 ## The run model
@@ -686,6 +686,7 @@ src/core/brief.ts  the clock line of unattended prompts
 src/core/budget.ts  spend ledger and daily budget
 src/core/callkey.ts  identity of a tool call
 src/core/capnotice.ts  the one notice throttle (takeCapNotice) and the friends' cap fact
+src/core/until.ts  the one "until" value of /pause and /quiet: parse, test, words
 src/core/ownerfact.ts  holdFact: a system matter as a fact for the owner's next run
 src/core/contain.ts  `isInside`: path containment
 src/core/convdb.ts  assistant.db schema and accessors
@@ -709,7 +710,7 @@ src/core/mailtext.ts  mail body cleaning
 src/core/messages.ts  the conversation log and its compaction
 src/core/ownerkey.ts  the owner's key; policy source of a key
 src/core/paths.ts  repo root and default data dir
-src/core/pause.ts  the pause switch
+src/core/pause.ts  the pause switch (a kv row, fails safe)
 src/core/preset.ts  preset loader, validation, templates
 src/core/reaction.ts  `[[react: 👍]]` markers
 src/core/redact.ts  keeps numbers and credentials out of logs
