@@ -720,7 +720,7 @@ test("groups: a 😂 on the assistant's own message is chatter: no addressed tur
   recordMessage("notice", 8003, "📬 LinkedIn: a digest.", new Date(), conv.logFile);
   const p = probe(false);
   const { pipeline } = rig({ group: p.group });
-  await pipeline.handleIncoming(conv, { ...thumbsDown(8003), r: { ...(thumbsDown(8003) as any).r, emoji: "😂" } });
+  await pipeline.handleIncoming(conv, thumbsDown(8003, { emoji: "😂" }));
   assert.equal(p.seen.length, 0);
 });
 
