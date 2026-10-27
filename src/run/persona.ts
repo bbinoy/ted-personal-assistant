@@ -52,7 +52,7 @@ Honesty:
 
 const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join("\n\n");
 
-// What every conversation's prompt says about its own background checks (persona/background.md) and about delegating to an expert (persona/delegate.md, for chat turns too): the standing instruction for what to do on its own when it is woken without a message. One
+// What every conversation's prompt says about its own background checks (persona/background.md) about delegating to an expert (persona/delegate.md, for chat turns too) and about learning from corrections (persona/learn.md): the standing instruction for what to do on its own when it is woken without a message. One
 // text for the owner's chat, a group's and a friend's, the same whether the run is a chat turn or a look (the per-check facts are the check's message, heartbeatInstruction, never here: the prompt stays stable so the
 // session cache holds). It promises only what the conversation's capabilities hold (looker, scope.ts).
 const background = (l: Looker, caps: ReadonlySet<Capability>): string =>
@@ -68,7 +68,7 @@ const background = (l: Looker, caps: ReadonlySet<Capability>): string =>
     meetings: l.meetings,
     routines: caps.has("heartbeat") && caps.has("wake"),
     dayMinutes: String(settings.heartbeatDayMinutes),
-  }), say("delegate", { who: l.who, delegated: delegatedText(expertSetup(l.skills, "")) }));
+  }), say("delegate", { who: l.who, delegated: delegatedText(expertSetup(l.skills, "")) }), say("learn", { who: l.who }));
 const ownerConv = { kind: "owner" } as const; // (the default conversation of the prompts that are asked for without one)
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
