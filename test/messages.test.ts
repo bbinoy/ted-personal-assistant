@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
-import { compactIfNeeded, findMessage, limitWords, noticeLines, planCompaction, recordMessage, recentNotices, type Sent } from "../src/core/messages.ts";
-import { readText } from "../src/core/state.ts";
+import { compactIfNeeded, findMessage, limitWords, messagesSince, noticeLines, planCompaction, recordMessage, recentNotices, type Sent } from "../src/core/messages.ts";
+import { readText, writeText } from "../src/core/state.ts";
 import { dataPath } from "../src/core/state.ts";
 import { reactionPrompt } from "../src/core/reaction.ts";
 import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
@@ -112,4 +112,29 @@ test("messages: the parsed-log cache follows the file (append, rewrite, delete) 
   reset();
   assert.deepEqual(ledgerEntries(), []); // deleted
   rmSync(dataPath(scratchLog("group-abc.jsonl")), { force: true });
+});
+
+test("messages: one table of kinds; every reader's set is a lookup into it", async () => {
+  const { KIND_INFO, kindIs, searchOf, SEARCHED_KINDS } = await import("../src/core/messages.ts");
+  const withFlag = (f: Parameters<typeof kindIs>[1]) => Object.keys(KIND_INFO).filter((k) => kindIs(k, f)).sort();
+  assert.deepEqual(withFlag("ledger"), ["action", "journal", "wake"]);
+  assert.deepEqual(withFlag("inbound"), ["member", "owner"]);
+  assert.deepEqual(withFlag("proactive"), ["brief", "draft", "notice"]);
+  assert.deepEqual(withFlag("answers"), ["chat", "other"]);
+  assert.deepEqual(withFlag("asks"), ["approval", "draft"]);
+  assert.deepEqual(withFlag("said"), ["approval", "brief", "chat", "draft", "notice", "other"]);
+  assert.deepEqual([...SEARCHED_KINDS].sort(), ["brief", "chat", "draft", "edit", "journal", "member", "notice", "other", "owner", "summary"]);
+  assert.ok(!("suggestions" in KIND_INFO) && !("proposals" in KIND_INFO));
+  assert.equal(kindIs("constructor", "said"), false);
+  assert.equal(searchOf("reaction"), "none");
+});
+
+test("messages: old log lines of the retired kinds (suggestions, proposals) still parse and read as conversation", () => {
+  reset();
+  const file = convPaths(OWNER_CONV).messages;
+  const line = (ts: number, kind: string, text: string) => JSON.stringify({ ts, at: new Date(ts).toISOString(), kind, text });
+  writeText(file, [line(Date.now() - 2000, "suggestions", "old suggestion text"), line(Date.now() - 1000, "proposals", "old proposal text")].join("\n") + "\n");
+  assert.deepEqual(messagesSince(undefined, file).map((m) => m.text), ["old suggestion text", "old proposal text"]);
+  assert.equal(findMessage(Date.parse(messagesSince(undefined, file)[0]!.at), file)?.text, "old suggestion text");
+  reset();
 });

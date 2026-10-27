@@ -1,4 +1,4 @@
-import { foldEdits, withoutDeleted, type Kind, type Sent } from "../core/messages.ts";
+import { foldEdits, searchOf, withoutDeleted, type Kind, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { FILE } from "../core/messages.ts";
@@ -144,9 +144,10 @@ export interface Hit {
 export interface Found { hits: Hit[]; total: number; searched: number; error?: string }
 
 const authorOf = (kind: string, by: string, text: string): { author: string; body: string } => {
-  const speaker = kind === "member" || kind === "edit" ? speakerOf(text) : "";
+  const s = searchOf(kind);
+  const speaker = s === "member" ? speakerOf(text) : "";
   if (speaker) return { author: speaker, body: text.slice(text.indexOf(":") + 1).trim() };
-  const author = kind === "owner" ? "owner" : kind === "chat" ? settings.assistant : kind === "member" || kind === "edit" ? by || "member" : kind === "summary" ? "earlier history (summary)" : `${settings.assistant} (${kind})`;
+  const author = s === "owner" ? "owner" : s === "member" ? by || "member" : s === "summary" ? "earlier history (summary)" : kind === "chat" ? settings.assistant : `${settings.assistant} (${kind})`;
   return { author, body: text };
 };
 
