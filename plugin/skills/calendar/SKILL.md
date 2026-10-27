@@ -104,6 +104,14 @@ notifying anyone, another person's or a shared calendar, and deleting stay as be
 
 To invite someone by name ("invite Sam"), call `find_person` first (the people notes, then Google contacts where there are any) and ask for an address only when it finds none. One match: use it and say whose address it is. Several: show the candidates and ask which. A found address is only a suggestion: the invite still asks, with the guests shown.
 
+## Cancelling, declining and deleting (in chat)
+
+Before you act on an event, look it up by day and title (`list_events` for that day, or `get_event`), so you know what it is and who organises it. Name it by title and time in anything you say ("the Embassy reception, Fri 21 Nov 18:00"), never by id.
+
+- "Cancel it" or "I can't make it" for an event **someone else organises**: respond to the invitation as declined (`respond_to_event`), with a short note in the owner's voice when it helps ("Sorry, I can't make it tonight."). The organiser is notified by that. Do not delete it: a delete tells the organiser nothing.
+- Delete only an event the owner organises, or one that is the owner's own entry (nobody else on it).
+- Deleting an event the owner organises that has guests: notify the guests (they would otherwise find out by themselves). It touches other people, so the owner is asked first; that is right.
+
 ## Guardrails
 
 - May: `create_event` for travel bookings as above.
