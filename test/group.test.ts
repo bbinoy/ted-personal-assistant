@@ -61,11 +61,11 @@ test("groups: a group run is built with its own memory folder, its own session a
 test("groups: compaction of a group session is isolated exactly like the group run; the owner's is unchanged", () => {
   const conv = group("g-compact");
   const run = buildOptions(async () => ({ approved: false }), runOptionsFor(conv), undefined);
-  const c = compactOptions("sess-1", "group", conv.notesDir);
+  const c = compactOptions("sess-1", true, conv.notesDir);
   assert.deepEqual([c.settingSources, c.strictMcpConfig, c.settings, c.resume, c.tools], [run.settingSources, run.strictMcpConfig, run.settings, "sess-1", []]);
   assert.deepEqual([c.plugins, c.skills], [undefined, undefined], "compaction has no tools, so it loads none of the skills the group run has");
   assert.deepEqual(c.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
-  const o = compactOptions("sess-2", "chat");
+  const o = compactOptions("sess-2", false);
   assert.deepEqual([o.settingSources, o.strictMcpConfig, o.settings, o.plugins], [[], undefined, undefined, undefined]);
 });
 

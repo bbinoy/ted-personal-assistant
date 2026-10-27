@@ -429,6 +429,23 @@ export const CONV_SCHEMA: readonly Migration[] = [
       ALTER TABLE held_posts DROP COLUMN same_day;
     `,
   },
+  {
+    version: 15,
+    name: "a second session per conversation, for its looks: the same record as `session`, resumed by every look (a look is the same agent on another model, and a model's cache is its own)",
+    up: `
+      CREATE TABLE look_session (
+        id                  INTEGER PRIMARY KEY CHECK (id = 1),
+        session_id          TEXT,                                   -- the SDK session the conversation's looks resume
+        cost_usd            REAL NOT NULL DEFAULT 0,
+        last_turn_at        TEXT,                                   -- ISO: when the last look ended
+        last_context_tokens INTEGER,
+        compact_failed_at   TEXT,
+        base_tokens         INTEGER,
+        seen_at             TEXT,                                   -- the newest chat-log line the look session has been shown
+        untrusted_in        TEXT                                    -- the look session has read raw mail or a web page
+      );
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

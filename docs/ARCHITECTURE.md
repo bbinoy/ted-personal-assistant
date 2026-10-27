@@ -67,7 +67,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 
 | table(s) | holds |
 |---|---|
-| `session`, `dream`, `quiet`, `reset` | resumed SDK session, cost, untrusted taint; the dream's day; `/quiet`; the mark after a damaged file was replaced |
+| `session`, `look_session`, `dream`, `quiet`, `reset` | the two resumed SDK sessions (chat and looks), cost, untrusted taint, what each was shown; the dream's day; `/quiet`; the mark after a damaged file was replaced |
 | `hold`, `held_posts` | day's count of unprompted posts; posts held for quiet hours or the cap (newest 30) |
 | `seen_mail` | mail ids the look has worked through (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
@@ -436,7 +436,7 @@ src/run/rules.ts  the look's answer schema, clamp and parser
 src/run/runoptions.ts  runOptionsFor: one builder for all conversations
 src/run/scope.ts  what a look is made of; "anything to look at?"
 src/run/session.ts  when a session resumes, restarts or compacts
-src/run/sessionstore.ts  the `session` row of assistant.db
+src/run/sessionstore.ts  the `session` and `look_session` rows of assistant.db
 src/run/turncontext.ts  what a session is told at the start of a turn
 ```
 
@@ -681,6 +681,7 @@ src/core/requirelayout.ts  layout guard for CLIs and the intake page
 src/core/retention.ts  retention registry and scheduler
 src/core/rotate.ts  size-based log rotation
 src/core/rungate.ts  the gate of model runs
+src/core/runkind.ts  who a run is for and whether someone waits (RunKind)
 src/core/sanitize.ts  text sanitiser and `LIMITS`
 src/core/settings.ts  every tunable, validated at start
 src/core/sleep.ts  the "Mac slept" signal
