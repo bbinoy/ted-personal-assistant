@@ -300,7 +300,7 @@ Everything the assistant does or decides is told once as a typed event (`src/cor
 
 ## Memory
 
-Working memory is the conversation's resumed session. Episodic memory is `logs/audit.jsonl`, the conversation log and the `looks` table. Procedural memory is the bundled skills in `plugin/skills/` (no personal details). Semantic memory is the notes.
+Working memory is the conversation's resumed session. Episodic memory is `logs/audit.jsonl`, the conversation log and the `looks` table. Procedural memory is the bundled skills in `plugin/skills/` (no personal details). Semantic memory is the notes. Mail has one provider-neutral skill (`mail`: triage, drafting, guardrails) and one thin skill per provider (`mailbird`, `gmail`: tool names and quirks); a mail module brings both, so only the provider in use is offered.
 
 - **Notes** live in `conversations/<convId>/notes/`: one markdown note per fact plus `MEMORY.md`, kept by the SDK's auto-memory. The category is the start of the file name (`triage-`, `people-`, `scheduling-`, `context-`, `brief-`, `style-`, `setup-`, `voice-`, `status-`, `routine-`); a note may carry `expires:` (its fields may sit nested under `metadata:`, where the SDK's writer puts them); a `routine-` note carries `when:` (see Routines).
 - Containment (`isInside`, `src/core/contain.ts`) is the only write gate. Every note written, edited or forgotten is mentioned in the reply and audited. `status-<name>.md` notes (the brief's headlines, the overdue offer) are ordinary notes the skills write with `Write`, each with an `expires:` line; the index leaves them out and the dream never touches them.

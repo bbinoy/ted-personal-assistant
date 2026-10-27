@@ -1,6 +1,6 @@
 ---
 name: tasks
-description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. They live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy. Pairs with `ted-personal-assistant:mailbird` and `ted-personal-assistant:daily-brief`.
+description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. They live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy. Pairs with `ted-personal-assistant:mail` and `ted-personal-assistant:daily-brief`.
 ---
 
 # The task list (it lives in the assistant, not in Notion)
@@ -46,7 +46,7 @@ the owner says plainly to drop or remove that item.
 - **A promise the owner made** in sent mail is an `i_owe` item with `person`; something
   they wait on is `owed_to_me`.
 - **Nudge** an `owed_to_me` item that is past its date with no reply: surface it in the
-  brief with a draft follow-up (via `ted-personal-assistant:mailbird`), never send.
+  brief with a draft follow-up (via `ted-personal-assistant:mail`), never send.
 
 Every deadline is a task; the list ordered by date is the deadline view. After you add,
 change or finish a task in chat, load `ted-personal-assistant:follow-through`.

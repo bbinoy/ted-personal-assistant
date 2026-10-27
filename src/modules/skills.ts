@@ -29,7 +29,7 @@ const withPlugin = (name: string) => `${PLUGIN}:${name}`;
 export const sharedSkills = (): Readonly<Record<string, readonly Capability[]>> => Object.fromEntries(skillsOf(registered()).flatMap((s) => (s.shared ? [[s.name, s.shared] as const] : [])));
 
 // Never offered to a group or a tenant, whatever capability she holds: they read or write the owner's mail, calendar, Notion, brief and setup.
-export const privateSkills = (): string[] => skillsOf(registered()).filter((s) => !s.shared).map((s) => s.name);
+export const privateSkills = (): string[] => [...new Set(skillsOf(registered()).filter((s) => !s.shared).map((s) => s.name))]; // (both mail modules bring `mail`)
 
 // The skills of a run with these capabilities: the shared ones of the loaded modules whose capabilities the set holds.
 // The owner's conversation (`owner`) also has the private ones: the whole plugin (ownerSkills below).

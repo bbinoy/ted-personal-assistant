@@ -41,7 +41,7 @@ A mail provider is one tool module with `slot: "mail"` (`src/modules/mailbird/mo
 | `search_conversations(query, limit)` | restore fallback by subject | `[{ conversationId, subject }]` |
 
 4. **Hide what the model does not need**: `hide: { prefix, visible, valid, hint }` names the connector's tools the model is shown (every tool schema is sent on every model call); `<MODULE>_TOOLS` in `.env` replaces the list.
-5. **A skill** for the provider in `plugin/skills/<name>/` (`skills: [{ name, required: true }]`), and the provider name added to `MAIL_PROVIDER`'s accepted values in `src/core/settings.ts`.
+5. **A skill** for the provider in `plugin/skills/<name>/` (`skills: [{ name: "mail", required: true }, { name, required: true }]`): the provider-neutral rules are the one `mail` skill, so the provider skill holds only its tool names and quirks, and the provider name added to `MAIL_PROVIDER`'s accepted values in `src/core/settings.ts`.
 
 IMAP maps cleanly onto the table: list = `SEARCH`/`FETCH` on INBOX by UID, archive = `MOVE` to the archive mailbox, conversation id = Message-ID or UID (and note that moving a message changes its UID, which is why `restore` tries several ids). `test/modules.test.ts` and `test/manifestrows.test.ts` check the shape of a new module and pin its rows.
 

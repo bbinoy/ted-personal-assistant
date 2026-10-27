@@ -27,7 +27,7 @@ const say = (key: PromptKey, vars: Readonly<Record<string, Value>> = {}): string
 // (Mailbird: the background handler's reply drafts; Gmail: there is no handler, so drafts are made in chat or the brief and sent only on the owner's word).
 const mailSkill = (): string => {
   const skill = mailSlot()?.chat.skill;
-  return skill ? `${skill}, ` : "";
+  return skill ? `${PLUGIN}:mail, ${skill}, ` : "";
 };
 const mailNote = (): string => mailSlot()?.chat.note(OWNER) ?? "";
 

@@ -264,10 +264,10 @@ test("brief: Gmail's delivery sentence uses the gmail skill; email only with BRI
 
 test("skills and doctor: the gmail skill is offered instead of the Mailbird ones; doctor checks the address and the connector", () => {
   assert.ok(ownerSkills(true, "gmail").includes("ted-personal-assistant:gmail"));
-  assert.ok(!ownerSkills(true, "gmail").some((s) => /mailbird/.test(s)));
+  assert.ok(!ownerSkills(true, "gmail").some((s) => /mailbird/.test(s)) && ownerSkills(true, "gmail").includes("ted-personal-assistant:mail"));
   assert.ok(!ownerSkills(true, "mailbird").some((s) => /gmail/.test(s)));
-  assert.ok(!ownerSkills(false, "gmail").some((s) => /gmail|mailbird/.test(s)));
-  assert.ok(requiredSkills(true, "gmail").includes("gmail") && !requiredSkills(true, "gmail").includes("mailbird"));
+  assert.ok(!ownerSkills(false, "gmail").some((s) => /gmail|mail/.test(s)));
+  assert.ok(requiredSkills(true, "gmail").includes("gmail") && requiredSkills(true, "gmail").includes("mail") && !requiredSkills(true, "gmail").includes("mailbird"));
   const out: [boolean | "warn", string][] = [];
   const line = (ok: boolean | "warn", what: string) => void out.push([ok, what]);
   gmailChecks(line, { self: undefined, connector: false, briefEmail: false });

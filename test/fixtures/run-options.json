@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "db22987b551ff845"
+        "sha": "bb71f61b6443c6f6"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -130,8 +130,8 @@
       ],
       "skills": [
         "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mail",
         "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
         "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
@@ -163,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "db22987b551ff845"
+        "sha": "bb71f61b6443c6f6"
       },
       "snapshot": false
     },
@@ -203,8 +203,8 @@
     ],
     "skills": [
       "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mail",
       "ted-personal-assistant:mailbird",
-      "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
       "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
@@ -564,7 +564,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "db22987b551ff845"
+        "sha": "bb71f61b6443c6f6"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -687,8 +687,8 @@
       ],
       "skills": [
         "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mail",
         "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
         "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
@@ -723,7 +723,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "db22987b551ff845"
+        "sha": "bb71f61b6443c6f6"
       },
       "snapshot": false
     },
@@ -763,8 +763,8 @@
     ],
     "skills": [
       "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mail",
       "ted-personal-assistant:mailbird",
-      "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
       "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",

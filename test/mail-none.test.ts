@@ -88,8 +88,8 @@ test("doctor without mail: 'mail: off' is OK, Mailbird is never contacted, no ma
   const line = (ok: boolean | "warn", what: string, detail?: string) => void lines.push([ok, what, detail]);
   await mailCheck(line, false, async () => assert.fail("must not connect"));
   assert.deepEqual(lines, [[true, "mail: off", "MAIL_PROVIDER=none, chat only"]]);
-  assert.ok(!requiredSkills(false).includes("mailbird"));
-  assert.ok(requiredSkills(true).includes("mailbird"));
+  assert.ok(!requiredSkills(false).includes("mail") && !requiredSkills(false).includes("mailbird"));
+  assert.ok(requiredSkills(true).includes("mail") && requiredSkills(true).includes("mailbird"));
   assert.equal(heartbeatDetail({ lastTickAt: "2026-10-12T09:00:00Z" }, 3.2, undefined, () => "x"), "last tick 3 min ago; last look none yet");
   assert.equal(heartbeatDetail({ lastTickAt: "2026-10-12T09:00:00Z" }, 3.2, "2026-10-12T09:00:00Z", () => "x"), "last tick 3 min ago; last look x");
   assert.equal(heartbeatDetail({}, Infinity, undefined, () => "x"), "no tick recorded yet");
@@ -120,7 +120,7 @@ test("offered skills: without mail the two mail skills are gone, the rest are un
   const all = ownerSkills(true);
   const none = ownerSkills(false);
   assert.equal(all.length, 14);
-  assert.deepEqual(none, all.filter((s) => !/:mailbird/.test(s)));
+  assert.deepEqual(none, all.filter((s) => !/:mail(bird)?$/.test(s)));
   assert.equal(none.length, 12);
 });
 
@@ -134,7 +134,7 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
     assert.match(p, sentence, name);
     const rest = p.replace(sentence, "");
     assert.doesNotMatch(rest, /mailbird|Reply ready|send_message_now|update_draft|get_message|draft|inbox|by email|email drafts|writes email/i, `${name} still talks about mail`);
-    assert.doesNotMatch(rest, /ted-personal-assistant:mailbird/, name);
+    assert.doesNotMatch(rest, /ted-personal-assistant:mail/, name);
     assert.match(rest, /ted-personal-assistant:daily-brief/, name); // the other skills are still listed
   }
   assert.doesNotMatch(prompts.chat, /how you write|voice \(how/i);
