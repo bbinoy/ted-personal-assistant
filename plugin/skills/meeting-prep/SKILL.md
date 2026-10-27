@@ -1,6 +1,6 @@
 ---
 name: meeting-prep
-description: Use when deciding which upcoming meetings need preparation, creating and drafting a prep page in the owner's Notion "Meetings" database, and running the post-meeting follow-up pass. Part of the daily brief, and the source of the short timely prep said minutes before a meeting. Gets the event list from `ted-personal-assistant:calendar`; pairs with `ted-personal-assistant:mailbird`, the task tools (`list_tasks`, `add_task`), `ted-personal-assistant:daily-brief`.
+description: Use when deciding which upcoming meetings need preparation, creating and drafting a prep page in the owner's Notion "Meetings" database, and running the post-meeting follow-up pass. Part of the daily brief, and the source of the short timely prep said minutes before a meeting. Gets the event list from `ted-personal-assistant:calendar`; pairs with `ted-personal-assistant:mail`, the task tools (`list_tasks`, `add_task`), `ted-personal-assistant:daily-brief`.
 delegate: sonnet
 ---
 
@@ -77,7 +77,7 @@ rebuild or re-research.
      person / company (their `Summary` first; open a body only if the
      Summary is thin);
    - at most the **2 most recent** email threads with the attendee -
-     one `ted-personal-assistant:mailbird` `search_conversations`, skim the result, open at
+     one `ted-personal-assistant:mail` `search_conversations`, skim the result, open at
      most those two;
    - any single doc the invite directly links.
    Structure: **Context** (who they are, how the owner knows them, last
@@ -94,7 +94,7 @@ For meetings that already happened in the look-back window:
 2. **If it has real notes / a Summary:** read them, pull out follow-ups
    (a promise the owner made, a next step, a doc to send). For each, add a
    task with `add_task` (also when unattended: then say so) if none exists and list it in the brief;
-   draft any follow-up email in-thread via `ted-personal-assistant:mailbird`.
+   draft any follow-up email in-thread via `ted-personal-assistant:mail`.
 3. **If there are no notes:** in the brief, ask "add notes from your
    <meeting> with <person>?" and, if the meeting type usually needs a
    follow-up, add a placeholder task and say so.

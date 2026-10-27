@@ -1,6 +1,6 @@
 ---
 name: calendar
-description: Use for reviewing the owner's Google Calendar - listing the day's / week's events, flagging conflicts and overlaps, proposing reschedule slots, and creating calendar events from travel bookings. Part of the daily brief; also for ad-hoc "what's my day / find me a slot / is X on my calendar". Pairs with `ted-personal-assistant:mailbird`, `ted-personal-assistant:meeting-prep`, `ted-personal-assistant:daily-brief`.
+description: Use for reviewing the owner's Google Calendar - listing the day's / week's events, flagging conflicts and overlaps, proposing reschedule slots, and creating calendar events from travel bookings. Part of the daily brief; also for ad-hoc "what's my day / find me a slot / is X on my calendar". Pairs with `ted-personal-assistant:mail`, `ted-personal-assistant:meeting-prep`, `ted-personal-assistant:daily-brief`.
 ---
 
 # Calendar review
@@ -55,7 +55,7 @@ calendar** goes on the owner's own calendar, whichever run finds it (a look hand
 new mail, the daily brief's sweep, a chat): event and class tickets, orders for an
 event, restaurant and venue reservations, appointments, flights, trains, hotels,
 buses. The daily brief also scans recent booking confirmations via
-`ted-personal-assistant:mailbird` `search_conversations`. For each one:
+`ted-personal-assistant:mail` `search_conversations`. For each one:
 
 - `create_event` on the calendar the setup note names for bookings (else the primary
   one), with no guests: clear title ("Startup Nights 2026", "Flight ZRH -> BCN LX123",

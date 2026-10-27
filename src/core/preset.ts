@@ -24,8 +24,8 @@ export type ProfileKey = "chat" | "group";
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
-  // categories: every note category; background: the ones a heartbeat look may write itself (facts, never rules); dream: the ones the owner's dream may write; group and tenant: the ones a group's and a friend's notes (and their dreams) have.
-  readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[]; readonly tenant: readonly string[]; readonly background: readonly string[] };
+  // categories: every note category; background: the ones a heartbeat look may write itself (facts, never rules); dream: the ones the owner's dream may write; others: the ones the notes (and dreams) of a group and of a friend have.
+  readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly others: readonly string[]; readonly background: readonly string[] };
   readonly profiles: Readonly<Record<ProfileKey, ProfileData>>;
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
   readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert every run may delegate to (run/delegation.ts); expert-opus is the same on OPUS_MODEL
@@ -100,11 +100,11 @@ export const PROMPTS = {
   noMail: [],
   reactions: ["who"],
   skills: ["mail", "mailSkill"],
-  chat: ["mail", "personality", "sources", "reactions", "send", "channel", "mailNote", "logsDir", "ownerDir", "routine", "categories"],
+  chat: ["mail", "personality", "sources", "reactions", "send", "shared", "channel", "mailNote", "logsDir", "ownerDir", "routine"],
   voice: ["own", "group"],
   summary: [],
-  group: ["weather", "browse", "draw", "categories", "personality", "participation", "routine", "sources", "reactions", "send"],
-  tenant: ["browse", "weather", "draw", "google", "her", "personality", "routine", "sources", "reactions", "send", "categories"],
+  shared: ["whose", "asker", "categories", "own"],
+  others: ["group", "who", "weather", "browse", "draw", "google", "personality", "participation", "routine", "sources", "reactions", "send", "shared"],
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
   background: ["who", "Who", "own", "group", "reads", "mail", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
   delegate: ["who", "delegated"],
@@ -198,7 +198,7 @@ export function loadPreset(dir: string): Preset {
     const stray = list.find((c) => !categories.includes(c));
     return stray ? fail(at(path), `"${stray}" is not one of notes.categories (${categories.join(", ")})`) : list;
   };
-  const notes = { categories, dream: subset("notes.dream", n.dream), group: subset("notes.group", n.group), tenant: subset("notes.tenant", n.tenant), background: n.background === undefined ? [] : words(at("notes.background"), n.background).filter((c) => categories.includes(c)) }; // (a preset that extends another and changes the categories keeps the ones it still has)
+  const notes = { categories, dream: subset("notes.dream", n.dream), others: subset("notes.others", n.others), background: n.background === undefined ? [] : words(at("notes.background"), n.background).filter((c) => categories.includes(c)) }; // (a preset that extends another and changes the categories keeps the ones it still has)
 
   const p = sec("profiles");
   const profile = (key: ProfileKey): ProfileData => {
@@ -242,5 +242,5 @@ export function presetFor(env: Readonly<Record<string, string | undefined>> = pr
 }
 export const preset = (): Preset => presetFor(process.env);
 
-// The note categories a conversation has: the owner's chat all of them, a group the preset's notes.group, a friend notes.tenant. Nothing else in the code names a category.
-export const categoriesFor = (kind: "owner" | "group" | "tenant", p: Preset = preset()): readonly string[] => (kind === "owner" ? p.notes.categories : kind === "group" ? p.notes.group : p.notes.tenant);
+// The note categories a conversation has: the owner's chat all of them, a group or a friend (someone else) the preset notes.others. Nothing else in the code names a category.
+export const categoriesFor = (kind: "owner" | "others", p: Preset = preset()): readonly string[] => (kind === "owner" ? p.notes.categories : p.notes.others);

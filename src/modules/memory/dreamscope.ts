@@ -8,7 +8,7 @@ import { convDb, peekConvDb } from "../../core/convdb.ts";
 import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 // WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it, the note categories it has (the preset's notes.dream for the owner,
-// notes.group, notes.tenant) and the state of its last run (in its assistant.db), all inside the conversation's own folder. The dream and "undo the dream" (memory-tools.ts) both
+// notes.others) and the state of its last run (in its assistant.db), all inside the conversation's own folder. The dream and "undo the dream" (memory-tools.ts) both
 // ask this, so a conversation that is dreamt can always be undone, and nobody can name another conversation's folder.
 
 type Who = Pick<Conversation, "kind" | "tenantId" | "groupId">;
@@ -19,7 +19,7 @@ export function dreamScope(conv: Who): Scope {
   const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
   if (!rec) throw new Error("not a tenant");
   const ctx = tenantContext(rec);
-  return { notesDir: ctx.notesDir, backupsDir: ctx.backupDir, categories: preset().notes.tenant, maxNotes: settings.memoryMaxNotes };
+  return { notesDir: ctx.notesDir, backupsDir: ctx.backupDir, categories: preset().notes.others, maxNotes: settings.memoryMaxNotes };
 }
 
 // The conversation whose assistant.db holds its dream state (the `dream` row): checked first, so a name that is no conversation cannot make one.

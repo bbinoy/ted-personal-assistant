@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "db22987b551ff845"
+        "sha": "27217810ec5c8bc9"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -130,8 +130,8 @@
       ],
       "skills": [
         "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mail",
         "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
         "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
@@ -163,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "db22987b551ff845"
+        "sha": "27217810ec5c8bc9"
       },
       "snapshot": false
     },
@@ -203,8 +203,8 @@
     ],
     "skills": [
       "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mail",
       "ted-personal-assistant:mailbird",
-      "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
       "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
@@ -318,7 +318,7 @@
     "run": {
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "8d1ce9941f2039a6"
+        "sha": "86adc69e35f0052e"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -379,7 +379,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "8d1ce9941f2039a6"
+        "sha": "86adc69e35f0052e"
       },
       "snapshot": false
     },
@@ -436,7 +436,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "15f3912502862a19"
+        "sha": "9d4abebfd1e29b7f"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -504,7 +504,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "15f3912502862a19"
+        "sha": "9d4abebfd1e29b7f"
       },
       "snapshot": false
     },
@@ -564,7 +564,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "db22987b551ff845"
+        "sha": "27217810ec5c8bc9"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -687,8 +687,8 @@
       ],
       "skills": [
         "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mail",
         "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
         "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
@@ -723,7 +723,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "db22987b551ff845"
+        "sha": "27217810ec5c8bc9"
       },
       "snapshot": false
     },
@@ -763,8 +763,8 @@
     ],
     "skills": [
       "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mail",
       "ted-personal-assistant:mailbird",
-      "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
       "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
@@ -878,7 +878,7 @@
     "run": {
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "8d1ce9941f2039a6"
+        "sha": "86adc69e35f0052e"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -942,7 +942,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "8d1ce9941f2039a6"
+        "sha": "86adc69e35f0052e"
       },
       "snapshot": false
     },
@@ -999,7 +999,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "15f3912502862a19"
+        "sha": "9d4abebfd1e29b7f"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -1070,7 +1070,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "15f3912502862a19"
+        "sha": "9d4abebfd1e29b7f"
       },
       "snapshot": false
     },

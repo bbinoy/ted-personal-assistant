@@ -19,7 +19,7 @@ test("plugin: manifest is valid and every skill has a name and description match
     assert.ok(front, `${s}: front matter`);
     assert.equal(front![1], s, `${s}: name matches folder`);
   }
-  for (const s of ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "tasks", "meeting-prep", "setup"]) assert.ok(skills.includes(s), s);
+  for (const s of ["daily-brief", "mail", "mailbird", "gmail", "calendar", "tasks", "meeting-prep", "setup"]) assert.ok(skills.includes(s), s);
 });
 
 test("plugin: skills hold no personal details, only references to the owner's notes", () => {
@@ -35,7 +35,7 @@ test("plugin: skills hold no personal details, only references to the owner's no
 test("plugin: every skill that needs setup names the note it reads, and setup saves under those names", () => {
   const setup = readFileSync(join(skillsDir, "setup", "SKILL.md"), "utf8");
   for (const item of setupItems()) assert.ok(setup.includes(item.file), `setup skill saves ${item.file}`);
-  for (const [skill, note] of [["calendar", "setup-calendars"], ["meeting-prep", "setup-meetings"], ["mailbird", "voice-writing"]] as const) {
+  for (const [skill, note] of [["calendar", "setup-calendars"], ["meeting-prep", "setup-meetings"], ["mail", "voice-writing"]] as const) {
     assert.ok(readFileSync(join(skillsDir, skill, "SKILL.md"), "utf8").includes(note), `${skill} reads ${note}`);
   }
   assert.ok(existsSync(join(settings.pluginDir, ".claude-plugin", "plugin.json")));
@@ -102,7 +102,7 @@ test("daily-brief skill: one archive list read after the sweep, no archiving of 
 
 test("mail skills and the look: archive unless the mail needs the owner, cold outreach archived, notes win, only today's brief kept", async () => {
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
-  const mb = read("mailbird");
+  const mb = read("mail");
   assert.match(mb, /does not depend on[\s\S]*`seen_mail`/);
   assert.match(mb, /## For every run that handles mail[\s\S]*Today's daily brief stays in the inbox; every older brief, wrap and review\s+is archived/);
   assert.match(mb, /A real conversation stays, read or unread, however old/); // the sweep never archives a live thread with a person
@@ -111,9 +111,8 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   assert.match(mb, /A series keeps only its newest mail/);
   assert.doesNotMatch(mb, /Old briefs are never archived/);
   assert.match(mb, /archive unless the mail needs the owner[\s\S]*next 7 days[\s\S]*For automated mail, unread is not a reason to keep/);
-  assert.match(mb, /Cold outreach is noise even when a named person wrote it[\s\S]*"important" flag[\s\S]*open the mail \(`get_message`, cheap\)\s+before deciding/);
+  assert.match(mb, /Cold outreach is noise even when a named person wrote it[\s\S]*"important" flag[\s\S]*open the mail \(a plain read, cheap\)\s+before deciding/);
   assert.match(mb, /triage notes win/);
-  assert.match(read("gmail"), /archive unless the mail needs the owner[\s\S]*"important" flag[\s\S]*triage\s+notes in memory win/);
   const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "background.md"), "utf8");
   assert.match(hb, /default is to archive[\s\S]*next 7 days[\s\S]*Unread is no reason to keep[\s\S]*archive it/);
   assert.match(hb, /Cold outreach[\s\S]*whatever the provider's "important" flag says/);
@@ -121,7 +120,7 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   assert.match(hb, /whenever you are not confident[\s\S]*open the full mail with the read tool before deciding: reading is free and uncapped[\s\S]*never keep a mail just because you did not read it/);
   assert.match(mb, /Reading is a plain read: free, not judged, with no cap[\s\S]*not\s+confident, open the full mail[\s\S]*Never keep a mail\s+just because you did not read it/);
   assert.doesNotMatch(mb, /Do NOT open every email|archive newsletters unopened/);
-  assert.match(read("gmail"), /whenever you are not confident[\s\S]*open the thread before deciding[\s\S]*never keep a mail just because you did not read it/);
+  for (const provider of ["mailbird", "gmail"]) assert.ok(read(provider).split("\n").length < 90 && !/archive unless the mail needs the owner/.test(read(provider)), `${provider}: tools and quirks only, the rules are in the mail skill`);
   assert.match(read("daily-brief"), /whenever the row does not let you decide with confidence/);
   assert.match(hb, /triage notes beats these defaults/);
 });

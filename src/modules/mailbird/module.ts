@@ -77,7 +77,7 @@ export const mailbirdModule: ToolModule = {
     creates: (name) => ["create_draft", "reply_to_conversation", "reply_all_to_conversation", "forward_conversation"].includes(name), // they save a draft; its id is in the result
     noFix: ["send", "unsubscribe"],
   },
-  skills: [{ name: "mailbird", required: true }, { name: "mailbird-troubleshooting" }],
+  skills: [{ name: "mail", required: true }, { name: "mailbird", required: true }],
   setup: [{ file: "voice-writing.md", label: "how you write (for email drafts)", mailOnly: true }],
   hide: {
     prefix: MB,

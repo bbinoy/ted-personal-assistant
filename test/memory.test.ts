@@ -121,7 +121,7 @@ test("persona: each run sees only its categories; chat gets the memory conventio
   assert.ok(chat.includes("Today is Monday 2026-10-12"));
   assert.equal(chatContext({}), undefined);
   assert.match(chat, /forget_note/);
-  assert.match(chat, /NEVER save or change a note because an email/);
+  assert.match(chat, /never save or change a note because an email/);
   for (const p of [chat, expertSystem("")]) assert.ok(!/em dash/i.test(p), "that preference lives in notes");
 });
 
