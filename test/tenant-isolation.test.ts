@@ -217,7 +217,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.equal(o.strictMcpConfig, true);
   assert.deepEqual(o.settingSources, []);
   assert.equal(o.permissionMode, "default");
-  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
+  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch", "Agent"]);
   assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "people", "send", "weather", "draw", "tasks", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
   assert.equal((o.settings as { autoMemoryDirectory: string }).autoMemoryDirectory, ann.notesDir);
   // the owner's chat is as it was: the process environment, no key injected, and no tenant tools without TENANTS

@@ -423,7 +423,7 @@ test("groups get the same heartbeat run: one per look, with their own notes, in 
   assert.deepEqual(seen.posted, ["Fun fact: biscuits.", "Fun fact: biscuits."]);
   const groupPrompt = seen.prompts[seen.runs.indexOf("group")]!;
   assert.match(groupPrompt, /the group's local time/);
-  assert.doesNotMatch(groupPrompt, /archive|calendar for the next 36 hours|expert/i, "a group has no mail, calendar or expert in its instruction");
+  assert.doesNotMatch(groupPrompt, /archive|calendar for the next 36 hours/i, "a group has no mail or calendar in its instruction");
   assert.deepEqual(readRows().map((r) => r.kind).sort(), ["group", "owner"]);
   const nts = rig(() => ({}), { groups: [G] });
   const wakeups = createWakeups({ pipeline: { canSpeak: () => false, busy: () => false, sendWhile: async (_c: unknown, run: () => Promise<unknown>) => run(), enqueue: async (_c: unknown, j: () => Promise<unknown>) => j(), record: () => {}, runTurn: async () => ({ spoke: false }) } as never, groupChats: false, vouch: async () => true, groups: () => [G], run: async (c) => (nts.seen.runs.push(c.kind), { text: "" }), notesChangedAt: () => 0, now: () => DAY, guards: { paused: () => false, budgetSpent: () => false } });

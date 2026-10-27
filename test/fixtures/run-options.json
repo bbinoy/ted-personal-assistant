@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "a8d1f337f4221a1a"
+        "sha": "5bc4272e4da2f3ec"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -150,7 +150,15 @@
         "dir": "<data>/conversations/owner/notes",
         "zone": "Europe/London",
         "notify": "[fn]"
-      }
+      },
+      "experts": [
+        "expert",
+        "expert-daily-brief",
+        "expert-evening-wrap",
+        "expert-meeting-prep",
+        "expert-opus",
+        "expert-weekly-review"
+      ]
     },
     "model": "sonnet",
     "system": {
@@ -158,7 +166,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "a8d1f337f4221a1a"
+        "sha": "5bc4272e4da2f3ec"
       },
       "snapshot": false
     },
@@ -174,556 +182,6 @@
       "voice",
       "memory",
       "people",
-      "browse"
-    ],
-    "tools": [
-      "Skill",
-      "Read",
-      "Write",
-      "Edit",
-      "WebSearch",
-      "WebFetch"
-    ],
-    "settingSources": [
-      "user"
-    ],
-    "plugins": [
-      {
-        "type": "local",
-        "path": "<repo>/plugin",
-        "skipMcpDiscovery": true
-      }
-    ],
-    "skills": [
-      "ted-personal-assistant:daily-brief",
-      "ted-personal-assistant:mailbird",
-      "ted-personal-assistant:mailbird-troubleshooting",
-      "ted-personal-assistant:calendar",
-      "ted-personal-assistant:notion-tasks",
-      "ted-personal-assistant:meeting-prep",
-      "ted-personal-assistant:research-booking",
-      "ted-personal-assistant:follow-through",
-      "ted-personal-assistant:stay-in-touch",
-      "ted-personal-assistant:setup",
-      "ted-personal-assistant:surf-conditions",
-      "ted-personal-assistant:draw",
-      "ted-personal-assistant:task-import",
-      "ted-personal-assistant:evening-wrap",
-      "ted-personal-assistant:weekly-review"
-    ],
-    "disallowedTools": [
-      "mcp__claude_ai_Interactive_Brokers_IBKR",
-      "mcp__claude_ai_Gmail",
-      "mcp__claude_ai_Claude_Docs",
-      "mcp__claude_ai_Notion__notion-ai-search",
-      "mcp__claude_ai_Notion__notion-check-mcp-next-steps",
-      "mcp__claude_ai_Notion__notion-convert-page-to-skill",
-      "mcp__claude_ai_Notion__notion-create-attachment",
-      "mcp__claude_ai_Notion__notion-create-comment",
-      "mcp__claude_ai_Notion__notion-create-database",
-      "mcp__claude_ai_Notion__notion-create-file-upload",
-      "mcp__claude_ai_Notion__notion-create-folder",
-      "mcp__claude_ai_Notion__notion-create-view",
-      "mcp__claude_ai_Notion__notion-download-attachment",
-      "mcp__claude_ai_Notion__notion-download-skill",
-      "mcp__claude_ai_Notion__notion-duplicate-page",
-      "mcp__claude_ai_Notion__notion-get-async-task",
-      "mcp__claude_ai_Notion__notion-get-comments",
-      "mcp__claude_ai_Notion__notion-get-session-status",
-      "mcp__claude_ai_Notion__notion-get-teams",
-      "mcp__claude_ai_Notion__notion-get-tool-access",
-      "mcp__claude_ai_Notion__notion-get-users",
-      "mcp__claude_ai_Notion__notion-list-favorite-pages",
-      "mcp__claude_ai_Notion__notion-list-private-pages",
-      "mcp__claude_ai_Notion__notion-list-recent-pages",
-      "mcp__claude_ai_Notion__notion-list-session-events",
-      "mcp__claude_ai_Notion__notion-list-shared-pages",
-      "mcp__claude_ai_Notion__notion-move-pages",
-      "mcp__claude_ai_Notion__notion-query-data-sources",
-      "mcp__claude_ai_Notion__notion-query-meeting-notes",
-      "mcp__claude_ai_Notion__notion-query-multiple-data-sources",
-      "mcp__claude_ai_Notion__notion-query-sessions",
-      "mcp__claude_ai_Notion__notion-read-session-event",
-      "mcp__claude_ai_Notion__notion-search-agents",
-      "mcp__claude_ai_Notion__notion-search-sessions",
-      "mcp__claude_ai_Notion__notion-send-message-to-session",
-      "mcp__claude_ai_Notion__notion-show-advanced-analysis-next-steps",
-      "mcp__claude_ai_Notion__notion-spawn-session",
-      "mcp__claude_ai_Notion__notion-stop-session",
-      "mcp__claude_ai_Notion__notion-update-data-source",
-      "mcp__claude_ai_Notion__notion-update-folder",
-      "mcp__claude_ai_Notion__notion-update-view",
-      "mcp__claude_ai_Notion__notion-upload-skill",
-      "mcp__claude_ai_Notion__notion-wait-session",
-      "mcp__claude_ai_Google_Drive__copy_file",
-      "mcp__claude_ai_Google_Drive__create_file",
-      "mcp__claude_ai_Google_Drive__download_file_content",
-      "mcp__claude_ai_Google_Drive__get_file_permissions",
-      "mcp__claude_ai_Google_Drive__share_file",
-      "mcp__claude_ai_Google_Drive__trash_file",
-      "mcp__claude_ai_Google_Drive__update_file",
-      "mcp__claude_ai_Google_Docs__update_doc",
-      "mcp__mailbird__copy_conversation",
-      "mcp__mailbird__delete_conversation_permanently",
-      "mcp__mailbird__get_help",
-      "mcp__mailbird__get_ui_state",
-      "mcp__mailbird__mark_all_as_read",
-      "mcp__mailbird__move_conversation",
-      "mcp__mailbird__set_conversation_important",
-      "mcp__mailbird__set_conversation_read",
-      "mcp__mailbird__set_conversation_spam",
-      "mcp__mailbird__set_conversation_starred",
-      "mcp__mailbird__set_sender_blocked",
-      "mcp__mailbird__show_notification",
-      "mcp__mailbird__snooze_conversation",
-      "mcp__mailbird__trash_conversation",
-      "mcp__mailbird__unsubscribe_from_newsletter",
-      "mcp__claude_ai_Gmail__apply_sensitive_message_label",
-      "mcp__claude_ai_Gmail__apply_sensitive_thread_label",
-      "mcp__claude_ai_Gmail__create_label",
-      "mcp__claude_ai_Gmail__delete_label",
-      "mcp__claude_ai_Gmail__label_message",
-      "mcp__claude_ai_Gmail__mark_message_spam",
-      "mcp__claude_ai_Gmail__mark_thread_spam",
-      "mcp__claude_ai_Gmail__trash_message",
-      "mcp__claude_ai_Gmail__trash_thread",
-      "mcp__claude_ai_Gmail__unlabel_message",
-      "mcp__claude_ai_Gmail__unmark_message_spam",
-      "mcp__claude_ai_Gmail__unmark_thread_spam",
-      "mcp__claude_ai_Gmail__untrash_message",
-      "mcp__claude_ai_Gmail__untrash_thread",
-      "mcp__claude_ai_Gmail__update_label",
-      "mcp__claude_ai_Gmail__update_message_labels"
-    ],
-    "permissionMode": "default",
-    "maxTurns": 40,
-    "maxBudgetUsd": 2,
-    "envChanged": {
-      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
-    },
-    "envRemoved": [],
-    "hooks": [
-      "PostToolUse"
-    ],
-    "canUseTool": "function"
-  },
-  "group": {
-    "run": {
-      "systemPrompt": {
-        "key": "group.run.systemPrompt",
-        "sha": "29753b5b5e9e2a66"
-      },
-      "maxTurns": 8,
-      "maxBudgetUsd": 0.5,
-      "kind": {
-        "who": "group",
-        "attended": true
-      },
-      "sessionConv": "group-ff36ac23eadd0841",
-      "sessionTrack": "chat",
-      "conversation": "g-run-options",
-      "stopScope": "group-ff36ac23eadd0841",
-      "groupId": "g-run-options",
-      "tools": [
-        "Edit",
-        "Read",
-        "Skill",
-        "WebSearch",
-        "Write",
-        "mcp__browse__browse",
-        "mcp__draw__draw",
-        "mcp__memory__forget_note",
-        "mcp__memory__journal",
-        "mcp__memory__search_logs",
-        "mcp__memory__undo_dream",
-        "mcp__people__find_person",
-        "mcp__send__send",
-        "mcp__tasks__add_task",
-        "mcp__tasks__complete_task",
-        "mcp__tasks__drop_task",
-        "mcp__tasks__list_tasks",
-        "mcp__tasks__snooze_task",
-        "mcp__tasks__update_task",
-        "mcp__voice__voice",
-        "mcp__weather__get_distance",
-        "mcp__weather__get_forecast",
-        "mcp__weather__get_marine_forecast",
-        "mcp__weather__get_spot_info",
-        "mcp__weather__search_places"
-      ],
-      "skills": [
-        "ted-personal-assistant:research-booking",
-        "ted-personal-assistant:surf-conditions",
-        "ted-personal-assistant:draw"
-      ],
-      "memory": {
-        "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
-        "zone": "Europe/London",
-        "groupId": "g-run-options"
-      }
-    },
-    "model": "sonnet",
-    "system": {
-      "type": "preset",
-      "preset": "claude_code",
-      "append": {
-        "key": "group.system.append",
-        "sha": "29753b5b5e9e2a66"
-      },
-      "snapshot": false
-    },
-    "settings": {
-      "autoMemoryEnabled": true,
-      "autoMemoryDirectory": "<data>/conversations/group-ff36ac23eadd0841/notes"
-    },
-    "mcpServers": [
-      "send",
-      "weather",
-      "draw",
-      "tasks",
-      "voice",
-      "memory",
-      "people",
-      "browse"
-    ],
-    "strictMcpConfig": true,
-    "tools": [
-      "Skill",
-      "Read",
-      "Write",
-      "Edit",
-      "WebSearch"
-    ],
-    "settingSources": [],
-    "plugins": [
-      {
-        "type": "local",
-        "path": "<repo>/plugin",
-        "skipMcpDiscovery": true
-      }
-    ],
-    "skills": [
-      "ted-personal-assistant:research-booking",
-      "ted-personal-assistant:surf-conditions",
-      "ted-personal-assistant:draw"
-    ],
-    "permissionMode": "default",
-    "maxTurns": 8,
-    "maxBudgetUsd": 0.5,
-    "envChanged": {
-      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
-    },
-    "envRemoved": [],
-    "hooks": [
-      "PostToolUse"
-    ],
-    "canUseTool": "function"
-  },
-  "tenant": {
-    "run": {
-      "systemPrompt": {
-        "key": "tenant.run.systemPrompt",
-        "sha": "0f163f7efb94234b"
-      },
-      "maxTurns": 12,
-      "maxBudgetUsd": 0.5,
-      "tenant": {
-        "id": "<bea>",
-        "key": "tenant:<bea>",
-        "apiKey": "<instance-key>",
-        "keyTag": "f8707298",
-        "ledger": "friend-<bea>",
-        "logFile": "<data>/conversations/friend-<bea>/messages.jsonl",
-        "overBudget": "[fn]"
-      },
-      "kind": {
-        "who": "tenant",
-        "attended": true
-      },
-      "sessionConv": "friend-<bea>",
-      "sessionTrack": "chat",
-      "conversation": "tenant:<bea>",
-      "stopScope": "friend-<bea>",
-      "tools": [
-        "Edit",
-        "Read",
-        "Skill",
-        "WebSearch",
-        "Write",
-        "mcp__browse__browse",
-        "mcp__draw__draw",
-        "mcp__memory__forget_note",
-        "mcp__memory__journal",
-        "mcp__memory__search_logs",
-        "mcp__memory__undo_dream",
-        "mcp__people__find_person",
-        "mcp__send__send",
-        "mcp__tasks__add_task",
-        "mcp__tasks__complete_task",
-        "mcp__tasks__drop_task",
-        "mcp__tasks__list_tasks",
-        "mcp__tasks__snooze_task",
-        "mcp__tasks__update_task",
-        "mcp__voice__voice",
-        "mcp__weather__get_distance",
-        "mcp__weather__get_forecast",
-        "mcp__weather__get_marine_forecast",
-        "mcp__weather__get_spot_info",
-        "mcp__weather__search_places"
-      ],
-      "skills": [
-        "ted-personal-assistant:research-booking",
-        "ted-personal-assistant:surf-conditions",
-        "ted-personal-assistant:draw"
-      ],
-      "memory": {
-        "dir": "<data>/conversations/friend-<bea>/notes",
-        "zone": "Europe/London"
-      }
-    },
-    "model": "sonnet",
-    "system": {
-      "type": "preset",
-      "preset": "claude_code",
-      "append": {
-        "key": "tenant.system.append",
-        "sha": "0f163f7efb94234b"
-      },
-      "snapshot": false
-    },
-    "settings": {
-      "autoMemoryEnabled": true,
-      "autoMemoryDirectory": "<data>/conversations/friend-<bea>/notes"
-    },
-    "mcpServers": [
-      "send",
-      "weather",
-      "draw",
-      "tasks",
-      "voice",
-      "memory",
-      "people",
-      "browse"
-    ],
-    "strictMcpConfig": true,
-    "tools": [
-      "Skill",
-      "Read",
-      "Write",
-      "Edit",
-      "WebSearch"
-    ],
-    "settingSources": [],
-    "plugins": [
-      {
-        "type": "local",
-        "path": "<repo>/plugin",
-        "skipMcpDiscovery": true
-      }
-    ],
-    "skills": [
-      "ted-personal-assistant:research-booking",
-      "ted-personal-assistant:surf-conditions",
-      "ted-personal-assistant:draw"
-    ],
-    "permissionMode": "default",
-    "maxTurns": 12,
-    "maxBudgetUsd": 0.5,
-    "envChanged": {
-      "ANTHROPIC_API_KEY": "<instance-key>",
-      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
-    },
-    "envRemoved": [
-      "CLAUDE_CODE_OAUTH_TOKEN"
-    ],
-    "hooks": [
-      "PostToolUse"
-    ],
-    "canUseTool": "function"
-  },
-  "ownerLook": {
-    "run": {
-      "systemPrompt": {
-        "key": "ownerLook.run.systemPrompt",
-        "sha": "a8d1f337f4221a1a"
-      },
-      "maxTurns": 40,
-      "maxBudgetUsd": 2,
-      "kind": {
-        "who": "owner",
-        "attended": false
-      },
-      "sessionConv": "owner",
-      "sessionTrack": "look",
-      "conversation": "owner",
-      "stopScope": "owner",
-      "tools": [
-        "Edit",
-        "Read",
-        "Skill",
-        "WebFetch",
-        "WebSearch",
-        "Write",
-        "mcp__browse__browse",
-        "mcp__claude_ai_Claude_Docs__batch",
-        "mcp__claude_ai_Claude_Docs__create",
-        "mcp__claude_ai_Claude_Docs__delete",
-        "mcp__claude_ai_Claude_Docs__export",
-        "mcp__claude_ai_Claude_Docs__guide",
-        "mcp__claude_ai_Claude_Docs__query",
-        "mcp__claude_ai_Claude_Docs__read",
-        "mcp__claude_ai_Claude_Docs__update",
-        "mcp__claude_ai_Google_Calendar__create_event",
-        "mcp__claude_ai_Google_Calendar__delete_event",
-        "mcp__claude_ai_Google_Calendar__get_event",
-        "mcp__claude_ai_Google_Calendar__list_calendars",
-        "mcp__claude_ai_Google_Calendar__list_events",
-        "mcp__claude_ai_Google_Calendar__respond_to_event",
-        "mcp__claude_ai_Google_Calendar__search_events",
-        "mcp__claude_ai_Google_Calendar__suggest_time",
-        "mcp__claude_ai_Google_Calendar__update_event",
-        "mcp__claude_ai_Google_Docs__read_doc",
-        "mcp__claude_ai_Google_Docs__update_doc",
-        "mcp__claude_ai_Google_Drive__copy_file",
-        "mcp__claude_ai_Google_Drive__create_file",
-        "mcp__claude_ai_Google_Drive__download_file_content",
-        "mcp__claude_ai_Google_Drive__get_file_metadata",
-        "mcp__claude_ai_Google_Drive__get_file_permissions",
-        "mcp__claude_ai_Google_Drive__list_recent_files",
-        "mcp__claude_ai_Google_Drive__read_file_content",
-        "mcp__claude_ai_Google_Drive__search_files",
-        "mcp__claude_ai_Google_Drive__share_file",
-        "mcp__claude_ai_Google_Drive__trash_file",
-        "mcp__claude_ai_Google_Drive__update_file",
-        "mcp__claude_ai_Notion__notion-ai-search",
-        "mcp__claude_ai_Notion__notion-create-comment",
-        "mcp__claude_ai_Notion__notion-create-pages",
-        "mcp__claude_ai_Notion__notion-fetch",
-        "mcp__claude_ai_Notion__notion-get-comments",
-        "mcp__claude_ai_Notion__notion-get-teams",
-        "mcp__claude_ai_Notion__notion-get-tool-access",
-        "mcp__claude_ai_Notion__notion-get-users",
-        "mcp__claude_ai_Notion__notion-list-favorite-pages",
-        "mcp__claude_ai_Notion__notion-list-private-pages",
-        "mcp__claude_ai_Notion__notion-list-recent-pages",
-        "mcp__claude_ai_Notion__notion-list-shared-pages",
-        "mcp__claude_ai_Notion__notion-move-pages",
-        "mcp__claude_ai_Notion__notion-query-data-sources",
-        "mcp__claude_ai_Notion__notion-query-meeting-notes",
-        "mcp__claude_ai_Notion__notion-query-multiple-data-sources",
-        "mcp__claude_ai_Notion__notion-search",
-        "mcp__claude_ai_Notion__notion-search-agents",
-        "mcp__claude_ai_Notion__notion-update-page",
-        "mcp__draw__draw",
-        "mcp__mailbird__archive_conversation",
-        "mcp__mailbird__create_draft",
-        "mcp__mailbird__delete_conversation_permanently",
-        "mcp__mailbird__discard_draft",
-        "mcp__mailbird__forward_conversation",
-        "mcp__mailbird__get_attachment_content",
-        "mcp__mailbird__get_conversation",
-        "mcp__mailbird__get_help",
-        "mcp__mailbird__get_message",
-        "mcp__mailbird__get_send_status",
-        "mcp__mailbird__get_ui_state",
-        "mcp__mailbird__list_accounts",
-        "mcp__mailbird__list_attachments",
-        "mcp__mailbird__list_conversations",
-        "mcp__mailbird__list_folders",
-        "mcp__mailbird__move_conversation",
-        "mcp__mailbird__move_conversation_to_inbox",
-        "mcp__mailbird__reply_all_to_conversation",
-        "mcp__mailbird__reply_to_conversation",
-        "mcp__mailbird__search_conversations",
-        "mcp__mailbird__select_conversation",
-        "mcp__mailbird__send_message_now",
-        "mcp__mailbird__send_self_briefing",
-        "mcp__mailbird__set_conversation_spam",
-        "mcp__mailbird__set_sender_blocked",
-        "mcp__mailbird__show_notification",
-        "mcp__mailbird__summarize_all_inboxes",
-        "mcp__mailbird__trash_conversation",
-        "mcp__mailbird__unsubscribe_from_newsletter",
-        "mcp__mailbird__update_draft",
-        "mcp__meetings__note_upcoming_meetings",
-        "mcp__memory__forget_note",
-        "mcp__memory__journal",
-        "mcp__memory__memory_changes_since_brief",
-        "mcp__memory__search_logs",
-        "mcp__memory__undo_dream",
-        "mcp__people__find_person",
-        "mcp__seenmail__seen_mail",
-        "mcp__send__send",
-        "mcp__status__write_status_note",
-        "mcp__tasks__add_task",
-        "mcp__tasks__complete_task",
-        "mcp__tasks__drop_task",
-        "mcp__tasks__list_tasks",
-        "mcp__tasks__snooze_task",
-        "mcp__tasks__update_task",
-        "mcp__voice__voice",
-        "mcp__weather__get_distance",
-        "mcp__weather__get_forecast",
-        "mcp__weather__get_marine_forecast",
-        "mcp__weather__get_spot_info",
-        "mcp__weather__search_places"
-      ],
-      "skills": [
-        "ted-personal-assistant:daily-brief",
-        "ted-personal-assistant:mailbird",
-        "ted-personal-assistant:mailbird-troubleshooting",
-        "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
-        "ted-personal-assistant:meeting-prep",
-        "ted-personal-assistant:research-booking",
-        "ted-personal-assistant:follow-through",
-        "ted-personal-assistant:stay-in-touch",
-        "ted-personal-assistant:setup",
-        "ted-personal-assistant:surf-conditions",
-        "ted-personal-assistant:draw",
-        "ted-personal-assistant:task-import",
-        "ted-personal-assistant:evening-wrap",
-        "ted-personal-assistant:weekly-review"
-      ],
-      "memory": {
-        "dir": "<data>/conversations/owner/notes",
-        "zone": "Europe/London"
-      },
-      "model": "haiku",
-      "effort": "high",
-      "outputFormat": "[schema]",
-      "experts": [
-        "expert",
-        "expert-daily-brief",
-        "expert-evening-wrap",
-        "expert-meeting-prep",
-        "expert-weekly-review"
-      ]
-    },
-    "model": "haiku",
-    "system": {
-      "type": "preset",
-      "preset": "claude_code",
-      "append": {
-        "key": "ownerLook.system.append",
-        "sha": "a8d1f337f4221a1a"
-      },
-      "snapshot": false
-    },
-    "settings": {
-      "autoMemoryEnabled": true,
-      "autoMemoryDirectory": "<data>/conversations/owner/notes"
-    },
-    "mcpServers": [
-      "send",
-      "weather",
-      "draw",
-      "tasks",
-      "voice",
-      "memory",
-      "people",
-      "status",
-      "meetings",
       "browse"
     ],
     "tools": [
@@ -859,20 +317,20 @@
     ],
     "canUseTool": "function"
   },
-  "groupLook": {
+  "group": {
     "run": {
       "systemPrompt": {
-        "key": "groupLook.run.systemPrompt",
-        "sha": "29753b5b5e9e2a66"
+        "key": "group.run.systemPrompt",
+        "sha": "70c4f87afbe92b99"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
       "kind": {
         "who": "group",
-        "attended": false
+        "attended": true
       },
       "sessionConv": "group-ff36ac23eadd0841",
-      "sessionTrack": "look",
+      "sessionTrack": "chat",
       "conversation": "g-run-options",
       "stopScope": "group-ff36ac23eadd0841",
       "groupId": "g-run-options",
@@ -913,17 +371,18 @@
         "zone": "Europe/London",
         "groupId": "g-run-options"
       },
-      "model": "haiku",
-      "effort": "high",
-      "outputFormat": "[schema]"
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
     },
-    "model": "haiku",
+    "model": "sonnet",
     "system": {
       "type": "preset",
       "preset": "claude_code",
       "append": {
-        "key": "groupLook.system.append",
-        "sha": "29753b5b5e9e2a66"
+        "key": "group.system.append",
+        "sha": "70c4f87afbe92b99"
       },
       "snapshot": false
     },
@@ -947,7 +406,8 @@
       "Read",
       "Write",
       "Edit",
-      "WebSearch"
+      "WebSearch",
+      "Agent"
     ],
     "settingSources": [],
     "plugins": [
@@ -970,15 +430,16 @@
     },
     "envRemoved": [],
     "hooks": [
+      "PreToolUse",
       "PostToolUse"
     ],
     "canUseTool": "function"
   },
-  "tenantLook": {
+  "tenant": {
     "run": {
       "systemPrompt": {
-        "key": "tenantLook.run.systemPrompt",
-        "sha": "0f163f7efb94234b"
+        "key": "tenant.run.systemPrompt",
+        "sha": "eeedb7a003f5bc27"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -993,10 +454,10 @@
       },
       "kind": {
         "who": "tenant",
-        "attended": false
+        "attended": true
       },
       "sessionConv": "friend-<bea>",
-      "sessionTrack": "look",
+      "sessionTrack": "chat",
       "conversation": "tenant:<bea>",
       "stopScope": "friend-<bea>",
       "tools": [
@@ -1035,17 +496,18 @@
         "dir": "<data>/conversations/friend-<bea>/notes",
         "zone": "Europe/London"
       },
-      "model": "haiku",
-      "effort": "high",
-      "outputFormat": "[schema]"
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
     },
-    "model": "haiku",
+    "model": "sonnet",
     "system": {
       "type": "preset",
       "preset": "claude_code",
       "append": {
-        "key": "tenantLook.system.append",
-        "sha": "0f163f7efb94234b"
+        "key": "tenant.system.append",
+        "sha": "eeedb7a003f5bc27"
       },
       "snapshot": false
     },
@@ -1069,7 +531,8 @@
       "Read",
       "Write",
       "Edit",
-      "WebSearch"
+      "WebSearch",
+      "Agent"
     ],
     "settingSources": [],
     "plugins": [
@@ -1095,6 +558,598 @@
       "CLAUDE_CODE_OAUTH_TOKEN"
     ],
     "hooks": [
+      "PreToolUse",
+      "PostToolUse"
+    ],
+    "canUseTool": "function"
+  },
+  "ownerLook": {
+    "run": {
+      "systemPrompt": {
+        "key": "ownerLook.run.systemPrompt",
+        "sha": "5bc4272e4da2f3ec"
+      },
+      "maxTurns": 40,
+      "maxBudgetUsd": 2,
+      "kind": {
+        "who": "owner",
+        "attended": false
+      },
+      "sessionConv": "owner",
+      "sessionTrack": "look",
+      "conversation": "owner",
+      "stopScope": "owner",
+      "tools": [
+        "Skill",
+        "WebFetch",
+        "WebSearch",
+        "mcp__browse__browse",
+        "mcp__claude_ai_Claude_Docs__batch",
+        "mcp__claude_ai_Claude_Docs__create",
+        "mcp__claude_ai_Claude_Docs__delete",
+        "mcp__claude_ai_Claude_Docs__export",
+        "mcp__claude_ai_Claude_Docs__guide",
+        "mcp__claude_ai_Claude_Docs__query",
+        "mcp__claude_ai_Claude_Docs__read",
+        "mcp__claude_ai_Claude_Docs__update",
+        "mcp__claude_ai_Google_Calendar__create_event",
+        "mcp__claude_ai_Google_Calendar__delete_event",
+        "mcp__claude_ai_Google_Calendar__get_event",
+        "mcp__claude_ai_Google_Calendar__list_calendars",
+        "mcp__claude_ai_Google_Calendar__list_events",
+        "mcp__claude_ai_Google_Calendar__respond_to_event",
+        "mcp__claude_ai_Google_Calendar__search_events",
+        "mcp__claude_ai_Google_Calendar__suggest_time",
+        "mcp__claude_ai_Google_Calendar__update_event",
+        "mcp__claude_ai_Google_Docs__read_doc",
+        "mcp__claude_ai_Google_Docs__update_doc",
+        "mcp__claude_ai_Google_Drive__copy_file",
+        "mcp__claude_ai_Google_Drive__create_file",
+        "mcp__claude_ai_Google_Drive__download_file_content",
+        "mcp__claude_ai_Google_Drive__get_file_metadata",
+        "mcp__claude_ai_Google_Drive__get_file_permissions",
+        "mcp__claude_ai_Google_Drive__list_recent_files",
+        "mcp__claude_ai_Google_Drive__read_file_content",
+        "mcp__claude_ai_Google_Drive__search_files",
+        "mcp__claude_ai_Google_Drive__share_file",
+        "mcp__claude_ai_Google_Drive__trash_file",
+        "mcp__claude_ai_Google_Drive__update_file",
+        "mcp__claude_ai_Notion__notion-ai-search",
+        "mcp__claude_ai_Notion__notion-create-comment",
+        "mcp__claude_ai_Notion__notion-create-pages",
+        "mcp__claude_ai_Notion__notion-fetch",
+        "mcp__claude_ai_Notion__notion-get-comments",
+        "mcp__claude_ai_Notion__notion-get-teams",
+        "mcp__claude_ai_Notion__notion-get-tool-access",
+        "mcp__claude_ai_Notion__notion-get-users",
+        "mcp__claude_ai_Notion__notion-list-favorite-pages",
+        "mcp__claude_ai_Notion__notion-list-private-pages",
+        "mcp__claude_ai_Notion__notion-list-recent-pages",
+        "mcp__claude_ai_Notion__notion-list-shared-pages",
+        "mcp__claude_ai_Notion__notion-move-pages",
+        "mcp__claude_ai_Notion__notion-query-data-sources",
+        "mcp__claude_ai_Notion__notion-query-meeting-notes",
+        "mcp__claude_ai_Notion__notion-query-multiple-data-sources",
+        "mcp__claude_ai_Notion__notion-search",
+        "mcp__claude_ai_Notion__notion-search-agents",
+        "mcp__claude_ai_Notion__notion-update-page",
+        "mcp__draw__draw",
+        "mcp__mailbird__archive_conversation",
+        "mcp__mailbird__create_draft",
+        "mcp__mailbird__delete_conversation_permanently",
+        "mcp__mailbird__discard_draft",
+        "mcp__mailbird__forward_conversation",
+        "mcp__mailbird__get_attachment_content",
+        "mcp__mailbird__get_conversation",
+        "mcp__mailbird__get_help",
+        "mcp__mailbird__get_message",
+        "mcp__mailbird__get_send_status",
+        "mcp__mailbird__get_ui_state",
+        "mcp__mailbird__list_accounts",
+        "mcp__mailbird__list_attachments",
+        "mcp__mailbird__list_conversations",
+        "mcp__mailbird__list_folders",
+        "mcp__mailbird__move_conversation",
+        "mcp__mailbird__move_conversation_to_inbox",
+        "mcp__mailbird__reply_all_to_conversation",
+        "mcp__mailbird__reply_to_conversation",
+        "mcp__mailbird__search_conversations",
+        "mcp__mailbird__select_conversation",
+        "mcp__mailbird__send_message_now",
+        "mcp__mailbird__send_self_briefing",
+        "mcp__mailbird__set_conversation_spam",
+        "mcp__mailbird__set_sender_blocked",
+        "mcp__mailbird__show_notification",
+        "mcp__mailbird__summarize_all_inboxes",
+        "mcp__mailbird__trash_conversation",
+        "mcp__mailbird__unsubscribe_from_newsletter",
+        "mcp__mailbird__update_draft",
+        "mcp__meetings__note_upcoming_meetings",
+        "mcp__memory__search_logs",
+        "mcp__notes__journal",
+        "mcp__notes__memory_changes_since_brief",
+        "mcp__notes__read_note",
+        "mcp__notes__write_note",
+        "mcp__people__find_person",
+        "mcp__seenmail__seen_mail",
+        "mcp__send__send",
+        "mcp__status__write_status_note",
+        "mcp__tasks__add_task",
+        "mcp__tasks__complete_task",
+        "mcp__tasks__drop_task",
+        "mcp__tasks__list_tasks",
+        "mcp__tasks__snooze_task",
+        "mcp__tasks__update_task",
+        "mcp__voice__voice",
+        "mcp__weather__get_distance",
+        "mcp__weather__get_forecast",
+        "mcp__weather__get_marine_forecast",
+        "mcp__weather__get_spot_info",
+        "mcp__weather__search_places"
+      ],
+      "skills": [
+        "ted-personal-assistant:daily-brief",
+        "ted-personal-assistant:mailbird",
+        "ted-personal-assistant:mailbird-troubleshooting",
+        "ted-personal-assistant:calendar",
+        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:meeting-prep",
+        "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:follow-through",
+        "ted-personal-assistant:stay-in-touch",
+        "ted-personal-assistant:setup",
+        "ted-personal-assistant:surf-conditions",
+        "ted-personal-assistant:draw",
+        "ted-personal-assistant:task-import",
+        "ted-personal-assistant:evening-wrap",
+        "ted-personal-assistant:weekly-review"
+      ],
+      "notesRead": {
+        "dir": "<data>/conversations/owner/notes",
+        "categories": [
+          "triage",
+          "people",
+          "scheduling",
+          "context",
+          "brief",
+          "style",
+          "setup",
+          "voice",
+          "status",
+          "routine"
+        ],
+        "write": [
+          "people",
+          "context",
+          "scheduling"
+        ],
+        "maxNotes": 2000,
+        "zone": "Europe/London"
+      },
+      "model": "haiku",
+      "effort": "high",
+      "outputFormat": "[schema]",
+      "experts": [
+        "expert",
+        "expert-daily-brief",
+        "expert-evening-wrap",
+        "expert-meeting-prep",
+        "expert-opus",
+        "expert-weekly-review"
+      ]
+    },
+    "model": "haiku",
+    "system": {
+      "type": "custom",
+      "prompt": {
+        "key": "ownerLook.system.prompt",
+        "sha": "5bc4272e4da2f3ec"
+      },
+      "snapshot": false
+    },
+    "settings": {
+      "autoMemoryEnabled": false
+    },
+    "mcpServers": [
+      "send",
+      "weather",
+      "draw",
+      "tasks",
+      "voice",
+      "memory",
+      "notes",
+      "people",
+      "status",
+      "meetings",
+      "browse"
+    ],
+    "tools": [
+      "Skill",
+      "WebSearch",
+      "WebFetch",
+      "Agent"
+    ],
+    "settingSources": [
+      "user"
+    ],
+    "plugins": [
+      {
+        "type": "local",
+        "path": "<repo>/plugin",
+        "skipMcpDiscovery": true
+      }
+    ],
+    "skills": [
+      "ted-personal-assistant:daily-brief",
+      "ted-personal-assistant:mailbird",
+      "ted-personal-assistant:mailbird-troubleshooting",
+      "ted-personal-assistant:calendar",
+      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:meeting-prep",
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:follow-through",
+      "ted-personal-assistant:stay-in-touch",
+      "ted-personal-assistant:setup",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw",
+      "ted-personal-assistant:task-import",
+      "ted-personal-assistant:evening-wrap",
+      "ted-personal-assistant:weekly-review"
+    ],
+    "disallowedTools": [
+      "mcp__claude_ai_Interactive_Brokers_IBKR",
+      "mcp__claude_ai_Gmail",
+      "mcp__claude_ai_Claude_Docs",
+      "mcp__claude_ai_Notion__notion-ai-search",
+      "mcp__claude_ai_Notion__notion-check-mcp-next-steps",
+      "mcp__claude_ai_Notion__notion-convert-page-to-skill",
+      "mcp__claude_ai_Notion__notion-create-attachment",
+      "mcp__claude_ai_Notion__notion-create-comment",
+      "mcp__claude_ai_Notion__notion-create-database",
+      "mcp__claude_ai_Notion__notion-create-file-upload",
+      "mcp__claude_ai_Notion__notion-create-folder",
+      "mcp__claude_ai_Notion__notion-create-view",
+      "mcp__claude_ai_Notion__notion-download-attachment",
+      "mcp__claude_ai_Notion__notion-download-skill",
+      "mcp__claude_ai_Notion__notion-duplicate-page",
+      "mcp__claude_ai_Notion__notion-get-async-task",
+      "mcp__claude_ai_Notion__notion-get-comments",
+      "mcp__claude_ai_Notion__notion-get-session-status",
+      "mcp__claude_ai_Notion__notion-get-teams",
+      "mcp__claude_ai_Notion__notion-get-tool-access",
+      "mcp__claude_ai_Notion__notion-get-users",
+      "mcp__claude_ai_Notion__notion-list-favorite-pages",
+      "mcp__claude_ai_Notion__notion-list-private-pages",
+      "mcp__claude_ai_Notion__notion-list-recent-pages",
+      "mcp__claude_ai_Notion__notion-list-session-events",
+      "mcp__claude_ai_Notion__notion-list-shared-pages",
+      "mcp__claude_ai_Notion__notion-move-pages",
+      "mcp__claude_ai_Notion__notion-query-data-sources",
+      "mcp__claude_ai_Notion__notion-query-meeting-notes",
+      "mcp__claude_ai_Notion__notion-query-multiple-data-sources",
+      "mcp__claude_ai_Notion__notion-query-sessions",
+      "mcp__claude_ai_Notion__notion-read-session-event",
+      "mcp__claude_ai_Notion__notion-search-agents",
+      "mcp__claude_ai_Notion__notion-search-sessions",
+      "mcp__claude_ai_Notion__notion-send-message-to-session",
+      "mcp__claude_ai_Notion__notion-show-advanced-analysis-next-steps",
+      "mcp__claude_ai_Notion__notion-spawn-session",
+      "mcp__claude_ai_Notion__notion-stop-session",
+      "mcp__claude_ai_Notion__notion-update-data-source",
+      "mcp__claude_ai_Notion__notion-update-folder",
+      "mcp__claude_ai_Notion__notion-update-view",
+      "mcp__claude_ai_Notion__notion-upload-skill",
+      "mcp__claude_ai_Notion__notion-wait-session",
+      "mcp__claude_ai_Google_Drive__copy_file",
+      "mcp__claude_ai_Google_Drive__create_file",
+      "mcp__claude_ai_Google_Drive__download_file_content",
+      "mcp__claude_ai_Google_Drive__get_file_permissions",
+      "mcp__claude_ai_Google_Drive__share_file",
+      "mcp__claude_ai_Google_Drive__trash_file",
+      "mcp__claude_ai_Google_Drive__update_file",
+      "mcp__claude_ai_Google_Docs__update_doc",
+      "mcp__mailbird__copy_conversation",
+      "mcp__mailbird__delete_conversation_permanently",
+      "mcp__mailbird__get_help",
+      "mcp__mailbird__get_ui_state",
+      "mcp__mailbird__mark_all_as_read",
+      "mcp__mailbird__move_conversation",
+      "mcp__mailbird__set_conversation_important",
+      "mcp__mailbird__set_conversation_read",
+      "mcp__mailbird__set_conversation_spam",
+      "mcp__mailbird__set_conversation_starred",
+      "mcp__mailbird__set_sender_blocked",
+      "mcp__mailbird__show_notification",
+      "mcp__mailbird__snooze_conversation",
+      "mcp__mailbird__trash_conversation",
+      "mcp__mailbird__unsubscribe_from_newsletter",
+      "mcp__claude_ai_Gmail__apply_sensitive_message_label",
+      "mcp__claude_ai_Gmail__apply_sensitive_thread_label",
+      "mcp__claude_ai_Gmail__create_label",
+      "mcp__claude_ai_Gmail__delete_label",
+      "mcp__claude_ai_Gmail__label_message",
+      "mcp__claude_ai_Gmail__mark_message_spam",
+      "mcp__claude_ai_Gmail__mark_thread_spam",
+      "mcp__claude_ai_Gmail__trash_message",
+      "mcp__claude_ai_Gmail__trash_thread",
+      "mcp__claude_ai_Gmail__unlabel_message",
+      "mcp__claude_ai_Gmail__unmark_message_spam",
+      "mcp__claude_ai_Gmail__unmark_thread_spam",
+      "mcp__claude_ai_Gmail__untrash_message",
+      "mcp__claude_ai_Gmail__untrash_thread",
+      "mcp__claude_ai_Gmail__update_label",
+      "mcp__claude_ai_Gmail__update_message_labels"
+    ],
+    "permissionMode": "default",
+    "maxTurns": 40,
+    "maxBudgetUsd": 2,
+    "envChanged": {
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
+    },
+    "envRemoved": [],
+    "hooks": [
+      "PreToolUse",
+      "PostToolUse"
+    ],
+    "canUseTool": "function"
+  },
+  "groupLook": {
+    "run": {
+      "systemPrompt": {
+        "key": "groupLook.run.systemPrompt",
+        "sha": "70c4f87afbe92b99"
+      },
+      "maxTurns": 8,
+      "maxBudgetUsd": 0.5,
+      "kind": {
+        "who": "group",
+        "attended": false
+      },
+      "sessionConv": "group-ff36ac23eadd0841",
+      "sessionTrack": "look",
+      "conversation": "g-run-options",
+      "stopScope": "group-ff36ac23eadd0841",
+      "groupId": "g-run-options",
+      "tools": [
+        "Skill",
+        "WebSearch",
+        "mcp__browse__browse",
+        "mcp__draw__draw",
+        "mcp__memory__search_logs",
+        "mcp__notes__journal",
+        "mcp__notes__read_note",
+        "mcp__notes__write_note",
+        "mcp__people__find_person",
+        "mcp__send__send",
+        "mcp__tasks__add_task",
+        "mcp__tasks__complete_task",
+        "mcp__tasks__drop_task",
+        "mcp__tasks__list_tasks",
+        "mcp__tasks__snooze_task",
+        "mcp__tasks__update_task",
+        "mcp__voice__voice",
+        "mcp__weather__get_distance",
+        "mcp__weather__get_forecast",
+        "mcp__weather__get_marine_forecast",
+        "mcp__weather__get_spot_info",
+        "mcp__weather__search_places"
+      ],
+      "skills": [
+        "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:surf-conditions",
+        "ted-personal-assistant:draw"
+      ],
+      "notesRead": {
+        "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
+        "categories": [
+          "people",
+          "context",
+          "scheduling",
+          "style"
+        ],
+        "write": [
+          "people",
+          "context",
+          "scheduling"
+        ],
+        "maxNotes": 2000,
+        "zone": "Europe/London"
+      },
+      "model": "haiku",
+      "effort": "high",
+      "outputFormat": "[schema]",
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
+    },
+    "model": "haiku",
+    "system": {
+      "type": "custom",
+      "prompt": {
+        "key": "groupLook.system.prompt",
+        "sha": "70c4f87afbe92b99"
+      },
+      "snapshot": false
+    },
+    "settings": {
+      "autoMemoryEnabled": false
+    },
+    "mcpServers": [
+      "send",
+      "weather",
+      "draw",
+      "tasks",
+      "voice",
+      "memory",
+      "notes",
+      "people",
+      "browse"
+    ],
+    "strictMcpConfig": true,
+    "tools": [
+      "Skill",
+      "WebSearch",
+      "Agent"
+    ],
+    "settingSources": [],
+    "plugins": [
+      {
+        "type": "local",
+        "path": "<repo>/plugin",
+        "skipMcpDiscovery": true
+      }
+    ],
+    "skills": [
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
+    ],
+    "permissionMode": "default",
+    "maxTurns": 8,
+    "maxBudgetUsd": 0.5,
+    "envChanged": {
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
+    },
+    "envRemoved": [],
+    "hooks": [
+      "PreToolUse",
+      "PostToolUse"
+    ],
+    "canUseTool": "function"
+  },
+  "tenantLook": {
+    "run": {
+      "systemPrompt": {
+        "key": "tenantLook.run.systemPrompt",
+        "sha": "eeedb7a003f5bc27"
+      },
+      "maxTurns": 12,
+      "maxBudgetUsd": 0.5,
+      "tenant": {
+        "id": "<bea>",
+        "key": "tenant:<bea>",
+        "apiKey": "<instance-key>",
+        "keyTag": "f8707298",
+        "ledger": "friend-<bea>",
+        "logFile": "<data>/conversations/friend-<bea>/messages.jsonl",
+        "overBudget": "[fn]"
+      },
+      "kind": {
+        "who": "tenant",
+        "attended": false
+      },
+      "sessionConv": "friend-<bea>",
+      "sessionTrack": "look",
+      "conversation": "tenant:<bea>",
+      "stopScope": "friend-<bea>",
+      "tools": [
+        "Skill",
+        "WebSearch",
+        "mcp__browse__browse",
+        "mcp__draw__draw",
+        "mcp__memory__search_logs",
+        "mcp__notes__journal",
+        "mcp__notes__read_note",
+        "mcp__notes__write_note",
+        "mcp__people__find_person",
+        "mcp__send__send",
+        "mcp__tasks__add_task",
+        "mcp__tasks__complete_task",
+        "mcp__tasks__drop_task",
+        "mcp__tasks__list_tasks",
+        "mcp__tasks__snooze_task",
+        "mcp__tasks__update_task",
+        "mcp__voice__voice",
+        "mcp__weather__get_distance",
+        "mcp__weather__get_forecast",
+        "mcp__weather__get_marine_forecast",
+        "mcp__weather__get_spot_info",
+        "mcp__weather__search_places"
+      ],
+      "skills": [
+        "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:surf-conditions",
+        "ted-personal-assistant:draw"
+      ],
+      "notesRead": {
+        "dir": "<data>/conversations/friend-<bea>/notes",
+        "categories": [
+          "people",
+          "context",
+          "scheduling",
+          "style"
+        ],
+        "write": [
+          "people",
+          "context",
+          "scheduling"
+        ],
+        "maxNotes": 2000,
+        "zone": "Europe/London"
+      },
+      "model": "haiku",
+      "effort": "high",
+      "outputFormat": "[schema]",
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
+    },
+    "model": "haiku",
+    "system": {
+      "type": "custom",
+      "prompt": {
+        "key": "tenantLook.system.prompt",
+        "sha": "eeedb7a003f5bc27"
+      },
+      "snapshot": false
+    },
+    "settings": {
+      "autoMemoryEnabled": false
+    },
+    "mcpServers": [
+      "send",
+      "weather",
+      "draw",
+      "tasks",
+      "voice",
+      "memory",
+      "notes",
+      "people",
+      "browse"
+    ],
+    "strictMcpConfig": true,
+    "tools": [
+      "Skill",
+      "WebSearch",
+      "Agent"
+    ],
+    "settingSources": [],
+    "plugins": [
+      {
+        "type": "local",
+        "path": "<repo>/plugin",
+        "skipMcpDiscovery": true
+      }
+    ],
+    "skills": [
+      "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:surf-conditions",
+      "ted-personal-assistant:draw"
+    ],
+    "permissionMode": "default",
+    "maxTurns": 12,
+    "maxBudgetUsd": 0.5,
+    "envChanged": {
+      "ANTHROPIC_API_KEY": "<instance-key>",
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
+    },
+    "envRemoved": [
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+    "hooks": [
+      "PreToolUse",
       "PostToolUse"
     ],
     "canUseTool": "function"

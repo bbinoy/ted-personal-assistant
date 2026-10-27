@@ -83,9 +83,9 @@ export interface RunOptions {
   // A tenant's run (tenants.ts): an isolated "group" run on HER OWN Anthropic API key, with her own cost ledger and cooldown. Never absent for a run
   // made for a tenant, and never given the instance's login: without a key the run does not start.
   tenant?: TenantRun;
-  // A heartbeat run whose conversation has something to read (heartbeat/scope.ts): experts it may delegate heavy work to (heartbeat/delegation.ts). Gives the run the Agent tool, the SDK `agents` and the PreToolUse hook that
-  // allows only these agents, at most two per look and no nesting, and keeps a `delegate:` skill out of the run's own hands. `onDelegate` is told each accepted delegation.
-  experts?: { setup: ExpertSetup; onDelegate?: (d: Delegation) => void; context?: () => string | undefined }; // context: code-written, appended to every brief (the facts and the recent chat the look has)
+  // The experts every run may delegate heavy work to (run/delegation.ts, set by the builder). Gives the run the Agent tool, the SDK `agents` and the PreToolUse hook that
+  // allows only these agents, at most two per run and no nesting, and keeps a `delegate:` skill out of the run's own hands. `onDelegate` is told each accepted delegation.
+  experts?: { setup: ExpertSetup; onDelegate?: (d: Delegation) => void; context?: () => string | undefined }; // context: code-written, appended to every brief (a look's facts and recent chat)
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.

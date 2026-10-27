@@ -19,6 +19,7 @@ test("DREAM_HOUR: the preset's default (4), overridable, validated", () => {
   assert.throws(() => loadSettings({ DREAM_HOUR: "24" }), /DREAM_HOUR/);
   assert.equal(loadSettings({}).model, "sonnet", "the dream's model is the harness model, Sonnet by default");
   assert.equal(loadSettings({ HARNESS_MODEL: "opus" }).model, "opus");
+  assert.deepEqual([loadSettings({}).opusModel, loadSettings({ OPUS_MODEL: "claude-opus-x" }).opusModel], ["opus", "claude-opus-x"]);
 });
 
 test("the trigger: nothing before the hour, the first tick at or after it runs, then at most once an hour until tomorrow", () => {

@@ -4,7 +4,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lookOptions } from "../src/run/agent.ts";
-import { owner } from "../src/conversation/conversationmodel.ts";
+import { group, owner } from "../src/conversation/conversationmodel.ts";
+import { runFor, TRIGGERS } from "../src/run/runoptions.ts";
+import { settings } from "../src/core/settings.ts";
 import { LOGIN } from "../src/tenants/payer.ts";
 import { buildOptions } from "../src/run/agentrun.ts";
 import { readAudit } from "../src/core/audit.ts";
@@ -45,20 +47,25 @@ test("skill hints: delegate and tools are read from the frontmatter; a typo fail
   assert.throws(() => parseHint("---\ntools: [Bash(rm -rf)]\n---\n"), /not a tool name/);
 });
 
-test("experts: one general expert from the preset, a variant for each skill with a hint, and the run may not load a delegate: skill itself", () => {
+test("experts: two general experts (Sonnet from the preset, Opus from OPUS_MODEL), a variant for each skill with a hint, and the run may not load a delegate: skill itself", () => {
   const set = expertSetup(SKILLS, "EXPERT PROMPT", hints(plugin()));
-  assert.deepEqual(Object.keys(set.agents).sort(), ["expert", "expert-deep", "expert-heavy"]);
+  assert.deepEqual(Object.keys(set.agents).sort(), ["expert", "expert-deep", "expert-heavy", "expert-opus"]);
   const x = set.agents.expert!;
   assert.equal(x.model, preset().expert.model);
   assert.equal(x.maxTurns, preset().expert.maxTurns);
   assert.equal(x.prompt, "EXPERT PROMPT");
+  const opus = set.agents["expert-opus"]!;
+  assert.equal(opus.model, settings.opusModel, "expert-opus gets the Opus model");
+  assert.equal(settings.opusModel, "opus");
+  assert.deepEqual([opus.maxTurns, opus.prompt, opus.tools, opus.disallowedTools, opus.background], [x.maxTurns, x.prompt, x.tools, x.disallowedTools, false]);
   assert.equal(x.tools, undefined, "the general expert has the run's whole tool set");
   assert.deepEqual(x.disallowedTools, ["Agent"], "and no way to delegate further");
   const heavy = set.agents["expert-heavy"]!;
   assert.deepEqual(heavy.tools, ["mcp__claude_ai_Google_Calendar__*", "mcp__send__send", "Skill"], "exactly the declared tools");
   assert.equal(heavy.model, "sonnet");
   assert.deepEqual(heavy.skills, ["ted-personal-assistant:heavy"]);
-  assert.equal(set.agents["expert-deep"]!.model, "opus");
+  assert.equal(set.agents["expert-deep"]!.model, settings.opusModel, "a skill's delegate: opus is the OPUS_MODEL");
+  assert.equal(heavy.model, preset().expert.model);
   assert.equal(set.agents["expert-deep"]!.tools, undefined);
   assert.deepEqual([...set.delegated], [["heavy", "expert-heavy"], ["deep", "expert-deep"]]);
   assert.match(delegatedText(set), /ted-personal-assistant:heavy \(subagent_type "expert-heavy"\), ted-personal-assistant:deep/);
@@ -75,7 +82,7 @@ const run = (over: { max?: number; seen?: string[] } = {}) => {
 };
 const decision = (r: { hookSpecificOutput?: { permissionDecision?: string } }) => r.hookSpecificOutput?.permissionDecision;
 
-test("the Agent hook: only expert and expert-<skill>, at most two per look, no nesting", async () => {
+test("the Agent hook: only expert and expert-<skill>, at most two per run, no nesting", async () => {
   const { h, call, told } = run();
   assert.equal(decision(await call("Agent", { subagent_type: "expert", prompt: "write the careful decline to Eve", description: "decline" })), "allow");
   assert.equal(decision(await call("Agent", { subagent_type: "general-purpose", prompt: "x", description: "x" })), "deny", "the SDK's built-in agent does not exist here");
@@ -84,7 +91,7 @@ test("the Agent hook: only expert and expert-<skill>, at most two per look, no n
   assert.equal(decision(await call("Task", { subagent_type: "general-purpose", prompt: "x", description: "x" })), "deny", "the old tool name too");
   assert.equal(decision(await call("Agent", { subagent_type: "expert-heavy", prompt: "the brief", description: "x" })), "allow");
   const third = await call("Agent", { subagent_type: "expert", prompt: "a third one", description: "x" });
-  assert.equal(decision(third), "deny", `the ${MAX_DELEGATIONS + 1}rd delegation of a look`);
+  assert.equal(decision(third), "deny", `the ${MAX_DELEGATIONS + 1}rd delegation of a run`);
   assert.match(third.hookSpecificOutput!.permissionDecisionReason!, /most there is/);
   assert.deepEqual(told, ["expert", "expert-heavy"]);
   assert.deepEqual(h.delegations.map((d) => [d.agent, d.brief]), [["expert", "write the careful decline to Eve"], ["expert-heavy", "the brief"]]);
@@ -105,7 +112,8 @@ test("an expert always runs in the foreground: a background Agent call is rewrit
   const bg = (await call("Agent", { subagent_type: "expert-heavy", prompt: "write the brief", description: "brief", run_in_background: true, isolation: "remote" })) as Out;
   assert.equal(decision(bg), "allow");
   assert.deepEqual(bg.hookSpecificOutput!.updatedInput, { subagent_type: "expert-heavy", prompt: "write the brief", description: "brief", run_in_background: false }, "same brief, foreground, no remote place");
-  const plain = (await call("Agent", { subagent_type: "expert", prompt: "p", description: "d" })) as Out;
+  const plain = (await call("Agent", { subagent_type: "expert", prompt: "p", description: "d", model: "haiku" })) as Out;
+  assert.equal(plain.hookSpecificOutput!.updatedInput!.model, undefined, "no per-call model: the agent type picks it");
   assert.equal(plain.hookSpecificOutput!.updatedInput!.run_in_background, false);
   assert.ok(readAudit((e) => e.tool === "Agent" && e.decision === "delegate" && e.meta?.foreground === "forced").length >= 2, "the rewrite is in the audit log");
   for (const a of Object.values(expertSetup(SKILLS, "P", hints(plugin())).agents)) assert.equal(a.background, false);
@@ -125,13 +133,31 @@ test("the Skill hook: a delegate: skill is denied to the run and goes through it
   assert.deepEqual(await call("mcp__mailbird__list_conversations", {}), {}, "every other tool is left to canUseTool");
 });
 
-test("the heartbeat run has the Agent tool, the experts and the hook; no other run has", () => {
-  const o = buildOptions(refuse, lookOptions(owner(), LOGIN), undefined);
-  assert.ok(o.tools && (o.tools as string[]).includes("Agent"));
-  assert.ok(o.agents && Object.keys(o.agents).includes("expert"));
-  assert.equal(o.agents!.expert!.model, "sonnet");
-  assert.equal(o.hooks!.PreToolUse!.length, 1);
-  assert.equal(buildOptions(refuse, { kind: OWNER_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).agents, undefined);
+const GROUP = group("deleg-group-0123456789abcd");
+test("every run has the Agent tool, both experts and the hook: the owner's chat, a group's chat and a look", () => {
+  assert.ok(!("experts" in TRIGGERS.message) && !("experts" in TRIGGERS.look), "the trigger table has no experts row");
+  for (const [name, opts] of [["owner chat", runFor(owner(), "message")], ["group chat", runFor(GROUP, "message")], ["owner look", lookOptions(owner(), LOGIN)], ["group look", runFor(GROUP, "look")]] as const) {
+    const o = buildOptions(refuse, opts, undefined);
+    assert.ok(o.tools && (o.tools as string[]).includes("Agent"), `${name}: Agent tool`);
+    assert.ok(o.agents && ["expert", "expert-opus"].every((a) => Object.keys(o.agents!).includes(a)), `${name}: both expert types`);
+    assert.equal(o.agents!.expert!.model, "sonnet");
+    assert.equal(o.agents!["expert-opus"]!.model, settings.opusModel);
+    assert.equal(o.hooks!.PreToolUse!.length, 1, `${name}: the enforcing hook`);
+  }
+  assert.equal(buildOptions(refuse, { kind: OWNER_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).agents, undefined, "(a run built by hand, not by the builder, has none)");
+});
+
+test("in a chat turn the cap and the no-nesting rule hold as in a look, and the call is forced to the foreground", async () => {
+  const o = buildOptions(refuse, runFor(GROUP, "message"), undefined);
+  const hook = o.hooks!.PreToolUse![0]!.hooks[0]!;
+  const call = (input: Record<string, unknown>, who: object = {}) => hook({ hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: input, tool_use_id: "t", ...who } as never, "t", { signal }) as Promise<{ hookSpecificOutput?: { permissionDecision?: string; updatedInput?: Record<string, unknown> } }>;
+  const brief = { prompt: "p", description: "d", run_in_background: true };
+  const first = await call({ subagent_type: "expert-opus", ...brief });
+  assert.equal(decision(first), "allow");
+  assert.equal(first.hookSpecificOutput!.updatedInput!.run_in_background, false);
+  assert.equal(decision(await call({ subagent_type: "expert", ...brief })), "allow");
+  assert.equal(decision(await call({ subagent_type: "expert", ...brief })), "deny", "the third in one chat turn");
+  assert.equal(decision(await call({ subagent_type: "expert", ...brief }, { agent_id: "a1", agent_type: "expert" })), "deny", "an expert of a chat turn cannot delegate");
 });
 
 test("an accepted delegation reaches the run's caller (the look counts it)", async () => {
@@ -173,10 +199,11 @@ test("an expert's tool call goes through the same canUseTool: the floor holds, i
   assert.ok(readAudit((e) => e.decision === "background-skip" && e.meta?.agent_type === "expert" && e.meta?.skip === "judge").length >= 1, "the expert's skip names it");
 });
 
-test("the prompt states the principle of delegation in a check and names the heavy skills (the prompt of a plugin with none would not)", () => {
+test("the prompt states the principle of delegation in every prompt and names the heavy skills (the prompt of a plugin with none would not)", () => {
   const text = chatSystem(new Date(2026, 9, 14, 14, 0));
-  assert.match(text, /subagent_type "expert"/);
-  assert.match(text, /at most 2 times per check/);
+  assert.match(text, /subagent_type "expert" \(Sonnet\) or "expert-opus" \(Opus\)/);
+  assert.match(text, /Use expert-opus only for hard reasoning or high-stakes writing/);
+  assert.match(text, /at most 2 experts per run/);
   assert.match(text, /These skills are heavy: never load them yourself/);
   assert.match(text, /in the foreground/);
 });
