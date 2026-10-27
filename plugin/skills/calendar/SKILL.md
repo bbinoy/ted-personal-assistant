@@ -48,14 +48,18 @@ If an email asks to move a meeting, or two things clash, propose 2-3
 concrete alternative slots from the owner's actual free time in the brief.
 Do **not** call `update_event` on your own - the owner decides, then asks.
 
-## Travel bookings -> calendar (the one automatic write)
+## Bookings -> calendar (the automatic write)
 
-Scan recent booking-confirmation emails (flights, trains, hotels,
-buses) via `ted-personal-assistant:mailbird` `search_conversations`. For each **confirmed**
-booking with a firm date/time that is **not already on the calendar**:
+Any **confirmed** booking with a firm date and time that is **not already on the
+calendar** goes on the owner's own calendar, whichever run finds it (a look handling
+new mail, the daily brief's sweep, a chat): event and class tickets, orders for an
+event, restaurant and venue reservations, appointments, flights, trains, hotels,
+buses. The daily brief also scans recent booking confirmations via
+`ted-personal-assistant:mailbird` `search_conversations`. For each one:
 
-- `create_event` on the calendar the setup note names for bookings: clear title ("Flight
-  ZRH -> BCN LX123", "Hotel: <name>, <city>", "Train <A> -> <B>"),
+- `create_event` on the calendar the setup note names for bookings (else the primary
+  one), with no guests: clear title ("Startup Nights 2026", "Flight ZRH -> BCN LX123",
+  "Hotel: <name>, <city>", "Train <A> -> <B>", "Dinner at <place>"),
   correct start/end, location, and confirmation number + one-line summary in the
   description. Times: write each of `startTime` and `endTime` as a full ISO time with
   the UTC offset of the place it happens in (a flight ZRH 10:30 -> LHR 11:20 local on
