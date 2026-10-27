@@ -105,7 +105,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 
 **One builder.** `runFor(conversation, trigger, inputs)` (`src/run/runoptions.ts`) builds the `RunOptions` of every run: a chat turn of the owner, a group or a friend (`trigger` `message`), a look of any of them (`look`) and the warm process (`prepare`). Tools come from `toolsFor(capabilitiesOf(conversation), kind)`, skills from `skillsFor`, the persona from the conversation's kind, the limits from the preset (`test/runoptions.test.ts`). `runConversation` and `runLook` (`src/run/agent.ts`) both end in one function, `runTurn`: the conversation's session for the trigger, the options, the context told in front of the message (what is set up, a look's notes, the facts of `factsFor`, each only when that session was not told it already) and the trigger's own message.
 
-What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`, and nothing else branches on the trigger:
+What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`, and nothing else branches on the trigger (delegation is not a row: both may delegate, below):
 
 | | message | look |
 |---|---|---|
@@ -114,7 +114,6 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | message | the person's words (quote, pictures, documents) | "Background check at HH:MM, nothing new from X", why it is due, the routines due, and the chat lines since the look session last saw the log (a fresh one: the last 40) |
 | attended | yes | no |
 | answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
-| experts | none yet | may delegate to the expert (until delegation is built for every run) |
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
 - **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: the notes' file tools (`Read`, `Write`, `Edit`) and the memory writers (`forget_note`, `undo_dream`, and the chat's `journal`), pending the memory unification; the edits of the person's task list (`update_task`, `complete_task`, `drop_task`, `snooze_task`; they are free of the judge, so a run that reads mail does not get them) and the owner's task import and tenant administration; for a look, `read_note` / `write_note`, `seen_mail`, `note_upcoming_meetings` and the status note. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
@@ -143,10 +142,10 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 - A look never starts while a turn of its conversation is settling, queued or running (`Pipeline.busy`). A message that arrives during a look overtakes it (`preempted`, mail not marked seen) unless it waits on an approval or would starve it (`preemptible`). `/stop` reaches looks too.
 - Ceilings (`src/run/ceiling.ts`): every run of a conversation, a look included, 40 minutes (`RUN_MAX_MINUTES_CHAT`). Approval waits do not count.
 
-**Delegation** (`src/run/delegation.ts`). A look delegates by default whatever needs judgement or careful wording (Haiku keeps the mechanical work) to a Sonnet expert (`expert`, or `expert-<skill>` for a skill declaring `delegate: sonnet|opus`).
+**Delegation** (`src/run/delegation.ts`). Every run, a chat turn of the owner, a group or a friend and a look alike, may delegate what needs judgement, careful wording, research or several steps, or a task that means reading a lot (to keep its own context small), to an expert. The caller picks the model by agent type: `expert` (Sonnet, `preset.json`) or `expert-opus` (`OPUS_MODEL`, for hard reasoning or high-stakes writing only); `expert-<skill>` is a skill's variant, on the model its `delegate: sonnet|opus` names. One instruction text (`persona/delegate.md`) is part of every conversation's system prompt, so chat and look prompts stay identical.
 
-- A PreToolUse hook allows only these agents, at most two per look, no nesting, always in the foreground.
-- Only looks of a conversation that can read something have the Agent tool. An expert's calls pass the same permission path.
+- A PreToolUse hook allows only these agents, at most two per run, no nesting, always in the foreground, a per-call `model` override dropped. A chat turn that delegates waits for the expert (the reply comes after; typing keeps showing), bounded like any run by `RUN_MAX_MINUTES_CHAT` (40) and `maxBudgetUsd`, which cover the subagents; a friend's experts pay on her ledger and the instance key as her turn does.
+- The builder gives every run the Agent tool and the `agents`. An expert's calls pass the same `canUseTool` as its run's (floor, judge, and the person's question in a chat turn, the skip in a look).
 
 **Group gate** (`src/conversation/gate.ts`). For an untagged group message one tool-less Haiku call decides whether to act, once per settled burst. Tagged or quoted messages, the owner's chat and a friend's chat are always answered.
 

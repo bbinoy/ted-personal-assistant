@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "28fc93d7df8cbad3"
+        "sha": "3cd83f10badc02b4"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -150,7 +150,15 @@
         "dir": "<data>/conversations/owner/notes",
         "zone": "Europe/London",
         "notify": "[fn]"
-      }
+      },
+      "experts": [
+        "expert",
+        "expert-daily-brief",
+        "expert-evening-wrap",
+        "expert-meeting-prep",
+        "expert-opus",
+        "expert-weekly-review"
+      ]
     },
     "model": "sonnet",
     "system": {
@@ -158,7 +166,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "28fc93d7df8cbad3"
+        "sha": "3cd83f10badc02b4"
       },
       "snapshot": false
     },
@@ -182,7 +190,8 @@
       "Write",
       "Edit",
       "WebSearch",
-      "WebFetch"
+      "WebFetch",
+      "Agent"
     ],
     "settingSources": [
       "user"
@@ -303,6 +312,7 @@
     },
     "envRemoved": [],
     "hooks": [
+      "PreToolUse",
       "PostToolUse"
     ],
     "canUseTool": "function"
@@ -311,7 +321,7 @@
     "run": {
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "2781cea801f42bde"
+        "sha": "5f2f2b0557b419e1"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -360,7 +370,11 @@
         "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
         "zone": "Europe/London",
         "groupId": "g-run-options"
-      }
+      },
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
     },
     "model": "sonnet",
     "system": {
@@ -368,7 +382,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "2781cea801f42bde"
+        "sha": "5f2f2b0557b419e1"
       },
       "snapshot": false
     },
@@ -392,7 +406,8 @@
       "Read",
       "Write",
       "Edit",
-      "WebSearch"
+      "WebSearch",
+      "Agent"
     ],
     "settingSources": [],
     "plugins": [
@@ -415,6 +430,7 @@
     },
     "envRemoved": [],
     "hooks": [
+      "PreToolUse",
       "PostToolUse"
     ],
     "canUseTool": "function"
@@ -423,7 +439,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "6628cdf56bd65864"
+        "sha": "1af1a78f3d71a6fc"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -479,7 +495,11 @@
       "memory": {
         "dir": "<data>/conversations/friend-<bea>/notes",
         "zone": "Europe/London"
-      }
+      },
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
     },
     "model": "sonnet",
     "system": {
@@ -487,7 +507,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "6628cdf56bd65864"
+        "sha": "1af1a78f3d71a6fc"
       },
       "snapshot": false
     },
@@ -511,7 +531,8 @@
       "Read",
       "Write",
       "Edit",
-      "WebSearch"
+      "WebSearch",
+      "Agent"
     ],
     "settingSources": [],
     "plugins": [
@@ -537,6 +558,7 @@
       "CLAUDE_CODE_OAUTH_TOKEN"
     ],
     "hooks": [
+      "PreToolUse",
       "PostToolUse"
     ],
     "canUseTool": "function"
@@ -545,7 +567,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "28fc93d7df8cbad3"
+        "sha": "3cd83f10badc02b4"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -708,6 +730,7 @@
         "expert-daily-brief",
         "expert-evening-wrap",
         "expert-meeting-prep",
+        "expert-opus",
         "expert-weekly-review"
       ]
     },
@@ -716,7 +739,7 @@
       "type": "custom",
       "prompt": {
         "key": "ownerLook.system.prompt",
-        "sha": "28fc93d7df8cbad3"
+        "sha": "3cd83f10badc02b4"
       },
       "snapshot": false
     },
@@ -870,7 +893,7 @@
     "run": {
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "2781cea801f42bde"
+        "sha": "5f2f2b0557b419e1"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -926,14 +949,18 @@
       },
       "model": "haiku",
       "effort": "high",
-      "outputFormat": "[schema]"
+      "outputFormat": "[schema]",
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
     },
     "model": "haiku",
     "system": {
       "type": "custom",
       "prompt": {
         "key": "groupLook.system.prompt",
-        "sha": "2781cea801f42bde"
+        "sha": "5f2f2b0557b419e1"
       },
       "snapshot": false
     },
@@ -954,7 +981,8 @@
     "strictMcpConfig": true,
     "tools": [
       "Skill",
-      "WebSearch"
+      "WebSearch",
+      "Agent"
     ],
     "settingSources": [],
     "plugins": [
@@ -977,6 +1005,7 @@
     },
     "envRemoved": [],
     "hooks": [
+      "PreToolUse",
       "PostToolUse"
     ],
     "canUseTool": "function"
@@ -985,7 +1014,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "6628cdf56bd65864"
+        "sha": "1af1a78f3d71a6fc"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -1049,14 +1078,18 @@
       },
       "model": "haiku",
       "effort": "high",
-      "outputFormat": "[schema]"
+      "outputFormat": "[schema]",
+      "experts": [
+        "expert",
+        "expert-opus"
+      ]
     },
     "model": "haiku",
     "system": {
       "type": "custom",
       "prompt": {
         "key": "tenantLook.system.prompt",
-        "sha": "6628cdf56bd65864"
+        "sha": "1af1a78f3d71a6fc"
       },
       "snapshot": false
     },
@@ -1077,7 +1110,8 @@
     "strictMcpConfig": true,
     "tools": [
       "Skill",
-      "WebSearch"
+      "WebSearch",
+      "Agent"
     ],
     "settingSources": [],
     "plugins": [
@@ -1103,6 +1137,7 @@
       "CLAUDE_CODE_OAUTH_TOKEN"
     ],
     "hooks": [
+      "PreToolUse",
       "PostToolUse"
     ],
     "canUseTool": "function"

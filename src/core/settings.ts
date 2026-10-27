@@ -185,6 +185,8 @@ export function loadSettings(env: Env) {
     // "sonnet" is an alias the SDK resolves to the current Sonnet, so new releases are
     // picked up automatically. Pin a full model id if you prefer stability.
     model: env.HARNESS_MODEL || "sonnet",
+    // The model of `expert-opus`, the stronger expert any run may delegate to (run/delegation.ts); an alias like the above.
+    opusModel: env.OPUS_MODEL?.trim() || "opus",
     credential: credentialMode(env),
 
     mailProvider,

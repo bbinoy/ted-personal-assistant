@@ -134,7 +134,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const finished = new Set<string>();
   let selfMailed = 0; // routine emails sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
   const { routines: ownRoutines, broken } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone, now });
-  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => (!r.skill || looker.experts) && !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), deliver: deliverHow }) : undefined;
+  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), deliver: deliverHow }) : undefined;
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
   for (const n of routineNames) grab(`routine:${n}`);
   const start = (name: string): void => {
@@ -186,7 +186,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
 export function routinesWaiting(conv: Conversation, now: Date): boolean {
   const looker = lookerOf(conv);
   const { routines } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone: looker.zone, now });
-  return routines.some((r) => (!r.skill || looker.experts) && planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), settings.routineCatchUpHours).state === "due");
+  return routines.some((r) => planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), settings.routineCatchUpHours).state === "due");
 }
 
 // Used by tests: forget every pending claim.

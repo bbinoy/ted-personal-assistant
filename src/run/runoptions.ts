@@ -38,7 +38,7 @@ import type { Track } from "./sessionstore.ts";
 //   model     HARNESS_MODEL, or HEARTBEAT_MODEL (a look is a cheap model that decides and delegates)
 //   answer    a reply, or the look's JSON (message, nextCheckMinutes, urgent)
 // Not in the table, on purpose: the limits. A look has the conversation's own turn cap, budget, ceiling (RUN_MAX_MINUTES_CHAT) and place in the run gate, exactly as a message has.
-//   experts   a look may delegate to the expert (a look only until delegation is built for every run)
+// Delegation is not a row either: every run, a message's and a look's, may call the expert (delegation.ts) under the same limits.
 // Security stays where it was and is not decided here: the isolation (strictMcpConfig, no settings sources, no plugins) follows from `who` in buildOptions; the tools and skills come from
 // the capabilities (capabilities.ts, skills.ts) and policy.ts classify; the instance key goes only into the run's environment (tenanttools.ts tenantEnv).
 
@@ -50,17 +50,15 @@ interface TriggerRow {
   model: () => string | undefined; // undefined: HARNESS_MODEL
   effort?: Options["effort"];
   answer?: Options["outputFormat"]; // constrained JSON; absent: a normal reply
-  experts: boolean; // may delegate to the expert (a look only until delegation is built for every run)
 }
 export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
-  message: { attended: true, track: "chat", model: () => undefined, experts: false },
+  message: { attended: true, track: "chat", model: () => undefined },
   look: {
     attended: false,
     track: "look",
     model: () => settings.heartbeatModel,
     effort: "high",
     answer: HEARTBEAT_SCHEMA,
-    experts: true,
   },
 };
 
@@ -140,7 +138,6 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
   const caps = capabilitiesOf(conv);
   const skills = skillsFor(caps, conv.kind === "owner");
   const now = inputs.now ?? new Date();
-  const looker = lookerOf(conv);
   const { notes, ...rest } = shape;
   return {
     ...rest,
@@ -160,11 +157,11 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
     model: t.model(),
     effort: t.effort,
     outputFormat: t.answer,
-    ...(t.experts && looker.experts ? { experts: { setup: expertSetup(looker.skills, expertText(conv, now)) } } : {}),
+    experts: { setup: expertSetup(skills, expertText(conv, now)) }, // (a look adds its callbacks: agent.ts)
   };
 }
 
-// The expert a look may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem).
+// The expert a run may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem).
 function expertText(conv: Conversation, now: Date): string {
   if (conv.kind === "owner") return expertSystem(memoryFor(categoriesFor("owner"), now, conv.notesDir, zoneOf(conv)), { missing: missingSetup(readNotes()) });
   const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;

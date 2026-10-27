@@ -52,25 +52,23 @@ Honesty:
 
 const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join("\n\n");
 
-// What every conversation's prompt says about its own background checks (persona/background.md): the standing instruction for what to do on its own when it is woken without a message. One
+// What every conversation's prompt says about its own background checks (persona/background.md) and about delegating to an expert (persona/delegate.md, for chat turns too): the standing instruction for what to do on its own when it is woken without a message. One
 // text for the owner's chat, a group's and a friend's, the same whether the run is a chat turn or a look (the per-check facts are the check's message, heartbeatInstruction, never here: the prompt stays stable so the
 // session cache holds). It promises only what the conversation's capabilities hold (looker, scope.ts).
 const background = (l: Looker, caps: ReadonlySet<Capability>): string =>
-  say("background", {
+  join(say("background", {
     who: l.who,
     Who: l.own ? l.who : l.who.slice(0, 1).toUpperCase() + l.who.slice(1), // (the same name at the start of a sentence; the owner's is written as it is)
     own: l.own,
     group: l.group,
     reads: l.reads,
     mail: l.mail,
-    experts: l.experts,
     sources: l.sources,
     tasks: l.tasks,
     meetings: l.meetings,
-    delegated: l.experts ? delegatedText(expertSetup(l.skills, "")) : "",
     routines: caps.has("heartbeat") && caps.has("wake"),
     dayMinutes: String(settings.heartbeatDayMinutes),
-  });
+  }), say("delegate", { who: l.who, delegated: delegatedText(expertSetup(l.skills, "")) }));
 const ownerConv = { kind: "owner" } as const; // (the default conversation of the prompts that are asked for without one)
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -221,7 +219,7 @@ export interface Looked {
 }
 const whoLooked = (o: Looked | undefined): string => (!o ? OWNER : o.group ? "the group" : oneLineName(o.name));
 
-// The general expert the heartbeat run delegates heavy work to (heartbeat/delegation.ts): the persona's expert text, the same rules and the same notes as the run it works for.
+// The general expert every run may delegate to (run/delegation.ts): the persona's expert text, the same rules and the same notes as the run it works for.
 export function expertSystem(memory: string, o: { missing?: readonly string[]; mail?: boolean; looked?: Looked } = {}): string {
   const vars = { personality: PERSONALITY, own: !o.looked, who: whoLooked(o.looked) };
   if (o.looked) return join(say("expert", vars), memory);
