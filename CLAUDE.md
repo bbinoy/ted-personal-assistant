@@ -9,11 +9,16 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - **Give facts, not decisions.** Where the model is weak (dates, time zones, counts, "is this due", "was this already sent"), code computes the fact and hands it to the run as context. The run decides what to do with it.
 - **General over specific.** If a fix only works for one feature, look for the shared mechanism that fixes the whole class. Abstract and generalise across features instead of adding a case.
 - **Delete, do not keep fallbacks.** Remove the old path when the new one lands. No feature flags for old behaviour, no dead code kept "just in case".
+- **Schedules are data.** Anything that runs at a set time is declared in a skill's `schedule:` or a note's `when:` line. Code computes when it is due and that it runs once; the model does the work.
+- **Context is a budget.** Every tool definition and prompt line is paid on every call. Show the model only the tools its skills use, and measure with `/context` before and after a change that adds any.
 
 ## 2. One architecture for everyone
 
 - The owner's chat, groups and friends use the same run path, tools, skills and loops. Capabilities decide what each conversation has; there is no owner-only copy of a feature.
 - A background look, a chat turn and a routine are the same agent with the same rules. Behaviour must not depend on what triggered the run.
+- **One builder.** Every run (chat turn, look, expert) is built by the same functions from the conversation's capabilities, the owner included: the owner is just the conversation with every capability.
+- **A closed list of differences.** A chat turn and a look differ only in model, session, trigger line, whether someone is attended, and answer format. Nothing else branches on the trigger or on "is owner"; a new difference needs the owner's approval.
+- **Same context, same powers.** Every run sees the same shared context and may delegate to a stronger model (Sonnet or Opus) when the work needs judgement.
 
 ## 3. Act, don't ask
 
@@ -21,6 +26,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - **Ask only for critical, irreversible actions.** Paying (typed YES, card holder's own chat), and anything that cannot be undone and touches money or other people where the judge is unsure. Everything else happens automatically.
 - **Prefer the reversible way.** Archive instead of delete, mark done instead of remove, own-calendar entries freely. Make undo easy: the journal and the daily brief say what was done, and the user can reverse it in one message.
 - **Background runs never ask.** Unattended work acts when the judge says yes and skips silently when it does not.
+- **Trust the judge, not parallel paths.** Mail and web content is marked untrusted; the code floor and the judge decide. Do not add restricted copies of tools or provenance stamps for unattended runs: the §5 invariants are the hard limits.
 - **Inform minimally.** Tell the user what happened only when it matters to them, in one friendly line, or collect it into the daily brief. Low-risk work (adding a task, archiving routine mail, a calendar placeholder) is done and then mentioned, never proposed for approval.
 
 ## 4. Ted speaks, code doesn't
