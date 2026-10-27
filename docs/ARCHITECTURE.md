@@ -72,8 +72,8 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `seen_mail` | mail ids the look has worked through (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
 | `routine_runs` | last period of each routine (scheduled skill or routine note), keyed by skill name or note file name |
-| `items`, `task_events`, `reminders`, `pending_imports`, `group_remind_noted` | tasks, append-only history, claimed reminders, an import preview, a group notice mark |
-| `learned_changes`, `learned_batches`, `voice_*`, `friend*` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
+| `items`, `task_events`, `reminders`, `group_remind_noted` | tasks, append-only history, claimed reminders, a group notice mark |
+| `learned_changes`, `learned_batches`, `voice_*`, `friend` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
 | `pending_*`, `suggestion_asks` | unused; a shipped migration is never edited; `pending_*` is emptied nightly |
 
 - **Adding state is one migration:** append a step to `CONV_SCHEMA`, write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound. Older code refuses a newer file (`NewerSchemaError`).

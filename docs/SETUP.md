@@ -35,7 +35,7 @@ npm run doctor
 npm run install:launchd               # installs a launchd job; the agent starts now and at login
 ```
 
-On its first start (an empty data folder) the assistant tells the assistant to introduce itself in your chat; say "set up" to walk through connecting your calendars and how you write. It then starts gently: for the first days (until 3 days have passed AND you have at least one triage note, at the latest 14 days) a heartbeat look only PROPOSES its archives in one message ("I'd archive these 14": 👍 archives them all, "3,5 keep" leaves those), and only your answer archives anything. `SHADOW_MODE=off` archives from the first look as your notes say, `SHADOW_MODE=on` keeps proposing forever; a friend's own mail is counted from her first message. Asking in chat ("archive all newsletters") is never held back.
+On its first start (an empty data folder) the assistant introduces itself in your chat, in its own words; say "set up" to walk through connecting your calendars and how you write. It archives routine mail from the first look, as your notes say; every archive is listed in `/today` and the brief, and "restore 3" brings one back.
 
 Send yourself a message on Signal. The first heartbeat look works through the inbox the assistant has not looked at yet (the `seen_mail` log is empty at first; a big inbox is worked off over successive looks). So that the first look does not triage a whole backlog, mail older than `MAIL_BACKLOG_DAYS` (7) is marked as seen without being sorted, and the assistant tells you so once in its first message; `MAIL_BACKLOG_DAYS=0` turns that off. The first daily brief is started by the heartbeat run around 07:30 (its rules are in `assistants/ted/persona/heartbeat.md`).
 
