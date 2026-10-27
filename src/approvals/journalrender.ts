@@ -9,6 +9,7 @@ import { resultText } from "../modules/browse/browseguard.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { callLabel, createdLabel, idsInCall, idsInResult } from "./created.ts";
 import type { RunProvenance } from "./autojudge.ts";
+import { rememberNames, seenName } from "./seennames.ts";
 import { scopeOf } from "./turnscope.ts";
 
 // What the journal says about an action, written by code (core/sinks/journalsink.ts writes the line): WHAT was done (named by the object, not only its id), WHY (first from what code knows:
@@ -69,58 +70,6 @@ export function categoryOf(tool: string): string {
   }
 }
 
-// ---- the mail the run has seen, to name an archive ----
-
-// An archive call carries only an id. The subject and sender of that mail are what the person recognises, so code remembers them from the results of the mail READS of this conversation (a list, a
-// search, a get) for a day: every object in a result that has an id-like key and a subject. Only text the connector returned; never the model's words. In memory, per conversation, bounded.
-const SEEN_TTL_MS = 24 * 3_600_000;
-const MAX_SEEN = 600;
-const seenMail = new Map<string, Map<string, { subject: string; from?: string; at: number }>>();
-export const forgetSeenMail = (): void => seenMail.clear(); // tests
-
-const ID_KEYS = ["conversationId", "conversation_id", "threadId", "thread_id", "messageId", "message_id", "id"];
-const FROM_KEY = /^(?:last_?)?(?:from|sender)(?:_?name|_?email|_?address)?$/i; // (Mailbird's list rows say `lastSender`)
-const textOf = (v: unknown): string | undefined => {
-  if (typeof v === "string") return v.trim() || undefined;
-  if (v && typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    return textOf(o.name) ?? textOf(o.displayName) ?? textOf(o.email) ?? textOf(o.address);
-  }
-  return undefined;
-};
-
-export function rememberMail(conv: string, response: unknown, now = Date.now()): void {
-  let root: unknown = response;
-  const text = typeof response === "string" ? response : resultText(response);
-  if (text) {
-    try {
-      root = JSON.parse(text);
-    } catch {
-      return; // (not JSON: a rendered list we cannot read ids from)
-    }
-  }
-  const found: [string, { subject: string; from?: string }][] = [];
-  const walk = (v: unknown, depth: number): void => {
-    if (depth > 6 || !v || typeof v !== "object" || found.length > 200) return;
-    if (Array.isArray(v)) return void v.forEach((x) => walk(x, depth + 1));
-    const o = v as Record<string, unknown>;
-    const subject = textOf(o.subject);
-    const id = ID_KEYS.map((k) => o[k]).find((x) => (typeof x === "string" && x) || typeof x === "number");
-    if (subject && id !== undefined) found.push([String(id), { subject, from: Object.keys(o).filter((k) => FROM_KEY.test(k)).map((k) => textOf(o[k])).find(Boolean) }]);
-    for (const x of Object.values(o)) walk(x, depth + 1);
-  };
-  walk(root, 0);
-  if (!found.length) return;
-  const m = seenMail.get(conv) ?? seenMail.set(conv, new Map()).get(conv)!;
-  for (const [k, e] of m) if (now - e.at >= SEEN_TTL_MS) m.delete(k);
-  for (const [id, e] of found) m.set(id, { ...e, at: now });
-  while (m.size > MAX_SEEN) m.delete(m.keys().next().value!);
-}
-export const mailName = (conv: string, id: string): string | undefined => {
-  const e = seenMail.get(conv)?.get(id);
-  return e ? `“${clip(e.subject, 80)}”${e.from ? ` from ${clip(e.from, 50)}` : ""}` : undefined;
-};
-
 // ---- what ----
 
 const VERBS: Record<string, string> = {
@@ -171,14 +120,14 @@ export function render(conv: string, tool: string, input: Record<string, unknown
   const archived = archivedBy(tool, input);
   if (archived) {
     const ids = archived.filter(Boolean);
-    const names = ids.map((id) => mailName(conv, id) ?? `mail ${id}`);
+    const names = ids.map((id) => seenName(conv, id) ?? `mail ${id}`);
     // (every id is in the undo, so the archive list of the brief can restore each one: journalread.ts archiveItems reads them back)
     return { what: `Archived ${ids.length ? list(names) : "a mail"}`, cat, undo: ids.length === 1 ? `npm run restore ${ids[0]}, or say 'restore that'` : ids.length ? `npm run restore <id> for each of ${ids.join(" ")}, or say 'restore that'` : "say 'restore that'" };
   }
   const e = entryFor(tool);
   if (e?.action === "restore") {
     const ids = idsInCall(input);
-    return { what: `Put ${ids.length ? list(ids.map((id) => mailName(conv, id) ?? `mail ${id}`)) : "a mail"} back in the inbox`, cat };
+    return { what: `Put ${ids.length ? list(ids.map((id) => seenName(conv, id) ?? `mail ${id}`)) : "a mail"} back in the inbox`, cat };
   }
   if (NOTE_WRITES.has(tool)) {
     const file = typeof input.file_path === "string" ? input.file_path.split("/").pop() : undefined;
@@ -256,7 +205,7 @@ export async function noteDone(o: { conv: string | undefined; run?: string; sour
   const conv = o.conv ?? OWNER_KEY;
   try {
     if (isReadTool(o.tool)) {
-      if (entryFor(o.tool)?.cap === "mail" || entryFor(o.tool)?.provider === "gmail" || entryFor(o.tool)?.provider === "mailbird") rememberMail(conv, o.response);
+      rememberNames(conv, o.response);
       return;
     }
     if (!journalable(o.tool)) return;

@@ -1,9 +1,11 @@
-import { createdLabel, idsInCall } from "./created.ts";
+import { createdFact, createdLabel, idsInCall } from "./created.ts";
 import { confirmsDelete, moduleOf } from "../policy/toolmanifest.ts";
+import { seenName } from "./seennames.ts";
 
 // A question about a call that acts on an object by its id (delete or change a calendar event, a Notion page, a Drive file, a mail draft) must name the object, not only the id.
-// Written by code, in this order: (1) what the assistant itself made in this conversation and the title and time its creating call gave (created.ts, 24 hours); (2) the
-// module's own read-only lookup (ToolModule.describe), where it has a getter and the code has a client for it; (3) for a delete, the plain statement that the title is unknown.
+// Written by code, in this order: (1) what the assistant itself made in this conversation and the title and time its creating call gave (created.ts, 24 hours); (2) what the run itself READ
+// in this conversation, any connector (seennames.ts); (3) the module's own read-only lookup (ToolModule.describe), where it has a getter and the code has a client for it; (4) the plain statement that the title is unknown, for a delete;
+// permissions.ts then sends the run to look the object up first (a `fix`), and asks the owner only if it still cannot be named.
 // The line is part of the code-rendered details the question writer and the judge read, and the title must appear in the question (questionfacts.ts).
 
 const HAS_NAME = /^(summary|title|subject|name)$/i;
@@ -15,6 +17,8 @@ export async function objectLines(conversation: string, tool: string, input: Rec
   if (named(input) || idsInCall(input).length === 0) return ""; // the call says what it is about itself, or it names no object
   const made = createdLabel(conversation, input);
   if (made) return `\nNamed: ${made} (the assistant created it earlier in this conversation)`;
+  const seenAs = seenName(conversation, idsInCall(input)[0]!);
+  if (seenAs) return `\nNamed: ${seenAs}`;
   const find = lookup ?? moduleOf(tool)?.describe;
   if (find) {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -27,5 +31,7 @@ export async function objectLines(conversation: string, tool: string, input: Rec
       clearTimeout(timer);
     }
   }
-  return confirmsDelete(tool, input) ? "\nNamed: unknown (only its id is known: it was not made by the assistant here and could not be looked up)" : "";
+  return confirmsDelete(tool, input) && createdFact(conversation, input) !== "yes" ? UNNAMED : "";
 }
+
+export const UNNAMED = "\nNamed: unknown (only its id is known: it was not made by the assistant here, not read in this conversation, and could not be looked up)";

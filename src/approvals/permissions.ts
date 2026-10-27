@@ -5,7 +5,7 @@ import { emit, type Why } from "../core/events.ts";
 import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
-import { objectLines } from "./describe.ts";
+import { objectLines, UNNAMED } from "./describe.ts";
 import { clearDeclined, declinedAgo, declinedLine, declinedMinutes, noteDeclined } from "./declined.ts";
 import { describeCall } from "./format.ts";
 import type { MailView } from "../policy/mailview.ts";
@@ -181,6 +181,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
   const log = baseLog;
   // The judge's `fix` verdicts of THIS run (this closure lives as long as the run), per tool: how many, and for which exact arguments.
   const fixes = new Map<string, { n: number; keys: Set<string> }>();
+  const unnamedSent = new Set<string>(); // calls already sent back once to be looked up (so a call that cannot be named is then asked, not looped)
   const runGates = registered().flatMap((m) => (m.floor?.perRun ? [m.floor.perRun()] : [])); // the modules' limits for THIS run (the archive cap)
   // Fails closed: whatever throws on the way (the guard, the audit log, the read-back of a draft, the judge's set-up, the approver) ends in a deny, never an allow.
   return async (tool, input, o) => {
@@ -266,6 +267,12 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     // A decline is final until the person asks again in a new message (declined.ts): the question and the judge are told, and the judge cannot loosen it.
     const declinedMs = g?.payment ? undefined : declinedAgo(conversation, tool, input, Date.now(), g?.description);
     if (declinedMs !== undefined) description += `\n${declinedLine(declinedMs)}`;
+    // A delete or change of an object the run never saw by name is not asked by its id: the run looks it up first (a read), so the question can name it. The second time, the owner is asked.
+    if (!g && declinedMs === undefined && description.includes(UNNAMED) && !unnamedSent.has(key)) {
+      unnamedSent.add(key);
+      log(tool, "judge-fix", source, { reason: "unnamed-object", count: unnamedSent.size });
+      return { behavior: "deny", message: "Not run, nobody was asked: this call names an object only by its id, and no question can be put to the person about an id. Look the object up first with a read tool (for a calendar event: get_event, or list_events for that day), so you know its title and time, then call this again. Name it by title and time in anything you say to the person." };
+    }
     let judgeSaid: Verdict["decision"] | undefined;
     let judged: Verdict | undefined;
     let skipWhy: string | undefined; // why an unattended run's call is skipped (the audit's reason class): the judge's ask, a fix that may not be applied, a decline that stands
