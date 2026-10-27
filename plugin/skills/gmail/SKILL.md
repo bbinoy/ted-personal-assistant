@@ -24,15 +24,19 @@ The tools you have: `search_threads`, `get_thread`, `get_message`, `get_draft`,
   free and uncapped; never keep a mail just because you did not read it.** Open with `get_thread` and `messageFormat: "PLAIN_TEXT"` (never `RAW`).
 - **Attachments**: never read or open their content. Their name, type and size are enough; if the
   owner needs the content, tell them to open it in Gmail.
-- The owner's own briefing mails (subject starting with the sun or moon emoji) are never read, replied to or counted as mail; only today's `☀️` brief stays in the inbox, older `☀️` and `🌙` ones are archived in the daily sweep.
+- The assistant's own briefs (mail the owner sent to themselves whose subject starts with "Daily brief", "Evening wrap" or "Weekly review", with or without a `☀️` / `🌙`) are never read, replied to or counted as mail; today's daily brief stays in the inbox, every older brief, wrap and review is archived, by every run.
 
 ## Triage (the daily brief's inbox pass)
 
-Same rules as the Mailbird skill, "Inbox sweep" (read it): **archive unless the mail needs the owner**
-(a reply or decision expected, a payment or signature open, an event or deadline within 7 days, or unread
-personal mail from someone the owner knows or has corresponded with); everything else is handled and goes, read or unread, new or old
+Same rules as the Mailbird skill, "Inbox sweep" (read it), for every look as well as the sweep: **archive unless the mail needs the owner**
+(a reply or decision expected, a payment or signature open, an event or deadline within 7 days). **Real conversations stay**
+(a thread where the owner and a person write to each other personally), read or unread, however old, until clearly closed and older
+than about 14 days; so do the owner's own mails and threads they started. **Official and open matters** (bills, tax, lawyers,
+insurance, official letters, requests to sign or verify) stay until something shows they are done. **A completed task closes its
+mail; a series of the same reminder keeps only its newest.** Automated mail that is handled goes, read or unread, new or old
 (receipts, confirmations, booking and order updates, codes, account notices a day old, newsletters, promos,
-notifications, CI and tool mails, answered invitations). Cold outreach (sales, recruiting, fundraising, vendor pitches, follow-up sequences, a stranger name-dropping the owner's company) is archived like a newsletter whatever any "important" flag says, unless the owner's notes want that kind; open the thread before judging an unknown sender, never decide by the subject alone. Routine and in doubt: archive. The owner's triage
+notifications, e-signature completion notices, CI and tool mails, answered invitations); archive from the row only for automated
+senders, open a person's mail first. Cold outreach (sales, recruiting, fundraising, vendor pitches, follow-up sequences, a stranger name-dropping the owner's company) is noise even when a named person wrote it: judge the relationship, not whether a human typed it; it is archived like a newsletter whatever any "important" flag says, unless the owner's notes want that kind. Routine automated mail in doubt: archive; doubt about a person, money or an official matter: keep. The owner's triage
 notes in memory win over these defaults. The daily sweep lists the whole inbox itself
 (`search_threads` with `in:inbox`, paging with the page token until it ends, oldest included; it does not use
 `seen_mail`) and archives what is handled, including all but today's brief email. Skim at most 4 relevant

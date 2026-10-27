@@ -12,6 +12,15 @@ follow those, don't restate them here. If the connection is broken
 (`claude mcp list` shows it failed, 401s, setup redo), use the
 **`mailbird-troubleshooting`** skill.
 
+## For every run that handles mail
+
+- **The assistant's own briefs.** A mail the owner sent to themselves whose subject
+  starts with "Daily brief", "Evening wrap" or "Weekly review" (with or without a
+  `☀️` / `🌙` in front) is the assistant's own brief. Never read, reply to or count it
+  as mail. Today's daily brief stays in the inbox; every older brief, wrap and review
+  is archived.
+- **The triage rules below apply to every look, not only the daily sweep.**
+
 ## Inbox sweep (the daily brief run)
 
 Run this across every account (`list_accounts` -> each Inbox). The agent's
@@ -30,18 +39,15 @@ radar).
    about 50 rows, all `archive_conversation` calls of a batch in one turn. A run
    may archive only so many mails (the tool refuses past the cap): when it does,
    stop archiving, say nothing about it, and the next day's sweep continues.
-   **Keep only today's brief email.** The owner's own briefing mails (a
-   self-sent message with a `☀️` or `🌙` subject) are never read, replied to,
-   labelled or counted as mail, and the newest `☀️` (today's) stays in the inbox;
-   every older `☀️` daily and `🌙` evening brief is archived in the sweep, like
-   any other handled mail.
+   **Keep only today's brief email** (see "For every run that handles mail").
 
 **Decide per mail whether the row is enough, and read when it is not.**
 Reading is a plain read: free, not judged, with no cap. Where the row (sender,
 subject, preview) makes the call certain, classify and archive from the row
-without opening it: newsletters, promos, job-board digests, social nudges,
-receipts, security/login alerts, shipping and portal-document notices, and a
-batch of near-identical rows that is obviously one category. **Whenever you are
+without opening it, **for automated senders only**: newsletters, promos, job-board
+digests, social nudges, receipts, security/login alerts, shipping and
+portal-document notices, and a batch of near-identical rows that is obviously one
+category. **Mail from a person is opened before it is archived.** **Whenever you are
 not confident, open the full mail (`get_message`) before deciding:** an unknown
 sender, a subject that could be personal, anything that might need the owner, a
 date, an amount or an ask you must read to judge, a real-person thread you cannot
@@ -57,36 +63,56 @@ in one turn, not one per turn.
 2. **Triage: archive unless the mail needs the owner.** The default is
    *archive*. Everything the owner does not have to act on goes, and goes
    whether it is unread, new or old.
-   - *Needs the owner* (the only reason to keep): a reply or a decision is
-     expected from them; a payment is open or a document waits for their
-     signature; an event or deadline falls in the next 7 days; or it is
-     something they would clearly want to read and have not: unread personal mail
-     from someone the owner knows or has corresponded with (their notes, contacts,
-     earlier threads in the inbox or sent mail, the calendar) or that clearly continues
-     a conversation the owner started. **Cold outreach is not that**: sales,
+   - *Needs the owner* (keep): a reply or a decision is expected from them; a
+     payment is open or a document waits for their signature; an event or
+     deadline falls in the next 7 days; or **a real conversation**: a thread in
+     which the owner and a person write to each other personally (the owner has
+     written to them, or they write to the owner about something the owner is part
+     of: their notes, contacts, earlier threads, sent mail, the calendar tell you).
+     A real conversation stays, read or unread, however old, until it has clearly
+     closed (a thanks or a sign-off, nothing open on either side) **and** is older
+     than about 14 days. **The owner's own mails stay too**: a thread the owner
+     started or a mail they sent to themselves (a note, a link, a forward), unless
+     it is one of the assistant's own briefs.
+   - **Cold outreach is noise even when a named person wrote it**: sales,
      recruiting, fundraising, agency and vendor pitches, "quick question" mails,
      follow-up sequences, generic personalisation, a stranger name-dropping the
-     owner's company. It is archived like a newsletter, whatever the provider's
-     "important" flag says, unless the owner's notes say they want that kind.
-     **When the sender is unknown to the owner, open the mail (`get_message`, cheap)
-     before deciding;** never judge an unknown sender by the subject alone. **Invoices still to pay, bills, insurance
-     policy changes, tax documents and official letters** stay while something is
-     open; once paid, confirmed or merely informational they are handled.
+     owner's company. Judge the relationship, not whether a human typed it: no
+     earlier exchange, no shared context, and a pitch is outreach. It is archived
+     like a newsletter, whatever the provider's "important" flag says, unless the
+     owner's notes say they want that kind. **When the sender is unknown to the
+     owner, open the mail (`get_message`, cheap) before deciding;** never judge an
+     unknown sender by the subject alone.
+   - **Official and open matters stay until something shows they are done**:
+     invoices still to pay, bills, tax and accounting mail, lawyers and notaries,
+     insurance, official letters, and requests to sign or verify (DocuSign and the
+     like). They are handled once a later mail, the calendar or a task shows it:
+     a payment confirmation, "all parties have signed", a closed case.
+   - **A completed task closes its mail.** When a task in the list is done and a mail
+     belongs to it (the task's source mail, the same thread, or plainly the same
+     matter by sender and subject), that mail is handled.
+   - **A series keeps only its newest mail.** Several mails that are the same reminder
+     or update (a signature reminder sent three times, payment or renewal reminders,
+     repeated status updates on one matter): keep the newest while it is still open,
+     archive the older ones.
    - *Handled, archive from the row:* receipts and payment confirmations, booking
      and order updates (confirmed, shipped, dispatched, delivered), a receipt for
      a booking already confirmed, verification and confirmation codes, account and
      security notices (once a day old, unless suspicious: a login the owner did
      not make stays), past events and finished trips, calendar invitations /
      updates / accepted / declined notices (judge the event on the calendar),
-     Notion, Google Docs and e-signature notifications, app/OAuth notices, CI and
+     Notion and Google Docs notifications, e-signature *completion* notices (a
+     request to sign is an open matter, above), app/OAuth notices, CI and
      tool mails (build failures, deploy notices), "RE: Reservation" style booking
      notifications, review requests, read and concluded threads, and a mail that
      is now a task (the task holds it).
    - *Noise, archive from the row:* newsletters, promotions, cold outreach, job-board
      digests, social nudges, expired invites and event blasts.
-   - **Unread is not a reason to keep.** Neither is "I have not looked at it": decide
-     by what the mail is. **Read** is a signal for the other side: a mail the owner has
-     opened, older than about 3 days, with nothing open for them, is handled.
+   - **For automated mail, unread is not a reason to keep.** Neither is "I have not
+     looked at it": decide by what the mail is. **Read** is a signal for the other
+     side: an automated mail the owner has opened, older than about 3 days, with
+     nothing open for them, is handled. For a person's mail, read or unread does not
+     decide: the real-conversation rule above does.
    - **In doubt between keep and archive for routine mail: archive.** It is
      reversible, journaled and listed in the brief. Doubt about a mail from a real
      person, money or an official deadline is different: keep that one.
@@ -94,12 +120,10 @@ in one turn, not one per turn.
      (`triage-` notes: "mail from X is always urgent", "keep the school's mails")
      override every default in this list, in both directions.
 
-   **Real-person threads:** a thread with a person the owner knows (not a service /
-   no-reply sender, not cold outreach) that is unread, or still waits for a reply from either side,
-   stays; flag it in the brief when it has gone dormant ("dormant thread with
-   <person> (<subject>, last activity <date>) - reply or archive?"). A thread
-   that has obviously wrapped up (a thanks, a sign-off, nothing outstanding), or
-   that the owner has read and that needs nothing from them, is handled.
+   **Real conversations in the brief:** a real conversation that still waits for a
+   reply from either side and has gone quiet is flagged in the brief ("dormant
+   thread with <person> (<subject>, last activity <date>)"). It is not archived
+   until it has clearly closed and is older than about 14 days (above).
 3. **Tidy.** Archive the FYI + Noise buckets with `archive_conversation`
    (never trash or delete). Track what was archived and the reason.
 4. **Propose actions with drafts ready.** For each "Needs the owner" item
