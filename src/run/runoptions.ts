@@ -151,24 +151,14 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
     model: t.model(),
     effort: t.effort,
     outputFormat: t.answer,
-<<<<<<< HEAD
-    ...(t.experts && looker.experts ? { experts: { setup: expertSetup(looker.skills, expertText(conv)) } } : {}),
+    experts: { setup: expertSetup(skills, expertText(conv)) }, // (a look adds its callbacks: agent.ts)
   };
 }
 
-// The expert a look may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem): the index of the notes, which it reads in full with its own tools.
+// The expert a run may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem): the index of the notes, which it reads in full with its own tools.
 function expertText(conv: Conversation): string {
   const index = readIndex(conv.notesDir);
   if (conv.kind === "owner") return expertSystem(index, { missing: missingSetup(readNotes()) });
-=======
-    experts: { setup: expertSetup(skills, expertText(conv, now)) }, // (a look adds its callbacks: agent.ts)
-  };
-}
-
-// The expert a run may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem).
-function expertText(conv: Conversation, now: Date): string {
-  if (conv.kind === "owner") return expertSystem(memoryFor(categoriesFor("owner"), now, conv.notesDir, zoneOf(conv)), { missing: missingSetup(readNotes()) });
->>>>>>> main
   const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
   const looker = lookerOf(conv);
   const looked = { name: looker.who, group: looker.group, language: ctx?.language, persona: ctx?.persona };
