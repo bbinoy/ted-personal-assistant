@@ -139,7 +139,7 @@ test("manifest: same action, same behaviour across mail providers", () => {
 
 test("manifest: every connector tool the model is given by default (a module's `hide.visible`) has an entry", () => {
   const hiding = registered().filter((m) => m.hide);
-  assert.deepEqual(hiding.map((m) => m.name).sort(), ["gmail", "mailbird", "notion"]);
+  assert.deepEqual(hiding.map((m) => m.name).sort(), ["docs", "drive", "gmail", "mailbird", "notion"]);
   for (const m of hiding) for (const t of m.hide!.visible) assert.ok(allRows().some((r) => r.tool === m.hide!.prefix + t), `${m.name}: ${t}`);
 });
 

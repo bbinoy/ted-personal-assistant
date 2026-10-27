@@ -21,6 +21,9 @@ export const driveModule: ToolModule = {
   free: ["read"],
   titles: { [`${DRIVE}share_file`]: { icon: "🔗", title: "Share a Drive file" }},
   floor: { judgeNever: ["share"] },
+  // The model reads and finds files; saving, copying and sharing go through other paths, and each of those definitions costs context on every call (DRIVE_TOOLS replaces the list).
+  hide: { prefix: DRIVE, visible: ["search_files", "read_file_content", "list_recent_files", "get_file_metadata"], valid: /^[a-z_]+$/, hint: "a Drive tool name like search_files" },
+  known: "copy_file create_file download_file_content get_file_metadata get_file_permissions list_recent_files read_file_content search_files share_file trash_file update_file".split(" ").map((t) => `${DRIVE}${t}`),
 };
 
 const docs = rowsOf(DOCS, "docs", "drive");
@@ -29,6 +32,8 @@ export const docsModule: ToolModule = {
   connection: { kind: "connector", optional: true, key: "docs", label: "Google Docs", skipped: "reading and editing Google Docs", server: /google docs/i, prefix: DOCS },
   rows: [...docs("read", "read_doc"), ...docs("doc-write", "update_doc")],
   free: ["read"],
+  hide: { prefix: DOCS, visible: ["read_doc"], valid: /^[a-z_]+$/, hint: "a Docs tool name like read_doc" }, // update_doc alone is 2.6k tokens (DOCS_TOOLS replaces the list)
+  known: [`${DOCS}read_doc`, `${DOCS}update_doc`],
 };
 
 // The Claude Docs connector (living documents): reads are free, writes are judged, and its plain `delete` is never allowed.

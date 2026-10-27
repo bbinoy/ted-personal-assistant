@@ -113,6 +113,17 @@ test("hidden tools: both lists come from settings, so a skill that needs another
   assert.deepEqual(hidden, ["mcp__claude_ai_Gmail", `${N}search`]);
 });
 
+test("hidden tools: Drive and Docs show reading and finding only; DRIVE_TOOLS brings one back", () => {
+  const D = "mcp__claude_ai_Google_Drive__";
+  const DOC = "mcp__claude_ai_Google_Docs__";
+  const hide = ["create_file", "update_file", "copy_file", "share_file", "get_file_permissions", "download_file_content"].map((t) => D + t);
+  const keep = ["search_files", "read_file_content", "list_recent_files", "get_file_metadata"].map((t) => D + t);
+  const hidden = hiddenTools([...hide, ...keep, DOC + "read_doc", DOC + "update_doc"], loadSettings({}));
+  for (const t of [...hide, DOC + "update_doc"]) assert.ok(hidden.includes(t), t);
+  for (const t of [...keep, DOC + "read_doc"]) assert.ok(!hidden.includes(t), t);
+  assert.ok(!hiddenTools([D + "copy_file"], loadSettings({ DRIVE_TOOLS: "copy_file" })).includes(D + "copy_file"));
+});
+
 // The pin of the refactor that made every module declare its own visible tools: what the model is hidden is exactly what the old per-provider settings gave, for every provider.
 test("hidden tools: the defaults hide exactly what the per-provider lists did, for mailbird, gmail and no mail", () => {
   const MB = "mcp__mailbird__";

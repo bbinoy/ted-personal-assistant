@@ -312,7 +312,7 @@ export function loadSettings(env: Env) {
 
     // What the model can see (policy.ts, hiddenTools): every tool it sees is re-sent on every model call, so hide what your skills never use. A skill that needs a
     // hidden tool will fail, so list it here. HIDDEN_CONNECTORS: tool-name prefixes of whole connectors (Google Drive and Google Docs are shown by default: find a file, read it; list them here to hide them again. The Gmail one is shown while MAIL_PROVIDER=gmail, and the mail
-    // connector that is not in use is hidden whatever this says). <MODULE>_TOOLS (NOTION_TOOLS, MAILBIRD_TOOLS, GMAIL_TOOLS: the module's name in capitals): the tools
+    // connector that is not in use is hidden whatever this says). <MODULE>_TOOLS (NOTION_TOOLS, MAILBIRD_TOOLS, GMAIL_TOOLS, DRIVE_TOOLS, DOCS_TOOLS: the module's name in capitals): the tools
     // of that module's connector to keep, replacing the default list the module declares (src/modules/*.ts `hide`); checked against the module by checkHideSettings.
     hiddenConnectors: list(
       env,
