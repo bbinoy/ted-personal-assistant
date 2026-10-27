@@ -9,6 +9,7 @@ import { addDays, daysBetween, daysInMonth, epochDay, fromEpochDay, localOf, mod
 //   every weekday | every weekend | every monday | every mon, wed and fri | weekly | every week [on monday] | every N weeks [on monday, thursday] | every other week | fortnightly
 //   every month | monthly | every N months, each with  on the 1st | on the 15th | on the last day | on the first monday | on the last friday     (also: every first monday of the month)
 //   every year | yearly | annually | every N years, with  on 14 feb | on feb 14                                                                     (also: every 14 feb)
+//   any of them may end with an IANA time zone, "every day at 08:00 Europe/Zurich": the rule then runs on that clock, otherwise on the conversation's
 // The interval counts from an ANCHOR date (the task's due date, else the day it was made): "every 2 weeks" from Monday 5 Oct fires on 19 Oct, 2 Nov... A day-of-month beyond the month's end
 // (the 31st in April) fires on the month's last day; 29 Feb fires on 28 Feb in a year without one.
 
@@ -21,6 +22,7 @@ export interface Rule {
   month?: number; // year: with day; absent: the anchor's
   day?: number;
   time?: string; // "HH:MM", local; absent: the caller's default (the task's own time, else the reminder default)
+  zone?: string; // IANA zone the rule runs in ("Europe/Zurich"); absent: the conversation's
 }
 
 export type Parsed = { ok: true; rule: Rule; text: string } | { ok: false; error: string };
@@ -35,6 +37,14 @@ const ORD_NAME: Record<number, string> = { 1: "first", 2: "second", 3: "third", 
 export const USAGE = "a repeat rule like: every day, every weekday, every monday, every mon and thu, every 2 weeks, every month on the 1st, every month on the last friday, every year on 14 feb (add 'at 09:00' for a time)";
 
 const bad = (text: string): Parsed => ({ ok: false, error: `Cannot read the repeat rule "${text.slice(0, 80)}". Use ${USAGE}.` });
+// A zone as people write it ("europe/zurich"), as Intl names it ("Europe/Zurich"); undefined when Intl does not know it.
+const zoneName = (z: string): string | undefined => {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: z }).resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+};
 const ordinal = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th")}`;
 const wdKey = (w: string): number | undefined => WD[w] ?? WD[w.replace(/s$/, "")];
 
@@ -103,17 +113,26 @@ function monthDate(s: string): { month: number; day: number } | undefined {
 }
 
 function finish(rule: Rule, time: string | undefined): Parsed {
-  const r: Rule = { ...rule, ...(time ? { time } : {}) };
+  const r: Rule = { ...rule, ...(time ? { time } : {}), ...(zoneNow ? { zone: zoneNow } : {}) };
   if (r.interval < 1 || r.interval > MAX_INTERVAL[r.unit]) return { ok: false, error: `A repeat rule can skip at most ${MAX_INTERVAL[r.unit]} ${r.unit}s (every ${r.interval} ${r.unit}s is too many or too few).` };
   if (r.unit === "week" && r.interval === 1 && r.weekdays?.length === 7) return finish({ unit: "day", interval: 1 }, time); // (every day of the week is every day)
   return { ok: true, rule: r, text: formatRepeat(r) };
 }
+
+let zoneNow: string | undefined; // (the zone of the rule being parsed: parseRepeat is synchronous, finish reads it)
 
 /** A repeat rule as written by a person or a model, to a Rule and its canonical text; or what was wrong with it. */
 export function parseRepeat(input: string): Parsed {
   if (typeof input !== "string" || input.length > 120) return bad(String(input).slice(0, 80));
   let s = input.toLowerCase().replace(/[.;]/g, " ").replace(/\s+/g, " ").trim().replace(/^(repeats?|repeating)\s+/, "");
   if (!s) return bad(input);
+  zoneNow = undefined;
+  const z = /\s+([a-z_]+(?:\/[a-z0-9_+-]+)+)$/.exec(s);
+  if (z) {
+    zoneNow = zoneName(z[1]!);
+    if (!zoneNow) return { ok: false, error: `The repeat rule "${input.slice(0, 80)}" names a time zone that does not exist ("${z[1]}"). Use an IANA zone like Europe/Zurich.` };
+    s = s.slice(0, z.index).trim();
+  }
   const t = takeTime(s);
   if ("error" in t) return { ok: false, error: `The repeat rule "${input.slice(0, 80)}" has ${t.error}. Use ${USAGE}.` };
   s = t.rest;
@@ -182,7 +201,7 @@ export function formatRepeat(r: Rule): string {
     else if (r.monthDay) base = `${every} on the ${ordinal(r.monthDay)}`;
     else if (r.nth) base = `${every} on the ${ORD_NAME[r.nth.n]} ${WEEKDAY_NAMES[r.nth.weekday]}`;
   } else if (r.unit === "year" && r.month && r.day) base = `${every} on ${r.day} ${MONTH_NAMES[r.month - 1]!.slice(0, 3)}`;
-  return r.time ? `${base} at ${r.time}` : base;
+  return `${r.time ? `${base} at ${r.time}` : base}${r.zone ? ` ${r.zone}` : ""}`;
 }
 
 /** Does the rule fire on this date? `anchor`: the date the interval counts from. */
@@ -228,7 +247,8 @@ export function nextDate(rule: Rule, from: string, anchor: string): string {
  * The first firing strictly after an instant, as an instant, in the zone's local time (a rule without a time uses `defaultTime`). DST-safe: the wall time is turned into an instant by wallToUtc
  * (a time skipped by the clocks moves forward, a repeated one is the first), so "every day at 09:00" is 09:00 on the clock every day of the year.
  */
-export function nextInstant(rule: Rule, afterMs: number, zone: string, anchor: string, defaultTime = "09:00"): number {
+export function nextInstant(rule: Rule, afterMs: number, conversationZone: string, anchor: string, defaultTime = "09:00"): number {
+  const zone = rule.zone ?? conversationZone; // (the rule's own zone, when it names one)
   const time = rule.time ?? defaultTime;
   let d = nextDate(rule, localOf(afterMs, zone).date, anchor);
   for (let i = 0; i < 4; i++) {

@@ -405,3 +405,31 @@ test("the wrap and the review: their experts have exactly the read tools, the ca
     assert.deepEqual(set.agents[`expert-${s}`]!.disallowedTools, ["Agent"]);
   }
 });
+
+test("a rule may end with an IANA zone: it runs on that clock, across the clock change, whatever zone the conversation is in; a rule without one is unchanged", () => {
+  const zurich = rule("every day at 08:00 Europe/Zurich");
+  assert.equal(zurich.zone, "Europe/Zurich");
+  assert.equal((parseRepeat("every day at 08:00 europe/zurich") as { text: string }).text, "every day at 08:00 Europe/Zurich", "canonical text keeps the zone");
+  assert.equal((parseRepeat("every weekday at 17:45 Europe/London") as { text: string }).text, "every weekday at 17:45 Europe/London");
+  const r = { name: "routine-x", rule: zurich };
+  const LONDON = "Europe/London";
+  const rec = { since: z("2026-03-01T00:00:00Z").getTime(), attempts: 0, told: false };
+  // before the change to summer time (Sun 29 Mar 2026): 08:00 Zurich is 07:00 UTC; after it 06:00 UTC
+  assert.equal(S.slotsAround(r, z("2026-03-28T06:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-28T07:00:00.000Z");
+  assert.equal(S.slotsAround(r, z("2026-03-28T10:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-29T06:00:00.000Z");
+  assert.equal(S.planRoutine(r, z("2026-03-30T06:30:00Z"), LONDON, rec, 4).state, "due", "08:30 in Zurich: its 08:00 slot is due");
+  assert.equal(S.planRoutine(r, z("2026-03-30T05:30:00Z"), LONDON, { ...rec, since: z("2026-03-30T00:00:00Z").getTime() }, 4).state, "waiting", "07:30 in Zurich (06:30 in London): not yet");
+  assert.match(S.nextText(r, z("2026-03-30T05:30:00Z"), LONDON), /every day at 08:00 Europe\/Zurich, next today 08:00/);
+  assert.match(S.routineStatus(owner().convId, [r], z("2026-03-30T06:30:00Z"), LONDON, 4), /routine-x: /);
+  // without a zone: the conversation's clock, as before
+  const plain = { name: "routine-y", rule: rule("every day at 08:00") };
+  assert.equal(S.slotsAround(plain, z("2026-03-28T06:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-28T08:00:00.000Z");
+  assert.equal(rule("every day at 08:00").zone, undefined);
+});
+
+test("an unknown time zone in a repeat rule is unreadable and says so", () => {
+  const p = parseRepeat("every day at 08:00 Europe/Atlantis");
+  assert.equal(p.ok, false);
+  assert.match((p as { error: string }).error, /time zone that does not exist/);
+  assert.equal(parseRepeat("every day at 08:00 Mars/Olympus").ok, false);
+});
