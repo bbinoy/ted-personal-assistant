@@ -668,7 +668,6 @@
         "mcp__meetings__note_upcoming_meetings",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
-        "mcp__memory__memory_changes_since_brief",
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",

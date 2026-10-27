@@ -473,6 +473,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
     name: "tasks: the one-time Notion import is gone, so its pending previews are too (items keep source_kind 'import')",
     up: `DROP TABLE IF EXISTS pending_imports;`,
   },
+  {
+    version: 18,
+    name: "what I learned overnight: every list is told once, the brief's 'delivered' mark is gone",
+    up: `ALTER TABLE learned_batches DROP COLUMN delivered;`,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

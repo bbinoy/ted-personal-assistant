@@ -16,7 +16,6 @@
 {"tool":"mcp__memory__forget_note","provider":"memory","action":"memory","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__journal","provider":"memory","action":"memory","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__search_logs","provider":"memory","action":"memory","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
-{"tool":"mcp__memory__memory_changes_since_brief","provider":"memory","action":"memory-told","cap":"heartbeat","attended":false,"who":["owner"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__undo_dream","provider":"memory","action":"memory","cap":"dream","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__people__find_person","provider":"people","action":"read","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":true},
 {"tool":"mcp__seenmail__seen_mail","provider":"seenmail","action":"seen-mail","cap":"mail","attended":false,"who":null,"view":null,"free":true,"untrusted":false},
