@@ -16,6 +16,7 @@ import { readLongText } from "@ted-assistant/signal";
 import { toSignalStyles } from "@ted-assistant/signal/messenger";
 import type { IncomingMessage, IncomingReaction, OutgoingMessage, Target } from "@ted-assistant/messenger";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
+import type { GroupDeps } from "../src/conversation/conversationmodel.ts";
 import { MAX_SPOKEN_CHARS } from "@ted-assistant/speech/tts";
 
 // The shared conversation pipeline against a fake messenger. The first block pins the owner's private chat
@@ -30,12 +31,29 @@ interface Rig {
   reacts: { emoji: string; target: { author: string; timestamp: number }; groupId?: string }[];
   typing: { stop: boolean; groupId?: string }[];
   reads: { ts: number; from?: string }[];
-  records: { groupId?: string; kind: string; text: string }[];
+  records: { groupId?: string; kind: string; text: string; extra?: { by?: string; of?: number; addressed?: true } }[];
   prompts: string[];
   spoken: string[];
 }
 
-function rig(over: { onRun?: (own: string, reactedTo?: string) => void; separate?: boolean; run?: (prompt: string, own?: string) => Promise<string>; ready?: boolean; approval?: any; reactionApproval?: any; transcript?: (m: IncomingMessage) => Promise<string>; picture?: (m: IncomingMessage) => Promise<Picture>; pictures?: Picture[][]; document?: (m: IncomingMessage) => Promise<Document>; longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; documents?: Document[][]; now?: () => number; vouch?: boolean; wait?: (ms: number) => Promise<void>; synth?: (words: string) => Promise<string>; foreign?: (words: string) => Promise<string | undefined>; admitGroup?: any; settleMs?: number; settleMaxMs?: number } = {}) {
+// What a group's turn is made of, for the tests of the intake steps: the gate says act (or not), the run is a fake that notes what it was shown.
+function probe(act = false) {
+  const seen: { prompt: string; pictures: Picture[]; documents: Document[] }[] = [];
+  const group: GroupDeps = {
+    gate: async () => ({ act, delaySeconds: 0, nextCheckMinutes: 30 }),
+    context: () => ({ lines: [] }),
+    recent: () => [],
+    warm: () => {},
+    run: async (build) => {
+      const b = build();
+      seen.push({ prompt: b.prompt, pictures: b.pictures ?? [], documents: b.documents ?? [] });
+      return "[[silent]]";
+    },
+  };
+  return { seen, group };
+}
+
+function rig(over: { onRun?: (own: string, reactedTo?: string) => void; separate?: boolean; run?: (prompt: string, own?: string) => Promise<string>; ready?: boolean; approval?: any; reactionApproval?: any; transcript?: (m: IncomingMessage) => Promise<string>; picture?: (m: IncomingMessage) => Promise<Picture>; pictures?: Picture[][]; document?: (m: IncomingMessage) => Promise<Document>; longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; documents?: Document[][]; now?: () => number; vouch?: boolean; wait?: (ms: number) => Promise<void>; synth?: (words: string) => Promise<string>; foreign?: (words: string) => Promise<string | undefined>; group?: GroupDeps; settleMs?: number; settleMaxMs?: number } = {}) {
   const r: Rig = { sent: [], reacts: [], typing: [], reads: [], records: [], prompts: [], spoken: [] };
   let ts = 5000;
   const separate = over.separate ?? true;
@@ -49,7 +67,7 @@ function rig(over: { onRun?: (own: string, reactedTo?: string) => void; separate
     markRead: async (_t: Target, m: { timestamp: number; author?: string }) => void r.reads.push({ ts: m.timestamp, from: m.author }),
     send: async (groupId: Target, m: OutgoingMessage) => (r.sent.push({ text: m.text, styles: toSignalStyles(m.styles ?? []), quote: m.quote, groupId, attachments: m.attachments?.map((x) => x.file) }), ++ts),
   };
-  const record = (groupId: string | undefined, kind: string, _ts: number, text: string) => void r.records.push({ groupId, kind, text });
+  const record = (groupId: string | undefined, kind: string, _ts: number, text: string, extra?: { by?: string; of?: number; addressed?: true }) => void r.records.push({ groupId, kind, text, ...(extra ? { extra } : {}) });
   const out = createOutbound(messenger, (kind, t, text, groupId) => record(groupId, kind, t, text));
   const dir = mkdtempSync(join(tmpdir(), "tts-"));
   const pipeline = createPipeline({
@@ -72,7 +90,7 @@ function rig(over: { onRun?: (own: string, reactedTo?: string) => void; separate
     },
     vouch: async () => over.vouch ?? true,
     isOwner: (w) => w.from === OWNER,
-    admitGroup: over.admitGroup ?? (async () => {}),
+    group: over.group ?? probe().group,
     now: over.now,
     wait: over.wait ?? (async () => {}),
     settleMs: over.settleMs === undefined ? undefined : () => over.settleMs!,
@@ -81,6 +99,9 @@ function rig(over: { onRun?: (own: string, reactedTo?: string) => void; separate
   return { r, pipeline };
 }
 
+// What came in, as the history has it (not the assistant's own lines, not the gate's ledger).
+const said = (r: Rig) => r.records.filter((x) => ["owner", "member", "reaction", "edit", "delete"].includes(x.kind));
+
 const msg = (over: Partial<IncomingMessage> = {}): Incoming => ({ type: "message", m: { from: OWNER, text: "hi", timestamp: 111, direct: true, ...over } });
 const react = (over: Partial<IncomingReaction> = {}): Incoming => ({ type: "reaction", r: { from: OWNER, emoji: "👍", targetTimestamp: 42, isRemove: false, direct: true, ...over } });
 const target = { author: OWNER, timestamp: 111 };
@@ -88,8 +109,8 @@ const target = { author: OWNER, timestamp: 111 };
 test("conversation: only the two factories make conversations, and they differ in trust", () => {
   const o = owner();
   const g = group("abc");
-  assert.deepEqual([o.kind, o.gate, o.approvals, o.groupId], ["owner", false, true, undefined]);
-  assert.deepEqual([g.kind, g.gate, g.approvals, g.groupId], ["group", true, false, "abc"]);
+  assert.deepEqual([o.kind, o.direct, o.groupId], ["owner", true, undefined]);
+  assert.deepEqual([g.kind, g.direct, g.groupId], ["group", false, "abc"]);
   assert.notEqual(g.logFile, o.logFile);
   assert.notEqual(g.notesDir, o.notesDir);
   assert.equal(owner(), o); // one owner conversation
@@ -455,26 +476,23 @@ test("private chat: the owner's reaction is feedback the model judges; it may sa
 const GID = "Z3JvdXAtZm9yLXRlc3Q=";
 const gmsg = (over: Partial<IncomingMessage> = {}): Incoming => ({ type: "message", m: { from: "+15555550105", text: "@Ted hi", timestamp: 9, direct: false, group: { id: GID }, addressedToMe: true, fromName: "Eve", ...over } });
 
-test("groups: a message goes through the shared steps to the group admission, which gets the transcript", async () => {
-  const got: any[] = [];
-  const { r, pipeline } = rig({ admitGroup: async (_c: unknown, m: unknown) => void got.push(m), transcript: async () => "bring the ball" });
+test("groups: a message goes through the shared steps and is recorded under its speaker, with the transcript and whether it was addressed", async () => {
+  const { r, pipeline } = rig({ transcript: async () => "bring the ball" });
   await pipeline.handleIncoming(group(GID), gmsg());
   assert.deepEqual(r.reads, [{ ts: 9, from: "+15555550105" }]); // a read receipt to the author, when addressed
-  assert.deepEqual([got[0].groupId, got[0].text, got[0].isOwner, got[0].addressedToMe, got[0].author], [GID, "@Ted hi", false, true, "+15555550105"]);
+  assert.deepEqual(said(r).map((x) => [x.groupId, x.kind, x.text, x.extra]), [[GID, "member", "Eve (a member): @Ted hi", { by: "+15555550105", addressed: true }]]);
   await pipeline.handleIncoming(group(GID), gmsg({ text: "", audio: { id: "a.aac", size: 3 }, addressedToMe: false, timestamp: 10 }));
-  assert.equal(got[1].text, "🎙️ bring the ball");
-  assert.equal(got[1].voice, true);
+  assert.deepEqual([said(r)[1]!.text, said(r)[1]!.extra], ["Eve (a member): 🎙️ bring the ball", { by: "+15555550105" }]); // (not addressed: the log says so by leaving the mark out)
   assert.equal(r.reads.length, 1); // not addressed: no "seen" mark
   await pipeline.handleIncoming(group(GID), gmsg({ from: OWNER }));
-  assert.equal(got[2].isOwner, true);
+  assert.match(said(r)[2]!.text, /\(the owner\): @Ted hi$/);
 });
 
 test("groups: unvouched groups get nothing, not even a transcription or a receipt", async () => {
   let heard = 0;
-  const got: unknown[] = [];
-  const { r, pipeline } = rig({ vouch: false, transcript: async () => (heard++, "x"), admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+  const { r, pipeline } = rig({ vouch: false, transcript: async () => (heard++, "x") });
   await pipeline.handleIncoming(group(GID), gmsg({ text: "", audio: { id: "a.aac", size: 3 } }));
-  assert.deepEqual([heard, got.length, r.reads.length, r.sent.length], [0, 0, 0, 0]);
+  assert.deepEqual([heard, said(r).length, r.reads.length, r.sent.length], [0, 0, 0, 0]);
 });
 
 test("groups: someone who spoke to it and cannot be understood is told; otherwise it moves on", async () => {
@@ -487,11 +505,10 @@ test("groups: someone who spoke to it and cannot be understood is told; otherwis
   assert.equal(quiet.r.sent.length, 0);
 });
 
-test("groups: reactions reach the admission with the text they were made on", async () => {
-  const got: any[] = [];
-  const { pipeline } = rig({ admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+test("groups: a reaction is recorded with the text it was made on", async () => {
+  const { r, pipeline } = rig();
   await pipeline.handleIncoming(group(GID), { type: "reaction", r: { from: "+15555550105", emoji: "🔥", targetTimestamp: 1, isRemove: false, direct: false, group: { id: GID }, fromName: "Eve" } });
-  assert.deepEqual(got[0].reaction, { emoji: "🔥", on: "an older message" });
+  assert.deepEqual(said(r).map((x) => [x.kind, x.text]), [["reaction", "Eve (a member) reacted 🔥 to: an older message"]]);
 });
 
 test("groups: replies, reactions, typing and voice are aimed at the group; a thread under the asker is kept", async () => {
@@ -584,17 +601,17 @@ test("groups: a picture is opened only when it will be used; an unopenable one i
     for (const [mode, addressed, opened] of [["tagged", false, 0], ["tagged", true, 1], ["auto", false, 1]] as const) {
       mutable.groupParticipation = mode;
       let n = 0;
-      const got: any[] = [];
-      const { pipeline } = rig({ picture: async () => (n++, PIC), admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+      const p = probe(true);
+      const { r, pipeline } = rig({ picture: async () => (n++, PIC), group: p.group });
       await pipeline.handleIncoming(group(GID), gmsg({ text: "look", image: { id: "p.jpg", size: 10 }, addressedToMe: addressed }));
       assert.equal(n, opened, `${mode} addressed=${addressed}`);
-      assert.deepEqual([got[0].text, got[0].picture], ["🖼️ look", opened ? PIC : undefined]);
+      assert.deepEqual([said(r)[0]!.text, p.seen.flatMap((x) => x.pictures)], ["Eve (a member): 🖼️ look", opened ? [PIC] : []]);
     }
     mutable.groupParticipation = "auto";
-    const got: any[] = [];
-    const bad = rig({ picture: async () => { throw new Error("I couldn't open that picture."); }, admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+    const p = probe(true);
+    const bad = rig({ picture: async () => { throw new Error("I couldn't open that picture."); }, group: p.group });
     await bad.pipeline.handleIncoming(group(GID), gmsg({ text: "", image: { id: "p.jpg", size: 10 } }));
-    assert.deepEqual([got.length, got[0].text, got[0].picture], [1, "🖼️ image", undefined]);
+    assert.deepEqual([said(bad.r).length, said(bad.r)[0]!.text, p.seen.flatMap((x) => x.pictures)], [1, "Eve (a member): 🖼️ image", []]);
     assert.deepEqual(bad.r.sent.map((s) => s.text), ["I couldn't open that picture."]); // addressed: told, and still admitted
   } finally {
     mutable.groupParticipation = was;
@@ -635,20 +652,18 @@ test("log: a finished turn says which conversation kind replied or failed", asyn
 
 test("groups: a question asked in the group is answered by ANY member's message (the owner's check is not needed), and the answer is not a group message", async () => {
   const seen: any[] = [];
-  const got: any[] = [];
   const { r, pipeline } = rig({
     approval: (text: string, ctx: any) => (seen.push([text, ctx]), ctx.scope === GID ? { outcome: "approved" } : { outcome: "none" }),
-    admitGroup: async (_c: unknown, m: unknown) => void got.push(m),
   });
   await pipeline.handleIncoming(group(GID), gmsg({ from: "+15555550105", text: "yes please", addressedToMe: false }));
   assert.deepEqual(seen, [["yes please", { scope: GID, by: "+15555550105", voice: false }]]); // scoped to this group, with who answered
-  assert.deepEqual(got, []); // consumed as the answer: the group brain never sees it
   assert.deepEqual(r.reacts.map((x) => [x.emoji, x.groupId]), [["👍", GID]]);
+  assert.deepEqual(r.sent, []); // consumed as the answer: the group is not run for it
   // a message that is not an answer goes on to the group as always
-  const admitted: unknown[] = [];
-  const other = rig({ approval: { outcome: "none" }, admitGroup: async (_c: unknown, m: unknown) => void admitted.push(m) });
+  const p = probe(true);
+  const other = rig({ approval: { outcome: "none" }, group: p.group });
   await other.pipeline.handleIncoming(group(GID), gmsg({ text: "hello", timestamp: 31 }));
-  assert.equal(admitted.length, 1);
+  assert.equal(p.seen.length, 1);
 });
 
 test("groups: a clarifying reply and a reaction go to the group; a reaction on a question of another conversation is ignored", async () => {
@@ -670,8 +685,7 @@ test("groups: a clarifying reply and a reaction go to the group; a reaction on a
 
 test("groups: an edit never answers an approval, a picture caption neither, and a voice message does (as a message for the model)", async () => {
   const asked: any[] = [];
-  const got: any[] = [];
-  const { r, pipeline } = rig({ approval: (t: string, ctx: any) => (asked.push([t, ctx.voice]), { outcome: "approved" }), admitGroup: async (_c: unknown, m: unknown) => void got.push(m), transcript: async () => "yes do it" });
+  const { r, pipeline } = rig({ approval: (t: string, ctx: any) => (asked.push([t, ctx.voice]), { outcome: "approved" }), transcript: async () => "yes do it" });
   await pipeline.handleIncoming(group(GID), gmsg({ text: "yes", timestamp: 50, edited: { targetTimestamp: 49 } } as any));
   await pipeline.handleIncoming(group(GID), gmsg({ text: "yes", timestamp: 51, image: { id: "p.jpg", size: 3 } } as any));
   assert.deepEqual(asked, []);
@@ -761,16 +775,14 @@ test("audio file: in a group it is opened even when nobody addressed us (like a 
   try {
     await withQwen(async () => {
       resetVoiceNotes();
-      const got: any[] = [];
-      const { pipeline } = rig({ document: async () => MP3_DOC, admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+      const { r, pipeline } = rig({ document: async () => MP3_DOC });
       await pipeline.handleIncoming(group(GID), gmsg({ text: "", timestamp: TS + 45, file: { id: "att-g", size: 900, name: "talk.mp3", audio: true }, addressedToMe: false }));
-      assert.equal(got[0].document, MP3_DOC);
-      assert.equal(got[0].text, "📄 audio file");
+      assert.equal(said(r)[0]!.text, "Eve (a member): 📄 audio file"); // opened, and in the history
       assert.equal(voiceNotes(group(GID).key).find((n) => n.ts === TS + 45)?.kind, "file");
       assert.equal(voiceNotes(owner().key).some((n) => n.ts === TS + 45), false);
       // another file type that nobody addressed to us is still not opened (as before)
       let opened = 0;
-      const other = rig({ document: async () => (opened++, MP3_DOC), admitGroup: async () => {} });
+      const other = rig({ document: async () => (opened++, MP3_DOC) });
       await other.pipeline.handleIncoming(group(GID), gmsg({ text: "", timestamp: TS + 46, file: { id: "att-h", size: 900, name: "x.bin" }, addressedToMe: false }));
       assert.equal(opened, 0);
       resetVoiceNotes();
@@ -788,19 +800,18 @@ test("groups: a document is handled like a picture: opened when it will be used,
     for (const [mode, addressed, opened] of [["tagged", false, 0], ["tagged", true, 1], ["auto", false, 1]] as const) {
       mutable.groupParticipation = mode;
       let n = 0;
-      const got: any[] = [];
-      const { pipeline } = rig({ document: async () => (n++, PDF), admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+      const p = probe(true);
+      const { r, pipeline } = rig({ document: async () => (n++, PDF), group: p.group });
       await pipeline.handleIncoming(group(GID), gmsg({ text: "read this", file: { id: "d1", size: 10, name: "x.pdf" }, addressedToMe: addressed }));
       assert.equal(n, opened, `${mode} addressed=${addressed}`);
-      assert.deepEqual([got[0].text, got[0].document], ["📄 read this", opened ? PDF : undefined]);
+      assert.deepEqual([said(r)[0]!.text, p.seen.flatMap((x) => x.documents)], ["Eve (a member): 📄 read this", opened ? [PDF] : []]);
     }
     mutable.groupParticipation = "auto";
-    const got: any[] = [];
-    const bad = rig({ document: async () => { throw new Error("That PDF has 200 pages and I can read at most 100 at a time. Send a part of it."); }, admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+    const bad = rig({ document: async () => { throw new Error("That PDF has 200 pages and I can read at most 100 at a time. Send a part of it."); } });
     await bad.pipeline.handleIncoming(group(GID), gmsg({ text: "", file: { id: "d1", size: 10 } }));
     await bad.pipeline.handleIncoming(group(GID), gmsg({ text: "", file: { id: "d2", size: 10 }, addressedToMe: false, timestamp: 10 }));
     assert.deepEqual(bad.r.sent.map((s) => [s.text, s.groupId]), [["That PDF has 200 pages and I can read at most 100 at a time. Send a part of it.", GID]]); // only the addressed one is told
-    assert.deepEqual([got.length, got[0].text, got[0].document], [2, "📄 document", undefined]);
+    assert.deepEqual(said(bad.r).map((x) => x.text), ["Eve (a member): 📄 document", "Eve (a member): 📄 document"]);
   } finally {
     mutable.groupParticipation = was;
   }
@@ -865,11 +876,11 @@ test("long message: over 64 KB it is cut with a note", async () => {
 });
 
 test("long message: in a group the whole text reaches the admission and is no file", async () => {
-  const got: any[] = [];
-  const { pipeline } = longRig({ lt4: LONG }, { admitGroup: async (_c: unknown, m: unknown) => void got.push(m) });
+  const p = probe(true);
+  const { pipeline } = longRig({ lt4: LONG }, { group: p.group });
   await pipeline.handleIncoming(group(GID), gmsg({ text: LONG.slice(0, 2000), longText: { id: "lt4", size: LONG.length } }));
-  assert.equal(got[0].text, LONG);
-  assert.equal(got[0].document, undefined);
+  assert.ok(p.seen[0]!.prompt.includes(LONG.slice(0, 500)), "the whole text reaches the run, not the cut body");
+  assert.deepEqual(p.seen[0]!.documents, []);
 });
 
 // ---- the card's kill switch ----
@@ -888,14 +899,13 @@ test("owner chat: /card off is handled in code before any model, switches card u
   killSwitch.turnOn();
 });
 
-test("a group message /card off from anyone, the owner included, goes to the group's pipeline and touches nothing", async () => {
+test("a group message /card off from anyone, the owner included, is no command there (a group has no card capability) and touches nothing", async () => {
   const { killSwitch } = await import("../src/modules/browse/card.ts");
   killSwitch.turnOn();
-  const seen: string[] = [];
-  const { r, pipeline } = rig({ admitGroup: async (_c: unknown, a: { text: string }) => void seen.push(a.text) });
+  const { r, pipeline } = rig();
   await pipeline.handleIncoming(group("g1"), msg({ text: "/card off", direct: false, groupId: "g1" } as never));
   assert.equal(killSwitch.off(), undefined);
-  assert.deepEqual(seen, ["/card off"]);
+  assert.deepEqual(said(r).map((x) => x.text.replace(/^.*: /, "")), ["/card off"]); // an ordinary line of the group
   assert.deepEqual(r.sent, []);
 });
 
@@ -967,13 +977,12 @@ test("owner chat: /stop aborts the running turn at once, says Stopped. and no 's
   assert.equal(prompts, 1);
 });
 
-test("a group message /pause from anyone goes to the group's pipeline and touches nothing", async () => {
+test("a group message /pause from anyone is no command there (a group has no admin capability) and touches nothing", async () => {
   const { isPaused } = await import("../src/core/pause.ts");
-  const seen: string[] = [];
-  const { r, pipeline } = rig({ admitGroup: async (_c: unknown, a: { text: string }) => void seen.push(a.text) });
+  const { r, pipeline } = rig();
   await pipeline.handleIncoming(group("g1"), msg({ text: "/pause 2h", direct: false, groupId: "g1" } as never));
   assert.equal(isPaused(), false);
-  assert.deepEqual(seen, ["/pause 2h"]);
+  assert.deepEqual(said(r).map((x) => x.text.replace(/^.*: /, "")), ["/pause 2h"]);
   assert.deepEqual(r.sent, []);
 });
 

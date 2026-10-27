@@ -5,13 +5,15 @@ import { settings } from "../core/settings.ts";
 import { auditSource } from "../core/runkind.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { listTenants } from "../tenants/tenants.ts";
-import { owner, tenant, type Conversation, type PipelineDeps } from "./conversationmodel.ts";
+import { group, owner, tenant, type Conversation } from "./conversationmodel.ts";
+import { listGroups } from "./groupstore.ts";
 import type { Pipeline } from "./conversation.ts";
 
 // A message waiting in the burst or the queue lives only in memory (conversation.ts), so a crash or restart between "the owner wrote" and "the reply went out" loses it. The
-// owner's line is in the log before any of that happens (ownerTurn records first), so at start-up the log tells what was never answered: owner lines younger than
-// REPLAY_MINUTES with no reply of the assistant after them. They become ONE turn, with a note that they arrived before a restart. Private chats only (the owner's and
-// each friend's): a group message is answered when the gate decides to, and an old one is not worth a late "yes".
+// line is in the log before any of that happens (the intake records first), so at start-up the log tells what was never answered: lines of the owner, a friend or a group member younger than
+// REPLAY_MINUTES with no reply of the assistant after them. They go through the SAME intake again (intake.ts replay), from the burst on, with a note that they arrived before a restart.
+// A private chat answers them as one turn. A group answers only the lines the log says were addressed to the assistant, or when the gate, asked again on the tail, says act; untagged chatter
+// stays as unanswered as it would have been. Never an approval answer, an edit or a deleted message (below), and never a second run of something that may have been done already.
 
 // What answers a line: a reply of a turn ("chat") or the notice a failed turn sends ("other"). Unprompted notices, briefs and drafts say nothing about a message of hers.
 const ANSWERS: ReadonlySet<string> = new Set(["chat", "other"]);
@@ -42,8 +44,8 @@ export function unansweredSince(log: readonly Sent[], now: number, maxAgeMs: num
   return out.slice(-MAX_REPLAY_LINES);
 }
 
-// The prompt of the replayed turn: the words as they were logged, and why they are late.
-export function replayPrompt(lines: readonly Sent[]): string {
+// The prompt of a private chat's replayed turn: the words as they were logged, and why they are late.
+export function replayPrompt(lines: readonly { at: string; text: string }[]): string {
   const said = lines.map((m) => `[${m.at}] ${m.text.slice(0, LIMITS.body)}`).join("\n\n");
   return `${lines.length === 1 ? "This message arrived" : `These ${lines.length} messages arrived, oldest first,`} shortly before the assistant restarted and ${lines.length === 1 ? "was" : "were"} never answered. Answer ${lines.length === 1 ? "it" : "them"} now, together if there are several. Say briefly that you are answering late. Before you act, check whether it was already done (the calendar, the mail, your notes): the restart may have come after part of it. If what follows shows the request is stale or already done, say that instead of repeating it.\n\n${said}`;
 }
@@ -60,14 +62,13 @@ export function actedSince(rows: readonly AuditEntry[], source: Source, sinceMs:
 }
 const auditRows = (source: Source, sinceMs: number): AuditEntry[] => readAudit((e) => e.source === source && Date.parse(e.ts) >= sinceMs);
 
-// The private chats worth looking at: the owner's, and each friend's when TENANTS is on (her own gates still apply in her run).
-export function directConversations(): Conversation[] {
-  return [owner(), ...(settings.tenants ? listTenants().map((t) => tenant(t.id)) : [])];
+// Every conversation worth looking at: the owner's, each friend's when TENANTS is on (her own gates still apply in her run) and every group we know.
+export function replayConversations(): Conversation[] {
+  return [owner(), ...(settings.tenants ? listTenants().map((t) => tenant(t.id)) : []), ...listGroups().map((g) => group(g.id))];
 }
 
 export interface ReplayDeps {
-  pipeline: Pick<Pipeline, "enqueue" | "runTurn">;
-  run: PipelineDeps["run"]; // one turn of a private chat (the same function the pipeline runs)
+  pipeline: Pick<Pipeline, "replay">;
   conversations?: () => Conversation[];
   now?: () => number;
   read?: (conv: Conversation) => readonly Sent[]; // (tests) default: the conversation's log
@@ -75,33 +76,23 @@ export interface ReplayDeps {
   audit?: (source: Source, sinceMs: number) => readonly AuditEntry[]; // (tests) default: logs/audit.jsonl
 }
 
-// Queues one turn per private chat that has unanswered lines. Returns how many chats were replayed. Never throws and never waits for the turns.
+// Puts what each conversation lost back through the intake (pipeline.replay: the burst, the answer decision, the turn). Returns how many conversations had something to replay. Never throws
+// and never waits for the turns.
 export function replayUnanswered(deps: ReplayDeps): number {
   let n = 0;
   const now = (deps.now ?? Date.now)();
-  for (const conv of (deps.conversations ?? directConversations)()) {
+  for (const conv of (deps.conversations ?? replayConversations)()) {
     try {
       const lines = unansweredSince(deps.read ? deps.read(conv) : messagesSince(undefined, conv.logFile), now);
       if (!lines.length) continue;
-      const last = lines.at(-1)!;
       console.log(`replay: ${lines.length} unanswered message(s) in ${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""} from before the restart`);
-      // The run may have acted (a calendar event, archived mail, a note) before it died: running the request again could do it twice. Then say so instead.
+      // The run may have acted (a calendar event, archived mail, a note) before it died: running the request again could do it twice. Then say so instead (to someone who was waiting).
       const since = Date.parse(lines[0]!.at);
-      if (actedSince((deps.audit ?? auditRows)(auditSource({ who: conv.kind, attended: true }), since), auditSource({ who: conv.kind, attended: true }), since)) {
-        console.log(`replay: ${conv.kind} had acted since its oldest unanswered message; not re-running it`);
-        void deps.tell(conv, SORRY).catch((e) => console.error("replay: failed:", (e as Error).message));
-        n++;
-        continue;
-      }
-      const prompt = replayPrompt(lines);
+      const source = auditSource({ who: conv.kind, attended: true });
+      const acted = actedSince((deps.audit ?? auditRows)(source, since), source, since);
+      if (acted) console.log(`replay: ${conv.kind} had acted since its oldest unanswered message; not re-running it`);
       void deps.pipeline
-        .enqueue(conv, () =>
-          deps.pipeline.runTurn(conv, {
-            run: () => deps.run(conv, prompt, lines.map((m) => m.text).join("\n")),
-            target: last.by ? { author: last.by, timestamp: last.ts } : undefined,
-            announce: true,
-          }),
-        )
+        .replay(conv, lines, acted ? () => deps.tell(conv, SORRY) : undefined)
         .catch((e) => console.error("replay: failed:", (e as Error).message));
       n++;
     } catch (e) {

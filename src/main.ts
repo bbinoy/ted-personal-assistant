@@ -12,9 +12,8 @@ import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./conversation/guards.ts";
 import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
-import { createGroupBrain, groupName, ownerInGroup } from "./conversation/group.ts";
+import { groupName, ownerInGroup } from "./conversation/group.ts";
 import { groupDir, recordGroup } from "./conversation/groupstore.ts";
-import { logTail } from "./conversation/gate.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
@@ -150,12 +149,10 @@ const pipeline: Pipeline = createPipeline({
   feedback: createFeedback(), // a 👎 or "less of this" on something sent unprompted: one note saved, mentioned by the chat turn that follows (feedback.ts)
   vouch,
   isOwner: fromOwner,
-  admitGroup: (_conv, m) => groupBrain(m),
   compact: compactConversation, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it
   // The owner's chat is kept warm after each turn; the group that spoke last has its own warm process (group.ts).
   afterTurn: (conv) => void (conv.kind === "owner" ? warmChat() : conv.kind === "tenant" && tenantRunner.warm(conv)),
 });
-const groupBrain = createGroupBrain({ pipeline, recent: (groupId) => logTail(group(groupId)) });
 
 // The linked device sees ALL of the owner's Signal traffic. Only their own Note to Self is
 // ever acted on; everything else is dropped here, before it can reach anything else.
@@ -226,7 +223,7 @@ warmChat();
 if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
-replayUnanswered({ pipeline, run: runChat, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what the owner (or a friend) wrote just before the last stop and never got an answer to (replay.ts)
+replayUnanswered({ pipeline, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));

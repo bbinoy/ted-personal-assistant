@@ -178,7 +178,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
     lastNotice.set(conv.key, now());
     if (persist) markNoticeAt(`warn:${conv.convId}`, now());
     if (lastNotice.size > 50) for (const [key, at] of lastNotice) if (now() - at > 24 * 3_600_000) lastNotice.delete(key); // (only the last few minutes of an entry matter)
-    return out.reply(conv.notice(e), { quote: conv.groupId ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
+    return out.reply(conv.notice(e), { quote: conv.threadAlways ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
   }
 
   // An unattended run that may speak while it works (the heartbeat run and its expert): the SAME send tool as a chat turn, delivered by the same function as the final reply, as a

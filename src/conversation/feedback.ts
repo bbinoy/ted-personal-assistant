@@ -170,7 +170,7 @@ export function createFeedback(deps: FeedbackDeps = {}) {
   const now = deps.now ?? Date.now;
   const model = deps.model ?? helperModel();
   const payerOf = deps.payer ?? ((conv) => mayRun(conv, "feedback", { chat: true, now: now() }));
-  const enabled = (conv: Conversation) => conv.direct && settings.feedbackOffersPerDay > 0; // a private chat only: a reaction in a group is too ambiguous to learn a rule from
+  const enabled = () => settings.feedbackOffersPerDay > 0; // (which conversations learn is intake.ts WAYS.learns: a private chat, never a group, where a reaction is too ambiguous to learn a rule from)
   const db = (conv: Conversation) => convDb(conv.convId);
 
   const aboutBefore = (conv: Conversation, ts: number): boolean => db(conv).get("SELECT 1 AS x FROM feedback_offers WHERE on_ts = ?", ts) !== undefined;
@@ -219,7 +219,7 @@ export function createFeedback(deps: FeedbackDeps = {}) {
   return {
     // A reaction in a private chat that is no approval answer. The fact to hand the chat turn for it when a note was saved; undefined otherwise (the turn runs as usual either way).
     async reaction(conv: Conversation, r: Pick<IncomingReaction, "emoji" | "targetTimestamp">): Promise<string | undefined> {
-      if (!enabled(conv)) return undefined;
+      if (!enabled()) return undefined;
       try {
         const msg = findMessage(r.targetTimestamp, conv.logFile);
         if (!isProactive(msg)) return undefined;
@@ -233,7 +233,7 @@ export function createFeedback(deps: FeedbackDeps = {}) {
 
     // A message of the owner's that quotes something sent unprompted: the fact to hand its chat turn when it was feedback and a note was saved; undefined otherwise.
     async message(conv: Conversation, m: Pick<IncomingMessage, "text" | "quote" | "edited" | "image" | "file" | "audio">): Promise<string | undefined> {
-      if (!enabled(conv) || !m.quote || m.edited || m.image || m.file || !m.text.trim() || m.text.length > MAX_REPLY_CHARS) return undefined;
+      if (!enabled() || !m.quote || m.edited || m.image || m.file || !m.text.trim() || m.text.length > MAX_REPLY_CHARS) return undefined;
       try {
         const msg = findMessage(m.quote.timestamp, conv.logFile);
         if (!isProactive(msg) || aboutBefore(conv, msg.ts) || offersToday(conv) >= settings.feedbackOffersPerDay) return undefined; // (the model is not asked at all when no note could follow)

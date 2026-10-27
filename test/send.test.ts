@@ -169,7 +169,6 @@ function rig(o: { speech?: boolean; foreign?: string; synthFails?: boolean } = {
     approvals: { answer: async () => ({ outcome: "none" as const }), answerReaction: () => "ignored" },
     vouch: async () => true,
     isOwner: () => true,
-    admitGroup: async () => {},
     wait: async () => {},
   });
   return { sent, reacted, typing, spoken, pipeline };

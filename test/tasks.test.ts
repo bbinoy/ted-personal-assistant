@@ -372,7 +372,7 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   assert.equal("tasks" in servers({ ...base, kind: GROUP_CHAT }), false, "an isolated run with no conversation gets no list (not the owner's)");
 });
 
-test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, grouped; a group has no commands", () => {
+test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, grouped; a group has the same command", () => {
   assert.deepEqual(parseCommand("/tasks"), { kind: "tasks" });
   for (const t of ["tasks", "/tasks please", "show /tasks", "/task", "/tasks suggestions"]) assert.equal(parseCommand(t), undefined, t);
   const k = fresh();
@@ -424,7 +424,7 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
   const owner = { kind: "owner" as const, key: k, convId: "owner" };
   assert.match(commandReply(owner, "/tasks", { now: () => now, tasks: (c) => `T ${c.key}` })!, new RegExp(`^T ${k}$`));
   const group = { kind: "group" as const, key: k, convId: convIdOfKey(k) };
-  assert.equal(commandReply(group, "/tasks", { now: () => now, tasks: () => "never" }), undefined, "a group has no commands: it is a message like any other");
+  assert.equal(commandReply(group, "/tasks", { now: () => now, tasks: (c) => `T ${c.key}` }), `T ${k}`, "a group has the capability too: the same command, its own list");
 });
 
 test("tasks: /tasks for a friend answers from HER list in her clock, and not for a friend without the capability", () => {

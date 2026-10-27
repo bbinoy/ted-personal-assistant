@@ -11,9 +11,8 @@ import { join } from "node:path";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "mailtasks-test-"));
 
 const S = await import("../src/tasks/store.ts");
-const G = await import("../src/tasks/grouptasks.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
-const { taskReply } = await import("../src/conversation/taskreplies.ts");
+const { commandReply } = await import("../src/conversation/ownercommands.ts");
 const { settings } = await import("../src/core/settings.ts");
 const { convDb, peekConvDb, CONV_SCHEMA } = await import("../src/core/convdb.ts");
 const { convIdOfKey } = await import("../src/core/convpaths.ts");
@@ -138,16 +137,15 @@ test("migration 11: a task still waiting as a suggestion becomes an ordinary ope
   assert.match(S.dropItem({ key: k, zone: ZONE, by: "owner", origin: "owner", source: "chat", now: NOW }, 1).line, /^Dropped/, "and can be changed");
 });
 
-test("groups: /tasks lists the group's items, code only; there is no '/tasks suggestions' any more", async () => {
+test("groups: /tasks lists the group's items, code only (the one command of every conversation: a group has the capability); there is no '/tasks suggestions' any more", async () => {
   const k = fresh();
   await fromMail(k, "Book the hall", "mail-hall-1");
-  const said: string[] = [];
-  assert.equal(await taskReply(conv(k), { text: "/tasks" } as never, async (x) => void said.push(x)), true);
-  assert.match(said[0]!, /Tasks: 1 open[\s\S]*Book the hall/);
-  assert.doesNotMatch(said[0]!, /suggestion/);
-  assert.equal(await taskReply(conv(k), { text: "/tasks suggestions" } as never, async () => {}), false, "an ordinary message now");
-  assert.equal(await taskReply(conv(k, "owner"), { text: "/tasks" } as never, async () => {}), false, "the owner's /tasks is the owner command path, not this one");
-  assert.equal(G.groupTasksReply(conv(k), "please /tasks", ZONE), undefined, "exactly the command");
+  const say = (text: string) => commandReply(conv(k), text, { now: () => new Date(NOW) });
+  assert.match(say("/tasks")!, /Tasks: 1 open[\s\S]*Book the hall/);
+  assert.doesNotMatch(say("/tasks")!, /suggestion/);
+  assert.equal(say("/tasks suggestions"), undefined, "an ordinary message now");
+  assert.equal(say("please /tasks"), undefined, "exactly the command");
+  assert.equal(say("/pause 2h"), undefined, "a group has no admin capability: pause is the owner's");
 });
 
 test("groups: 'Sam by Friday' sets the assignee; 'remind me' makes a GROUP task for that member and the line is said once per member", async () => {
@@ -229,7 +227,7 @@ test("the names of members are remembered whatever the voice provider, so the ta
     approvals: { answer: async () => ({ outcome: "none" }), answerReaction: () => "ignored" },
     vouch: async () => true,
     isOwner: () => false,
-    admitGroup: async (c: { key: string }, m: { fromName?: string }) => void seen.push(`${c.key}|${m.fromName}`),
+    group: { recent: () => [], context: () => ({ lines: [] }), warm: () => {}, run: async () => (seen.push("ran"), "[[silent]]") },
   } as never);
   const g = group("names-grp-1-0123456789abcdef");
   await pipeline.handleIncoming(g, { type: "message", m: { from: "+15555550105", text: "hello", timestamp: 5, direct: false, group: { id: "names-grp-1-0123456789abcdef" }, fromName: "Eve", addressedToMe: true } } as never);

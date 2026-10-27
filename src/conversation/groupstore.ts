@@ -104,7 +104,7 @@ const lineOf = (m: Sent) => `[${new Date(m.at).toTimeString().slice(0, 5)}] ${m.
 // a model call each. seenAt is the newest line in the log now, stored with the session once the run is made.
 export function groupContext(groupId: string, since?: string, n = 25): { lines: string[]; seenAt?: string } {
   // What a member took back (deleted for everyone) is not shown, only that it happened; an edit is a line of its own that says so.
-  const all = withoutDeleted(groupHistorySince(groupId)).filter((m) => m.kind === "member" || m.kind === "chat" || m.kind === "edit" || m.kind === "delete");
+  const all = withoutDeleted(groupHistorySince(groupId)).filter((m) => m.kind === "member" || m.kind === "chat" || m.kind === "edit" || m.kind === "delete" || m.kind === "reaction");
   const picked = since ? all.filter((m) => m.kind !== "chat" && m.at > since).slice(-MAX_UNSEEN) : all.slice(-n);
   return { lines: picked.map(lineOf), seenAt: all.at(-1)?.at ?? since };
 }

@@ -48,6 +48,7 @@ export interface Sent {
   by?: string; // who wrote an inbound message (owner, member, edit): their number or account id
   of?: number; // edit, delete: the timestamp of the message it concerns
   cat?: string; // journal: what kind of action (archive, mail, calendar, ...)
+  addressed?: true; // an inbound line that was meant for the assistant (tagged or quoted): a restart finds in the log which lines a group has to answer (replay.ts)
 }
 
 /** What a log line can carry besides its kind and text. */
@@ -55,6 +56,7 @@ export interface Extra {
   by?: string;
   of?: number;
   cat?: string;
+  addressed?: true;
 }
 
 interface Summary {
@@ -145,7 +147,7 @@ const compacting = new Set<string>(); // files being compacted: one run at a tim
 
 export function recordMessage(kind: Kind, ts: number, text: string, now = new Date(), file: string = FILE, extra: Extra = {}): void {
   if (!text.trim()) return;
-  appendLine(file, JSON.stringify({ ts, at: now.toISOString(), kind, text: text.slice(0, LIMITS.logEntry), ...(extra.by ? { by: extra.by } : {}), ...(extra.of ? { of: extra.of } : {}), ...(extra.cat ? { cat: extra.cat } : {}) } satisfies Sent));
+  appendLine(file, JSON.stringify({ ts, at: now.toISOString(), kind, text: text.slice(0, LIMITS.logEntry), ...(extra.by ? { by: extra.by } : {}), ...(extra.of ? { of: extra.of } : {}), ...(extra.cat ? { cat: extra.cat } : {}), ...(extra.addressed ? { addressed: true as const } : {}) } satisfies Sent));
 }
 
 // ---- edits and deletes ----

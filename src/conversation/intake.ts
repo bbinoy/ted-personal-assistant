@@ -1,8 +1,8 @@
 import { allows } from "../policy/capabilities.ts";
-import { cleanIncoming, type Conversation, type Held, type Incoming, type PipelineDeps } from "./conversationmodel.ts";
-import { findMessage, revisionsOf, type Extra, type Kind } from "../core/messages.ts";
+import { cleanIncoming, type Batch, type Conversation, type Entry, type Held, type Incoming, type PipelineDeps } from "./conversationmodel.ts";
+import { findMessage, revisionsOf, type Extra, type Kind, type Sent } from "../core/messages.ts";
 import { editNote, DELETED_LINE, isAuthor, sameText } from "./edit.ts";
-import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "../run/image.ts";
+import { MAX_PICTURES, PICTURE_NOTE } from "../run/image.ts";
 import { documentNote, takeDocuments, type Document } from "./document.ts";
 import { withQuoteContext } from "./quote.ts";
 import { holdQuote, holdVoiceNote, rememberSender } from "../modules/voice/voicenote.ts";
@@ -11,23 +11,26 @@ import { commandReply } from "./ownercommands.ts";
 import { TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 import { reactionMessage, reactionPrompt } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { taskReply } from "./taskreplies.ts";
+import { createGroupAnswering, speaker, type Go } from "./group.ts";
+import { replayPrompt } from "./replay.ts";
 import { forgetDeclined } from "../approvals/declined.ts";
 import { voiceOption } from "./voicereply.ts";
 import { settings } from "../core/settings.ts";
-import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
+import { clean, defuseSpeakers, LIMITS, oneLine } from "../core/sanitize.ts";
 import { MAX_LONG_TEXT_BYTES, type IncomingDeletion, type IncomingMessage, type IncomingReaction } from "@ted-assistant/messenger";
 import type { Queue } from "./queue.ts";
 import type { Delivery } from "./delivery.ts";
 
-// Everything that arrives for a conversation, up to the moment its turn is handed to the queue: edits, deletes, reactions, owner commands, approval answers, and the steps a message
-// goes through first (voice, picture, file, long text). This module owns the record of messages taken as approval answers.
+// ONE INTAKE for every conversation (docs/ARCHITECTURE.md, "One intake"): everything that arrives for the owner's chat, a friend's and a group, a message (text, voice, picture, file), an
+// edit, a deletion or a reaction, goes through the same ordered chain of steps below, and the only per-kind differences are the rows of WAYS. This module owns the record of messages
+// taken as approval answers.
 export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Delivery) {
   const { messenger, out } = deps;
   const caps = messenger.capabilities;
   const now = deps.now ?? Date.now;
   const { burst, enqueue, overtake, pendingOf, authorOf, dropPending } = queue;
   const { reactTo, status, canSpeak, holdTyping, runTurn } = delivery;
+  const answering = createGroupAnswering(deps, delivery, queue);
 
   const record = (conv: Conversation, kind: Kind, ts: number, text: string, extra?: Extra) => deps.record(conv.target, kind, ts, text, extra);
 
@@ -46,10 +49,10 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     return canSpeak() ? `${text}\n\n${voiceOption(true)}` : text;
   }
 
-  // Tell the sender why their voice message or picture could not be used: the owner always gets the reason (`before` runs
-  // first, for the owner only); in a group only someone who spoke to the assistant does, otherwise it just moves on.
+  // Tell the sender why their voice message or picture could not be used: where everyone is heard (WAYS) they always get the reason (`before` runs
+  // first, for them only); otherwise only someone who spoke to the assistant does, and the rest just moves on.
   async function tell(conv: Conversation, m: IncomingMessage, why: string, before?: () => void): Promise<void> {
-    if (conv.attention === "always") {
+    if (waysOf(conv).everyone) {
       before?.();
       if (conv.target) await out.reply(why, { plain: true, target: conv.target });
       else await out.replyPlain(why);
@@ -59,7 +62,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   // Voice message -> text, or false when it could not be understood (the sender was told, if they should be).
   async function hear(conv: Conversation, m: IncomingMessage): Promise<Held | false> {
     const target = { author: m.from, timestamp: m.timestamp };
-    if (conv.attention === "always") status(conv, "👂", target);
+    if (waysOf(conv).everyone) status(conv, "👂", target);
     try {
       const text = clean("voice transcript", await deps.transcript(m), { max: LIMITS.body });
       // Kept (id only, no copy) so the voice tool can build a cloned voice from it: per conversation, never across conversations.
@@ -121,22 +124,134 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     return { ...rest, text: got.cut ? `${whole}\n${LONG_CUT_AT}` : whole };
   }
 
-  // Everything a message goes through before its conversation decides what to do with it. The same steps for the owner and
-  // every group; the Conversation's flags (vouch, attention, optionalPictures) say where they differ.
-  async function intake(conv: Conversation, incoming: IncomingMessage): Promise<void> {
+  // ---- THE TABLE: the only places where the kinds of conversation differ on the way in ----
+  // A private chat (the owner's, a friend's) and a group are told apart by `conv.direct` here and nowhere else in the chain. Everything else is the same function for all of them.
+  //   who may do what   code-only commands are checked against the conversation's capabilities (ownercommands.ts: /card needs "card", /pause "admin", /tasks "tasks", ...), not its kind.
+  //                     Feedback offers (`learns`) are per person: a private chat's, never a shared group's.
+  //   the answer        a private chat always answers; a group answers when addressed (`forUs`: tagged or quoted, then sticky until answered) or when the participation gate says act
+  //                     (`mayAnswer`, `decide`, group.ts). A paused or over-budget group answers nothing, and says so once to someone who addressed it.
+  //   who is heard      `everyone`: every sender gets a read receipt and the reason for a voice message or picture that could not be used; otherwise only someone who spoke to us.
+  //                     `vouch`: the owner's membership is checked first (a stranger cannot add us to a group and use it). `optionalPictures`: a picture is opened only when it
+  //                     can be answered, and an unusable one is dropped (the caption stays); otherwise it is required.
+  //   history           `recorded`/`say`/`sayReaction`: how a line reads in the log (a group's lines name their speaker).
+  //   the turn          `turn`: how the burst is shown to the model (a private chat: the messages; a group: its recent log, fenced) and delivered (threading and target are the
+  //                     Conversation's: threadAlways, target). A reaction in a private chat is a quiet turn of its own; in a group it is chatter like any other.
+  // Delivery data that stays on the Conversation: target (where it goes), threadAlways, notice and noticeEveryMs (conversationmodel.ts).
+  type Who = { from: string; fromUuid?: string; fromName?: string };
+  interface Ways {
+    vouch: boolean;
+    everyone: boolean;
+    optionalPictures: boolean;
+    learns: boolean;
+    recorded: "owner" | "member";
+    forUs: (m: { addressedToMe?: boolean }) => boolean;
+    mayAnswer: (m: { addressedToMe?: boolean }) => boolean;
+    say: (who: Who, text: string, max?: number) => string;
+    sayReaction: (who: Who, emoji: string, on: string) => { line: string; said: string };
+    note: (conv: Conversation, e: Entry) => void;
+    forget: (conv: Conversation, stamps: readonly number[], deleted: boolean) => void;
+    react: (conv: Conversation, r: IncomingReaction, e: Entry, learned: string | undefined) => Promise<void>;
+    decide: (conv: Conversation, d: { batch: Batch<Entry>; e: Entry; showTyping: () => void }) => Promise<Go | undefined>;
+    turn: (conv: Conversation, items: Entry[], go: Go, batch: Batch<Entry>) => Promise<void>;
+  }
+  const WAYS: { private: Ways; group: Ways } = {
+    private: {
+      vouch: false,
+      everyone: true,
+      optionalPictures: false,
+      learns: true,
+      recorded: "owner",
+      forUs: () => true,
+      mayAnswer: () => true,
+      say: (_who, text) => text,
+      sayReaction: (_who, emoji, on) => ({ line: `${emoji} on: ${on.slice(0, LIMITS.preview)}`, said: emoji }),
+      note: () => {},
+      forget: () => {},
+      react: privateReaction,
+      decide: async (_conv, { showTyping }) => (showTyping(), {}), // the owner is always answered: show it now, even while an earlier turn still runs
+      turn: privateTurn,
+    },
+    group: {
+      vouch: true,
+      everyone: false,
+      optionalPictures: true,
+      learns: false,
+      recorded: "member",
+      forUs: (m) => !!m.addressedToMe,
+      mayAnswer: answering.mayAnswer,
+      say: (who, text, max = LIMITS.logLine) => `${speaker({ isOwner: deps.isOwner(who), fromName: who.fromName })}: ${defuseSpeakers(clean("group message", text, { max }))}`,
+      sayReaction: (who, emoji, on) => {
+        const name = speaker({ isOwner: deps.isOwner(who), fromName: who.fromName });
+        return { line: `${name} reacted ${oneLine("reaction", emoji, 16)} to: ${defuseSpeakers(clean("reaction", on, { max: LIMITS.preview }))}`, said: `${name} reacted ${oneLine("reaction", emoji, 16)}` };
+      },
+      note: answering.note,
+      forget: answering.forget,
+      react: (conv, _r, e) => settle(conv, WAYS.group, e),
+      decide: answering.decide,
+      turn: answering.turn,
+    },
+  };
+  const waysOf = (conv: Conversation): Ways => (conv.direct ? WAYS.private : WAYS.group);
+
+  // A private chat's turn: the burst's messages as one prompt, one run.
+  async function privateTurn(conv: Conversation, ms: Entry[], _go: Go, b: Batch<Entry>): Promise<void> {
+    const last = ms[ms.length - 1]!;
+    for (const x of ms) {
+      console.log(`owner message (${x.text.length} chars)`);
+      if (x.quote) console.log(`owner is replying to an earlier message (${x.quote.text.length} chars)`);
+    }
+    const learned = ms.map((x) => x.learned).filter(Boolean).join("\n\n");
+    const late = ms.filter((x) => x.late);
+    const shown = late.length ? replayPrompt(late.map((x) => ({ at: x.late!.at, text: x.text }))) : ownerPrompt(ms);
+    const prompt = learned ? `${shown}\n\n${learned}` : shown;
+    await runTurn(conv, {
+      run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
+      target: { author: last.from, timestamp: last.timestamp },
+      threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
+      hadQuote: ms.some((x) => x.quote),
+      announce: true,
+      timing: b.timing,
+    });
+  }
+
+  // A reaction in a private chat that is not an approval answer is feedback on a message. The model is told which message it was on (looked up by timestamp in the log) and decides what,
+  // if anything, it means. A quiet turn: no typing, no icons, no apology.
+  async function privateReaction(conv: Conversation, r: IncomingReaction, _e: Entry, learned: string | undefined): Promise<void> {
+    const on = findMessage(r.targetTimestamp, conv.logFile);
+    await enqueue(conv, async () => {
+      console.log(`owner reacted ${r.emoji}`);
+      const prompt = reactionPrompt(r.emoji, on) + (learned ? `\n\n${learned}` : "");
+      // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
+      await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text, on ? Date.parse(on.at) || 0 : 0), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
+    });
+  }
+
+  // ---- THE CHAIN ----
+  // A message of any conversation, in this order (an edit skips 3 to 5: it is never a command, an approval answer or feedback):
+  //   0. the door         hidden characters out, a long message read whole, a group we cannot vouch for gets nothing; read receipt; voice, picture and file made usable; an edit is checked (edit())
+  //   1. record           the line goes into the conversation's log, before anything can lose it (replay.ts finds what a restart lost there)
+  //   2. commands         code only, before any model: /card off, /stop, /pause, /status, /tasks, /quiet ... each needs a capability the conversation has (ownercommands.ts)
+  //   3. approval answer  a message, a quoted reply or a reaction answers a question open in THIS conversation; it is consumed, and never replayed
+  //   4. feedback         where the conversation learns (WAYS.learns): a short quoted reply to something sent unprompted may save a note
+  //   5. declined         a new message: a declined action may be asked for again (declined.ts)
+  //   6. the burst        a message that is for us calls off a look that is running; then a short settling pause, and one turn for everything that arrived (queue.ts)
+  //   7. the answer       WAYS.decide: is anything to be said? (a private chat always; a group when addressed or when the gate says act)
+  //   8. the turn         WAYS.turn: one run for the burst, delivered by delivery.ts
+  async function message(conv: Conversation, incoming: IncomingMessage): Promise<void> {
+    const w = waysOf(conv);
     const original = cleanIncoming(await withLongText(incoming)); // the door: hidden characters never get past here
     const arrived = now();
-    if (conv.vouch && !(await deps.vouch(conv.groupId!))) return; // a group we cannot vouch for gets nothing, not even a transcription
-    if (original.edited) return edit(conv, original, arrived);
+    if (w.vouch && !(await deps.vouch(conv.groupId!))) return; // a group we cannot vouch for gets nothing, not even a transcription
     const author = original.from || original.fromUuid;
     if (caps.readReceipts) {
-      if (conv.attention === "always") void messenger.markRead(conv.target, { timestamp: original.timestamp, author: conv.kind === "tenant" ? author : undefined }); // the owner sees it was read, as soon as we have it (a tenant: the receipt goes to her)
+      if (w.everyone) void messenger.markRead(conv.target, { timestamp: original.timestamp, author: conv.kind === "tenant" ? author : undefined }); // the owner sees it was read, as soon as we have it (a tenant: the receipt goes to her)
       else if (original.addressedToMe && author) void messenger.markRead(conv.target, { timestamp: original.timestamp, author }); // only those who spoke to us see "seen"
     }
     rememberSender(conv.key, author, original.fromName && oneLine("sender name", original.fromName, 40)); // (memory only, whatever the voice provider: the voice tool and the task tools both name who is asking)
     if (settings.tts.provider === "qwen") {
       if (original.quotedAudio) holdQuote(conv.key, original.timestamp, original.quotedAudio);
     }
+    if (original.edited) return edit(conv, original, arrived);
     let m: Held = original;
     if (m.audio) {
       const heard = await hear(conv, m);
@@ -145,59 +260,90 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     }
     if (m.image) {
       // Looked at only when it will be used: in "tagged" mode a picture nobody addressed to us is just a line in the history.
-      const seen = !conv.optionalPictures || m.addressedToMe || settings.groupParticipation !== "tagged" ? await see(conv, m) : false;
-      if (!seen && !conv.optionalPictures) return;
+      const seen = w.mayAnswer(m) ? await see(conv, m) : false;
+      if (!seen && !w.optionalPictures) return;
       m = { ...m, image: undefined, picture: seen ? seen.picture : undefined };
     }
     if (m.file) {
       // An audio file is opened like a voice message is transcribed, whoever it is for (it may be the source of a voice someone asks for next).
-      const seen = !conv.optionalPictures || m.addressedToMe || settings.groupParticipation !== "tagged" || m.file.audio ? await openFile(conv, m) : false;
-      if (!seen && !conv.optionalPictures) return;
+      const seen = w.mayAnswer(m) || m.file.audio ? await openFile(conv, m) : false;
+      if (!seen && !w.optionalPictures) return;
       m = { ...m, file: undefined, document: seen ? seen.document : undefined };
     }
     // The line for the history: searchable, and what the dream learns from (never the picture or the document itself).
     const line = original.audio ? `🎙️ ${m.text}` : original.image ? `🖼️ ${m.text || "image"}` : original.file ? `📄 ${m.text || (m.document?.kind === "audio" ? "audio file" : "document")}` : m.text;
-    if (!conv.approvals) {
-      // A question asked in this group is answered here by ANY member (their message, a quoted reply or a reaction); the model reads it
-      // like the owner's. Only this group's approvals can be answered; an edit and a caption never answer.
-      if (await taskReply(conv, m, (t) => out.reply(t, { plain: true, target: conv.target }))) return; // /tasks in a group (taskreplies.ts)
-      if (await approvalAnswer(conv, m, author)) return;
-      forgetDeclined(conv.key);
-      if (m.addressedToMe) overtake(conv); // (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
-      return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: line, picture: m.picture, document: m.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, voice: m.voice });
-    }
-    return ownerTurn(conv, m, line, arrived);
+    return admit(conv, m, line, arrived);
   }
 
-  // An edit of an earlier message, the same for the owner's chat and every group. Only its author may edit it; the original may be
+  // Steps 1 to 8 for a message that is ready (an edit comes here with `edited`: the timestamp of the message it replaces).
+  async function admit(conv: Conversation, m: Held, line: string, arrived: number, edited?: { of: number }): Promise<void> {
+    if (!line.trim()) return;
+    const w = waysOf(conv);
+    const author = m.from || m.fromUuid;
+    // 1. record
+    record(conv, edited ? "edit" : w.recorded, m.timestamp, w.say(m, line), { by: author, ...(edited ? { of: edited.of } : {}), ...(m.addressedToMe ? { addressed: true } : {}) });
+    let learned: string | undefined;
+    if (!edited) {
+      // 2. commands: code only, ahead of the queue, so "stop" works while a turn runs. A caption or a file never makes one.
+      if (!m.picture && !m.document) {
+        const said = (allows(conv, "card") ? cardCommand(m.text) : undefined) ?? commandReply(conv, m.text, { dropQueued: () => queue.dropAllPending(conv) });
+        if (said !== undefined) return void (await out.reply(said, { plain: true, target: conv.target }));
+      }
+      // 3. approval answer: it skips the queue (the queue is blocked on the very turn that is waiting for it)
+      scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
+      if (await approvalAnswer(conv, m, author)) return;
+      // 4. feedback (feedback.ts): the turn below mentions what was learned
+      if (w.learns) learned = await deps.feedback?.message(conv, m);
+    }
+    forgetDeclined(conv.key); // 5. a new message: they may be asking for a declined action again (declined.ts)
+    const e: Entry = { ...m, line, said: w.say(m, line, LIMITS.message), author, arrivedAt: arrived, learned };
+    if (w.forUs(m)) overtake(conv); // 6. a look of this conversation that is running gives way to the turn (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
+    if (!w.mayAnswer(m)) return;
+    w.note(conv, e);
+    return settle(conv, w, e);
+  }
+
+  // Steps 6 to 8: the burst, the answer decision, the turn. Replay (below) joins here too.
+  function settle(conv: Conversation, w: Ways, e: Entry): Promise<void> {
+    return burst(conv, e, async (b) => {
+      let typing: (() => void) | undefined;
+      try {
+        const go = await w.decide(conv, { batch: b, e, showTyping: () => void (typing ??= holdTyping(conv, b.timing)) });
+        if (go) await b.run((items) => w.turn(conv, items.sort((x, y) => x.timestamp - y.timestamp), go, b));
+      } finally {
+        typing?.(); // however it ended: answered, silent, superseded or failed
+      }
+    }, e.arrivedAt);
+  }
+
+  // An edit of an earlier message, the same for every conversation. Only its author may edit it; the original may be
   //   still waiting (settling, queued, or being judged by the gate): the edit takes its place, so the answer is about the new text;
   //   answered already: the edit is a new message that says it is one (and what it replaced), so the answer can be corrected;
   //   unchanged (after whitespace and Unicode normalisation): nothing happens.
-  // An edit is never an approval answer, whatever the original was: the owner's path below skips the approval check, and an edit of a
-  // message that WAS taken as an answer is dropped altogether.
+  // An edit is never an approval answer, whatever the original was (admit skips steps 2 to 4 for it): an edit of a message that WAS taken as an answer is dropped altogether.
   async function edit(conv: Conversation, m: IncomingMessage, arrived: number): Promise<void> {
+    const w = waysOf(conv);
     const targetTs = m.edited!.targetTimestamp;
     const past = revisionsOf(targetTs, conv.logFile);
     const stamps = past ? past.stamps : [targetTs];
     if (stamps.some((t) => approvalAnswers.has(t))) return void console.log("edit of an approval answer ignored");
-    const waiting = pendingOf(conv, stamps);
+    const waiting = pendingOf(conv, stamps) as Entry | undefined;
     if (!waiting && past && past.root.kind !== "owner" && past.root.kind !== "member" && past.root.kind !== "edit") return void console.log("edit of a message that is not someone's own ignored");
-    if (!waiting && !past && conv.kind === "group") return void console.log("edit of an unknown message in a group ignored"); // nobody to check it against
+    if (!waiting && !past && !conv.direct) return void console.log("edit of an unknown message in a group ignored"); // nobody to check it against
     if (!isAuthor(m, waiting ? authorOf(waiting) : past?.root.by, conv.direct)) return void console.log(`edit by someone other than the author ignored (${conv.kind})`);
-    const prior = waiting ? (waiting as { text: string }).text : past?.latest.text;
-    const author = m.from || m.fromUuid;
-    const via = { targetTimestamp: targetTs, stamps, prior, pending: !!waiting, picture: (waiting as { picture?: Picture } | undefined)?.picture, document: (waiting as { document?: Document } | undefined)?.document };
-    if (conv.kind === "group") {
-      if (author && m.addressedToMe && caps.readReceipts) void messenger.markRead(conv.target, { timestamp: m.timestamp, author });
-      return deps.admitGroup(conv, { groupId: conv.groupId!, arrivedAt: arrived, text: m.text, picture: via.picture, document: via.document, timestamp: m.timestamp, isOwner: deps.isOwner(m), fromName: m.fromName, addressedToMe: !!m.addressedToMe, author, quote: m.quote, edit: via });
+    const before = waiting ? w.say(m, waiting.line) : past?.latest.text; // (as the log has it)
+    const line = w.say(m, m.text);
+    if (before !== undefined && sameText(before, line)) return void console.log("edit changes nothing, ignored");
+    if (waiting) {
+      dropPending(conv, stamps);
+      w.forget(conv, stamps, false);
     }
-    if (prior !== undefined && sameText(prior, m.text)) return void console.log("edit changes nothing, ignored");
-    if (waiting) dropPending(conv, stamps);
-    const held: Held = { ...m, picture: via.picture, document: via.document, ...(waiting ? {} : { edit: { before: prior } }) };
-    return ownerTurn(conv, held, m.text, arrived, { of: targetTs });
+    const held: Held = { ...m, picture: waiting?.picture, document: waiting?.document, ...(waiting ? {} : { edit: { before } }) };
+    return admit(conv, held, m.text, arrived, { of: targetTs });
   }
 
-  // Is this message the answer to a question open in THIS conversation? Then it is consumed (and the owner or group is told what happened).
+  // Is this message the answer to a question open in THIS conversation? Then it is consumed (and the conversation is told what happened). In a group ANY member's answer counts (their message, a
+  // quoted reply or a reaction); the model reads it like the owner's.
   // Never an edit (an approval is answered by a new message, a reaction or a quoted reply, so "no" edited into "yes" changes nothing)
   // and never a picture caption. A voice message is a message like any other; the judge is told it is an automatic
   // transcript.
@@ -216,82 +362,28 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     return true;
   }
 
-  async function ownerTurn(conv: Conversation, m: Held, line: string, arrived: number, edited?: { of: number }): Promise<void> {
-    record(conv, edited ? "edit" : "owner", m.timestamp, line, { by: m.from || m.fromUuid, ...(edited ? { of: edited.of } : {}) });
-    // The card's kill switch: handled here, in code, before any model sees the message, and only for the owner's own chat. It can only switch card
-    // use OFF; switching it on is the terminal's (card.ts).
-    if (allows(conv, "card") && !edited && !m.picture && !m.document) {
-      const said = cardCommand(m.text);
-      if (said !== undefined) return void (await out.reply(said, { plain: true }));
-    }
-    // /stop, /pause, /resume, /status: also in code, before any model and ahead of the queue, so "stop" works while a turn runs (ownercommands.ts).
-    if (!edited && !m.picture && !m.document) {
-      const said = commandReply(conv, m.text, { dropQueued: () => queue.dropAllPending(conv) });
-      if (said !== undefined) return void (await out.reply(said, { plain: true, target: conv.target }));
-    }
-    // While an approval is pending, a message may be its answer. That must skip the queue.
-    scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
-    if (!edited && (await approvalAnswer(conv, m, m.from || m.fromUuid))) return;
-    const learned = edited ? undefined : await deps.feedback?.message(conv, m); // learning from feedback (feedback.ts): a short quoted reply to something sent unprompted may save a note; the turn below mentions it
-    forgetDeclined(conv.key); // a new message: they may be asking for a declined action again (declined.ts)
-    overtake(conv); // a look of this conversation that is running gives way to the turn
-    await burst(conv, m, async (b) => {
-      const typing = holdTyping(conv, b.timing); // the owner is always answered: show it now, even while an earlier turn still runs
-      try {
-        await b.run(async (items) => {
-          const ms = items.sort((a, c) => a.timestamp - c.timestamp);
-          const last = ms[ms.length - 1]!;
-          for (const x of ms) {
-            console.log(`owner message (${x.text.length} chars)`);
-            if (x.quote) console.log(`owner is replying to an earlier message (${x.quote.text.length} chars)`);
-          }
-          const prompt = learned ? `${ownerPrompt(ms)}\n\n${learned}` : ownerPrompt(ms);
-          await runTurn(conv, {
-            run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
-            target: { author: last.from, timestamp: last.timestamp },
-            threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
-            hadQuote: ms.some((x) => x.quote),
-            announce: true,
-            timing: b.timing,
-          });
-        });
-      } finally {
-        typing();
-      }
-    }, arrived);
-  }
-
-  // Any reaction that is not an approval answer is feedback on a message. The model is told which message
-  // it was on (looked up by timestamp in the log) and decides what, if anything, it means.
-  async function ownerReaction(conv: Conversation, r: IncomingReaction): Promise<void> {
-    const outcome = deps.approvals.answerReaction(r.emoji, r.targetTimestamp, conv.key, r.from || r.fromUuid);
-    if (outcome === "needs_text") return void (await out.reply(TYPED_YES_NEEDED, { plain: true })); // a payment is not approved by a reaction
+  // A reaction: the same steps as a message (vouch, approval answer, record, feedback, overtake), then the kind's own way to answer it (WAYS.react).
+  async function reaction(conv: Conversation, r: IncomingReaction): Promise<void> {
+    const w = waysOf(conv);
+    if (w.vouch && !(await deps.vouch(conv.groupId!))) return;
+    const outcome = deps.approvals.answerReaction(r.emoji, r.targetTimestamp, conv.key, r.from || r.fromUuid); // a reaction on a question asked in this conversation
+    if (outcome === "needs_text") return void (await out.reply(TYPED_YES_NEEDED, { plain: true, target: conv.target })); // a payment is not approved by a reaction
     if (outcome !== "ignored") return void console.log(`approval ${outcome} (by reaction)`);
     overtake(conv, false); // an emoji is news for the look but never calls it off
-    await enqueue(conv, async () => {
-      console.log(`owner reacted ${r.emoji}`);
-      const on = findMessage(r.targetTimestamp, conv.logFile);
-      record(conv, "reaction", now(), `${r.emoji} on: ${(on?.text ?? "an older message").slice(0, LIMITS.preview)}`);
-      const learned = await deps.feedback?.reaction(conv, r); // a 👎 on something sent unprompted may save a note (feedback.ts); the turn below mentions it
-      const prompt = reactionPrompt(r.emoji, on) + (learned ? `\n\n${learned}` : "");
-      // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
-      await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text, on ? Date.parse(on.at) || 0 : 0), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
-    });
-  }
-
-  async function groupReaction(conv: Conversation, r: IncomingReaction): Promise<void> {
-    const groupId = conv.groupId!;
-    if (!(await deps.vouch(groupId))) return;
-    const answered = deps.approvals.answerReaction(r.emoji, r.targetTimestamp, conv.key, r.from || r.fromUuid); // a reaction on a question asked in this group
-    if (answered !== "ignored") return void console.log(`approval ${answered} (by reaction, in a group)`);
     const on = findMessage(r.targetTimestamp, conv.logFile)?.text ?? "an older message";
-    return deps.admitGroup(conv, { groupId, text: "", timestamp: now(), isOwner: deps.isOwner(r), fromName: r.fromName && oneLine("group member name", r.fromName, LIMITS.name), addressedToMe: false, reaction: { emoji: oneLine("reaction", r.emoji, 16), on } });
+    const { line, said } = w.sayReaction(r, r.emoji, on);
+    const t = now();
+    record(conv, "reaction", t, line);
+    const learned = w.learns ? await deps.feedback?.reaction(conv, r) : undefined; // a 👎 on something sent unprompted may save a note (feedback.ts); the turn mentions it
+    const e: Entry = { from: r.from, fromUuid: r.fromUuid, fromName: r.fromName, text: "", timestamp: t, direct: r.direct, addressedToMe: false, line, said, arrivedAt: t, learned, reaction: { emoji: oneLine("reaction", r.emoji, 16), on } };
+    return w.react(conv, r, e, learned);
   }
 
   // A message deleted for everyone. Only its author can. Still waiting: it is dropped, so it is never answered and nothing in it is
   // acted on. Answered already: a marker line says so, nothing runs again. Nobody is told about it, in a group least of all.
   async function deletion(conv: Conversation, d: IncomingDeletion): Promise<void> {
-    if (conv.vouch && !(await deps.vouch(conv.groupId!))) return;
+    const w = waysOf(conv);
+    if (w.vouch && !(await deps.vouch(conv.groupId!))) return;
     const past = revisionsOf(d.targetTimestamp, conv.logFile);
     const stamps = past ? past.stamps : [d.targetTimestamp];
     const waiting = pendingOf(conv, stamps);
@@ -300,19 +392,33 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     if (!waiting && past && past.root.kind !== "owner" && past.root.kind !== "member" && past.root.kind !== "edit") return void console.log("delete of a message that is not someone's own ignored");
     if (!isAuthor(d, waiting ? authorOf(waiting) : past?.root.by, conv.direct)) return void console.log(`delete by someone other than the author ignored (${conv.kind})`);
     dropPending(conv, stamps);
+    w.forget(conv, stamps, true); // (a group forgets a pending address of it and no longer judges it)
     console.log(`${conv.kind} message deleted by its author${waiting ? " before it was answered" : ""}`);
-    if (conv.direct) return record(conv, "delete", now(), `[${DELETED_LINE}]`, { of: d.targetTimestamp });
-    // The group brain writes the marker (it knows how members are named) and forgets a pending address of the deleted message.
-    return deps.admitGroup(conv, { groupId: conv.groupId!, text: "", timestamp: now(), isOwner: deps.isOwner(d), fromName: d.fromName && oneLine("group member name", d.fromName, LIMITS.name), addressedToMe: false, deletion: { targetTimestamp: d.targetTimestamp, stamps } });
+    record(conv, "delete", now(), w.say(d, `[${DELETED_LINE}]`), { of: d.targetTimestamp });
+  }
+
+  // What a restart lost, found in the log (replay.ts) and put through the chain again from step 6: the same burst, the same answer decision, the same turn. Not step 1 to 5: it is
+  // recorded already, and neither a command nor an approval answer is ever replayed (an old "yes" is no new one). In a private chat the lines are one turn. In a group a line is answered only
+  // when it addressed us (the log says so) or when the gate, asked again on the tail, says act. The caller has dropped what is too old or may have been done already.
+  // `sorry`: the run may have acted before it died, so nothing is run again; it is said (once) to someone who was waiting, i.e. when a line was for us.
+  async function replay(conv: Conversation, lines: readonly Sent[], sorry?: () => Promise<unknown>): Promise<void> {
+    const w = waysOf(conv);
+    if (w.vouch && !(await deps.vouch(conv.groupId!))) return;
+    if (sorry) return void (lines.some((l) => w.forUs({ addressedToMe: !!l.addressed })) && (await sorry()));
+    const t = now();
+    const entries = lines
+      .map((l): Entry => ({ from: l.by ?? "", text: l.text, timestamp: l.ts, direct: conv.direct, addressedToMe: !!l.addressed, line: l.text, said: l.text, author: l.by, arrivedAt: t, late: { at: l.at } }))
+      .filter((e) => w.mayAnswer(e));
+    for (const e of entries) w.note(conv, e);
+    await Promise.all(entries.map((e) => settle(conv, w, e))); // (all joined into the burst first: the last one settles it)
   }
 
   // Everything that arrives for a conversation. The caller has already decided who may speak to it
   // (guards.ts for the owner's chat; our own echoes and reactions are dropped before this).
   function handleIncoming(conv: Conversation, ev: Incoming): Promise<void> {
     if (ev.type === "deletion") return deletion(conv, ev.d);
-    if (conv.direct) return ev.type === "message" ? intake(conv, ev.m) : ownerReaction(conv, ev.r);
-    return ev.type === "message" ? intake(conv, ev.m) : groupReaction(conv, ev.r);
+    return ev.type === "message" ? message(conv, ev.m) : reaction(conv, ev.r);
   }
 
-  return { handleIncoming };
+  return { handleIncoming, replay };
 }
