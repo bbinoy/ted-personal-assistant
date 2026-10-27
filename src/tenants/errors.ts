@@ -1,7 +1,8 @@
 import { noteRateLimit } from "../core/cooldown.ts";
 import { reportKeyProblem } from "./keynotice.ts";
 import { cooldownKeyOf, LOGIN, type Payer } from "./payer.ts";
-import { OWNER } from "../core/settings.ts";
+import { takeCapNotice } from "../core/capnotice.ts";
+import { OWNER, settings } from "../core/settings.ts";
 
 // The failures that have their own message, instead of "something broke".
 export class AuthError extends Error {} // the Claude login expired
@@ -38,19 +39,43 @@ export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
   other: { what: "the model run keeps failing", fix: "Run `npm run doctor`; it reads the errors in logs/agent.log." },
 };
 
-type Kind = "auth" | "limit" | "billing" | "refused" | "timeout" | "connector" | "reconnect" | "other";
+// ---- what a person is told when Ted cannot serve them right now: ONE table, by reason and audience ----
+// Fixed texts, on purpose (CLAUDE.md §4): they go to people for whom no model run is possible at that moment (a refused key, a spent day, a cooldown), or after a run has failed. Short and kind; the
+// owner's own end with the one step (FIXES). A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every TENANT_NOTICE_MINUTES (refusalOnce).
+export type Reason = Cause | "owner-budget" | "own-budget" | "shared-budget" | "cooldown" | "no-key";
+export interface RefusalFacts {
+  until?: string; // a cooldown: when it ends, as a clock time
+  limit?: number; // a friend's own day: her ceiling
+}
 const OTHER = "Something broke on my end, sorry. Try again in a bit.";
 const LIMIT = "I've hit my usage limit for now, so I can't think until it resets. Try me again a bit later.";
-const NOTICES: Readonly<Record<Kind, Readonly<Record<Audience, string>>>> = {
-  auth: { owner: `My login expired, so I can't think. ${FIXES.login.fix}`, group: `I can't think right now: my login has expired, and ${OWNER} needs to fix it.`, friend: OTHER },
+const SLOW = "That took too long, so I stopped. Try something smaller, or ask again.";
+type Say = string | ((o: RefusalFacts) => string);
+const REFUSALS: Readonly<Record<Reason, Readonly<Partial<Record<Audience, Say>>>>> = {
+  login: { owner: `My login expired, so I can't think. ${FIXES.login.fix}`, group: `I can't think right now: my login has expired, and ${OWNER} needs to fix it.` },
   limit: { owner: `I've hit my usage limit for now, so I can't think until it resets. ${FIXES.limit.fix}`, group: LIMIT, friend: "The account I run on for friends has hit a usage limit, so I can't think for a while. I'll answer again once the limit has lifted." },
-  billing: { owner: `The shared API key has no credit left, so friends get no answers. ${FIXES.billing.fix}`, group: OTHER, friend: `The account I run on for friends says there is no credit left (or a billing problem). ${OWNER} needs to look at it; I can answer again once that is fixed.` },
-  refused: { owner: `The shared API key was refused, so friends get no answers. ${FIXES.refused.fix}`, group: OTHER, friend: `Anthropic refused the request made with the account I run on for friends. ${OWNER} needs to check it; I'll try again later.` },
-  timeout: { owner: "That ran too long and I stopped it. Raise RUN_MAX_MINUTES_CHAT in .env and restart, or ask for something smaller.", group: "That took too long, so I stopped. Try something smaller, or ask again.", friend: "That took too long, so I stopped. Try something smaller, or ask again." },
-  connector: { owner: `A connector I need (Notion, Calendar or Gmail) did not answer. ${FIXES.connector.fix}`, group: OTHER, friend: OTHER },
-  reconnect: { owner: `A friend's Notion or Google connection no longer works. ${FIXES.reconnect.fix}`, group: OTHER, friend: OTHER },
-  other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}`, group: OTHER, friend: OTHER },
+  billing: { owner: `The shared API key has no credit left, so friends get no answers. ${FIXES.billing.fix}`, friend: `The account I run on for friends says there is no credit left (or a billing problem). ${OWNER} needs to look at it; I can answer again once that is fixed.` },
+  refused: { owner: `The shared API key was refused, so friends get no answers. ${FIXES.refused.fix}`, friend: `Anthropic refused the request made with the account I run on for friends. ${OWNER} needs to check it; I'll try again later.` },
+  timeout: { owner: "That ran too long and I stopped it. Raise RUN_MAX_MINUTES_CHAT in .env and restart, or ask for something smaller.", group: SLOW, friend: SLOW },
+  connector: { owner: `A connector I need (Notion, Calendar or Gmail) did not answer. ${FIXES.connector.fix}` },
+  reconnect: { owner: `A friend's Notion or Google connection no longer works. ${FIXES.reconnect.fix}` },
+  other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}` },
+  "owner-budget": { group: `I've used up my budget for today, so I can't answer until tomorrow. ${OWNER} can raise it if it is urgent.` },
+  "own-budget": { group: "I've reached today's limit for this group, back tomorrow.", friend: (o) => `You've reached your daily limit of ${o.limit}, so I'm resting until tomorrow.` },
+  "shared-budget": { friend: "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved." },
+  cooldown: { friend: (o) => `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${o.until}.` },
+  "no-key": { friend: `I'm not set up for friends yet, so I can't reply for now. I've let ${OWNER} know.` },
 };
+export function refusal(reason: Reason, audience: Audience, o: RefusalFacts = {}): string {
+  const say = REFUSALS[reason][audience] ?? OTHER;
+  return typeof say === "function" ? say(o) : say;
+}
+// The same line to the same person or group (key: their convId) at most once a day for a day's ceiling, else every TENANT_NOTICE_MINUTES (capnotice.ts); undefined: it was said, stay silent.
+export function refusalOnce(reason: Reason, audience: Audience, convId: string, o: RefusalFacts = {}, now = Date.now()): string | undefined {
+  const every = reason === "cooldown" || reason === "no-key" ? settings.tenantNoticeMinutes * 60_000 : undefined;
+  return takeCapNotice(`refusal:${reason}:${convId}`, now, every) ? refusal(reason, audience, o) : undefined;
+}
+export const noticeFor = (audience: Audience) => (e: unknown): string => refusal(causeOf(e), audience);
 const CONNECTOR_WORDS = /\bmcp\b|connector|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|server .*(?:failed|not connected|disconnected)/i;
 const RECONNECT_WORDS = /permission expired or was withdrawn|has not connected (?:Google|Notion)/i; // (googlemcp.ts GoogleReconnect, notionoauth.ts NotionReconnect: fixed sentences)
 export function causeOf(e: unknown): Cause {
@@ -61,13 +86,6 @@ export function causeOf(e: unknown): Cause {
   if (e instanceof Error && RECONNECT_WORDS.test(e.message)) return "reconnect";
   return e instanceof Error && CONNECTOR_WORDS.test(e.message) ? "connector" : "other";
 }
-const kindOf = (e: unknown): Kind => {
-  const c = causeOf(e);
-  return c === "login" ? "auth" : c;
-};
-export class FixedNotice extends Error {} // a notice that is its own message (a daily ceiling was hit: capnotice.ts), shown as it is
-export const noticeFor = (audience: Audience) => (e: unknown): string => (e instanceof FixedNotice ? e.message : NOTICES[kindOf(e)][audience]);
-
 // The SDK reports a failed turn as an assistant error code and an error result. `payer`: whose call it was. On the instance key any refusal of the key is the key's (HTTP
 // 429, 400 and 402 arrive as rate_limit, invalid_request, billing_error): its cooldown, and the owner's one notice (keynotice.ts); on the login an expired login or the plan's limit.
 // The one place a call is found to have failed, whoever started it and whatever it was (a chat turn, the gate, triage, the dream, compaction, a mail handler run).

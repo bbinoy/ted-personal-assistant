@@ -1,6 +1,6 @@
 import { emit } from "../core/events.ts";
 import { forgetSpend } from "../core/budget.ts";
-import { forgetNotices } from "../core/capnotice.ts";
+import { forgetNoticesOf } from "../core/capnotice.ts";
 import { removeConvDir } from "../core/convdb.ts";
 import { isConvId, type ConvId } from "../core/convpaths.ts";
 import { settings } from "../core/settings.ts";
@@ -63,7 +63,7 @@ export function forgetGroup(ref: string, d: GroupForgetDeps = {}): GroupRemoval 
   });
   step("its saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));
   step("its day's spend", () => forgetSpend(conv));
-  step("its notice marks", () => forgetNotices((k) => k === `group:${conv}` || k === `group-budget:${conv}` || k === `warn:${conv}`));
+  step("its notice marks", () => forgetNoticesOf(conv));
   step("its name in memory", () => (found.id ? (forgetGroupCache(found.id), d.drop?.(found.id), false) : false));
   emit({ type: "removal", tool: "group_forget", decision: "removed", source: "chat", meta: { conv, steps: out.removed.length }, text: `Forgot the group ${out.name ? `“${out.name}” ` : ""}(${conv}) and its data (${out.removed.length} step(s))` });
   console.log(`groups: ${conv} forgotten`);

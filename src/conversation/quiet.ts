@@ -1,5 +1,5 @@
 import { convDb, peekConvDb } from "../core/convdb.ts";
-import { timeIn } from "../core/timezone.ts";
+import { untilOn, untilWords } from "../core/until.ts";
 import { convIdOf } from "../core/convpaths.ts";
 import type { Conversation } from "./conversationmodel.ts";
 
@@ -16,20 +16,11 @@ export const setQuiet = (conv: Where, until: string): void =>
   void convDb(convIdOf(conv)).run("INSERT INTO quiet (id, until) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET until = excluded.until", until);
 export const clearQuiet = (conv: Where): void => void convDb(convIdOf(conv)).run("DELETE FROM quiet WHERE id = 1");
 
-// Pure: is the stored switch on at `now`?
-export function quietOn(stored: string | undefined, now: Date): boolean {
-  const until = stored?.trim();
-  if (until === undefined) return false;
-  if (until === "") return true;
-  const t = Date.parse(until);
-  return Number.isFinite(t) && t > now.getTime();
-}
-export const isQuiet = (conv: Where, now: Date): boolean => quietOn(quietValue(conv), now);
+// Is the switch on at `now`? (the one "until" test, core/until.ts; a time nobody can read is NOT quiet)
+export const isQuiet = (conv: Where, now: Date): boolean => untilOn(quietValue(conv), now, false);
 
 // For "/status": what the switch says, or undefined when not quiet.
 export function quietText(conv: Where, now: Date, zone?: string): string | undefined {
   const s = quietValue(conv);
-  if (!quietOn(s, now)) return undefined;
-  const until = s!.trim();
-  return until === "" ? "quiet until you say /unquiet" : `quiet until ${timeIn(new Date(until), zone)}`;
+  return untilOn(s, now, false) ? `quiet ${untilWords(s!, zone)}` : undefined;
 }

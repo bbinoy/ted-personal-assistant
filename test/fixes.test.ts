@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { AuthError, causeOf, FIXES, InstanceKeyError, noticeFor, RateLimitError, type Cause } from "../src/tenants/errors.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { createFailureTracker, budgetText } from "../src/heartbeat/notices.ts";
-import { ownerCapText } from "../src/core/capnotice.ts";
-import { createKeyNotices } from "../src/tenants/keynotice.ts";
+import { instanceCapFact } from "../src/core/capnotice.ts";
+import { KEY_FACTS } from "../src/tenants/keynotice.ts";
 
 const CAUSES = Object.keys(FIXES) as Cause[];
 const SAMPLES: Record<Cause, unknown> = {
@@ -63,15 +63,11 @@ test("the owner's chat failure notices end with the step for their cause; friend
   assert.match(noticeFor("owner")(SAMPLES.timeout), /RUN_MAX_MINUTES_CHAT in \.env and restart/);
 });
 
-test("the budget, the shared cap and the shared-key notices each end with the exact setting", () => {
+test("the budget notice, the shared cap and the shared-key facts each end with the exact setting", () => {
   assert.match(budgetText(), /raise DAILY_BUDGET_USD in \.env and restart\.$/);
-  assert.match(ownerCapText(5), /raise INSTANCE_KEY_DAILY_USD in \.env and restart\.$/);
-  const told: string[] = [];
-  const k = createKeyNotices();
-  k.sendTo((t) => told.push(t));
-  k.report("refused");
-  k.report("missing");
+  assert.match(instanceCapFact(5), /raise INSTANCE_KEY_DAILY_USD in \.env and restart\.$/);
+  const told = [KEY_FACTS.refused, KEY_FACTS.missing];
   assert.match(told[0]!, /check TENANT_ANTHROPIC_API_KEY in \.env, then restart\.$/);
   assert.match(told[1]!, /and restart\.$/);
-  for (const t of [budgetText(), ownerCapText(5), ...told]) assert.doesNotMatch(t, SECRETS);
+  for (const t of [budgetText(), instanceCapFact(5), ...told]) assert.doesNotMatch(t, SECRETS);
 });

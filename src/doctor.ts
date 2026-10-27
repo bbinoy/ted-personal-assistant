@@ -442,7 +442,7 @@ export async function doctor() {
 
   const spent = spentToday();
   line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)${spent < settings.dailyBudgetUsd ? "" : `: background work is paused until midnight; to change it set DAILY_BUDGET_USD in .env and restart`}`);
-  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${pauseText() ?? "paused"} (${dataPath(instancePaths().paused)}); to resume say /resume in your chat or delete that file` : "");
+  line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${pauseText() ?? "paused"}; to resume say /resume in your chat` : "");
   const cardOff = killSwitch.off();
   const unconfirmed = new Ledger().rows().filter((r) => r.status === "unconfirmed").length;
   line(unconfirmed ? "warn" : true, "card payments", `${cardOff ? `OFF (${cardOff}); switch on: npm run card -- enable` : "not switched off (npm run card -- list shows the card, if one is saved)"}${unconfirmed ? `; ${unconfirmed} payment(s) unconfirmed: npm run card -- payments` : ""}`);

@@ -4,7 +4,7 @@ import { dataRoot, isConvId, layout, type Layout } from "../core/convpaths.ts";
 import { registerRetention, type RetentionRule } from "../core/retention.ts";
 import { pruneVoiceNotes } from "../modules/voice/voicenote.ts";
 import { SEEN_MAX, trimSeenMail } from "../modules/seenmail/seenmail.ts";
-import { MAX_HELD } from "./notices.ts";
+import { MAX_HELD } from "../core/ownerfact.ts";
 import { KEEP_MS as MEETING_KEEP_MS } from "../tasks/meetings.ts";
 
 // The retention rule for the tables of every conversation's assistant.db (core/convdb.ts; core/retention.ts says how rules run). Each table is bounded where it is written already; this is the

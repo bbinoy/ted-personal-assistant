@@ -391,7 +391,7 @@ export function setTimeZone(id: string, zone: string | undefined): TenantRecord 
   return rec;
 }
 
-// ---- first greeting, notice times, cooldown: the `friend` and `friend_notices` tables of her assistant.db ----
+// ---- first greeting, cooldown: the `friend` table of her assistant.db ----
 
 type Who = Pick<TenantContext, "convId">;
 interface FriendRow {
@@ -410,16 +410,6 @@ export const pausedUntil = (ctx: Who, now = Date.now()): number | undefined => {
 export function setPaused(ctx: Who, until: number | undefined): void {
   const was = friend(ctx)?.paused_until;
   if (until !== undefined || (was !== null && was !== undefined)) convDb(ctx.convId).run("INSERT INTO friend (id, paused_until) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET paused_until = excluded.paused_until", until ?? null);
-}
-// A fixed notice (not set up, budget, cooldown) at most every TENANT_NOTICE_MINUTES: true when it may be sent now (and is marked).
-export function mayNotice(ctx: Who, kind: string, now = Date.now()): boolean {
-  const db = convDb(ctx.convId);
-  return db.tx(() => {
-    const last = Date.parse(db.get<{ at: string }>("SELECT at FROM friend_notices WHERE kind = ?", kind)?.at ?? "");
-    if (Number.isFinite(last) && now - last < settings.tenantNoticeMinutes * 60_000) return false;
-    db.run("INSERT INTO friend_notices (kind, at) VALUES (?, ?) ON CONFLICT (kind) DO UPDATE SET at = excluded.at", kind, new Date(now).toISOString());
-    return true;
-  });
 }
 
 // Her history is bounded like every log, but never summarised by a model: that call would run on the owner's login, over her words.
