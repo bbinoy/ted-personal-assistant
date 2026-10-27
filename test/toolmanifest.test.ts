@@ -76,9 +76,9 @@ test("manifest: which tools run free and which are judged, tool by tool; the sam
     for (const run of KINDS) if (availableFor(tool, run)) assert.equal(access(tool, run), kind, `${tool} (${name(run)})`);
     assert.ok(KINDS.some((k) => availableFor(tool, k)), tool);
   }
-  // no per-run table: the web tools, the browse entry, send, draw and voice exist in every run of a conversation (its capabilities decide who has them), the notes' file tools only where someone waits
+  // no per-run table: the web tools, the browse entry, send, draw and voice exist in every run of a conversation (its capabilities decide who has them), the notes' file tools too
   for (const run of KINDS) for (const t of ["WebSearch", "WebFetch", "mcp__browse__browse", "mcp__send__send", "mcp__draw__draw", "mcp__voice__voice", `${MB}archive_conversation`, `${CAL}update_event`]) assert.ok(availableFor(t, run), `${t} (${name(run)})`);
-  assert.deepEqual(KINDS.filter((k) => availableFor("Write", k)).map(name), KINDS.filter((k) => k.attended).map(name));
+  for (const run of KINDS) assert.ok(availableFor("Write", run), `Write (${name(run)})`);
 });
 
 test("manifest: only the browse run has the browser's tools; reading mail or a page marks a run as having read untrusted text", () => {

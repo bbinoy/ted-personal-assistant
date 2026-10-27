@@ -129,8 +129,7 @@ export interface JudgeSetup {
   conversation?: string;
   run?: string; // this run's id: the journal pairs a call's why with its success within the run only (agentrun.ts)
   seenMail?: { forget: (ids: readonly string[]) => void }; // the look's seen-mail tracker: mail an archive the run cap refused named is not worked through, so it is not marked seen
-  notesSeen?: () => readonly { file: string; inferred: boolean }[]; // the notes this run has read so far, in order, for the journal's "per your notes: ..."
-  inferredNoteRead?: () => boolean; // this run has read (read_note) a note a background look inferred (origin: inferred): such a note is untrusted text, so a wake-up is not judged
+  notesSeen?: () => readonly string[]; // the notes this run has read so far, in order, for the journal's "per your notes: ..."
   // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
   // subagent's), and the type of a subagent by its id (for the audit log).
   expertBriefs?: () => readonly string[];
@@ -273,13 +272,11 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
-    // Two floors in code on top of isJudgeable, for what third-party text may have steered: a send to someone the person's words and the thread do not account for, in a run that
-    // has read untrusted mail or pages; and a wake-up in a run that has read an inferred note. Either way the owner is asked.
+    // A floor in code on top of isJudgeable, for what third-party text may have steered: a send to someone the person's words and the thread do not account for, in a run that
+    // has read untrusted mail or pages. The owner is asked.
     const outside = view && isUntrusted() && MAIL_OUT.has(entryFor(tool)?.view ?? "") ? recipientsOutside(view, input, provenance) : [];
     if (outside.length) log(tool, "judge-floor", source, { reason: "untrusted-recipient", recipients: outside.length });
-    const doubtful = provenance?.kind === "derived" && provenance.by === "gate" && !!setup.inferredNoteRead?.();
-    if (doubtful) log(tool, "judge-floor", source, { reason: "inferred-note-read" });
-    if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && !doubtful && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
+    if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });
       if (declinedMs !== undefined && judged.decision !== "ask") {
         judgeSaid = judged.decision;
@@ -313,7 +310,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     // An unattended run asks nobody: what would be a question is declined back to it (UNATTENDED_SKIP). A payment is refused outright.
     // The floor's reason class, when no judge verdict led here: no provenance, the judge switched off, a floor in code, a guard step that is never judged, or a call
     // isJudgeable keeps from the judge (a send, a delete, an unknown tool, a create with no title...).
-    const floorWhy = (): string => (!provenance ? "no-provenance" : settings.autoApprove === "off" ? "judge-off" : outside.length ? "untrusted-recipient" : doubtful ? "inferred-note-read" : g?.kind === "ask" && g.judge !== true ? "guard-step" : "never-judged");
+    const floorWhy = (): string => (!provenance ? "no-provenance" : settings.autoApprove === "off" ? "judge-off" : outside.length ? "untrusted-recipient" : g?.kind === "ask" && g.judge !== true ? "guard-step" : "never-judged");
     if (unattended) {
       if (g?.payment) {
         log(tool, "deny-payment-unattended", source);

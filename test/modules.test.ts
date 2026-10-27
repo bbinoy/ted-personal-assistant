@@ -19,7 +19,7 @@ import { BROWSE_RUN, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 const GM = "mcp__claude_ai_Gmail__";
 const MB = "mcp__mailbird__";
 const names = (ms: readonly ToolModule[]) => ms.map((m) => m.name);
-const CORE = ["send", "weather", "draw", "tasks", "voice", "memory", "notes", "people", "status", "seenmail", "meetings", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
+const CORE = ["send", "weather", "draw", "tasks", "voice", "memory", "people", "status", "seenmail", "meetings", "browse", "browser", "intake", "tenants", "builtin", "calendar", "notion", "drive", "docs", "claudedocs", "ibkr", "google", "notionhosted"];
 
 test("modules: names are unique, a tool belongs to one module, and a row carries no approval flag", () => {
   const all = registered();
@@ -69,7 +69,7 @@ test("modules: every module that names a server has its server in runtime.ts (RU
   assert.deepEqual(Object.keys(MAIL).sort(), mailProviders().sort());
   assert.ok(mailRuntime("mailbird") && mailRuntime("gmail") && !mailRuntime("none"));
   // The order the run's servers are listed in is the module order (the run-options fixture pins it for the three conversations).
-  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "tasks", "voice", "memory", "notes", "people", "status", "seenmail", "meetings", "browse", "intake", "tenants", "google", "notion"]);
+  assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "tasks", "voice", "memory", "people", "status", "seenmail", "meetings", "browse", "intake", "tenants", "google", "notion"]);
 });
 
 // What a run offers: its conversation's capabilities, less what attendance removes (capabilities.ts toolsFor), as buildOptions hands it to the modules.
@@ -93,10 +93,8 @@ test("modules: each module decides from the run whether it has a server (a conve
   assert.equal(when(module("seenmail"), ctx({ kind: OWNER_LOOK, seenMail: {} as never })), true, "a heartbeat run of a conversation with mail");
   assert.equal(when(module("send"), ctx({ kind: GROUP_CHAT, key: "g", offers: (t) => t !== "mcp__send__send" })), false, "a group whose capability set lacks it");
   assert.equal(when(module("memory"), chat), true);
-  assert.equal(when(module("memory"), ctx({ kind: OWNER_LOOK })), false);
-  assert.equal(when(module("notes"), ctx({ kind: OWNER_LOOK, key: undefined })), false, "no notes of its own, no read_note");
-  assert.equal(when(module("notes"), ctx({ kind: OWNER_LOOK, key: undefined, notesRead: { dir: "/n", write: [], maxNotes: 1 } })), true, "a heartbeat run reads its notes one at a time");
-  assert.equal(when(module("notes"), chat), false, "chat reads them as files");
+  assert.equal(when(module("memory"), ctx({ kind: OWNER_LOOK })), false, "no notes of its own, no memory server");
+  assert.equal(when(module("memory"), ctx({ kind: OWNER_LOOK, memory: { dir: "/n" } })), true, "a look has the same memory server as a chat turn");
   assert.equal(when(module("browse"), ctx({ kind: OWNER_LOOK })), true, "a look may browse; its worker never has the owner's card or saved details (browse.ts), and nothing is asked");
   assert.equal(when(module("tenants"), ctx({ kind: GROUP_CHAT, key: "g" })), false, "the tenant administration is the owner's chat only");
   assert.equal(when(module("tenants"), ctx({ kind: OWNER_LOOK })), false, "and not her look");

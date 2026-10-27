@@ -19,7 +19,7 @@ import { scopeOf } from "./turnscope.ts";
 
 // Plumbing that is no action worth a line: sending into the chat is the conversation itself, seen-mail is bookkeeping, a status note is the brief's own state, a drawing or a voice is sent as a message.
 const NOT_ACTIONS = new Set(["send", "seenmail", "status", "draw", "voice", "weather"]);
-const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]), notes: new Set(["write_note"]) }; // (the rest of these servers read: search_logs, journal, read_note)
+const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]) }; // (the rest of this server reads: search_logs, journal, memory_changes_since_brief)
 const NOTE_WRITES = new Set(["Write", "Edit"]);
 // The SDK's own tools that are no action: a delegation is the expert's actions (each its own line), not an action itself; StructuredOutput is how a run hands in its answer; the to-do
 // list and the tool search are its own bookkeeping. The one place: the journal and the look's count of what it did (look.ts) both ask it.
@@ -58,7 +58,6 @@ export function categoryOf(tool: string): string {
     case "claudedocs":
       return "drive";
     case "memory":
-    case "notes":
     case "builtin":
       return "memory";
     case "tasks":
@@ -187,7 +186,6 @@ export function render(conv: string, tool: string, input: Record<string, unknown
   }
   if (e?.provider === "tasks") return renderTask(tool, response, cat);
   if (tool.endsWith("__forget_note")) return { what: `Forgot the note ${String(input.file ?? "").slice(0, 80)}`, cat };
-  if (tool.endsWith("__write_note")) return { what: `Saved the inferred note ${String(input.file ?? "").slice(0, 80)}`, cat, undo: `say 'forget ${String(input.file ?? "").slice(0, 80)}'` };
   if (tool.endsWith("__undo_dream")) return { what: "Put the notes back as they were before the dream", cat };
   const view = e?.view ? mailView(tool, input) : undefined;
   if (view) {
@@ -218,15 +216,14 @@ export interface WhyInput {
   provenance?: RunProvenance;
   judge?: string; // the judge's reason (auto-approved)
   asked?: boolean;
-  notes?: readonly { file: string; inferred: boolean }[]; // the notes the run had read before this call, in order
+  notes?: readonly string[]; // the notes the run had read before this call, in order
   now?: number;
 }
 
-// Pure: "per your notes: triage-linkedin, triage-newsletters (inferred) and 2 more" from the notes a run had read (at most 3 names); empty when it read none.
-export function notesText(notes: readonly { file: string; inferred: boolean }[] | undefined): string {
+// Pure: "per your notes: triage-linkedin, triage-newsletters and 2 more" from the notes a run had read (at most 3 names); empty when it read none.
+export function notesText(notes: readonly string[] | undefined): string {
   if (!notes?.length) return "";
-  const names = notes.slice(0, 3).map((n) => `${n.file}${n.inferred ? " (inferred)" : ""}`);
-  return `per your notes: ${names.join(", ")}${notes.length > 3 ? ` and ${notes.length - 3} more` : ""}`;
+  return `per your notes: ${notes.slice(0, 3).join(", ")}${notes.length > 3 ? ` and ${notes.length - 3} more` : ""}`;
 }
 
 // Pure but for the turn scope's clock: the why of a call. What code knows: whose words or which instruction started the run.

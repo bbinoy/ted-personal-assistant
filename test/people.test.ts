@@ -27,7 +27,7 @@ const { GOOGLE_PREFIX, GOOGLE_TOOLS } = await import("../src/modules/google/modu
 // find_person (src/modules/people): the address book of ONE conversation. Ranking and dedupe by address, the notes-only path, sources that are down reported and never failing,
 // isolation (a group has its notes only; a friend never sees the owner's; each conversation its own), and approvals that do not care where an address came from.
 
-const note = (file: string, body: string, inferred = false) => parseNote(file, `${inferred ? "---\norigin: inferred\n---\n" : ""}${body}`)!;
+const note = (file: string, body: string) => parseNote(file, body)!;
 const notesDir = (files: Record<string, string>): string => {
   const d = mkdtempSync(join(dir, "notes-"));
   mkdirSync(d, { recursive: true });
@@ -68,31 +68,30 @@ test("people: Google Contacts text becomes candidates with every address and pho
   assert.deepEqual(fromContactsText("No contacts found matching 'zed' for anna@example.com."), []);
 });
 
-test("people: ranking and dedupe by address, confirmed before inferred, a person in two sources is one candidate with both", () => {
+test("people: ranking and dedupe by address, notes before contacts, a person in two sources is one candidate with both", () => {
   const found = [
-    fromNote(note("people-sam-lee.md", "Sam Lee. sam.lee@example.net", true))!,
+    fromNote(note("people-sam-lee.md", "Sam Lee. sam.lee@example.net"))!,
     ...fromContactsText(CONTACTS),
     fromNote(note("people-sam-carter.md", "Sam Carter. Close friend. sam.carter@example.com"))!,
     fromNote(note("people-bob.md", "Bob Stone. bob@example.com"))!,
   ];
   const r = rank(found, "sam");
-  assert.deepEqual(r.map((c) => c.name), ["Sam Carter", "Samantha Reyes", "Sam Lee"], "bob does not match; Sam Carter is one person, found twice; the inferred-only note comes last");
+  assert.deepEqual(r.map((c) => c.name), ["Sam Carter", "Sam Lee", "Samantha Reyes"], "bob does not match; Sam Carter is one person, found twice; notes come before contacts");
   assert.deepEqual(r[0]!.from.map((f) => f.source).sort(), ["contacts", "notes"]);
   assert.deepEqual(r[0]!.emails, ["sam.carter@example.com", "sam@home.example"]);
-  assert.equal(r[2]!.from[0]!.confirmed, false, "the inferred one stays marked");
   assert.deepEqual(rank(found, "sam carter").map((c) => c.name), ["Sam Carter"]);
   assert.deepEqual(rank(found, "SAM.CARTER@example.com").map((c) => c.name), ["Sam Carter"], "an address finds its person");
   assert.ok(matchScore(r[0]!, "sam carter") > matchScore(r[1]!, "sam"));
 });
 
-test("people: the notes-only path says what it used and what it could not, and marks an inferred note", async () => {
-  const d = notesDir({ "people-sam-carter.md": "Sam Carter. Lives in Leeds. sam.carter@example.com", "people-sam-lee.md": "---\norigin: inferred\n---\nSam Lee. sam.lee@example.net", "style-x.md": "Short. x@y.example" });
+test("people: the notes-only path says what it used and what it could not", async () => {
+  const d = notesDir({ "people-sam-carter.md": "Sam Carter. Lives in Leeds. sam.carter@example.com", "people-sam-lee.md": "Sam Lee. sam.lee@example.net", "style-x.md": "Short. x@y.example" });
   const out = await findPerson("sam", { notesDir: d, contactsWhy: "a group has no contacts of its own" });
   assert.match(out, /Sources used: people notes \(2\)\./);
   assert.match(out, /Not available: Google Contacts \(a group has no contacts of its own\)\./);
   assert.match(out, /Not available: recent correspondents in mail/);
   assert.match(out, /1\. Sam Carter: sam\.carter@example\.com\. From: people-sam-carter\.md\./);
-  assert.match(out, /2\. Sam Lee: sam\.lee@example\.net\. From: people-sam-lee\.md \(inferred, not confirmed\)\./);
+  assert.match(out, /2\. Sam Lee: sam\.lee@example\.net\. From: people-sam-lee\.md\./);
   assert.match(out, /More than one person fits: show these and ask which/);
   assert.doesNotMatch(out, /x@y\.example/, "only people notes");
   const none = await findPerson("zed", { notesDir: d, contactsWhy: "n/a" });

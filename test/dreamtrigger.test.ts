@@ -62,7 +62,7 @@ test("the dream is not shown a status note, and its snapshot and undo leave it a
   writeFileSync(join(notes, "people-anna.md"), "Anna is my sister\n");
   writeFileSync(join(notes, "status-brief.md"), "---\nexpires: 2026-10-15\n---\nstatus: started\n");
   assert.deepEqual(readNoteFiles(notes).map((n) => n.file), ["people-anna.md"], "not in the dream's prompt");
-  const scope = { notesDir: notes, backupsDir: backups, categories: ["people"], index: false, maxNotes: 100 };
+  const scope = { notesDir: notes, backupsDir: backups, categories: ["people"], maxNotes: 100 };
   const plan = { actions: [{ kind: "add" as const, file: "people-eve.md", content: "Eve is a friend\n", description: "eve" }], rejected: [] };
   const snap = applyPlan(plan as never, at(4), scope);
   assert.ok(snap && !existsSync(join(snap, "status-brief.md")), "not in the snapshot");
@@ -70,6 +70,6 @@ test("the dream is not shown a status note, and its snapshot and undo leave it a
   writeFileSync(join(notes, "status-brief.md"), "---\nexpires: 2026-10-16\n---\nstatus: delivered\n");
   const undone = undoLatest(scope);
   assert.ok(undone.ok);
-  assert.deepEqual(readdirSync(notes).sort(), ["people-anna.md", "status-brief.md"]);
+  assert.deepEqual(readdirSync(notes).sort(), ["MEMORY.md", "people-anna.md", "status-brief.md"]);
   assert.match(readFileSync(join(notes, "status-brief.md"), "utf8"), /delivered/);
 });

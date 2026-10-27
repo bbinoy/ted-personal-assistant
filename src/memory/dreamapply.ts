@@ -5,7 +5,7 @@ import { emitRecord } from "../core/events.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import { OWNER_SCOPE, type Plan, type Scope } from "./dreamplan.ts";
 import { settings } from "../core/settings.ts";
-import { forgetNote, NOTES_DIR, STATUS_PREFIX } from "./notes.ts";
+import { forgetNote, NOTES_DIR, STATUS_PREFIX, writeIndex } from "./notes.ts";
 import { dreamUndone } from "./learned.ts";
 import { convOfPath, OWNER_CONV } from "../core/convpaths.ts";
 
@@ -24,14 +24,6 @@ function snapshot(now: Date, scope: Scope): string {
   return dir;
 }
 
-export function upsertIndex(file: string, description: string, scope: Scope): void {
-  const path = join(scope.notesDir, "MEMORY.md");
-  const lines = existsSync(path) ? readFileSync(path, "utf8").split("\n").filter((l) => l && !l.includes(`(${file})`)) : [];
-  const title = file.replace(/\.md$/, "").replace(/^[a-z]+-/, "").replace(/-/g, " ");
-  lines.push(`- [${title.charAt(0).toUpperCase()}${title.slice(1)}](${file}) - ${description}`);
-  writeFileAtomic(path, lines.join("\n") + "\n"); // always a fresh read of the index and only this file's line changed: an edit made meanwhile to any other line survives
-}
-
 // What a dream read: each note's content hash at read time. A dream awaits a model for a while; the owner's chat (auto-memory) or a background look may edit or add a note meanwhile.
 // At apply time an op whose target no longer matches what the model was shown is skipped (and logged), never written over.
 export type NoteBase = ReadonlyMap<string, string>;
@@ -44,7 +36,7 @@ function changedSince(base: NoteBase, dir: string, file: string): boolean {
 }
 
 // Applies a plan, after a snapshot. Returns the snapshot's folder (undefined if nothing to do). With `base` (what the dream read), an op whose target note changed since is skipped:
-// a write also protects the notes it merges (they are not deleted when the merged note could not be written). The index is merged line by line (upsertIndex, forgetNote), never overwritten.
+// a write also protects the notes it merges (they are not deleted when the merged note could not be written).
 export function applyPlan(plan: Plan, now = new Date(), scope: Scope = OWNER_SCOPE, base?: NoteBase): string | undefined {
   if (plan.actions.length === 0) return undefined;
   mkdirSync(scope.notesDir, { recursive: true, mode: 0o700 });
@@ -60,12 +52,10 @@ export function applyPlan(plan: Plan, now = new Date(), scope: Scope = OWNER_SCO
       console.log(`dream: skipped ${a.file}: it changed while the dream was running`);
       continue;
     }
-    if (a.kind === "delete") forgetNote(a.file, scope.notesDir);
-    else {
-      writeFileAtomic(join(scope.notesDir, a.file), a.content);
-      if (scope.index) upsertIndex(a.file, a.description, scope);
-    }
+    if (a.kind === "delete") forgetNote(a.file, scope.notesDir, now);
+    else writeFileAtomic(join(scope.notesDir, a.file), a.content);
   }
+  writeIndex(scope.notesDir, now); // the index is code's: made again from the notes the dream left (a merge, a forget and an add are one change to it)
   return dir;
 }
 
@@ -82,6 +72,7 @@ export function undoLatest(scope: Scope = OWNER_SCOPE): { ok: true; restored: nu
     if (f !== "MEMORY.md") restored++;
   }
   rmSync(dir, { recursive: true, force: true });
+  writeIndex(scope.notesDir);
   emitRecord("dream_undo", "restored", "chat", { restored });
   const conv = scope.notesDir === NOTES_DIR ? OWNER_CONV : convOfPath(scope.notesDir);
   if (conv) dreamUndone(conv, Date.now()); // its lines are not listed as news any more ("what I learned overnight", learned.ts)

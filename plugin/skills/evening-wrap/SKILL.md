@@ -3,7 +3,7 @@ name: evening-wrap
 description: The owner's evening wrap, a short routine scheduled on weekdays at 18:30. A heavy skill, so the heartbeat run delegates it to its expert (subagent expert-evening-wrap); in chat it runs as is ("wrap up my day"). Read-only: what got done today, what tomorrow holds, and what is still waiting on the owner. Delivers ONE phone-sized chat message.
 delegate: sonnet
 schedule: every weekday at 18:30
-tools: [Skill, mcp__notes__journal, mcp__tasks__list_tasks, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Google_Calendar__get_event, mcp__claude_ai_Google_Calendar__search_events, mcp__send__send]
+tools: [Skill, mcp__memory__journal, mcp__tasks__list_tasks, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Google_Calendar__get_event, mcp__claude_ai_Google_Calendar__search_events, mcp__send__send]
 ---
 
 # Evening wrap

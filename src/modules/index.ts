@@ -11,7 +11,7 @@ import { googleModule } from "./google/module.ts";
 import { notionHostedModule } from "./notion/module.ts";
 import { intakeModule } from "./intake.ts";
 import { mailbirdModule } from "./mailbird/module.ts";
-import { memoryModule, notesModule } from "./memory/module.ts";
+import { memoryModule } from "./memory/module.ts";
 import { peopleModule } from "./people/module.ts";
 import { notionModule } from "./notion.ts";
 import { seenMailModule } from "./seenmail/module.ts";
@@ -31,7 +31,7 @@ import { weatherModule } from "./weather/module.ts";
 // when every module has been evaluated.
 let all: readonly ToolModule[] | undefined;
 export const registered = (): readonly ToolModule[] =>
-  (all ??= [sendModule, weatherModule, drawModule, tasksModule, voiceModule, memoryModule, notesModule, peopleModule, statusModule, seenMailModule, meetingsModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, calendarModule, notionModule, driveModule, docsModule, claudeDocsModule, ibkrModule, googleModule, notionHostedModule, mailbirdModule, gmailModule]);
+  (all ??= [sendModule, weatherModule, drawModule, tasksModule, voiceModule, memoryModule, peopleModule, statusModule, seenMailModule, meetingsModule, browseModule, browserModule, intakeModule, tenantsModule, builtinModule, calendarModule, notionModule, driveModule, docsModule, claudeDocsModule, ibkrModule, googleModule, notionHostedModule, mailbirdModule, gmailModule]);
 
 // LOADED: every module without a slot, and in the `mail` slot the one MAIL_PROVIDER names (none: no mail module). A module that is not loaded has no rows,
 // no skills and no connection; only its floor data (registered() below) keeps restricting, because a floor rule can only take away.

@@ -15,6 +15,7 @@ import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./cha
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
 import { announceMemoryChanges, noteWritten } from "../memory/memorynotice.ts";
+import { isNotePath, writeIndex } from "../memory/notes.ts";
 import { routineNoteReply } from "../modules/tasks/routinelist.ts";
 import { builtinModule } from "../modules/builtin.ts";
 import { createsOf, isOwnerOnly } from "../policy/toolmanifest.ts";
@@ -52,10 +53,9 @@ export interface RunOptions {
   sessionConv?: ConvId; // continue + save the conversation's session here (its assistant.db); the browse worker: none, a fresh run
   sessionTrack?: Track; // which of the conversation's two sessions (sessionstore.ts): its chat's (default) or its looks'
   conversation?: string; // the conversation the run acts for (its key); default the owner's, or the tenant's or group's of this run. Keys the per-conversation anti-repeat state (permissions.ts)
-  // Turns on the SDK's auto-memory: notes in `dir`, the only place the file tools may write (policy.ts).
+  // The SDK's auto-memory, for every run of a conversation: notes in `dir`, the only place the file tools may write (policy.ts); its MEMORY.md is code's (notes.ts writeIndex).
   // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
   memory?: { dir: string; zone?: string; groupId?: string; notify?: (text: string) => Promise<void> };
-  notesRead?: { dir: string; categories?: readonly string[]; write: readonly string[]; maxNotes: number; zone?: string }; // an unattended run's notes: the prompt holds their index, read_note reads one and write_note saves an inferred one (notestools.ts)
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
   groupId?: string; // a group's run: its send, its browse approvals and its questions go there
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
@@ -127,14 +127,15 @@ function builtinTools(tools: ReadonlySet<string>, owner: boolean): string[] {
 export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined, signal?: AbortSignal, run: string = randomUUID()): Options { // signal: the run's own abort signal, when the caller has it (its browse child is called off with it)
   // After a successful tool call: announce a note change on the phone (chat), and report the
   // call to whoever asked (the brief captures what it sent).
-  // The notes this run has read so far, in order (read_note reports each; a chat turn reads its notes with the Read tool): the journal says "per your notes: ..." for what it does next (journalrender.ts whyOf).
-  const notesSeen: { file: string; inferred: boolean }[] = [];
-  const noteSeen = (file: string, inferred: boolean): void => {
-    const name = file.split("/").pop()!.replace(/\.md$/, "");
-    if (name && name !== "MEMORY" && !notesSeen.some((n) => n.file === name)) notesSeen.push({ file: name, inferred });
-  };
+  // The notes this run has read so far, in order (its Read of a note reports each): the journal says "per your notes: ..." for what it does next (journalrender.ts whyOf).
+  const notesSeen: string[] = [];
   const afterTool = async (tool: string, input: Record<string, unknown>, response?: unknown) => {
-    if (tool === "Read" && opts.memory?.dir && typeof input.file_path === "string" && input.file_path.startsWith(opts.memory.dir) && input.file_path.endsWith(".md")) noteSeen(input.file_path, false);
+    const notes = opts.memory?.dir;
+    if (notes && isNotePath(input.file_path, notes)) {
+      const name = input.file_path.split("/").pop()!.replace(/\.md$/, "");
+      if (tool === "Read" && input.file_path.endsWith(".md") && name !== "MEMORY" && !notesSeen.includes(name)) notesSeen.push(name);
+      if (tool === "Write" || tool === "Edit") writeIndex(notes, new Date(), opts.memory?.zone); // a note changed: the index is code's, made again from the notes (whatever the model wrote there is replaced)
+    }
     if (opts.memory?.notify) noteWritten(tool, input);
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
     void noteDone({ conv: conversation, run, source: auditSource(opts.kind), tool, input, response }); // the journal line of an action, with the why the permission layer recorded (core/events.ts)
@@ -195,10 +196,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  // Whether this run read a note a background look inferred (read_note tells us): the approval judge then does not take a wake-up's task as the person's word (permissions.ts).
-  let readInferred = false;
-  const notesRead = opts.notesRead && { ...opts.notesRead, onRead: (n: { file?: string; inferred?: boolean }) => void (n.inferred && (readInferred = true), n.file && noteSeen(n.file, !!n.inferred)) };
-  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, memory: opts.memory, notesRead, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv }) };
+  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, memory: opts.memory, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -222,8 +220,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // today's date and the last brief, and a change must apply to the very next message.
     // Chat uses Claude Code's preset prompt because that is where the SDK's auto-memory
     // instructions live (with a custom prompt the model says "noted" and saves nothing);
-    // our persona and rules are appended. The unattended runs keep a custom prompt and
-    // get their notes injected as data (notes.ts).
+    // our persona and rules are appended. Every run of a conversation has it, a look too; only the browse worker keeps a custom prompt.
     systemPrompt: opts.memory
       ? { type: "preset", preset: "claude_code", append: opts.systemPrompt, snapshot: false }
       : { type: "custom", prompt: opts.systemPrompt, snapshot: false },
@@ -248,7 +245,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, inferredNoteRead: () => readInferred, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && conversation === OWNER_KEY, taint: sessionTaint(opts.sessionConv, resume, opts.sessionTrack), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && conversation === OWNER_KEY, taint: sessionTaint(opts.sessionConv, resume, opts.sessionTrack), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

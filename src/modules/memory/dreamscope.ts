@@ -19,7 +19,7 @@ export function dreamScope(conv: Who): Scope {
   const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
   if (!rec) throw new Error("not a tenant");
   const ctx = tenantContext(rec);
-  return { notesDir: ctx.notesDir, backupsDir: ctx.backupDir, categories: preset().notes.tenant, index: true, maxNotes: settings.memoryMaxNotes };
+  return { notesDir: ctx.notesDir, backupsDir: ctx.backupDir, categories: preset().notes.tenant, maxNotes: settings.memoryMaxNotes };
 }
 
 // The conversation whose assistant.db holds its dream state (the `dream` row): checked first, so a name that is no conversation cannot make one.

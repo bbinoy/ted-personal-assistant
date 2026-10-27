@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "28fc93d7df8cbad3"
+        "sha": "14e0ddd655759c9c"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -158,7 +158,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "28fc93d7df8cbad3"
+        "sha": "14e0ddd655759c9c"
       },
       "snapshot": false
     },
@@ -311,7 +311,7 @@
     "run": {
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "2781cea801f42bde"
+        "sha": "b16ac50492566cce"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -368,7 +368,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "2781cea801f42bde"
+        "sha": "b16ac50492566cce"
       },
       "snapshot": false
     },
@@ -423,7 +423,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "6628cdf56bd65864"
+        "sha": "48e971d3da05523a"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -487,7 +487,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "6628cdf56bd65864"
+        "sha": "48e971d3da05523a"
       },
       "snapshot": false
     },
@@ -545,7 +545,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "28fc93d7df8cbad3"
+        "sha": "14e0ddd655759c9c"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -558,9 +558,12 @@
       "conversation": "owner",
       "stopScope": "owner",
       "tools": [
+        "Edit",
+        "Read",
         "Skill",
         "WebFetch",
         "WebSearch",
+        "Write",
         "mcp__browse__browse",
         "mcp__claude_ai_Claude_Docs__batch",
         "mcp__claude_ai_Claude_Docs__create",
@@ -643,11 +646,11 @@
         "mcp__mailbird__unsubscribe_from_newsletter",
         "mcp__mailbird__update_draft",
         "mcp__meetings__note_upcoming_meetings",
+        "mcp__memory__forget_note",
+        "mcp__memory__journal",
+        "mcp__memory__memory_changes_since_brief",
         "mcp__memory__search_logs",
-        "mcp__notes__journal",
-        "mcp__notes__memory_changes_since_brief",
-        "mcp__notes__read_note",
-        "mcp__notes__write_note",
+        "mcp__memory__undo_dream",
         "mcp__people__find_person",
         "mcp__seenmail__seen_mail",
         "mcp__send__send",
@@ -678,26 +681,8 @@
         "ted-personal-assistant:evening-wrap",
         "ted-personal-assistant:weekly-review"
       ],
-      "notesRead": {
+      "memory": {
         "dir": "<data>/conversations/owner/notes",
-        "categories": [
-          "triage",
-          "people",
-          "scheduling",
-          "context",
-          "brief",
-          "style",
-          "setup",
-          "voice",
-          "status",
-          "routine"
-        ],
-        "write": [
-          "people",
-          "context",
-          "scheduling"
-        ],
-        "maxNotes": 2000,
         "zone": "Europe/London"
       },
       "model": "haiku",
@@ -713,15 +698,17 @@
     },
     "model": "haiku",
     "system": {
-      "type": "custom",
-      "prompt": {
-        "key": "ownerLook.system.prompt",
-        "sha": "28fc93d7df8cbad3"
+      "type": "preset",
+      "preset": "claude_code",
+      "append": {
+        "key": "ownerLook.system.append",
+        "sha": "14e0ddd655759c9c"
       },
       "snapshot": false
     },
     "settings": {
-      "autoMemoryEnabled": false
+      "autoMemoryEnabled": true,
+      "autoMemoryDirectory": "<data>/conversations/owner/notes"
     },
     "mcpServers": [
       "send",
@@ -730,7 +717,6 @@
       "tasks",
       "voice",
       "memory",
-      "notes",
       "people",
       "status",
       "meetings",
@@ -738,6 +724,9 @@
     ],
     "tools": [
       "Skill",
+      "Read",
+      "Write",
+      "Edit",
       "WebSearch",
       "WebFetch",
       "Agent"
@@ -870,7 +859,7 @@
     "run": {
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "2781cea801f42bde"
+        "sha": "b16ac50492566cce"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -884,14 +873,17 @@
       "stopScope": "group-ff36ac23eadd0841",
       "groupId": "g-run-options",
       "tools": [
+        "Edit",
+        "Read",
         "Skill",
         "WebSearch",
+        "Write",
         "mcp__browse__browse",
         "mcp__draw__draw",
+        "mcp__memory__forget_note",
+        "mcp__memory__journal",
         "mcp__memory__search_logs",
-        "mcp__notes__journal",
-        "mcp__notes__read_note",
-        "mcp__notes__write_note",
+        "mcp__memory__undo_dream",
         "mcp__people__find_person",
         "mcp__send__send",
         "mcp__tasks__add_task",
@@ -908,21 +900,10 @@
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
       ],
-      "notesRead": {
+      "memory": {
         "dir": "<data>/conversations/group-ff36ac23eadd0841/notes",
-        "categories": [
-          "people",
-          "context",
-          "scheduling",
-          "style"
-        ],
-        "write": [
-          "people",
-          "context",
-          "scheduling"
-        ],
-        "maxNotes": 2000,
-        "zone": "Europe/London"
+        "zone": "Europe/London",
+        "groupId": "g-run-options"
       },
       "model": "haiku",
       "effort": "high",
@@ -930,15 +911,17 @@
     },
     "model": "haiku",
     "system": {
-      "type": "custom",
-      "prompt": {
-        "key": "groupLook.system.prompt",
-        "sha": "2781cea801f42bde"
+      "type": "preset",
+      "preset": "claude_code",
+      "append": {
+        "key": "groupLook.system.append",
+        "sha": "b16ac50492566cce"
       },
       "snapshot": false
     },
     "settings": {
-      "autoMemoryEnabled": false
+      "autoMemoryEnabled": true,
+      "autoMemoryDirectory": "<data>/conversations/group-ff36ac23eadd0841/notes"
     },
     "mcpServers": [
       "send",
@@ -947,13 +930,15 @@
       "tasks",
       "voice",
       "memory",
-      "notes",
       "people",
       "browse"
     ],
     "strictMcpConfig": true,
     "tools": [
       "Skill",
+      "Read",
+      "Write",
+      "Edit",
       "WebSearch"
     ],
     "settingSources": [],
@@ -985,7 +970,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "6628cdf56bd65864"
+        "sha": "48e971d3da05523a"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -1007,14 +992,17 @@
       "conversation": "tenant:<bea>",
       "stopScope": "friend-<bea>",
       "tools": [
+        "Edit",
+        "Read",
         "Skill",
         "WebSearch",
+        "Write",
         "mcp__browse__browse",
         "mcp__draw__draw",
+        "mcp__memory__forget_note",
+        "mcp__memory__journal",
         "mcp__memory__search_logs",
-        "mcp__notes__journal",
-        "mcp__notes__read_note",
-        "mcp__notes__write_note",
+        "mcp__memory__undo_dream",
         "mcp__people__find_person",
         "mcp__send__send",
         "mcp__tasks__add_task",
@@ -1031,20 +1019,8 @@
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
       ],
-      "notesRead": {
+      "memory": {
         "dir": "<data>/conversations/friend-<bea>/notes",
-        "categories": [
-          "people",
-          "context",
-          "scheduling",
-          "style"
-        ],
-        "write": [
-          "people",
-          "context",
-          "scheduling"
-        ],
-        "maxNotes": 2000,
         "zone": "Europe/London"
       },
       "model": "haiku",
@@ -1053,15 +1029,17 @@
     },
     "model": "haiku",
     "system": {
-      "type": "custom",
-      "prompt": {
-        "key": "tenantLook.system.prompt",
-        "sha": "6628cdf56bd65864"
+      "type": "preset",
+      "preset": "claude_code",
+      "append": {
+        "key": "tenantLook.system.append",
+        "sha": "48e971d3da05523a"
       },
       "snapshot": false
     },
     "settings": {
-      "autoMemoryEnabled": false
+      "autoMemoryEnabled": true,
+      "autoMemoryDirectory": "<data>/conversations/friend-<bea>/notes"
     },
     "mcpServers": [
       "send",
@@ -1070,13 +1048,15 @@
       "tasks",
       "voice",
       "memory",
-      "notes",
       "people",
       "browse"
     ],
     "strictMcpConfig": true,
     "tools": [
       "Skill",
+      "Read",
+      "Write",
+      "Edit",
       "WebSearch"
     ],
     "settingSources": [],

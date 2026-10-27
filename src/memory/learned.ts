@@ -1,16 +1,15 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { liveConvDb, peekConvDb } from "../core/convdb.ts";
 import { OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import type { Db } from "../core/db.ts";
-import { parseNote } from "./notes.ts";
 import type { Plan } from "./dreamplan.ts";
 
-// "What I learned overnight": the notes change without the person being asked (the nightly dream tidies and adds, a background look saves an `origin: inferred` note), and this makes that VISIBLE
-// without nagging. CODE records each such change where it happens (recordDream, recordInferred: a row in the conversation's assistant.db, learned_changes), and later ONE short list is built from
+// "What I learned overnight": the notes change without the person being asked (the nightly dream tidies and adds), and this makes that VISIBLE
+// without nagging. CODE records each such change where it happens (recordDream: a row in the conversation's assistant.db, learned_changes), and later ONE short list is built from
 // the rows not yet told (planBatch / commitBatch): the owner gets it as a section of the daily brief (the `memory_changes_since_brief` tool), a friend as a fact in her next look
 // (learnedFact), which says it in its own words (and so keeps quiet hours). A row is told once (its `batch`), so nothing repeats. Taking one back is an ordinary chat turn (forget_note, undo_dream).
-// Groups are off: their notes are shared, and what they keep stays as it was (nothing is recorded for one). Inferred notes the person never confirms are unchanged: weighed less, no expiry here.
+// Groups are off: their notes are shared, and what they keep stays as it was (nothing is recorded for one).
 
 export const MAX_LISTED = 9; // one list holds at most this many (the rest go in the next one)
 const STALE_MS = 7 * 86_400_000; // a change older than this unsummarised (no brief ran) is dropped, not told as news
@@ -20,7 +19,7 @@ const GIST_MAX = 90;
 export interface Change {
   seq: number;
   at: number;
-  source: "dream" | "inferred";
+  source: string; // "dream"; a row of any other kind (an older release wrote one) is settled without a word
   action: "add" | "update" | "merge" | "delete" | "undone";
   file: string;
   gist: string;
@@ -73,18 +72,6 @@ export function recordDream(conv: ConvId, plan: Plan, dir: string, now: number):
   return n;
 }
 
-/** A background look saved or updated an inferred note (write_note). One pending row per note: a second write the same night replaces the first. */
-export function recordInferred(conv: ConvId, file: string, created: boolean, gist: string, now: number): void {
-  if (isGroupConv(conv)) return;
-  const db = liveConvDb(conv);
-  if (!db) return;
-  db.tx(() => {
-    const before = db.get<{ action: string }>("SELECT action FROM learned_changes WHERE source = 'inferred' AND file = ? AND batch IS NULL AND outcome IS NULL", file);
-    db.run("DELETE FROM learned_changes WHERE source = 'inferred' AND file = ? AND batch IS NULL AND outcome IS NULL", file);
-    db.run("INSERT INTO learned_changes (at, source, action, file, gist) VALUES (?, 'inferred', ?, ?, ?)", now, created || before?.action === "add" ? "add" : "update", file, oneLineGist(gist)); // (new tonight stays new)
-  });
-}
-
 // ---- the list ----
 
 export interface Batch {
@@ -93,26 +80,7 @@ export interface Batch {
   seqs: number[]; // every row this list settles (the stale ones too)
 }
 
-const gistOfNote = (raw: string, file: string): string | undefined => {
-  const m = /^description:\s*(.+)$/m.exec(raw.split(/\n---\n/)[0] ?? "");
-  if (!m) return parseNote(file, raw)?.text.split("\n")[0];
-  try {
-    return String(JSON.parse(m[1]!));
-  } catch {
-    return m[1]!.replace(/^["']|["']$/g, "");
-  }
-};
-
-/** Is this note still an unconfirmed guess of the assistant's? (read from the folder: the person may have confirmed or forgotten it since) */
-export function isStillInferred(dir: string, file: string): boolean {
-  try {
-    return !!parseNote(file, readFileSync(join(dir, file), "utf8"))?.inferred;
-  } catch {
-    return false;
-  }
-}
-
-/** The rows not yet told, as a numbered list (at most MAX_LISTED), without writing anything. Changes that are no longer true (an inferred note forgotten or confirmed since, a note gone) are skipped. */
+/** The rows not yet told, as a numbered list (at most MAX_LISTED), without writing anything. Changes that are no longer true (a note gone since) are skipped. */
 export function planBatch(conv: ConvId, dir: string, now: number): Batch | undefined {
   if (isGroupConv(conv)) return undefined;
   const db = peekConvDb(conv);
@@ -129,14 +97,13 @@ export function planBatch(conv: ConvId, dir: string, now: number): Batch | undef
       continue;
     }
     const fresh = now - c.at < STALE_MS;
-    const true_ = c.source === "inferred" ? isStillInferred(dir, c.file) : c.action === "delete" ? !existsSync(join(dir, c.file)) : existsSync(join(dir, c.file));
+    const true_ = c.source === "dream" && (c.action === "delete" ? !existsSync(join(dir, c.file)) : existsSync(join(dir, c.file)));
     if (!fresh || !true_) {
       seqs.push(c.seq); // settled without a word
       continue;
     }
     if (items.length >= MAX_LISTED) continue;
-    const live = c.source === "inferred" && c.action !== "delete" ? gistOfNote(readFileSync(join(dir, c.file), "utf8"), c.file) : undefined; // (the note as it is now, in case it was updated again)
-    items.push({ ...c, ...(live ? { gist: oneLineGist(live) } : {}) });
+    items.push(c);
     seqs.push(c.seq);
   }
   return items.length || seqs.length ? { items, notes, seqs } : undefined;
@@ -165,9 +132,9 @@ function prune(db: Db, now: number): void {
 
 const name = (file: string) => file.replace(/\.md$/, "");
 const verb = (i: Change): string =>
-  i.source === "inferred" ? (i.action === "add" ? "inferred" : "inferred, updated") : i.action === "merge" ? `merged ${i.merged.length} note${i.merged.length === 1 ? "" : "s"}` : i.action === "delete" ? "forgotten" : i.action === "add" ? "saved" : "updated";
+  i.action === "merge" ? `merged ${i.merged.length} note${i.merged.length === 1 ? "" : "s"}` : i.action === "delete" ? "forgotten" : i.action === "add" ? "saved" : "updated";
 
-/** One line: "- people-anna: Anna moved to Lisbon (inferred)". */
+/** One line: "- people-anna: Anna moved to Lisbon (saved)". */
 export const lineOf = (i: Change): string => `- ${name(i.file)}: ${i.gist} (${verb(i)})`;
 
 /** The list as data for a run that says it in its own words (the brief's section, a friend's look). */
@@ -208,7 +175,7 @@ export function learnedFact(conv: ConvId, dir: string, now: number): { text: str
   if (!batch) return undefined;
   if (!batch.items.length && !batch.notes.length) return void commitBatch(conv, batch, now); // (only changes that no longer hold: settled without a word)
   return {
-    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you inferred while looking):\n${learnedBody(batch.items, batch.notes)}\nTell them once, in one short line of your message, what you learned and that "forget <note>" (or "undo the dream" for the night's tidy-up) takes it back. If you say nothing, it stays for the next run.`,
+    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up):\n${learnedBody(batch.items, batch.notes)}\nTell them once, in one short line of your message, what you learned and that "forget <note>" (or "undo the dream" for the night's tidy-up) takes it back. If you say nothing, it stays for the next run.`,
     told: () => void commitBatch(conv, batch, now),
   };
 }

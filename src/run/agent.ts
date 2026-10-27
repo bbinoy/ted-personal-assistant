@@ -1,7 +1,7 @@
 import { query, startup } from "@anthropic-ai/claude-agent-sdk";
 import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
 import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
-import { notesIndex, runFor, turnContext, TRIGGERS, type RunInputs, type Trigger } from "./runoptions.ts";
+import { runFor, turnContext, TRIGGERS, type RunInputs, type Trigger } from "./runoptions.ts";
 import { markShown, spoke, toldKey, turnFacts, unseen, type TurnFacts } from "./turncontext.ts";
 import { chatResume, sessionTaint } from "./chatsession.ts";
 import { lookerOf } from "./scope.ts";
@@ -52,14 +52,13 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const built = runFor(conv, trigger, w.inputs);
   const o: RunOptions = { ...built, ...w.extra?.(built), seenAt, onFirstOutput: w.onFirstOutput };
-  // What the session is told in front of the message: what is set up and the recent notices (turnContext), a look's notes, the claimed facts and the information facts (heartbeat/facts.ts),
+  // What the session is told in front of the message: what is set up and the recent notices (turnContext), the claimed facts and the information facts (heartbeat/facts.ts),
   // each only when it differs from what the session was last told. A claimed fact is settled when the run ends: told if the reply said something, else left for the next run.
   const own = !w.facts; // a look settles its facts itself
   const facts = w.facts ?? turnFacts(conv, now);
   const k = toldKey(conv.convId, t.track);
   const told = [
     [k, turnContext(conv, trigger)],
-    [`${k}:notes`, notesIndex(conv, trigger, now)],
     [`${k}:status`, facts?.status.join("\n\n")],
     [`${k}:facts`, facts?.blocks.join("\n\n")],
   ] as const;

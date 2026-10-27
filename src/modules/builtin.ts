@@ -9,9 +9,9 @@ export const builtinModule: ToolModule = {
   connection: { kind: "builtin" },
   rows: [
     ...builtin("skill", "Skill"), // which skills load is limited by the SDK's skills allowlist (agent.ts, skills.ts); a group or tenant has the tool only with a shared skill to load
-    // The file tools are for attended runs: the owner's chat and, inside their own notes folder, a group's or a friend's; WHICH path is code (policy.ts classify). An unattended run reads
-    // its notes with the notes tools instead (modules/memory/module.ts): it reads untrusted mail and has no way to change them but the logged, inferred write_note.
-    ...builtin("note-file", "Read Write Edit", { attended: true }),
+    // The file tools are every run's way into its notes (the SDK's auto-memory): the owner's anywhere in her notes (and, to read, her data folders), an isolated conversation's inside its own notes folder only;
+    // WHICH path is code (policy.ts classify). A look has them as a chat turn does: what a run that read mail may do is the judge's and the floor's, not a second, narrower tool.
+    ...builtin("note-file", "Read Write Edit"),
     // A search query is a small channel out, accepted: every run has the tool.
     ...builtin("web-search", "WebSearch"),
     ...builtin("web-fetch", "WebFetch"), // judged; the plain-address veto is below. Only the owner's runs, attended or not (ownerOnly: an address can carry data out of a conversation that holds no private data of the owner's)

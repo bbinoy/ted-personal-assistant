@@ -10,9 +10,8 @@ import { settings } from "../core/settings.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import { splitJournal } from "../memory/journalread.ts";
 import { recordMemoryChange } from "../memory/memorynotice.ts";
-import { upsertIndex } from "../memory/dreamapply.ts";
 import { noteContent } from "../memory/dreamplan.ts";
-import { MAX_NOTE_CHARS, parseNote, readNotes } from "../memory/notes.ts";
+import { MAX_NOTE_CHARS, parseNote, readNotes, writeIndex } from "../memory/notes.ts";
 import { dreamScope } from "../modules/memory/dreamscope.ts";
 import { oneShot, withTimeout } from "../tenants/haiku.ts";
 import { isRefusal, mayRun, type Payer, type Refusal } from "../tenants/payer.ts";
@@ -26,7 +25,7 @@ import type { IncomingMessage, IncomingReaction } from "@ted-assistant/messenger
 //   2. propose (model, no tools): from the reacted message and the journal lines of what was done around it (their "per your notes: triage-x" says which note drove it) it writes ONE
 //      note in a category the conversation has, so the machinery that already reads notes (triage, notices, the brief, people) uses it. Code checks the shape and that no address,
 //      link or number appears that is not in the reacted message (or the note it edits); the model's text is never trusted further.
-//   3. save (code): a valid proposal is saved as the person's own note (origin: owner: it comes from her own 👎 or words). It is reversible (forget it, the dream's snapshots, undo_dream), so
+//   3. save (code): a valid proposal is saved as the person's own note (it comes from her own 👎 or words). It is reversible (forget it, the dream's snapshots, undo_dream), so
 //      nobody is asked. At most FEEDBACK_OFFERS_PER_DAY a day per conversation, one per message, ever.
 //   4. mention (model): the caller gets back a FACT ("you saved note X because of ..."), and the ordinary chat turn for that 👎 or reply says it in one line in the assistant's own words. If the
 //      reply has no words, the memory notice (memorynotice.ts) says it, with the way back.
@@ -197,8 +196,8 @@ export function createFeedback(deps: FeedbackDeps = {}) {
       return undefined;
     }
     mkdirSync(conv.notesDir, { recursive: true, mode: 0o700 });
-    writeFileAtomic(path, noteContent(p.file, p.description, p.text.slice(0, MAX_NOTE_CHARS), undefined, new Date(at), "owner"));
-    if (scope.index) upsertIndex(p.file, p.description, scope);
+    writeFileAtomic(path, noteContent(p.file, p.description, p.text.slice(0, MAX_NOTE_CHARS), undefined, new Date(at)));
+    writeIndex(conv.notesDir, new Date(at));
     d.run("INSERT INTO feedback_offers (on_ts, state, file, description, body, at) VALUES (?, 'saved', ?, ?, ?, ?)", msg.ts, p.file, p.description, p.text, at);
     emitRecord("memory_note", existing ? "edited" : "written", "chat");
     recordMemoryChange(`${existing ? "✏️ updated" : "➕ saved"} ${p.file}: ${p.description}`); // (the fallback if the turn answers with no words)

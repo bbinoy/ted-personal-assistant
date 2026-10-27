@@ -13,7 +13,7 @@ decides what needs prep, drafts it, and follows up after meetings happen.
 
 Part of an ordinary look: code claims a meeting `PREP_MINUTES` (15) before it starts (one that has other people on it) and your prompt lists it under `meetings_to_prepare` (title, time, who, link). Prepare it now, quickly and in your own voice (delegate to the expert if you like), and post it as an urgent message so quiet hours and the day's cap do not hold it. For this prep read **only this section** and skip the rest here: no Notion pages are created, no tasks added, nothing is sent to anyone but the owner, drafted or changed. Stop looking as soon as you have enough; the meeting is minutes away.
 
-1. **Who** - the attendees' names and, from your notes (`read_note`, `find_person` if you have it) or the last mail, how the owner knows them. One clause.
+1. **Who** - the attendees' names and, from your notes (read them, `find_person` if you have it) or the last mail, how the owner knows them. One clause.
 2. **Last contact** - the most recent mail thread with them: one search by their address or name, open at most one thread. One line: when, and what it was about. Add a note about them if one exists.
 3. **Open items with them** - `list_tasks` with `person` set to the first name, three times: `kind` i_owe (what the owner promised them), `kind` owed_to_me (what they owe the owner), and the other open tasks that name them. Open ones only.
 4. **The Notion meeting page**, if one exists: one `notion-search` by the meeting's title or their name, open at most one page, give its link (the `setup-meetings` note says where meeting pages live). If Notion is not connected, leave this line out and say nothing about it.

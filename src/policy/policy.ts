@@ -2,7 +2,7 @@ import type { RunKind } from "../core/runkind.ts";
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { isInside, realish } from "../core/contain.ts";
-import { isNotePath } from "../memory/notes.ts";
+import { isNotePath, withinCaps } from "../memory/notes.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, conversationsDir, instancePaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { browseTools, groupTools } from "./capabilities.ts";
@@ -46,12 +46,9 @@ export function denial(tool: string, input: Record<string, unknown>): Denial | u
 // Which tool needs which approval is the manifest (toolmanifest.ts); this file adds what a flag cannot say.
 export { isReadTool };
 
-// The owner's memory is the SDK's auto-memory: the chat agent keeps small notes in
-// conversations/owner/notes/ with the built-in Read, Write and Edit tools, plus our forget_note. Those tools
-// are allowed for chat ONLY on a path inside that folder (anywhere else is denied), and every
-// change is announced on the phone with how to undo it (agent.ts), so a note planted by
-// something the agent read is seen at once. Nothing unattended may touch them. Checked before
-// any allow list, so adding them to one can never open them up.
+// Every conversation's memory is the SDK's auto-memory: every run, a chat turn or a look, keeps small notes in its notes folder with the built-in Read, Write and Edit tools, plus our forget_note.
+// Those tools are allowed ONLY on a path inside that folder (anywhere else is denied), and the owner's chat announces every change on the phone with how to undo it (agent.ts),
+// so a note planted by something the agent read is seen at once; a look's are in the journal. Checked before any allow list, so adding them to one can never open them up.
 const NOTE_FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
 // The owner's chat may READ (never write) a SHORT ALLOW-LIST of the assistant's own data with the built-in Read, so the owner can ask what a voice message
 // said or what the assistant did: readableData() below (conversations/owner/notes/ incl. MEMORY.md; conversations/owner/messages.jsonl; logs/audit.jsonl, agent.log, signal-daemon.log).
@@ -129,7 +126,7 @@ export function classify(tool: string, input: Record<string, unknown>, run: RunK
   for (const m of registered()) verdict = lower(verdict, m.floor?.verdict?.(tool, input, run)); // every registered module's, loaded or not: they only restrict
   if (NOTE_FILE_TOOLS.has(tool)) {
     const ok = isolated ? !!groupNotesDir && isInside(input.file_path, groupNotesDir) : isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path));
-    if (!ok) return "deny";
+    if (!ok || !withinCaps(tool, input, isolated ? groupNotesDir : undefined)) return "deny";
   }
   return verdict;
 }

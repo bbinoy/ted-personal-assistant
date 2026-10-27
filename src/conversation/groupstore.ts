@@ -61,7 +61,7 @@ export const forgetGroupCache = (groupId: string): void => void named.delete(gro
 export const groupScope = (groupId: string): Scope => {
   groupDir(groupId); // (the folder is made first)
   const p = convPaths(groupConvId(groupId));
-  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: GROUP_CATEGORIES, index: true, maxNotes: settings.memoryMaxNotes };
+  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: GROUP_CATEGORIES, maxNotes: settings.memoryMaxNotes };
 };
 
 interface KnownGroup {

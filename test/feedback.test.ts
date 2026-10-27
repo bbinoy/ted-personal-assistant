@@ -15,11 +15,11 @@ const { dreamPrompt } = await import("../src/conversation/dream.ts");
 const { recordMessage, FILE } = await import("../src/core/messages.ts");
 const { convDb } = await import("../src/core/convdb.ts");
 const { OWNER_CONV, friendConvId } = await import("../src/core/convpaths.ts");
-const { NOTES_DIR, parseNote } = await import("../src/memory/notes.ts");
+const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const { dataPath } = await import("../src/core/state.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
 
-// Learning from feedback (src/conversation/feedback.ts): a 👎 or a clear "less of this" on something the assistant sent unprompted SAVES one note (origin owner) and hands the chat turn the fact
+// Learning from feedback (src/conversation/feedback.ts): a 👎 or a clear "less of this" on something the assistant sent unprompted SAVES one note and hands the chat turn the fact
 // to mention it in one line; a 👍 is only counted.
 
 (settings as unknown as { tenants: boolean }).tenants = true;
@@ -87,10 +87,10 @@ const fresh = () => {
 };
 // A message the assistant sent (kind notice = on its own, chat = an answer), and the journal line of what it did just before.
 const sentAs = (kind: string, text: string, file = FILE) => recordMessage(kind as any, ++next, text, new Date(), file), lastTs = () => next;
-const journal = (file = FILE) => recordMessage("journal", ++next, "Archived 4 mails from LinkedIn. Why: per your notes: triage-linkedin (inferred). Undo: move them back to the inbox.", new Date(Date.now() - 60_000), file, { cat: "archive" });
+const journal = (file = FILE) => recordMessage("journal", ++next, "Archived 4 mails from LinkedIn. Why: per your notes: triage-linkedin. Undo: move them back to the inbox.", new Date(Date.now() - 60_000), file, { cat: "archive" });
 const row = (conv = OWNER_CONV) => convDb(conv).all<{ state: string }>("SELECT state FROM feedback_offers ORDER BY seq");
 
-test("feedback: a 👎 on a message sent unprompted saves exactly one note (origin owner, indexed), with the journal's why, and the chat turn is told to mention it", async () => {
+test("feedback: a 👎 on a message sent unprompted saves exactly one note (indexed), with the journal's why, and the chat turn is told to mention it", async () => {
   fresh();
   journal();
   sentAs("notice", "📬 LinkedIn: 4 new job alerts and a digest.");
@@ -102,9 +102,8 @@ test("feedback: a 👎 on a message sent unprompted saves exactly one note (orig
   assert.match(r.proposes[0]!.journal.join("\n"), /\[archive\] Archived 4 mails from LinkedIn \(per your notes: triage-linkedin/);
   assert.deepEqual(r.proposes[0]!.categories, ["triage", "people", "scheduling", "context", "brief", "style"]);
   const raw = readFileSync(join(NOTES_DIR, "triage-linkedin.md"), "utf8");
-  assert.match(raw, /origin: owner/);
+  assert.doesNotMatch(raw, /origin/);
   assert.match(raw, /Archive LinkedIn digest mails from now on, without telling me\./);
-  assert.equal(parseNote("triage-linkedin.md", raw)!.inferred, undefined, "confirmed, not inferred");
   assert.match(readFileSync(join(NOTES_DIR, "MEMORY.md"), "utf8"), /\(triage-linkedin\.md\) - Archive LinkedIn digests quietly/);
   assert.equal(r.runs.length, 1, "the ordinary reaction turn runs, with the fact");
   assert.match(r.runs[0]!, /reacted 👎/);
@@ -291,7 +290,7 @@ test("feedback: a 👍 on an unprompted message is only counted, per note or cat
 
 test("feedback: the journal around a message names the notes behind it", () => {
   fresh();
-  recordMessage("journal", ++next, "Archived 2 mails. Why: per your notes: triage-a, triage-b (inferred) and 2 more. Undo: x", new Date(Date.now() - 120_000), FILE, { cat: "archive" });
+  recordMessage("journal", ++next, "Archived 2 mails. Why: per your notes: triage-a, triage-b and 2 more. Undo: x", new Date(Date.now() - 120_000), FILE, { cat: "archive" });
   recordMessage("journal", ++next, "Old thing. Why: per your notes: triage-old. Undo: x", new Date(Date.now() - 5 * 3600_000), FILE, { cat: "archive" });
   const a = journalAround(FILE, new Date().toISOString());
   assert.deepEqual(a.notes, ["triage-a.md", "triage-b.md"]);
