@@ -9,6 +9,7 @@ import { ROOT } from "./core/paths.ts";
 import { spentToday } from "./core/budget.ts";
 import { lastLookAt, readRows, type HeartbeatRow } from "./core/looks.ts";
 import { HEARTBEAT_KEY } from "./heartbeat/heartbeat.ts";
+import { ZONE_KEY, type ZoneRecord } from "./heartbeat/whereabouts.ts";
 import { kvGet, openInstanceDbAt } from "./core/instancedb.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
@@ -436,6 +437,8 @@ export async function doctor() {
     "heartbeat is ticking",
     heartbeatDetail(beat, ageMin, lastLookAt(), localTime),
   );
+  const mac = kvGet<ZoneRecord | undefined>(ZONE_KEY, undefined);
+  line(true, "the Mac's time zone", mac ? `${mac.zone}${mac.since ? ` since ${localTime(new Date(mac.since).toISOString())}` : ""}${mac.previous ? `, before ${mac.previous.zone}` : ""}` : "not recorded yet");
   sleepCheck(line);
   failedLooksCheck(line, readRows(1));
   line(true, "heartbeat run", `every conversation's look (owner, groups, friends with wake) at its chat and what it can read, on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);

@@ -15,6 +15,7 @@ import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/
 import { groupName, ownerInGroup } from "./conversation/group.ts";
 import { groupDir, recordGroup } from "./conversation/groupstore.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
+import { noteMacZone } from "./heartbeat/whereabouts.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
 import { ownerSearchScope, warmSearchIndex } from "./memory/search.ts";
@@ -263,6 +264,7 @@ startHeartbeat({
   onTick: () => {
     startJobs({
       wake: () => wakeups.tick(),
+      whereabouts: () => noteMacZone(), // the Mac's zone history (heartbeat/whereabouts.ts)
       retention: () => retentionAtItsHour(), // the first tick at or after 03:30, once a day, never while a chat turn runs (core/retention.ts)
       dream: () => dreamAtItsHour(), // the first tick at or after the preset's dream hour; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
     });
