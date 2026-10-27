@@ -158,7 +158,7 @@ export function learnedFact(conv: ConvId, dir: string, now: number): { text: str
   if (!batch) return undefined;
   if (!batch.items.length && !batch.notes.length) return void commitBatch(conv, batch, now); // (only changes that no longer hold: settled without a word)
   return {
-    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you saved while looking):\n${learnedBody(batch.items, batch.notes)}\nTell them once, in your own words and one short line each (in the daily brief, under its 🧠 Learned overnight section), what you learned and that "forget <note>" (or "undo the dream" for the night's tidy-up) takes it back. If you say nothing, it stays for the next run.`,
+    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you saved while looking):\n${learnedBody(batch.items, batch.notes)}\nIn this message, tell the person about these changes, briefly and in your own voice: one short line each, or one line for several (in the daily brief, under its 🧠 Learned overnight section). Say how to undo one: "forget <note>", or "undo the dream" for the night's tidy-up. If you say nothing, it stays for the next run.`,
     told: () => void commitBatch(conv, batch, now),
   };
 }
