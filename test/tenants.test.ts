@@ -32,7 +32,7 @@ const { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } =
 const { FILE: OWNER_LOG } = await import("../src/core/messages.ts");
 const { acceptOwner } = await import("../src/conversation/guards.ts");
 
-const on = settings as unknown as { tenants: boolean; tenantNoticeMinutes: number };
+const on = settings as unknown as { tenants: boolean };
 const ACI_A = "11111111-1111-4111-8111-111111111111";
 const ACI_C = "33333333-3333-4333-8333-333333333333";
 const KEY_A = "sk-" + "ant-api03-AAAAAAAAAAAAAAAAAAAAAAAA";
@@ -161,7 +161,7 @@ test("key notice: a refused or missing shared key is a fact for the owner's next
   const chat: string[] = [];
   ownerNotices.sendTo((t) => void chat.push(t)); // (the one fixed-text channel to the owner: the daily budget only)
   const facts = ownerFacts();
-  const every = 3 * 3600_000; // TENANT_KEY_NOTICE_MINUTES, default 180
+  const every = 3 * 3600_000; // the key notice interval, three hours
   assert.equal(reportKeyProblem("refused", 1000), true);
   assert.equal(reportKeyProblem("refused", 1000 + 2 * 3600_000), false, "within the interval");
   assert.equal(reportKeyProblem("missing", 1000 + 2 * 3600_000), true, "another problem is another notice");

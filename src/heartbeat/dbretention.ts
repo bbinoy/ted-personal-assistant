@@ -16,12 +16,14 @@ import { settings } from "../core/settings.ts";
 
 const none = (notes: string): RetentionResult => ({ removed: 0, freedBytes: 0, notes });
 
+const LOOKS_KEEP_DAYS = 400; // heartbeat look rows older than this are pruned
+const SPEND_KEEP_DAYS = 400; // spend ledger rows of days older than this are pruned (the budgets look at today only)
 export function registerDbRules(): void {
   registerRetention({
     name: "db-looks",
     everyHours: 24,
     run(now, o) {
-      const days = settings.looksKeepDays;
+      const days = LOOKS_KEEP_DAYS;
       if (o.dryRun) return { removed: instanceDb().num("SELECT COUNT(*) FROM looks WHERE at_ms < ?", now.getTime() - days * 86_400_000), freedBytes: 0, notes: `heartbeat looks older than ${days} days` };
       return { removed: pruneLooks(days, now.getTime()), freedBytes: 0, notes: `heartbeat looks older than ${days} days` };
     },
@@ -30,7 +32,7 @@ export function registerDbRules(): void {
     name: "db-spend",
     everyHours: 24,
     run(now, o) {
-      const days = settings.spendKeepDays;
+      const days = SPEND_KEEP_DAYS;
       const cutoff = dayIn(new Date(now.getTime() - days * 86_400_000));
       if (o.dryRun) return { removed: instanceDb().num("SELECT COUNT(*) FROM spend WHERE day < ?", cutoff), freedBytes: 0, notes: `spend rows older than ${days} days` };
       return { removed: pruneSpend(days, now), freedBytes: 0, notes: `spend rows older than ${days} days` };

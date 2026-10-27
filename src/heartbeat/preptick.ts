@@ -14,7 +14,7 @@ import { claimMeeting, claimedMeetings, giveBack, openMeetings, prepDue, prepSki
 //
 // The rules, all in code:
 //   * AT MOST ONCE per event id AND start time: the row is claimed in the database BEFORE the look is made due; a moved event is a new row (its old pending one went when the look re-recorded it).
-//   * SKIPPED (meetings.ts prepSkip): declined by the owner, all-day, private, nobody else on it (and no video link), and with PREP_ONLY_EXTERNAL nobody outside her e-mail domain.
+//   * SKIPPED (meetings.ts prepSkip): declined by the owner, all-day, private, nobody else on it (and no video link). Whether a meeting is worth a word is the look's judgement from the meeting's facts (attendees, who is outside her domain).
 //   * NEVER CLAIMED IN THE DEEP NIGHT: none between 23:00 and 06:00 in her zone, nor while her own /quiet is on. It stays open; a later tick claims it if the night or /quiet ends in time, the sweep drops it once too late.
 //   * NOT SAID LATE: less than MIN_LEAD_MS before the start the sweep drops it, claimed or not.
 //   * A look that did not tell it gives it back once while there is time; a look that told it marks it sent. Otherwise it is an ordinary look: the same floor, judge and budget as any other.
@@ -42,7 +42,7 @@ export function claimPreps(conv: Conversation, now: Date): number {
     let claimed = 0;
     for (const m of openMeetings(db)) {
       if (!prepDue(m, t, settings.prepMinutes)) continue;
-      const skip = prepSkip(m, { onlyExternal: settings.prepOnlyExternal });
+      const skip = prepSkip(m);
       if (skip) settleMeeting(db, m, "skipped", t, { why: skip });
       else if (prepAllowedNow(conv, now) && claimMeeting(db, m, t)) claimed++;
     }

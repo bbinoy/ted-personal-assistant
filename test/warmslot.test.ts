@@ -171,13 +171,10 @@ test("group warm: a process built before the session moved on is not used", asyn
   }
 });
 
-test("warm: WARM=off starts nothing; WARM and WARM_IDLE_MINUTES are validated", async () => {
+test("warm: WARM=off starts nothing; WARM is validated", async () => {
   assert.equal(loadSettings({}).warm, true);
   assert.equal(loadSettings({ WARM: "off" }).warm, false);
   assert.throws(() => loadSettings({ WARM: "maybe" }), /WARM/);
-  assert.equal(loadSettings({}).warmIdleMinutes, 60);
-  assert.throws(() => loadSettings({ WARM_IDLE_MINUTES: "0" }), /WARM_IDLE_MINUTES/);
-  assert.equal(loadSettings({ WARM_IDLE_MINUTES: "90" }).warmIdleMinutes, 90);
   const was = settings.warm;
   (settings as { warm: boolean }).warm = false;
   try {

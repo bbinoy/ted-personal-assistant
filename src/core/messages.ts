@@ -1,7 +1,6 @@
 import { skipForCooldown } from "./cooldown.ts";
 import { statSync } from "node:fs";
 import { appendLine, dataPath, readText, writeText } from "./state.ts";
-import { settings } from "./settings.ts";
 import { convPaths, OWNER_CONV } from "./convpaths.ts";
 import { LIMITS } from "./sanitize.ts";
 
@@ -10,7 +9,7 @@ import { LIMITS } from "./sanitize.ts";
 // timestamp) refer to, what did the assistant tell the owner on its own (alerts, handled mail,
 // radar, the brief), and what was said a week ago (searchable, like any log, with search_logs).
 //
-// The file is bounded by SIZE, not age. Past MESSAGE_LOG_MB the oldest messages are folded into
+// The file is bounded by SIZE, not age. Past LOG_MAX_BYTES the oldest messages are folded into
 // ONE short summary line at the top ("20 more messages about ..."), written by a small model; the
 // summary itself is rewritten each time, so the file never grows past the limit. The owner's own
 
@@ -34,7 +33,7 @@ const KEEP_AFTER_COMPACTION = 0.7; // compact down to this share of the limit, s
 // a reaction was on) skips them; only search_logs and the gate itself see them.
 // "journal" is the third ledger kind: one line per thing the assistant DID (an archive, a calendar change, a sent mail...) with why and how to undo it, written by the journal sink
 // (core/events.ts), read by the `journal` tool, /today and the daily brief. It carries a category (`cat`: archive, mail, calendar...). Not conversation, so everything above skips it; the
-// F10 search indexes it; compaction keeps it verbatim for JOURNAL_KEEP_DAYS and never folds it into the summary (compactIfNeeded).
+// F10 search indexes it; compaction keeps it verbatim for JOURNAL_KEEP_DAYS (below) and never folds it into the summary (compactIfNeeded).
 export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
 
 // THE table of kinds: what each one is, in one place. Every reader that sorts lines by kind asks it (kindIs below) and no module keeps a list of its own.
@@ -233,7 +232,7 @@ export const messagesSince = (sinceIso?: string, file: string = FILE): Sent[] =>
 // Every line including the ledger, oldest first: for the gate (gate.ts) alone.
 export const ledgerEntries = (file: string = FILE): readonly Sent[] => readAll(file).sent; // shared with the cache: read-only
 
-const NOTICE_AGE_MS = settings.noticeAgeHours * 3600_000;
+const NOTICE_AGE_MS = 24 * 3600_000; // what the assistant sent on its own stays "recent" for the chat this long
 
 // Pure: what the assistant told the owner on its own in the last day, as plain lines for a prompt,
 // oldest first, the last few only. The chat reads it to understand "yes, do that"; the radar, to
@@ -284,7 +283,12 @@ export function journalToKeep(dropped: readonly string[], journalDays: number, m
   return keep.reverse();
 }
 
-export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.messageLogMb * 1_000_000, file: string = FILE, journalDays = settings.journalKeepDays): Promise<boolean> {
+// The log of messages the assistant sent is bounded by size; older messages become one summary of at most SUMMARY_WORDS words.
+export const LOG_MAX_BYTES = 1_000_000; // the owner's chat
+export const GROUP_LOG_MAX_BYTES = 500_000; // per group (and per friend), the same size-bounding
+export const SUMMARY_WORDS = 60;
+const JOURNAL_KEEP_DAYS = 90; // journal lines (what the assistant DID, core/events.ts) survive log compaction verbatim this long; older ones go without a summary
+export async function compactIfNeeded(summarize: Summarize, maxBytes = LOG_MAX_BYTES, file: string = FILE, journalDays = JOURNAL_KEEP_DAYS): Promise<boolean> {
   if (compacting.has(file)) return false;
   try {
     if (statSync(dataPath(file)).size <= maxBytes) return false; // the common case: nothing to read
@@ -309,7 +313,7 @@ export async function compactIfNeeded(summarize: Summarize, maxBytes = settings.
     if (folded.length === 0) text = previous?.text ?? ""; // nothing to say about (only ledger or old journal lines go): no model call
     else
       try {
-        text = limitWords(await summarize(previous, folded), settings.summaryWords);
+        text = limitWords(await summarize(previous, folded), SUMMARY_WORDS);
       } catch (e) {
         console.error("messages: could not summarize, keeping a count only:", (e as Error).message);
         text = "older messages, no summary available";

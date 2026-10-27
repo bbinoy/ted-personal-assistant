@@ -15,7 +15,7 @@ import { markDisclosed, setPaused, tenantById, tenantContext, type TenantContext
 //   her day's budget is spent -> a fixed notice until tomorrow (her own ledger, her own ceiling)
 //   the instance key is refused (expired, over its limit, out of credit) -> her run fails as before, and the owner's chat hears of it once (keynotice.ts, called from errors.ts failure for every kind of run)
 // and after the run: her first reply is marked (the model greets her once, in its own voice: persona.ts FIRST_CONTACT). A fixed notice is sent at most every
-// TENANT_NOTICE_MINUTES; in between the turn stays silent ([[silent]]).
+// 30 minutes (tenants.ts mayNotice); in between the turn stays silent ([[silent]]).
 
 const SILENT = "[[silent]]";
 
@@ -33,7 +33,7 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
   const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt, pictures, documents }), hooks?.firstOutput));
   const prepare = deps.prepare ?? ((ctx: TenantContext, apiKey: string) => prepareWarm(tenant(ctx.id), { apiKey }));
 
-  // (the one refusal table and the one throttle, tenants/errors.ts: a ceiling is said once a day, a cooldown or a missing key every TENANT_NOTICE_MINUTES)
+  // (the one refusal table and the one throttle, tenants/errors.ts: a ceiling is said once a day, a cooldown or a missing key every 30 minutes)
   const refuse = (ctx: TenantContext, reason: Reason, o: { until?: string; limit?: number } = {}) => ({ text: refusalOnce(reason, "friend", ctx.convId, o, now()) ?? SILENT });
 
   async function run(conv: Conversation, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]): Promise<{ text: string; costUsd?: number }> {

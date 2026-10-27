@@ -34,7 +34,6 @@ s.quietStartHour = 22;
 s.quietEndHour = 7;
 s.maxUnpromptedPerDay = 2;
 s.prepMinutes = 15;
-s.prepOnlyExternal = false;
 
 const berlin = (date: string, time: string): number => Date.parse(`${date}T${time}:00+02:00`); // (CEST until 25 Oct)
 const NOW = berlin("2026-10-22", "12:00");
@@ -56,7 +55,6 @@ function reset(): void {
   resetHeld(conv);
   clearQuiet(conv);
   s.prepMinutes = 15;
-  s.prepOnlyExternal = false;
   s.maxUnpromptedPerDay = 2;
 }
 
@@ -134,21 +132,18 @@ test("recording: off while PREP_MINUTES is 0, and the tool is the conversation's
 
 const meet = (o: Partial<import("../src/tasks/meetings.ts").Meeting> = {}): import("../src/tasks/meetings.ts").Meeting => ({ eventId: "e", startMs: NOW + 20 * MIN, title: "T", attendees: [ME, ANNA], allDay: false, private: false, ...o });
 
-test("skip rules: declined, all-day, private, nobody else (unless there is a video link), and with PREP_ONLY_EXTERNAL nobody outside the owner's domain", () => {
-  const no = { onlyExternal: false };
-  assert.equal(M.prepSkip(meet(), no), undefined);
-  assert.equal(M.prepSkip(meet({ response: "declined" }), no), "declined");
-  assert.equal(M.prepSkip(meet({ response: "tentative" }), no), undefined, "tentative is still a meeting");
-  assert.equal(M.prepSkip(meet({ allDay: true }), no), "all-day");
-  assert.equal(M.prepSkip(meet({ private: true }), no), "private");
-  assert.equal(M.prepSkip(meet({ attendees: [ME] }), no), "alone");
-  assert.equal(M.prepSkip(meet({ attendees: [] }), no), "alone");
-  assert.equal(M.prepSkip(meet({ attendees: [ME], link: "https://meet.example.com/x" }), no), undefined, "a video link counts as other people");
-  const yes = { onlyExternal: true };
-  assert.equal(M.prepSkip(meet({ attendees: [ME, { name: "Cy", email: "cy@acme.com" }] }), yes), "internal");
-  assert.equal(M.prepSkip(meet(), yes), undefined, "Anna is at another domain");
-  assert.equal(M.prepSkip(meet({ attendees: [{ name: "Ben", email: "ben@gmail.com", self: true }, { name: "Dee", email: "dee@gmail.com" }] }), yes), undefined, "webmail says nothing about who works together: every other address is outside");
-  assert.equal(M.prepSkip(meet({ attendees: [ME], link: "https://meet.example.com/x" }), yes), "internal", "a link alone is nobody outside");
+test("skip rules: declined, all-day, private, nobody else (unless there is a video link); outside her domain is a fact, not a rule", () => {
+  assert.equal(M.prepSkip(meet()), undefined);
+  assert.equal(M.prepSkip(meet({ response: "declined" })), "declined");
+  assert.equal(M.prepSkip(meet({ response: "tentative" })), undefined, "tentative is still a meeting");
+  assert.equal(M.prepSkip(meet({ allDay: true })), "all-day");
+  assert.equal(M.prepSkip(meet({ private: true })), "private");
+  assert.equal(M.prepSkip(meet({ attendees: [ME] })), "alone");
+  assert.equal(M.prepSkip(meet({ attendees: [] })), "alone");
+  assert.equal(M.prepSkip(meet({ attendees: [ME], link: "https://meet.example.com/x" })), undefined, "a video link counts as other people");
+  assert.equal(M.prepSkip(meet({ attendees: [ME, { name: "Cy", email: "cy@acme.com" }] })), undefined, "colleagues only: the look judges whether it is worth a word");
+  assert.match(M.meetingFacts([{ ...meet({ attendees: [ME, { name: "Cy", email: "cy@acme.com" }] }), state: "claimed", tries: 0 } as never], { now: NOW, zone: "Europe/Berlin" }), /outside her e-mail domain: no/);
+  assert.match(M.meetingFacts([{ ...meet(), state: "claimed", tries: 0 } as never], { now: NOW, zone: "Europe/Berlin" }), /outside her e-mail domain: yes/);
   assert.equal(M.hasExternal(meet({ attendees: [{ name: "Ben", self: true }, { name: "Eve" }] })), true, "owner's address unknown: everyone counts as outside");
 });
 
@@ -227,19 +222,17 @@ test("a rescheduled event gets a new prep (same id, new start), a cancelled one 
   assert.deepEqual(rowsOf().map((m) => [m.eventId, m.startMs, m.state]), [["m1", NOW + 15 * MIN, "sent"], ["m1", NOW + 120 * MIN, "sent"]]);
 });
 
-test("skipped meetings are never claimed and are marked with the rule: declined, all-day, private, alone; PREP_ONLY_EXTERNAL", () => {
+test("skipped meetings are never claimed and are marked with the rule: declined, all-day, private, alone", () => {
   reset();
   record([
     raw("dec", NOW + 15 * MIN, { response: "declined" }),
     raw("all", NOW + 15 * MIN, { allDay: true }),
     raw("priv", NOW + 15 * MIN, { private: true }),
     raw("solo", NOW + 15 * MIN, { attendees: [ME] }),
-    raw("inside", NOW + 15 * MIN, { attendees: [ME, { name: "Cy", email: "cy@acme.com" }] }),
     raw("real", NOW + 15 * MIN),
   ]);
-  s.prepOnlyExternal = true;
   assert.equal(tick(NOW), 1);
-  assert.deepEqual(Object.fromEntries(states().map((x) => [x[0], `${x[1]}:${x[2]}`])), { dec: "skipped:declined", all: "skipped:all-day", priv: "skipped:private", solo: "skipped:alone", inside: "skipped:internal", real: "claimed:undefined" });
+  assert.deepEqual(Object.fromEntries(states().map((x) => [x[0], `${x[1]}:${x[2]}`])), { dec: "skipped:declined", all: "skipped:all-day", priv: "skipped:private", solo: "skipped:alone", real: "claimed:undefined" });
 });
 
 test("not for a group, not while PREP_MINUTES is 0, not for a conversation without a calendar", () => {

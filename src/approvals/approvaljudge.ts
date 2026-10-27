@@ -78,8 +78,8 @@ const JUDGE_SCHEMA: Options["outputFormat"] = {
 const OPTIONS: Options = { ...haikuOptions(JUDGE_SYSTEM, { ...JUDGE_LIMITS, outputFormat: JUDGE_SCHEMA }), model: settings.judgeModel }; // (haikuOptions is the shared no-tools base; the model is the judge's own)
 
 // A spawned Claude Code process takes ~5s to start, so one is started ahead (an approval question going out, or a use just
-// made) and only the model call is left. A spare serves one query; WARM=off starts cold; WARM_IDLE_MINUTES drops an idle one.
-const spare = new JudgeSpare("judge", OPTIONS, () => settings.judgeIdleMinutes); // (approvals come in bursts: its own, shorter idle than the 60 minutes of the chat's spare)
+// made) and only the model call is left. A spare serves one query; WARM=off starts cold; WARM_IDLE_MINUTES (settings.ts) drops an idle one.
+const spare = new JudgeSpare("judge", OPTIONS, () => 10); // (approvals come in bursts: its own, shorter idle than the 60 minutes of the chat's spare)
 export const prepareJudge = (io?: JudgeIO): void => spare.prepare(io);
 export const discardJudge = (): void => spare.discard();
 

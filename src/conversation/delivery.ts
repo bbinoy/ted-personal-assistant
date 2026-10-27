@@ -16,6 +16,7 @@ import { MAX_SPOKEN_CHARS, VoiceAbort } from "@ted-assistant/speech/tts";
 import { startDeadline } from "../core/deadline.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
 
+const VOICE_TIMEOUT_SECONDS = 75; // ONE deadline for a whole voice reply, from the start of the synthesis to the hand-over to the messenger; over it the reply goes out as text
 const SILENT = /^\s*\[\[silent\]\]\s*$/i;
 
 // Everything the assistant says or shows while a conversation is being answered: the delivery of a reply (text, voice, picture, reaction), "typing…", the failure notice, and the run of one turn.
@@ -43,7 +44,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // ONE deadline (VOICE_TIMEOUT_SECONDS) covers the whole of it, from here to the hand-over of the file to the messenger: the language check, every engine and the
   // fallback, the conversion and the upload. When it runs out, the work is aborted (the engines kill their processes and requests), a file that came too late is never
   // sent, and the words go out as text.
-  const voiceDeadlineMs = (chars: number): number => Math.max(settings.voiceTimeoutSeconds, 30 + Math.ceil(chars * 0.15)) * 1000;
+  const voiceDeadlineMs = (chars: number): number => Math.max(VOICE_TIMEOUT_SECONDS, 30 + Math.ceil(chars * 0.15)) * 1000;
 
   async function speak(conv: Conversation, words: string): Promise<"spoken" | "text" | "failed"> {
     // The deadline grows with the text: a long pep talk on a busy Mac takes longer than a one-liner (828 characters took 47 s unloaded). VOICE_TIMEOUT_SECONDS is the floor.

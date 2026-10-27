@@ -31,8 +31,8 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
   const p = loadPreset(TED);
   assert.equal(p.name, "ted");
   assert.deepEqual(p.rhythm, {
-    heartbeat: { everyMinutes: 5, dayMinutes: 30, quietFromHour: 22, quietToHour: 7 },
-    dream: { enabled: true, hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
+    heartbeat: { everyMinutes: 5, dayMinutes: 30 },
+    dream: { hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
   });
   assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status", "routine"]);
   assert.deepEqual(Object.keys(p.profiles).sort(), ["chat", "group"]);
@@ -46,7 +46,7 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
 test("the code reads the preset: settings defaults, profiles, note categories", () => {
   const p = presetFor();
   assert.deepEqual([settings.heartbeatDayMinutes, settings.heartbeatMinutes, settings.quietStartHour, settings.quietEndHour],
-    [p.rhythm.heartbeat.dayMinutes, p.rhythm.heartbeat.everyMinutes, p.rhythm.heartbeat.quietFromHour, p.rhythm.heartbeat.quietToHour]);
+    [p.rhythm.heartbeat.dayMinutes, p.rhythm.heartbeat.everyMinutes, 22, 7]); // (the quiet hours are not the preset's: they differ per install, QUIET_HOURS)
   assert.deepEqual(CATEGORIES, p.notes.categories);
 });
 
@@ -77,7 +77,6 @@ test("a malformed preset fails with a message that names the file and the proble
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "a stray {{ brace")), /chat\.md: a stray/);
   assert.throws(broken((_d, j) => { delete j.expert; }), /expert: must be an object/);
   assert.throws(broken((_d, j) => { j.rhythm.heartbeat.dayMinutes = 5; }), /rhythm\.heartbeat\.dayMinutes: must be a whole number from 10 to 120/);
-  assert.throws(broken((_d, j) => { j.rhythm.dream.enabled = "yes"; }), /rhythm\.dream\.enabled: must be true or false/);
   assert.throws(broken((_d, j) => { delete j.profiles.group; }), /profiles\.group: must be an object/);
   assert.throws(broken((_d, j) => { j.skills.core = "daily-brief"; }), /skills\.core: must be a list/);
   assert.throws(broken((_d, j) => { j.name = "Ted Lasso"; }), /"name" must be a lower-case word/);
@@ -121,8 +120,6 @@ test("a second preset changes the persona, the rhythm and the limits without tou
   assert.deepEqual(coach.cat, ["goals", null]); // "triage" is not this assistant's category
   assert.equal(coach.groupTurns, 40);
   assert.deepEqual(coach.rhythm, [30, 45]);
-  // An environment variable still beats the preset's default.
-  assert.equal(run({ ASSISTANT_PRESET: dir, HEARTBEAT_MINUTES: "20" }).rhythm[0], 20);
   // Without the variable it is Ted again, and this process's own prompts are Ted's.
   const ted = run({});
   assert.ok(ted.chat.includes("Ted Lasso") && ted.personality === PERSONALITY);

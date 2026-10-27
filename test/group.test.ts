@@ -10,7 +10,7 @@ import { readLongText } from "@ted-assistant/signal";
 import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/modules/skills.ts";
 import { classify } from "../src/policy/policy.ts";
-import { parseGate } from "../src/conversation/gate.ts";
+import { GATE_MAX_DELAY_SECONDS, parseGate } from "../src/conversation/gate.ts";
 import { settings } from "../src/core/settings.ts";
 import { RateLimitError } from "../src/tenants/errors.ts";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
@@ -327,8 +327,8 @@ test("groups: unvouched groups get no logging and no answers; the verdict parser
   const r = rig({ vouch: async () => false });
   await r.on(mk({ groupId: gid() }));
   assert.deepEqual([r.sent.length, r.recorded.length], [0, 0]);
-  assert.deepEqual(parseGate({ act: true, delaySeconds: 500, nextCheckMinutes: 5 }), { act: true, delaySeconds: settings.gateMaxDelaySeconds, nextCheckMinutes: 15 });
-  assert.equal(settings.gateMaxDelaySeconds, 4); // the default: a pause is for being natural, not slow
+  assert.deepEqual(parseGate({ act: true, delaySeconds: 500, nextCheckMinutes: 5 }), { act: true, delaySeconds: GATE_MAX_DELAY_SECONDS, nextCheckMinutes: 15 });
+  assert.equal(GATE_MAX_DELAY_SECONDS, 4); // the default: a pause is for being natural, not slow
   assert.equal(parseGate({ act: "yes" }).act, false);
   assert.equal(parseGate(undefined).act, false);
 });

@@ -1,9 +1,9 @@
 import { oneShot } from "../tenants/haiku.ts";
 import { LOGIN } from "../tenants/payer.ts";
 import { fence } from "../core/fence.ts";
-import type { Sent, Summarize } from "../core/messages.ts";
+import { SUMMARY_WORDS, type Sent, type Summarize } from "../core/messages.ts";
 import { summarySystem } from "../run/persona.ts";
-import { OWNER, settings } from "../core/settings.ts";
+import { OWNER } from "../core/settings.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
 // The small model that folds old messages into the log's one-line summary (messages.ts).
@@ -21,7 +21,7 @@ const summaryPrompt = (previous: string | undefined, old: readonly Sent[], words
     .join("\n\n");
 
 export const summarizeWithHaiku: Summarize = async (previous, old) => {
-  const r = await oneShot({ system: summarySystem(), prompt: summaryPrompt(previous?.text, old, settings.summaryWords), payer: LOGIN, options: { maxTurns: 1, maxBudgetUsd: 0.05 } });
+  const r = await oneShot({ system: summarySystem(), prompt: summaryPrompt(previous?.text, old, SUMMARY_WORDS), payer: LOGIN, options: { maxTurns: 1, maxBudgetUsd: 0.05 } });
   if (!r.ok || !r.text.trim()) throw new Error("no summary returned");
   return r.text;
 };

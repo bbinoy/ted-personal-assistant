@@ -2,8 +2,8 @@
   "name": "ted",
   "description": "Ted, a personal assistant: mail, calendar, tasks and meetings for one person, in a warm, Ted Lasso kind of voice.",
   "rhythm": {
-    "heartbeat": { "everyMinutes": 5, "dayMinutes": 30, "quietFromHour": 22, "quietToHour": 7 },
-    "dream": { "enabled": true, "hour": 4, "minNewLines": { "direct": 1, "group": 3 }, "maxGroupsPerNight": 5 }
+    "heartbeat": { "everyMinutes": 5, "dayMinutes": 30 },
+    "dream": { "hour": 4, "minNewLines": { "direct": 1, "group": 3 }, "maxGroupsPerNight": 5 }
   },
   "notes": {
     "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status", "routine"],

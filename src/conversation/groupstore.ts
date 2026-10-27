@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import type { Scope } from "../memory/dreamplan.ts";
-import { compactIfNeeded, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "../core/messages.ts";
+import { compactIfNeeded, GROUP_LOG_MAX_BYTES, messagesSince, recordMessage, withoutDeleted, type Extra, type Kind, type Sent } from "../core/messages.ts";
 import { matchLines } from "../core/logsearch.ts";
 import { MAX_NOTE_CHARS, type Note } from "../memory/notes.ts";
 import { preset } from "../core/preset.ts";
@@ -90,7 +90,7 @@ export function listGroups(): KnownGroup[] {
 export function recordGroup(groupId: string, kind: Kind, ts: number, text: string, extra?: Extra): void {
   const file = groupLogFile(groupId);
   recordMessage(kind, ts, text, new Date(), file, extra);
-  void compactIfNeeded(summarizeWithHaiku, settings.groupLogMb * 1_000_000, file).catch((e) => console.error("group log: compaction failed:", (e as Error).message));
+  void compactIfNeeded(summarizeWithHaiku, GROUP_LOG_MAX_BYTES, file).catch((e) => console.error("group log: compaction failed:", (e as Error).message));
 }
 
 export const groupHistorySince = (groupId: string, sinceIso?: string): Sent[] => messagesSince(sinceIso, groupLogFile(groupId));

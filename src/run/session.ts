@@ -5,7 +5,6 @@
 //     for a while, or right after a reply if it grew far past the limit.
 // The decision is a pure function so the boundaries are unit-tested.
 
-import { settings } from "../core/settings.ts";
 
 export interface ChatSession {
   sessionId?: string;
@@ -18,7 +17,8 @@ export interface ChatSession {
   untrustedIn?: string; // the id of the session that has read raw mail or a web page ("pending": the session this turn starts, whose id is not known yet): its context still holds that text, so the approval judge is told from then on (chatsession.ts sessionTaint)
 }
 
-const COMPACT_BACKOFF_MS = settings.compactBackoffMinutes * 60_000;
+// After a failed compaction there is no new try for this long.
+const COMPACT_BACKOFF_MS = 60 * 60_000;
 
 type SessionPlan = "fresh" | "resume" | "resume then compact";
 

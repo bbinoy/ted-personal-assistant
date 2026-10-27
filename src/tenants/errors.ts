@@ -2,7 +2,7 @@ import { noteRateLimit } from "../core/cooldown.ts";
 import { reportKeyProblem } from "./keynotice.ts";
 import { cooldownKeyOf, LOGIN, type Payer } from "./payer.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
-import { OWNER, settings } from "../core/settings.ts";
+import { OWNER } from "../core/settings.ts";
 
 // The failures that have their own message, instead of "something broke".
 export class AuthError extends Error {} // the Claude login expired
@@ -41,7 +41,7 @@ export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
 
 // ---- what a person is told when Ted cannot serve them right now: ONE table, by reason and audience ----
 // Fixed texts, on purpose (CLAUDE.md §4): they go to people for whom no model run is possible at that moment (a refused key, a spent day, a cooldown), or after a run has failed. Short and kind; the
-// owner's own end with the one step (FIXES). A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every TENANT_NOTICE_MINUTES (refusalOnce).
+// owner's own end with the one step (FIXES). A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every 30 minutes (refusalOnce).
 export type Reason = Cause | "owner-budget" | "own-budget" | "shared-budget" | "cooldown" | "no-key";
 export interface RefusalFacts {
   until?: string; // a cooldown: when it ends, as a clock time
@@ -70,9 +70,9 @@ export function refusal(reason: Reason, audience: Audience, o: RefusalFacts = {}
   const say = REFUSALS[reason][audience] ?? OTHER;
   return typeof say === "function" ? say(o) : say;
 }
-// The same line to the same person or group (key: their convId) at most once a day for a day's ceiling, else every TENANT_NOTICE_MINUTES (capnotice.ts); undefined: it was said, stay silent.
+// The same line to the same person or group (key: their convId) at most once a day for a day's ceiling, else every 30 minutes (capnotice.ts); undefined: it was said, stay silent.
 export function refusalOnce(reason: Reason, audience: Audience, convId: string, o: RefusalFacts = {}, now = Date.now()): string | undefined {
-  const every = reason === "cooldown" || reason === "no-key" ? settings.tenantNoticeMinutes * 60_000 : undefined;
+  const every = reason === "cooldown" || reason === "no-key" ? 30 * 60_000 : undefined;
   return takeCapNotice(`refusal:${reason}:${convId}`, now, every) ? refusal(reason, audience, o) : undefined;
 }
 export const noticeFor = (audience: Audience) => (e: unknown): string => refusal(causeOf(e), audience);

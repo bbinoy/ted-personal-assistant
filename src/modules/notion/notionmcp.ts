@@ -18,7 +18,7 @@ export interface NotionConfig {
   fetch?: typeof fetch; // tests
 }
 
-export const notionConfig = (): NotionConfig => ({ url: settings.notion.mcpUrl, idleMs: settings.notion.idleMinutes * 60_000, callMs: settings.notion.callSeconds * 1000 });
+export const notionConfig = (): NotionConfig => ({ url: settings.notion.mcpUrl, idleMs: 10 * 60_000, /* a friend's connection to the hosted server is closed after this long unused */ callMs: 60_000 /* one tool call */ });
 
 export class NotionSession extends UpstreamSession {
   protected readonly label = "her Notion connection";

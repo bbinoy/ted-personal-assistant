@@ -13,7 +13,7 @@ import type { ConvId } from "../../core/convpaths.ts";
 //     them unseen, so the mail is worked through by the next look; an offline gap is worked off over successive looks, not lost.
 //   * The log is bounded (the last SEEN_MAX ids: trimSeenMail, also a retention rule) and belongs to ONE conversation: it is the `seen_mail` table of that conversation's assistant.db.
 //   * The run and the expert it calls share one pending set (they share the run's tool servers).
-//   * The FIRST look (no log yet) does not triage the whole backlog: mail the run says arrived more than MAIL_BACKLOG_DAYS ago (`received`, as the mail tool gave it) is marked seen
+//   * The FIRST look (no log yet) does not triage the whole backlog: mail the run says arrived more than MAIL_BACKLOG_DAYS (7) ago (`received`, as the mail tool gave it) is marked seen
 //     without being returned, and the tool says so once, so the owner hears of it in the first message (isBacklog).
 // The tool touches only this log: nothing to judge, nothing to ask.
 
@@ -48,7 +48,9 @@ export interface SeenMail {
   pending: () => number;
 }
 
-export function createSeenMail(conv: ConvId, max: number = SEEN_MAX, backlogDays: number = settings.mailBacklogDays, now: () => number = Date.now): SeenMail {
+// First run only: inbox mail older than this is marked seen without triage.
+const MAIL_BACKLOG_DAYS = 7;
+export function createSeenMail(conv: ConvId, max: number = SEEN_MAX, backlogDays: number = MAIL_BACKLOG_DAYS, now: () => number = Date.now): SeenMail {
   const pending = new Set<string>();
   const backlog = new Set<string>();
   const firstRun = (peekConvDb(conv)?.num("SELECT COUNT(*) FROM seen_mail") ?? 0) === 0; // no log yet: nothing was ever worked through
@@ -119,7 +121,7 @@ export function createSeenMailServer(seen: SeenMail) {
           const aged = seen.aged();
           const lost = seen.reset();
           emitRecord("seen_mail", "checked", "background", { asked: ids.length, unseen: fresh.length, aged });
-          const note = lost && aged > 0 ? `\n\nYou lost track of which mail was already handled (the notebook it was kept in was damaged), so the ${aged} mail(s) in the inbox now were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence: "I lost track of which mail I'd already handled, so I skipped what's in your inbox now; new mail from here on is handled as usual."` : aged > 0 ? `\n\nThis is your first look: ${aged} mail(s) older than ${settings.mailBacklogDays} days were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence.` : "";
+          const note = lost && aged > 0 ? `\n\nYou lost track of which mail was already handled (the notebook it was kept in was damaged), so the ${aged} mail(s) in the inbox now were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence: "I lost track of which mail I'd already handled, so I skipped what's in your inbox now; new mail from here on is handled as usual."` : aged > 0 ? `\n\nThis is your first look: ${aged} mail(s) older than ${MAIL_BACKLOG_DAYS} days were marked as looked at without sorting through them. Tell ${settings.owner} so in your message, once, in one short sentence.` : "";
           return reply((fresh.length ? `Not looked at yet (${fresh.length} of ${ids.length}):\n${fresh.join("\n")}` : `Nothing new: all ${ids.length} were looked at in earlier looks.`) + note);
         },
         { alwaysLoad: true },

@@ -1,14 +1,13 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import type { ConvRef } from "../../core/convpaths.ts";
-import { settings } from "../../core/settings.ts";
 import { isNotePath, parseNote, readNotes } from "../../memory/notes.ts";
 import { parseRepeat } from "../../tasks/repeat.ts";
 import { nextText, routineLines, type Routine } from "../../tasks/routines.ts";
 import { scheduledSkills } from "../skills.ts";
 
 // What is scheduled in a conversation, from its two sources (tasks/routines.ts plans them, heartbeat/facts.ts hands the due one to the look): the scheduled skills it has (`schedule:` in
-// SKILL.md, less ROUTINES_OFF) and its routine notes (`routine-<slug>.md`: front matter `when:` = a repeat rule, body = what to do). A note whose `when:` cannot be read is not scheduled but
+// SKILL.md; remove the line and the routine is off) and its routine notes (`routine-<slug>.md`: front matter `when:` = a repeat rule, body = what to do). A note whose `when:` cannot be read is not scheduled but
 // listed in `broken`, so it is told to the model instead of silently never firing.
 
 export const MAX_NOTE_ROUTINES = 20; // per conversation: a runaway list of notes must not become a runaway list of runs
@@ -21,7 +20,7 @@ export function scheduledIn(o: { skills: readonly string[]; notesDir: string; zo
   const broken: string[] = [];
   for (const [skill, schedule] of scheduledSkills(o.skills)) {
     const p = parseRepeat(schedule);
-    if (p.ok && !settings.routinesOff.includes(skill)) routines.push({ name: skill, rule: p.rule, skill });
+    if (p.ok) routines.push({ name: skill, rule: p.rule, skill });
   }
   for (const n of readNotes(o.now, o.notesDir, o.zone, "routine-").slice(0, MAX_NOTE_ROUTINES)) {
     const p = n.when ? parseRepeat(n.when) : undefined;

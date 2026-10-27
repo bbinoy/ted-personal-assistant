@@ -15,10 +15,10 @@ export interface CoreSkill { readonly name: string; readonly required?: boolean 
 export interface ProfileData { readonly maxTurns: number; readonly maxBudgetUsd: number }
 export interface Rhythm {
   // everyMinutes: the free tick (no model); dayMinutes: the heartbeat run's default gap between two looks in the day.
-  readonly heartbeat: { readonly everyMinutes: number; readonly dayMinutes: number; readonly quietFromHour: number; readonly quietToHour: number };
+  readonly heartbeat: { readonly everyMinutes: number; readonly dayMinutes: number };
   // The nightly dream (dream.ts): the same for every conversation. A direct chat (the owner's, a friend's) is dreamt once she wrote `minNewLines.direct` lines since the
   // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
-  readonly dream: { readonly enabled: boolean; readonly hour: number; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
+  readonly dream: { readonly hour: number; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
 export type ProfileKey = "chat" | "group";
 export interface Preset {
@@ -181,9 +181,8 @@ export function loadPreset(dir: string): Preset {
   const r = sec("rhythm");
   const hb = obj(at("rhythm.heartbeat"), r.heartbeat), dr = obj(at("rhythm.dream"), r.dream), mn = obj(at("rhythm.dream.minNewLines"), dr.minNewLines);
   const rhythm: Rhythm = {
-    heartbeat: { everyMinutes: int(at("rhythm.heartbeat.everyMinutes"), hb.everyMinutes, 1, 240), dayMinutes: int(at("rhythm.heartbeat.dayMinutes"), hb.dayMinutes, 10, 120), quietFromHour: int(at("rhythm.heartbeat.quietFromHour"), hb.quietFromHour, 0, 23), quietToHour: int(at("rhythm.heartbeat.quietToHour"), hb.quietToHour, 0, 23) },
+    heartbeat: { everyMinutes: int(at("rhythm.heartbeat.everyMinutes"), hb.everyMinutes, 1, 240), dayMinutes: int(at("rhythm.heartbeat.dayMinutes"), hb.dayMinutes, 10, 120) },
     dream: {
-      enabled: bool(at("rhythm.dream.enabled"), dr.enabled),
       hour: int(at("rhythm.dream.hour"), dr.hour, 0, 23),
       minNewLines: { direct: int(at("rhythm.dream.minNewLines.direct"), mn.direct, 1, 1000), group: int(at("rhythm.dream.minNewLines.group"), mn.group, 1, 1000) },
       maxGroupsPerNight: int(at("rhythm.dream.maxGroupsPerNight"), dr.maxGroupsPerNight, 1, 1000),
