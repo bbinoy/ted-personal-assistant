@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "3876e558fa44dc98"
+        "sha": "7ce744c304e41dcd"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -166,7 +166,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "3876e558fa44dc98"
+        "sha": "7ce744c304e41dcd"
       },
       "snapshot": false
     },
@@ -321,7 +321,7 @@
     "run": {
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "5cb61e96c9c21da2"
+        "sha": "37c99e6749bab883"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -382,7 +382,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "5cb61e96c9c21da2"
+        "sha": "37c99e6749bab883"
       },
       "snapshot": false
     },
@@ -439,7 +439,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "fa3452d63a640ad9"
+        "sha": "bbad01d387a1ba17"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -507,7 +507,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "fa3452d63a640ad9"
+        "sha": "bbad01d387a1ba17"
       },
       "snapshot": false
     },
@@ -567,7 +567,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "3876e558fa44dc98"
+        "sha": "7ce744c304e41dcd"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -729,7 +729,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "3876e558fa44dc98"
+        "sha": "7ce744c304e41dcd"
       },
       "snapshot": false
     },
@@ -886,7 +886,7 @@
     "run": {
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "5cb61e96c9c21da2"
+        "sha": "37c99e6749bab883"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -950,7 +950,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "5cb61e96c9c21da2"
+        "sha": "37c99e6749bab883"
       },
       "snapshot": false
     },
@@ -1007,7 +1007,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "fa3452d63a640ad9"
+        "sha": "bbad01d387a1ba17"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -1078,7 +1078,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "fa3452d63a640ad9"
+        "sha": "bbad01d387a1ba17"
       },
       "snapshot": false
     },

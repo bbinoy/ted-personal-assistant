@@ -108,6 +108,7 @@ export const PROMPTS = {
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
   background: ["who", "Who", "own", "group", "reads", "mail", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
   delegate: ["who", "delegated"],
+  learn: ["who"],
   expert: ["personality", "own", "who"],
   heartbeat: ["now", "timeZone", "who", "lastLook", "quietFrom", "quietTo", "due", "sources", "routineFacts"],
   tasks: ["own", "group", "who"],
