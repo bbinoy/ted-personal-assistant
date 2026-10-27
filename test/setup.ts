@@ -6,6 +6,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// One time zone for every test process, whatever the machine's (a laptop in London, a CI runner in UTC): run options carry the
+// conversation's zone and the snapshots must not depend on where they run. A file that tests another zone still sets TZ itself.
+process.env.TZ = "Europe/London";
+
 const dir = mkdtempSync(join(tmpdir(), "harness-test-"));
 process.env.HARNESS_DATA_DIR = dir;
 process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
