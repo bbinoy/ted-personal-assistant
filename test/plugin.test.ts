@@ -89,12 +89,13 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
 
 test("daily-brief skill: one archive list read after the sweep, no archiving of its own briefs, no model-written delivery time", () => {
   const s = readFileSync(join(skillsDir, "daily-brief", "SKILL.md"), "utf8");
-  assert.match(s, /keep only today's ☀️ brief in the inbox and archive the older ones/);
+  assert.match(s, /keep only today's daily brief in the inbox and archive the older ones/);
+  assert.match(s, /"Daily brief", "Evening wrap" or "Weekly review", with or without/); // matched by subject, not by emoji
   assert.doesNotMatch(s, /never archive the assistant's own brief emails/);
   assert.match(s, /the daily sweep[\s\S]*WHOLE inbox[\s\S]*do \*\*not\*\* use `seen_mail` here/);
-  assert.match(s, /archive unless the mail needs the owner[\s\S]*Unread is not a reason to keep[\s\S]*in doubt on routine mail, archive/);
+  assert.match(s, /Triage follows the mail skill's rules exactly/); // one source of truth for triage: the mail skill
   assert.match(s, /triage notes[\s\S]*win over these defaults/);
-  assert.match(s, /Cold outreach[\s\S]*whatever the provider's "important" flag says[\s\S]*unknown sender[\s\S]*never judge it by the subject alone/);
+  assert.match(s, /cold outreach is noise even from a named person/);
   assert.match(s, /after the email sweep, just before you write the brief\*\*, so the list includes what this very run archived/);
   assert.match(s, /no time of your own: the code stamps the real write time/);
 });
@@ -103,10 +104,14 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
   const mb = read("mailbird");
   assert.match(mb, /does not depend on[\s\S]*`seen_mail`/);
-  assert.match(mb, /Keep only today's brief email[\s\S]*older `☀️` daily and `🌙` evening brief is archived/);
+  assert.match(mb, /## For every run that handles mail[\s\S]*Today's daily brief stays in the inbox; every older brief, wrap and review\s+is archived/);
+  assert.match(mb, /A real conversation stays, read or unread, however old/); // the sweep never archives a live thread with a person
+  assert.match(mb, /Cold outreach is noise even when a named person wrote it/);
+  assert.match(mb, /A completed task closes its mail/);
+  assert.match(mb, /A series keeps only its newest mail/);
   assert.doesNotMatch(mb, /Old briefs are never archived/);
-  assert.match(mb, /archive unless the mail needs the owner[\s\S]*next 7 days[\s\S]*Unread is not a reason to keep/);
-  assert.match(mb, /Cold outreach is not that[\s\S]*"important" flag[\s\S]*open the mail \(`get_message`, cheap\)\s+before deciding/);
+  assert.match(mb, /archive unless the mail needs the owner[\s\S]*next 7 days[\s\S]*For automated mail, unread is not a reason to keep/);
+  assert.match(mb, /Cold outreach is noise even when a named person wrote it[\s\S]*"important" flag[\s\S]*open the mail \(`get_message`, cheap\)\s+before deciding/);
   assert.match(mb, /triage notes win/);
   assert.match(read("gmail"), /archive unless the mail needs the owner[\s\S]*"important" flag[\s\S]*triage\s+notes in memory win/);
   const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "background.md"), "utf8");
