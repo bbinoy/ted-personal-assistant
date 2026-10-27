@@ -26,9 +26,12 @@ export const reactionMessage = (emoji: string): string => `${OWNER} reacted ${em
 // The prompt for a reaction the owner put on a message: what they reacted with, and the message
 // (from the message log; it is fenced because it may quote mail). It carries no instruction on
 // what to do: the model judges, and the owner's notes can tune it.
-export function reactionPrompt(emoji: string, msg?: { at: string; kind: string; text: string }): string {
+export function reactionPrompt(emoji: string, msg?: { at: string; kind: string; text: string }, journal?: readonly string[]): string {
   const about = msg
     ? `to this message of yours (${msg.kind}, sent ${msg.at.slice(0, 16).replace("T", " ")} UTC):\n${fence("reacted_message", msg.text)}`
     : "to a message that is no longer in your log (or to one of their own).";
-  return `${reactionMessage(emoji)} ${about}`;
+  return `${reactionMessage(emoji)} ${about}${reactionJournal(journal)}`;
 }
+
+// The journal lines as a block for a prompt (data: they may quote mail); nothing when there are none.
+export const reactionJournal = (lines?: readonly string[]): string => (lines?.length ? `\n\nWhat you did around that time, and why:\n${fence("journal", lines.join("\n"), 3000)}` : "");

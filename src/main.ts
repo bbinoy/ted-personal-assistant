@@ -1,7 +1,6 @@
 import "./core/log.ts"; // first: timestamps, redaction and owner-only files for everything below
 import "./core/agentstart.ts"; // second: a data folder in another layout stops the start before any module opens a file (core/requirelayout.ts)
 import { createPipeline, group, owner, tenant, type Pipeline } from "./conversation/conversation.ts";
-import { createFeedback } from "./conversation/feedback.ts";
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runLook } from "./run/agent.ts";
@@ -146,7 +145,6 @@ const pipeline: Pipeline = createPipeline({
     foreign: createVoiceLanguage(settings.ttsLanguages), // the language the voice does not speak, if any; a failed check falls back to the conversation's last known language
   },
   approvals,
-  feedback: createFeedback(), // a 👎 or "less of this" on something sent unprompted: one note saved, mentioned by the chat turn that follows (feedback.ts)
   vouch,
   isOwner: fromOwner,
   compact: compactConversation, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it

@@ -331,7 +331,6 @@ export function loadSettings(env: Env) {
     memoryMaxNotes: num(env, "MEMORY_MAX_NOTES", 2000, 10, 20000), // how many notes a run reads (each is cut at MAX_NOTE_CHARS); far above normal use, so it only guards against runaway growth
     dream: oneOf(env, "DREAM", rhythm.dream.enabled ? "on" : "off", ["on", "off"] as const) === "on",
     dreamHour: num(env, "DREAM_HOUR", rhythm.dream.hour, 0, 23), // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
-    feedbackOffersPerDay: num(env, "FEEDBACK_OFFERS_PER_DAY", 3, 0, 20), // learning from feedback (conversation/feedback.ts): at most this many notes a day saved from a 👎 or "less of this" per conversation (0: off)
 
     // The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window. RETENTION=off disables all of it; each window is a setting (0 where noted: that rule off).
     retention: oneOf(env, "RETENTION", "on", ["on", "off"] as const) === "on",

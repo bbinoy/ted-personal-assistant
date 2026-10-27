@@ -478,6 +478,14 @@ export const CONV_SCHEMA: readonly Migration[] = [
     name: "what I learned overnight: every list is told once, the brief's 'delivered' mark is gone",
     up: `ALTER TABLE learned_batches DROP COLUMN delivered;`,
   },
+  {
+    version: 19,
+    name: "learning from a 👎 is the general learn rule: the feedback offers and thumbs-up counts are dropped",
+    up: `
+      DROP TABLE feedback_offers;
+      DROP TABLE feedback_signals;
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

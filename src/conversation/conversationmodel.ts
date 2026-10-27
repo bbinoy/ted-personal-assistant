@@ -6,7 +6,6 @@ import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { type Picture } from "../run/image.ts";
 import { type Document } from "./document.ts";
-import type { Feedback } from "./feedback.ts";
 import { tenantKey } from "../core/ownerkey.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, friendConvId, groupConvId, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
@@ -96,8 +95,8 @@ export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; docum
 export type Incoming = { type: "message"; m: IncomingMessage } | { type: "reaction"; r: IncomingReaction } | { type: "deletion"; d: IncomingDeletion };
 
 // What a message is while it waits for its turn (the burst, the queue): the message once prepared, plus what every conversation's turn needs of it. `line`: how it reads in the history (a voice
-// message is marked, a picture has its caption); `said`: the same labelled with whoever said it, at full length (a group's turn answers this); `late`: it was found in the log after a restart (replay.ts), written at `at`; `learned`: what feedback.ts saved because of it.
-export type Entry = Held & { line: string; said: string; author?: string; arrivedAt: number; late?: { at: string }; learned?: string; reaction?: { emoji: string; on: string } };
+// message is marked, a picture has its caption); `said`: the same labelled with whoever said it, at full length (a group's turn answers this); `late`: it was found in the log after a restart (replay.ts), written at `at`.
+export type Entry = Held & { line: string; said: string; author?: string; arrivedAt: number; late?: { at: string }; reaction?: { emoji: string; on: string; journal?: string[] } };
 
 // What a group's turn is made of beyond the shared pipeline.
 export interface GroupDeps {
@@ -147,7 +146,6 @@ export interface PipelineDeps {
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
   speech: { ready: () => boolean; synth: (words: string, conversation: string, limits?: SynthLimits) => Promise<string>; foreign: (words: string, conversation: string) => Promise<string | undefined>; timeoutMs?: number; deadline?: (ms: number) => Deadline }; // spoken replies: local TTS, a file
   approvals: { answer: (text: string, working: () => void, quote: { timestamp: number } | undefined, deps: undefined, ctx: { scope: string; by?: string; voice?: boolean }) => Promise<{ outcome: "none" | "approved" | "modified" | "declined" | "feedback" | "clarify"; changes?: { field: string; value: unknown }[]; reply?: string }>; answerReaction: (emoji: string, ts: number, scope: string, by?: string) => string };
-  feedback?: Pick<Feedback, "reaction" | "message">; // learning from feedback (feedback.ts): a 👎 or "less of this" on something sent unprompted saves one note and returns the fact for the chat turn to mention
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group?
   isOwner: (who: { from: string; fromUuid?: string }) => boolean;
   group?: GroupDeps; // what a group's answer decision and turn are made of (group.ts); the defaults are the real ones, a test supplies its own
