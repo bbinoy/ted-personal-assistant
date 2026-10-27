@@ -340,7 +340,7 @@ function rig() {
     approvals: { answer: async () => ({ outcome: "none" as const }), answerReaction: () => "ignored" },
     vouch: async () => true,
     isOwner: (w) => w.from === "+10000000000",
-    admitGroup: async (conv, m) => void ran.group.push(`${conv.key}: ${m.text}`),
+    group: { recent: () => [], context: () => ({ lines: [] }), warm: () => {}, run: async (build, { conv }) => (ran.group.push(`${conv.key}: ${/hello group/.test(build().prompt)}`), "[[silent]]") },
     wait: async () => {},
   });
   return { sent, typing, reads, records, ran, pipeline };
@@ -351,7 +351,7 @@ const aciOf = (c: { target?: string }) => c.target!.slice(3);
 test("pipeline: a tenant's chat answers her, to her, logs to her, and is not the owner's chat", async () => {
   const { sent, typing, reads, records, ran, pipeline } = rig();
   const conv = tenant(ann.id);
-  assert.deepEqual([conv.kind, conv.direct, conv.gate, conv.groupId, conv.target], ["tenant", true, false, undefined, toPerson(aciOf(ann))]);
+  assert.deepEqual([conv.kind, conv.direct, conv.groupId, conv.target], ["tenant", true, undefined, toPerson(aciOf(ann))]);
   assert.equal(conv.notesDir, ann.notesDir);
   assert.equal(conv.logFile, ann.logFile);
   assert.notEqual(conv.key, owner().key);
@@ -381,7 +381,7 @@ test("group + tenant: a tenant in a group is a member of that group; the group's
   assert.equal(g.notesDir, convPaths(groupConvId("signal-group-1")).notes);
   assert.ok(!g.logFile.includes(ann.id) && g.logFile.startsWith(conversationsDir()) && !g.logFile.includes("signal-group-1"), "a group's folder is named by its hash, never its id");
   await pipeline.handleIncoming(g, { type: "message", m: { from: "", fromUuid: aciOf(ann), fromName: "Ann", text: "hello group", timestamp: 700, direct: false, group: { id: "signal-group-1" }, addressedToMe: true } });
-  assert.deepEqual(ran.group, ["signal-group-1: hello group"], "the group path, as for any member");
+  assert.deepEqual(ran.group, ["signal-group-1: true"], "the group path, as for any member");
   assert.deepEqual(ran.tenant, [], "no private run for a group message");
   assert.deepEqual(sent, []);
   assert.ok(records.every((r) => r.target === undefined || r.target === "signal-group-1"), "nothing goes to her private history");

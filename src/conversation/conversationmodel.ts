@@ -1,6 +1,7 @@
 import { noticeFor } from "../tenants/errors.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
-import type { GroupMessage } from "./group.ts";
+import type { Gate } from "./gate.ts";
+import type { Runner } from "./group.ts";
 import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { type Picture } from "../run/image.ts";
@@ -27,11 +28,6 @@ export interface Conversation {
   readonly direct: boolean; // a private one-to-one chat (the owner's or a tenant's): one person, always answered, her messages are her own
   readonly logFile: string; // this conversation's message log
   readonly notesDir: string; // this conversation's notes (the SDK auto-memory folder; the only place its file tools may write)
-  readonly gate: boolean; // is the participation gate in front of it
-  readonly approvals: boolean; // the owner's own turn path (an approval answer is read before the queue); groups read it in intake() before the gate, and any member's answer counts there
-  readonly vouch: boolean; // is the owner's membership checked before anything is read (groups: a stranger cannot add us to a group and use us)
-  readonly attention: "always" | "addressed"; // who gets a read receipt and an explanation of an unusable voice message or picture: everyone (the owner's chat) or only someone who spoke to us
-  readonly optionalPictures: boolean; // a picture is opened only when it will be used, and an unopenable one is dropped (the caption stays); otherwise it is required
   readonly threadAlways: boolean; // an answer to someone who addressed us is always threaded under it
   readonly noticeEveryMs: number; // at most one error notice per this long (0: always)
   readonly notice: (e: unknown) => string;
@@ -44,11 +40,6 @@ const OWNER_CONVERSATION: Conversation = Object.freeze({
   direct: true,
   logFile: OWNER_LOG,
   notesDir: NOTES_DIR,
-  gate: false,
-  approvals: true,
-  vouch: false,
-  attention: "always",
-  optionalPictures: false,
   threadAlways: false,
   noticeEveryMs: 0,
   notice: noticeFor("owner"), // tells the owner where to look
@@ -69,11 +60,6 @@ export const group = (groupId: string): Conversation => {
     direct: false,
     logFile: p.messages,
     notesDir: p.notes,
-    gate: true,
-    approvals: false,
-    vouch: true,
-    attention: "addressed",
-    optionalPictures: true,
     threadAlways: true, // a group scrolls: say whom you answer
     noticeEveryMs: settings.groupNoticeMinutes * 60_000, // a failure is reported at most this often per group
     notice: noticeFor("group"), // nobody there should be sent to a terminal
@@ -95,11 +81,6 @@ export const tenant = (id: string): Conversation => {
     direct: true,
     logFile: ctx.logFile,
     notesDir: ctx.notesDir,
-    gate: false,
-    approvals: true, // the owner's turn path: an answer to her own question is read before the queue (scoped to her chat, approvals.ts)
-    vouch: false,
-    attention: "always",
-    optionalPictures: false,
     threadAlways: false,
     noticeEveryMs: settings.tenantReplyNoticeMinutes * 60_000, // she is waiting: told promptly, but not once per message of a flood
     notice: noticeFor("friend"), // no terminals, no logs
@@ -114,7 +95,20 @@ export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; docum
 
 export type Incoming = { type: "message"; m: IncomingMessage } | { type: "reaction"; r: IncomingReaction } | { type: "deletion"; d: IncomingDeletion };
 
-// What one run needs. The caller (the owner's path here, the group brain in group.ts) builds it.
+// What a message is while it waits for its turn (the burst, the queue): the message once prepared, plus what every conversation's turn needs of it. `line`: how it reads in the history (a voice
+// message is marked, a picture has its caption); `said`: the same labelled with whoever said it, at full length (a group's turn answers this); `late`: it was found in the log after a restart (replay.ts), written at `at`; `learned`: what feedback.ts saved because of it.
+export type Entry = Held & { line: string; said: string; author?: string; arrivedAt: number; late?: { at: string }; learned?: string; reaction?: { emoji: string; on: string } };
+
+// What a group's turn is made of beyond the shared pipeline.
+export interface GroupDeps {
+  recent?: (conv: Conversation) => string[]; // the tail of that history, for the gate (default gate.ts logTail)
+  context?: (groupId: string, since?: string) => { lines: string[]; seenAt?: string }; // what the run is shown (default: the group's log)
+  run?: Runner; // default: the real run (group.ts realRunner)
+  gate?: Gate;
+  warm?: (conv: Conversation, afterTurn: boolean) => void; // keeps a warm model process ready for the group (default: the real one, unless a test supplies its own runner)
+}
+
+// What one run needs. The intake's turn row (intake.ts WAYS) builds it.
 export interface RunHooks {
   firstOutput: () => void; // the model produced its first message (timing only)
 }
@@ -156,7 +150,7 @@ export interface PipelineDeps {
   feedback?: Pick<Feedback, "reaction" | "message">; // learning from feedback (feedback.ts): a 👎 or "less of this" on something sent unprompted saves one note and returns the fact for the chat turn to mention
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group?
   isOwner: (who: { from: string; fromUuid?: string }) => boolean;
-  admitGroup: (conv: Conversation, m: GroupMessage) => Promise<void>; // the participation gate (group.ts)
+  group?: GroupDeps; // what a group's answer decision and turn are made of (group.ts); the defaults are the real ones, a test supplies its own
   compact?: (conv: Conversation, mode: "urgent") => Promise<void>; // after an answer is out, only if the conversation grew far past the limit; the next message waits for it. Every conversation (quiet-time compaction is the heartbeat's, wake.ts)
   afterTurn?: (conv: Conversation) => void; // after any turn, success or not (the owner: warm up the process for the next message)
   now?: () => number;

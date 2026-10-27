@@ -9,7 +9,14 @@ import { dataPath } from "../src/core/state.ts";
 import { isPaused } from "../src/core/pause.ts";
 import { systemZone } from "../src/core/timezone.ts";
 import { heldWaiting, resetHeld, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
-import { groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { friendConvId, groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { addTenant, ensureOwner } from "../src/tenants/tenants.ts";
+
+// A friend is a registered person: what her chat may do comes from her capabilities (policy/capabilities.ts), not from a label on the conversation.
+ensureOwner({ number: "+15555550114" });
+const friend = addTenant({ aci: "11111111-2222-4333-8444-666666666666", name: "Xia" })!;
+const friendConv = { kind: "tenant", key: `tenant:${friend.id}`, convId: friendConvId(friend.id), tenantId: friend.id } as const;
+
 
 const s = settings as unknown as Record<string, unknown>;
 s.quietStartHour = 22;
@@ -18,7 +25,6 @@ s.maxUnpromptedPerDay = 6;
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
 const ownerConv = { kind: "owner", key: "owner", convId: OWNER_CONV } as const;
-const friendConv = { kind: "tenant", key: "tenant:x", convId: "friend-x" } as const;
 const groupConv = { kind: "group", key: "g", convId: groupConvId("g") } as const;
 const clean = () => {
   clearQuiet(ownerConv);
@@ -59,18 +65,18 @@ test("quietOn: no file is not quiet, '' is until /unquiet, a time is until then,
   assert.equal(quietOn("garbage", NOW), false);
 });
 
-test("/quiet and /unquiet: the owner's chat and a friend's own chat, never a group; /quiet leaves /pause alone", () => {
+test("/quiet and /unquiet: the owner's chat, a friend's own chat and a group (each its own); /quiet leaves /pause alone", () => {
   clean();
   const set: string[] = [];
   const deps = { now: () => NOW, setQuiet: (c: { key: string }, u: string) => void set.push(`${c.key}:${u}`), clearQuiet: (c: { key: string }) => void set.push(`${c.key}:cleared`) };
   assert.match(commandReply(ownerConv, "/quiet 2h", deps)!, /^Quiet until 16:30\./);
   assert.match(commandReply(friendConv, "/quiet", deps)!, /until you say \/unquiet/);
   assert.match(commandReply(friendConv, "/unquiet", deps)!, /^Back to normal/);
-  assert.equal(commandReply(groupConv, "/quiet 2h", deps), undefined);
-  assert.equal(commandReply(groupConv, "/unquiet", deps), undefined);
+  assert.match(commandReply(groupConv, "/quiet 2h", deps)!, /^Quiet until 16:30\./);
+  assert.match(commandReply(groupConv, "/unquiet", deps)!, /^Back to normal/);
   assert.match(commandReply(ownerConv, "/quiet banana", deps)!, /\/quiet 2h.*\/unquiet/);
   assert.match(commandReply(friendConv, "/quiet banana", deps)!, /\/unquiet/);
-  assert.deepEqual(set, [`owner:${new Date(NOW.getTime() + 7_200_000).toISOString()}`, "tenant:x:", "tenant:x:cleared"]);
+  assert.deepEqual(set, [`owner:${new Date(NOW.getTime() + 7_200_000).toISOString()}`, `tenant:${friend.id}:`, `tenant:${friend.id}:cleared`, `g:${new Date(NOW.getTime() + 7_200_000).toISOString()}`, "g:cleared"]);
   assert.equal(commandReply(friendConv, "/pause 2h", deps), undefined, "pause stays the owner's");
   assert.equal(isPaused(NOW), false);
 });

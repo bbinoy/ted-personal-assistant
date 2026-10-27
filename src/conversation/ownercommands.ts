@@ -17,12 +17,13 @@ import { disconnected, NAMES, readConnectors } from "../modules/connectors.ts";
 import { stopRuns } from "../run/ceiling.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { allows } from "../policy/capabilities.ts";
+import type { Capability } from "../tenants/tenants.ts";
 import { tasksText } from "../tasks/render.ts";
 
 // The owner's hands on the machine, handled in code before any model sees the message (like /card, conversation.ts): "/stop" (or "stop!") aborts the conversation's running turn,
 // "/pause 2h" / "/pause until 18:00" / "/pause" / "/resume" write and remove the pause switch (core/pause.ts), "/status" answers in a phone-sized summary, "/today" what the assistant did today and why (the journal), "/quiet 2h" / "/quiet until 18:00" /
 // "/quiet" / "/unquiet" hold the conversation's unprompted posts for the next look while chat and the heartbeat's work go on (quiet.ts). The message must be EXACTLY the command, so a
-// sentence that merely contains the word is a message like any other. "/tasks" the open tasks grouped by when they are due (tasks/render.ts). /stop, /quiet and /tasks work in the owner's chat and a friend's own chat; pause, status and today are the owner's only.
+// sentence that merely contains the word is a message like any other. "/tasks" the open tasks grouped by when they are due (tasks/render.ts). Each needs a capability of the conversation, not a kind (NEEDS below): /stop "chat", /tasks "tasks", /quiet "wake" (a group has these three too); pause, resume, status and today "admin" (the owner's only).
 
 export type Command =
   | { kind: "stop" }
@@ -174,27 +175,25 @@ const real: CommandDeps = {
 };
 
 // The reply to a command in this conversation, or undefined when the message is no command for it (so it goes on to the model as always).
-// /quiet and /unquiet: the owner's chat and a friend's own chat (her own conversation only); a group has no commands.
-function quietReply(conv: QuietConv, cmd: Command, d: CommandDeps): string | undefined {
-  if (conv.kind === "group") return undefined;
-  if (cmd.kind === "quiet") return d.setQuiet(conv, cmd.until), cmd.text;
-  if (cmd.kind === "unquiet") return d.clearQuiet(conv), "Back to normal. What I held, I will look at again and tell you what still matters.";
-  return QUIET_USAGE;
-}
+// What each command needs: a capability of the conversation (policy/capabilities.ts), never its kind. The owner has them all; a friend all but "admin"; a group (nothing of the owner's) has "chat", "wake" and "tasks".
+const NEEDS: Record<Command["kind"], Capability> = { stop: "chat", tasks: "tasks", quiet: "wake", unquiet: "wake", "quiet-usage": "wake", resume: "admin", status: "admin", today: "admin", pause: "admin", "pause-usage": "admin" };
 
 export function commandReply(conv: QuietConv, text: string, deps: Partial<CommandDeps> = {}): string | undefined {
   const d = { ...real, ...deps };
   const now = d.now();
   const cmd = parseCommand(text, now, conv.kind === "tenant" ? zoneOf(conv) : undefined);
-  if (!cmd) return undefined;
-  if (cmd.kind === "stop") {
-    if (conv.kind === "group") return undefined; // (a group has its own door; a command there is just a message)
-    return d.stop(conv.convId) + d.dropQueued() > 0 ? "Stopped." : "Nothing is running right now.";
-  }
-  if (cmd.kind === "tasks") return conv.kind === "group" || !allows(conv, "tasks") ? undefined : d.tasks(conv, now); // the owner's list in her chat, a friend's in hers; a group has no commands
-  if (cmd.kind === "quiet" || cmd.kind === "unquiet" || cmd.kind === "quiet-usage") return quietReply(conv, cmd, d);
-  if (conv.kind !== "owner") return undefined; // pause and status are the owner's
+  if (!cmd || !allows(conv, NEEDS[cmd.kind])) return undefined;
   switch (cmd.kind) {
+    case "stop":
+      return d.stop(conv.convId) + d.dropQueued() > 0 ? "Stopped." : "Nothing is running right now.";
+    case "tasks":
+      return d.tasks(conv, now);
+    case "quiet":
+      return d.setQuiet(conv, cmd.until), cmd.text;
+    case "unquiet":
+      return d.clearQuiet(conv), "Back to normal. What I held, I will look at again and tell you what still matters.";
+    case "quiet-usage":
+      return QUIET_USAGE;
     case "resume":
       d.clearPause();
       return "Resumed.";

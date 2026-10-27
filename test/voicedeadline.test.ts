@@ -61,7 +61,6 @@ function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) =
     approvals: { answer: async () => ({ outcome: "none" as const }), answerReaction: () => "ignored" },
     vouch: async () => true,
     isOwner: () => true,
-    admitGroup: async () => {},
     wait: async () => {},
   });
   return { pipeline, sent, voices, clock, makeFile };

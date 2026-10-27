@@ -7,11 +7,17 @@ import { commandReply, lastOwnerLook, parseCommand, statusText } from "../src/co
 import { isPaused, pauseText } from "../src/core/pause.ts";
 import { dataPath, readText, writeText } from "../src/core/state.ts";
 import { RunStopped, stopRuns, withCeiling } from "../src/run/ceiling.ts";
-import { groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { friendConvId, groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { addTenant, ensureOwner } from "../src/tenants/tenants.ts";
+
+// A friend is a registered person: what her chat may do comes from her capabilities (policy/capabilities.ts), not from a label on the conversation.
+ensureOwner({ number: "+15555550114" });
+const friend = addTenant({ aci: "11111111-2222-4333-8444-666666666666", name: "Xia" })!;
+const friendConv = { kind: "tenant", key: `tenant:${friend.id}`, convId: friendConvId(friend.id), tenantId: friend.id } as const;
+
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
 const ownerConv = { kind: "owner", key: "owner", convId: OWNER_CONV } as const;
-const friendConv = { kind: "tenant", key: "tenant:x", convId: "friend-x" } as const;
 const clear = () => rmSync(dataPath(instancePaths().paused), { force: true });
 
 test("parseCommand: exactly the commands, nothing inside a sentence", () => {
@@ -68,9 +74,10 @@ test("pause, resume and status are the owner's; a friend can only stop her own r
   assert.equal(readText(instancePaths().paused), undefined);
   let stopped = "";
   assert.equal(commandReply(friendConv, "stop!", { stop: (s) => ((stopped = s), 1) }), "Stopped.");
-  assert.equal(stopped, "friend-x");
+  assert.equal(stopped, friendConvId(friend.id));
   assert.equal(commandReply(ownerConv, "/stop", { stop: () => 0 }), "Nothing is running right now.");
-  assert.equal(commandReply({ kind: "group", key: "g", convId: groupConvId("g") }, "/stop"), undefined, "a group has no commands");
+  assert.equal(commandReply({ kind: "group", key: "g", convId: groupConvId("g") }, "/stop", { stop: () => 0 }), "Nothing is running right now.", "a group has the capability to stop its own run");
+  assert.equal(commandReply({ kind: "group", key: "g", convId: groupConvId("g") }, "/pause 2h"), undefined, "but not the owner's admin commands");
   assert.match(commandReply(ownerConv, "/pause banana")!, /\/pause 2h/);
 });
 

@@ -7,7 +7,9 @@ import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/modules/skills.ts";
 import { prepare, runConversation } from "../src/run/agent.ts";
 import { group, owner } from "../src/conversation/conversation.ts";
-import { createGroupBrain } from "../src/conversation/group.ts";
+import { createPipeline } from "../src/conversation/conversation.ts";
+import { createOutbound } from "../src/conversation/outbound.ts";
+import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
 import { loadSettings, settings } from "../src/core/settings.ts";
 import { writeSession } from "../src/run/sessionstore.ts";
 
@@ -195,32 +197,39 @@ test("group warm: asked when a message arrives and after a turn, not while the g
   const calls: string[] = [];
   const sent: string[] = [];
   let hold: Promise<void> = Promise.resolve();
-  const brain = createGroupBrain({
-    pipeline: {
-      record: () => {},
-      react: () => {},
-      wait: async () => {},
-      canSpeak: () => false,
-      enqueue: (_c: any, j: any) => j(),
-      burstQueued: () => false,
-      holdTyping: () => () => {},
-      burst: async (_c: any, m: any, settled: any) => settled({ stale: () => false, timing: { set() {}, mark() {} }, run: (job: any) => job([m]) }),
-      runTurn: async (_c: any, t: any) => (calls.push("turn"), await hold, sent.push((await t.run({ firstOutput() {} })).text), { spoke: true }),
-    } as any,
-    recent: () => [],
-    run: async () => "ok",
-    gate: async () => ({ act: true, task: "task" as const, delaySeconds: 0, nextCheckMinutes: 30 }),
-    warm: (_c, after) => void calls.push(after ? "warm after" : "warm arrival"),
+  const messenger = { name: "fake", summary: "fake", self: "+10000000001", capabilities: FULL_CAPABILITIES, react: async () => {}, typing: async () => {}, markRead: async () => {}, send: async (_t: unknown, m: { text: string }) => (sent.push(m.text), 1) };
+  const record = (..._a: unknown[]) => {};
+  const pipeline = createPipeline({
+    messenger,
+    out: createOutbound(messenger, (k, t, text, g) => record(g, k, t, text)),
+    record,
+    run: async () => assert.fail("not the owner's chat"),
+    picture: async () => assert.fail("no picture"),
+    document: async () => assert.fail("no document"),
+    transcript: async () => assert.fail("no voice"),
+    speech: { ready: () => false, synth: async () => assert.fail("no speech"), foreign: async () => undefined },
+    approvals: { answer: async () => ({ outcome: "none" as const }), answerReaction: () => "ignored" },
+    vouch: async () => true,
+    isOwner: () => false,
+    wait: async () => {},
+    group: {
+      recent: () => [],
+      context: () => ({ lines: [] }),
+      run: async () => (calls.push("turn"), await hold, "ok"),
+      gate: async () => ({ act: true, delaySeconds: 0, nextCheckMinutes: 30 }),
+      warm: (_c, after) => void calls.push(after ? "warm after" : "warm arrival"),
+    },
   });
+  const brain = (m: { groupId: string; text: string; timestamp: number; addressedToMe: boolean }) => pipeline.handleIncoming(group(m.groupId), { type: "message", m: { from: "+1", text: m.text, timestamp: m.timestamp, direct: false, group: { id: m.groupId }, addressedToMe: m.addressedToMe } });
   const g = gid();
-  await brain({ groupId: g, text: "@Ted hi", timestamp: 1, isOwner: false, addressedToMe: true, author: "+1" });
+  await brain({ groupId: g, text: "@Ted hi", timestamp: 1, addressedToMe: true });
   assert.deepEqual(calls, ["warm arrival", "turn", "warm after"]);
   calls.length = 0;
   let release!: () => void;
   hold = new Promise<void>((r) => (release = r));
-  const first = brain({ groupId: g, text: "@Ted again", timestamp: 3, isOwner: false, addressedToMe: true, author: "+1" });
+  const first = brain({ groupId: g, text: "@Ted again", timestamp: 3, addressedToMe: true });
   await tick();
-  const second = brain({ groupId: g, text: "@Ted and more", timestamp: 4, isOwner: false, addressedToMe: true, author: "+1" });
+  const second = brain({ groupId: g, text: "@Ted and more", timestamp: 4, addressedToMe: true });
   await tick();
   release();
   await Promise.all([first, second]);
@@ -229,7 +238,7 @@ test("group warm: asked when a message arrives and after a turn, not while the g
   (settings as { groupParticipation: string }).groupParticipation = "tagged";
   try {
     calls.length = 0;
-    await brain({ groupId: g, text: "chatter", timestamp: 2, isOwner: false, addressedToMe: false, author: "+1" });
+    await brain({ groupId: g, text: "chatter", timestamp: 2, addressedToMe: false });
     assert.deepEqual(calls, []); // nothing will be answered: no process for it
   } finally {
     (settings as { groupParticipation: string }).groupParticipation = was;

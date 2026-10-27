@@ -42,20 +42,18 @@ test("timing: one line per answered turn, owner and group, with every stage and 
       approvals: { answer: async () => ({ outcome: "none" as const }), answerReaction: () => "ignored" },
       vouch: async () => true,
       isOwner: () => false,
-      admitGroup: async (conv, m) => {
-        await pipeline.burst(conv, m, (b) => b.run(async () => void (await pipeline.runTurn(conv, { run: async () => ({ text: "hi" }), timing: b.timing, announce: false }))), m.arrivedAt);
-      },
+      group: { recent: () => [], context: () => ({ lines: [] }), warm: () => {}, run: async () => "hi" },
       now: () => clock,
       wait: async (ms) => void (clock += ms),
       settleMs: () => 2000,
       settleMaxMs: () => 10_000,
     });
     await pipeline.handleIncoming(owner(), { type: "message", m: { from: "+1", text: "secret words", timestamp: 1, direct: true } });
-    await pipeline.handleIncoming(group("g-timing"), { type: "message", m: { from: "+2", text: "other secret", timestamp: 2, direct: false, group: { id: "g-timing" } } });
+    await pipeline.handleIncoming(group("g-timing"), { type: "message", m: { from: "+2", text: "other secret", timestamp: 2, direct: false, group: { id: "g-timing" }, addressedToMe: true } });
     const lines = logged.filter((l) => l.startsWith("timing "));
     assert.equal(lines.length, 2);
     assert.match(lines[0]!, /^timing owner settle=2000 typing=2000 queue=0 first=2700 run=1000 total=3000$/);
-    assert.match(lines[1]!, /^timing group settle=2000 queue=0 typing=2000 run=0 total=2000$/); // this stub never holds typing early
+    assert.match(lines[1]!, /^timing group settle=2000 typing=2000 queue=0 run=0 total=2000$/); // an addressed group shows typing at once, like the owner's chat
     assert.doesNotMatch(lines.join("\n"), /secret/);
   } finally {
     console.log = realLog;

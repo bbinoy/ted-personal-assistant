@@ -25,7 +25,6 @@ function rig(caps: ConstructorParameters<typeof FakeMessenger>[0], run: () => Pr
     approvals: { answer: async () => ({ outcome: "none" as const }), answerReaction: () => "ignored" },
     vouch: async () => true,
     isOwner: () => true,
-    admitGroup: async () => {},
     wait: async () => {},
   });
   const say = (timestamp = 7) => pipeline.handleIncoming(owner(), { type: "message", m: { from: OWNER, text: "hello", timestamp, direct: true } });

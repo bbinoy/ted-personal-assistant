@@ -65,9 +65,9 @@ function rig(over: { classify?: (said: string) => Promise<{ kind: "less_of_this"
     speech: { ready: () => false, synth: async () => assert.fail("no speech"), foreign: async () => undefined },
     approvals: { answer: async () => ({ outcome: "none" }), answerReaction: () => "ignored" },
     feedback: createFeedback({ model, payer: () => LOGIN }),
+    group: { gate: async () => ({ act: false, delaySeconds: 0, nextCheckMinutes: 30 }), recent: () => [], context: () => ({ lines: [] }), warm: () => {}, run: async () => assert.fail("no group run") },
     vouch: async () => true,
     isOwner: (w) => w.from === OWNER,
-    admitGroup: async () => {},
     wait: async () => {},
   });
   return { pipeline, sent, runs, proposes, classifies };
@@ -246,9 +246,6 @@ test("feedback: groups are off: a reaction there never reaches it", async () => 
   await r.pipeline.handleIncoming(g, react("👎", lastTs(), { direct: false, group: { id: "R3JvdXBGNEZlZWRiYWNr" } }));
   assert.equal(r.proposes.length, 0);
   assert.equal(r.sent.length, 0);
-  const f = createFeedback({ model: { classify: async () => assert.fail("no model"), propose: async () => assert.fail("no model") }, payer: () => LOGIN });
-  assert.equal(await f.reaction(g, { emoji: "👎", targetTimestamp: lastTs() }), undefined);
-  assert.equal(await f.message(g, { text: "stop", quote: { text: "x", author: "a", timestamp: lastTs() } }), undefined);
 });
 
 test("feedback: FEEDBACK_OFFERS_PER_DAY=0 turns it off", async () => {

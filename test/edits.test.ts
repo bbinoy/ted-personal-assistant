@@ -4,7 +4,6 @@ import { tick } from "./util.ts";
 import { rmSync } from "node:fs";
 import { createPipeline, group, owner, type Incoming } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
-import { createGroupBrain } from "../src/conversation/group.ts";
 import * as approvals from "./approvalrig.ts";
 import { FILE, findMessage, foldEdits, ledgerEntries, recordMessage, revisionsOf, withoutDeleted, type Extra, type Kind, type Sent } from "../src/core/messages.ts";
 import { editNote, isAuthor, normalised, sameText } from "../src/conversation/edit.ts";
@@ -63,14 +62,12 @@ function rig(over: { run?: (prompt: string) => Promise<string>; gate?: () => Pro
     approvals: { answer: async (text: string) => (answers.push(text), over.answer ? over.answer(text) : { outcome: "none" }), answerReaction: () => "ignored" },
     vouch: async () => true,
     isOwner: (w) => w.from === OWNER,
-    admitGroup: async (_c, m) => brain(m),
     wait: pause.wait,
-  });
-  const brain = createGroupBrain({
-    pipeline,
-    recent: () => [],
-    run: async (build) => (prompts.push(build().prompt), await (over.run ?? (async () => "Howdy!"))(build().prompt)),
-    gate: async () => (gates.push(1), over.gate ? over.gate() : { act: true, task: "task" as const, delaySeconds: 0, nextCheckMinutes: 30 }),
+    group: {
+      recent: () => [],
+      run: async (build) => (prompts.push(build().prompt), await (over.run ?? (async () => "Howdy!"))(build().prompt)),
+      gate: async () => (gates.push(1), over.gate ? over.gate() : { act: true, delaySeconds: 0, nextCheckMinutes: 30 }),
+    },
   });
   const msg = (over: Partial<IncomingMessage> = {}): Incoming => ({ type: "message", m: { from: OWNER, text: "hi", timestamp: 100, direct: true, ...over } });
   const del = (over: Partial<IncomingDeletion> = {}): Incoming => ({ type: "deletion", d: { from: OWNER, targetTimestamp: 100, direct: true, ...over } });

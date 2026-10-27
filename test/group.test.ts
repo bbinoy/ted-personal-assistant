@@ -5,7 +5,7 @@ import { defer, tick } from "./util.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
 import { createPipeline, group, type Pipeline } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
-import { groupName, createGroupBrain, groupPrompt, ownerInGroup, speaker } from "../src/conversation/group.ts";
+import { groupName, groupPrompt, ownerInGroup, speaker } from "../src/conversation/group.ts";
 import { readLongText } from "@ted-assistant/signal";
 import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/modules/skills.ts";
@@ -101,7 +101,7 @@ test("groups: a quoted message and a voice transcript reach the prompt as data; 
 
 const mk = (over: object = {}) => ({ groupId: GID, text: "@Ted hi", timestamp: 1, isOwner: false, addressedToMe: true, author: "+15555550105", ...over }) as { groupId: string; text: string; timestamp: number; isOwner: boolean; addressedToMe: boolean; author: string; reaction?: { emoji: string; on: string } };
 type Sent = { text: string; quoted: boolean };
-// The brain runs on the real shared pipeline, over a fake Signal client.
+// A group runs on the real shared pipeline (its answer decision and turn are the group column of the intake table), over a fake Signal client.
 const rig = (over: object = {}) => {
   const sent: Sent[] = [];
   const reacted: string[] = [];
@@ -133,23 +133,22 @@ const rig = (over: object = {}) => {
     approvals: { answer: async () => ({ outcome: "none" as const }), answerReaction: () => "ignored" },
     vouch: (over as any).vouch ?? (async () => true),
     isOwner: (w) => w.from === OWNER,
-    admitGroup: async (_c, m) => brain(m),
+    group: {
+      recent: () => [] as string[],
+      run: async () => "Howdy!",
+      gate: async () => ({ act: true, delaySeconds: 0, nextCheckMinutes: 30 }),
+      ...over,
+    },
+    now: (over as any).now,
     wait: (over as any).wait ?? (async (ms: number) => void waits.push(ms)),
   });
-  const brain = createGroupBrain({
-    pipeline,
-    recent: () => [] as string[],
-    run: async () => "Howdy!",
-    gate: async () => ({ act: true, delaySeconds: 0, nextCheckMinutes: 30 }),
-    ...over,
-  });
-  // Feed it as Signal would (conversation.ts checks the group, then the brain decides).
+  // Feed it as Signal would (the intake checks the group, then the group's answer decision follows).
   const on = (m: ReturnType<typeof mk>) =>
     m.reaction
-      ? brain(m)
+      ? pipeline.handleIncoming(group(m.groupId), { type: "reaction", r: { from: m.author, emoji: m.reaction.emoji, targetTimestamp: 999, isRemove: false, direct: false, group: { id: m.groupId }, fromName: (m as any).fromName } })
       : pipeline.handleIncoming(group(m.groupId), { type: "message", m: { from: m.author, text: m.text, timestamp: m.timestamp, direct: false, group: { id: m.groupId }, addressedToMe: m.addressedToMe, fromName: (m as any).fromName } });
   const pipelineOn = (g: string, m: any) => pipeline.handleIncoming(group(g), { type: "message", m: { ...m, group: { id: g } } });
-  return { on, brain, sent, reacted, reactTargets, recorded, waits, ledger, pipelineOn };
+  return { on, sent, reacted, reactTargets, recorded, waits, ledger, pipelineOn };
 };
 let ids = 0;
 const gid = () => `grp-${++ids}-0123456789abcdef`; // fresh state (error notices) per test
@@ -251,9 +250,12 @@ test("groups: a sticky address answered from a later message reacts to the ADDRE
   const settle2 = new Promise<void>((x) => (release2 = x));
   const gated: string[] = [];
   const prompts: string[] = [];
-  const old = rig({ wait: () => settle2, gate: async () => (gated.push("gate"), { act: true, delaySeconds: 0, nextCheckMinutes: 30 }), run: async (build: (s?: string) => { prompt: string }) => (prompts.push(build().prompt), "ok") });
-  const t0 = new Date();
-  const both = [old.brain(mk({ groupId: g2, timestamp: 1, text: "@Ted ok?" }), t0), old.brain(mk({ groupId: g2, timestamp: 2, addressedToMe: false, text: "hm" }), new Date(t0.getTime() + 31 * 60_000))];
+  let clock = Date.now();
+  const old = rig({ now: () => clock, wait: () => settle2, gate: async () => (gated.push("gate"), { act: true, delaySeconds: 0, nextCheckMinutes: 30 }), run: async (build: (s?: string) => { prompt: string }) => (prompts.push(build().prompt), "ok") });
+  const both = [old.on(mk({ groupId: g2, timestamp: 1, text: "@Ted ok?" }))];
+  await new Promise((res) => setTimeout(res, 5)); // (it has arrived)
+  clock += 31 * 60_000;
+  both.push(old.on(mk({ groupId: g2, timestamp: 2, addressedToMe: false, text: "hm" })));
   await new Promise((res) => setTimeout(res, 5));
   release2();
   await Promise.all(both);
@@ -311,7 +313,9 @@ test("groups: when the gate is refused (usage limit), the group hears it, once i
 
 test("groups: reactions are understood and can be made", async () => {
   const r = rig({ gate: async () => ({ act: false, delaySeconds: 0, nextCheckMinutes: 30 }) });
-  await r.on(mk({ groupId: gid(), addressedToMe: false, fromName: "Eve", text: "", reaction: { emoji: "👍", on: "Ted: Net Gains FC" } }));
+  const rg = gid();
+  recordMessage("chat", 999, "Ted: Net Gains FC", new Date(), group(rg).logFile);
+  await r.on(mk({ groupId: rg, addressedToMe: false, fromName: "Eve", text: "", reaction: { emoji: "👍", on: "Ted: Net Gains FC" } }));
   assert.equal(r.recorded[0], "Eve (a member) reacted 👍 to: Ted: Net Gains FC");
   const m = rig({ run: async () => "[[react: 😂]]" });
   await m.on(mk({ groupId: gid() }));
