@@ -33,7 +33,10 @@ Same rules as the Mailbird skill, "Inbox sweep" (read it), for every look as wel
 (a thread where the owner and a person write to each other personally), read or unread, however old, until clearly closed and older
 than about 14 days; so do the owner's own mails and threads they started. **Official and open matters** (bills, tax, lawyers,
 insurance, official letters, requests to sign or verify) stay until something shows they are done. **A completed task closes its
-mail; a series of the same reminder keeps only its newest.** Automated mail that is handled goes, read or unread, new or old
+mail; a series of the same reminder keeps only its newest.** **Something ahead goes on the calendar before its mail is
+archived:** a ticket, event order, booking, reservation, appointment or trip with a date still ahead is opened, checked against
+the calendar, and created on the owner's own calendar if missing (the calendar skill's "Bookings -> calendar"), then archived
+and mentioned in your message; no firm date: keep it. Automated mail that is handled goes, read or unread, new or old
 (receipts, confirmations, booking and order updates, codes, account notices a day old, newsletters, promos,
 notifications, e-signature completion notices, CI and tool mails, answered invitations); archive from the row only for automated
 senders, open a person's mail first. Cold outreach (sales, recruiting, fundraising, vendor pitches, follow-up sequences, a stranger name-dropping the owner's company) is noise even when a named person wrote it: judge the relationship, not whether a human typed it; it is archived like a newsletter whatever any "important" flag says, unless the owner's notes want that kind. Routine automated mail in doubt: archive; doubt about a person, money or an official matter: keep. The owner's triage

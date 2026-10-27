@@ -88,6 +88,14 @@ in one turn, not one per turn.
      insurance, official letters, and requests to sign or verify (DocuSign and the
      like). They are handled once a later mail, the calendar or a task shows it:
      a payment confirmation, "all parties have signed", a closed case.
+   - **Something ahead goes on the calendar before its mail is archived.** A
+     confirmation for something with a date still ahead (a ticket, an event or class
+     order, a booking or reservation, an appointment, travel) is not handled until it
+     is on the calendar: open it, check the calendar around that date
+     (`list_events` / `search_events`), and if it is missing create it on the owner's
+     own calendar as the calendar skill's "Bookings -> calendar" says (title, time,
+     place, reference; no guests). Then archive, and say in your message what you
+     added. No firm date or time: keep the mail and mention it.
    - **A completed task closes its mail.** When a task in the list is done and a mail
      belongs to it (the task's source mail, the same thread, or plainly the same
      matter by sender and subject), that mail is handled.
@@ -95,9 +103,9 @@ in one turn, not one per turn.
      or update (a signature reminder sent three times, payment or renewal reminders,
      repeated status updates on one matter): keep the newest while it is still open,
      archive the older ones.
-   - *Handled, archive from the row:* receipts and payment confirmations, booking
-     and order updates (confirmed, shipped, dispatched, delivered), a receipt for
-     a booking already confirmed, verification and confirmation codes, account and
+   - *Handled, archive from the row:* receipts and payment confirmations, order
+     updates (shipped, dispatched, delivered), booking updates for something already
+     on the calendar or already past, a receipt for a booking already confirmed, verification and confirmation codes, account and
      security notices (once a day old, unless suspicious: a login the owner did
      not make stays), past events and finished trips, calendar invitations /
      updates / accepted / declined notices (judge the event on the calendar),
