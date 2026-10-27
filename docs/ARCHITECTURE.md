@@ -641,7 +641,6 @@ src/memory/dreamapply.ts  snapshots, applying a plan, undo
 src/memory/dreamplan.ts  which dream proposals may apply (pure)
 src/memory/journalread.ts  reads journal lines; `/today`; archive list
 src/memory/learned.ts  quiet note changes and the lists that tell them
-src/memory/memorynotice.ts  the one notice about a turn's note changes
 src/memory/notes.ts  notes: reading, path guard, forget, the code-made `MEMORY.md`
 src/memory/search.ts  ranked search over log and notes
 src/memory/searchindex.ts  the per-conversation FTS5 index
@@ -723,7 +722,7 @@ src/core/sanitize.ts  text sanitiser and `LIMITS`
 src/core/settings.ts  every tunable, validated at start
 src/core/sleep.ts  the "Mac slept" signal
 src/core/state.ts  atomic file access (writeFileAtomic)
-src/core/timezone.ts  a conversation's clock and quiet hours
+src/core/timezone.ts  a conversation's clock, quiet hours and the one set of time formatters
 src/core/timing.ts  per-turn timing line
 src/core/toolclean.ts  cleans tool results
 src/core/warmslot.ts  one warm model process slot

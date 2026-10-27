@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { delegationHook, expertSetup } from "../src/run/delegation.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
 import { chatSystem } from "../src/run/persona.ts";
-import { announceMemoryChanges, noteWritten } from "../src/memory/memorynotice.ts";
+import { noteSavedHint } from "../src/memory/notes.ts";
 import { categoryOf, indexOf, NOTES_DIR, readNotes } from "../src/memory/notes.ts";
 import { journalable } from "../src/approvals/journalrender.ts";
 import { settings } from "../src/core/settings.ts";
@@ -58,10 +58,7 @@ test("the status notes are ordinary notes the skills write with Write: expiring,
   assert.doesNotMatch(indexOf(readNotes(now, dir)), /status-/, "not in MEMORY.md");
   assert.ok(preset().notes.categories.includes("status") && !preset().notes.dream.includes("status"));
   assert.ok(!dreamScope({ kind: "owner" }).categories.includes("status"));
-  const shown: string[] = [];
-  noteWritten("Write", { file_path: join(dir, "status-brief.md"), content: "x" });
-  announceMemoryChanges(async (t) => void shown.push(t), "");
-  assert.deepEqual(shown, [], "a status note is not the owner's memory: no notice");
+  assert.equal(noteSavedHint("Write", { file_path: join(dir, "status-brief.md"), content: "x" }, dir), undefined, "a status note is not the owner's memory: no hint to mention it");
   assert.equal(journalable("Write", { file_path: join(dir, "status-brief.md") }), false, "plumbing, not an action");
   assert.equal(journalable("Write", { file_path: join(dir, "people-anna.md") }), true, "any other note write is");
   // the tool is gone; the owner's look and a chat turn write the note with Write

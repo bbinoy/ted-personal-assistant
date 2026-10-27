@@ -1,5 +1,5 @@
 import { takeCapNotice } from "./capnotice.ts";
-import { localDay } from "./pause.ts";
+import { dayIn } from "./timezone.ts";
 import { settings } from "./settings.ts";
 import { groupConvId, isConvId, OWNER_CONV, type ConvId } from "./convpaths.ts";
 import { instanceDb } from "./instancedb.ts";
@@ -52,7 +52,7 @@ export function recordSpend(r: SpendRow): void {
   const conv = r.conv ?? OWNER_CONV;
   const now = r.now ?? new Date();
   try {
-    instanceDb().run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, ?, ?)", now.getTime(), localDay(now), conv, r.payer ?? payerOf(conv), r.kind ?? "run", r.usd);
+    instanceDb().run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, ?, ?)", now.getTime(), dayIn(now), conv, r.payer ?? payerOf(conv), r.kind ?? "run", r.usd);
   } catch (e) {
     logFailure(`recording $${r.usd.toFixed(4)} for ${conv}`, e);
   }
@@ -64,7 +64,7 @@ export function recordCost(usd: number, ledger?: ConvId, kind?: string): void {
 }
 
 export function spentToday(ledger?: ConvId, now: Date = new Date()): number {
-  const day = localDay(now);
+  const day = dayIn(now);
   return closed(() => {
     const db = instanceDb();
     if (ledger === undefined || ledger === OWNER_CONV) return cents(db.num("SELECT SUM(usd) FROM spend WHERE payer = 'login' AND day = ?", day));
@@ -77,7 +77,7 @@ export function spentToday(ledger?: ConvId, now: Date = new Date()): number {
 // together they spend one key): written by payer.ts charge(), read by payer.ts mayRun() and by group.ts before a group's run. A group is its convId, never its raw id.
 export const groupSpentToday = (groupId: string): number => spentToday(groupConvId(groupId));
 export const groupOverBudget = (groupId: string): boolean => groupSpentToday(groupId) >= settings.groupDailyBudgetUsd;
-export const keySpentToday = (now: Date = new Date()): number => closed(() => cents(instanceDb().num("SELECT SUM(usd) FROM spend WHERE payer = 'key' AND day = ?", localDay(now))), Number.POSITIVE_INFINITY);
+export const keySpentToday = (now: Date = new Date()): number => closed(() => cents(instanceDb().num("SELECT SUM(usd) FROM spend WHERE payer = 'key' AND day = ?", dayIn(now))), Number.POSITIVE_INFINITY);
 export const instanceKeyOverBudget = (): boolean => keySpentToday() >= settings.instanceKeyDailyUsd;
 
 // A tenant's day: spent so far against her own ceiling (0: no spending allowed at all).
@@ -101,7 +101,7 @@ export function forgetSpend(conv: ConvId, now: Date = new Date()): boolean {
   if (!isConvId(conv)) return false;
   const db = instanceDb();
   return db.tx(() => {
-    const had = db.num("SELECT COUNT(*) FROM spend WHERE conv = ? AND day = ?", conv, localDay(now)) > 0;
+    const had = db.num("SELECT COUNT(*) FROM spend WHERE conv = ? AND day = ?", conv, dayIn(now)) > 0;
     db.run("UPDATE spend SET conv = '' WHERE conv = ?", conv);
     return had;
   });
@@ -109,6 +109,6 @@ export function forgetSpend(conv: ConvId, now: Date = new Date()): boolean {
 
 /** Retention: the rows of days before today minus `days` (the budgets look at today only; older rows are history for `npm run report`). Returns how many went. */
 export function pruneSpend(days: number, now: Date = new Date()): number {
-  const cutoff = localDay(new Date(now.getTime() - Math.max(1, Math.floor(days)) * 86_400_000));
+  const cutoff = dayIn(new Date(now.getTime() - Math.max(1, Math.floor(days)) * 86_400_000));
   return instanceDb().run("DELETE FROM spend WHERE day < ?", cutoff).changes;
 }

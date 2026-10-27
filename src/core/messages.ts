@@ -1,5 +1,5 @@
 import { skipForCooldown } from "./cooldown.ts";
-import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { appendLine, dataPath, readText, writeText } from "./state.ts";
 import { settings } from "./settings.ts";
 import { convPaths, OWNER_CONV } from "./convpaths.ts";
@@ -35,10 +35,42 @@ const KEEP_AFTER_COMPACTION = 0.7; // compact down to this share of the limit, s
 // "journal" is the third ledger kind: one line per thing the assistant DID (an archive, a calendar change, a sent mail...) with why and how to undo it, written by the journal sink
 // (core/events.ts), read by the `journal` tool, /today and the daily brief. It carries a category (`cat`: archive, mail, calendar...). Not conversation, so everything above skips it; the
 // F10 search indexes it; compaction keeps it verbatim for JOURNAL_KEEP_DAYS and never folds it into the summary (compactIfNeeded).
-export type Kind = "chat" | "notice" | "approval" | "suggestions" | "proposals" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
+export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
 
-const LEDGER_KINDS: ReadonlySet<Kind> = new Set<Kind>(["action", "wake", "journal"]);
-const isLedger = (kind: Kind) => LEDGER_KINDS.has(kind);
+// THE table of kinds: what each one is, in one place. Every reader that sorts lines by kind asks it (kindIs below) and no module keeps a list of its own.
+//   ledger: not conversation (the gate's state, the journal); inbound: a person wrote it (owner, member); said: the assistant said it to the person; proactive: unprompted (the notices a prompt shows);
+//   answers: the reply (or the failure notice) of a turn, so lines before it are answered; asks: leaves a question open, so the next line is probably its answer;
+//   search: how the F10 index treats it: the role/author it is found under, "marker" (kept so a deleted message is left out, never a hit) or "none" (not indexed).
+// A line of a kind the table does not know (an old log: "suggestions" and "proposals" are never written any more) still parses; it is indexed as an assistant line and is nothing else.
+type Search = "owner" | "member" | "assistant" | "summary" | "marker" | "none";
+interface KindInfo { ledger?: true; inbound?: true; said?: true; proactive?: true; answers?: true; asks?: true; search: Search }
+export const KIND_INFO: Readonly<Record<Kind | "summary", KindInfo>> = {
+  owner: { inbound: true, search: "owner" },
+  member: { inbound: true, search: "member" },
+  edit: { search: "member" },
+  delete: { search: "marker" },
+  reaction: { search: "none" },
+  chat: { said: true, answers: true, search: "assistant" },
+  other: { said: true, answers: true, search: "assistant" },
+  notice: { said: true, proactive: true, search: "assistant" },
+  brief: { said: true, proactive: true, search: "assistant" },
+  draft: { said: true, proactive: true, asks: true, search: "assistant" },
+  approval: { said: true, asks: true, search: "none" },
+  action: { ledger: true, search: "none" },
+  wake: { ledger: true, search: "none" },
+  journal: { ledger: true, search: "assistant" },
+  summary: { search: "summary" },
+};
+export type KindFlag = Exclude<keyof KindInfo, "search">;
+const infoOf = (kind: string): KindInfo | undefined => (Object.hasOwn(KIND_INFO, kind) ? KIND_INFO[kind as Kind] : undefined);
+/** Does this kind have the property? An unknown kind (an old log line) has none. */
+export const kindIs = (kind: string, flag: KindFlag): boolean => !!infoOf(kind)?.[flag];
+/** How the search index treats this kind; an unknown one is found as an assistant line. */
+export const searchOf = (kind: string): Search => infoOf(kind)?.search ?? "assistant";
+/** Every kind of the table that is found in search under a role. */
+export const SEARCHED_KINDS: readonly string[] = Object.keys(KIND_INFO).filter((k) => !["marker", "none"].includes(KIND_INFO[k as Kind].search));
+
+const isLedger = (kind: Kind) => kindIs(kind, "ledger");
 
 export interface Sent {
   ts: number; // Signal timestamp of the message
@@ -121,28 +153,6 @@ function readAll(file: string = FILE): { sent: Sent[]; summary?: Summary } {
   return { sent, summary };
 }
 
-/** The newest messages of a log, read from its last `bytes` only (a cheap look at what was just appended; the whole log is not parsed). Oldest first; the first, possibly cut, line is dropped. */
-export function tailEntries(file: string = FILE, bytes = 64 * 1024): Sent[] {
-  let fd: number | undefined;
-  try {
-    fd = openSync(dataPath(file), "r");
-    const size = fstatSync(fd).size;
-    const len = Math.min(size, bytes);
-    const buf = Buffer.alloc(len);
-    readSync(fd, buf, 0, len, size - len);
-    const lines = buf.toString("utf8").split("\n");
-    if (size > len) lines.shift();
-    return lines.flatMap((l) => {
-      const e = l ? parse(l) : undefined;
-      return e && !isSummary(e) ? [e] : [];
-    });
-  } catch {
-    return [];
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
-}
-
 const compacting = new Set<string>(); // files being compacted: one run at a time per log
 
 export function recordMessage(kind: Kind, ts: number, text: string, now = new Date(), file: string = FILE, extra: Extra = {}): void {
@@ -223,7 +233,6 @@ export const messagesSince = (sinceIso?: string, file: string = FILE): Sent[] =>
 // Every line including the ledger, oldest first: for the gate (gate.ts) alone.
 export const ledgerEntries = (file: string = FILE): readonly Sent[] => readAll(file).sent; // shared with the cache: read-only
 
-const NOTICE_KINDS = new Set<Kind>(["notice", "draft", "brief", "suggestions", "proposals"]);
 const NOTICE_AGE_MS = settings.noticeAgeHours * 3600_000;
 
 // Pure: what the assistant told the owner on its own in the last day, as plain lines for a prompt,
@@ -231,7 +240,7 @@ const NOTICE_AGE_MS = settings.noticeAgeHours * 3600_000;
 // avoid saying the same thing twice.
 export function noticeLines(sent: readonly Sent[], now: Date, keep = 8): string[] {
   return sent
-    .filter((m) => NOTICE_KINDS.has(m.kind) && now.getTime() - Date.parse(m.at) < NOTICE_AGE_MS)
+    .filter((m) => kindIs(m.kind, "proactive") && now.getTime() - Date.parse(m.at) < NOTICE_AGE_MS)
     .slice(-keep)
     .map((m) => `[${new Date(m.at).toTimeString().slice(0, 5)}] ${m.text.slice(0, LIMITS.logLine).replace(/\s*\n\s*/g, " / ")}`);
 }

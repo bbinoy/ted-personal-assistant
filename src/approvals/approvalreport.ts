@@ -1,5 +1,5 @@
 import type { AuditEntry } from "../core/audit.ts";
-import { localTime } from "../core/pause.ts";
+import { localTime } from "../core/timezone.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
 // `npm run report`: each approval ask with the exact arguments next to the question that was

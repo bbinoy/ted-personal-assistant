@@ -1,4 +1,4 @@
-import { foldEdits, ledgerEntries, withoutDeleted } from "../core/messages.ts";
+import { foldEdits, kindIs, ledgerEntries, withoutDeleted } from "../core/messages.ts";
 import type { Recent } from "./approvalprompt.ts";
 import { isTenantKey, OWNER_KEY } from "../core/ownerkey.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
@@ -6,13 +6,12 @@ import { tenantById, tenantContext } from "../tenants/tenants.ts";
 // The last few lines of a private chat (the owner's, or a friend's: `logFile`), for the approval judge and the question writer: what the person said and what the
 // assistant told them, oldest first. Approval questions themselves are left out (the judge gets those separately), and so is the
 // message being judged (it is already in the log by then).
-const OWNER_KINDS = new Set(["owner"]);
-const ASSISTANT_KINDS = new Set(["chat", "notice", "draft", "brief", "suggestions", "proposals"]);
+const isAssistant = (kind: string) => kindIs(kind, "said") && kind !== "approval";
 
 export function recentChat(current?: string, keep = 5, logFile?: string): Recent[] {
   const lines = foldEdits(withoutDeleted(ledgerEntries(logFile)))
-    .filter((m) => OWNER_KINDS.has(m.kind) || ASSISTANT_KINDS.has(m.kind))
-    .map((m): Recent => ({ from: OWNER_KINDS.has(m.kind) ? "owner" : "assistant", text: m.text }));
+    .filter((m) => kindIs(m.kind, "inbound") || isAssistant(m.kind))
+    .map((m): Recent => ({ from: kindIs(m.kind, "inbound") ? "owner" : "assistant", text: m.text }));
   const last = lines[lines.length - 1];
   if (current !== undefined && last?.from === "owner" && last.text === current) lines.pop();
   return lines.slice(-keep);

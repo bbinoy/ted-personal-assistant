@@ -61,7 +61,6 @@ export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
 };
 
 export interface RunInputs {
-  notify?: (text: string) => Promise<void>; // the owner's chat: every change of her notes is announced on the phone (a group's reply says what was saved)
   style?: string; // a group: the style lines of its chat (group.ts styleLines)
   apiKey?: string; // a run on the instance key (a tenant's): TENANT_ANTHROPIC_API_KEY
   now?: Date;
@@ -145,7 +144,7 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
     tools: toolsFor(caps, kind),
     skills,
     // Notes: the SDK's auto-memory for every run (its file tools and the memory server, confined to the notes folder); MEMORY.md is code's, made fresh here from the notes (notes.ts writeIndex).
-    memory: { dir: notes.dir, zone: notes.zone, ...(conv.groupId ? { groupId: conv.groupId } : {}), ...(conv.kind === "owner" && inputs.notify ? { notify: inputs.notify } : {}) },
+    memory: { dir: notes.dir, zone: notes.zone, ...(conv.groupId ? { groupId: conv.groupId } : {}) },
     model: t.model(),
     effort: t.effort,
     outputFormat: t.answer,

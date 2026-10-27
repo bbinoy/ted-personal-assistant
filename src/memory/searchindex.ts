@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { dataPath } from "../core/state.ts";
 import { settings } from "../core/settings.ts";
+import { SEARCHED_KINDS, searchOf } from "../core/messages.ts";
 import { stems } from "./searchtext.ts";
 
 // The search index of ONE conversation (its own file, in that conversation's folder; never shared, so a group or a friend can only ever
@@ -28,10 +29,9 @@ import { stems } from "./searchtext.ts";
 const VERSION = 2;
 const SLICE_MS = 8;
 const SEGMENT = 4 << 20;
-const NOT_SPOKEN: ReadonlySet<string> = new Set(["reaction", "approval", "action", "wake"]); // reactions, approvals and the gate's ledger are no conversation: not indexed
-const isSearchable = (kind: string) => !!kind && !NOT_SPOKEN.has(kind) && kind !== "delete"; // a deletion marker is kept (not searchable) so a deleted message is left out of results
+// How a kind is indexed comes from the table of kinds (core/messages.ts): reactions, approvals and the gate's ledger are no conversation (not indexed); a deletion marker is kept but never a hit, so a deleted message is left out of results.
+const isSearchable = (kind: string) => !!kind && !["none", "marker"].includes(searchOf(kind));
 const MAX_NOTE_BYTES = 20_000;
-const KNOWN_KINDS = ["owner", "chat", "member", "edit", "summary", "notice", "brief", "draft", "suggestions", "proposals", "other", "journal"]; // (journal: what the assistant did and why, core/events.ts: found like anything said)
 
 export const yieldLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
@@ -59,8 +59,12 @@ export function speakerOf(text: string): string {
   const m = /^([^:\n]{1,40}):\s/.exec(text);
   return m ? m[1]! : "";
 }
-const roleOf = (kind: string): string => (kind === "owner" ? "owner user me" : kind === "chat" ? `assistant ${settings.assistant}` : kind === "member" || kind === "edit" ? "member" : kind === "summary" ? "summary" : `assistant ${settings.assistant} ${kind}`).toLowerCase();
-const speakerKey = (kind: string, text: string) => (kind === "member" || kind === "edit" ? speakerOf(text).toLowerCase() : ""); // a group's line starts with the speaker's name
+const ROLES = { owner: "owner user me", member: "member", summary: "summary", marker: "", none: "" } as const;
+const roleOf = (kind: string): string => {
+  const s = searchOf(kind);
+  return (s === "assistant" ? `assistant ${settings.assistant}${kind === "chat" ? "" : ` ${kind}`}` : ROLES[s]).toLowerCase();
+};
+const speakerKey = (kind: string, text: string) => (searchOf(kind) === "member" ? speakerOf(text).toLowerCase() : ""); // a group's line starts with the speaker's name
 export const authorLabels = (kind: string, by: string, text: string): string => `${roleOf(kind)} ${by.toLowerCase()} ${speakerKey(kind, text)}`;
 
 const likeEscape = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -251,7 +255,7 @@ export class SearchIndex {
     let e: { ts?: unknown; at?: unknown; kind?: unknown; text?: unknown; by?: unknown; of?: unknown };
     try { e = JSON.parse(buf.toString("utf8", from, to)); } catch { return false; }
     const kind = typeof e.kind === "string" ? e.kind : "";
-    if (typeof e.text !== "string" || !kind || NOT_SPOKEN.has(kind)) return false;
+    if (typeof e.text !== "string" || !kind || searchOf(kind) === "none") return false;
     const t = Date.parse(String(e.at));
     this.#insert({ src: "m", t: Number.isFinite(t) ? t : 0, ts: typeof e.ts === "number" ? e.ts : 0, kind, by: typeof e.by === "string" ? e.by : "", of: typeof e.of === "number" ? e.of : 0, name: "", text: e.text, off, len: to - from });
     return true;
@@ -331,7 +335,7 @@ export class SearchIndex {
     if (f.to !== undefined) { parts.push("(d.src='n' or d.t<=?)"); args.push(f.to); }
     if (f.who) {
       const w = f.who.toLowerCase().trim();
-      const roles = KNOWN_KINDS.filter((k) => roleOf(k).includes(w));
+      const roles = SEARCHED_KINDS.filter((k) => roleOf(k).includes(w));
       parts.push(`((d.wr || ' ' || d.sp) like ? escape '\\'${roles.length ? ` or d.kind in (${roles.map(() => "?").join(",")})` : ""})`);
       args.push(`%${likeEscape(w)}%`, ...roles);
     }

@@ -37,7 +37,7 @@ type Run = Parameters<typeof buildOptions>[1];
 
 // ---- the conversations, as they are built, for a message and for a look ----
 const runs = {
-  owner: (): Run => runFor(owner(), "message", { notify: async () => {} }),
+  owner: (): Run => runFor(owner(), "message", {}),
   group: (): Run => runFor(group("g-run-options"), "message", { style: STYLE }),
   tenant: (ctx: ReturnType<typeof T.tenantContext>): Run => runFor(tenant(ctx.id), "message", { apiKey: INSTANCE_KEY, now: NOW }),
   ownerLook: (): Run => runFor(owner(), "look", { now: NOW }),

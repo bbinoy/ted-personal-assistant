@@ -1,6 +1,6 @@
 import { readAudit, type AuditEntry, type Source } from "../core/audit.ts";
 import { isReadTool } from "../policy/policy.ts";
-import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
+import { foldEdits, kindIs, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
 import { auditSource } from "../core/runkind.ts";
 import { LIMITS } from "../core/sanitize.ts";
@@ -15,11 +15,8 @@ import type { Pipeline } from "./conversation.ts";
 // A private chat answers them as one turn. A group answers only the lines the log says were addressed to the assistant, or when the gate, asked again on the tail, says act; untagged chatter
 // stays as unanswered as it would have been. Never an approval answer, an edit or a deleted message (below), and never a second run of something that may have been done already.
 
-// What answers a line: a reply of a turn ("chat") or the notice a failed turn sends ("other"). Unprompted notices, briefs and drafts say nothing about a message of hers.
-const ANSWERS: ReadonlySet<string> = new Set(["chat", "other"]);
-// A question the assistant had open: the line right after one is most likely its answer ("yes"), which is not a request to run again.
-const ASKED: ReadonlySet<string> = new Set(["approval", "draft"]);
-const SPOKEN: ReadonlySet<string> = new Set(["chat", "other", "approval", "suggestions", "proposals", "draft", "notice", "brief"]); // (suggestions: said, but no open question: the next owner line is an ordinary message and is replayed)
+// What answers a line (a reply of a turn, or the notice a failed turn sends), what is a question the assistant had open (the line right after one is most likely its answer, "yes", which is
+// not a request to run again) and what the assistant said at all: the kinds' properties `answers`, `asks` and `said` (core/messages.ts). Unprompted notices and briefs say nothing about a message of hers.
 const MAX_REPLAY_LINES = 10;
 
 // Pure: the lines of someone's own (owner, member) that were never answered and are younger than `maxAgeMs`, oldest first. Edits are folded into their original and
@@ -28,17 +25,17 @@ export function unansweredSince(log: readonly Sent[], now: number, maxAgeMs: num
   if (maxAgeMs <= 0) return [];
   const lines = foldEdits(withoutDeleted(log));
   let from = 0;
-  lines.forEach((m, i) => { if (ANSWERS.has(m.kind)) from = i + 1; });
+  lines.forEach((m, i) => { if (kindIs(m.kind, "answers")) from = i + 1; });
   const out: Sent[] = [];
   let before: Sent | undefined; // the last thing the assistant said before this line
   let answerSeen = false; // the one line right after an open question has been set aside
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i]!;
-    if (SPOKEN.has(m.kind)) (before = m), (answerSeen = false);
-    if (i < from || (m.kind !== "owner" && m.kind !== "member")) continue;
+    if (kindIs(m.kind, "said")) (before = m), (answerSeen = false);
+    if (i < from || !kindIs(m.kind, "inbound")) continue;
     const age = now - Date.parse(m.at);
     if (!(age >= 0 && age <= maxAgeMs)) continue; // too old (or a clock that makes no sense)
-    if (before && ASKED.has(before.kind) && !answerSeen) { answerSeen = true; continue; } // the first line after an open question
+    if (before && kindIs(before.kind, "asks") && !answerSeen) { answerSeen = true; continue; } // the first line after an open question
     out.push(m);
   }
   return out.slice(-MAX_REPLAY_LINES);

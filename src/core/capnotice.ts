@@ -1,4 +1,4 @@
-import { localDay } from "./pause.ts";
+import { dayIn } from "./timezone.ts";
 import { holdFact } from "./ownerfact.ts";
 import { instanceDb } from "./instancedb.ts";
 
@@ -15,7 +15,7 @@ export function takeCapNotice(key: string, now = Date.now(), everyMs?: number): 
     const db = instanceDb();
     return db.tx(() => {
       const last = db.get<{ last_at: number }>("SELECT last_at FROM notices WHERE key = ?", key)?.last_at;
-      if (last !== undefined && (everyMs === undefined ? localDay(new Date(last)) === localDay(new Date(now)) : now - last < everyMs)) return false;
+      if (last !== undefined && (everyMs === undefined ? dayIn(new Date(last)) === dayIn(new Date(now)) : now - last < everyMs)) return false;
       db.run("DELETE FROM notices WHERE last_at < ?", now - 2 * DAY); // (no interval is longer than a day or two: older marks mean nothing)
       db.run("INSERT INTO notices (key, last_at) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET last_at = excluded.last_at", key, now);
       return true;

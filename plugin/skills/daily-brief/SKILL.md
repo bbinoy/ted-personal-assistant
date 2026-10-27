@@ -80,12 +80,12 @@ Each ``ted-personal-assistant:skill`` means: load it once with the `Skill` tool 
    most 4 by sender + subject, then archive them.
 2. **Tasks** - the assistant's own list, not Notion. Call `list_tasks` once for each of: overdue
    (`overdue`), due today (`due_from` and `due_to` today), waiting on (`kind` `owed_to_me`), what the owner
-   owes (`kind` `i_owe`); one message, several calls. This run is unattended, so you can only **list
-   and add**: every email or meeting deadline, promise or obligation with no matching item becomes an
-   `add_task` call, which goes straight onto the list (`source_kind` `mail` or `meeting`, `source_ref` the
-   mail id, so the same mail never adds it twice; a few a day at most); you cannot finish, change or drop an item. When mail clearly completes a task (the
-   owner sent the reply it called for, the signed document arrived) do not tick it off: put "looks done -
-   confirm?" in the brief. Past-date `owed_to_me` items with no reply get a nudge draft. What you added
+   owes (`kind` `i_owe`); one message, several calls. Every email or meeting deadline, promise or
+   obligation with no matching item becomes an `add_task` call, which goes straight onto the list
+   (`source_kind` `mail` or `meeting`, `source_ref` the mail id, so the same mail never adds it twice;
+   a few a day at most). When mail clearly completes a task (the owner sent the reply it called for,
+   the signed document arrived), tick it off with `complete_task` (or `snooze_task` if it waits); the
+   journal says so and `reopen` undoes it. Mention it in the Tasks section. Past-date `owed_to_me` items with no reply get a nudge draft. What you added
    goes in the Tasks section (step 5). Never write tasks to Notion.
 3. **Calendar** - run `ted-personal-assistant:calendar`: today and tomorrow ahead, and the time
    since the previous brief behind. Flag conflicts and overlaps, propose

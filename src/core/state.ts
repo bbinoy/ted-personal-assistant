@@ -1,3 +1,4 @@
+import { fileStamp } from "./timezone.ts";
 import { rotateIfOver } from "./rotate.ts";
 import { appendFileSync, chmodSync, closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
@@ -78,7 +79,7 @@ export function parseJson<T>(rel: string): { value: T | undefined } | { corrupt:
 
 // The bad file is kept for a human (<name>.corrupt-<time>), not overwritten by the next save of defaults.
 export function moveAside(path: string): string | undefined {
-  const to = `${path}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const to = `${path}.corrupt-${fileStamp()}`;
   try {
     renameSync(path, to);
     return to;

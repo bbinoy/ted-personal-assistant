@@ -10,6 +10,7 @@ import { trimLogInPlace } from "./logtrim.ts";
 import { redact } from "./redact.ts";
 import { dataPath, secureDataDirs } from "./state.ts";
 import { logPaths } from "./convpaths.ts";
+import { pad } from "./timezone.ts";
 
 const FILE = dataPath(logPaths().agent);
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -33,7 +34,6 @@ rotateIfNeeded();
 // launchd's raw stderr files (the agent's, and the intake page's: scripts/intake.ts imports this file first too) are never rotated by anyone else: over 5 MB at start, keep the last 1 MB.
 const trimmedStderr = [logPaths().launchdStderr, logPaths().intakeLaunchdStderr].map((f) => trimLogInPlace(dataPath(f), MAX_BYTES, 1024 * 1024)).reduce((a, b) => a + b, 0);
 
-const pad = (n: number, w = 2) => String(n).padStart(w, "0");
 function stamp(d = new Date()) {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }

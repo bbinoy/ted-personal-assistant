@@ -92,7 +92,7 @@ test("the owner gets the learned changes as the same fact a friend does, once; t
   rmSync(NOTES_DIR, { recursive: true, force: true });
   mkdirSync(NOTES_DIR, { recursive: true });
   type Srv = { instance: { _registeredTools: Record<string, unknown> } };
-  const names = Object.keys((createMemoryServer({ source: "background", notesDir: NOTES_DIR, record() {} }) as unknown as Srv).instance._registeredTools);
+  const names = Object.keys((createMemoryServer({ source: "background", notesDir: NOTES_DIR }) as unknown as Srv).instance._registeredTools);
   assert.ok(!names.includes("memory_changes_since_brief"));
   const o = { convId: OWNER_CONV, notesDir: NOTES_DIR };
   assert.equal(L.learnedFact(o.convId, o.notesDir, NOW), undefined, "nothing changed");

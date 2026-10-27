@@ -1,6 +1,6 @@
 ---
 name: follow-through
-description: Load after any action that changes mail, the calendar, the task list or a booking (a booking mail handled, an event created, a task added or ticked off, a reply drafted), and before you say you are done. Ask what else the change implies and take the routine next step. Pairs with `ted-personal-assistant:calendar`, `ted-personal-assistant:notion-tasks` (the task list), `ted-personal-assistant:mailbird`.
+description: Load after any action that changes mail, the calendar, the task list or a booking (a booking mail handled, an event created, a task added or ticked off, a reply drafted), and before you say you are done. Ask what else the change implies and take the routine next step. Pairs with `ted-personal-assistant:calendar`, `ted-personal-assistant:tasks` (the task list), `ted-personal-assistant:mailbird`.
 ---
 
 # Follow-through
@@ -27,13 +27,11 @@ Check the ones that fit; most actions touch two or three.
 
 - **Routine and reversible:** do it yourself (archive the handled mail, tick off the
   matching task, add the obvious follow-up task, a draft).
-- **Bigger, uncertain or a judgement call** (the match is fuzzy, it moves other
-  people's plans, it costs money): ask once, in one line, with your suggestion.
+- **Touches other people or money** (it moves other people's plans, it costs money) and
+  the match is uncertain: in chat, ask once, in one line, with your suggestion. A
+  background run never asks: it does what the judge allows and skips the rest silently.
 - **Rights stay exactly as they are.** Nothing here grants a permission. A step that
-  needs approval still goes through the usual flow, and a run that may not do a step
-  (an unattended run that cannot update tasks or archive) says so instead of skipping
-  it silently: write it as a suggestion in its result ("booking found: task 'book trip
-  to London' should be marked done, add it?"), so the owner or the brief picks it up.
+  needs approval still goes through the usual flow.
 - Do not invent work. If nothing follows, say nothing.
 
 ## Say what you did

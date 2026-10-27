@@ -1,6 +1,6 @@
 import { instanceDb } from "../../core/instancedb.ts";
 import type { Db } from "../../core/db.ts";
-import { localDay } from "../../core/pause.ts";
+import { dayIn } from "../../core/timezone.ts";
 
 // The payment ledger: the `payments` table of instance.db with one row per status change of a card payment, append-only. It holds NO card
 // data: the merchant, the amount, the last four digits, a hash of the cart and the status. It is what makes a payment happen once (a
@@ -83,7 +83,7 @@ export class Ledger {
     const since = new Date(now.getTime() - 3 * 86_400_000).toISOString();
     return this.db()
       .all<DbPayRow>(`${LATEST} WHERE status IN ${SPENT_SQL} AND currency = ? AND ts >= ?`, currency, since)
-      .filter((r) => localDay(new Date(r.ts)) === localDay(now))
+      .filter((r) => dayIn(new Date(r.ts)) === dayIn(now))
       .reduce((a, r) => a + r.total_minor, 0);
   }
 

@@ -9,7 +9,7 @@ import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
 import type { Conversation } from "./conversationmodel.ts";
 import { speakerOf, zoneOf } from "../tenants/tenants.ts";
 import { readNotes } from "../memory/notes.ts";
-import { localDay } from "../core/pause.ts";
+import { localTime } from "../core/timezone.ts";
 import { isOneEmoji } from "../core/reaction.ts";
 import { GATE_DEFAULTS } from "../run/persona.ts";
 import { OWNER, settings } from "../core/settings.ts";
@@ -100,17 +100,13 @@ export function notesText(conv: Conversation, now: Date): string {
   return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
 
-const stamp = (iso: string) => {
-  const d = new Date(iso);
-  return `${localDay(d).slice(5)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
 
 // Pure: one log line as the model reads it. The ledger shows up as what Ted did and planned. `who` is the person in the chat (speakerOf).
 export function tailLine(m: Sent, who: string = OWNER): string {
-  const t = `[${stamp(m.at)}]`;
+  const t = `[${localTime(m.at)}]`;
   if (m.kind === "wake") {
     const w = parseWake(m.text);
-    return w ? `${t} (you looked and planned to look again at ${stamp(w.next)})` : `${t} (you looked)`;
+    return w ? `${t} (you looked and planned to look again at ${localTime(w.next)})` : `${t} (you looked)`;
   }
   const flat = m.text.replace(/\n+/g, " / ").slice(0, LIMITS.line);
   if (m.kind === "action") return `${t} (you acted without posting: ${flat})`;

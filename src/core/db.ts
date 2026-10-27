@@ -1,3 +1,4 @@
+import { fileStamp } from "./timezone.ts";
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
@@ -63,7 +64,6 @@ export function isCorruption(e: unknown): boolean {
   return /malformed|not a database|disk image is malformed|file is encrypted/i.test(err.message ?? "");
 }
 
-const stamp = (): string => new Date().toISOString().replace(/[:.]/g, "-");
 const STATEMENTS_MAX = 300; // (a bound on the cache of prepared statements: callers with dynamic SQL cannot grow it without end)
 const open = new Set<Db>();
 let exitHooked = false;
@@ -242,7 +242,7 @@ export function migrateDb(db: Db, ms: readonly Migration[]): number {
   return applied;
 }
 
-export function moveCorruptAside(path: string, to: string = `${path}.corrupt-${stamp()}`): string {
+export function moveCorruptAside(path: string, to: string = `${path}.corrupt-${fileStamp()}`): string {
   renameSync(path, to);
   for (const side of ["-wal", "-shm"]) {
     try {

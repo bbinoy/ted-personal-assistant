@@ -8,7 +8,7 @@ import { join } from "node:path";
 // as a FACT for her next run (never a fixed chat line) once per interval.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "noticepersist-"));
 
-const { instanceDb, closeInstanceDb } = await import("../src/core/instancedb.ts");
+const { instanceDb } = await import("../src/core/instancedb.ts");
 const { reportKeyProblem } = await import("../src/tenants/keynotice.ts");
 const { takeCapNotice, pruneNotices } = await import("../src/core/capnotice.ts");
 const { owner } = await import("../src/conversation/conversationmodel.ts");
@@ -19,7 +19,7 @@ test("key notice: a restart within the interval stays quiet; after it, a fact ag
   const t0 = Date.now();
   const every = 180 * 60_000; // TENANT_KEY_NOTICE_MINUTES, default
   assert.equal(reportKeyProblem("refused", t0), true);
-  closeInstanceDb(); // (a restart: the marks are in the database)
+  // (a restart changes nothing: the marks are in the database, not in memory)
   assert.equal(reportKeyProblem("refused", t0 + 3_600_000), false, "no repeat after a restart");
   assert.equal(reportKeyProblem("missing", t0 + 3_600_000), true);
   assert.equal(reportKeyProblem("refused", t0 + every + 1), true, "after the interval it speaks again");

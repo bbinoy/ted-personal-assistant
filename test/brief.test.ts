@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { clockLine } from "../src/core/brief.ts";
-import { localDay } from "../src/core/pause.ts";
+import { dayIn } from "../src/core/timezone.ts";
 const at = (iso: string) => new Date(iso); // local time, no zone suffix
 
 test("clock line: exact weekday and date pairs", () => {
@@ -15,6 +15,6 @@ test("clock line: exact weekday and date pairs", () => {
 test("clock line: month and year rollover", () => {
   const line = clockLine(at("2026-12-31T08:00:00"));
   assert.match(line, /Tomorrow is Friday 2027-01-01/);
-  assert.equal(localDay(at("2026-01-05T00:00:00")), "2026-01-05");
+  assert.equal(dayIn(at("2026-01-05T00:00:00")), "2026-01-05");
 });
 

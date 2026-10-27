@@ -3,18 +3,6 @@ import { dataPath, readText } from "./state.ts";
 import { instanceDb } from "./instancedb.ts";
 import { untilOn, untilWords } from "./until.ts";
 import { instancePaths } from "./convpaths.ts";
-import { dayIn } from "./timezone.ts";
-
-// The day as YYYY-MM-DD: the Mac's by default, a conversation's own with its zone (timezone.ts).
-export const localDay = (d: Date, zone?: string) =>
-  zone ? dayIn(d, zone) : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-// Local wall time (MM-DD HH:MM), like the agent's own log.
-export const localTime = (iso: string) => {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-};
 
 // ONE pause switch for everything unattended (heartbeat, triage actions, daily brief, browse, the group gate): a row of instance.db (kv "paused"), an "until" value (until.ts): "" = until /resume,
 // an ISO time = until then (what the chat's "/pause 2h" writes, conversation/ownercommands.ts). It is a KILL SWITCH, so it fails safe: a value nobody can read, or a database that cannot be opened,
