@@ -73,7 +73,7 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
       }),
   },
   status: { server: () => createStatusServer() },
-  // The conversation's task list. An unattended run (a look of any conversation) can only list and add (tasktools.ts).
+  // The conversation's task list. A look has the same task tools as a chat turn (tasktools.ts).
   tasks: {
     server: (ctx) =>
       createTasksServer({

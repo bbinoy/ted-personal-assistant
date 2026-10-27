@@ -264,7 +264,7 @@ test("repeats: the reminder moves to the next occurrence, one item, nothing pile
 
 test("a background look cannot make an item urgent", () => {
   const conv = fresh();
-  const it = S.addItem({ ...scope(conv.key), origin: "inferred", by: "assistant (inferred)" }, { title: "Suggested", urgent: true }).item;
+  const it = S.addItem({ ...scope(conv.key), unattended: true, by: "assistant (look)" }, { title: "Suggested", urgent: true }).item;
   assert.equal(it.urgent, undefined);
 });
 

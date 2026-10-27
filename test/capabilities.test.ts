@@ -36,8 +36,8 @@ test("capabilities: what a group, a friend and a person with less have, pinned (
   const shared = [P("research-booking"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(groupTools()), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
-  // its look: the same set, less what needs a person waiting (the edits of the list); the notes and the memory tools are the same as a chat turn's
-  assert.deepEqual(sorted(groupTools(GROUP_LOOK)), sorted(full.filter((t) => !["mcp__tasks__complete_task", "mcp__tasks__drop_task", "mcp__tasks__snooze_task", "mcp__tasks__update_task"].includes(t))));
+  // its look: the same set (the notes, memory and list tools are every run's)
+  assert.deepEqual(sorted(groupTools(GROUP_LOOK)), full);
   // a new friend's record is the same set as a group's
   const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw", "tasks");
   assert.deepEqual(sorted(toolsFor(friend)), full);
