@@ -35,7 +35,7 @@ test("plugin: skills hold no personal details, only references to the owner's no
 test("plugin: every skill that needs setup names the note it reads, and setup saves under those names", () => {
   const setup = readFileSync(join(skillsDir, "setup", "SKILL.md"), "utf8");
   for (const item of setupItems()) assert.ok(setup.includes(item.file), `setup skill saves ${item.file}`);
-  for (const [skill, note] of [["calendar", "setup-calendars"], ["task-import", "setup-tasks"], ["meeting-prep", "setup-meetings"], ["mailbird", "voice-writing"]] as const) {
+  for (const [skill, note] of [["calendar", "setup-calendars"], ["meeting-prep", "setup-meetings"], ["mailbird", "voice-writing"]] as const) {
     assert.ok(readFileSync(join(skillsDir, skill, "SKILL.md"), "utf8").includes(note), `${skill} reads ${note}`);
   }
   assert.ok(existsSync(join(settings.pluginDir, ".claude-plugin", "plugin.json")));

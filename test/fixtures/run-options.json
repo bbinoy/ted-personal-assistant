@@ -112,8 +112,6 @@
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
         "mcp__tasks__drop_task",
-        "mcp__tasks__import_tasks_commit",
-        "mcp__tasks__import_tasks_preview",
         "mcp__tasks__list_tasks",
         "mcp__tasks__snooze_task",
         "mcp__tasks__update_task",
@@ -142,7 +140,6 @@
         "ted-personal-assistant:setup",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw",
-        "ted-personal-assistant:task-import",
         "ted-personal-assistant:evening-wrap",
         "ted-personal-assistant:weekly-review"
       ],
@@ -216,7 +213,6 @@
       "ted-personal-assistant:setup",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw",
-      "ted-personal-assistant:task-import",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review"
     ],
@@ -703,7 +699,6 @@
         "ted-personal-assistant:setup",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw",
-        "ted-personal-assistant:task-import",
         "ted-personal-assistant:evening-wrap",
         "ted-personal-assistant:weekly-review"
       ],
@@ -781,7 +776,6 @@
       "ted-personal-assistant:setup",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw",
-      "ted-personal-assistant:task-import",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review"
     ],

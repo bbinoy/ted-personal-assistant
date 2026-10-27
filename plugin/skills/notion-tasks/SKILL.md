@@ -1,6 +1,6 @@
 ---
 name: notion-tasks
-description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. Tasks no longer live in Notion: they live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy; moving an old Notion task table over is `ted-personal-assistant:task-import`. Pairs with `ted-personal-assistant:mailbird` and `ted-personal-assistant:daily-brief`.
+description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. Tasks no longer live in Notion: they live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy. Pairs with `ted-personal-assistant:mailbird` and `ted-personal-assistant:daily-brief`.
 ---
 
 # The task list (it lives in the assistant, not in Notion)
@@ -10,9 +10,8 @@ The owner's tasks, the promises they made (`i_owe`) and what they wait on from o
 (read), `add_task`, and in chat `update_task`, `complete_task`, `drop_task`,
 `snooze_task`. **Never write a task to
 Notion** (no page edit, no new page, no row for a task): after the
-one-time import the Notion table is an archive nobody updates. If the owner still
-has tasks in a Notion table and none are in the list yet, offer
-`ted-personal-assistant:task-import`.
+move the Notion table is an archive nobody updates. If the owner asks to bring tasks
+over from Notion again, read Notion and use `add_task` for each, like any other request.
 
 ## Read before you add
 

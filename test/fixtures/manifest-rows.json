@@ -12,8 +12,6 @@
 {"tool":"mcp__tasks__complete_task","provider":"tasks","action":"task-write","cap":"tasks","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__tasks__drop_task","provider":"tasks","action":"task-write","cap":"tasks","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__tasks__snooze_task","provider":"tasks","action":"task-write","cap":"tasks","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
-{"tool":"mcp__tasks__import_tasks_preview","provider":"tasks","action":"task-import","cap":"tasks","attended":true,"who":["owner"],"view":null,"free":true,"untrusted":false},
-{"tool":"mcp__tasks__import_tasks_commit","provider":"tasks","action":"task-import","cap":"tasks","attended":true,"who":["owner"],"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__voice__voice","provider":"voice","action":"voice","cap":"voice","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__forget_note","provider":"memory","action":"memory","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":false},
 {"tool":"mcp__memory__journal","provider":"memory","action":"memory","cap":"chat","attended":null,"who":null,"view":null,"free":true,"untrusted":false},

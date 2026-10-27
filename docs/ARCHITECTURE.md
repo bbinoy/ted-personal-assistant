@@ -72,7 +72,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `seen_mail` | mail ids the look has worked through (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
 | `routine_runs` | last period of each routine (scheduled skill or routine note), keyed by skill name or note file name |
-| `items`, `task_events`, `reminders`, `pending_imports`, `group_remind_noted` | tasks, append-only history, claimed reminders, an import preview, a group notice mark |
+| `items`, `task_events`, `reminders`, `group_remind_noted` | tasks, append-only history, claimed reminders, a group notice mark |
 | `learned_changes`, `learned_batches`, `feedback_*`, `voice_*`, `friend*` | quiet note changes and the lists that told them; notes saved after a 👎 and 👍 counts; voice notes received; a friend's bookkeeping |
 | `pending_*`, `suggestion_asks` | unused; a shipped migration is never edited; `pending_*` is emptied nightly |
 
@@ -116,7 +116,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
-- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: the owner's task import and tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail`, `note_upcoming_meetings` and the status note. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
+- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail`, `note_upcoming_meetings` and the status note. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
 - The session of a conversation's chat and its look session never mix (different models, different caches). Each resumes between runs and is compacted in the background after `COMPACT_QUIET_MINUTES` (5) of quiet (`src/run/chatsession.ts`, one code for both tracks).
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
@@ -322,8 +322,8 @@ Each conversation has its own task list in its own `assistant.db` (`src/tasks/`,
 
 - **Data.** `items` (kind, title, local `due` with zone, `remind_at`, `snooze_until`, `repeat`, person, assignee, status `open|done|dropped|snoozed`, origin `owner|member|friend` (whose conversation made the row; old rows may say `inferred`, which nothing reads), source kind and ref) and the append-only `task_events`. `dropped` is the end state; triggers refuse a DELETE on `items` and any change to `task_events`.
 - **Store** (`src/tasks/store.ts`). Every mutation is one transaction plus a `task` event; validation is strict and duplicates are not added. At most 1000 open items and 10 added a day by looks (`LIMITS`; counted from the history's `by`, "assistant (look)"). The model resolves "next friday" into an ISO date; code validates (`repeat.ts`, `when.ts`).
-- **Tools** (`mcp__tasks__`): `add_task`, `update_task`, `complete_task`, `drop_task`, `snooze_task`, `list_tasks`, and for the owner's one-time Notion import `import_tasks_preview` and `import_tasks_commit` (a commit runs only after a confirming message that arrived after the preview).
-- **Who may change what.** The person and any group member. A look has the same task tools as a chat turn (not the import): it adds tasks from mail, completes, edits, snoozes and drops when the chat or a mail clearly shows it, and tells the person. Its changes are attributed to "assistant (look)" in `task_events.by`; reopen undoes any of them. A task whose source is mail marks the run untrusted.
+- **Tools** (`mcp__tasks__`): `add_task`, `update_task`, `complete_task`, `drop_task`, `snooze_task`, `list_tasks`. (The one-time Notion import is gone: the owner's tasks were brought over, those items keep `source_kind = 'import'`; a new request to bring tasks from Notion is the model reading Notion and calling `add_task`.)
+- **Who may change what.** The person and any group member. A look has the same task tools as a chat turn: it adds tasks from mail, completes, edits, snoozes and drops when the chat or a mail clearly shows it, and tells the person. Its changes are attributed to "assistant (look)" in `task_events.by`; reopen undoes any of them. A task whose source is mail marks the run untrusted.
 - Reminders are under "The heartbeat look". `/tasks` lists open items by section, in a group too (the intake's command step; the group has the `tasks` capability).
 
 ## Tool modules and the manifest
@@ -657,7 +657,6 @@ Tasks, repeat rules, meetings and routines.
 
 ```
 src/tasks/grouptasks.ts  a group's `/tasks`, "saved for the group" line
-src/tasks/import.ts  one-time Notion import: preview and commit
 src/tasks/meetings.ts  recorded meetings and prep rules
 src/tasks/remind.ts  reminder planner and facts (pure)
 src/tasks/render.ts  items as lines, `/tasks`, task facts
