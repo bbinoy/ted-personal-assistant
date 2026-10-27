@@ -25,14 +25,14 @@ const reset = () => {
   for (const t of ["spend", "notices", "looks", "intake", "kv"]) instanceDb().run(`DELETE FROM ${t}`);
 };
 
-test("the file is instance/instance.db of the data folder, in WAL mode, schema 3, and the doctor's check reads it", () => {
+test("the file is instance/instance.db of the data folder, in WAL mode, schema 4, and the doctor's check reads it", () => {
   assert.equal(instanceDb().path, instancePaths().db);
   assert.equal(instanceDb().journalMode, "wal");
-  assert.equal(instanceDb().version, 3);
+  assert.equal(instanceDb().version, 4);
   const lines: [unknown, string, string][] = [];
   assert.equal(dbCheck((ok, what, detail) => void lines.push([ok, what, detail ?? ""])), true);
   assert.equal(lines[0]![0], true);
-  assert.match(lines[0]![2], /wal mode, schema 3, integrity_check ok; \d+ spend, \d+ payment, \d+ look row/);
+  assert.match(lines[0]![2], /wal mode, schema 4, integrity_check ok; \d+ spend, \d+ payment, \d+ look row/);
   const broken = mkdtempSync(join(tmpdir(), "instancedb-broken-"));
   const bad: [unknown, string, string][] = [];
   assert.equal(dbCheck((ok, what, detail) => void bad.push([ok, what, detail ?? ""]), join(broken, "nope", "x.db")), true, "a database that does not exist yet is made (a new folder)");
@@ -133,29 +133,22 @@ test("the budget check is fast: well under a millisecond with a year of rows", (
   }
 });
 
-test("notices: once a day per key, interval stamps beside them, forgetting by key, clearing by prefix, pruning what means nothing any more", () => {
+test("notices: once a day per key or once per interval, forgetting by key, pruning what means nothing any more", () => {
   reset();
   const now = Date.now();
   assert.equal(N.takeCapNotice("friend:anna", now), true);
   assert.equal(N.takeCapNotice("friend:anna", now), false, "not again today");
-  assert.equal(N.capNoticeDue("friend:anna", now + DAY_MS), true, "tomorrow it is due again");
-  assert.equal(N.capNoticeDue("friend:bo", now), true, "marking is per key");
-  N.markNoticeAt("warn:g1", now);
-  N.markNoticeAt("key:refused", now);
-  assert.equal(N.lastNoticeAt("warn:g1"), now);
-  assert.equal(N.capNoticeDue("warn:g1", now), true, "a stamp is not a day mark");
-  N.markCapNotice("warn:g1", now);
-  assert.equal(N.lastNoticeAt("warn:g1"), now, "and a day mark leaves the stamp");
-  N.clearNoticeAt("key:");
-  assert.equal(N.lastNoticeAt("key:refused"), undefined);
-  assert.equal(N.lastNoticeAt("warn:g1"), now, "only the prefix");
-  assert.equal(N.forgetNotices((k) => k.startsWith("warn:") || k.startsWith("friend:")), 3, "friend:anna's day, warn:g1's day and its stamp");
-  assert.equal(N.capNoticeDue("friend:anna", now), true);
-  N.markNoticeAt("old", now - 3 * DAY_MS);
-  N.markCapNotice("oldday", now - 3 * DAY_MS);
-  N.markCapNotice("today", now);
-  assert.equal(N.pruneNotices(now), 2, "the old stamp and the old day mark");
-  assert.equal(N.capNoticeDue("today", now), false);
+  assert.equal(N.takeCapNotice("friend:anna", now + DAY_MS), true, "tomorrow it is due again");
+  assert.equal(N.takeCapNotice("friend:bo", now), true, "marking is per key");
+  assert.equal(N.takeCapNotice("warn:g1", now, 60_000), true);
+  assert.equal(N.takeCapNotice("warn:g1", now + 30_000, 60_000), false, "within the interval");
+  assert.equal(N.takeCapNotice("warn:g1", now + 60_000, 60_000), true, "after it");
+  assert.equal(N.forgetNotices((k) => k.startsWith("warn:") || k.startsWith("friend:a")), 2, "friend:anna and warn:g1");
+  assert.equal(N.takeCapNotice("friend:anna", now), true);
+  N.takeCapNotice("today", now);
+  N.takeCapNotice("old", now - 3 * DAY_MS);
+  assert.equal(N.pruneNotices(now), 1, "the old mark");
+  assert.equal(N.takeCapNotice("today", now), false);
 });
 
 test("the budget notice is once a day, and OVERBUDGET's first time uses the notices table", () => {
@@ -167,7 +160,7 @@ test("the budget notice is once a day, and OVERBUDGET's first time uses the noti
     B.recordCost(2);
     assert.deepEqual(B.overBudget(), { over: true, firstTime: true, usd: 2 });
     assert.deepEqual(B.overBudget(), { over: true, firstTime: false, usd: 2 });
-    assert.equal(instanceDb().get<{ day: string }>("SELECT day FROM notices WHERE key = ?", B.OWNER_BUDGET_NOTICE)?.day, localDay(new Date()));
+    assert.equal(localDay(new Date(instanceDb().get<{ last_at: number }>("SELECT last_at FROM notices WHERE key = ?", B.OWNER_BUDGET_NOTICE)!.last_at)), localDay(new Date()));
   } finally {
     s.dailyBudgetUsd = was;
   }

@@ -1,7 +1,5 @@
-import { capNoticesTo } from "../core/capnotice.ts";
 import { setApprovers } from "../approvals/permissions.ts";
-import { keyNotices } from "../tenants/keynotice.ts";
-import { holdFact, ownerNotices } from "./notices.ts";
+import { ownerNotices } from "./notices.ts";
 import { factsFor } from "./facts.ts";
 import { turnFactsFrom } from "../run/turncontext.ts";
 import { removeFriend } from "../conversation/tenantremoval.ts";
@@ -12,7 +10,7 @@ import { tenantHooks } from "../tenants/tenanttools.ts";
 // main.ts builds an AppContext and calls wire(). A hook missing here stops the start with its name, instead of a notice or a question silently going nowhere later.
 export interface AppContext {
   approvers: Parameters<typeof setApprovers>[0]; // who is asked about a call, in the conversation that triggered it (approvers.ts)
-  notifyOwner: (text: string) => void; // a plain notice in the owner's chat: the shared-key notice (keynotice.ts), the daily cap line (capnotice.ts), the budget notice (heartbeat/notices.ts)
+  notifyOwner: (text: string) => void; // a plain notice in the owner's chat: the daily budget notice (heartbeat/notices.ts), the one fixed text to the owner
   dropTenant: (id: string) => void; // a suspended or removed tenant: her warm process and every connection of hers stop (tenanttools.ts)
   sendFirst?: NonNullable<typeof tenantHooks.sendFirst>; // the owner's hello to a number or username (invite_person); absent where the platform has none, by design
 }
@@ -24,8 +22,6 @@ export function wire(ctx: AppContext): void {
   if (wired) throw new Error("startup wiring runs once");
   wired = true;
   setApprovers(ctx.approvers);
-  keyNotices.sendTo(holdFact); // (the owner's own look can run on the login: a fact for it, never a ping at night)
-  capNoticesTo(holdFact);
   ownerNotices.sendTo(ctx.notifyOwner);
   turnFactsFrom((conv, now) => factsFor(conv, now, "chat")); // every chat turn gets the facts a look gets (facts.ts)
   tenantHooks.sendFirst = ctx.sendFirst;

@@ -15,7 +15,7 @@ const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { createWakeups } = await import("../src/heartbeat/wake.ts");
 const { createDreamer } = await import("../src/conversation/dream.ts");
-const { keyNotices } = await import("../src/tenants/keynotice.ts");
+const { ownerFacts, resetOwnerFacts } = await import("./ownerfacts.ts");
 const { askGateWith } = await import("../src/conversation/gate.ts");
 const { owner, tenant } = await import("../src/conversation/conversation.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
@@ -58,9 +58,8 @@ const note = (rec: { id: string }, text = "Remind her about her sister's birthda
 
 type Conv = import("../src/conversation/conversation.ts").Conversation;
 function rig(o: { key?: string | undefined; answer?: (c: Conv) => { message?: string; nextCheckMinutes?: number } | "throw"; ids?: string[]; now?: Date } = {}) {
-  const alerts: string[] = [];
-  keyNotices.reset(); // (one notice for the owner about the shared key, whatever the run: keynotice.ts)
-  keyNotices.sendTo((t) => void alerts.push(t));
+  const alerts = ownerFacts();
+  resetOwnerFacts();
   const seen = { provenance: [] as unknown[], runs: [] as { conv: Conv; payer: unknown; prompt: string }[], sent: [] as { conv: Conv; text: string }[] };
   const now = o.now ?? NOON;
   const pipeline = {
@@ -336,9 +335,8 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
   T.setStatus(sus.id, "suspended");
   recordCost(100, T.tenantContext(poor).ledger);
   const ran: string[] = [];
-  const alerts: string[] = [];
-  keyNotices.reset();
-  keyNotices.sendTo((t) => void alerts.push(t));
+  const alerts = ownerFacts();
+  resetOwnerFacts();
   const mk = (key: string | undefined) => {
     return createDreamer({
       key: () => key,

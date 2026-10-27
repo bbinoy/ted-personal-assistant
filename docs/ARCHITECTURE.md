@@ -72,13 +72,8 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `seen_mail` | mail ids the look has worked through (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
 | `routine_runs` | last period of each routine (scheduled skill or routine note), keyed by skill name or note file name |
-<<<<<<< HEAD
 | `items`, `task_events`, `reminders`, `pending_imports`, `group_remind_noted` | tasks, append-only history, claimed reminders, an import preview, a group notice mark |
 | `learned_changes`, `learned_batches`, `voice_*`, `friend*` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
-=======
-| `items`, `task_events`, `reminders`, `group_remind_noted` | tasks, append-only history, claimed reminders, a group notice mark |
-| `learned_changes`, `learned_batches`, `feedback_*`, `voice_*`, `friend*` | quiet note changes and the lists that told them; notes saved after a 👎 and 👍 counts; voice notes received; a friend's bookkeeping |
->>>>>>> main
 | `pending_*`, `suggestion_asks` | unused; a shipped migration is never edited; `pending_*` is emptied nightly |
 
 - **Adding state is one migration:** append a step to `CONV_SCHEMA`, write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound. Older code refuses a newer file (`NewerSchemaError`).
@@ -92,7 +87,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 | table | holds |
 |---|---|
 | `spend` | one row per charged run: time, local day, convId, payer (`login` or `key`), kind, dollars; the budgets are sums over it (`src/core/budget.ts`) |
-| `notices` | once-a-day marks and interval stamps by key (`capnotice.ts`) |
+| `notices` | when each notice was last told, by key: the one "at most once per interval" throttle (`capnotice.ts takeCapNotice`) |
 | `looks` | one counted row per heartbeat look, no words (`looks.ts`) |
 | `payments` | one row per status change of a card payment, never deleted (`modules/browse/payments.ts`) |
 | `intake` | per tenant and purpose: when a form was stored (names and lengths), when a connection stopped working |
@@ -240,7 +235,8 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_START_HOUR`..`QUIET_END_HOUR`, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (6) is held (`submitPost`) unless the run marked it `urgent`.
 
-- Code never rewrites a held post. The only fixed texts here are the budget notice and the notice about the owner's own damaged database, once a day and not during quiet.
+- Code never rewrites a held post. The one fixed text to the owner is the daily budget notice (once a day, not during quiet: over budget no run is possible). Every other system matter (the shared key, the friends' daily cap, a damaged database) is a fact for her next run (`holdFact`, `src/core/ownerfact.ts`): the model says it in its own words, and `takeCapNotice` throttles how often it is raised.
+- People Ted cannot run a model for right now (a spent day, a cooldown, no key) get a short fixed line from ONE table, `refusal(reason, audience)` in `src/tenants/errors.ts`, the same for a group and a friend and throttled by the same `takeCapNotice` (`refusalOnce`: a ceiling once a day, a cooldown or a missing key every `TENANT_NOTICE_MINUTES`).
 
 **Routines** (`src/tasks/routines.ts`, `src/modules/tasks/routinelist.ts`). One mechanism for everything the assistant does at set times: a routine is a name, a repeat rule (`src/tasks/repeat.ts`, the grammar tasks use) and what to do. Code computes "is it due" and "was it done"; the model does the work. There are two sources, planned the same way:
 
@@ -372,7 +368,7 @@ One instance, one messenger account, several people. Off by default (`TENANTS=of
 - **Routing** (`src/tenants/tenantroute.ts`): identity is the sender's account id. A tenant's message goes to her conversation; a suspended tenant's to nobody.
 - Anyone else is a registration request (`registration.ts`): one fixed reply with no model call, her messages held and read by no model, and a question to the owner in her own chat. Limits: one open request per sender, 10 open, 3 new an hour, 7-day expiry.
 - **Registry** (`src/tenants/tenants.ts`): `instance/tenants.json`, one record per person, never a key. Owner-chat tools: `list_tenants`, `invite_person`, `suspend_tenant`, `resume_tenant`, `remove_tenant`; `npm run tenants` is the terminal side (the admin role moves only through `set-admin`).
-- **Her run** (`src/conversation/tenantrun.ts`, then `runConversation`): gates without a model first (`mayRun`), then the same run path on the instance key, her spend rows and her cooldown. A refusal of the key pauses every friend and tells the owner once (`keynotice.ts`).
+- **Her run** (`src/conversation/tenantrun.ts`, then `runConversation`): gates without a model first (`mayRun`), then the same run path on the instance key, her spend rows and her cooldown. A refusal of the key pauses every friend and hands the owner a fact for her next run (`keynotice.ts`, `core/ownerfact.ts`).
 - She has no owner connectors, payment, saved details or Drive. Her look needs `heartbeat` and `wake`, her dream `dream`; her approvals go to her chat and her audit rows carry no words.
 - **Groups** have the same shape with a fixed capability set, no connectors, shared skills only and the gate for untagged messages.
 - **Google for friends.** With a Google OAuth client set, a friend connects her own Gmail and Calendar through the `google` purpose (PKCE, offline access; the refresh token goes to `tenants/<id>/google/oauth` through the write-only token).
@@ -611,7 +607,7 @@ src/tenants/capabilityset.ts  derives a capability set (nothing stored)
 src/tenants/connections.ts  which accounts a friend connected
 src/tenants/errors.ts  causes and fixes of failed model calls
 src/tenants/haiku.ts  oneShot: small one-off model calls
-src/tenants/keynotice.ts  the owner's notice about the shared key
+src/tenants/keynotice.ts  the shared key's problems, as a fact for the owner
 src/tenants/payer.ts  Payer and mayRun: who pays, may it run
 src/tenants/registration.ts  registration requests: limits and expiry
 src/tenants/removal.ts  removing a friend, idempotent
@@ -689,7 +685,8 @@ src/core/audit.ts  the audit writer
 src/core/brief.ts  the clock line of unattended prompts
 src/core/budget.ts  spend ledger and daily budget
 src/core/callkey.ts  identity of a tool call
-src/core/capnotice.ts  once-a-day notice marks
+src/core/capnotice.ts  the one notice throttle (takeCapNotice) and the friends' cap fact
+src/core/ownerfact.ts  holdFact: a system matter as a fact for the owner's next run
 src/core/contain.ts  `isInside`: path containment
 src/core/convdb.ts  assistant.db schema and accessors
 src/core/convpaths.ts  the one place that builds data paths

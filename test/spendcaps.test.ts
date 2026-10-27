@@ -11,8 +11,11 @@ const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { charge, isRefusal, LOGIN, loginFor, mayRun } = await import("../src/tenants/payer.ts");
 const { groupSpentToday, spentToday, instanceKeyOverBudget } = await import("../src/core/budget.ts");
+const { owner, tenant: tenantConv } = await import("../src/conversation/conversationmodel.ts");
+const { heldPosts, resetHeld } = await import("../src/heartbeat/notices.ts");
+const { refusal } = await import("../src/tenants/errors.ts");
 const { resetCooldown } = await import("../src/core/cooldown.ts");
-const { keyNotices } = await import("../src/tenants/keynotice.ts");
+const { instanceDb } = await import("../src/core/instancedb.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 const KEY = "instance-key-for-the-spend-tests";
@@ -28,7 +31,8 @@ const inst = (rec: { id: string }, ledger: string) => ({ kind: "instance", id: r
 beforeEach(() => {
   on.tenants = true;
   resetCooldown();
-  keyNotices.reset();
+  instanceDb().run("DELETE FROM notices");
+  resetHeld(owner());
 });
 
 test("defaults: a group's day is a quarter of the owner's, the key's day is its own setting", () => {
@@ -92,50 +96,24 @@ test("her own ceiling is still checked first and keeps its own reason", () => {
 // ---- who is told, once a day (capnotice.ts) ----
 
 const { createTenantRunner } = await import("../src/conversation/tenantrun.ts");
-const { tenant: tenantConv, group: groupConv } = await import("../src/conversation/conversationmodel.ts");
-const { capNoticesTo, FRIEND_CAP_TEXT, GROUP_CAP_TEXT, groupCapped, ownerCapText, capNoticeDue } = await import("../src/core/capnotice.ts");
-const { FixedNotice, noticeFor } = await import("../src/tenants/errors.ts");
 
-test("key ceiling: the friend gets one fixed line a day, the owner one line a day with the limit and no friend's name, both again the next day", async () => {
+test("key ceiling: the friend gets one fixed line a day, the owner one fact a day with the limit and no friend's name, both again the next day", async () => {
   on.tenantApiKey = KEY;
   on.instanceKeyDailyUsd = 0.5;
-  const told: string[] = [];
-  capNoticesTo((t) => void told.push(t));
   const ann = friend("Ann-Cap");
   const bo = friend("Bo-Cap");
   charge(inst(ann, T.tenantContext(ann).ledger), 0.6);
   let clock = Date.now();
   const runner = createTenantRunner({ apiKey: () => KEY, now: () => clock, ask: async () => assert.fail("no model call") });
   const say = async (rec: { id: string }) => (await runner.run(tenantConv(rec.id), "hi")).text;
-  assert.equal(await say(ann), FRIEND_CAP_TEXT);
+  assert.equal(await say(ann), refusal("shared-budget", "friend"));
   assert.equal(await say(ann), "[[silent]]", "not again today");
-  assert.equal(await say(bo), FRIEND_CAP_TEXT, "each friend is told once");
-  assert.deepEqual(told, [ownerCapText(0.5)], "the owner once, however many friends and runs");
+  assert.equal(await say(bo), refusal("shared-budget", "friend"), "each friend is told once");
+  const told = heldPosts(owner()).map((h) => h.text);
+  assert.equal(told.length, 1, "the owner once, however many friends and runs");
+  assert.match(told[0]!, /\$0\.5 is reached.*INSTANCE_KEY_DAILY_USD/);
   assert.ok(!/Ann|Bo/.test(told[0]!));
   clock += 25 * 3600_000;
-  assert.equal(await say(ann), FRIEND_CAP_TEXT, "the next day");
-  assert.equal(told.length, 2);
-  capNoticesTo(undefined);
-});
-
-test("group ceiling: an addressed message gets one short line a day in the group; an unaddressed one none; a line that could not be posted is tried again", async () => {
-  const posted: string[] = [];
-  const say = (ok = true) => async () => (ok && posted.push(GROUP_CAP_TEXT), ok);
-  assert.equal(await groupCapped(false, true, "g-day", say()), false, "under the ceiling: nothing");
-  assert.equal(await groupCapped(true, false, "g-day", say()), true, "over, not addressed: refused, silent");
-  assert.equal(posted.length, 0);
-  assert.equal(await groupCapped(true, true, "g-day", say(false)), true);
-  assert.equal(capNoticeDue("group:g-day"), true, "not delivered, not marked");
-  assert.equal(await groupCapped(true, true, "g-day", say()), true);
-  assert.equal(await groupCapped(true, true, "g-day", say()), true);
-  assert.equal(posted.length, 1, "once");
-  assert.equal(await groupCapped(true, true, "g-other", say()), true, "another group has its own");
-  assert.equal(posted.length, 2);
-  assert.equal(await groupCapped(true, true, "g-day", say(), Date.now() + 25 * 3600_000), true);
-  assert.equal(posted.length, 3, "the next day");
-});
-
-test("a fixed notice is shown as it is, for any audience", () => {
-  assert.equal(noticeFor("group")(new FixedNotice(GROUP_CAP_TEXT)), GROUP_CAP_TEXT);
-  assert.equal(groupConv("g").notice(new FixedNotice("x")), "x");
+  assert.equal(await say(ann), refusal("shared-budget", "friend"), "the next day");
+  assert.equal(heldPosts(owner()).length, 1, "the owner is told again the next day, but the same fact still waiting is held once");
 });

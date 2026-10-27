@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { emit } from "../core/events.ts";
-import { forgetNotices } from "../core/capnotice.ts";
+import { forgetNoticesOf } from "../core/capnotice.ts";
 import { forgetSpend } from "../core/budget.ts";
 import { isInside } from "../core/contain.ts";
 import { removeConvDir } from "../core/convdb.ts";
@@ -81,7 +81,7 @@ export async function removeTenant(id: string, d: RemovalDeps = {}): Promise<Rem
   step("her saved voice-note audio", () => removeAttachments(attachments, d.attachmentsDir));
   step("her connection marks", () => forgetTenantConnections(id));
   step("her spend rows (unnamed; the totals stay)", () => forgetSpend(conv));
-  step("her notice marks", () => forgetNotices((k) => k === `friend:${id}` || k === `warn:${conv}`));
+  step("her notice marks", () => forgetNoticesOf(conv));
   for (const secrets of d.secrets ?? []) {
     try {
       const n = await secrets(id);

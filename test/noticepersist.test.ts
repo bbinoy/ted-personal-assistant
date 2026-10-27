@@ -4,41 +4,39 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// The notices that repeat after an interval (the shared key's problem, a group's error notice) are remembered in the notices table of instance.db, so a restart does not repeat them.
+// The one throttle ("told at most once per key per interval") is remembered in the notices table of instance.db, so a restart does not repeat a notice; the shared key's problem reaches the owner
+// as a FACT for her next run (never a fixed chat line) once per interval.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "noticepersist-"));
 
-const { instanceDb } = await import("../src/core/instancedb.ts");
-const { createKeyNotices } = await import("../src/tenants/keynotice.ts");
-const { capNoticeDue, markCapNotice, lastNoticeAt, markNoticeAt } = await import("../src/core/capnotice.ts");
+const { instanceDb, closeInstanceDb } = await import("../src/core/instancedb.ts");
+const { reportKeyProblem } = await import("../src/tenants/keynotice.ts");
+const { takeCapNotice, pruneNotices } = await import("../src/core/capnotice.ts");
+const { owner } = await import("../src/conversation/conversationmodel.ts");
+const { heldPosts, resetHeld } = await import("../src/heartbeat/notices.ts");
 
-test("key notice: a 'restart' (a new instance) within the interval stays quiet; after it, it speaks; a different problem is its own", () => {
-  const every = () => 3 * 3_600_000;
+test("key notice: a restart within the interval stays quiet; after it, a fact again; a different problem is its own", () => {
+  resetHeld(owner());
   const t0 = Date.now();
-  const told: string[] = [];
-  const first = createKeyNotices({ everyMs: every, persist: true });
-  first.sendTo((t) => told.push(t));
-  assert.equal(first.report("refused", t0), true);
-  const restarted = createKeyNotices({ everyMs: every, persist: true });
-  restarted.sendTo((t) => told.push(t));
-  assert.equal(restarted.report("refused", t0 + 3_600_000), false, "no repeat after a restart");
-  assert.equal(restarted.report("missing", t0 + 3_600_000), true);
-  assert.equal(restarted.report("refused", t0 + 3 * 3_600_000 + 1), true, "after the interval it speaks again");
-  assert.equal(told.length, 3);
-  const wording = createKeyNotices({ everyMs: every }); // not persistent: unchanged behaviour
-  wording.sendTo(() => undefined);
-  assert.equal(wording.report("refused", t0), true);
+  const every = 180 * 60_000; // TENANT_KEY_NOTICE_MINUTES, default
+  assert.equal(reportKeyProblem("refused", t0), true);
+  closeInstanceDb(); // (a restart: the marks are in the database)
+  assert.equal(reportKeyProblem("refused", t0 + 3_600_000), false, "no repeat after a restart");
+  assert.equal(reportKeyProblem("missing", t0 + 3_600_000), true);
+  assert.equal(reportKeyProblem("refused", t0 + every + 1), true, "after the interval it speaks again");
+  const held = heldPosts(owner()).map((h) => h.text);
+  assert.equal(held.length, 2, "the refused fact is held once while it waits");
+  assert.match(held[0]!, /^System status for .*TENANT_ANTHROPIC_API_KEY/, "a fact for the owner's next run, to say in her own words");
 });
 
-test("interval stamps and the once-a-day marks share the table without erasing each other, and old stamps are dropped", () => {
+test("the interval and the once-a-day throttle share one table, old marks are dropped", () => {
   const now = Date.now();
-  markNoticeAt("warn:g1", now - 2 * 86_400_000);
-  markNoticeAt("warn:g2", now);
-  assert.equal(lastNoticeAt("warn:g1"), undefined, "older than a day: dropped when the next is written");
-  assert.equal(lastNoticeAt("warn:g2"), now);
-  markCapNotice("group:x", now);
-  assert.equal(capNoticeDue("group:x", now), false);
-  assert.equal(lastNoticeAt("warn:g2"), now, "a day mark leaves the stamps");
-  markNoticeAt("warn:g3", now);
-  assert.equal(capNoticeDue("group:x", now), false, "a stamp leaves the day marks");
-  assert.equal(instanceDb().get("SELECT 1 AS x FROM notices WHERE key = ?", "warn:g3")?.x, 1, "the stamp is a row of the notices table");
+  assert.equal(takeCapNotice("warn:g1", now, 60_000), true);
+  assert.equal(takeCapNotice("warn:g1", now + 30_000, 60_000), false);
+  assert.equal(takeCapNotice("warn:g1", now + 60_000, 60_000), true, "the interval is over");
+  assert.equal(takeCapNotice("group:x", now), true);
+  assert.equal(takeCapNotice("group:x", now), false, "once a day when no interval is given");
+  assert.equal(takeCapNotice("group:x", now + 25 * 3_600_000), true, "tomorrow it is due again");
+  assert.equal(instanceDb().get("SELECT 1 AS x FROM notices WHERE key = ?", "warn:g1")?.x, 1);
+  takeCapNotice("old", now - 3 * 86_400_000);
+  assert.ok(pruneNotices(now) >= 1, "a mark of three days ago is pruned");
 });
