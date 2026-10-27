@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "c66457c868a5d70c"
+        "sha": "5bc8e520ba025a83"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -133,7 +133,7 @@
         "ted-personal-assistant:mailbird",
         "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
         "ted-personal-assistant:follow-through",
@@ -164,7 +164,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "c66457c868a5d70c"
+        "sha": "5bc8e520ba025a83"
       },
       "snapshot": false
     },
@@ -207,7 +207,7 @@
       "ted-personal-assistant:mailbird",
       "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
-      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:follow-through",
@@ -565,7 +565,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "c66457c868a5d70c"
+        "sha": "5bc8e520ba025a83"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -691,7 +691,7 @@
         "ted-personal-assistant:mailbird",
         "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
         "ted-personal-assistant:follow-through",
@@ -724,7 +724,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "c66457c868a5d70c"
+        "sha": "5bc8e520ba025a83"
       },
       "snapshot": false
     },
@@ -767,7 +767,7 @@
       "ted-personal-assistant:mailbird",
       "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
-      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:follow-through",

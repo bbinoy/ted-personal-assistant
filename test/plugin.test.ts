@@ -19,7 +19,7 @@ test("plugin: manifest is valid and every skill has a name and description match
     assert.ok(front, `${s}: front matter`);
     assert.equal(front![1], s, `${s}: name matches folder`);
   }
-  for (const s of ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "notion-tasks", "meeting-prep", "setup"]) assert.ok(skills.includes(s), s);
+  for (const s of ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "tasks", "meeting-prep", "setup"]) assert.ok(skills.includes(s), s);
 });
 
 test("plugin: skills hold no personal details, only references to the owner's notes", () => {
@@ -128,7 +128,7 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
 
 test("a long overdue pile: the brief offers a clean-up once (remembered in the status note), the task skill says how", () => {
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
-  assert.match(read("notion-tasks"), /A long overdue pile[\s\S]*\*\*once\*\*[\s\S]*reschedule, drop or keep[\s\S]*Nothing is dropped without their word/);
+  assert.match(read("tasks"), /A long overdue pile[\s\S]*\*\*once\*\*[\s\S]*reschedule, drop or keep[\s\S]*Nothing is dropped without their word/);
   assert.match(read("daily-brief"), /A long overdue pile[\s\S]*status-overdue-offer[\s\S]*`status-overdue-offer\.md` with `Write`/);
 });
 
@@ -161,7 +161,7 @@ test("connectors: judged by the server status in the start-up message, so a slow
 test("plugin: follow-through is a private skill the calendar and task skills point to", async () => {
   const { privateSkills } = await import("../src/modules/skills.ts");
   assert.ok(privateSkills().includes("follow-through"));
-  for (const s of ["calendar", "notion-tasks"]) assert.match(readFileSync(join(skillsDir, s, "SKILL.md"), "utf8"), /ted-personal-assistant:follow-through/, s);
+  for (const s of ["calendar", "tasks"]) assert.match(readFileSync(join(skillsDir, s, "SKILL.md"), "utf8"), /ted-personal-assistant:follow-through/, s);
 });
 
 test("connectors: an optional connector (Drive, Docs) is down only after a run saw it working; the doctor's seen list is recorded by recordConnectors", async () => {

@@ -30,7 +30,7 @@ export const notionModule: ToolModule = {
   free: ["read"],
   titles: { [`${NOTION}notion-update-page`]: NOTION_UPDATE_TITLE },
   floor: NOTION_FLOOR,
-  skills: [{ name: "notion-tasks", required: true }],
+  skills: [{ name: "tasks", required: true }],
   setup: [
     { file: "setup-meetings.md", label: "meeting notes (where prep pages go)", needs: "notion" },
   ],

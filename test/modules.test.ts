@@ -134,13 +134,13 @@ test("modules: the mail slot answers for the provider, so central code never ask
 
 test("modules: skills come from the loaded modules, in the order the owner's list always had; shared ones need a capability", () => {
   const P = (s: string) => `ted-personal-assistant:${s}`;
-  const mailbird = ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "notion-tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review"].map(P);
+  const mailbird = ["daily-brief", "mailbird", "mailbird-troubleshooting", "calendar", "tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw", "evening-wrap", "weekly-review"].map(P);
   if (settings.weather && settings.draw) assert.deepEqual(ownerSkills(true, "mailbird"), mailbird);
   assert.deepEqual(ownerSkills(true, "gmail").filter((s) => /mail/.test(s)), [P("gmail")]);
   assert.ok(!ownerSkills(true, "gmail").includes(P("mailbird")));
   assert.deepEqual(ownerSkills(false, "mailbird").filter((s) => /mail/.test(s)), []);
   assert.deepEqual(ownerSkills(true, "none").filter((s) => /mail/.test(s)), []);
-  assert.deepEqual(ownerSkills(true, "mailbird", { required: true }), ["daily-brief", "mailbird", "calendar", "notion-tasks", "meeting-prep", "setup"]);
+  assert.deepEqual(ownerSkills(true, "mailbird", { required: true }), ["daily-brief", "mailbird", "calendar", "tasks", "meeting-prep", "setup"]);
   assert.deepEqual(sharedSkills(), { "research-booking": ["browse"], "surf-conditions": ["weather"], draw: ["draw"] });
   assert.deepEqual(skillsFor(new Set(["browse", "draw"] as const)), [P("research-booking"), P("draw")]);
   assert.deepEqual(skillsFor(new Set(["mail", "calendar", "notion", "chat"] as const)), []);

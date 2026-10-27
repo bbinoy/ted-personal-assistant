@@ -44,7 +44,7 @@ notes in memory win over these defaults. The daily sweep lists the whole inbox i
 (`search_threads` with `in:inbox`, paging with the page token until it ends, oldest included; it does not use
 `seen_mail`) and archives what is handled, including all but today's brief email. Skim at most 4 relevant
 newsletters for the brief's Radar before archiving. Scan sent mail (`in:sent newer_than:7d`) for waiting-on threads and for promises
-to turn into tasks, (`add_task`, as `ted-personal-assistant:notion-tasks` describes).
+to turn into tasks, (`add_task`, as `ted-personal-assistant:tasks` describes).
 
 ## Archiving
 
@@ -77,8 +77,5 @@ When a mail asks about availability or proposes a time, follow "Scheduling email
 `label_thread` and the other label tools ask the owner first. `list_labels` gives label ids (the tools take
 ids, not names).
 
-## Automated runs
-
-The heartbeat run works through new mail about every 30 minutes in the day, archives clear noise, and
-tells the owner on Signal only what is worth interrupting for. Operate with
+Operate with
 `npm run doctor`, `npm run report` and `npm run restore <threadId>`.
