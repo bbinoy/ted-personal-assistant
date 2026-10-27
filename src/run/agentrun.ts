@@ -52,6 +52,7 @@ export interface RunOptions {
   kind: RunKind; // who the run is for and whether someone waits for it (core/runkind.ts): the tools, the isolation and the asking all follow from these two facts
   systemPrompt: string;
   sessionConv?: ConvId; // continue + save the conversation's session here (its assistant.db); the browse worker: none, a fresh run
+  freshSession?: boolean; // a run that never resumes or saves its session (a look): sessionConv still names the conversation
   sessionTrack?: Track; // which of the conversation's two sessions (sessionstore.ts): its chat's (default) or its looks'
   conversation?: string; // the conversation the run acts for (its key); default the owner's, or the tenant's or group's of this run. Keys the per-conversation anti-repeat state (permissions.ts)
   // The SDK's auto-memory, for every run of a conversation: notes in `dir`, the only place the file tools may write (policy.ts); its MEMORY.md is code's (notes.ts writeIndex).
@@ -281,7 +282,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       if (!message.parent_tool_use_id) lastContext = contextTokens(message.message.usage);
     }
     if (message.type !== "result") continue;
-    if (opts.sessionConv) {
+    if (opts.sessionConv && !opts.freshSession) {
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
       const before = readSession(opts.sessionConv, opts.sessionTrack);
       const baseTokens = before.sessionId === message.session_id ? before.baseTokens : lastContext; // a session from before this existed has none: the absolute limit applies until it starts fresh
@@ -315,7 +316,7 @@ export async function underCeiling<T>(kind: RunKind, run: (c: Ceiling) => Promis
 }
 
 export async function runAgent(prompt: Parameters<typeof query>[0]["prompt"], approve: Approve, opts: RunOptions, io: { query?: typeof query } = {}): Promise<AgentReply> {
-  const { resume, previousCost } = opts.sessionConv ? chatResume(opts.sessionConv, opts.sessionTrack) : { resume: undefined, previousCost: 0 };
+  const { resume, previousCost } = opts.sessionConv && !opts.freshSession ? chatResume(opts.sessionConv, opts.sessionTrack) : { resume: undefined, previousCost: 0 };
   // The entry gate of an unattended run (rungate.ts; every one is a heartbeat look, a chat turn goes through agent.ts runConversation): it waits for a place, and its ceiling starts only once it has one.
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
   // "/stop" (ceiling.ts stopRuns) reaches a look too, also while it still waits for a place: `wait` is called off by it, by the caller's signal (a message overtook the look)

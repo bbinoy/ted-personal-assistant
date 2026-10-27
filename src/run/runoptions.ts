@@ -47,6 +47,7 @@ interface TriggerRow {
   track: Track;
   model: () => string | undefined; // undefined: HARNESS_MODEL
   effort?: Options["effort"];
+  fresh?: boolean; // never resume or save a session: each run starts clean, continuity comes from the shared context
   answer?: Options["outputFormat"]; // constrained JSON; absent: a normal reply
 }
 export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
@@ -54,6 +55,7 @@ export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
   look: {
     attended: false,
     track: "look",
+    fresh: true, // a new session every look: a resumed Haiku session saw its earlier checks and skipped the work (27 Oct)
     model: () => settings.heartbeatModel,
     effort: "high",
     answer: HEARTBEAT_SCHEMA,
@@ -138,6 +140,7 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
     kind,
     sessionConv: conv.convId,
     sessionTrack: t.track,
+    ...(t.fresh ? { freshSession: true } : {}),
     conversation: conv.key,
     stopScope: conv.convId, // "/stop" in this conversation reaches its look too
     ...(conv.groupId ? { groupId: conv.groupId } : {}),
