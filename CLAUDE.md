@@ -17,6 +17,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - The owner's chat, groups and friends use the same run path, tools, skills and loops. Capabilities decide what each conversation has; there is no owner-only copy of a feature.
 - A background look, a chat turn and a routine are the same agent with the same rules. Behaviour must not depend on what triggered the run.
 - **One builder.** Every run (chat turn, look, expert) is built by the same functions from the conversation's capabilities, the owner included: the owner is just the conversation with every capability.
+- **One intake.** Every inbound message of every conversation goes through the same chain; private and group differ only in one table (who may do what, whether to answer, where the reply goes). A feature is added to the chain, never to one kind.
 - **A closed list of differences.** A chat turn and a look differ only in model, session, trigger line, whether someone is attended, and answer format. Nothing else branches on the trigger or on "is owner"; a new difference needs the owner's approval.
 - **Same context, same powers.** Every run sees the same shared context and may delegate to a stronger model (Sonnet or Opus) when the work needs judgement.
 
