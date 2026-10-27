@@ -14,6 +14,7 @@ import { SOURCES } from "../src/core/audit.ts";
 import { allRows, confirmsDelete, entryFor, isFree, neverAllowedTool } from "../src/policy/toolmanifest.ts";
 import { groupTools } from "../src/policy/capabilities.ts";
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
+import { BROWSE_RUN, FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK, kindOf } from "./runkinds.ts";
 
 // ONE never-allowed mechanism (neverallowed.ts, toolmanifest.ts neverAllowedTool, policy.ts classify) and the one fold of classify: tested over the rows, over
 // every tool name each connector is known to have, by name, by arguments, and for every source.
@@ -48,21 +49,21 @@ test("never allowed: a row's action in NEVER_ACTIONS decides, for every source a
   assert.deepEqual([...byRow].sort(), [...expected].sort());
   for (const t of expected) {
     assert.ok(neverAllowedTool(t), t);
-    for (const source of SOURCES) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
+    for (const source of SOURCES) assert.equal(classify(t, {}, kindOf(source)), "deny", `${t} (${source})`);
     assert.equal(isJudgeable(t, {}), false, t);
     assert.equal(mayFix(t), false, t);
   }
   // trading: the whole connector, listed or not, whichever name it goes by
   for (const t of liveNames.filter((n) => n.includes("Interactive_Brokers")).concat(["mcp__claude_ai_Interactive_Brokers__brand_new_tool", "mcp__claude_ai_Interactive_Brokers_IBKR__get_something_new"])) {
-    for (const source of SOURCES) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
+    for (const source of SOURCES) assert.equal(classify(t, {}, kindOf(source)), "deny", `${t} (${source})`);
   }
 });
 
 test("never allowed: a tool no module lists is denied by a name that says trash, delete, purge, erase, destroy, spam, junk or block, at word boundaries", () => {
   for (const t of ["mcp__x__trash_thing", "mcp__x__delete", "mcp__x__purge-all", "mcp__x__erase_data", "mcp__x__destroy_it", "mcp__x__mark_spam", "mcp__x__junk_mail", "mcp__x__block_sender", "mcp__x__set_blocked", "mcp__x__notion-delete-page", "mcp__x__do_trash"]) {
     assert.ok(nameIsNever(t), t);
-    assert.equal(classify(t, {}, "chat"), "deny", t);
-    for (const source of ["handler", "background"] as const) assert.equal(classify(t, {}, source), "deny", `${t} (${source})`);
+    assert.equal(classify(t, {}, OWNER_CHAT), "deny", t);
+    for (const source of ["handler", "background"] as const) assert.equal(classify(t, {}, kindOf(source)), "deny", `${t} (${source})`);
   }
   for (const t of ["mcp__x__get_thing", "mcp__x__blockquote_style", "mcp__x__undeleted_not_a_token", "mcp__x__list_blocks_free", "mcp__x__spamming", "mcp__x__search_deleted"]) assert.equal(nameIsNever(t), false, t);
   // every read name in the code and in the connectors' lists must survive the rule (a row decides for the ones it lists)
@@ -90,18 +91,18 @@ test("never allowed: the arguments, snake_case and camelCase, for tools that onl
       assert.equal(mayFix(t, { input: { page_id: "p", ...input } }), false);
       assert.equal(applyChanges(t, { page_id: "p", ...input }, [{ field: "page_id", value: "q" }]), undefined, "a reply cannot retarget a delete");
     }
-    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "chat"), "ask");
-    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "handler"), "ask");
+    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, OWNER_CHAT), "ask");
+    assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, OWNER_LOOK), "ask");
   }
-  for (const input of [{ spam: true }, { trashed: true }, { allow_deleting_content: true }, { archived: true, allow_deleting_content: true }, { labelIds: ["TRASH"] }, { action: "delete" }]) assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, "chat"), "deny", JSON.stringify(input));
+  for (const input of [{ spam: true }, { trashed: true }, { allow_deleting_content: true }, { archived: true, allow_deleting_content: true }, { labelIds: ["TRASH"] }, { action: "delete" }]) assert.equal(classify(`${N}notion-update-page`, { page_id: "p", ...input }, OWNER_CHAT), "deny", JSON.stringify(input));
   assert.equal(confirmsDelete(`${N}notion-update-page`, { page_id: "p", command: "replace_content" }), false);
   assert.equal(mayFix(`${N}notion-update-page`, { input: { page_id: "p" } }), true);
   for (const input of [{ labelIds: ["INBOX", "UNREAD"] }, { spam: false }, { archived: false }, { in_trash: false }, { allow_deleting_content: false }, { action: "create" }, { action: "rsvp" }, { query: "trash" }, { body: "this is spam" }]) assert.equal(destinationIsTrashOrSpam(input) || isNeverAllowed("mcp__x__update_thing", input), false, JSON.stringify(input));
   // the friend's calendar delete is confirmed like the owner's; any other word for it is still denied
   const ME = new Set(["mcp__google__manage_event"]); // (a friend's tool exists in her isolated run only)
-  assert.equal(classify("mcp__google__manage_event", { action: "delete", event_id: "e" }, "group", "/n", ME), "ask");
-  assert.equal(classify("mcp__google__manage_event", { action: " Delete ", event_id: "e" }, "group", "/n", ME), "ask");
-  for (const action of ["trash", "purge", "destroy"]) assert.equal(classify("mcp__google__manage_event", { action, event_id: "e" }, "group", "/n", ME), "deny", action);
+  assert.equal(classify("mcp__google__manage_event", { action: "delete", event_id: "e" }, FRIEND_CHAT, "/n", ME), "ask");
+  assert.equal(classify("mcp__google__manage_event", { action: " Delete ", event_id: "e" }, FRIEND_CHAT, "/n", ME), "ask");
+  for (const action of ["trash", "purge", "destroy"]) assert.equal(classify("mcp__google__manage_event", { action, event_id: "e" }, FRIEND_CHAT, "/n", ME), "deny", action);
   assert.equal(isJudgeable("mcp__google__manage_event", { action: "delete", event_id: "e" }), true);
   assert.equal(isJudgeable("mcp__google__manage_event", { action: "delete", event_id: "e", attendees: ["a@example.org"] }), false, "a delete that names guests is asked");
   assert.equal(mayFix("mcp__google__manage_event", { input: { action: "delete", event_id: "e" } }), false);
@@ -120,14 +121,14 @@ test("the five destructive actions the owner allows: ask on every source, judged
   assert.ok(!NEVER_ACTIONS.has(DELETE_CONFIRM));
   for (const [t, input, shown] of five) {
     for (const source of SOURCES) {
-      if (source === "group") continue;
-      assert.equal(classify(t, input, source), "ask", `${t} (${source})`);
+      if (source === "group" || source === "browse") continue; // (the browse worker holds none of these tools: its own tests)
+      assert.equal(classify(t, input, kindOf(source)), "ask", `${t} (${source})`);
     }
     assert.equal(neverAllowedTool(t), false, t);
     assert.equal(isNeverAllowed(t, input), false, t);
     assert.equal(isJudgeable(t, input), !!entryFor(t), t); // (judged where the tool is loaded: Gmail only while it is the mail provider)
     assert.equal(mayFix(t, { input }), false, t);
-    assert.equal(isFree(t, undefined, { input, source: "chat" }), false, t);
+    assert.equal(isFree(t, undefined, { input, run: OWNER_CHAT }), false, t);
     assert.match(describeCall(t, input), shown, t);
   }
   assert.equal(describeCall(`${CAL}delete_event`, { eventId: "e1", summary: "Dentist" }).includes("Dentist"), true, "the title the call carries is shown");
@@ -135,46 +136,46 @@ test("the five destructive actions the owner allows: ask on every source, judged
   const hidden = hiddenTools([`${MB}discard_draft`, `${GM}delete_draft`, `${CAL}delete_event`, `${N}notion-update-page`]);
   for (const [t] of five) assert.ok(!hidden.includes(t), t);
   // an isolated run only has what its capability set holds: the owner's connectors are not a friend's or a group's
-  assert.equal(classify(`${CAL}delete_event`, { eventId: "e" }, "group"), "deny");
+  assert.equal(classify(`${CAL}delete_event`, { eventId: "e" }, GROUP_CHAT), "deny");
   // the neighbours stay denied
-  for (const t of [`${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`, `${GM}delete_label`, `${GM}trash_message`, `${GM}untrash_thread`, `${GM}mark_thread_spam`, "mcp__claude_ai_Claude_Docs__delete", "mcp__x__delete_draft", "mcp__claude_ai_Interactive_Brokers_IBKR__delete_alert"]) assert.equal(classify(t, {}, "chat"), "deny", t);
+  for (const t of [`${MB}trash_conversation`, `${MB}delete_conversation_permanently`, `${MB}set_conversation_spam`, `${MB}set_sender_blocked`, `${GM}delete_label`, `${GM}trash_message`, `${GM}untrash_thread`, `${GM}mark_thread_spam`, "mcp__claude_ai_Claude_Docs__delete", "mcp__x__delete_draft", "mcp__claude_ai_Interactive_Brokers_IBKR__delete_alert"]) assert.equal(classify(t, {}, OWNER_CHAT), "deny", t);
 });
 
 test("a Mailbird move is asked and never judged (the destination may be Trash or Junk); discard_draft is asked and judged with care", () => {
-  assert.equal(classify(`${MB}move_conversation`, { conversationId: "c", destinationFolderId: "x" }, "chat"), "ask");
+  assert.equal(classify(`${MB}move_conversation`, { conversationId: "c", destinationFolderId: "x" }, OWNER_CHAT), "ask");
   assert.equal(isJudgeable(`${MB}move_conversation`, { conversationId: "c" }), false);
   assert.equal(mayFix(`${MB}move_conversation`), false);
-  assert.equal(classify(`${MB}discard_draft`, { messageId: 1 }, "chat"), "ask");
-  assert.equal(classify(`${MB}show_notification`, {}, "chat"), "ask");
+  assert.equal(classify(`${MB}discard_draft`, { messageId: 1 }, OWNER_CHAT), "ask");
+  assert.equal(classify(`${MB}show_notification`, {}, OWNER_CHAT), "ask");
 });
 
 test("classify is one fold: a floor can only lower, a call a module declares free is the only grant, and nothing unknown is free", () => {
   assert.equal(isFree("mcp__x__get_thing"), false);
-  assert.equal(classify("mcp__x__get_thing", {}, "chat"), "ask");
-  for (const source of SOURCES) assert.notEqual(classify("mcp__x__get_thing", {}, source), "allow", source);
+  assert.equal(classify("mcp__x__get_thing", {}, OWNER_CHAT), "ask");
+  for (const source of SOURCES) assert.notEqual(classify("mcp__x__get_thing", {}, kindOf(source)), "allow", source);
   // local files: any string starting with file:, anywhere, for every source
-  assert.equal(classify(`${MB}create_draft`, { attachments: ["FILE:///etc/passwd"] }, "chat"), "deny");
-  assert.equal(classify(`${MB}create_draft`, { note: "file:/x" }, "handler"), "deny");
-  assert.equal(classify("mcp__send__send", { text: "x", path: "file:///x" }, "group", "/n", new Set(["mcp__send__send"])), "deny");
-  assert.equal(classify("WebSearch", { query: "x", file: "file:///x" }, "group", "/n", new Set(["WebSearch"])), "deny");
+  assert.equal(classify(`${MB}create_draft`, { attachments: ["FILE:///etc/passwd"] }, OWNER_CHAT), "deny");
+  assert.equal(classify(`${MB}create_draft`, { note: "file:/x" }, OWNER_LOOK), "deny");
+  assert.equal(classify("mcp__send__send", { text: "x", path: "file:///x" }, GROUP_CHAT, "/n", new Set(["mcp__send__send"])), "deny");
+  assert.equal(classify("WebSearch", { query: "x", file: "file:///x" }, GROUP_CHAT, "/n", new Set(["WebSearch"])), "deny");
   // an absolute or ~ path in an attachments-like field
   for (const attachments of [["/home/someone/.ssh/id_ed25519"], ["~/.env"], [{ path: "/etc/hosts" }], { files: ["C:\\data\\a.txt"] }]) assert.ok(namesLocalFile({ attachments }), JSON.stringify(attachments));
   assert.equal(namesLocalFile({ attachments: ["mailbird://mcp/messages/1/attachments/2", "report.pdf"] }), false);
   assert.equal(namesLocalFile({ body: "see /usr/bin and ~ for details" }), false);
-  assert.equal(classify(`${MB}create_draft`, { to: "x@example.com", attachments: ["/home/someone/.ssh/id"] }, "chat"), "deny");
+  assert.equal(classify(`${MB}create_draft`, { to: "x@example.com", attachments: ["/home/someone/.ssh/id"] }, OWNER_CHAT), "deny");
   // the group/tenant sources: the capability set first, then the same fold
   const set = new Set(["mcp__browse__browse"]);
-  assert.equal(classify("mcp__browse__browse", { task: "x" }, "group", undefined, set), "ask", "a browse task is judged in a group like in the owner's chat");
-  assert.equal(classify("mcp__browse__browse", { task: "x" }, "group", undefined, new Set()), "deny");
+  assert.equal(classify("mcp__browse__browse", { task: "x" }, GROUP_CHAT, undefined, set), "ask", "a browse task is judged in a group like in the owner's chat");
+  assert.equal(classify("mcp__browse__browse", { task: "x" }, GROUP_CHAT, undefined, new Set()), "deny");
 });
 
 test("every known name of every module that is not a row classifies as ask or deny, never allow, for every source", () => {
   const rows = new Set(allRows().map((e) => e.tool));
   const unlisted = everyName.filter((t) => !rows.has(t));
   assert.ok(unlisted.length > 40, "the connectors have tools the manifest does not list");
-  for (const t of unlisted) for (const source of SOURCES) assert.notEqual(classify(t, {}, source), "allow", `${t} (${source})`);
+  for (const t of unlisted) for (const source of SOURCES) assert.notEqual(classify(t, {}, kindOf(source)), "allow", `${t} (${source})`);
   // with a group's tool set naming it, still not free
-  for (const t of unlisted) assert.notEqual(classify(t, {}, "group", "/n", new Set([t])), "allow", t);
+  for (const t of unlisted) assert.notEqual(classify(t, {}, GROUP_CHAT, "/n", new Set([t])), "allow", t);
   // and an unlisted tool is never judged
   for (const t of unlisted) assert.equal(isJudgeable(t, {}), false, t);
 });
@@ -213,8 +214,8 @@ const TABLE: [string, string, string, string][] = [
   ["Skill", "allow", "allow", "allow"],
   ["Bash", "ask", "ask", "deny"],
   ["mcp__browse__browse", "ask", "ask", "ask"],
-  ["mcp__send__send", "allow", "deny", "allow"],
-  ["mcp__weather__get_forecast", "allow", "deny", "allow"],
+  ["mcp__send__send", "allow", "allow", "allow"],
+  ["mcp__weather__get_forecast", "allow", "allow", "allow"],
   ["mcp__new_server__do_something", "ask", "ask", "deny"],
   ["mcp__new_server__get_thing", "ask", "ask", "deny"],
   ["mcp__new_server__delete_thing", "deny", "deny", "deny"],
@@ -222,9 +223,9 @@ const TABLE: [string, string, string, string][] = [
 
 test("the table: the verdict of each tool for the owner's chat, an unattended run and a group", () => {
   for (const [tool, chat, brief, group] of TABLE) {
-    assert.equal(classify(tool, {}, "chat"), chat, `${tool} (chat)`);
-    assert.equal(classify(tool, {}, "handler"), brief, `${tool} (unattended)`);
-    assert.equal(classify(tool, {}, "group"), group, `${tool} (group)`);
+    assert.equal(classify(tool, {}, OWNER_CHAT), chat, `${tool} (chat)`);
+    assert.equal(classify(tool, {}, OWNER_LOOK), brief, `${tool} (unattended)`);
+    assert.equal(classify(tool, {}, GROUP_CHAT), group, `${tool} (group)`);
   }
   assert.ok(!groupTools().has(`${MB}get_message`));
 });
@@ -278,7 +279,7 @@ test("instance/browse is not readable data, and stale browse run folders are swe
   mkdirSync(join(root, "run-fresh"), { recursive: true });
   writeFileSync(join(root, "run-fresh", "page.md"), "a page view");
   assert.equal(isReadableData(join(root, "run-fresh", "page.md")), false, "left-over page views are not for the chat");
-  assert.equal(classify("Read", { file_path: join(root, "run-fresh", "page.md") }, "chat"), "deny");
+  assert.equal(classify("Read", { file_path: join(root, "run-fresh", "page.md") }, OWNER_CHAT), "deny");
   const tmp = mkdtempSync(join(tmpdir(), "browse-sweep-"));
   const old = Date.now() - 2 * 60 * 60_000;
   for (const d of ["run-old", "run-new", join("shots", "run-old"), join("shots", "run-new"), "other"]) mkdirSync(join(tmp, d), { recursive: true });
@@ -290,11 +291,10 @@ test("instance/browse is not readable data, and stale browse run folders are swe
 
 test("the built-in tools of a run come from the builtin module's rows: the same offering as ever, one list", async () => {
   const { buildOptions } = await import("../src/run/agentrun.ts");
-  const tools = (source: (typeof SOURCES)[number], extra: Record<string, unknown> = {}) => buildOptions(async () => ({ approved: false }), { source, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, ...extra } as never, undefined).tools;
-  assert.deepEqual(tools("chat", { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"]);
-  assert.deepEqual(tools("background"), ["Skill", "WebSearch", "WebFetch"]);
-  for (const source of ["radar", "handler", "heartbeat", "dream"] as const) assert.deepEqual(tools(source), ["Skill"], source); // (they never open a page: docs/SAFETY.md says so)
-  assert.deepEqual(tools("browse"), ["WebSearch"]);
-  assert.deepEqual(tools("group", { tools: new Set(["WebSearch", "Read", "Skill", "WebFetch"]) }), ["Skill", "Read", "WebSearch"], "never opening a page, even if a set held the name");
-  assert.deepEqual(tools("group", { tools: new Set() }), []);
+  const tools = (kind: typeof OWNER_CHAT, extra: Record<string, unknown> = {}) => buildOptions(async () => ({ approved: false }), { kind, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, ...extra } as never, undefined).tools;
+  assert.deepEqual(tools(OWNER_CHAT, { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"]);
+  assert.deepEqual(tools(OWNER_LOOK), ["Skill", "WebSearch", "WebFetch"], "the owner's look: the same, less the notes' file tools (attended)");
+  assert.deepEqual(tools(BROWSE_RUN), ["WebSearch"]);
+  assert.deepEqual(tools(GROUP_CHAT, { tools: new Set(["WebSearch", "Read", "Skill", "WebFetch"]) }), ["Skill", "Read", "WebSearch"], "never opening a page, even if a set held the name");
+  assert.deepEqual(tools(GROUP_CHAT, { tools: new Set() }), []);
 });

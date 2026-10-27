@@ -25,13 +25,17 @@ const DEFAULT_TIME = "09:00"; // (a rule without a time, like a task reminder's)
 const INSTRUCTION_CHARS = 1500;
 const clean = (s: string): string => s.replace(/\s+/g, " ").trim().slice(0, INSTRUCTION_CHARS);
 
+// The clock a routine runs on: its rule's zone when it names one, else the conversation's.
+const zoneFor = (r: Pick<Routine, "rule">, zone: string): string => r.rule.zone ?? zone;
+
 export const whenText = (r: Pick<Routine, "rule">): string => formatRepeat(r.rule.time ? r.rule : { ...r.rule, time: DEFAULT_TIME });
 
 // An interval ("every 2 weeks") counts from the day the planner first saw the routine.
 const anchorOf = (rec: { since: number } | undefined, now: Date, zone: string): string => localOf(rec?.since ?? now.getTime(), zone).date;
 
 // The latest slot at or before `now` (looking back eight days) and the first one after it, from `nextInstant` (DST-safe: 18:30 is 18:30 on the wall clock all year).
-export function slotsAround(r: Pick<Routine, "rule">, now: Date, zone: string, anchor: string): { last?: Slot; next?: Slot } {
+export function slotsAround(r: Pick<Routine, "rule">, now: Date, conversationZone: string, anchor: string): { last?: Slot; next?: Slot } {
+  const zone = zoneFor(r, conversationZone);
   const t = now.getTime();
   const slot = (ms: number): Slot => ({ date: localOf(ms, zone).date, at: new Date(ms) });
   let last: Slot | undefined;
@@ -70,7 +74,8 @@ export type Plan =
   | { state: "done"; at: Date }
   | { state: "skipped"; slot: Slot; why: "asleep" | "failed" }; // asleep: past the catch-up window without a run; failed: gave up after MAX_ATTEMPTS
 
-export function planRoutine(r: Routine, now: Date, zone: string, rec: RoutineRecord | undefined, catchUpHours: number): Plan {
+export function planRoutine(r: Routine, now: Date, conversationZone: string, rec: RoutineRecord | undefined, catchUpHours: number): Plan {
+  const zone = zoneFor(r, conversationZone);
   const { last, next } = slotsAround(r, now, zone, anchorOf(rec, now, zone));
   if (!last || !rec || last.at.getTime() < rec.since) return { state: "waiting", ...(next ? { next } : {}) };
   const mine = rec.period === last.date ? rec : undefined;
@@ -86,7 +91,8 @@ export function planRoutine(r: Routine, now: Date, zone: string, rec: RoutineRec
 }
 
 // What the owner sees in /status and the doctor: "every weekday at 18:30, next Tue 27 Oct 18:30".
-export function nextText(r: Routine, now: Date, zone: string, rec?: RoutineRecord): string {
+export function nextText(r: Routine, now: Date, conversationZone: string, rec?: RoutineRecord): string {
+  const zone = zoneFor(r, conversationZone);
   const n = slotsAround(r, now, zone, anchorOf(rec, now, zone)).next;
   if (!n) return whenText(r);
   const today = localOf(now.getTime(), zone).date;
@@ -199,17 +205,18 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
 
 // The routines as STATUS for any run (a chat turn, a look, an expert): due, running, delivered at, skipped, or when next. Read-only: only the look starts, records and settles a routine.
 export function routineStatus(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, catchUpHours: number): string {
-  const at = (d: Date): string => {
-    const l = localOf(d.getTime(), zone);
-    return `${l.date === localOf(now.getTime(), zone).date ? "today" : l.date} ${l.time}`;
-  };
   const lines = routines.map((r) => {
+    const z = zoneFor(r, zone); // (times in the rule's own zone are named: "today 08:05 Europe/Zurich")
+    const at = (d: Date): string => {
+      const l = localOf(d.getTime(), z);
+      return `${l.date === localOf(now.getTime(), z).date ? "today" : l.date} ${l.time}${r.rule.zone ? ` ${z}` : ""}`;
+    };
     const rec = readRecord(conv, r.name);
     const plan = planRoutine(r, now, zone, rec, catchUpHours);
-    const what = plan.state === "due" ? `due now${plan.retry ? " (the earlier attempt died)" : ""}; the next look runs it` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"})` : `next: ${nextText(r, now, zone, rec)}`;
+    const what = plan.state === "due" ? `due now${plan.retry ? " (the earlier attempt died)" : ""}` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"})` : `next: ${nextText(r, now, zone, rec)}`;
     return `${r.name}: ${what}`;
   });
-  return lines.length ? `Routines, status only (code schedules them and only a look runs them: never start one yourself; use this to answer "did my brief go out?" or to avoid repeating what one is about to say):\n${lines.join("\n")}` : "";
+  return lines.length ? `Routines, status only (code schedules them; use this to answer "did my brief go out?" or to avoid repeating what one is about to say):\n${lines.join("\n")}` : "";
 }
 
 // "/status" and the doctor: one line per routine with its schedule, next run and last run.
@@ -218,7 +225,8 @@ export function routineLines(conv: ConvRef, routines: readonly Routine[], now: D
 }
 
 // "10-22 18:31", "failed (2026-10-22)", "not yet": the last run of a routine, from the record.
-export function lastRun(conv: ConvRef, r: Routine, zone: string): string {
+export function lastRun(conv: ConvRef, r: Routine, conversationZone: string): string {
+  const zone = zoneFor(r, conversationZone);
   const rec = readRecord(conv, r.name);
   if (rec?.lastDelivered) return `${localOf(rec.lastDelivered, zone).date.slice(5)} ${localOf(rec.lastDelivered, zone).time}${rec.status === "failed" || rec.status === "skipped" ? `, then ${rec.status} (${rec.period})` : ""}`;
   return rec?.status ? `${rec.status} (${rec.period})` : "not yet";

@@ -17,6 +17,7 @@ import {
   type ClipTools,
 } from "@ted-assistant/speech/tts";
 import { synthesizeQwen, stopQwen } from "@ted-assistant/speech/tts";
+import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The cloned voice: a library per conversation, built from voice notes received in that conversation, read by the speech provider per reply.
 
@@ -243,18 +244,17 @@ test("tool: group rules: a group library is capped, anyone can switch back, only
   assert.equal(activeVoice(root), "default");
 });
 
-test("tool: manifest and policy: chat and group without approval, never an unattended run", () => {
+test("tool: manifest and policy: free without approval wherever the conversation has the capability, a look included", () => {
   const TOOL = "mcp__voice__voice";
-  assert.equal(access(TOOL, "chat"), "free");
-  assert.equal(classify(TOOL, { action: "list" }, "chat"), "allow");
-  assert.equal(classify(TOOL, { action: "list" }, "group"), "allow");
-  for (const source of ["radar", "handler", "heartbeat", "dream", "browse", "background"] as const) {
-    assert.equal(access(TOOL, source), undefined, source);
-    assert.equal(classify(TOOL, { action: "list" }, source), "deny", source);
-  }
-  // the default provider is Qwen: chat and group are offered the tool, an unattended run is not
-  const servers = (source: "chat" | "group" | "handler") => Object.keys(buildOptions(async () => ({ approved: true }), { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, source, ...(source === "chat" ? { memory: { dir: "/tmp/n" } } : source === "group" ? { memory: { dir: "/tmp/n", groupId: "g" } } : {}) }, undefined).mcpServers ?? {});
-  for (const s of ["chat", "group", "handler"] as const) assert.equal(servers(s).includes("voice"), s !== "handler", s);
+  assert.equal(access(TOOL, OWNER_CHAT), "free");
+  assert.equal(classify(TOOL, { action: "list" }, OWNER_CHAT), "allow");
+  assert.equal(classify(TOOL, { action: "list" }, OWNER_LOOK), "allow");
+  assert.equal(classify(TOOL, { action: "list" }, GROUP_CHAT), "allow");
+  assert.equal(classify(TOOL, { action: "list" }, GROUP_LOOK), "allow");
+  // the default provider is Qwen: every run of a conversation that has the capability is offered the tool, the browse worker is not
+  const servers = (kind: typeof OWNER_CHAT) => Object.keys(buildOptions(async () => ({ approved: true }), { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, kind, ...(kind.who === "group" ? { groupId: "g" } : {}) }, undefined).mcpServers ?? {});
+  for (const run of [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK]) assert.ok(servers(run).includes("voice"), `${run.who} ${run.attended}`);
+  assert.ok(!servers(BROWSE_RUN).includes("voice"));
 });
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0;

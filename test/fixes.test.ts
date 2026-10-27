@@ -48,8 +48,7 @@ test("the failing-looks fact carries the cause's what and fix, for the owner onl
       assert.equal(f.fact("x"), "", `${scope} ${c}`);
     }
   }
-  assert.match(FIXES.timeout.fix, /HEARTBEAT_TIMEOUT_MINUTES/, "a look's ceiling, not RUN_MAX_MINUTES_BACKGROUND");
-  assert.doesNotMatch(FIXES.timeout.fix, /RUN_MAX_MINUTES_BACKGROUND/);
+  assert.match(FIXES.timeout.fix, /RUN_MAX_MINUTES_CHAT/, "the one ceiling of every run");
 });
 
 test("the owner's chat failure notices end with the step for their cause; friends and groups are sent to no terminal", () => {

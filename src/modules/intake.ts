@@ -5,6 +5,6 @@ import { rowsOf, type ToolModule } from "./types.ts";
 export const intakeModule: ToolModule = {
   name: "intake",
   connection: { kind: "in-process", name: "intake", when: (ctx) => !!ctx.tenant && ctx.offers("mcp__intake__get_setup_link") },
-  rows: [...rowsOf("mcp__intake__", "intake", "intake")("intake", "get_setup_link setup_status", { only: ["group"] })],
+  rows: [...rowsOf("mcp__intake__", "intake", "intake")("intake", "get_setup_link setup_status", { who: ["tenant"] })],
   free: true,
 };

@@ -7,6 +7,7 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { classify } from "../src/policy/policy.ts";
 import { settings } from "../src/core/settings.ts";
 import { createsOf } from "../src/policy/toolmanifest.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 // The five destructive actions (a draft, a calendar event, a Notion page and a Drive file to the bin) are allowed, judged with care: the judge is told by code whether the
 // assistant made this very thing in this conversation, and a delete is never fixed.
@@ -74,10 +75,10 @@ test("through the permission path: classify asks, the judge sees the care line, 
   const seen: string[] = [];
   const mk = (decision: Verdict["decision"], conv: string) => {
     const asked: string[] = [];
-    const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "chat", undefined, (async (i: { description: string }) => (seen.push(i.description), { decision, reason: "r" })) as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "delete that draft" }), conversation: conv });
+    const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), OWNER_CHAT, undefined, (async (i: { description: string }) => (seen.push(i.description), { decision, reason: "r" })) as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "delete that draft" }), conversation: conv });
     return { asked, can: async (t: string, i: Record<string, unknown>) => ((await can(t, i, opts)) as { behavior: string; message?: string }) };
   };
-  assert.equal(classify(`${MB}discard_draft`, { messageId: 26305 }, "chat"), "ask");
+  assert.equal(classify(`${MB}discard_draft`, { messageId: 26305 }, OWNER_CHAT), "ask");
   assert.equal(isJudgeable(`${MB}discard_draft`, { messageId: 26305 }), true);
   assert.equal(mayFix(`${MB}discard_draft`, { input: { messageId: 26305 } }), false);
   // auto: nobody is asked

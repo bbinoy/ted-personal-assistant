@@ -86,7 +86,7 @@ test("routines: a chat turn sees their status and never starts one; the look is 
   db.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('daily-brief', ?)", new Date(2026, 9, 1).getTime());
   const at = new Date(2026, 9, 14, 8, 0);
   const chat = F.factsFor(conv, at, "chat");
-  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*daily-brief: due now; the next look runs it/);
+  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*daily-brief: due now/);
   assert.equal(chat.routines, "", "no instruction to run it");
   assert.ok(!has(chat, /Delegate it now/));
   chat.done({ ended: true, said: true });

@@ -15,6 +15,7 @@ import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, screenshotInput, validPoint 
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { loadSettings } from "../src/core/settings.ts";
 import { cleanToolOutput } from "../src/core/toolclean.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // The vision experiment (BROWSE_VISION): off changes nothing; read lets a screenshot reach the model; click resolves a point itself.
 
@@ -103,7 +104,7 @@ test("an image block survives the result path: shape keeps it, the door-cleaning
 
 test("a screenshot runs with the input code narrowed it to (permission path)", async () => {
   const g = guard("read");
-  const canUse = makeCanUseTool(async () => ({ approved: false }), "browse", undefined, async (): Promise<Verdict> => ({ decision: "auto", reason: "x" }), g, undefined, false, { provenance: standing("t") });
+  const canUse = makeCanUseTool(async () => ({ approved: false }), BROWSE_RUN, undefined, async (): Promise<Verdict> => ({ decision: "auto", reason: "x" }), g, undefined, false, { provenance: standing("t") });
   const r = (await canUse(`${B}take_screenshot`, { type: "png", scale: "device" }, opts)) as { behavior: string; updatedInput?: Record<string, unknown> };
   assert.equal(r.behavior, "allow");
   assert.deepEqual(r.updatedInput, { type: "jpeg", scale: "css" });
@@ -196,7 +197,7 @@ test("point clicks: an empty area, a canvas or a map surface is a plain click, l
 
 test("point clicks: the judge asking (or failing) reaches the owner for an unresolved point", async () => {
   const asked: string[] = [];
-  const mk = (verdict: () => Promise<Verdict>) => makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, verdict, guard("click", async () => "the lookup failed (boom)"), undefined, false, { provenance: standing("find a table") });
+  const mk = (verdict: () => Promise<Verdict>) => makeCanUseTool(async (d) => (asked.push(d), { approved: false }), BROWSE_RUN, undefined, verdict, guard("click", async () => "the lookup failed (boom)"), undefined, false, { provenance: standing("find a table") });
   assert.equal(((await mk(async () => ({ decision: "ask", reason: "x" }))(`${B}mouse_click_xy`, click, opts)) as { behavior: string }).behavior, "deny");
   assert.equal(asked.length, 1);
   asked.length = 0;
@@ -225,7 +226,7 @@ test("point clicks: payment and login fields always ask, no judge; the question 
   // end to end: a judge that says auto cannot skip it
   const asked: string[] = [];
   let judged = 0;
-  const canUse = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "x" }), guard("click", at(fields[1]!)), undefined, false, { provenance: standing("t") });
+  const canUse = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), BROWSE_RUN, undefined, async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "x" }), guard("click", at(fields[1]!)), undefined, false, { provenance: standing("t") });
   assert.equal(((await canUse(`${B}mouse_click_xy`, click, opts)) as { behavior: string }).behavior, "deny");
   assert.equal(asked.length, 1);
   assert.equal(judged, 0);
@@ -234,7 +235,7 @@ test("point clicks: payment and login fields always ask, no judge; the question 
 test("point clicks through the permission path: a commit is judged, then the owner is asked if the judge asks; an unidentified point is judged too", async () => {
   const asked: string[] = [];
   const judgedFor: string[] = [];
-  const mk = (probe: Parameters<typeof guard>[1], verdict: Verdict["decision"]) => makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, async (i): Promise<Verdict> => (judgedFor.push(i.description), { decision: verdict, reason: "x" }), guard("click", probe), undefined, false, { provenance: standing("find a table") });
+  const mk = (probe: Parameters<typeof guard>[1], verdict: Verdict["decision"]) => makeCanUseTool(async (d) => (asked.push(d), { approved: false }), BROWSE_RUN, undefined, async (i): Promise<Verdict> => (judgedFor.push(i.description), { decision: verdict, reason: "x" }), guard("click", probe), undefined, false, { provenance: standing("find a table") });
   const c1 = mk(at({ name: "Book now" }), "ask");
   assert.equal(((await c1(`${B}mouse_click_xy`, click, opts)) as { behavior: string }).behavior, "deny");
   assert.equal(asked.length, 1);

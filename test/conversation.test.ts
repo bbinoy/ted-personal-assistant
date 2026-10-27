@@ -88,12 +88,12 @@ const target = { author: OWNER, timestamp: 111 };
 test("conversation: only the two factories make conversations, and they differ in trust", () => {
   const o = owner();
   const g = group("abc");
-  assert.deepEqual([o.source, o.gate, o.approvals, o.groupId], ["chat", false, true, undefined]);
-  assert.deepEqual([g.source, g.gate, g.approvals, g.groupId], ["group", true, false, "abc"]);
+  assert.deepEqual([o.kind, o.gate, o.approvals, o.groupId], ["owner", false, true, undefined]);
+  assert.deepEqual([g.kind, g.gate, g.approvals, g.groupId], ["group", true, false, "abc"]);
   assert.notEqual(g.logFile, o.logFile);
   assert.notEqual(g.notesDir, o.notesDir);
   assert.equal(owner(), o); // one owner conversation
-  assert.throws(() => ((o as any).source = "group"), TypeError); // frozen: trust cannot be rewritten
+  assert.throws(() => ((o as any).kind = "group"), TypeError); // frozen: trust cannot be rewritten
 });
 
 test("private chat: a plain answer, no thread, read receipt, typing on and off, both sides logged", async () => {

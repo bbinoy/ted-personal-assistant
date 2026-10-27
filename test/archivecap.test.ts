@@ -7,6 +7,7 @@ import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { archiveGate, archivedBy } from "../src/modules/archivecap.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
+import { FRIEND_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The archive cap: at most ARCHIVE_MAX_PER_RUN archives per run, for every mail provider, each message of a batch counted.
 
@@ -58,8 +59,8 @@ test("the gate: the same id is counted once, a batch past the cap is refused who
   assert.equal(gate(`${MB}get_message`, { messageId: 1 }), undefined, "only archives are counted");
 });
 
-const sequence = async (tool: string, key: (n: number) => Record<string, unknown>, source: "chat" | "background" | "group" = "background", tools?: ReadonlySet<string>) => {
-  const can = makeCanUseTool(async () => ({ approved: true }), source, undefined, autoJudge, undefined, tools, false, { provenance: () => ({ kind: "owner-words", text: "tidy the inbox" }) as never });
+const sequence = async (tool: string, key: (n: number) => Record<string, unknown>, kind: typeof OWNER_LOOK = OWNER_LOOK, tools?: ReadonlySet<string>) => {
+  const can = makeCanUseTool(async () => ({ approved: true }), kind, undefined, autoJudge, undefined, tools, false, { provenance: () => ({ kind: "owner-words", text: "tidy the inbox" }) as never });
   const out: Out[] = [];
   for (let n = 0; n < 4; n++) out.push((await can(tool, key(n), opts)) as Out);
   return out;
@@ -72,7 +73,7 @@ test("Mailbird: the fourth archive of a run with a cap of three is refused and a
     assert.deepEqual(out.map((o) => o.behavior), ["allow", "allow", "allow", "deny"]);
     assert.match(out[3]!.message ?? "", /archive cap reached for this look/i);
     assert.ok(readAudit((e) => e.decision === "deny-run-cap" && e.ts >= start).length >= 1, "the refusal is in the audit log");
-    const can = makeCanUseTool(async () => ({ approved: true }), "background", undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never });
+    const can = makeCanUseTool(async () => ({ approved: true }), OWNER_LOOK, undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never });
     assert.equal(((await can(`${MB}archive_conversation`, { conversationIds: ["x1", "x2", "x3", "x4"] }, opts)) as Out).behavior, "deny", "four messages in one call are four archives");
     assert.equal(((await can(`${MB}archive_conversation`, { conversationId: "x1" }, opts)) as Out).behavior, "allow", "each run has its own count");
   });
@@ -83,7 +84,7 @@ test("Gmail: removing INBOX counts the same way, other label changes do not", as
     const out = await sequence(`${GM}unlabel_thread`, (n) => ({ threadId: `cap-gm-${n}`, labelIds: ["INBOX"] }));
     assert.deepEqual(out.map((o) => o.behavior), ["allow", "allow", "deny", "deny"]);
     assert.match(out[2]!.message ?? "", /archive cap reached/i);
-    const can = makeCanUseTool(async () => ({ approved: true }), "background", undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never });
+    const can = makeCanUseTool(async () => ({ approved: true }), OWNER_LOOK, undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never });
     for (let n = 0; n < 4; n++) assert.doesNotMatch(((await can(`${GM}label_thread`, { threadId: `l${n}`, labelIds: ["STARRED"] }, opts)) as Out).message ?? "", /cap reached/, "a label that is no archive is no part of the cap");
   });
 });
@@ -91,7 +92,7 @@ test("Gmail: removing INBOX counts the same way, other label changes do not", as
 test("a friend's Google: removing INBOX with modify_gmail_message_labels counts too", async () => {
   await withCap(2, {}, async () => {
     const tool = `${GG}modify_gmail_message_labels`;
-    const out = await sequence(tool, (n) => ({ message_id: `cap-gg-${n}`, remove_label_ids: ["INBOX"] }), "group", new Set([tool]));
+    const out = await sequence(tool, (n) => ({ message_id: `cap-gg-${n}`, remove_label_ids: ["INBOX"] }), FRIEND_CHAT, new Set([tool]));
     assert.equal(out.filter((o) => /archive cap reached/i.test(o.message ?? "")).length, 2, "the third and fourth are refused by the cap");
   });
 });
@@ -101,7 +102,7 @@ test("seen mail: ids an archive the run cap refused named are forgotten, so the 
   await withCap(1, {}, async () => {
     const seen = createSeenMail(file);
     assert.deepEqual(seen.unseen(["a", "b", "c"]), ["a", "b", "c"]);
-    const can = makeCanUseTool(async () => ({ approved: true }), "background", undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never, seenMail: seen });
+    const can = makeCanUseTool(async () => ({ approved: true }), OWNER_LOOK, undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never, seenMail: seen });
     assert.equal(((await can(`${MB}archive_conversation`, { conversationId: "a" }, opts)) as Out).behavior, "allow");
     assert.equal(((await can(`${MB}archive_conversation`, { conversationIds: ["b", "c"] }, opts)) as Out).behavior, "deny", "past the cap");
     seen.commit();

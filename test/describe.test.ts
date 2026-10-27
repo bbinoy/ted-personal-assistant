@@ -7,6 +7,7 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { resetDeclined } from "../src/approvals/declined.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 const CREATE = "mcp__claude_ai_Google_Calendar__create_event";
 const DELETE = "mcp__claude_ai_Google_Calendar__delete_event";
@@ -29,7 +30,7 @@ test("the delete question carries the title and time of what the assistant creat
   resetDeclined();
   noteCreated("owner", idsInResult('{"id":"bq99vc4x1"}'), Date.now(), callLabel({ summary: "Coffee", startTime: "2026-10-21T09:00:00", endTime: "2026-10-21T10:00:00" }));
   const asked: string[] = [];
-  const canUse = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "chat", undefined, ask as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "m" }), conversation: "owner" });
+  const canUse = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), OWNER_CHAT, undefined, ask as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "m" }), conversation: "owner" });
   await canUse(DELETE, { calendarId: "primary", eventId: "bq99vc4x1" }, opts);
   assert.match(asked[0]!, /\nNamed: “Coffee”, Wed 21 Oct, 09:00–10:00 \(the assistant created it earlier in this conversation\)/);
   const facts = factsOf({ calendarId: "primary", eventId: "bq99vc4x1" }, asked[0]!);

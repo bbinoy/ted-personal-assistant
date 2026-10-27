@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { GoogleHub } from "../src/modules/google/googlemcp.ts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { FRIEND_CHAT, OWNER_CHAT, kindOf } from "./runkinds.ts";
 
 // A friend's Google tools (src/modules/google/googlemcp.ts, src/modules/google/module.ts) against a fake stdio server (test/fakegoogle.ts): one process per friend with her own token,
 // the token only in a private folder and that process (never an argument, never the model's environment), the tools her capability set allows and no others,
@@ -23,7 +24,7 @@ const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TM
 const { serversFor, RUNTIME, stopAll, dropAll } = await import("../src/modules/runtime.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { id?: string; config: any }) => resolveCapabilities((ctx.id && held.get(ctx.id)) || T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx), FRIEND_CHAT);
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
@@ -245,7 +246,7 @@ function friend(caps: (typeof T.CAPABILITIES)[number][]): ReturnType<typeof T.te
 }
 const runCtx = (ctx: ReturnType<typeof T.tenantContext>) => {
   const tools = tenantTools(ctx);
-  return { source: "group" as const, browsing: false, key: `tenant:${ctx.id}`, mode: "group" as const, tenant: { id: ctx.id } as never, offers: (t: string) => tools.has(t), browseRun: async () => ({ text: "", costUsd: 0 }), memory: { dir: ctx.notesDir } };
+  return { kind: FRIEND_CHAT, browsing: false, key: `tenant:${ctx.id}`, mode: "group" as const, tenant: { id: ctx.id } as never, offers: (t: string) => tools.has(t), browseRun: async () => ({ text: "", costUsd: 0 }), memory: { dir: ctx.notesDir } };
 };
 
 test("google: the capability set decides: google with mail and calendar offers the tools and a server; google alone, mail alone and nothing offer none", () => {
@@ -269,7 +270,7 @@ test("google: the capability set decides: google with mail and calendar offers t
   assert.equal(serversFor(runCtx(plain)).google, undefined);
   assert.ok(tenantCapabilities(plain).has("chat"));
   // The owner's runs never have her server, whatever the set.
-  assert.equal(serversFor({ ...runCtx(both), source: "chat", tenant: undefined, key: "owner", mode: "owner", offers: () => true }).google, undefined);
+  assert.equal(serversFor({ ...runCtx(both), kind: OWNER_CHAT, tenant: undefined, key: "owner", mode: "owner", offers: () => true }).google, undefined);
 });
 
 test("google: the proxy lists only her allowed tools, forces her own address into every call, and refuses what her set does not offer", async () => {
@@ -308,7 +309,7 @@ function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = 
   const judged: { description: string; untrustedInput?: boolean }[] = [];
   const approve = async (description: string) => (asked.push(description), { approved: true });
   const judge = (async (i: { description: string; untrustedInput?: boolean }) => (judged.push(i), { decision: verdict, reason: "t" })) as never;
-  const can = makeCanUseTool(approve as never, "group", ctx.notesDir, judge, undefined, tenantTools(ctx), true, { provenance: scopeOf(`tenant:${ctx.id}`).read, conversation: `tenant:${ctx.id}` });
+  const can = makeCanUseTool(approve as never, FRIEND_CHAT, ctx.notesDir, judge, undefined, tenantTools(ctx), true, { provenance: scopeOf(`tenant:${ctx.id}`).read, conversation: `tenant:${ctx.id}` });
   return { asked, judged, run: (tool: string, input: Record<string, unknown>) => can(G + tool, input, opts) as Promise<Out> };
 }
 
@@ -394,14 +395,14 @@ test("google: a calendar write that names guests, and every answer to an invite,
 test("google: nothing of the owner's or of the Google tools exists for a person without the capability, and the owner's source has none of these tools", () => {
   const plain = friend([]);
   const tools = tenantTools(plain);
-  assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, "group", plain.notesDir, tools), "deny");
-  assert.equal(classify(G + "search_gmail_messages", { query: "x" }, "group", plain.notesDir, tools), "deny");
-  for (const source of ["chat", "background", "handler", "radar"] as const) assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, source, undefined), "deny", source);
+  assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, FRIEND_CHAT, plain.notesDir, tools), "deny");
+  assert.equal(classify(G + "search_gmail_messages", { query: "x" }, FRIEND_CHAT, plain.notesDir, tools), "deny");
+  for (const source of ["chat", "background", "handler", "radar"] as const) assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, kindOf(source), undefined), "deny", source);
   const full = friend(["google", "mail", "calendar"]);
-  assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, "group", full.notesDir, tenantTools(full)), "ask");
-  assert.equal(classify(G + "search_gmail_messages", { query: "x" }, "group", full.notesDir, tenantTools(full)), "allow");
-  assert.equal(classify("mcp__mailbird__send_message_now", {}, "group", full.notesDir, tenantTools(full)), "deny");
-  assert.equal(classify(G + "delete_gmail_message", {}, "group", full.notesDir, tenantTools(full)), "deny");
+  assert.equal(classify(G + "send_gmail_message", { to: "a@b.c" }, FRIEND_CHAT, full.notesDir, tenantTools(full)), "ask");
+  assert.equal(classify(G + "search_gmail_messages", { query: "x" }, FRIEND_CHAT, full.notesDir, tenantTools(full)), "allow");
+  assert.equal(classify("mcp__mailbird__send_message_now", {}, FRIEND_CHAT, full.notesDir, tenantTools(full)), "deny");
+  assert.equal(classify(G + "delete_gmail_message", {}, FRIEND_CHAT, full.notesDir, tenantTools(full)), "deny");
 });
 
 test("google: the default server command pins the package and the day its dependencies resolve to", async () => {

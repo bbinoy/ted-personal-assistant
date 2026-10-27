@@ -20,7 +20,7 @@ export interface Rhythm {
   // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
   readonly dream: { readonly enabled: boolean; readonly hour: number; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
-export type ProfileKey = "chat" | "heartbeat" | "group";
+export type ProfileKey = "chat" | "group";
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
@@ -106,9 +106,9 @@ export const PROMPTS = {
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "routine", "sources", "reactions", "send"],
   tenant: ["browse", "weather", "draw", "google", "her", "personality", "routine", "sources", "reactions", "send", "categories"],
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
-  heartbeatSystem: ["personality", "own", "who", "group"],
+  background: ["who", "Who", "own", "group", "reads", "mail", "experts", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
   expert: ["personality", "own", "who"],
-  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "routines", "routineFacts", "who", "Who", "own", "reads", "mail", "experts", "sources", "tasks", "meetings", "group"],
+  heartbeat: ["now", "timeZone", "who", "lastLook", "quietFrom", "quietTo", "due", "sources", "routineFacts"],
   tasks: ["own", "group", "who"],
   gateGroup: ["participation", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;
@@ -203,7 +203,7 @@ export function loadPreset(dir: string): Preset {
     const d = obj(at(`profiles.${key}`), p[key]);
     return { maxTurns: int(at(`profiles.${key}.maxTurns`), d.maxTurns, 1, 1000), maxBudgetUsd: num(at(`profiles.${key}.maxBudgetUsd`), d.maxBudgetUsd, 0.01, 1000) };
   };
-  const profiles = { chat: profile("chat"), heartbeat: profile("heartbeat"), group: profile("group") };
+  const profiles = { chat: profile("chat"), group: profile("group") };
 
   const s = sec("skills");
   const coreList = Array.isArray(s.core) ? s.core : fail(at("skills.core"), "must be a list");

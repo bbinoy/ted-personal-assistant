@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 // The owner's tasks live in the assistant's own task list (src/tasks/store.ts), not in Notion (22 Oct): the task tools are own data and never judged, finishing or dropping keeps the row and
 // can be undone; after the import a Notion edit of the old task table is told to the judge by a code line (its rule: fix, use the task tools); before it, nothing changes; and the owner's chat
@@ -26,7 +27,7 @@ const yes: import("../src/tasks/import.ts").TurnLook = () => ({ text: "yes", at:
 const opts = { signal: new AbortController().signal } as never;
 
 test("the owner's own task actions are free in chat: no judge, no question, for add, update, complete, snooze and drop", async () => {
-  const can = makeCanUseTool(async () => assert.fail("not asked"), "chat", undefined, async () => assert.fail("not judged"), undefined, undefined, false, { conversation: "owner" });
+  const can = makeCanUseTool(async () => assert.fail("not asked"), OWNER_CHAT, undefined, async () => assert.fail("not judged"), undefined, undefined, false, { conversation: "owner" });
   for (const t of ["add_task", "update_task", "complete_task", "snooze_task", "drop_task", "list_tasks"]) assert.equal(((await can(`mcp__tasks__${t}`, { id: 1, title: "x" }, opts)) as { behavior: string }).behavior, "allow", t);
 });
 
@@ -63,7 +64,7 @@ test("the Tasks line reaches the judge with the Notion edit", async () => {
   const p = I.previewImport(scope(k), { rows: [{ title: "Imported", source_ref: "https://notion.so/p9" }] });
   I.commitImport(scope(k), p.batchId, yes);
   const seen: string[] = [];
-  const can = makeCanUseTool(async () => ({ approved: false }), "chat", undefined, async (i) => (seen.push(i.description), { decision: "fix", reason: "use the task tools" }), undefined, undefined, false, { conversation: k, provenance: () => ({ kind: "owner", message: "tick off the dentist" }) as never });
+  const can = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, async (i) => (seen.push(i.description), { decision: "fix", reason: "use the task tools" }), undefined, undefined, false, { conversation: k, provenance: () => ({ kind: "owner", message: "tick off the dentist" }) as never });
   const r = (await can(NOTION, { page_id: "tasks", command: "replace_content_range", new_str: "- [x] Dentist" }, opts)) as { behavior: string; message?: string };
   assert.equal(r.behavior, "deny");
   assert.match(r.message ?? "", /use the task tools/);

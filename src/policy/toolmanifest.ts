@@ -1,4 +1,4 @@
-import type { Source } from "../core/audit.ts";
+import type { RunKind } from "../core/runkind.ts";
 import type { MailView } from "./mailview.ts";
 import { loaded, registered } from "../modules/index.ts";
 import type { CallTitle, MailTools, ToolEntry, ToolModule, ViewKind } from "../modules/types.ts";
@@ -9,16 +9,16 @@ import { settings } from "../core/settings.ts";
 // policy.ts, autojudge.ts, permissions.ts, capabilities.ts and format.ts read this table; none keeps a tool list of its own. The table is the union of the
 // rows of the LOADED tool modules (src/modules, one file per tool): every module without a slot, and in the `mail` slot the one MAIL_PROVIDER names.
 //
-// A row says WHAT a tool is (provider, action), which capability gates it (`cap`), where it exists at all (`only`) and how a mail call is read (`view`).
+// A row says WHAT a tool is (provider, action), which capability gates it (`cap`), where it exists at all (`attended`, `who`) and how a mail call is read (`view`).
 // It does not say who may use it or whether the owner is asked: that is one path for every tool in every place (chat, group, tenant, mail handler,
 // brief, radar, wake-up, browse), in permissions.ts: the code floor (policy.ts: the never-allowed set and the capability set of a group or a tenant;
 // autojudge.ts: what may never be judged), then the approval judge (approvaljudge.ts), then the question on the owner's phone. The one thing a
 // module decides about its rows is whether they are `free` (isFree below): a plain read or the assistant's own plumbing runs without the judge, everything
 // else is judged.
-// `only` limits a tool to some sources and is used for two things: the browse sub-run's browser, and the tools that need a conversation to exist in
-// (send, draw, voice, the notes). Anywhere else such a tool is denied outright (policy.ts classify).
-// `cap` is the capability that gates the tool (tenants.ts CAPABILITIES). A group or a tenant is offered the tool only when its capability set holds
-// that capability (capabilities.ts) and `only` names "group" or does not limit the sources. The default is the module's capability.
+// `attended` and `who` limit a tool to some runs (core/runkind.ts): the notes' file tools and the edits of the person's own list are for attended runs, the look's bookkeeping
+// for unattended ones, a friend's own connections and the browse worker's browser for those runs. In any other run such a tool is denied outright (policy.ts classify).
+// `cap` is the capability that gates the tool (tenants.ts CAPABILITIES). A run is offered the tool only when its conversation's capability set holds
+// that capability (capabilities.ts) and the row is present for the run (presentFor). The default is the module's capability.
 // The never-allowed set is declared HERE, by the rows: an action in NEVER_ACTIONS (trash, delete, spam, block, trade; neverallowed.ts) or a module marked
 // `never`; neverAllowedTool below is the one question policy.ts, the hidden tools and mayFix ask. Not here, on purpose: which tools a group or tenant has at all
 // (its capability set, capabilities.ts). A tool no module lists is unknown: it asks, is never free and never judged (a name that says delete, trash,
@@ -81,10 +81,13 @@ const readVerb = (tool: string) => READ_VERB.test((tool.split("__").pop() ?? "")
 export const actionOf = (tool: string, mail?: MailProvider): string => entryFor(tool, mail)?.action ?? (readVerb(tool) ? "read" : "unknown");
 export const isReadTool = (tool: string): boolean => actionOf(tool) === "read";
 
-// Does this tool exist for this source at all? (`only`.) A tool the manifest does not know exists everywhere; classify asks about it.
-export function availableFor(tool: string, source: Source, mail?: MailProvider): boolean {
+// Does the row exist in this run at all, besides its capability: attended or not, and for whom (the row's `attended` and `who`).
+export const presentFor = (e: Pick<ToolEntry, "attended" | "who">, run: RunKind): boolean => (e.attended === undefined || e.attended === run.attended) && (!e.who || e.who.includes(run.who));
+
+// Does this tool exist for this run at all? A tool the manifest does not know exists everywhere; classify asks about it.
+export function availableFor(tool: string, run: RunKind, mail?: MailProvider): boolean {
   const e = entryFor(tool, mail);
-  return !e || !e.only || e.only.includes(source);
+  return !e || presentFor(e, run);
 }
 
 // A module's `free`, `untrusted` and `ownerOnly` say "all my rows" (true) or "the rows with these actions".
@@ -95,10 +98,10 @@ const covers = (set: true | readonly string[] | undefined, action: string): bool
 // declares free for that call (`freeWhen`: the brief to the owner's own address; it needs the call, hence `call`). Everything else is not free: it is judged
 // (autojudge.ts) or asked. A tool the manifest does not know is never free, whatever its name says (the read-verb heuristic above is for untrusted marking
 // only). Which PATH a note tool may touch is code (policy.ts classify).
-export function isFree(tool: string, mail: MailProvider = settings.mailProvider, call?: { input: Record<string, unknown>; source: Source }): boolean {
+export function isFree(tool: string, mail: MailProvider = settings.mailProvider, call?: { input: Record<string, unknown>; run: RunKind }): boolean {
   const f = lookup(tool, mail);
   if (!f) return false;
-  return covers(f.module.free, f.entry.action) || (!!call && !!f.module.freeWhen?.[f.entry.action]?.(call.input, call.source));
+  return covers(f.module.free, f.entry.action) || (!!call && !!f.module.freeWhen?.[f.entry.action]?.(call.input, call.run));
 }
 
 // Reading these shows the run text a third party wrote: mail, a web page, a search result, and any other data kind (an event's description, a Notion page, a

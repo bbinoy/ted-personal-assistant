@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { told } from "./told.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,10 +22,11 @@ const { createWakeups } = await import("../src/heartbeat/wake.ts");
 const { convDb } =await import("../src/core/convdb.ts");
 const { clearQuiet, setQuiet } = await import("../src/conversation/quiet.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
-const { heartbeatOptions } = await import("../src/run/agent.ts");
+const { lookOptions } = await import("../src/run/agent.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
 const { lookerOf } = await import("../src/run/scope.ts");
-const { lookInstruction } = await import("../src/heartbeat/look.ts");
+const { chatSystem } = await import("../src/run/persona.ts");
+const { runFor } = await import("../src/run/runoptions.ts");
 const { convDbRule } = await import("../src/heartbeat/convretention.ts");
 
 const s = settings as unknown as Record<string, unknown>;
@@ -326,26 +328,26 @@ test("a look that did not tell it gives the meeting back once while there is tim
 
 // ---- the look's side: who records, what the instruction says ----
 
-test("the look is told to record meetings only where prep exists: the owner with PREP_MINUTES on; not when it is 0, not a group", () => {
+test("the prompt tells a check to record meetings only where prep exists: the owner with PREP_MINUTES on; not when it is 0, not a group", () => {
   const at = new Date(NOW);
   assert.equal(lookerOf(conv).meetings, true);
-  assert.match(lookInstruction(at, undefined, lookerOf(conv)), /note_upcoming_meetings/);
+  assert.match(chatSystem(at, undefined, lookerOf(conv)), /note_upcoming_meetings/);
   s.prepMinutes = 0;
   assert.equal(lookerOf(conv).meetings, false);
-  assert.doesNotMatch(lookInstruction(at, undefined, lookerOf(conv)), /note_upcoming_meetings/);
+  assert.doesNotMatch(chatSystem(at, undefined, lookerOf(conv)), /note_upcoming_meetings/);
   s.prepMinutes = 15;
   assert.equal(lookerOf(group("meetingprep-group-2")).meetings, false);
 });
 
 test("the recording tool is on the owner's look and nowhere else: not in chat, not for a group, not with PREP_MINUTES 0", () => {
-  const look = heartbeatOptions(conv, LOGIN, {}, new Date(NOW));
+  const look = lookOptions(conv, LOGIN, {}, new Date(NOW));
   const names = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: false }), o, undefined).mcpServers as object);
   assert.ok(names(look).includes("meetings"));
-  assert.ok(!names({ ...look, source: "chat" }).includes("meetings"), "chat has no such tool");
+  assert.ok(!names(runFor(conv, "message", { now: new Date(NOW) })).includes("meetings"), "chat has no such tool");
   s.prepMinutes = 0;
   assert.ok(!names(look).includes("meetings"), "off: no server");
   s.prepMinutes = 15;
-  assert.ok(!names(heartbeatOptions(group("meetingprep-group-3"), LOGIN, {}, new Date(NOW))).includes("meetings"), "a group has no calendar, so no tool");
+  assert.ok(!names(lookOptions(group("meetingprep-group-3"), LOGIN, {}, new Date(NOW))).includes("meetings"), "a group has no calendar, so no tool");
 });
 
 test("retention: meeting rows older than 3 days go in the nightly sweep, newer ones stay", () => {
@@ -379,7 +381,7 @@ test("the owner's look is handed the claimed meeting as a fact and says it: a po
     pipeline: pipeline as never,
     groupChats: false,
     vouch: async () => true,
-    run: async (_c: unknown, _p: unknown, prompt: string) => (prompts.push(prompt), { text: answer, structured: { message: answer, nextCheckMinutes: 60, urgent: true } }),
+    run: async (_c: unknown, _p: unknown, build: (s?: string) => { prompt: string }, extra: { facts?: { status: string[]; blocks: string[] } }) => (prompts.push(told(build, extra)), { text: answer, structured: { message: answer, nextCheckMinutes: 60, urgent: true } }),
     notesChangedAt: () => 0,
     now: () => new Date(NOW),
     guards: { paused: () => false, budgetSpent: () => false },

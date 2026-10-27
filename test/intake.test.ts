@@ -10,6 +10,7 @@ import { readAudit } from "../src/core/audit.ts";
 import { ProfileStore } from "../src/modules/browse/profile.ts";
 import { IntakeWriter } from "../src/intake/intakestore.ts";
 import { startFakeBao, type FakeBao } from "./fakebao.ts";
+import { FRIEND_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The intake page: links (single use, expiry, bound to a person and a purpose), the form and the store, the hardening of the HTTP side, and the
 // tenant's two tools. Fakes only: a fake OpenBao, fake values, fake cards (4242 4242 4242 4242).
@@ -18,7 +19,7 @@ const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any; capabilities?: readonly import("../src/tenants/tenants.ts").Capability[] }) => resolveCapabilities(ctx.capabilities ?? T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a set chosen here, or the friend one: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any; capabilities?: readonly import("../src/tenants/tenants.ts").Capability[] }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantTools = (ctx: { config: any; capabilities?: readonly import("../src/tenants/tenants.ts").Capability[] }) => toolsForCaps(tenantCapabilities(ctx), FRIEND_CHAT);
 const L = await import("../src/intake/intakelinks.ts");
 const { IntakeServer } = await import("../src/intake/intakeserver.ts");
 const { createIntakeServer } = await import("../src/intake/intaketools.ts");
@@ -398,10 +399,10 @@ test("the minted link: a tenant's tool, offered only with INTAKE_BASE_URL, the i
     assert.deepEqual(has(caps("profile", "card")), [], "profile and card alone do not switch it on");
     assert.deepEqual(has(caps("intake", "chat")), [], "intake alone has no purpose");
     assert.deepEqual(has(caps("intake", "mail")), []);
-    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "group", "/n", tenantTools(caps("intake", "profile"))), "allow");
-    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "group", "/n", tenantTools(caps("chat"))), "deny");
-    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "chat"), "deny", "not a tool of the owner's chat");
-    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, "background"), "deny");
+    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, FRIEND_CHAT, "/n", tenantTools(caps("intake", "profile"))), "allow");
+    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, FRIEND_CHAT, "/n", tenantTools(caps("chat"))), "deny");
+    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, OWNER_CHAT), "deny", "not a tool of the owner's chat");
+    assert.equal(classify("mcp__intake__get_setup_link", { purpose: "profile" }, OWNER_LOOK), "deny");
 
     // the tool itself, over an in-process MCP connection
     const links = new L.LinkStore(mkdtempSync(join(tmpdir(), "intake-tool-")));

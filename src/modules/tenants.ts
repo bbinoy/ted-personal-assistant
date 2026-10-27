@@ -6,8 +6,8 @@ import { rowsOf, type ToolModule } from "./types.ts";
 const tenants = rowsOf("mcp__tenants__", "tenants", "admin");
 export const tenantsModule: ToolModule = {
   name: "tenants",
-  connection: { kind: "in-process", name: "tenants", when: (ctx) => ctx.source === "chat" && settings.tenants },
-  rows: [...tenants("tenants-read", "list_tenants resume_tenant", { only: ["chat"] }), ...tenants("tenants-invite", "invite_person", { only: ["chat"] }), ...tenants("tenants-stop", "suspend_tenant remove_tenant", { only: ["chat"] })],
+  connection: { kind: "in-process", name: "tenants", when: (ctx) => settings.tenants && ctx.offers("mcp__tenants__list_tenants") },
+  rows: [...tenants("tenants-read", "list_tenants resume_tenant", { attended: true }), ...tenants("tenants-invite", "invite_person", { attended: true }), ...tenants("tenants-stop", "suspend_tenant remove_tenant", { attended: true })],
   free: ["tenants-read"],
   ownerOnly: true,
   floor: { judgeNever: ["tenants-invite", "tenants-stop"] },

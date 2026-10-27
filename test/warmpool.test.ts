@@ -18,7 +18,7 @@ process.env.TENANT_ANTHROPIC_API_KEY = INSTANCE_KEY;
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { pool, runWarmOrCold, warmUp } = await import("../src/run/agentwarm.ts");
-const { runOptionsFor } = await import("../src/run/runoptions.ts");
+const { runFor } = await import("../src/run/runoptions.ts");
 const { chatResume } = await import("../src/run/chatsession.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { dropTenantWarm } = await import("../src/run/agent.ts");
@@ -52,9 +52,9 @@ const withSettings = async (change: Record<string, unknown>, fn: () => Promise<v
 };
 
 const inputsOf = (conv: ReturnType<typeof tenant | typeof group | typeof owner>, apiKey = INSTANCE_KEY) => (conv.kind === "tenant" ? { apiKey } : conv.kind === "group" ? { style: "" } : { notify: async () => {} });
-const prepare = (conv: any, start: any, apiKey?: string) => warmUp(conv, runOptionsFor(conv, inputsOf(conv, apiKey)), chatResume(conv.convId), start);
+const prepare = (conv: any, start: any, apiKey?: string) => warmUp(conv, runFor(conv, "message", inputsOf(conv, apiKey)), chatResume(conv.convId), start);
 const turn = (conv: any, log: string[], apiKey?: string) => {
-  const o = runOptionsFor(conv, inputsOf(conv, apiKey));
+  const o = runFor(conv, "message", inputsOf(conv, apiKey));
   return runWarmOrCold(conv, o, chatResume(conv.convId), userInput("p", [], []), cold(log));
 };
 
@@ -169,7 +169,7 @@ test("warm pool: a renewal wants a process in use, not an idle one", async () =>
   });
 });
 
-const refreshing = (conv: any, start: any) => warmUp(conv, runOptionsFor(conv, inputsOf(conv)), chatResume(conv.convId), start, true);
+const refreshing = (conv: any, start: any) => warmUp(conv, runFor(conv, "message", inputsOf(conv)), chatResume(conv.convId), start, true);
 
 test("warm pool: a renewal of an unchanged spare that stays fresh starts nothing; a changed one is rebuilt", async () => {
   await withSettings({ warm: true }, async () => {

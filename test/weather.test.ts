@@ -6,6 +6,7 @@ import { exposure, featuresFrom, rings, type Ring } from "../src/modules/weather
 import { access } from "./util.ts";
 import { ownerSkills } from "../src/modules/skills.ts";
 import { settings } from "../src/core/settings.ts";
+import { GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const io = (body: unknown, status = 200): WeatherIo => ({ fetch: async () => json(body, status), now: () => new Date("2026-10-19T08:30:00Z") }); // 10:30 local (UTC+2)
@@ -91,11 +92,9 @@ test("spots: the seed list finds a listed launch point and says so; an unlisted 
   assert.match(offline, /^not in the seed list, and no shore data: the map service did not answer/);
 });
 
-test("manifest: the weather tools are free reads in the owner's chat and in groups, nowhere else", () => {
+test("manifest: the weather tools are free reads in every run of a conversation that has the capability", () => {
   for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) {
-    assert.equal(access(`mcp__weather__${t}`, "chat"), "free");
-    assert.equal(access(`mcp__weather__${t}`, "group"), "free");
-    assert.equal(access(`mcp__weather__${t}`, "handler"), undefined);
+    for (const run of [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK]) assert.equal(access(`mcp__weather__${t}`, run), "free");
   }
   assert.ok(ownerSkills(settings.mail).includes("ted-personal-assistant:surf-conditions"));
 });
@@ -117,5 +116,5 @@ test("weather: a 429 is retried after the Retry-After the service sends; a 5xx a
 });
 
 test("weather: the owner's background look has the weather tools (the surf-conditions skill's unprompted look needs them)", () => {
-  for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) assert.equal(access(`mcp__weather__${t}`, "background"), "free", t);
+  for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) assert.equal(access(`mcp__weather__${t}`, OWNER_LOOK), "free", t);
 });

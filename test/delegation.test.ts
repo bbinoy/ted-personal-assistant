@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { heartbeatOptions } from "../src/run/agent.ts";
+import { lookOptions } from "../src/run/agent.ts";
 import { owner } from "../src/conversation/conversationmodel.ts";
 import { LOGIN } from "../src/tenants/payer.ts";
 import { buildOptions } from "../src/run/agentrun.ts";
@@ -11,9 +11,10 @@ import { readAudit } from "../src/core/audit.ts";
 import { judgePrompt, type JudgeInput, type Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { delegatedText, delegationHook, expertSetup, MAX_DELEGATIONS } from "../src/run/delegation.ts";
-import { lookInstruction } from "../src/heartbeat/look.ts";
+import { chatSystem } from "../src/run/persona.ts";
 import { preset } from "../src/core/preset.ts";
 import { parseHint, skillHint } from "../src/modules/skills.ts";
+import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 const signal = new AbortController().signal;
 const refuse = async () => ({ approved: false }) as never;
@@ -108,9 +109,9 @@ test("an expert always runs in the foreground: a background Agent call is rewrit
   assert.equal(plain.hookSpecificOutput!.updatedInput!.run_in_background, false);
   assert.ok(readAudit((e) => e.tool === "Agent" && e.decision === "delegate" && e.meta?.foreground === "forced").length >= 2, "the rewrite is in the audit log");
   for (const a of Object.values(expertSetup(SKILLS, "P", hints(plugin())).agents)) assert.equal(a.background, false);
-  const o = buildOptions(refuse, heartbeatOptions(owner(), LOGIN), undefined);
+  const o = buildOptions(refuse, lookOptions(owner(), LOGIN), undefined);
   assert.equal((o.env as Record<string, string>).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1", "the look's process cannot background anything");
-  assert.equal((buildOptions(refuse, { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).env as Record<string, string>).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1");
+  assert.equal((buildOptions(refuse, { kind: OWNER_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).env as Record<string, string>).CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1");
 });
 
 test("the Skill hook: a delegate: skill is denied to the run and goes through its expert; the expert and light skills load", async () => {
@@ -125,17 +126,17 @@ test("the Skill hook: a delegate: skill is denied to the run and goes through it
 });
 
 test("the heartbeat run has the Agent tool, the experts and the hook; no other run has", () => {
-  const o = buildOptions(refuse, heartbeatOptions(owner(), LOGIN), undefined);
+  const o = buildOptions(refuse, lookOptions(owner(), LOGIN), undefined);
   assert.ok(o.tools && (o.tools as string[]).includes("Agent"));
   assert.ok(o.agents && Object.keys(o.agents).includes("expert"));
   assert.equal(o.agents!.expert!.model, "sonnet");
   assert.equal(o.hooks!.PreToolUse!.length, 1);
-  assert.equal(buildOptions(refuse, { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).agents, undefined);
+  assert.equal(buildOptions(refuse, { kind: OWNER_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as never, undefined).agents, undefined);
 });
 
 test("an accepted delegation reaches the run's caller (the look counts it)", async () => {
   const seen: string[] = [];
-  const o = buildOptions(refuse, heartbeatOptions(owner(), LOGIN, { onDelegate: (a) => seen.push(a) }), undefined);
+  const o = buildOptions(refuse, lookOptions(owner(), LOGIN, { onDelegate: (a) => seen.push(a) }), undefined);
   const hook = o.hooks!.PreToolUse![0]!.hooks[0]!;
   await hook({ hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { subagent_type: "expert", prompt: "p", description: "d" }, tool_use_id: "t" } as never, "t", { signal });
   assert.deepEqual(seen, ["expert"]);
@@ -146,7 +147,7 @@ test("an expert's tool call goes through the same canUseTool: the floor holds, i
   const judged: JudgeInput[] = [];
   const judge = async (i: JudgeInput): Promise<Verdict> => (judged.push(i), { decision: "ask", reason: "test" });
   const asked: string[] = [];
-  const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "background", undefined, judge, undefined, undefined, false, {
+  const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), OWNER_LOOK, undefined, judge, undefined, undefined, false, {
     provenance: () => ({ kind: "standing", task: "the fixed look" }),
     expertBriefs: () => delegations,
     agentTypeOf: (id) => (id === "sub-1" ? "expert" : undefined),
@@ -172,10 +173,10 @@ test("an expert's tool call goes through the same canUseTool: the floor holds, i
   assert.ok(readAudit((e) => e.decision === "background-skip" && e.meta?.agent_type === "expert" && e.meta?.skip === "judge").length >= 1, "the expert's skip names it");
 });
 
-test("the heartbeat instruction states the principle and names the heavy skills (the instruction of a plugin with none would not)", () => {
-  const text = lookInstruction(new Date(2026, 9, 14, 14, 0), undefined);
+test("the prompt states the principle of delegation in a check and names the heavy skills (the prompt of a plugin with none would not)", () => {
+  const text = chatSystem(new Date(2026, 9, 14, 14, 0));
   assert.match(text, /subagent_type "expert"/);
-  assert.match(text, /at most 2 times per look/);
+  assert.match(text, /at most 2 times per check/);
   assert.match(text, /These skills are heavy: never load them yourself/);
   assert.match(text, /in the foreground/);
 });

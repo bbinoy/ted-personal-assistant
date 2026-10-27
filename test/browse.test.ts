@@ -4,7 +4,6 @@ import { standing } from "./util.ts";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SOURCES } from "../src/core/audit.ts";
 import { judgeAction, type Verdict } from "../src/approvals/autojudge.ts";
 import { browse, browseSystem, resultMessage, sanitizeResult, startRefusal } from "../src/modules/browse/browse.ts";
 import { BrowseGuard, resultText, withText } from "../src/modules/browse/browseguard.ts";
@@ -14,6 +13,7 @@ import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { classify } from "../src/policy/policy.ts";
 import { settings } from "../src/core/settings.ts";
 import { access } from "./util.ts";
+import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK, kindOf } from "./runkinds.ts";
 
 const B = "mcp__browser__browser_";
 const opts = { signal: new AbortController().signal } as never;
@@ -136,7 +136,7 @@ test("every commit step goes to the judge; an auto skips the owner, an ask or a 
   const verdict = (decision: "auto" | "ask") => { const calls: string[] = []; return { calls, fn: async (i: { description: string }): Promise<Verdict> => (calls.push(i.description), { decision, reason: "test" }) }; };
   const run = async (judge: Parameters<typeof makeCanUseTool>[3], click = "e71") => {
     const asked: string[] = [];
-    const canUse = asCall(makeCanUseTool(async (x) => (asked.push(x), { approved: false }), "browse", undefined, judge, onPage(guard()), undefined, false, { provenance: standing("order a pizza for Ann") }));
+    const canUse = asCall(makeCanUseTool(async (x) => (asked.push(x), { approved: false }), BROWSE_RUN, undefined, judge, onPage(guard()), undefined, false, { provenance: standing("order a pizza for Ann") }));
     return { behavior: (await canUse(`${B}click`, { target: click }, opts)).behavior, asked };
   };
   const broad = settings.autoApprove === "auto";
@@ -172,19 +172,19 @@ test("payment and credential fields, and card numbers (Luhn)", () => {
 // ---- the manifest ----
 
 test("manifest rows: browser tools exist only for the browse run; reads run free, pages, typing and dialogs go through the judge", () => {
-  for (const t of ["snapshot", "find", "wait_for", "tabs", "hover", "navigate_back", "click", "press_key"]) assert.equal(access(B + t, "browse"), "free", t);
-  for (const t of ["navigate", "type", "fill_form", "select_option", "handle_dialog"]) assert.equal(access(B + t, "browse"), "judged", t);
-  for (const source of SOURCES) if (source !== "browse") assert.equal(access(B + "navigate", source), undefined, source);
-  assert.equal(access("WebSearch", "browse"), "free");
+  for (const t of ["snapshot", "find", "wait_for", "tabs", "hover", "navigate_back", "click", "press_key"]) assert.equal(access(B + t, BROWSE_RUN), "free", t);
+  for (const t of ["navigate", "type", "fill_form", "select_option", "handle_dialog"]) assert.equal(access(B + t, BROWSE_RUN), "judged", t);
+  for (const run of [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK]) assert.equal(access(B + "navigate", run), undefined, run.who);
+  assert.equal(access("WebSearch", BROWSE_RUN), "free");
   // the entry tool exists everywhere (the same judged path; it starts a sandboxed run), the browser's own tools only in that run
-  for (const source of SOURCES) assert.equal(access("mcp__browse__browse", source), "judged", source);
+  for (const run of [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK, BROWSE_RUN]) assert.equal(access("mcp__browse__browse", run), "judged", run.who);
   // the browse run holds no owner tool at all
-  for (const t of ["mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-create-pages", "mcp__claude_ai_Google_Calendar__create_event", "mcp__memory__forget_note", "Read", "Write", "WebFetch"]) assert.notEqual(classify(t, {}, "browse"), "allow", t);
-  assert.equal(classify("mcp__memory__forget_note", {}, "browse"), "deny");
+  for (const t of ["mcp__mailbird__send_message_now", "mcp__claude_ai_Notion__notion-create-pages", "mcp__claude_ai_Google_Calendar__create_event", "mcp__memory__forget_note", "Read", "Write", "WebFetch"]) assert.notEqual(classify(t, {}, BROWSE_RUN), "allow", t);
+  assert.equal(classify("mcp__memory__forget_note", {}, BROWSE_RUN), "deny");
   // other sources get no browser tools
-  for (const source of ["chat", "background", "group"] as const) assert.equal(classify(B + "navigate", { url: "https://example.com" }, source), "deny", source);
-  assert.equal(classify("mcp__browse__browse", { task: "x" }, "group"), settings.browse ? "ask" : "deny"); // judged in a group too, with the member's words as provenance
-  assert.equal(classify("mcp__browse__browse", { task: "x" }, "chat"), "ask"); // judged like every other tool: the sub-run it starts is sandboxed and guarded step by step
+  for (const source of ["chat", "background", "group"] as const) assert.equal(classify(B + "navigate", { url: "https://example.com" }, kindOf(source)), "deny", source);
+  assert.equal(classify("mcp__browse__browse", { task: "x" }, GROUP_CHAT), settings.browse ? "ask" : "deny"); // judged in a group too, with the member's words as provenance
+  assert.equal(classify("mcp__browse__browse", { task: "x" }, OWNER_CHAT), "ask"); // judged like every other tool: the sub-run it starts is sandboxed and guarded step by step
 });
 
 test("only the listed browser tools exist; evaluate, run_code, uploads and the rest are hidden and denied", async () => {
@@ -336,7 +336,7 @@ test("canUseTool with the guard: reads and judged typing run, a commit the judge
   const asked: string[] = [];
   const seen: unknown[] = [];
   let judge: (i?: unknown) => Promise<Verdict> = judgeAuto;
-  const canUse = asCall(makeCanUseTool(async (d, call) => (asked.push(d), seen.push(call.input), { approved: false }), "browse", undefined, (i) => judge(i), g, undefined, false, { provenance: standing("order a pizza for Ann") }));
+  const canUse = asCall(makeCanUseTool(async (d, call) => (asked.push(d), seen.push(call.input), { approved: false }), BROWSE_RUN, undefined, (i) => judge(i), g, undefined, false, { provenance: standing("order a pizza for Ann") }));
   assert.equal((await canUse(`${B}snapshot`, {}, opts)).behavior, "allow");
   assert.equal((await canUse(`${B}navigate`, { url: "https://example.com/" }, opts)).behavior, settings.autoApprove === "auto" ? "allow" : "deny");
   assert.equal((await canUse(`${B}type`, { target: "e5", text: "Ann" }, opts)).behavior, settings.autoApprove === "auto" ? "allow" : "deny");
@@ -361,7 +361,7 @@ test("canUseTool with the guard: reads and judged typing run, a commit the judge
 test("a payment field typed with the owner's yes runs with the real text; the value is remembered and shown nowhere", async () => {
   const g = onPage(guard());
   const seen: unknown[] = [];
-  const canUse = makeCanUseTool(async (_d, call) => (seen.push(call.input), { approved: true }), "browse", undefined, judgeAuto, g, undefined, false, { provenance: standing("buy") });
+  const canUse = makeCanUseTool(async (_d, call) => (seen.push(call.input), { approved: true }), BROWSE_RUN, undefined, judgeAuto, g, undefined, false, { provenance: standing("buy") });
   const input = { target: "e51", text: "4111111111111111" };
   const r = (await canUse(`${B}type`, input, opts)) as { behavior: string; updatedInput?: Record<string, unknown> };
   assert.equal(r.behavior, "allow");
@@ -375,7 +375,7 @@ test("a payment field typed with the owner's yes runs with the real text; the va
 
 test("canUseTool: an approved commit runs once; the same click is not repeated", async () => {
   const g = onPage(guard());
-  const canUse = asCall(makeCanUseTool(async () => ({ approved: true }), "browse", undefined, judgeAuto, g));
+  const canUse = asCall(makeCanUseTool(async () => ({ approved: true }), BROWSE_RUN, undefined, judgeAuto, g));
   assert.equal((await canUse(`${B}click`, { target: "e44" }, opts)).behavior, "allow");
   const again = await canUse(`${B}click`, { target: "e44" }, opts);
   assert.equal(again.behavior, "deny");
@@ -390,7 +390,7 @@ test("a group browse run: a commit click the judge sends on asks in that group, 
   setApprovers((groupId) => makeApprove(async (t) => (posted.push({ groupId, text: t }), ++ts), { compose: async (q) => ({ text: q.details, ms: 0 }), scope: groupId, source: "group" }));
   try {
     const g = onPage(guard("group"));
-    const canUse = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, judgeAsk, g));
+    const canUse = asCall(makeCanUseTool(approveIn("g-browse"), BROWSE_RUN, undefined, judgeAsk, g));
     const pending = canUse(`${B}click`, { target: "e44", element: "harmless" }, opts);
     for (let i = 0; i < 50 && posted.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     assert.equal(posted.length, 1, "one question");
@@ -405,7 +405,7 @@ test("a group browse run: a commit click the judge sends on asks in that group, 
     assert.equal((await pending).behavior, "allow");
     // and a payment field in a group asks the group, without the value, whatever the judge would say
     posted.length = 0;
-    const pay = asCall(makeCanUseTool(approveIn("g-browse"), "browse", undefined, judgeAuto, g))(`${B}type`, { target: "e51", text: "4242424242424242" }, opts);
+    const pay = asCall(makeCanUseTool(approveIn("g-browse"), BROWSE_RUN, undefined, judgeAuto, g))(`${B}type`, { target: "e51", text: "4242424242424242" }, opts);
     for (let i = 0; i < 50 && posted.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     assert.equal(posted.length, 1);
     assert.equal(posted[0]!.groupId, "g-browse");
@@ -436,7 +436,7 @@ test("injection fixture: a model that obeys a hostile page cannot enter a card, 
   const g = guard();
   g.shape(`${B}navigate`, { url: "https://evil.example.org/offer" }, HOSTILE);
   const asked: string[] = [];
-  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, judgeAsk, g, undefined, false, { provenance: standing("find a table for two") }));
+  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), BROWSE_RUN, undefined, judgeAsk, g, undefined, false, { provenance: standing("find a table for two") }));
   const calls: [string, Record<string, unknown>][] = [
     [`${B}type`, { target: "e3", text: "4111 1111 1111 1111" }],
     [`${B}type`, { target: "e4", text: "4111111111111111" }],
@@ -507,19 +507,19 @@ test("the run's prompt says pages are data and what to do at a payment (one text
 
 // ---- the options of the runs ----
 
-test("options: chat, wake-up and group runs get the entry tool; the browse run gets the browser and web search and nothing of the owner's", async () => {
+test("options: chat, look and group runs get the entry tool; the browse run gets the browser and web search and nothing of the owner's", async () => {
   const { buildOptions } = await import("../src/run/agentrun.ts");
   const { browseStatus } = await import("../src/modules/browse/browseserver.ts");
   const deny = async () => ({ approved: false });
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
-  const chat = buildOptions(deny, { ...base, source: "chat", memory: { dir: "/tmp/notes" } }, undefined);
-  const bg = buildOptions(deny, { ...base, source: "background" }, undefined);
-  const group = buildOptions(deny, { ...base, source: "group", memory: { dir: "/tmp/notes", groupId: "g" } }, undefined);
+  const chat = buildOptions(deny, { ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/notes" } }, undefined);
+  const bg = buildOptions(deny, { ...base, kind: OWNER_LOOK }, undefined);
+  const group = buildOptions(deny, { ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/notes", groupId: "g" } }, undefined);
   for (const o of [chat, bg, group]) assert.ok(Object.keys(o.mcpServers ?? {}).includes("browse") === settings.browse);
-  const handler = buildOptions(deny, { ...base, source: "handler" }, undefined);
-  assert.ok(!Object.keys(handler.mcpServers ?? {}).includes("browse"), "unattended mail runs never browse");
+  const groupLook = buildOptions(deny, { ...base, kind: GROUP_LOOK, groupId: "g" }, undefined);
+  assert.ok(Object.keys(groupLook.mcpServers ?? {}).includes("browse") === settings.browse, "a look may browse too (its worker never has the owner's card or saved details, and asks nobody)");
   if (!browseStatus().ok) return; // the browser is not downloaded here: the run refuses to build (below)
-  const run = buildOptions(deny, { ...base, source: "browse", guard: guard() }, undefined);
+  const run = buildOptions(deny, { ...base, kind: BROWSE_RUN, guard: guard() }, undefined);
   assert.deepEqual(Object.keys(run.mcpServers ?? {}), ["browser"]);
   assert.deepEqual([run.tools, run.strictMcpConfig, run.settingSources, run.plugins, run.skills], [["WebSearch"], true, [], undefined, undefined]);
   assert.ok((run.disallowedTools ?? []).includes(`${B}evaluate`) && (run.disallowedTools ?? []).includes(`${B}file_upload`));
@@ -532,7 +532,7 @@ test("options: a browse run cannot be built without the browser, with a clear re
   const { buildOptions } = await import("../src/run/agentrun.ts");
   const { browseStatus } = await import("../src/modules/browse/browseserver.ts");
   if (browseStatus().ok) return;
-  assert.throws(() => buildOptions(async () => ({ approved: false }), { source: "browse", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, guard: guard() }, undefined), /browsing is not set up/);
+  assert.throws(() => buildOptions(async () => ({ approved: false }), { kind: BROWSE_RUN, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, guard: guard() }, undefined), /browsing is not set up/);
 });
 
 test("browser server: a plain desktop Chrome user agent of the same version, an ordinary language, and the safety flags kept", () => {
@@ -569,7 +569,7 @@ test("a search form: Enter after typing and the form button go to the judge, whi
   g.remember(`${B}type`, { target: "e4", text: "00" }, "", undefined);
   const seen: string[] = [];
   const asked: string[] = [];
-  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "browse", undefined, async (i) => (seen.push(i.description), { decision: "auto", reason: "only searches timetables" }), g, undefined, false, { provenance: standing("find the next train Zurich to Bern") }));
+  const canUse = asCall(makeCanUseTool(async (d) => (asked.push(d), { approved: false }), BROWSE_RUN, undefined, async (i) => (seen.push(i.description), { decision: "auto", reason: "only searches timetables" }), g, undefined, false, { provenance: standing("find the next train Zurich to Bern") }));
   const broad = settings.autoApprove === "auto";
   assert.equal((await canUse(`${B}press_key`, { key: "Enter" }, opts)).behavior, broad ? "allow" : "deny");
   assert.equal((await canUse(`${B}click`, { target: "e5" }, opts)).behavior, broad ? "allow" : "deny");

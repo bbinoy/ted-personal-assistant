@@ -46,7 +46,7 @@ export function routineNoteReply(tool: string, input: Record<string, unknown>, d
   const note = parseNote(file, raw);
   const p = note?.when ? parseRepeat(note.when) : undefined;
   if (!note || !p?.ok) return `This routine will NOT run: ${file} ${!note ? "has no text to do" : p && !p.ok ? `has a when: line that cannot be read (${p.error})` : NO_WHEN}. Fix it (front matter \`when: every weekday at 18:30\`, then the instruction as the body) and tell the person what you set.`;
-  return `Routine saved: ${nextText({ name: file, rule: p.rule }, now, zone)} (${zone}). Tell the person this schedule and when it runs next, in your own words.`;
+  return `Routine saved: ${nextText({ name: file, rule: p.rule }, now, zone)} (${p.rule.zone ?? zone}). Tell the person this schedule and when it runs next, in your own words.`;
 }
 
 // "/status" and the doctor: one line per scheduled item (skill or note) with its schedule, next and last run, and one per note that cannot run.

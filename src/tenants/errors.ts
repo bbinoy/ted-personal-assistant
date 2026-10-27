@@ -32,7 +32,7 @@ export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
   limit: { what: "the plan's usage limit is hit", fix: "It lifts by itself; message me again after it resets." },
   billing: { what: "the shared API key has no credit left", fix: "Add credit to the account behind TENANT_ANTHROPIC_API_KEY in .env, then restart." },
   refused: { what: "the shared API key was refused", fix: "Check TENANT_ANTHROPIC_API_KEY in .env, then restart." },
-  timeout: { what: "the looks are timing out", fix: "Raise HEARTBEAT_TIMEOUT_MINUTES (or EXPERT_TIMEOUT_MINUTES, for a look that delegates) in .env, then restart." },
+  timeout: { what: "the looks are timing out", fix: "Raise RUN_MAX_MINUTES_CHAT in .env, then restart." },
   connector: { what: "a connector (Notion, Calendar or Gmail) is not answering", fix: "Reconnect it in the Claude app under Settings > Connectors (`npm run doctor` says which)." },
   reconnect: { what: "a friend's Notion or Google permission expired", fix: 'Ask her to message me "reconnect Google" (or Notion): I send her a new one-time link in her own chat (`npm run doctor` lists who).' },
   other: { what: "the model run keeps failing", fix: "Run `npm run doctor`; it reads the errors in logs/agent.log." },

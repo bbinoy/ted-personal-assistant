@@ -12,6 +12,7 @@ import { readAudit, type AuditEntry } from "../src/core/audit.ts";
 import { convIdOfKey, convPaths } from "../src/core/convpaths.ts";
 import { ledgerEntries } from "../src/core/messages.ts";
 import { settings } from "../src/core/settings.ts";
+import { FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The consistency guarantee of the event stream (core/events.ts): every decision path of the real permission layer ends in exactly one journal line in the right conversation for a call that
 // SUCCEEDED and is not a read, with the audit rows of its decision beside it; a read is audit only; a refusal or a decline leaves no journal line; a friend's audit rows carry no words while
@@ -27,14 +28,14 @@ let seq = 0;
 const fresh = (kind: "owner" | "friend" | "group"): string => (kind === "owner" ? "owner" : kind === "friend" ? `tenant:jc${++seq}` : `jc-group-${++seq}`);
 
 const journal = (key: string) => ledgerEntries(convPaths(convIdOfKey(key)).messages).filter((m) => m.kind === "journal");
-const sourceOf = (key: string) => (key === "owner" ? "chat" : "group");
+const sourceOf = (key: string) => (key === "owner" ? OWNER_CHAT : key.startsWith("tenant:") ? FRIEND_CHAT : GROUP_CHAT);
 const judge = (verdict: Verdict) => async () => verdict;
 const calendarCall = (title: string) => ({ summary: title, startTime: "2026-10-31T17:10:00", endTime: "2026-10-31T20:00:00", timeZone: "Europe/Zurich" });
 let t0 = new Date().toISOString();
 const audit = (tool: string, pred: (e: AuditEntry) => boolean = () => true) => readAudit((e) => e.ts >= t0 && e.tool === tool && pred(e));
 const reset = () => (forgetArmed(), forgetSeenMail(), resetDeclined(), (t0 = new Date(Date.now() - 1).toISOString()));
 
-function canUse(key: string, o: { approve?: Parameters<typeof makeCanUseTool>[0]; judge?: Parameters<typeof makeCanUseTool>[3]; source?: "chat" | "group" | "background"; friend?: boolean; say?: string; tools?: ReadonlySet<string> } = {}) {
+function canUse(key: string, o: { approve?: Parameters<typeof makeCanUseTool>[0]; judge?: Parameters<typeof makeCanUseTool>[3]; source?: typeof OWNER_CHAT; friend?: boolean; say?: string; tools?: ReadonlySet<string> } = {}) {
   if (o.say) scopeOf(key).say(o.say);
   return makeCanUseTool(o.approve ?? (async () => ({ approved: false })), o.source ?? sourceOf(key), undefined, o.judge, undefined, o.tools, !!o.friend, { provenance: scopeOf(key).read, conversation: key });
 }
@@ -198,7 +199,7 @@ test("a look that read notes before acting says so: 'per your notes' in reading 
   const key = fresh("owner");
   const tool = `${MB}archive_conversation`;
   const seen: { file: string; inferred: boolean }[] = [];
-  const generic = makeCanUseTool(async () => ({ approved: false }), "background", undefined, judge({ decision: "auto", reason: "routine" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "look" }), conversation: key, notesSeen: () => seen });
+  const generic = makeCanUseTool(async () => ({ approved: false }), OWNER_LOOK, undefined, judge({ decision: "auto", reason: "routine" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "look" }), conversation: key, notesSeen: () => seen });
   const before = journal(key).length;
   await generic(tool, { conversationId: "n-1" }, opts);
   await noteDone({ conv: key, source: "background", tool, input: { conversationId: "n-1" } });
@@ -220,7 +221,7 @@ test("delegations and the SDK's own tools are no actions; plumbing is never arme
   const before = journal(key).length;
   await noteDone({ conv: key, source: "background", tool: "StructuredOutput", input: { message: "[[silent]]", nextCheckMinutes: 30 } });
   assert.equal(journal(key).length, before, "the run handing in its answer is no 'Ran StructuredOutput' line");
-  const mk = (run: string) => makeCanUseTool(async () => ({ approved: false }), "chat", undefined, undefined, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "forget it" }), conversation: key, run });
+  const mk = (run: string) => makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, undefined, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "forget it" }), conversation: key, run });
   await mk("run-a")("mcp__send__send", { text: "hello" }, opts);
   await mk("run-a")("mcp__memory__journal", {}, opts);
   assert.equal(armedCount(), 0, "plumbing leaves nothing in memory");

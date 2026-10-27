@@ -1,6 +1,6 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentReply, RunOptions } from "../run/agentrun.ts";
-import type { Source } from "../core/audit.ts";
+import type { RunKind, Who } from "../core/runkind.ts";
 import type { SeenMail } from "./seenmail/seenmail.ts";
 import type { BrowseGuard } from "./browse/browseguard.ts";
 import type { DraftView } from "./mailbird/proposals.ts";
@@ -34,12 +34,13 @@ export interface ToolEntry {
   provider: string; // mailbird, gmail, calendar, notion, drive, docs, builtin, memory, ...: a tag for logs and tests; the module owns the row
   action: string; // read, draft, reply-draft, send, reply, forward, archive, restore, label, select, send-self, calendar-write, ...
   cap: Capability; // what gates it: the capability a conversation needs to be offered the tool
-  only?: readonly Source[];
+  // Where the tool exists at all, besides its capability. Both absent: in every run of a conversation that has the capability. THE two facts a run is made of (core/runkind.ts):
+  attended?: boolean; // true: only where someone waits in the chat (a message turn); false: only in unattended runs (a look). The one list of what attendance changes.
+  who?: readonly Who[]; // only for these runs: a friend's own connections (`tenant`), the browse worker's browser (`browse`), the owner's own records
   view?: ViewKind; // a mail tool: how the module's mail view reads its input
-  offeredTo?: readonly Source[]; // a built-in tool (no MCP server): the sources whose run is handed it, for an owner run (agentrun.ts builtinTools; an isolated run gets the ones in its capability set)
 }
 
-type RowOpts = { only?: readonly Source[]; view?: ViewKind; cap?: Capability; offeredTo?: readonly Source[] };
+type RowOpts = { attended?: boolean; who?: readonly Who[]; view?: ViewKind; cap?: Capability };
 
 // Rows for one family of tools: `rowsOf(prefix, provider, cap)` returns a function (action, "name name ...", options) that makes the rows.
 export const rowsOf =
@@ -53,9 +54,9 @@ export const rowsOf =
 // run gets the claude.ai connector, a tenant's run gets its own server process or connection with her token (the Google and Notion modules), a group's gets
 // none. So whether a server exists is decided per run by the connection's `when`, never once for the whole process.
 export interface RunContext {
-  source: Source;
+  kind: RunKind; // who the run is for and whether someone waits for it
   browsing: boolean; // the browse sub-run (browse.ts): the browser and nothing else
-  key?: string; // the conversation the run is for (the owner's chat, a group id, "tenant:<id>"); none for an unattended run
+  key?: string; // the conversation the run is for (the owner's chat, a group id, "tenant:<id>"); none for the browse worker
   groupId?: string;
   tenant?: TenantRun; // a tenant's run (her key, her ledger)
   memory?: RunOptions["memory"];
@@ -63,7 +64,7 @@ export interface RunContext {
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: its tracker of the inbox mail already worked through (seenmail.ts)
   guard?: BrowseGuard; // the browse run's guard
   mode: "owner" | "group";
-  offers: (tool: string) => boolean; // an isolated conversation: is this tool in its capability set? (the owner's and unattended runs: always)
+  offers: (tool: string) => boolean; // an isolated conversation: is this tool in the run's tool set? (its capabilities, less what attendance removes: capabilities.ts toolsFor; the browse worker: always)
   browseRun: (prompt: string, guard: BrowseGuard) => Promise<AgentReply>; // starts the browse sub-run for this conversation, asking in its chat (agentrun.ts)
 }
 
@@ -99,7 +100,7 @@ export interface Denial {
 export interface ModuleFloor {
   // policy.ts classify, one step of the fold: a hard rule for this module's tools that a row cannot say (attachment content, a Gmail archive under another provider). It may only
   // restrict: "ask" or "deny", never "allow" (the verdict is the minimum of deny < ask < allow over the manifest and every floor).
-  verdict?: (tool: string, input: Record<string, unknown>, source: Source) => Exclude<FloorVerdict, "allow"> | undefined;
+  verdict?: (tool: string, input: Record<string, unknown>, run: RunKind) => Exclude<FloorVerdict, "allow"> | undefined;
   // permissions.ts, once per run: makes the run's own gate (it may keep a count). Asked before every call that is not already denied; a message is a refusal, said to the model
   // as it is. For a limit that is about the run, not the call (the archive cap, archivecap.ts); it only restricts.
   perRun?: () => (tool: string, input: Record<string, unknown>) => string | undefined;
@@ -183,7 +184,7 @@ export interface ToolModule {
   connection: Connection;
   rows: readonly ToolEntry[];
   free?: true | readonly string[]; // rows that run without the judge: all of the module's, or those with these actions (a read, the assistant's own plumbing)
-  freeWhen?: Readonly<Record<string, (input: Record<string, unknown>, source: Source) => boolean>>; // a call of this action that is free though the action is not (the Gmail brief to the owner's own address)
+  freeWhen?: Readonly<Record<string, (input: Record<string, unknown>, run: RunKind) => boolean>>; // a call of this action that is free though the action is not (the Gmail brief to the owner's own address)
   untrusted?: true | readonly string[]; // reading these shows the run text a third party wrote (mail, a web page): after one, the run's arguments may be steered. Default: the module's `read` rows (every data kind is someone's text) unless `trusted`
   trusted?: true; // opt OUT of the default: its reads show nothing a third party wrote (public weather data)
   untrustedWhen?: (action: string, conversation: string) => boolean; // a trusted module's read that shows a third party's words only sometimes (a task list holding a task made from a mail): looked at per call, in the run's conversation

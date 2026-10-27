@@ -19,7 +19,7 @@ export const GOOGLE_PREFIX = "mcp__google__";
 const gm = rowsOf(GOOGLE_PREFIX, "google", "mail");
 const gc = rowsOf(GOOGLE_PREFIX, "google", "calendar");
 const gd = rowsOf(GOOGLE_PREFIX, "google", "google"); // her Drive: behind the `google` capability alone (the owner's `drive` capability is owner-only: drive.ts)
-const only = { only: ["group"] } as const; // a friend's run is an isolated "group" run; the owner's policy source has no such tool
+const only = { who: ["tenant"] } as const; // a friend's own connection; the owner's runs have no such tool
 
 // A friend's mail tool: whether her set has it says whether she has Google mail at all (the system prompt names it, runoptions.ts).
 export const GOOGLE_MAIL_TOOL = `${GOOGLE_PREFIX}search_gmail_messages`;

@@ -10,6 +10,8 @@ import { INTAKE_LINK_TOOL } from "../src/intake/intakelinks.ts";
 import { allRows, entryFor, manifest } from "../src/policy/toolmanifest.ts";
 import { ownerSkills, privateSkills, sharedSkills, skillsFor } from "../src/modules/skills.ts";
 import { CAPABILITIES } from "../src/tenants/tenants.ts";
+import { capabilitiesOf, groupCapabilities, toolsFor } from "../src/policy/capabilities.ts";
+import { BROWSE_RUN, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The tool modules (src/modules): what a module is, which are loaded, what central code reads from them. The set of rows itself is pinned in
 // manifestrows.test.ts; the policy, the judge and the isolation are tested where they live.
@@ -24,7 +26,7 @@ test("modules: names are unique, a tool belongs to one module, and a row carries
   assert.deepEqual(names(all).filter((n, i) => names(all).indexOf(n) !== i), []);
   const tools = allRows().map((e) => e.tool);
   assert.deepEqual(tools.filter((t, i) => tools.indexOf(t) !== i), []);
-  for (const e of allRows()) assert.deepEqual(Object.keys(e).filter((k) => !["tool", "provider", "action", "cap", "only", "view", "offeredTo"].includes(k)), [], e.tool);
+  for (const e of allRows()) assert.deepEqual(Object.keys(e).filter((k) => !["tool", "provider", "action", "cap", "attended", "who", "view"].includes(k)), [], e.tool);
   for (const e of allRows()) assert.ok((CAPABILITIES as readonly string[]).includes(e.cap), `${e.tool}: ${e.cap} is a capability`);
 });
 
@@ -47,14 +49,14 @@ test("modules: the manifest is the rows of the loaded modules; a provider that i
   assert.ok(entryFor(`${GM}reply`, "gmail"));
   assert.deepEqual(manifest("none").filter((e) => e.provider === "mailbird" || e.provider === "gmail"), []);
   assert.equal(manifest("mailbird").length + allRows().filter((e) => e.provider === "gmail").length, allRows().length);
-  assert.equal(classify(`${GM}reply`, {}, "chat"), "ask"); // the default provider is Mailbird: the Gmail connector's tools are unlisted
+  assert.equal(classify(`${GM}reply`, {}, OWNER_CHAT), "ask"); // the default provider is Mailbird: the Gmail connector's tools are unlisted
 });
 
 test("modules: a module's floor keeps restricting when it is not loaded (the Gmail rules under Mailbird)", () => {
   assert.equal(settings.mailProvider, "mailbird");
-  assert.equal(classify(`${GM}apply_sensitive_message_label`, {}, "chat"), "deny");
-  assert.equal(classify(`${GM}get_attachment`, {}, "chat"), "deny");
-  assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX"] }, "chat"), "deny"); // an archive is the Gmail provider's: refused under Mailbird
+  assert.equal(classify(`${GM}apply_sensitive_message_label`, {}, OWNER_CHAT), "deny");
+  assert.equal(classify(`${GM}get_attachment`, {}, OWNER_CHAT), "deny");
+  assert.equal(classify(`${GM}unlabel_thread`, { threadId: "t", labelIds: ["INBOX"] }, OWNER_CHAT), "deny"); // an archive is the Gmail provider's: refused under Mailbird
 });
 
 test("modules: every module that names a server has its server in runtime.ts (RUNTIME, by the module's name), and runtime.ts has no entry for a module that does not exist", () => {
@@ -70,7 +72,12 @@ test("modules: every module that names a server has its server in runtime.ts (RU
   assert.deepEqual(servers.filter((s) => s !== "browser"), ["send", "weather", "draw", "tasks", "voice", "memory", "notes", "people", "status", "seenmail", "meetings", "browse", "intake", "tenants", "google", "notion"]);
 });
 
-const ctx = (over: Partial<RunContext> = {}): RunContext => ({ source: "chat", browsing: false, key: "owner", mode: "owner", offers: () => true, browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
+// What a run offers: its conversation's capabilities, less what attendance removes (capabilities.ts toolsFor), as buildOptions hands it to the modules.
+const offersOf = (run: typeof OWNER_CHAT): RunContext["offers"] => {
+  const tools = toolsFor(run.who === "owner" ? capabilitiesOf({ kind: "owner" }) : groupCapabilities(), run);
+  return (t) => tools.has(t);
+};
+const ctx = (over: Partial<RunContext> = {}): RunContext => ({ kind: OWNER_CHAT, browsing: false, key: "owner", mode: "owner", offers: offersOf(over.kind ?? OWNER_CHAT), browseRun: async () => ({ text: "", costUsd: 0 }), ...over });
 const when = (m: ToolModule, c: RunContext): boolean => {
   const k = m.connection;
   return k.kind === "in-process" || k.kind === "external" ? k.when(c) : false;
@@ -80,24 +87,25 @@ const module = (name: string) => registered().find((m) => m.name === name)!;
 test("modules: each module decides from the run whether it has a server (a conversation to send to, notes, a tenant, the browse run)", () => {
   const chat = ctx({ memory: { dir: "/n" } });
   assert.equal(when(module("send"), chat), true);
-  assert.equal(when(module("send"), ctx({ source: "background", key: undefined })), true, "the owner's heartbeat run has no key of its own and speaks in her chat");
-  assert.equal(when(module("send"), ctx({ source: "dream", key: undefined })), false, "no conversation, no send");
-  assert.equal(when(module("seenmail"), ctx({ source: "background" })), false, "no tracker, no seen_mail");
-  assert.equal(when(module("seenmail"), ctx({ source: "background", seenMail: {} as never })), true, "a heartbeat run of a conversation with mail");
-  assert.equal(when(module("send"), ctx({ source: "group", key: "g", offers: (t) => t !== "mcp__send__send" })), false, "a group whose capability set lacks it");
+  assert.equal(when(module("send"), ctx({ kind: OWNER_LOOK })), true, "the owner's look speaks in her chat, like any conversation's");
+  assert.equal(when(module("send"), ctx({ kind: OWNER_LOOK, key: undefined })), false, "no conversation, no send");
+  assert.equal(when(module("seenmail"), ctx({ kind: OWNER_LOOK })), false, "no tracker, no seen_mail");
+  assert.equal(when(module("seenmail"), ctx({ kind: OWNER_LOOK, seenMail: {} as never })), true, "a heartbeat run of a conversation with mail");
+  assert.equal(when(module("send"), ctx({ kind: GROUP_CHAT, key: "g", offers: (t) => t !== "mcp__send__send" })), false, "a group whose capability set lacks it");
   assert.equal(when(module("memory"), chat), true);
-  assert.equal(when(module("memory"), ctx({ source: "background", key: undefined })), false);
-  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined })), false, "no notes of its own, no read_note");
-  assert.equal(when(module("notes"), ctx({ source: "background", key: undefined, notesRead: { dir: "/n", write: [], maxNotes: 1 } })), true, "a heartbeat run reads its notes one at a time");
+  assert.equal(when(module("memory"), ctx({ kind: OWNER_LOOK })), false);
+  assert.equal(when(module("notes"), ctx({ kind: OWNER_LOOK, key: undefined })), false, "no notes of its own, no read_note");
+  assert.equal(when(module("notes"), ctx({ kind: OWNER_LOOK, key: undefined, notesRead: { dir: "/n", write: [], maxNotes: 1 } })), true, "a heartbeat run reads its notes one at a time");
   assert.equal(when(module("notes"), chat), false, "chat reads them as files");
-  assert.equal(when(module("browse"), ctx({ source: "handler", key: undefined })), false, "the unattended mail runs never browse");
-  assert.equal(when(module("tenants"), ctx({ source: "group", key: "g" })), false, "the tenant administration is the owner's chat only");
+  assert.equal(when(module("browse"), ctx({ kind: OWNER_LOOK })), true, "a look may browse; its worker never has the owner's card or saved details (browse.ts), and nothing is asked");
+  assert.equal(when(module("tenants"), ctx({ kind: GROUP_CHAT, key: "g" })), false, "the tenant administration is the owner's chat only");
+  assert.equal(when(module("tenants"), ctx({ kind: OWNER_LOOK })), false, "and not her look");
   assert.equal(when(module("intake"), chat), false, "intake is a tenant's");
   assert.equal(when(module("browser"), chat), false, "the browser belongs to the browse run");
-  assert.equal(when(module("browser"), ctx({ source: "browse", browsing: true })), false, "and needs the guard");
+  assert.equal(when(module("browser"), ctx({ kind: BROWSE_RUN, browsing: true })), false, "and needs the guard");
   // Intake asks the capability set for the tool named by the intake module itself.
   const asked: string[] = [];
-  when(module("intake"), ctx({ source: "group", key: "tenant:x", tenant: {} as never, offers: (t) => (asked.push(t), true) }));
+  when(module("intake"), ctx({ kind: GROUP_CHAT, key: "tenant:x", tenant: {} as never, offers: (t) => (asked.push(t), true) }));
   assert.deepEqual(asked, [INTAKE_LINK_TOOL]);
   assert.ok(module("intake").rows.some((e) => e.tool === INTAKE_LINK_TOOL));
 });
@@ -110,9 +118,9 @@ test("modules: a friend's own connection exists for a tenant run whose capabilit
     const when = c.when;
     const tool = m.rows[0]!.tool;
     assert.equal(when(ctx({ offers: () => true })), false, `${name}: the owner's chat never has it`);
-    assert.equal(when(ctx({ source: "group", key: "g", mode: "group", offers: () => true })), false, `${name}: a group never has it`);
-    assert.equal(when(ctx({ source: "group", tenant: {} as never, offers: () => false })), false, `${name}: a friend whose set offers none of its tools`);
-    assert.equal(when(ctx({ source: "group", tenant: {} as never, offers: (t) => t === tool })), true, `${name}: a friend whose set offers one`);
+    assert.equal(when(ctx({ kind: GROUP_CHAT, key: "g", mode: "group", offers: () => true })), false, `${name}: a group never has it`);
+    assert.equal(when(ctx({ kind: GROUP_CHAT, tenant: {} as never, offers: () => false })), false, `${name}: a friend whose set offers none of its tools`);
+    assert.equal(when(ctx({ kind: GROUP_CHAT, tenant: {} as never, offers: (t) => t === tool })), true, `${name}: a friend whose set offers one`);
   }
 });
 

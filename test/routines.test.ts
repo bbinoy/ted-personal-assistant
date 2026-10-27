@@ -257,7 +257,7 @@ test("a chat turn sees a routine note's status and never starts or records it; o
   const conv = groupWith("every day at 08:00");
   F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
   const chat = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "chat");
-  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-fun-fact: due now; the next look runs it/);
+  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-fun-fact: due now/);
   assert.equal(chat.routines, "");
   chat.done({ ended: true, said: true });
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, undefined);
@@ -265,6 +265,17 @@ test("a chat turn sees a routine note's status and never starts or records it; o
   assert.match(look.routines, /due now: Post a fun fact/);
   look.done({ ended: true, said: true });
   assert.match(F.factsFor(conv, at("2026-10-22T06:30:00Z"), "chat").status.join("\n"), /routine-fun-fact: delivered /);
+});
+
+test("a look handed a routine is told to do it and nothing else about it: no status line that says it is started, running or not for it to start", () => {
+  const conv = groupWith("every day at 08:00");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  const look = F.factsFor(conv, at("2026-10-22T06:06:00Z"), "look");
+  assert.match(look.routines, /due now: Post a fun fact/);
+  const told = [...look.status, look.routines, ...look.blocks].join("\n");
+  assert.doesNotMatch(look.status.join("\n"), /routine-fun-fact/, "not in the status block of the run that was handed it");
+  assert.doesNotMatch(told, /never start one yourself|the next look runs it|a look started it|being produced/);
+  look.done({ ended: true, said: true });
 });
 
 test("an unparseable when: is never silent: the status says so, the tool reply says so when the note is written, and the doctor line says it never runs", () => {
@@ -333,22 +344,23 @@ test("the selfTimed text is gone from every prompt; the promise points at the wh
   const OLD = /A check reads the notes every hour or so/;
   const withLook = new Set(GROUP_CAPABILITIES);
   const noLook = new Set([...GROUP_CAPABILITIES].filter((c) => c !== "wake" && c !== "heartbeat"));
-  for (const [name, text] of [["chat", chatSystem(new Date())], ["group", groupSystem({ caps: withLook as never })], ["tenant", tenantSystem({ name: "Eve", caps: withLook as never, timed: true })]] as const) {
+  for (const [name, text] of [["chat", chatSystem(new Date())], ["group", groupSystem({ caps: withLook as never })], ["tenant", tenantSystem({ name: "Eve", caps: withLook as never, timed: true, looker: lookerOf({ kind: "tenant" }) })]] as const) {
     assert.doesNotMatch(text, OLD, name);
     assert.match(text, /routine-<short-slug>\.md[\s\S]*`when:`/, `${name}: the when: note`);
   }
   assert.doesNotMatch(groupSystem({ caps: noLook as never }), /routine-<short-slug>/, "a group without a look is not promised one");
-  assert.match(tenantSystem({ name: "Eve", caps: noLook as never, timed: false }), /You cannot act on your own later or on a schedule/);
+  assert.match(tenantSystem({ name: "Eve", caps: noLook as never, timed: false, looker: lookerOf({ kind: "tenant" }) }), /You cannot act on your own later or on a schedule/);
   assert.doesNotMatch(lookInstruction(new Date(2026, 9, 14, 9, 0), undefined, lookerOf(owner())), /a note says is due|note asks for it and it is due/);
 });
 
-test("the look: facts are in the instruction only when there are some", () => {
+test("the look: how routines work is the prompt's; the message holds the facts only when there are some", () => {
   const looker = lookerOf(owner());
   const now = new Date(2026, 9, 14, 9, 0, 0);
+  assert.match(chatSystem(now), /Routines are things that happen at a set time[\s\S]*routine notes/);
   const plain = lookInstruction(now, undefined, looker);
-  assert.doesNotMatch(plain, /Routines are things that happen at a set time/);
+  assert.doesNotMatch(plain, /Routines are things that happen at a set time|daily-brief: due now/);
   const withFacts = lookInstruction(now, undefined, looker, "daily-brief: due now (every day at 07:30).");
-  assert.match(withFacts, /Routines are things that happen at a set time[\s\S]*routine notes[\s\S]*daily-brief: due now \(every day at 07:30\)\./);
+  assert.match(withFacts, /daily-brief: due now \(every day at 07:30\)\./);
 });
 
 test("skills: all three are in the plugin, the owner is offered them, they are heavy (own expert) and never shared with a friend or a group", () => {
@@ -392,4 +404,32 @@ test("the wrap and the review: their experts have exactly the read tools, the ca
     }
     assert.deepEqual(set.agents[`expert-${s}`]!.disallowedTools, ["Agent"]);
   }
+});
+
+test("a rule may end with an IANA zone: it runs on that clock, across the clock change, whatever zone the conversation is in; a rule without one is unchanged", () => {
+  const zurich = rule("every day at 08:00 Europe/Zurich");
+  assert.equal(zurich.zone, "Europe/Zurich");
+  assert.equal((parseRepeat("every day at 08:00 europe/zurich") as { text: string }).text, "every day at 08:00 Europe/Zurich", "canonical text keeps the zone");
+  assert.equal((parseRepeat("every weekday at 17:45 Europe/London") as { text: string }).text, "every weekday at 17:45 Europe/London");
+  const r = { name: "routine-x", rule: zurich };
+  const LONDON = "Europe/London";
+  const rec = { since: z("2026-03-01T00:00:00Z").getTime(), attempts: 0, told: false };
+  // before the change to summer time (Sun 29 Mar 2026): 08:00 Zurich is 07:00 UTC; after it 06:00 UTC
+  assert.equal(S.slotsAround(r, z("2026-03-28T06:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-28T07:00:00.000Z");
+  assert.equal(S.slotsAround(r, z("2026-03-28T10:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-29T06:00:00.000Z");
+  assert.equal(S.planRoutine(r, z("2026-03-30T06:30:00Z"), LONDON, rec, 4).state, "due", "08:30 in Zurich: its 08:00 slot is due");
+  assert.equal(S.planRoutine(r, z("2026-03-30T05:30:00Z"), LONDON, { ...rec, since: z("2026-03-30T00:00:00Z").getTime() }, 4).state, "waiting", "07:30 in Zurich (06:30 in London): not yet");
+  assert.match(S.nextText(r, z("2026-03-30T05:30:00Z"), LONDON), /every day at 08:00 Europe\/Zurich, next today 08:00/);
+  assert.match(S.routineStatus(owner().convId, [r], z("2026-03-30T06:30:00Z"), LONDON, 4), /routine-x: /);
+  // without a zone: the conversation's clock, as before
+  const plain = { name: "routine-y", rule: rule("every day at 08:00") };
+  assert.equal(S.slotsAround(plain, z("2026-03-28T06:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-28T08:00:00.000Z");
+  assert.equal(rule("every day at 08:00").zone, undefined);
+});
+
+test("an unknown time zone in a repeat rule is unreadable and says so", () => {
+  const p = parseRepeat("every day at 08:00 Europe/Atlantis");
+  assert.equal(p.ok, false);
+  assert.match((p as { error: string }).error, /time zone that does not exist/);
+  assert.equal(parseRepeat("every day at 08:00 Mars/Olympus").ok, false);
 });

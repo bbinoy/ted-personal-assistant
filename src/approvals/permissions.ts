@@ -1,5 +1,6 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { Source } from "../core/audit.ts";
+import { auditSource, type RunKind } from "../core/runkind.ts";
 import { emit, type Why } from "../core/events.ts";
 import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
@@ -134,18 +135,15 @@ export interface JudgeSetup {
   // subagent's), and the type of a subagent by its id (for the audit log).
   expertBriefs?: () => readonly string[];
   agentTypeOf?: (agentID: string | undefined) => string | undefined;
-  unattended?: boolean; // the run answers no live message (UNATTENDED_SKIP): default by source (isUnattended)
   restoreFree?: boolean; // the owner's own chat: putting mail back in the inbox (archivecap.ts restoredBy) undoes an archive and runs without the judge
 }
 
 // UNATTENDED RUNS NEVER ASK (the owner, 22 Oct: "act when it's sure and stay silent if it's not"). A run that answers no live message of a person (a heartbeat look of the
 // owner, a group or a friend, its expert, the routines it delegates, meeting prep, the browse worker of such a run) puts no question to anyone: a call that would lead to one
 // (the judge's ask, a floor that forces ask, a recent decline, a fix that may not be applied) is declined back to the run with this fixed text, audited `background-skip` with
-// the reason class only. No question, no approval-inbox item, no "waiting" line. The sources below are unattended by nature; a group's or a friend's look (source "group",
-// like their chat) is marked by its run (RunOptions.unattended).
+// the reason class only. No question, no approval-inbox item, no "waiting" line. Whether a run is unattended is one fact of the run (core/runkind.ts RunKind.attended), the same for
+// the owner's look, a group's and a friend's.
 export const UNATTENDED_SKIP = "Not done: not certain enough to act without asking, and background work never asks. Leave it; do not mention it unless it truly matters, then say it in your message as information, not as a question.";
-const UNATTENDED_SOURCES: ReadonlySet<Source> = new Set(["background", "heartbeat", "radar", "handler", "dream"]);
-export const isUnattended = (source: Source, flag?: boolean): boolean => flag ?? UNATTENDED_SOURCES.has(source);
 // A card payment in an unattended run: refused like a never-allowed call, nobody is asked (only the owner's typed yes in her own chat pays).
 const PAYMENT_UNATTENDED = "A payment is never made by background work, and nobody is asked from here. Leave it; if it matters, say in your message that it needs the owner, as information.";
 
@@ -168,7 +166,7 @@ export async function renderCall(conversation: string | undefined, tool: string,
   return { description, view };
 }
 
-export function makeCanUseTool(approve: Approve, source: Source, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
+export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string | undefined, judge: typeof judgeAction = judgeAction, guard?: CallGuard, tools?: ReadonlySet<string>, tenant = false, setup: JudgeSetup = {}): CanUseTool {
   let untrusted = !!setup.untrusted;
   const isUntrusted = () => untrusted || !!setup.taint?.read();
   const markUntrusted = () => {
@@ -176,7 +174,8 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
     setup.taint?.mark();
   };
   const conversation = setup.conversation ?? OWNER_KEY;
-  const unattended = isUnattended(source, setup.unattended);
+  const source = auditSource(run); // (the audit label)
+  const unattended = !run.attended;
   // Every row goes through the event stream (core/events.ts); a tenant's rows carry no words there (the audit log is the admin's). `ev`: on the steps that let a call run, the call and why, which the journal keeps until it succeeds.
   type Log = (tool: string, decision: string, src: Source, meta?: Record<string, unknown>, ev?: { call?: { input: Record<string, unknown>; final?: Record<string, unknown> }; why?: Why }) => void;
   const baseLog: Log = (tool, decision, src, meta, ev) => emit({ type: "tool", tool, decision, source: src, conv: conversation, ...(setup.run ? { run: setup.run } : {}), friend: tenant, ...(meta ? { meta } : {}), ...ev });
@@ -207,7 +206,7 @@ export function makeCanUseTool(approve: Approve, source: Source, memoryDir: stri
       log(tool, "deny-guard", source);
       return { behavior: "deny", message: g.reason ?? `${tool} is blocked and cannot be used.` };
     }
-    const base = classify(tool, input, source, memoryDir, tools);
+    const base = classify(tool, input, run, memoryDir, tools);
     // A limit about the run, not the call (the archive cap): a module's gate may refuse a call the manifest would let through.
     if (base !== "deny") {
       const limit = runGates.map((gate) => gate(tool, input)).find((m) => m !== undefined);

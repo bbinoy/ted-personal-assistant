@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The one-time import of the owner's Notion tasks (src/tasks/import.ts, the two import_tasks_* tools): the preview that checks, dedupes and sets aside, the commit that is atomic and idempotent,
 // who may call it, the journal line, and the skills that no longer write tasks to Notion.
@@ -11,7 +12,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "taskimport-test-"));
 const S = await import("../src/tasks/store.ts");
 const I = await import("../src/tasks/import.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
-const { unattendedTools } = await import("../src/run/scope.ts");
+const { capabilitiesOf, groupCapabilities, toolsFor } = await import("../src/policy/capabilities.ts");
 const { noteDone } = await import("../src/approvals/journalrender.ts");
 const { peekConvDb } = await import("../src/core/convdb.ts");
 const { convIdOfKey, convPaths } = await import("../src/core/convpaths.ts");
@@ -135,11 +136,13 @@ test("import tools: owner chat only: a friend, a group, an unattended run and a 
   assert.deepEqual(names(toolsOf({ key: "tenant:ida", source: "chat", unattended: false, zone: () => ZONE })), [], "a friend's own chat");
   assert.deepEqual(names(toolsOf({ key: "grp", source: "group", unattended: false, zone: () => ZONE })), []);
   assert.deepEqual(names(ownerTools({ unattended: true })), []);
-  assert.deepEqual(names(ownerTools({ source: "background" })), []);
   for (const t of ["import_tasks_preview", "import_tasks_commit"]) {
     assert.equal(entryFor(`mcp__tasks__${t}`)?.action, "task-import");
-    assert.deepEqual(entryFor(`mcp__tasks__${t}`)?.only, ["chat"]);
-    assert.equal(unattendedTools(new Set([`mcp__tasks__${t}`, "mcp__tasks__list_tasks"])).has(`mcp__tasks__${t}`), false, "an unattended tool set loses them");
+    assert.deepEqual([entryFor(`mcp__tasks__${t}`)?.attended, entryFor(`mcp__tasks__${t}`)?.who], [true, ["owner"]]);
+    const caps = capabilitiesOf({ kind: "owner" });
+    assert.equal(toolsFor(caps, OWNER_CHAT).has(`mcp__tasks__${t}`), true);
+    assert.equal(toolsFor(caps, OWNER_LOOK).has(`mcp__tasks__${t}`), false, "an unattended tool set has no import");
+    assert.equal(toolsFor(groupCapabilities(), GROUP_CHAT).has(`mcp__tasks__${t}`), false, "nor a group's");
   }
 });
 

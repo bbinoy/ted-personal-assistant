@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { GROUP_LOOK, OWNER_LOOK } from "./runkinds.ts";
 
-// The heartbeat run is ONE mechanism for the owner, a group and a friend (agent.ts heartbeatOptions): what differs is data from the conversation's capability set.
+// The heartbeat run is ONE mechanism for the owner, a group and a friend (agent.ts lookOptions): what differs is data from the conversation's capability set.
 // Here, for a friend and a group: the options of the run (isolation, her key and ledger, her tools, her notes as data and none of the owner's, the experts only
 // where she has something to read), the text it is told, and the permission path it passes (her approver, the never-allowed set, nothing outside her tools).
 const dir = mkdtempSync(join(tmpdir(), "heartbeat-conv-"));
@@ -16,15 +17,16 @@ process.env.TENANTS = "on";
 
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
-const { heartbeatOptions } = await import("../src/run/agent.ts");
+const { lookOptions } = await import("../src/run/agent.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
-const { lookerOf, hasSomethingToLookAt, unattendedTools } = await import("../src/run/scope.ts");
+const { lookerOf, hasSomethingToLookAt } = await import("../src/run/scope.ts");
+const { runFor, notesIndex } = await import("../src/run/runoptions.ts");
 const { lookInstruction } = await import("../src/heartbeat/look.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const { GOOGLE_MAIL_TOOL } = await import("../src/modules/google/module.ts");
-const { groupTools } = await import("../src/policy/capabilities.ts");
+const { capabilitiesOf, groupTools, toolsFor } = await import("../src/policy/capabilities.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 // Every friend has her own Google once the instance has the OAuth client; one "without Google" is a friend on an instance that has none.
@@ -59,9 +61,9 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   mkdirSync(NOTES_DIR, { recursive: true });
   writeFileSync(join(NOTES_DIR, "context-ben-secret.md"), "The owner's private fact.");
   const conv = tenant(id);
-  const o = heartbeatOptions(conv, payerOf(id), { provenance: { kind: "standing", task: "THE LOOK" } }, NOW);
-  assert.equal(o.source, "group", "the isolated policy source: none of the owner's data");
-  assert.deepEqual([o.sessionConv, o.memory, o.seenAt], [undefined, undefined, undefined], "a fresh session, no auto-memory: a run that reads mail cannot write notes");
+  const o = lookOptions(conv, payerOf(id), { provenance: { kind: "standing", task: "THE LOOK" } }, NOW);
+  assert.deepEqual(o.kind, { who: "tenant", attended: false }, "an isolated, unattended run: none of the owner's data, asks nobody");
+  assert.deepEqual([o.sessionConv, o.sessionTrack, o.memory, o.seenAt], [conv.convId, "look", undefined, undefined], "her look session, no auto-memory: a run that reads mail cannot write notes");
   assert.equal(o.model, settings.heartbeatModel);
   assert.ok(o.outputFormat);
   assert.deepEqual(o.provenance?.(), { kind: "standing", task: "THE LOOK" });
@@ -79,7 +81,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   assert.deepEqual(b.settingSources, []);
   const servers = Object.keys(b.mcpServers as object);
   assert.ok(servers.includes("google") && servers.includes("send"));
-  assert.ok(!servers.includes("status") && !servers.includes("memory") && !servers.includes("mailbird"), servers.join(","));
+  assert.ok(!servers.includes("status") && !servers.includes("mailbird"), servers.join(","));
   assert.ok((b.tools as string[]).includes("Agent") && b.agents && Object.keys(b.agents).includes("expert"), "she can read mail: she may delegate heavy work");
   assert.equal(b.hooks!.PreToolUse!.length, 1);
   const env = b.env as Record<string, string | undefined>;
@@ -88,8 +90,10 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
 
   const prompt = system(o);
   assert.match(prompt, /chatting privately on Signal with Ana/);
-  assert.match(prompt, /Her sister is called Eve/, "her notes, as data");
-  assert.doesNotMatch(prompt, /private fact/, "nothing of the owner's notes");
+  assert.equal(prompt, system(runFor(conv, "message", { apiKey: KEY, now: NOW })), "the one prompt of her conversation, whatever starts the run");
+  const notes = notesIndex(conv, "look", NOW) ?? "";
+  assert.match(notes, /Her sister is called Eve/, "her notes, as data, in what the look is told");
+  assert.doesNotMatch(prompt + notes, /private fact/, "nothing of the owner's notes");
   assert.doesNotMatch(prompt, new RegExp(`${settings.owner}'s personal assistant`));
   assert.match(system({ systemPrompt: (o.experts!.setup.agents.expert as { prompt: string }).prompt }), /working for Ana/, "the expert is told whom it works for, with the same notes");
   assert.match((o.experts!.setup.agents.expert as { prompt: string }).prompt, /Her sister is called Eve/);
@@ -98,7 +102,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
 
 test("a friend's run passes the same permission path: it asks nobody, outside her tools nothing, the never-allowed set stays denied", async () => {
   const id = friend("Bea");
-  const o = heartbeatOptions(tenant(id), payerOf(id), { provenance: { kind: "standing", task: "T" } }, NOW);
+  const o = lookOptions(tenant(id), payerOf(id), { provenance: { kind: "standing", task: "T" } }, NOW);
   const asked: string[] = [];
   const b = buildOptions(async (d) => (asked.push(d), { approved: false }), o, undefined);
   const can = b.canUseTool! as unknown as (tool: string, input: Record<string, unknown>, opts: unknown) => Promise<{ behavior: string }>;
@@ -123,7 +127,7 @@ test("a friend on an instance without Google has no expert and no mail in her in
   const id = friend("Cy");
   const looker = withoutGoogle(() => lookerOf(tenant(id)));
   assert.deepEqual([looker.reads, looker.mail, looker.experts, looker.own, looker.group], [false, false, false, false, false]);
-  const o = withoutGoogle(() => heartbeatOptions(tenant(id), payerOf(id), {}, NOW));
+  const o = withoutGoogle(() => lookOptions(tenant(id), payerOf(id), {}, NOW));
   assert.equal(o.experts, undefined);
   const b = withoutGoogle(() => buildOptions(async () => ({ approved: false }), o, undefined));
   assert.ok(!(b.tools as string[]).includes("Agent"));
@@ -131,28 +135,31 @@ test("a friend on an instance without Google has no expert and no mail in her in
   assert.equal(b.hooks!.PreToolUse, undefined);
   const text = lookInstruction(NOW, undefined, looker);
   assert.match(text, /Cy's local time/);
-  assert.match(text, /do nothing unprompted/);
-  assert.doesNotMatch(text, /expert|archive|calendar for the next 36 hours|status-brief/i);
+  const hers = withoutGoogle(() => runFor(tenant(id), "look", { apiKey: KEY, now: NOW }).systemPrompt);
+  assert.match(hers, /do nothing unprompted/);
+  assert.doesNotMatch(text + hers, /subagent_type|You decide what needs doing, and you delegate|calendar for the next 36 hours|status-brief|archive every mail/i);
 
   const g = group("hb-conv-group-0123456789abcd");
   const gl = lookerOf(g);
   assert.deepEqual([gl.who, gl.group, gl.reads, gl.experts], ["the group", true, false, false]);
-  const go = heartbeatOptions(g, LOGIN, {}, NOW);
-  assert.equal(go.source, "group");
+  const go = lookOptions(g, LOGIN, {}, NOW);
+  assert.deepEqual(go.kind, { who: "group", attended: false });
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
-  assert.deepEqual([...go.tools!].sort(), [...unattendedTools(groupTools())].sort(), "the group's capability set, less the notes' file tools");
-  assert.deepEqual([go.sessionConv, go.memory, go.tenant], [undefined, undefined, undefined]);
+  assert.deepEqual([...go.tools!].sort(), [...groupTools(GROUP_LOOK)].sort(), "the group's capability set, less what needs a person waiting");
+  assert.deepEqual([go.sessionConv, go.sessionTrack, go.memory, go.tenant], [g.convId, "look", undefined, undefined]);
   assert.ok(go.maxBudgetUsd <= 0.5);
-  assert.match(system(go), /in a group chat on Signal/);
+  assert.match(system(go), /group chat on Signal/);
+  assert.equal(system(go), system(runFor(g, "message", {})), "the group's one prompt");
   const gb = buildOptions(async () => ({ approved: false }), go, undefined);
   assert.ok(Object.keys(gb.mcpServers as object).includes("send"), "it may speak in its own group");
-  assert.match(lookInstruction(NOW, undefined, gl), /The group can override this/);
+  assert.match(system(go), /The group can override this/);
 });
 
 test("the owner's run is unchanged by all of it: the login, the background source, every connector, the status note", () => {
-  const o = heartbeatOptions(owner(), LOGIN, {}, NOW);
-  assert.equal(o.source, "background");
-  assert.equal(o.tools, undefined, "no isolation: the owner's whole set of connectors");
+  const o = lookOptions(owner(), LOGIN, {}, NOW);
+  assert.deepEqual(o.kind, { who: "owner", attended: false });
+  assert.deepEqual([...o.tools!].sort(), [...toolsFor(capabilitiesOf({ kind: "owner" }), OWNER_LOOK)].sort(), "derived from her capabilities like everyone's: her whole set of connectors, less what needs a person waiting");
+  assert.ok(o.tools!.has("mcp__mailbird__get_message") && o.tools!.has("mcp__draw__draw") && o.tools!.has("mcp__voice__voice") && o.tools!.has("WebFetch"));
   assert.equal(o.tenant, undefined);
   assert.ok(o.experts);
   const l = lookerOf(owner());
@@ -175,27 +182,14 @@ test("something to look at: mail or a calendar (her own Google, once the instanc
   assert.equal(hasSomethingToLookAt(group("hb-conv-empty-0123456789abcdef"), NOW), false);
 });
 
-test("the owner's look goes first in the run gate, then a friend's, then a group's; the owner's startup stagger is none", async () => {
-  const { gated, runGate } = await import("../src/core/rungate.ts");
+test("a look has the limits of a chat turn of its conversation, and its place in the run gate like a chat turn's; only the owner's startup stagger is none", async () => {
   const { startupStagger } = await import("../src/heartbeat/wake.ts");
   const id = friend("Bea");
-  const gateOf = (conv: ReturnType<typeof owner>) => heartbeatOptions(conv, payerOf(id), {}, NOW).gate;
-  assert.deepEqual([gateOf(owner()), gateOf(tenant(id)), gateOf(group("g1"))], ["ownerLook", "friendLook", "look"]);
-  assert.equal(startupStagger(owner()), 0);
-  const was = settings.maxConcurrentRuns;
-  on.maxConcurrentRuns = 1;
-  try {
-    const started: string[] = [];
-    let free: () => void = () => {};
-    const holder = gated("look", () => new Promise<void>((r) => (free = r)));
-    const hold = (name: string) => () => (started.push(name), Promise.resolve());
-    // after a long sleep the groups' looks are asked for first
-    const all = [gated("look", hold("group1")), gated("look", hold("group2")), gated("friendLook", hold("friend")), gated("ownerLook", hold("owner")), gated("dream", hold("dream"))];
-    free();
-    await Promise.all([holder, ...all]);
-    assert.deepEqual(started, ["owner", "friend", "group1", "group2", "dream"]);
-    assert.equal(runGate.running, 0);
-  } finally {
-    on.maxConcurrentRuns = was;
+  for (const conv of [owner(), tenant(id), group("g1")]) {
+    const look = lookOptions(conv, payerOf(id), {}, NOW);
+    const chat = runFor(conv, "message", { apiKey: KEY, now: NOW });
+    assert.deepEqual([look.maxTurns, look.maxBudgetUsd, look.maxMinutes, look.gate], [chat.maxTurns, chat.maxBudgetUsd, chat.maxMinutes, chat.gate], conv.kind);
+    assert.deepEqual([look.maxMinutes, look.gate], [undefined, undefined], "the one ceiling (RUN_MAX_MINUTES_CHAT) and the chat's gate place");
   }
+  assert.equal(startupStagger(owner()), 0);
 });

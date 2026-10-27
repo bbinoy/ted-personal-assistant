@@ -4,6 +4,7 @@ import { judgePrompt, type Verdict } from "../src/approvals/autojudge.ts";
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
+import { FRIEND_LOOK, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The judge's rules apply to the ACTION, not to what triggered the run: a chat message, a wake-up of the owner, of a group or of a friend are judged the same.
 
@@ -21,10 +22,10 @@ test("the same action, judged by the same fake judge, decides the same under a c
   const input = { summary: "Pottery", startTime: "2026-10-21T15:00:00", endTime: "2026-10-21T16:00:00", calendarId: "primary" };
   const set = new Set([tool]);
   const cases = [
-    { name: "chat message", source: "chat" as const, provenance: { kind: "owner", message: "put pottery in my calendar" } as const, tools: undefined, tenant: false },
-    { name: "owner wake-up", source: "background" as const, provenance: { kind: "derived", by: "gate", of: "owner", text: "put pottery in the calendar" } as const, tools: undefined, tenant: false },
-    { name: "group wake-up", source: "group" as const, provenance: { kind: "derived", by: "gate", of: "member", text: "put pottery in the calendar" } as const, tools: set, tenant: false },
-    { name: "friend wake-up", source: "group" as const, provenance: { kind: "derived", by: "gate", of: "member", text: "put pottery in the calendar" } as const, tools: set, tenant: true },
+    { name: "chat message", kind: OWNER_CHAT, provenance: { kind: "owner", message: "put pottery in my calendar" } as const, tools: undefined, tenant: false },
+    { name: "owner wake-up", kind: OWNER_LOOK, provenance: { kind: "derived", by: "gate", of: "owner", text: "put pottery in the calendar" } as const, tools: undefined, tenant: false },
+    { name: "group wake-up", kind: GROUP_LOOK, provenance: { kind: "derived", by: "gate", of: "member", text: "put pottery in the calendar" } as const, tools: set, tenant: false },
+    { name: "friend wake-up", kind: FRIEND_LOOK, provenance: { kind: "derived", by: "gate", of: "member", text: "put pottery in the calendar" } as const, tools: set, tenant: true },
   ];
   setAuto("auto");
   for (const decision of ["auto", "ask", "fix"] as const) {
@@ -33,8 +34,8 @@ test("the same action, judged by the same fake judge, decides the same under a c
     for (const c of cases) {
       const j = fake(decision);
       const asked: string[] = [];
-      const unattended = c.source !== "chat"; // (a wake-up is a look: it asks nobody)
-      const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.source, undefined, j.fn, undefined, c.tools, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} ${decision}`, unattended });
+      const unattended = !c.kind.attended; // (a wake-up is a look: it asks nobody)
+      const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.kind, undefined, j.fn, undefined, c.tools, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} ${decision}` });
       const r = (await can(tool, { ...input }, opts)) as { behavior: string; message?: string };
       assert.equal(asked.length, decision === "ask" && !unattended ? 1 : 0, `${c.name} ${decision}: only a chat turn asks`);
       assert.equal(j.seen.length, 1, `${c.name}: the judge is asked once`);
@@ -46,17 +47,17 @@ test("the same action, judged by the same fake judge, decides the same under a c
     assert.equal(new Set(descriptions).size, 1, "the judge sees the same action");
   }
   // an action the floor never lets the judge see (sharing) asks under every trigger that can have it
-  for (const c of cases.filter((x) => x.source !== "group")) {
+  for (const c of cases.filter((x) => x.kind.who === "owner")) {
     const j = fake("auto");
     const asked: string[] = [];
-    const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.source, undefined, j.fn, undefined, undefined, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} share` });
+    const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), c.kind, undefined, j.fn, undefined, undefined, c.tenant, { provenance: () => c.provenance, conversation: `${c.name} share` });
     assert.equal(((await can("mcp__claude_ai_Google_Drive__share_file", { fileId: "f" }, opts)) as { behavior: string }).behavior, "deny", c.name);
     assert.equal(j.seen.length, 0, c.name);
-    assert.equal(asked.length, c.source === "chat" ? 1 : 0, `${c.name}: asked in a chat, not done in a wake-up`);
+    assert.equal(asked.length, c.kind.attended ? 1 : 0, `${c.name}: asked in a chat, not done in a wake-up`);
   }
   // the untrusted-input flag, the real defence, is the same switch under every trigger
   const j = fake("auto");
-  const can = makeCanUseTool(async () => ({ approved: false }), "background", undefined, j.fn, undefined, undefined, false, { provenance: () => cases[1]!.provenance, conversation: "owner", untrusted: true });
+  const can = makeCanUseTool(async () => ({ approved: false }), OWNER_LOOK, undefined, j.fn, undefined, undefined, false, { provenance: () => cases[1]!.provenance, conversation: "owner", untrusted: true });
   await can(tool, { ...input }, opts);
   assert.equal(j.seen[0]!.untrustedInput, true);
   assert.match(judgePrompt(j.seen[0] as never), /untrusted_input_in_run: true/);

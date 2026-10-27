@@ -2,6 +2,7 @@ import { readAudit, type AuditEntry, type Source } from "../core/audit.ts";
 import { isReadTool } from "../policy/policy.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
+import { auditSource } from "../core/runkind.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { owner, tenant, type Conversation, type PipelineDeps } from "./conversationmodel.ts";
@@ -86,7 +87,7 @@ export function replayUnanswered(deps: ReplayDeps): number {
       console.log(`replay: ${lines.length} unanswered message(s) in ${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""} from before the restart`);
       // The run may have acted (a calendar event, archived mail, a note) before it died: running the request again could do it twice. Then say so instead.
       const since = Date.parse(lines[0]!.at);
-      if (actedSince((deps.audit ?? auditRows)(conv.source, since), conv.source, since)) {
+      if (actedSince((deps.audit ?? auditRows)(auditSource({ who: conv.kind, attended: true }), since), auditSource({ who: conv.kind, attended: true }), since)) {
         console.log(`replay: ${conv.kind} had acted since its oldest unanswered message; not re-running it`);
         void deps.tell(conv, SORRY).catch((e) => console.error("replay: failed:", (e as Error).message));
         n++;

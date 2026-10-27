@@ -21,7 +21,9 @@ export function markShown(conv: string, session: string | undefined, text: strin
   else told.delete(conv);
 }
 
-export const forgetShown = (conv: string): void => void [conv, `${conv}:facts`, `${conv}:status`].forEach((k) => told.delete(k));
+// What a session was told is kept under a key of its own: the conversation's chat session under the conversation's id, its look session under `<id>:look`; each with its facts and status.
+export const toldKey = (conv: string, track: "chat" | "look" = "chat"): string => (track === "look" ? `${conv}:look` : conv);
+export const forgetShown = (conv: string, track: "chat" | "look" = "chat"): void => void [toldKey(conv, track), `${toldKey(conv, track)}:facts`, `${toldKey(conv, track)}:status`, `${toldKey(conv, track)}:notes`].forEach((k) => told.delete(k));
 
 // The facts a run is handed besides its message (heartbeat/facts.ts factsFor, set once at start by heartbeat/wiring.ts: the run folder cannot import the heartbeat one). `blocks` are claimed and
 // delivered once, `status` is information; both are told to a chat session only when they differ from what it was last told (unseen / markShown, under their own keys).

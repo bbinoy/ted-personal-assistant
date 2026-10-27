@@ -5,6 +5,7 @@ import { readAudit } from "../src/core/audit.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { makeCanUseTool, type CallGuard } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 // A check that fails for any reason denies the call.
 
@@ -24,21 +25,21 @@ test("any error on the way is a deny with a fixed message and an audit row, neve
   setAuto("off");
   const start = new Date().toISOString();
   const throwing: CallGuard = { decide: async () => { throw new Error("guard exploded with words in it"); } };
-  const canGuard = makeCanUseTool(async () => ({ approved: true }), "chat", undefined, noJudge, throwing);
+  const canGuard = makeCanUseTool(async () => ({ approved: true }), OWNER_CHAT, undefined, noJudge, throwing);
   const r1 = (await canGuard(`${MB}archive_conversation`, { conversationId: "x1" }, opts)) as Out;
   assert.equal(r1.behavior, "deny");
   assert.match(r1.message ?? "", /could not be checked, so it was not run/);
   assert.doesNotMatch(r1.message ?? "", /exploded/);
   // the read-back of a draft throws
   setDraftReader(async () => { throw new Error("mail client gone"); });
-  const canSend = makeCanUseTool(async () => ({ approved: true }), "chat", undefined, noJudge);
+  const canSend = makeCanUseTool(async () => ({ approved: true }), OWNER_CHAT, undefined, noJudge);
   assert.equal(((await canSend("mcp__mailbird__send_message_now", { messageId: 1, confirm: true }, opts)) as Out).behavior, "deny");
   // the approver throws
   setDraftReader(async () => ({ to: ["a@example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
-  const canAsk = makeCanUseTool(async () => { throw new Error("signal down"); }, "chat", undefined, noJudge);
+  const canAsk = makeCanUseTool(async () => { throw new Error("signal down"); }, OWNER_CHAT, undefined, noJudge);
   assert.equal(((await canAsk(CAL, { summary: "Boom", startTime: "2026-10-22T10:00:00" }, opts)) as Out).behavior, "deny");
   // the judge's set-up throws (a provenance that cannot be read)
-  const canJudge = makeCanUseTool(async () => ({ approved: true }), "chat", undefined, fake().fn, undefined, undefined, false, { provenance: () => { throw new Error("scope broken"); } });
+  const canJudge = makeCanUseTool(async () => ({ approved: true }), OWNER_CHAT, undefined, fake().fn, undefined, undefined, false, { provenance: () => { throw new Error("scope broken"); } });
   setAuto("auto");
   assert.equal(((await canJudge(CAL, { summary: "Boom2", startTime: "2026-10-22T11:00:00" }, opts)) as Out).behavior, "deny");
   const rows = readAudit((e) => e.decision === "deny-error" && e.ts >= start);

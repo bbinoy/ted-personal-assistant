@@ -16,6 +16,7 @@ import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { TenantSecrets } from "../src/secrets/secrets.ts";
 import { startFakeBao } from "./fakebao.ts";
+import { BROWSE_RUN, GROUP_CHAT, OWNER_CHAT } from "./runkinds.ts";
 
 // Obviously fake values only. No test touches the real OpenBao or Keychain: the store talks to an in-process fake of OpenBao's HTTP API (fakebao.ts).
 const NAME = "Annabelle Fakename";
@@ -353,7 +354,7 @@ test("canUseTool: a judged fill runs with the real value but only the placeholde
   const g = onPage(guard());
   const asked: string[] = [];
   const calls: unknown[] = [];
-  const canUse = makeCanUseTool(async (d, call) => (asked.push(d), calls.push(call.input), { approved: true }), "browse", undefined, judgeAuto, g, undefined, false, { provenance: standing("book the train") });
+  const canUse = makeCanUseTool(async (d, call) => (asked.push(d), calls.push(call.input), { approved: true }), BROWSE_RUN, undefined, judgeAuto, g, undefined, false, { provenance: standing("book the train") });
   const r = (await canUse(`${B}type`, fill("e5", "email"), opts)) as { behavior: string; updatedInput?: Record<string, unknown> };
   assert.equal(r.behavior, "allow");
   assert.equal(r.updatedInput?.text, EMAIL, "approved by the judge or by the owner, it runs with the real value");
@@ -391,9 +392,9 @@ test("nothing leaks: no audit row, log field or tool result of a run with fills 
 
 test("the browse tool manifest is unchanged: a saved detail is a browser_type call, so groups have no new tool", async () => {
   const { access } = await import("./util.ts");
-  assert.equal(access(`${B}type`, "browse"), "judged");
-  assert.equal(access(`${B}type`, "chat"), undefined);
-  assert.equal(access(`${B}type`, "group"), undefined);
+  assert.equal(access(`${B}type`, BROWSE_RUN), "judged");
+  assert.equal(access(`${B}type`, OWNER_CHAT), undefined);
+  assert.equal(access(`${B}type`, GROUP_CHAT), undefined);
   assert.ok(!(await import("../src/modules/browse/browserules.ts")).ALLOWED_BROWSER_TOOLS.some((t) => /profile/.test(t)));
   void parseSnapshot;
 });

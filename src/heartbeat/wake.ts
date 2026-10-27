@@ -35,7 +35,7 @@ interface WakeDeps {
   sleep?: (ms: number) => Promise<void>; // (tests)
   awaitingApproval?: HeartbeatDeps["awaitingApproval"]; // (tests) default: a question of the conversation open in the chat (approvals.ts)
   vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
-  run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runHeartbeat, with that conversation's approver)
+  run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runLook, with that conversation's approver)
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
   groups?: () => string[]; // known group ids
   key?: () => string | undefined; // where the instance key comes from for a friend's unattended work (default settings.tenantApiKey; tests)

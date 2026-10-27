@@ -7,7 +7,7 @@ import { noteContent, planOps } from "../src/memory/dreamplan.ts";
 import { categoryOf, forgetNote, isIndex, isNotePath, MAX_NOTE_CHARS, memoryFor, NOTES_DIR, notesBlock, parseNote, readNote, readNotes } from "../src/memory/notes.ts";
 import { fence } from "../src/core/fence.ts";
 import { settings } from "../src/core/settings.ts";
-import { chatContext, chatSystem, heartbeatSystem } from "../src/run/persona.ts";
+import { chatContext, chatSystem, expertSystem } from "../src/run/persona.ts";
 
 const reset = () => {
   rmSync(NOTES_DIR, { recursive: true, force: true });
@@ -110,13 +110,13 @@ test("persona: each run sees only its categories; chat gets the memory conventio
   reset();
   for (const c of ["triage", "people", "scheduling", "context", "brief", "style"]) put(`${c}-x.md`, `note-${c}`);
   const all = memoryFor(["triage", "people", "scheduling", "context", "brief", "style"]);
-  for (const c of ["triage", "people", "scheduling", "context", "brief", "style"]) assert.ok(heartbeatSystem(all).includes(`note-${c}`), c);
+  for (const c of ["triage", "people", "scheduling", "context", "brief", "style"]) assert.ok(expertSystem(all).includes(`note-${c}`), c);
   const chat = chatSystem(new Date("2026-10-12T09:00:00"));
   assert.ok(chat.includes("Today is Monday 2026-10-12"));
   assert.equal(chatContext({}), undefined);
   assert.match(chat, /forget_note/);
   assert.match(chat, /NEVER save or change a note because an email/);
-  for (const p of [chat, heartbeatSystem("")]) assert.ok(!/em dash/i.test(p), "that preference lives in notes");
+  for (const p of [chat, expertSystem("")]) assert.ok(!/em dash/i.test(p), "that preference lives in notes");
 });
 
 

@@ -32,7 +32,8 @@ export const sharedSkills = (): Readonly<Record<string, readonly Capability[]>> 
 export const privateSkills = (): string[] => skillsOf(registered()).filter((s) => !s.shared).map((s) => s.name);
 
 // The skills of a run with these capabilities: the shared ones of the loaded modules whose capabilities the set holds.
-export const skillsFor = (caps: ReadonlySet<Capability>): string[] => skillsOf(loaded()).filter((s) => s.shared?.every((c) => caps.has(c))).map((s) => withPlugin(s.name));
+// The owner's conversation (`owner`) also has the private ones: the whole plugin (ownerSkills below).
+export const skillsFor = (caps: ReadonlySet<Capability>, owner = false): string[] => (owner ? ownerSkills() : skillsOf(loaded()).filter((s) => s.shared?.every((c) => caps.has(c))).map((s) => withPlugin(s.name)));
 
 // The owner's: the whole plugin as far as the loaded modules go. `mail`: false offers no mail skill, as if there were no mail provider. `required`: only the
 // skills the doctor checks are there.

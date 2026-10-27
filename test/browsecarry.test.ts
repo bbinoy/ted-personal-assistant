@@ -8,6 +8,7 @@ import { judgePrompt, type Verdict } from "../src/approvals/autojudge.ts";
 import { BrowseGuard, CARRY_MS } from "../src/modules/browse/browseguard.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // An approved plan carries forward within one browse run (browseguard.ts offer, autojudge.ts approvedPlan): the owner is asked once for
 // "fill the form, then click the form's Register button", not again for the final click.
@@ -135,7 +136,7 @@ test("Luma sequence: the first Register click is asked, the form fill is automat
     assert.equal((await approvals.answer("yes", () => {}, undefined, {}, { scope: "g-luma", by: "member" })).outcome, "approved");
   };
   const g = guard();
-  const canUse = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, "browse", undefined, judge, g, undefined, false, { provenance: standing("register Ben") })(tool, input, opts)) as { behavior: string });
+  const canUse = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, BROWSE_RUN, undefined, judge, g, undefined, false, { provenance: standing("register Ben") })(tool, input, opts)) as { behavior: string });
   g.shape(`${B}snapshot`, {}, EVENT());
 
   const first = canUse(`${B}click`, { target: "e97" });
@@ -160,7 +161,7 @@ test("Luma sequence: the first Register click is asked, the form fill is automat
   // the same plan, but the form now holds another address: the judge is offered the text, says ask, and the owner is asked again
   const g2 = guard();
   g2.shape(`${B}snapshot`, {}, EVENT());
-  const canUse2 = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, "browse", undefined, judge, g2, undefined, false, { provenance: standing("register Ben") })(tool, input, opts)) as { behavior: string });
+  const canUse2 = async (tool: string, input: Record<string, unknown>) => ((await makeCanUseTool(approve, BROWSE_RUN, undefined, judge, g2, undefined, false, { provenance: standing("register Ben") })(tool, input, opts)) as { behavior: string });
   posted.length = 0;
   const f2 = canUse2(`${B}click`, { target: "e97", element: "second run" });
   await answerYes();

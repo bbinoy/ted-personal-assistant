@@ -32,6 +32,7 @@ interface MemoryScope {
   dream?: Scope; // a group's or a friend's own dream (dreamscope.ts): where its snapshots are; unset: the owner's
   zone?: () => string; // the conversation's time zone (timezone.ts): a friend's own, else the owner's; the clock of the times a search shows
   record: (line: string) => void; // a change made through a tool, for the owner's announcement (a group passes a no-op)
+  offers?: (tool: string) => boolean; // the tools the run's tool set holds (a look has the reads only); unset: all
 }
 
 // One tool for the three scopes; what differs is the sentence about where it looks and the owner's extra `file` (the background jobs' logs).
@@ -53,12 +54,12 @@ const searchShape = (owner: boolean) => ({
 });
 
 export function createMemoryServer(scope: MemoryScope) {
-  const { notesDir, groupId, tenantLog, record, dream: own, zone } = scope;
+  const { notesDir, groupId, tenantLog, record, dream: own, zone, offers } = scope;
   const source = groupId || tenantLog ? "group" : "chat"; // a tenant's run is an isolated one (policy source "group")
   return createSdkMcpServer({
     name: "memory",
     version: "3.0.0",
-    tools: [
+    tools: ([
       tool(
         "forget_note",
         tenantLog
@@ -112,6 +113,6 @@ export function createMemoryServer(scope: MemoryScope) {
         emitRecord("memory_search", "searched", source);
         return reply(fence("history", await searchConversation(scope, a, { zone: zone?.() }), 12_000));
       }),
-    ],
+    ] as { name: string }[]).filter((t) => !offers || offers(`mcp__memory__${t.name}`)) as never,
   });
 }

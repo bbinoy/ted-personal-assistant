@@ -25,7 +25,6 @@ export interface Conversation {
   readonly tenantId?: string; // a tenant's chat (tenants.ts): her id
   readonly target?: Target; // where this conversation's messages go (the messenger's opaque target): the group id, directTarget(account id) for a tenant; unset: the owner's chat
   readonly direct: boolean; // a private one-to-one chat (the owner's or a tenant's): one person, always answered, her messages are her own
-  readonly source: "chat" | "group"; // policy source (src/policy/policy.ts); a tenant's is "group" (isolated: none of the owner's data), with her own folder
   readonly logFile: string; // this conversation's message log
   readonly notesDir: string; // this conversation's notes (the SDK auto-memory folder; the only place its file tools may write)
   readonly gate: boolean; // is the participation gate in front of it
@@ -43,7 +42,6 @@ const OWNER_CONVERSATION: Conversation = Object.freeze({
   key: "owner",
   convId: OWNER_CONV,
   direct: true,
-  source: "chat",
   logFile: OWNER_LOG,
   notesDir: NOTES_DIR,
   gate: false,
@@ -69,7 +67,6 @@ export const group = (groupId: string): Conversation => {
     groupId,
     target: groupId,
     direct: false,
-    source: "group",
     logFile: p.messages,
     notesDir: p.notes,
     gate: true,
@@ -96,7 +93,6 @@ export const tenant = (id: string): Conversation => {
     tenantId: id,
     target: ctx.target,
     direct: true,
-    source: "group",
     logFile: ctx.logFile,
     notesDir: ctx.notesDir,
     gate: false,

@@ -15,7 +15,7 @@ export interface HeartbeatRow {
   toolCalls: number; // tool calls that ran (the run's own and its subagents')
   archived: number; // mail archived in this look
   delegations: number; // experts it called (heartbeat/delegation.ts); their cost is in costUsd (the SDK's total includes subagents)
-  outcome: "posted" | "silent" | "failed" | "timeout" | "preempted"; // timeout: the run hit its wall-clock ceiling (HEARTBEAT_TIMEOUT_MINUTES / EXPERT_TIMEOUT_MINUTES) and was aborted; preempted: a message to the conversation overtook the look and it was called off (conversation.ts lease)
+  outcome: "posted" | "silent" | "failed" | "timeout" | "preempted"; // timeout: the run hit its wall-clock ceiling (RUN_MAX_MINUTES_CHAT) and was aborted; preempted: a message to the conversation overtook the look and it was called off (conversation.ts lease)
 }
 
 // Never throws: a look's record is a nicety, and the look's next wake-up must still be scheduled after it (look.ts). A number that is not finite (a cost the SDK did not report) is 0, said in the log.

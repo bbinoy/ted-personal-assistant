@@ -10,6 +10,7 @@ import { ledgerEntries } from "../src/core/messages.ts";
 import { settings } from "../src/core/settings.ts";
 import { archiveItems, readJournal } from "../src/memory/journalread.ts";
 import { restoredBy } from "../src/modules/archivecap.ts";
+import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // Archiving in an unattended run (the owner, 22 Oct): judged like every call; the judge's auto archives and the journal names the mail (subject, sender, id), so the next brief lists it
 // numbered and "restore 3" brings it back; the judge's ask leaves the mail in the inbox, silently. In the owner's chat, putting mail back in the inbox needs no judge.
@@ -24,7 +25,7 @@ let n = 0;
 const owner = () => `owner`;
 const journal = (key: string) => ledgerEntries(convPaths(convIdOfKey(key)).messages).filter((m) => m.kind === "journal");
 const look = (key: string, decision: Verdict["decision"], asked: string[]) =>
-  makeCanUseTool(async (d) => (asked.push(d), { approved: true }), "background", undefined, says(decision), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "the look" }), conversation: key, run: `run-${++n}` });
+  makeCanUseTool(async (d) => (asked.push(d), { approved: true }), OWNER_LOOK, undefined, says(decision), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "the look" }), conversation: key, run: `run-${++n}` });
 
 test("an unattended look archives what the judge is sure about: run, journaled with subject, sender and id; the brief's list numbers it by sender with the restore hint", async () => {
   forgetArmed();
@@ -80,12 +81,12 @@ test("bringing mail back: free in the owner's own chat (Mailbird to inbox, Gmail
   assert.equal(restoredBy(`${GM}label_thread`, { threadId: "t-1", labelIds: ["Receipts"] }), undefined);
   assert.equal(restoredBy(`${GM}unlabel_thread`, { threadId: "t-1", labelIds: ["INBOX"] }), undefined, "that is an archive");
   assert.equal(restoredBy(`${MB}archive_conversation`, { conversationId: "a-1" }), undefined);
-  const chat = makeCanUseTool(async () => assert.fail("not asked"), "chat", undefined, never, undefined, undefined, false, { conversation: "owner", restoreFree: true });
+  const chat = makeCanUseTool(async () => assert.fail("not asked"), OWNER_CHAT, undefined, never, undefined, undefined, false, { conversation: "owner", restoreFree: true });
   assert.equal(((await chat(`${MB}move_conversation_to_inbox`, { conversationId: "a-1" }, opts)) as { behavior: string }).behavior, "allow");
   assert.equal(((await chat(`${GM}label_thread`, { threadId: "t-1", labelIds: ["INBOX"] }, opts)) as { behavior: string }).behavior, "allow");
   assert.equal(((await chat(`${MB}trash_conversation`, { conversationId: "a-1" }, opts)) as { behavior: string }).behavior, "deny", "the never-allowed set");
   let judged = 0;
-  const bg = makeCanUseTool(async () => ({ approved: false }), "background", undefined, async () => (judged++, { decision: "ask", reason: "t" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "x" }), conversation: "owner" });
+  const bg = makeCanUseTool(async () => ({ approved: false }), OWNER_LOOK, undefined, async () => (judged++, { decision: "ask", reason: "t" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "x" }), conversation: "owner" });
   assert.equal(((await bg(`${MB}move_conversation_to_inbox`, { conversationId: "a-1" }, opts)) as { behavior: string }).behavior, "deny");
   assert.equal(judged, 1, "outside the owner's chat a restore is judged like any call");
 });

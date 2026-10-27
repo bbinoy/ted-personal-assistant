@@ -5,6 +5,7 @@ import { isJudgeable, notifyNote, type JudgeInput, type Verdict } from "../src/a
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 // An event on the owner's OWN calendar with nobody else on it is routine (the owner, 22 Oct: "it's just an event for me"): the judge autos it even when the day or time is the assistant's
 // best guess, and the assistant says in its reply which date and time it chose. Events that invite or notify people keep the careful rule; deletes keep theirs.
@@ -17,7 +18,7 @@ const UNCLE = { summary: "Visit godmother Uschi", startTime: "2026-10-24T10:00:0
 function chat(verdict: Verdict["decision"]) {
   const judged: JudgeInput[] = [];
   const asked: string[] = [];
-  const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), "chat", undefined, async (i) => (judged.push(i), { decision: verdict, reason: "test" }), undefined, undefined, false, { conversation: `own-cal-${Math.random()}`, provenance: () => ({ kind: "owner", message: "put the visit to my godmother Uschi on Saturday in my calendar" }) as never });
+  const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), OWNER_CHAT, undefined, async (i) => (judged.push(i), { decision: verdict, reason: "test" }), undefined, undefined, false, { conversation: `own-cal-${Math.random()}`, provenance: () => ({ kind: "owner", message: "put the visit to my godmother Uschi on Saturday in my calendar" }) as never });
   return { can, judged, asked };
 }
 

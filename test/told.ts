@@ -1,0 +1,2 @@
+// Everything a look's run is told as one text: the facts code hands it (in front, as run/agent.ts runTurn tells them) and its message with the chat lines (what the look's `build` makes).
+export const told = (build: (since?: string) => { prompt: string }, extra?: { facts?: { status: string[]; blocks: string[] } }): string => [...(extra?.facts?.status ?? []), ...(extra?.facts?.blocks ?? []), build().prompt].join("\n\n");

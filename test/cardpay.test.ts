@@ -18,6 +18,7 @@ import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { dataPath } from "../src/core/state.ts";
 import { logPaths } from "../src/core/convpaths.ts";
 import { scratch, scratchDb } from "./scratch.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // Obviously fake: the public test card number, a made-up security code, a local fake checkout (`shop.test`, a hosted page on stripe.com) that exists
 // only as page text in these tests. No real merchant, card or money.
@@ -86,7 +87,7 @@ const rig = async (o: { access?: CardAccess; mode?: "owner" | "group"; frames?: 
   const answer = { approved: true };
   const judged: number[] = [];
   const judge = async (): Promise<Verdict> => (judged.push(1), { decision: "auto", reason: "test" }); // a judge that says yes to everything
-  const canUse = makeCanUseTool(async (description, call, _s, op) => (asked.push({ description, input: call.input, typedYes: op?.typedYes }), { ...answer }), "browse", undefined, judge, g, undefined, false, { provenance: standing("buy a ticket") });
+  const canUse = makeCanUseTool(async (description, call, _s, op) => (asked.push({ description, input: call.input, typedYes: op?.typedYes }), { ...answer }), BROWSE_RUN, undefined, judge, g, undefined, false, { provenance: standing("buy a ticket") });
   return { g, asked, answer, judged, canUse, ...made };
 };
 
@@ -576,7 +577,7 @@ test("the real asking path: the audited ask holds the placeholder and the code-w
     compose: async (q) => ({ text: `Pay shop.test? ${q.details.includes("Card payment approval") ? "ok" : ""}`, ms: 1, by: "model" as const }),
   });
   const judge = async (): Promise<Verdict> => ({ decision: "auto", reason: "test" });
-  const canUse = makeCanUseTool(approve, "browse", undefined, judge, g, undefined, false, { provenance: standing("buy") });
+  const canUse = makeCanUseTool(approve, BROWSE_RUN, undefined, judge, g, undefined, false, { provenance: standing("buy") });
   const r = { g, canUse } as unknown as Rig;
   await toPsp(r);
   const res = (await canUse(`${B}type`, { target: "e4", text: "{{card:number}}" }, opts)) as Allowed;

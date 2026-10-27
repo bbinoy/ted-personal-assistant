@@ -1,13 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SOURCES } from "../src/core/audit.ts";
 import { classify } from "../src/policy/policy.ts";
+import { browseTools } from "../src/policy/capabilities.ts";
 import { NEVER_ACTIONS } from "../src/policy/neverallowed.ts";
 import { settings } from "../src/core/settings.ts";
 import { mailProviders, registered } from "../src/modules/index.ts";
-import { actionOf, allRows, availableFor, entryFor, isFree, mailView, readsUntrusted } from "../src/policy/toolmanifest.ts";
+import { actionOf, allRows, availableFor, entryFor, isFree, mailView, presentFor, readsUntrusted } from "../src/policy/toolmanifest.ts";
 import { isJudgeable } from "../src/approvals/autojudge.ts";
 import { access } from "./util.ts";
+import { BROWSE_RUN, FRIEND_CHAT, FRIEND_LOOK, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
+
+const KINDS = [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK, FRIEND_CHAT, FRIEND_LOOK, BROWSE_RUN];
+const name = (k: { who: string; attended: boolean }) => `${k.who} ${k.attended ? "attended" : "unattended"}`;
 
 const MANIFEST = allRows();
 const MAIL_PROVIDERS = mailProviders();
@@ -26,17 +30,17 @@ test("manifest: a tool name appears in one entry only, and every entry names a p
   }
 });
 
-test("manifest: every entry classifies the same way for every source: not there (deny), free (allow) or judged (ask); the active mail provider only", () => {
+test("manifest: every entry classifies the same way for every run: not there (deny), free (allow) or judged (ask); the active mail provider only", () => {
   for (const e of MANIFEST) {
     if (MAIL_PROVIDERS.includes(e.provider) && e.provider !== settings.mailProvider) continue;
-    for (const source of SOURCES) {
-      if (source === "group") continue; // a group has its own rules (below)
-      const there = !e.only || e.only.includes(source);
-      assert.equal(availableFor(e.tool, source), there, `${e.tool} (${source})`);
+    for (const run of [OWNER_CHAT, OWNER_LOOK, BROWSE_RUN]) { // (a group's and a friend's have their own rules: capabilities.ts, below)
+      const there = presentFor(e, run);
+      assert.equal(availableFor(e.tool, run), there, `${e.tool} (${name(run)})`);
       assert.equal(actionOf(e.tool), e.action, e.tool);
       // Read/Write/Edit also need a path inside the notes: with none the file rule denies first
       if (e.provider === "builtin" && e.action === "note-file") continue;
-      assert.equal(classify(e.tool, {}, source), !there || NEVER_ACTIONS.has(e.action) ? "deny" : isFree(e.tool) ? "allow" : "ask", `${e.tool} (${source})`); // (a never-allowed action is denied wherever the tool exists)
+      const held = run.who !== "browse" || browseTools().has(e.tool); // (the browse worker holds its browser and web search, nothing else)
+      assert.equal(classify(e.tool, {}, run), !there || !held || NEVER_ACTIONS.has(e.action) ? "deny" : isFree(e.tool) ? "allow" : "ask", `${e.tool} (${name(run)})`); // (a never-allowed action is denied wherever the tool exists)
     }
   }
 });
@@ -69,17 +73,16 @@ test("manifest: which tools run free and which are judged, tool by tool; the sam
     "mcp__memory__forget_note": "free",
   };
   for (const [tool, kind] of Object.entries(table)) {
-    for (const source of SOURCES) if (availableFor(tool, source)) assert.equal(access(tool, source), kind, `${tool} (${source})`);
-    assert.ok(SOURCES.some((s) => availableFor(tool, s)), tool);
+    for (const run of KINDS) if (availableFor(tool, run)) assert.equal(access(tool, run), kind, `${tool} (${name(run)})`);
+    assert.ok(KINDS.some((k) => availableFor(tool, k)), tool);
   }
-  // no per-source table: the web tools and the browse entry exist in every run, the ones that need a conversation or a notes folder only there
-  for (const source of SOURCES) for (const t of ["WebSearch", "WebFetch", "mcp__browse__browse", `${MB}archive_conversation`, `${CAL}update_event`]) assert.ok(availableFor(t, source), `${t} (${source})`);
-  assert.deepEqual(SOURCES.filter((s) => availableFor("mcp__send__send", s)), ["chat", "group", "background"]);
-  assert.deepEqual(SOURCES.filter((s) => availableFor("mcp__draw__draw", s)), ["chat", "group"]);
+  // no per-run table: the web tools, the browse entry, send, draw and voice exist in every run of a conversation (its capabilities decide who has them), the notes' file tools only where someone waits
+  for (const run of KINDS) for (const t of ["WebSearch", "WebFetch", "mcp__browse__browse", "mcp__send__send", "mcp__draw__draw", "mcp__voice__voice", `${MB}archive_conversation`, `${CAL}update_event`]) assert.ok(availableFor(t, run), `${t} (${name(run)})`);
+  assert.deepEqual(KINDS.filter((k) => availableFor("Write", k)).map(name), KINDS.filter((k) => k.attended).map(name));
 });
 
 test("manifest: only the browse run has the browser's tools; reading mail or a page marks a run as having read untrusted text", () => {
-  for (const source of SOURCES) assert.equal(availableFor("mcp__browser__browser_navigate", source), source === "browse", source);
+  for (const run of KINDS) assert.equal(availableFor("mcp__browser__browser_navigate", run), run.who === "browse", name(run));
   assert.ok(readsUntrusted(`${MB}get_message`));
   assert.ok(readsUntrusted("WebFetch"));
   assert.ok(readsUntrusted("mcp__browser__browser_snapshot"));
@@ -92,11 +95,11 @@ test("manifest: only the browse run has the browser's tools; reading mail or a p
 });
 
 test("manifest: unknown tools are never free (they ask) and are never judged, whatever their name says; the read-verb heuristic only marks untrusted text", () => {
-  for (const source of SOURCES) if (source !== "group") assert.equal(access("mcp__new_server__do_something", source), "judged", source);
-  assert.equal(access("Bash", "chat"), "judged");
-  assert.equal(classify("mcp__new_server__do_something", {}, "chat"), "ask");
-  assert.equal(access("mcp__new_server__get_thing", "chat"), "judged");
-  assert.equal(classify("mcp__new_server__get_thing", {}, "chat"), "ask");
+  for (const run of KINDS) assert.equal(access("mcp__new_server__do_something", run), "judged", name(run));
+  assert.equal(access("Bash", OWNER_CHAT), "judged");
+  assert.equal(classify("mcp__new_server__do_something", {}, OWNER_CHAT), "ask");
+  assert.equal(access("mcp__new_server__get_thing", OWNER_CHAT), "judged");
+  assert.equal(classify("mcp__new_server__get_thing", {}, OWNER_CHAT), "ask");
   assert.equal(actionOf("mcp__new_server__get_thing"), "read");
   assert.equal(isJudgeable("mcp__new_server__get_thing", {}), false);
   assert.equal(actionOf("mcp__x__send_search"), "unknown");
@@ -120,12 +123,12 @@ test("manifest: a provider's entries take effect only while it is the active mai
   assert.equal(mailView(`${GM}send_message`, { to: ["a@example.com"] }, undefined, "mailbird"), undefined);
   assert.equal(mailView(`${MB}create_draft`, { to: [{ email: "a@example.com" }] }, undefined, "gmail"), undefined);
   // ...and with gmail active the same rule holds as for Mailbird: sends are judged, drafts judged too, reads free, in every place
-  for (const source of ["chat", "handler", "radar"] as const) {
-    assert.equal(access(`${GM}send_message`, source, "gmail"), "judged", source);
-    assert.equal(access(`${GM}reply`, source, "gmail"), "judged", source);
-    assert.equal(access(`${GM}forward`, source, "gmail"), "judged", source);
-    assert.equal(access(`${GM}create_draft`, source, "gmail"), "judged", source);
-    assert.equal(access(`${GM}search_threads`, source, "gmail"), "free", source);
+  for (const source of [OWNER_CHAT, OWNER_LOOK]) {
+    assert.equal(access(`${GM}send_message`, source, "gmail"), "judged", name(source));
+    assert.equal(access(`${GM}reply`, source, "gmail"), "judged", name(source));
+    assert.equal(access(`${GM}forward`, source, "gmail"), "judged", name(source));
+    assert.equal(access(`${GM}create_draft`, source, "gmail"), "judged", name(source));
+    assert.equal(access(`${GM}search_threads`, source, "gmail"), "free", name(source));
   }
 });
 
@@ -145,11 +148,11 @@ test("manifest: every connector tool the model is given by default (a module's `
 
 test("manifest: the group's rules are not flags and stay as they were", () => {
   const dir = "/nonexistent-group-dir";
-  assert.equal(classify("WebSearch", { query: "x" }, "group"), "allow");
-  assert.equal(classify("WebFetch", { url: "https://example.com" }, "group"), "deny");
-  assert.equal(classify(`${MB}send_message_now`, {}, "group"), "deny");
-  assert.equal(classify(`${CAL}create_event`, {}, "group"), "deny");
-  assert.equal(classify("Read", { file_path: `${dir}/x.md` }, "group"), "deny");
+  assert.equal(classify("WebSearch", { query: "x" }, GROUP_CHAT), "allow");
+  assert.equal(classify("WebFetch", { url: "https://example.com" }, GROUP_CHAT), "deny");
+  assert.equal(classify(`${MB}send_message_now`, {}, GROUP_CHAT), "deny");
+  assert.equal(classify(`${CAL}create_event`, {}, GROUP_CHAT), "deny");
+  assert.equal(classify("Read", { file_path: `${dir}/x.md` }, GROUP_CHAT), "deny");
 });
 
 test("mailView: Mailbird send reads its draft back; bcc and attachments are always in the view", () => {

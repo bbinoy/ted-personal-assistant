@@ -9,6 +9,7 @@ import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { makeCanUseTool, type CallGuard } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
 import { CHAT } from "./util.ts";
+import { BROWSE_RUN, OWNER_CHAT } from "./runkinds.ts";
 
 const CAL = "mcp__claude_ai_Google_Calendar__";
 const opts = { signal: new AbortController().signal } as never;
@@ -43,7 +44,7 @@ test("the flight case: fix denies with the hint, asks nobody, runs nothing; the 
   scopeOf("owner").say("add my return flight to my calendar");
   const j = scripted(fix(), { decision: "auto", reason: "matches" });
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, j.fn, undefined, undefined, false, CHAT);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, CHAT);
   const first = (await canUse(`${CAL}create_event`, flight(), opts)) as Out;
   assert.equal(first.behavior, "deny");
   assert.equal(first.updatedInput, undefined);
@@ -64,7 +65,7 @@ test("at most 2 fixes per tool per run, then ask; the same arguments again ask a
   scopeOf("owner").say("add my flight");
   const j = scripted(fix(), fix(), fix("a third"));
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, j.fn, undefined, undefined, false, CHAT);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, CHAT);
   const a = flight(), b = flight({ summary: "b" }), c = flight({ summary: "c" });
   assert.equal(((await canUse(`${CAL}create_event`, a, opts)) as Out).message?.startsWith("Not run"), true);
   assert.equal(((await canUse(`${CAL}create_event`, b, opts)) as Out).message?.startsWith("Not run"), true);
@@ -73,7 +74,7 @@ test("at most 2 fixes per tool per run, then ask; the same arguments again ask a
   assert.equal(asked, 1);
   // a fresh run starts at zero; byte-identical arguments are never fixed twice
   const j2 = scripted(fix(), fix());
-  const run2 = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, j2.fn, undefined, undefined, false, CHAT);
+  const run2 = makeCanUseTool(async () => (asked++, { approved: false }), OWNER_CHAT, undefined, j2.fn, undefined, undefined, false, CHAT);
   assert.equal(((await run2(`${CAL}create_event`, flight({ summary: "d" }), opts)) as Out).message?.startsWith("Not run"), true);
   assert.match(((await run2(`${CAL}create_event`, flight({ summary: "d" }), opts)) as Out).message!, /declined/);
   assert.equal(asked, 2);
@@ -87,11 +88,11 @@ test("a fix for a send, a delete or a guard step is downgraded to ask", async ()
   setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], subject: "s", body: "b" }) as never);
   let asked = 0;
   const ask = async () => (asked++, { approved: false });
-  const send = makeCanUseTool(ask, "chat", undefined, scripted(fix()).fn, undefined, undefined, false, CHAT);
+  const send = makeCanUseTool(ask, OWNER_CHAT, undefined, scripted(fix()).fn, undefined, undefined, false, CHAT);
   assert.match(((await send("mcp__mailbird__send_message_now", { messageId: 9100, confirm: true }, opts)) as Out).message!, /declined/);
   assert.equal(asked, 1);
   const guard: CallGuard = { decide: async () => ({ kind: "ask", judge: true, description: "Browser: confirm this step" }) };
-  const step = makeCanUseTool(ask, "browse", undefined, scripted(fix()).fn, guard, undefined, false, { provenance: standing("order") });
+  const step = makeCanUseTool(ask, BROWSE_RUN, undefined, scripted(fix()).fn, guard, undefined, false, { provenance: standing("order") });
   assert.match(((await step("mcp__browser__browser_click", { target: "e1" }, opts)) as Out).message!, /declined/);
   assert.equal(asked, 2);
   assert.equal(rows("mcp__mailbird__send_message_now", "judge-fix").length, 0);
@@ -102,7 +103,7 @@ test("AUTO_APPROVE=off: the judge is not called at all, so there is nothing to f
   scopeOf("owner").say("add my flight");
   let asked = 0;
   const j = scripted(fix());
-  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, j.fn, undefined, undefined, false, CHAT);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, CHAT);
   assert.equal(((await canUse(`${CAL}create_event`, flight({ summary: "off" }), opts)) as Out).behavior, "allow");
   assert.equal(asked, 1);
   assert.equal(j.seen.length, 0);
@@ -123,7 +124,7 @@ test("follow-through: the judge is told the notification facts and the guidance 
   scopeOf("owner").say("where is the Balboa course?");
   const j = scripted({ decision: "auto", reason: "fills in the place he asked about" });
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), "chat", undefined, j.fn, undefined, undefined, false, CHAT);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: false }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, CHAT);
   assert.equal(((await canUse(`${CAL}update_event`, update, opts)) as Out).behavior, "allow");
   assert.equal(asked, 0);
   assert.match(j.seen[0]!, /Notifies: this call names no guests/);

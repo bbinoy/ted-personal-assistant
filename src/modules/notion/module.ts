@@ -9,7 +9,7 @@ import { tenantOffered, type ToolModule } from "../types.ts";
 // everything else goes to the central floor, the unified judge and HER chat. The floor is the owner's (notion.ts NOTION_FLOOR): moving a page is always her call, and a page to the bin is a delete she confirms.
 export const NOTION_FRIEND_PREFIX = "mcp__notion__";
 
-const only = { only: ["group"] } as const; // a friend's run is an isolated "group" run; the owner's policy source has no such tool
+const only = { who: ["tenant"] } as const; // a friend's own connection; the owner's runs have no such tool
 
 // The tools a friend's run is shown for her Notion (the hosted server has many more: sessions, databases, views, ...; they are not offered).
 const rows = notionRows(NOTION_FRIEND_PREFIX, only);

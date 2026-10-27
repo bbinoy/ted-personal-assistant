@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Note } from "../src/memory/notes.ts";
 import { missingSetup, setupItems } from "../src/modules/index.ts";
-import { chatContext, chatSystem, expertSystem, heartbeatSystem } from "../src/run/persona.ts";
+import { chatContext, chatSystem, expertSystem } from "../src/run/persona.ts";
 import { settings } from "../src/core/settings.ts";
 
 const skillsDir = join(settings.pluginDir, "skills");
@@ -48,7 +48,7 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
   assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
-  assert.match(heartbeatSystem("", { missing }), /You cannot ask anyone[\s\S]*message "set up"/);
+  assert.match(chatContext({ missing }, undefined, false)!, /You cannot ask anyone[\s\S]*message "set up"/);
   assert.ok(!chatSystem(new Date()).includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
 });
 
@@ -76,7 +76,7 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   assert.equal(missingSetup([], ["calendar"]).length, base.length - 1);
   assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 2);
   // the recorded state never reaches a prompt (it can be stale): the run is told to trust its own tool list
-  for (const p of [chatSystem(new Date()), heartbeatSystem(""), expertSystem("")]) {
+  for (const p of [chatSystem(new Date()), expertSystem("")]) {
     assert.doesNotMatch(p, /Not connected right now/);
     assert.match(p, /not in your tool list, say plainly that it is not connected[\s\S]*never assume a connector is down when its tools are present/);
   }
@@ -109,7 +109,7 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   assert.match(mb, /Cold outreach is not that[\s\S]*"important" flag[\s\S]*open the mail \(`get_message`, cheap\)\s+before deciding/);
   assert.match(mb, /triage notes win/);
   assert.match(read("gmail"), /archive unless the mail needs the owner[\s\S]*"important" flag[\s\S]*triage\s+notes in memory win/);
-  const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "heartbeat.md"), "utf8");
+  const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "background.md"), "utf8");
   assert.match(hb, /default is to archive[\s\S]*next 7 days[\s\S]*Unread is no reason to keep[\s\S]*archive it/);
   assert.match(hb, /Cold outreach[\s\S]*whatever the provider's "important" flag says/);
   assert.match(hb, /unknown to \{\{who\}\}[\s\S]*never judge an unknown sender by the subject alone/);

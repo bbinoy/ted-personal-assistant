@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT } from "./runkinds.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "people-"));
 process.env.HARNESS_DATA_DIR = dir;
@@ -120,7 +121,7 @@ async function ask(ctx: Record<string, unknown>, name: string): Promise<string> 
   await client.close();
   return res.content[0]!.text;
 }
-const base = { source: "chat", browsing: false, mode: "owner", offers: () => false, browseRun: async () => ({}) };
+const base = { kind: OWNER_CHAT, browsing: false, mode: "owner", offers: () => false, browseRun: async () => ({}) };
 
 test("people: isolation, a group has its own notes only, the owner has hers and no Google Contacts, nobody sees another conversation's", async () => {
   const ownerNotes = notesDir({ "people-sam-owner.md": "Sam Owner. sam@owner.example" });
@@ -130,11 +131,11 @@ test("people: isolation, a group has its own notes only, the owner has hers and 
   assert.match(o, /sam@owner\.example/);
   assert.doesNotMatch(o, /sam@group\.example|sam@friend\.example/);
   assert.match(o, /Not available: Google Contacts \(the Google connectors on the owner's login have no contacts tool\)/);
-  const g = await ask({ ...base, source: "group", mode: "group", groupId: "g1", memory: { dir: groupNotes, groupId: "g1" }, offers: () => true }, "sam"); // (even a set that offers everything: a group has no tenant, so no Google)
+  const g = await ask({ ...base, kind: GROUP_CHAT, mode: "group", groupId: "g1", memory: { dir: groupNotes, groupId: "g1" }, offers: () => true }, "sam"); // (even a set that offers everything: a group has no tenant, so no Google)
   assert.match(g, /sam@group\.example/);
   assert.doesNotMatch(g, /sam@owner\.example|sam@friend\.example/);
   assert.match(g, /Not available: Google Contacts \(a group has no contacts of its own\)/);
-  const f = await ask({ ...base, source: "group", mode: "group", tenant: { id: "t-anna" }, memory: { dir: friendNotes } }, "sam"); // (her set has no Google: no contacts at all)
+  const f = await ask({ ...base, kind: GROUP_CHAT, mode: "group", tenant: { id: "t-anna" }, memory: { dir: friendNotes } }, "sam"); // (her set has no Google: no contacts at all)
   assert.match(f, /sam@friend\.example/);
   assert.doesNotMatch(f, /sam@owner\.example|sam@group\.example/);
   assert.match(f, /Not available: Google Contacts \(she has not connected Google\)/);
@@ -154,19 +155,19 @@ test("people: a friend's contacts are searched through HER session, with HER add
 test("people: the tool is in a group's and a friend's set and the owner's; read-only, free, and what it reads is untrusted text", () => {
   const T = "mcp__people__find_person";
   assert.ok(groupTools().has(T));
-  assert.ok(toolsFor(new Set(FRIEND_CAPABILITIES)).has(T));
+  assert.ok(toolsFor(new Set(FRIEND_CAPABILITIES), FRIEND_CHAT).has(T));
   assert.ok(toolsFor(new Set(CAPABILITIES)).has(T));
-  assert.equal(classify(T, { name: "sam" }, "chat"), "allow");
-  assert.equal(classify(T, { name: "sam" }, "group"), "allow");
+  assert.equal(classify(T, { name: "sam" }, OWNER_CHAT), "allow");
+  assert.equal(classify(T, { name: "sam" }, FRIEND_CHAT), "allow");
   assert.equal(readsUntrusted(T), true, "contact data is third-party text: a run that read it is a tainted run");
   assert.equal(isFree(T), true);
 });
 
 test("people: an address found by Ted is no looser than any other, a send still asks and the floor still names it outside", () => {
   const send = "mcp__claude_ai_Gmail__send_message";
-  assert.equal(classify(send, { to: ["sam@example.com"], subject: "hi", body: "hi" }, "chat"), "ask");
-  assert.equal(classify("mcp__mailbird__send_message_now", { messageId: "m" }, "chat"), "ask");
-  assert.equal(classify("mcp__claude_ai_Google_Calendar__create_event", { attendees: ["sam@example.com"] }, "chat"), "ask");
+  assert.equal(classify(send, { to: ["sam@example.com"], subject: "hi", body: "hi" }, OWNER_CHAT), "ask");
+  assert.equal(classify("mcp__mailbird__send_message_now", { messageId: "m" }, OWNER_CHAT), "ask");
+  assert.equal(classify("mcp__claude_ai_Google_Calendar__create_event", { attendees: ["sam@example.com"] }, OWNER_CHAT), "ask");
   // The person typed "send it to Sam": the address Ted found is not in their words, so it is outside (the owner is asked, never the judge).
   const view = { action: "send", to: ["sam.carter@example.com"], cc: [], bcc: [] } as never;
   assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to Sam" } as never), ["sam.carter@example.com"]);
@@ -184,10 +185,10 @@ test("drive and docs: visible by default for the owner, hidden again by the sett
   assert.ok(again.includes("mcp__claude_ai_Google_Drive") && again.includes("mcp__claude_ai_Google_Docs"));
   const D = "mcp__claude_ai_Google_Drive__";
   const DOC = "mcp__claude_ai_Google_Docs__";
-  for (const t of [`${D}search_files`, `${D}read_file_content`, `${D}list_recent_files`, `${D}get_file_permissions`, `${DOC}read_doc`]) assert.equal(classify(t, {}, "chat"), "allow", t);
-  for (const t of [`${D}create_file`, `${D}update_file`, `${D}copy_file`, `${D}share_file`, `${DOC}update_doc`]) assert.equal(classify(t, {}, "chat"), "ask", t);
-  assert.equal(classify(`${D}trash_file`, { fileId: "f" }, "chat"), "deny", "Drive trash is denied like Gmail trash");
-  for (const t of [`${D}search_files`, `${D}share_file`, `${DOC}read_doc`]) assert.equal(classify(t, {}, "group"), "deny", `${t}: never a group's`);
+  for (const t of [`${D}search_files`, `${D}read_file_content`, `${D}list_recent_files`, `${D}get_file_permissions`, `${DOC}read_doc`]) assert.equal(classify(t, {}, OWNER_CHAT), "allow", t);
+  for (const t of [`${D}create_file`, `${D}update_file`, `${D}copy_file`, `${D}share_file`, `${DOC}update_doc`]) assert.equal(classify(t, {}, OWNER_CHAT), "ask", t);
+  assert.equal(classify(`${D}trash_file`, { fileId: "f" }, OWNER_CHAT), "deny", "Drive trash is denied like Gmail trash");
+  for (const t of [`${D}search_files`, `${D}share_file`, `${DOC}read_doc`]) assert.equal(classify(t, {}, FRIEND_CHAT), "deny", `${t}: never a group's`);
 });
 
 test("drive and docs: the connectors are reported to the owner while down, now that she sees them", () => {
@@ -196,17 +197,17 @@ test("drive and docs: the connectors are reported to the owner while down, now t
 });
 
 test("a friend's Drive is read-only: search, read, list; the server's writes and shares are not offered, and her contacts are reached only through find_person", () => {
-  const set = toolsFor(new Set(FRIEND_CAPABILITIES));
+  const set = toolsFor(new Set(FRIEND_CAPABILITIES), FRIEND_CHAT);
   for (const t of ["search_drive_files", "get_drive_file_content", "list_drive_items"]) {
     assert.ok(set.has(GOOGLE_PREFIX + t), t);
     assert.ok(GOOGLE_TOOLS.includes(t));
   }
   for (const t of ["create_drive_file", "update_drive_file", "manage_drive_access", "set_drive_file_permissions", "copy_drive_file", "search_contacts", "manage_contact"]) {
     assert.ok(!set.has(GOOGLE_PREFIX + t), `${t} is not a friend's tool`);
-    assert.equal(classify(GOOGLE_PREFIX + t, {}, "group", undefined, set), "deny", t);
+    assert.equal(classify(GOOGLE_PREFIX + t, {}, FRIEND_CHAT, undefined, set), "deny", t);
   }
-  assert.equal(classify(`${GOOGLE_PREFIX}search_drive_files`, { query: "x" }, "group", undefined, set), "allow");
-  assert.ok(![...toolsFor(new Set(FRIEND_CAPABILITIES))].some((t) => t.startsWith("mcp__claude_ai_Google_Drive")), "the owner's Drive connector is never a friend's");
+  assert.equal(classify(`${GOOGLE_PREFIX}search_drive_files`, { query: "x" }, FRIEND_CHAT, undefined, set), "allow");
+  assert.ok(![...toolsFor(new Set(FRIEND_CAPABILITIES), FRIEND_CHAT)].some((t) => t.startsWith("mcp__claude_ai_Google_Drive")), "the owner's Drive connector is never a friend's");
 });
 
 test("settings: a friend's server loads the contacts and drive tools and asks their read-only scopes by default", () => {

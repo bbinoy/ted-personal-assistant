@@ -5,8 +5,8 @@ import { rowsOf, type ToolModule } from "../types.ts";
 const memory = rowsOf("mcp__memory__", "memory", "chat");
 export const memoryModule: ToolModule = {
   name: "memory",
-  connection: { kind: "in-process", name: "memory", when: (ctx) => !!ctx.memory },
-  rows: [...memory("memory", "forget_note search_logs journal", { only: ["chat", "group"] }), ...memory("memory", "undo_dream", { only: ["chat", "group"], cap: "dream" })],
+  connection: { kind: "in-process", name: "memory", when: (ctx) => (!!ctx.memory || !!ctx.notesRead) && ctx.offers("mcp__memory__search_logs") }, // (a look has the reads of it: its notes' folder is where it is scoped)
+  rows: [...memory("memory", "forget_note journal", { attended: true }), ...memory("memory", "search_logs"), ...memory("memory", "undo_dream", { attended: true, cap: "dream" })],
   free: true,
 };
 
@@ -15,8 +15,8 @@ export const memoryModule: ToolModule = {
 const notes = rowsOf("mcp__notes__", "notes", "heartbeat");
 export const notesModule: ToolModule = {
   name: "notes",
-  connection: { kind: "in-process", name: "notes", when: (ctx) => !!ctx.notesRead && !ctx.browsing },
-  rows: [...notes("memory-read", "read_note journal", { only: ["background", "group"] }), ...notes("memory-told", "memory_changes_since_brief", { only: ["background"] }), ...notes("memory-write", "write_note", { only: ["background", "group"] })],
+  connection: { kind: "in-process", name: "notes", when: (ctx) => !!ctx.notesRead && ctx.offers("mcp__notes__read_note") },
+  rows: [...notes("memory-read", "read_note journal", { attended: false }), ...notes("memory-told", "memory_changes_since_brief", { attended: false, who: ["owner"] }), ...notes("memory-write", "write_note", { attended: false })],
   free: true,
   trusted: true,
 };

@@ -7,6 +7,7 @@ import type { Verdict } from "../src/approvals/autojudge.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { callKey, doneCount, makeCanUseTool } from "../src/approvals/permissions.ts";
 import { CHAT } from "./util.ts";
+import { kindOf, OWNER_CHAT } from "./runkinds.ts";
 
 const SEND = "mcp__mailbird__send_message_now";
 // A judge that always says "ask": these tests are about the guard, and must never start a real model process.
@@ -15,7 +16,7 @@ const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test"
 test("an approved call is never asked about or done twice", async () => {
   setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], subject: "Re: hi", body: "Hi Jessica" }) as never);
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, noJudge);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, noJudge);
   const opts = { signal: new AbortController().signal } as never;
   const first = await canUse(SEND, { messageId: 26001, confirm: true }, opts);
   assert.equal(first!.behavior, "allow");
@@ -31,7 +32,7 @@ test("an approved call is never asked about or done twice", async () => {
 test("a declined send can be asked again", async () => {
   setDraftReader(async () => ({ to: ["a@example.com"], cc: [], subject: "s", body: "b" }) as never);
   let answers = [false, true];
-  const canUse = makeCanUseTool(async () => ({ approved: answers.shift()! }), "chat", undefined, noJudge);
+  const canUse = makeCanUseTool(async () => ({ approved: answers.shift()! }), OWNER_CHAT, undefined, noJudge);
   const opts = { signal: new AbortController().signal } as never;
   assert.equal((await canUse(SEND, { messageId: 7 }, opts))!.behavior, "deny");
   assert.equal((await canUse(SEND, { messageId: 7 }, opts))!.behavior, "allow");
@@ -39,7 +40,7 @@ test("a declined send can be asked again", async () => {
 
 test("the same guard covers any approved call, not only sends, and an identical auto-judged one", async () => {
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, noJudge);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, noJudge);
   const opts = { signal: new AbortController().signal } as never;
   const call = { summary: "Dinner", startTime: "2026-10-20T19:00:00", attendees: ["a@example.com"] };
   const tool = "mcp__claude_ai_Google_Calendar__create_event";
@@ -50,7 +51,7 @@ test("the same guard covers any approved call, not only sends, and an identical 
 });
 
 test("opening the same page twice is not blocked", async () => {
-  const canUse = makeCanUseTool(async () => ({ approved: true }), "chat", undefined, noJudge);
+  const canUse = makeCanUseTool(async () => ({ approved: true }), OWNER_CHAT, undefined, noJudge);
   const opts = { signal: new AbortController().signal } as never;
   for (let i = 0; i < 2; i++) assert.equal((await canUse("WebFetch", { url: "https://example.com/a", prompt: "x" }, opts))!.behavior, "allow");
 });
@@ -64,7 +65,7 @@ test("calls that differ only in a nested field are different calls, and key orde
   assert.notEqual(callKey(tool, { attendees: [{ email: "a@example.com" }] }), callKey(tool, { attendees: [{ email: "b@example.com" }] }));
   // and through the guard: the second event is asked about, not refused as "already done"
   let asked = 0;
-  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, noJudge);
+  const canUse = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, noJudge);
   const opts = { signal: new AbortController().signal } as never;
   assert.equal((await canUse(tool, a, opts))!.behavior, "allow");
   assert.equal((await canUse(tool, b, opts))!.behavior, "allow");
@@ -73,7 +74,7 @@ test("calls that differ only in a nested field are different calls, and key orde
 });
 
 test("remembered calls expire out of the map after the 30 minute window", async () => {
-  const canUse = makeCanUseTool(async () => ({ approved: true }), "chat", undefined, noJudge);
+  const canUse = makeCanUseTool(async () => ({ approved: true }), OWNER_CHAT, undefined, noJudge);
   const opts = { signal: new AbortController().signal } as never;
   const realNow = Date.now;
   try {
@@ -100,7 +101,7 @@ test("a chat send is judged against the owner's messages and the draft with bcc;
   const seen: { description: string; provenance: { kind: string; message?: string; earlier?: readonly string[] }; untrustedInput?: boolean }[] = [];
   const judge = (decision: "auto" | "ask") => async (i: never): Promise<Verdict> => (seen.push(i), { decision, reason: "test" });
   const opts = { signal: new AbortController().signal } as never;
-  const auto = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, judge("auto") as never, undefined, undefined, false, CHAT);
+  const auto = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, judge("auto") as never, undefined, undefined, false, CHAT);
   assert.equal((await auto(SEND, { messageId: 41, confirm: true }, opts))!.behavior, "allow");
   assert.equal(asked, 0, "the judge said auto: no question");
   assert.match(seen[0]!.description, /^✉️ Send email now\nTo: jessica@example\.com\nBcc: spy@example\.com\nSubject: Re: hi\nAttachments: yes/);
@@ -108,7 +109,7 @@ test("a chat send is judged against the owner's messages and the draft with bcc;
   assert.equal(seen[0]!.provenance.message, "send it");
   assert.deepEqual(seen[0]!.provenance.earlier, ["reply to Jessica that Tuesday works"]);
   assert.equal(seen[0]!.untrustedInput, false);
-  const askJudge = makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, judge("ask") as never, undefined, undefined, false, CHAT);
+  const askJudge = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, judge("ask") as never, undefined, undefined, false, CHAT);
   assert.equal((await askJudge(SEND, { messageId: 42, confirm: true }, opts))!.behavior, "allow");
   assert.equal(asked, 1, "the judge said ask: the owner is asked");
 });
@@ -118,15 +119,15 @@ test("an unattended run's send is judged against its standing task, never agains
   scopeOf("owner").say("send it"); // the owner's chat message is nobody's provenance for a job
   const opts = { signal: new AbortController().signal } as never;
   let id = 50;
-  for (const source of ["handler", "radar", "background"] as const) {
+  for (const source of ["background"] as const) {
     const seen: { provenance: { kind: string; task?: string } }[] = [];
     let asked = 0;
     const judge = async (i: never): Promise<Verdict> => (seen.push(i), { decision: "auto", reason: "the task covers it" });
-    const withTask = makeCanUseTool(async () => (asked++, { approved: false }), source, undefined, judge as never, undefined, undefined, false, { provenance: standing("reply to Jessica that Tuesday works") });
+    const withTask = makeCanUseTool(async () => (asked++, { approved: false }), kindOf(source), undefined, judge as never, undefined, undefined, false, { provenance: standing("reply to Jessica that Tuesday works") });
     assert.equal((await withTask(SEND, { messageId: id++, confirm: true }, opts))!.behavior, "allow", source);
     assert.equal(asked, 0, source);
     assert.deepEqual(seen.map((x) => x.provenance.kind), ["standing"], source);
-    const noTask = makeCanUseTool(async () => (asked++, { approved: false }), source, undefined, judge as never);
+    const noTask = makeCanUseTool(async () => (asked++, { approved: false }), kindOf(source), undefined, judge as never);
     assert.equal((await noTask(SEND, { messageId: id++, confirm: true }, opts))!.behavior, "deny", source);
     assert.equal(seen.length, 1, `${source}: nothing to judge against, so not judged`);
     assert.equal(asked, 0, `${source} asks nobody`);
@@ -139,7 +140,7 @@ test("a forward draft is judged like any draft; a send whose draft cannot be rea
   let judged = 0;
   const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "x" });
   scopeOf("owner").say("forward that to Jessica");
-  const canUse = makeCanUseTool(async () => ({ approved: false }), "chat", undefined, judge as never, undefined, undefined, false, CHAT);
+  const canUse = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, judge as never, undefined, undefined, false, CHAT);
   assert.equal((await canUse("mcp__mailbird__forward_conversation", { conversationId: "g", body: "FYI" }, opts))!.behavior, "allow"); // only saves a draft: nothing leaves, the judge passes it
   assert.equal(judged, 1);
   setDraftReader(async () => undefined);

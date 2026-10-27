@@ -134,7 +134,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   async function deliverFinal(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target" | "reaction">): Promise<void> {
     const chosen = splitVoice(replied);
     const { reaction, text } = splitReaction(chosen.text);
-    if (conv.source === "chat") scopeOf(conv.key).assistantSaid(text); // the owner's own chat (the others are isolated): the judge reads her next "yes" against it
+    if (conv.kind === "owner") scopeOf(conv.key).assistantSaid(text); // the owner's own chat (the others are isolated): the judge reads her next "yes" against it
     await d.send({ kind: "text", text, voice: !!chosen.voice }, false);
     if (reaction && t.target) await d.send({ kind: "reaction", emoji: reaction }, false);
     else if (!t.reaction && !d.state.reacted) status(conv, "✅", t.target); // a reaction the model already put on that message stays
@@ -205,7 +205,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
     const sink: SendSink | undefined = background ? undefined : (c) => d.send(c, true);
     try {
       const by = turn.target?.author;
-      const asking = { author: by, timestamp: turn.target?.timestamp, owner: conv.source === "chat" || (!!by && deps.isOwner({ from: by, fromUuid: by })) };
+      const asking = { author: by, timestamp: turn.target?.timestamp, owner: conv.kind === "owner" || (!!by && deps.isOwner({ from: by, fromUuid: by })) };
       const { text, costUsd } = await withSend(conv.key, sink, () => turn.run({ firstOutput: () => turn.timing?.mark("first") }), asking);
       turn.timing?.set("run", now() - started);
       console.log(`${conv.kind} replied (${text.length} chars${costUsd === undefined ? "" : `, $${costUsd.toFixed(4)}`})`);

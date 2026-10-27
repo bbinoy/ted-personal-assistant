@@ -2,8 +2,11 @@ import { convDb, peekConvDb } from "../core/convdb.ts";
 import type { ConvRef } from "../core/convpaths.ts";
 import type { ChatSession } from "./session.ts";
 
-// The conversation's resumed-session pointer, cost and taint: the `session` row of its assistant.db (core/convdb.ts), which replaced session.json. Whole-record reads and writes, like the file was: a caller
-// reads the record, changes it, writes it back (the pipeline runs one turn of a conversation at a time). No row = a fresh conversation: { costUsd: 0 }.
+// The conversation's resumed-session pointers, cost and taint: the `session` row of its assistant.db (core/convdb.ts), which replaced session.json, and the `look_session` row beside it. A conversation has
+// two sessions, one per `track`: its chat (the messages, on the chat model) and its looks (the background checks, on the look model); they never mix. Whole-record reads and writes, like the file
+// was: a caller reads the record, changes it, writes it back (the pipeline runs one turn of a conversation at a time). No row = a fresh session: { costUsd: 0 }.
+export type Track = "chat" | "look";
+const TABLES: Record<Track, string> = { chat: "session", look: "look_session" };
 
 interface Row {
   session_id: string | null;
@@ -16,8 +19,8 @@ interface Row {
   untrusted_in: string | null;
 }
 
-export function readSession(conv: ConvRef): ChatSession {
-  const r = peekConvDb(conv)?.get<Row>("SELECT session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in FROM session WHERE id = 1");
+export function readSession(conv: ConvRef, track: Track = "chat"): ChatSession {
+  const r = peekConvDb(conv)?.get<Row>(`SELECT session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in FROM ${TABLES[track]} WHERE id = 1`);
   if (!r) return { costUsd: 0 };
   return {
     ...(r.session_id !== null ? { sessionId: r.session_id } : {}),
@@ -33,9 +36,9 @@ export function readSession(conv: ConvRef): ChatSession {
 
 const n = (v: number | undefined): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-export function writeSession(conv: ConvRef, s: ChatSession): void {
+export function writeSession(conv: ConvRef, s: ChatSession, track: Track = "chat"): void {
   convDb(conv).run(
-    `INSERT INTO session (id, session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ${TABLES[track]} (id, session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET session_id = excluded.session_id, cost_usd = excluded.cost_usd, last_turn_at = excluded.last_turn_at, last_context_tokens = excluded.last_context_tokens,
        compact_failed_at = excluded.compact_failed_at, base_tokens = excluded.base_tokens, seen_at = excluded.seen_at, untrusted_in = excluded.untrusted_in`,
     s.sessionId ?? null, n(s.costUsd) ?? 0, s.lastTurnAt ?? null, n(s.lastContextTokens), s.compactFailedAt ?? null, n(s.baseTokens), s.seenAt ?? null, s.untrustedIn ?? null,

@@ -138,6 +138,16 @@ export const logTail = (conv: Pick<Conversation, "logFile" | "tenantId">, n = 40
   return all.filter((m) => keep.has(m)).map((m) => tailLine(m, who));
 };
 
+// What the chat log holds that a session has not been shown: the lines newer than `since` (the newest line it was shown, an ISO time), without the looks' own wake lines. A session that has seen
+// nothing (`since` absent: a fresh one) gets the tail. `seenAt`: the newest line of the log, what the session is shown up to (stored with it, session.ts seenAt).
+export function logSince(conv: Pick<Conversation, "logFile" | "tenantId">, since?: string, n = 40): { lines: string[]; seenAt?: string } {
+  const all = withoutDeleted(ledgerEntries(conv.logFile));
+  const seenAt = all.at(-1)?.at;
+  if (!since) return { lines: logTail(conv, n), seenAt };
+  const who = speakerOf(conv);
+  return { lines: all.filter((m) => m.at > since && m.kind !== "wake").slice(-2 * n).map((m) => tailLine(m, who)), seenAt };
+}
+
 // "typing…" is already showing while a delay runs, so a long one only makes the answer late; the cap is enforced in parseGate.
 const delayText = (max: number = settings.gateMaxDelaySeconds): string =>
   max === 0

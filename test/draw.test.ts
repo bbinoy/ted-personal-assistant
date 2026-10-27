@@ -12,6 +12,7 @@ import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { settings } from "../src/core/settings.ts";
 import { adoptDrawing, adoptShots, loadShot, MAX_DRAWINGS, MAX_PICTURE_BYTES } from "../src/modules/send/shots.ts";
 import { access } from "./util.ts";
+import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // draw: the model's SVG becomes a PNG kept for the turn (img1...), looked at, then sent with `send` like a screenshot.
 
@@ -100,27 +101,28 @@ test("shots: drawings and screenshots count separately, both kinds can be PNG or
   assert.equal(existsSync(file), false);
 });
 
-test("draw: manifest and policy: free in chat and group, nowhere else", () => {
-  assert.equal(access("mcp__draw__draw", "chat"), "free");
-  assert.equal(access("mcp__draw__draw", "group"), "free");
-  for (const source of ["handler", "radar", "browse", "background", "heartbeat", "dream"] as const) assert.equal(access("mcp__draw__draw", source), undefined, source);
-  assert.equal(classify("mcp__draw__draw", { svg: SVG }, "chat"), "allow");
-  assert.equal(classify("mcp__draw__draw", { svg: SVG }, "group"), "allow");
-  for (const source of ["radar", "handler", "browse"] as const) assert.equal(classify("mcp__draw__draw", { svg: SVG }, source), "deny", source);
-  assert.equal(classify("mcp__draw__nothing", {}, "group"), "deny");
+test("draw: manifest and policy: free in every run of a conversation that has the capability (a look too), not in the browse worker", () => {
+  for (const run of [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK]) assert.equal(access("mcp__draw__draw", run), "free");
+  assert.equal(access("mcp__draw__draw", BROWSE_RUN), "free", "the row exists everywhere: which conversation has it is its capability set, the browse worker has no such server");
+  assert.equal(classify("mcp__draw__draw", { svg: SVG }, OWNER_CHAT), "allow");
+  assert.equal(classify("mcp__draw__draw", { svg: SVG }, OWNER_LOOK), "allow");
+  assert.equal(classify("mcp__draw__draw", { svg: SVG }, GROUP_CHAT), "allow");
+  assert.equal(classify("mcp__draw__nothing", {}, GROUP_CHAT), "deny");
 });
 
-test("draw: the server exists for chat and group runs only, and the skill is offered with DRAW=on", () => {
+test("draw: the server exists for the owner's and a group's runs alike, look or chat (its capability), and the skill is offered with DRAW=on", () => {
   const servers = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {});
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
-  assert.ok(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes("draw"));
-  assert.ok(servers({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g" } }).includes("draw"));
-  for (const source of ["radar", "handler", "background"] as const) assert.ok(!servers({ ...base, source }).includes("draw"), source);
+  assert.ok(servers({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes("draw"));
+  assert.ok(servers({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g" } }).includes("draw"));
+  assert.ok(servers({ ...base, kind: OWNER_LOOK }).includes("draw"), "the owner's look has draw, like a group's look");
+  assert.ok(servers({ ...base, kind: GROUP_LOOK, groupId: "g" }).includes("draw"));
+  assert.ok(!servers({ ...base, kind: BROWSE_RUN }).includes("draw"));
   assert.equal(ownerSkills(true).includes("ted-personal-assistant:draw"), settings.draw);
 });
 
 test("policy: the weather tools are allowed in a group run, other weather names are not", async () => {
   const { classify } = await import("../src/policy/policy.ts");
-  for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) assert.equal(classify(`mcp__weather__${t}`, {}, "group"), "allow");
-  assert.equal(classify("mcp__weather__set_alert", {}, "group"), "deny");
+  for (const t of ["search_places", "get_forecast", "get_marine_forecast", "get_spot_info", "get_distance"]) assert.equal(classify(`mcp__weather__${t}`, {}, GROUP_CHAT), "allow");
+  assert.equal(classify("mcp__weather__set_alert", {}, GROUP_CHAT), "deny");
 });

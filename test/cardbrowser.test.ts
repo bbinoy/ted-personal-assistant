@@ -18,6 +18,7 @@ import { Ledger } from "../src/modules/browse/payments.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { fakeCardStore } from "./fakebao.ts";
 import { scratch, scratchDb } from "./scratch.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // The card flow against a REAL headless Chromium and the real @playwright/mcp server, on local fake checkouts (test/fixtures/checkout): a shop, a hosted
 // payment page of a "known payment provider" (checkout.stripe.com), and the payment provider's card fields in a cross-origin iframe (js.stripe.com).
@@ -112,7 +113,7 @@ async function start(t: TestContext, o: { ads?: boolean } = {}): Promise<Env | u
   const g = new BrowseGuard({ mode: "owner", task: "buy the ticket", outDir, resolver: publicDns, card: access, frames: cdpFrames(cdpPort) });
   const asked: string[] = [];
   const judge = async (): Promise<Verdict> => ({ decision: "auto", reason: "test" });
-  const canUse = makeCanUseTool(async (description) => (asked.push(description), { approved: true }), "browse", undefined, judge, g, undefined, false, { provenance: standing("buy the ticket") });
+  const canUse = makeCanUseTool(async (description) => (asked.push(description), { approved: true }), BROWSE_RUN, undefined, judge, g, undefined, false, { provenance: standing("buy the ticket") });
   const opts = { signal: new AbortController().signal } as never;
 
   const call: Env["call"] = async (name, input) => {

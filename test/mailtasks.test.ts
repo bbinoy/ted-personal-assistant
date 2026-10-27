@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { told } from "./told.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +19,8 @@ const { convDb, peekConvDb, CONV_SCHEMA } = await import("../src/core/convdb.ts"
 const { convIdOfKey } = await import("../src/core/convpaths.ts");
 const { setAsking } = await import("../src/modules/voice/voicenote.ts");
 const { readsUntrusted } = await import("../src/policy/toolmanifest.ts");
-const { chatSystem, groupSystem, tenantSystem, heartbeatInstruction } = await import("../src/run/persona.ts");
+const { chatSystem, groupSystem, tenantSystem } = await import("../src/run/persona.ts");
+const { lookerOf } = await import("../src/run/scope.ts");
 const { groupCapabilities } = await import("../src/policy/capabilities.ts");
 
 const ZONE = "Europe/Berlin";
@@ -96,7 +98,7 @@ test("the look's prompt carries what was added from mail in the last day, fenced
   const seen: { prompt: string; untrusted?: boolean }[] = [];
   const hb = createHeartbeatLook({
     pipeline: pipeline as never,
-    run: (async (_c: unknown, _p: unknown, prompt: string, extra: { untrusted?: boolean }) => (seen.push({ prompt, untrusted: extra.untrusted }), { text: "", structured: { message: "[[silent]]", nextCheckMinutes: 30 } })) as never,
+    run: (async (_c: unknown, _p: unknown, build: (s?: string) => { prompt: string }, extra: { untrusted?: boolean; facts?: { status: string[]; blocks: string[] } }) => (seen.push({ prompt: told(build, extra), untrusted: extra.untrusted }), { text: "", structured: { message: "[[silent]]", nextCheckMinutes: 30 } })) as never,
     may: () => LOGIN,
     why: () => "x",
     notesChangedAt: () => 0,
@@ -180,17 +182,17 @@ test("prompts: the task tools are explained to the owner, a group and a friend; 
   const grp = groupSystem({ caps: groupCapabilities() });
   assert.match(grp, /any member may add, change and finish items/);
   assert.doesNotMatch(grp, /👍 confirms/);
-  const friend = tenantSystem({ name: "Ida", caps: new Set(["chat", "tasks"]) as never });
+  const friend = tenantSystem({ name: "Ida", caps: new Set(["chat", "tasks"]) as never, looker: lookerOf({ kind: "tenant" }) });
   assert.match(friend, /Tasks: you keep Ida's own to-do list/);
-  const vars = { now: "Thu 2026-10-22 12:00", timeZone: ZONE, lastLook: "", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30", delegated: "", who: "Ben", own: true, reads: true, mail: true, experts: false, sources: "x", tasks: true, group: false };
-  const look = heartbeatInstruction(vars);
+  const looker = { ...lookerOf({ kind: "owner" }), who: "Ben", reads: true, mail: true, experts: false, sources: "x", tasks: true, group: false };
+  const look = chatSystem(new Date(NOW), true, looker); // (what a background check does is every conversation's prompt)
   assert.match(look, /add it to the list yourself with add_task/);
   assert.match(look, /then tell Ben in your message, in your own words/);
   assert.match(look, /Do not ask whether to add it/);
   assert.match(look, /source_ref the mail's id/);
   assert.match(look, /promised something in a mail they sent \(kind i_owe/);
   assert.doesNotMatch(look, /SUGGEST|one tap|At most \d+ per look/);
-  assert.doesNotMatch(heartbeatInstruction({ ...vars, tasks: false }), /add_task/);
+  assert.doesNotMatch(chatSystem(new Date(NOW), true, { ...looker, tasks: false }), /add it to the list yourself with add_task/);
   void settings;
   void peekConvDb;
 });

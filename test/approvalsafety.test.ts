@@ -12,6 +12,7 @@ import { describeCall } from "../src/approvals/format.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
 import { CHAT } from "./util.ts";
+import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 const SEND = "mcp__mailbird__send_message_now";
 const CAL = "mcp__claude_ai_Google_Calendar__create_event";
@@ -52,12 +53,12 @@ test("makeApprove: the sent question is the model's plus the footer; a card paym
 test("an expired approval is told to the model as 'no answer, nothing done', a decline as a decline", async () => {
   const call = { summary: "Dinner", startTime: "2026-10-20T19:00:00" };
   const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test" });
-  const expired = makeCanUseTool(async () => ({ approved: false, expired: true }), "chat", undefined, noJudge);
+  const expired = makeCanUseTool(async () => ({ approved: false, expired: true }), OWNER_CHAT, undefined, noJudge);
   const r = (await expired(CAL, call, opts)) as { behavior: string; message: string };
   assert.equal(r.behavior, "deny");
   assert.match(r.message, /did not answer in time\. Nothing was done\. Do not retry it now; mention it in your next message/);
   assert.doesNotMatch(r.message, /declined/);
-  const declined = makeCanUseTool(async () => ({ approved: false }), "chat", undefined, noJudge);
+  const declined = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, noJudge);
   const d = (await declined(CAL, { ...call, summary: "Lunch" }, opts)) as { message: string };
   assert.match(d.message, /declined\. Do not retry\./);
 });
@@ -82,7 +83,7 @@ test("a send in an untrusted run to someone the owner did not name is never judg
   let judged = 0;
   let asked = 0;
   const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "fine" });
-  const run = (untrusted: boolean) => makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, judge as never, undefined, undefined, false, { ...CHAT, untrusted });
+  const run = (untrusted: boolean) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, judge as never, undefined, undefined, false, { ...CHAT, untrusted });
   scopeOf("owner").say("send it");
   assert.equal((await run(true)(SEND, { messageId: 801, confirm: true }, opts))!.behavior, "allow");
   assert.deepEqual({ judged, asked }, { judged: 0, asked: 1 }, "untrusted + nobody named: the owner is asked, the judge is not");
@@ -101,7 +102,7 @@ test("a wake-up task is judged unless the run itself read an inferred note; then
   let asked = 0;
   let readInferred = false; // what agentrun.ts keeps from read_note's onRead
   const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "the task covers it" });
-  const wake = makeCanUseTool(async () => (asked++, { approved: true }), "background", undefined, judge as never, undefined, undefined, false, {
+  const wake = makeCanUseTool(async () => (asked++, { approved: true }), OWNER_LOOK, undefined, judge as never, undefined, undefined, false, {
     provenance: () => ({ kind: "derived", by: "gate", of: "owner", text: "reply to jessica@example.com" }),
     conversation: "owner",
     inferredNoteRead: () => readInferred,

@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { tick as settle } from "./util.ts";
+import { FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The admin is the owner's chat: its powers are the instance's (invites, suspend and remove with approval, groups, logs of the instance), not a
 // person's. Nobody reaches another person's folder through the assistant, the admin included: the tenant's notes, history, session and ledger are not
@@ -16,7 +17,7 @@ const { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } =
 const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx), FRIEND_CHAT);
 const { classify, isReadableData } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
@@ -62,13 +63,13 @@ const SECRETS = [settings.intake.dir, join(settings.intake.dir, "0123abcd.json")
 
 test("the admin's file tools: Read, Write and Edit reach none of a tenant's files, `tenants/` or the secret store", () => {
   for (const path of [...HERS, ...SECRETS]) {
-    for (const tool of ["Read", "Write", "Edit"]) assert.equal(classify(tool, { file_path: path }, "chat"), "deny", `${tool} ${path}`);
+    for (const tool of ["Read", "Write", "Edit"]) assert.equal(classify(tool, { file_path: path }, OWNER_CHAT), "deny", `${tool} ${path}`);
     assert.equal(isReadableData(path), false, path);
   }
   // her own folder is as it always was
-  assert.equal(classify("Write", { file_path: join(NOTES_DIR, "context-new.md") }, "chat"), "allow");
-  assert.equal(classify("Read", { file_path: ownerNotes }, "chat"), "allow");
-  assert.equal(classify("Read", { file_path: instancePaths().tenants }, "chat"), "deny", "the registry holds every friend's name and account id");
+  assert.equal(classify("Write", { file_path: join(NOTES_DIR, "context-new.md") }, OWNER_CHAT), "allow");
+  assert.equal(classify("Read", { file_path: ownerNotes }, OWNER_CHAT), "allow");
+  assert.equal(classify("Read", { file_path: instancePaths().tenants }, OWNER_CHAT), "deny", "the registry holds every friend's name and account id");
 });
 
 test("no run of the instance has Glob, Grep or Bash (they could list and read any folder): the built-in file tools are Read, Write and Edit, each confined by path", () => {
@@ -82,22 +83,22 @@ test("no run of the instance has Glob, Grep or Bash (they could list and read an
   // not offered to the model at all (agentrun.ts builtinTools), and a group's or a tenant's classify refuses them outright
   const ownerOpts = { systemPrompt: "x", sessionConv: OWNER_CONV, maxTurns: 3, maxBudgetUsd: 1 };
   const runs = [
-    buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source: "chat", memory: { dir: NOTES_DIR } }, undefined),
-    ...(["background", "handler", "radar", "dream", "heartbeat"] as const).map((source) => buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source }, undefined)),
-    buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, source: "group", memory: { dir: ann.notesDir }, tenant: undefined }, undefined),
+    buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, kind: OWNER_CHAT, memory: { dir: NOTES_DIR } }, undefined),
+    buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, kind: OWNER_LOOK }, undefined),
+    buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, kind: GROUP_CHAT, memory: { dir: ann.notesDir }, tenant: undefined }, undefined),
   ];
   for (const o of runs) assert.ok((o.tools as string[]).every((t) => ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"].includes(t)), String(o.tools));
-  for (const [tool, input] of probes) assert.equal(classify(tool, input, "group", ann.notesDir, tenantTools(ann)), "deny", tool);
-  for (const [tool, input] of probes) assert.notEqual(classify(tool, input, "chat"), "allow", tool);
+  for (const [tool, input] of probes) assert.equal(classify(tool, input, GROUP_CHAT, ann.notesDir, tenantTools(ann)), "deny", tool);
+  for (const [tool, input] of probes) assert.notEqual(classify(tool, input, OWNER_CHAT), "allow", tool);
   assert.deepEqual([...new Set(MANIFEST.filter((e) => !e.tool.startsWith("mcp__")).map((e) => e.tool))].sort(), ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"]);
 });
 
 test("the admin's powers are the instance's: invites, list, suspend, resume and remove, and nothing that reads what a tenant said", () => {
   const admin = MANIFEST.filter((e) => e.tool.startsWith("mcp__tenants__")).map((e) => e.tool.split("__")[2]).sort();
   assert.deepEqual(admin, ["invite_person", "list_tenants", "remove_tenant", "resume_tenant", "suspend_tenant"]);
-  assert.equal(classify("mcp__tenants__suspend_tenant", { id: ann.id }, "chat"), "ask");
-  assert.equal(classify("mcp__tenants__remove_tenant", { id: ann.id }, "chat"), "ask");
-  assert.equal(classify("mcp__tenants__invite_person", { recipient: "+15555550114" }, "chat"), "ask", "the first hello to a person always asks the owner");
+  assert.equal(classify("mcp__tenants__suspend_tenant", { id: ann.id }, OWNER_CHAT), "ask");
+  assert.equal(classify("mcp__tenants__remove_tenant", { id: ann.id }, OWNER_CHAT), "ask");
+  assert.equal(classify("mcp__tenants__invite_person", { recipient: "+15555550114" }, OWNER_CHAT), "ask", "the first hello to a person always asks the owner");
   // what list_tenants shows is the record: no note, no history line
   const listed = describeTenants().join("\n");
   assert.match(listed, new RegExp(ann.id));
@@ -110,7 +111,7 @@ const search = (dir = settings.logsDir) => searchLogs(dir, { query: CANARY });
 
 test("search_logs for the admin: a tenant's approvals, replies, searches and judge reasons leave no word in the audit log; the owner's own rows are unchanged", async () => {
   // a tenant's run: a web search (its query is logged for the owner's runs) and an approval answered in her chat
-  const tenantRun = makeCanUseTool(async () => ({ approved: true }), "group", ann.notesDir, undefined, undefined, tenantTools(ann), true);
+  const tenantRun = makeCanUseTool(async () => ({ approved: true }), GROUP_CHAT, ann.notesDir, undefined, undefined, tenantTools(ann), true);
   await tenantRun("WebSearch", call.input, { signal: new AbortController().signal } as never);
   let ts = 100;
   const ask = (scope: string, source: "chat" | "group") => {
