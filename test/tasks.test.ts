@@ -315,7 +315,7 @@ test("tasks: who acted and where it came from: the owner, a friend, a group memb
   assert.deepEqual([origin(friendKey, 1), events(friendKey)[0]!.by], ["friend", "friend"]);
 });
 
-test("tasks: an unattended run has the chat's task tools (not the import); what it adds is open, attributed to the look, with its mail as the source", async () => {
+test("tasks: an unattended run has the chat's task tools ; what it adds is open, attributed to the look, with its mail as the source", async () => {
   const k = fresh();
   const bg = toolsOf({ key: k, source: "background", unattended: true, zone: () => ZONE, now: () => NOW });
   assert.deepEqual(Object.keys(bg).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"]);
@@ -328,7 +328,7 @@ test("tasks: an unattended run has the chat's task tools (not the import); what 
   assert.match(text(await bg.list_tasks!.handler({})), /#1 \[task\] Pay the invoice \| due Fri 30 Oct \| from mail/, "it can list (a read) to avoid adding twice");
 });
 
-test("tasks: the permission floor: own-data writes are free in chat and in a look; the import stays a chat's; nothing else reaches the tools", () => {
+test("tasks: the permission floor: own-data writes are free in chat and in a look; nothing else reaches the tools", () => {
   const MUTATORS = ["update_task", "complete_task", "drop_task", "snooze_task"].map((x) => `mcp__tasks__${x}`);
   const READ = "mcp__tasks__list_tasks";
   const ADD = "mcp__tasks__add_task";
@@ -343,7 +343,6 @@ test("tasks: the permission floor: own-data writes are free in chat and in a loo
     assert.ok(look.has(tool), tool);
     assert.equal(classify(tool, { id: 1 }, GROUP_LOOK, undefined, look), "allow", `${tool}: a look of a friend or a group`);
   }
-  for (const tool of ["mcp__tasks__import_tasks_preview", "mcp__tasks__import_tasks_commit"]) assert.equal(look.has(tool), false, `${tool}: the import is a confirm-the-preview flow, attended`);
   // unknown names under the server are denied for isolated runs and not free
   assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, GROUP_CHAT, undefined, groupTools()), "deny");
   assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, OWNER_CHAT), "ask", "a name the manifest does not know is never free");
@@ -364,7 +363,7 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {};
   const toolNames = (o: Parameters<typeof buildOptions>[1]) => Object.keys(((servers(o) as Record<string, { instance?: { _registeredTools: object } }>).tasks?.instance?._registeredTools ?? {}) as object);
-  assert.equal(toolNames({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).length, 8) // (the owner's chat also has the two import tools);
+  assert.equal(toolNames({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).length, 6);
   assert.equal(toolNames({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 6);
   assert.deepEqual(toolNames({ ...base, kind: OWNER_LOOK }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "the owner's look");
   assert.deepEqual(toolNames({ ...base, kind: GROUP_LOOK, groupId: "g", tools: groupTools(GROUP_LOOK) }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "a group's look has no chat memory");
@@ -535,4 +534,14 @@ test("tasks: itemLine shows kind, due (overdue marked), who, reminder, repeat an
   const k = fresh();
   const it = S.addItem(scope(k), { title: "Pay rent", kind: "i_owe", person: "Landlord", due: "2026-10-21", remindAt: Date.parse("2026-10-22T13:00:00Z"), repeat: "every month on the 1st" }).item;
   assert.equal(itemLine(it, NOW, ZONE), "#1 [i_owe] Pay rent | due Wed 21 Oct (overdue) | owed to Landlord | remind Thu 22 Oct 15:00 | repeats every month on the 1st");
+});
+
+test("tasks: the one-time Notion import is gone: no tool, no skill, no table; old rows with source_kind import still read", () => {
+  const src = resolve(import.meta.dirname, "../src");
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".ts") ? [join(dir, e.name)] : []));
+  for (const f of walk(src)) assert.doesNotMatch(readFileSync(f, "utf8"), /import_tasks_(preview|commit)|task-import/, f);
+  assert.equal(existsSync(resolve(import.meta.dirname, "../plugin/skills/task-import")), false);
+  const k = fresh();
+  assert.equal(convDb(convIdOfKey(k)).get("SELECT name FROM sqlite_master WHERE name = 'pending_imports'"), undefined);
+  assert.equal(S.addItem(scope(k), { title: "From before", sourceKind: "import", sourceRef: "p1" }).item.sourceKind, "import");
 });

@@ -1,6 +1,6 @@
 ---
 name: notion-tasks
-description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. Tasks no longer live in Notion: they live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy; moving an old Notion task table over is `ted-personal-assistant:task-import`. Pairs with `ted-personal-assistant:mailbird` and `ted-personal-assistant:daily-brief`.
+description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. Tasks no longer live in Notion: they live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy. Pairs with `ted-personal-assistant:mailbird` and `ted-personal-assistant:daily-brief`.
 ---
 
 # The task list (it lives in the assistant, not in Notion)
@@ -10,9 +10,8 @@ The owner's tasks, the promises they made (`i_owe`) and what they wait on from o
 (read), `add_task`, and in chat `update_task`, `complete_task`, `drop_task`,
 `snooze_task`. **Never write a task to
 Notion** (no page edit, no new page, no row for a task): after the
-one-time import the Notion table is an archive nobody updates. If the owner still
-has tasks in a Notion table and none are in the list yet, offer
-`ted-personal-assistant:task-import`.
+move the Notion table is an archive nobody updates. If the owner asks to bring tasks
+over from Notion again, read Notion and use `add_task` for each, like any other request.
 
 ## Read before you add
 
@@ -55,7 +54,7 @@ change or finish a task in chat, load `ted-personal-assistant:follow-through`.
 
 ## A long overdue pile
 
-When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Offer a clean-up **once**, in your own words and in one or two lines: reschedule, drop or keep, offering to go through them in chat in a few quick rounds. Remember that you offered with a short note (`overdue-cleanup`, with the date; the brief uses `status-overdue-offer`, written with `days` 30), and never offer again unless the owner asks or the pile grows well past what it was. When they say yes, go through the oldest first in small batches, each task one line with a suggestion ("drop", "move to Friday", "keep"), act on the answers with `update_task`, `snooze_task` or `drop_task`, and mention the result in one line. Nothing is dropped without their word. An unattended run (the daily brief) can only make the offer: it cannot change tasks.
+When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Offer a clean-up **once**, in your own words and in one or two lines: reschedule, drop or keep, offering to go through them in chat in a few quick rounds. Remember that you offered with a short note (`overdue-cleanup`, with the date; the brief uses `status-overdue-offer.md`, written with Write and an `expires:` 30 days out), and never offer again unless the owner asks or the pile grows well past what it was. When they say yes, go through the oldest first in small batches, each task one line with a suggestion ("drop", "move to Friday", "keep"), act on the answers with `update_task`, `snooze_task` or `drop_task`, and mention the result in one line. Nothing is dropped without their word. An unattended run (the daily brief) can only make the offer: it cannot change tasks.
 
 ## If the task tools are not there
 

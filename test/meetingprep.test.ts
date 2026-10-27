@@ -48,7 +48,7 @@ type Raw = import("../src/tasks/meetings.ts").RawMeeting;
 const ME = { name: "Ben", email: "ben@acme.com", self: true };
 const ANNA = { name: "Anna", email: "anna@client.org" };
 const raw = (id: string, startMs: number, o: Partial<Raw> = {}): Raw => ({ eventId: id, start: iso(startMs), title: `Meeting ${id}`, attendees: [ME, ANNA], ...o });
-const record = (list: Raw[], at = NOW) => noteMeetings({ key: "owner", now: () => at }, list);
+const record = (list: Raw[], at = NOW) => noteMeetings({ key: "owner", source: "background", now: () => at }, list);
 
 function reset(): void {
   db().run("DELETE FROM meetings");
@@ -120,11 +120,11 @@ test("recording: off while PREP_MINUTES is 0, and the tool is the conversation's
   s.prepMinutes = 15;
   const ana = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000f1", name: "Ana" })!;
   const key = `tenant:${ana.id}`;
-  noteMeetings({ key, now: () => NOW }, [raw("friend-1", NOW + 30 * MIN)]);
+  noteMeetings({ key, source: "group", now: () => NOW }, [raw("friend-1", NOW + 30 * MIN)]);
   record([raw("owner-1", NOW + 30 * MIN)]);
   assert.deepEqual(rowsOf().map((m) => m.eventId), ["owner-1"], "the owner's table holds only the owner's meetings");
   assert.deepEqual(M.allMeetings(convDb(tenant(ana.id).convId)).map((m) => m.eventId), ["friend-1"]);
-  const server = createMeetingsServer({ key, now: () => NOW }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: { meetings: Raw[] }) => Promise<{ content: { text: string }[] }> }> } };
+  const server = createMeetingsServer({ key, source: "group", now: () => NOW }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: { meetings: Raw[] }) => Promise<{ content: { text: string }[] }> }> } };
   assert.match((await server.instance._registeredTools.note_upcoming_meetings!.handler({ meetings: [raw("friend-2", NOW + 50 * MIN)] })).content[0]!.text, /Recorded 1/);
   assert.deepEqual(M.allMeetings(convDb(tenant(ana.id).convId)).map((m) => m.eventId), ["friend-2"], "a call replaces the pending meetings of its window, in her own table");
   assert.deepEqual(rowsOf().map((m) => m.eventId), ["owner-1"], "still only the owner's");
@@ -339,14 +339,15 @@ test("the prompt tells a check to record meetings only where prep exists: the ow
   assert.equal(lookerOf(group("meetingprep-group-2")).meetings, false);
 });
 
-test("the recording tool is on the owner's look and nowhere else: not in chat, not for a group, not with PREP_MINUTES 0", () => {
+test("the recording tool follows the calendar capability: the owner's look and chat turn have it; not a group, not with PREP_MINUTES 0", () => {
   const look = lookOptions(conv, LOGIN, {}, new Date(NOW));
   const names = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: false }), o, undefined).mcpServers as object);
   assert.ok(names(look).includes("meetings"));
-  assert.ok(!names(runFor(conv, "message", { now: new Date(NOW) })).includes("meetings"), "chat has no such tool");
+  assert.ok(names(runFor(conv, "message", { now: new Date(NOW) })).includes("meetings"), "a chat turn that has the calendar can record too");
   s.prepMinutes = 0;
   assert.ok(!names(look).includes("meetings"), "off: no server");
   s.prepMinutes = 15;
+  assert.ok(!names(runFor(group("meetingprep-group-4"), "message", { now: new Date(NOW) })).includes("meetings"), "a group chat has no calendar, so no tool");
   assert.ok(!names(lookOptions(group("meetingprep-group-3"), LOGIN, {}, new Date(NOW))).includes("meetings"), "a group has no calendar, so no tool");
 });
 

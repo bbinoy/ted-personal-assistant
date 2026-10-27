@@ -390,7 +390,7 @@ test("the catch-up window is at least an hour: 0 would make every routine late t
   assert.equal(loadSettings({}).routineCatchUpHours, 4);
 });
 
-test("the wrap and the review: their experts have exactly the read tools, the calendar reads, Skill and the chat send; no email, no write_note, status note, task writes or seen_mail", () => {
+test("the wrap and the review: their experts have exactly the read tools, the calendar reads, Skill and the chat send; no email, no write_note, task writes or seen_mail", () => {
   const set = expertSetup(ownerSkills(), "");
   for (const s of ["evening-wrap", "weekly-review"]) {
     const tools = set.agents[`expert-${s}`]!.tools;
@@ -399,7 +399,7 @@ test("the wrap and the review: their experts have exactly the read tools, the ca
       "Skill", "mcp__claude_ai_Google_Calendar__get_event", "mcp__claude_ai_Google_Calendar__list_calendars", "mcp__claude_ai_Google_Calendar__list_events",
       "mcp__claude_ai_Google_Calendar__search_events", "mcp__memory__journal", "mcp__send__send", "mcp__tasks__list_tasks",
     ]);
-    for (const banned of ["mcp__status__write_status_note", "mcp__tasks__add_task", "mcp__tasks__complete_task", "mcp__tasks__update_task", "mcp__meetings__note_upcoming_meetings", "mcp__seenmail__seen_mail", "Bash", "Write", "Edit"]) {
+    for (const banned of ["mcp__tasks__add_task", "mcp__tasks__complete_task", "mcp__tasks__update_task", "mcp__meetings__note_upcoming_meetings", "mcp__seenmail__seen_mail", "Bash", "Write", "Edit"]) {
       assert.ok(!tools.includes(banned), `${s}: cannot call ${banned}`);
     }
     assert.deepEqual(set.agents[`expert-${s}`]!.disallowedTools, ["Agent"]);

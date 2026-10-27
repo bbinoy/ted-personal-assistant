@@ -65,7 +65,7 @@ test("a conversation's chat and look have ONE system prompt; the owner's look ha
     for (const wanted of ["send", "tasks", "weather", "draw", ...(settings.tts.provider === "qwen" ? ["voice"] : [])]) assert.ok(servers.includes(wanted), `${conv.kind} look has ${wanted}`);
     assert.ok(!servers.includes("notes") && servers.includes("memory") && servers.includes("people"), "a look has the one memory server, like a chat");
     const memory = (o: Call) => Object.keys((o.options.mcpServers.memory as { instance: { _registeredTools: object } }).instance._registeredTools);
-    assert.deepEqual(memory(l).filter((t) => t !== "memory_changes_since_brief").sort(), memory(c).sort(), "the memory server of a look is a chat's");
+    assert.deepEqual(memory(l).sort(), memory(c).sort(), "the memory server of a look is a chat's");
     assert.deepEqual(memory(c).sort(), ["forget_note", "journal", "search_logs", ...(conv.kind === "owner" || conv.kind === "group" ? ["undo_dream"] : [])].sort());
     assert.ok(Object.keys(c.options.mcpServers ?? {}).includes("memory") && !Object.keys(c.options.mcpServers ?? {}).includes("notes"));
     assert.ok(l.options.tools.includes("Read") && c.options.tools.includes("Read"), "the notes' file tools are every run's");

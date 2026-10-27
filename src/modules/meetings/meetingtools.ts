@@ -1,12 +1,13 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import type { Source } from "../../core/audit.ts";
 import { emitRecord } from "../../core/events.ts";
 import { liveConvDb } from "../../core/convdb.ts";
 import { convIdOfKey } from "../../core/convpaths.ts";
 import { settings } from "../../core/settings.ts";
 import { cleanMeeting, HORIZON_MS, MAX_ATTENDEES, MAX_MEETINGS, recordMeetings, type Meeting, type RawMeeting } from "../../tasks/meetings.ts";
 
-// note_upcoming_meetings: the heartbeat look tells code which meetings are coming up (tasks/meetings.ts says what is kept and what the rules are). ONE server per run, closed over ONE
+// note_upcoming_meetings: any run that read the calendar tells code which meetings are coming up (tasks/meetings.ts says what is kept and what the rules are). ONE server per run, closed over ONE
 // conversation (its key is never a parameter): the call writes the `meetings` table of THAT conversation's assistant.db and nothing else, so a friend's look cannot reach the owner's rows
 // or the other way round (test/meetingprep.test.ts). Own data, nothing to approve. Code validates every field; a meeting it cannot keep is named in the answer so the model can fix the call.
 
@@ -14,6 +15,7 @@ const reply = (text: string, isError = false) => ({ content: [{ type: "text" as 
 
 export interface MeetingsRun {
   key: string; // the conversation's key: "owner" or "tenant:<id>"
+  source: Source; // the audit label of the run (chat, background, group)
   now?: () => number;
 }
 
@@ -33,7 +35,7 @@ export function noteMeetings(run: MeetingsRun, raw: RawMeeting[]): { text: strin
   if (!db) return { text: "Could not record the meetings (this conversation's database is not available now). Nothing was changed.", isError: true };
   try {
     const r = recordMeetings(db, kept, now);
-    emitRecord("note_upcoming_meetings", "recorded", run.key === "owner" ? "background" : "group", { stored: r.stored, removed: r.removed, refused: problems.length });
+    emitRecord("note_upcoming_meetings", "recorded", run.source, { stored: r.stored, removed: r.removed, refused: problems.length });
     return { text: `Recorded ${r.stored} upcoming meeting(s)${r.removed ? `, replacing ${r.removed} earlier one(s)` : ""}.${problems.length ? `\nNot recorded:\n- ${problems.join("\n- ")}` : ""}` };
   } catch (e) {
     console.error(`meetings: could not record (${(e as Error)?.message ?? "error"})`);
@@ -49,7 +51,7 @@ export function createMeetingsServer(run: MeetingsRun) {
     tools: [
       tool(
         "note_upcoming_meetings",
-        `Tell code which meetings are coming up, so it can have a short prep message written shortly before each one. Call it ONCE per look, after you have read the calendar for the next ${HORIZON_MS / 3_600_000} hours (a few more is fine, up to 36), with EVERY event in that window that is not all-day: this list REPLACES what was recorded for the window, so an event you leave out is forgotten (a cancelled or moved one disappears) and an empty list means "nothing is coming up". Do NOT call it if you could not read the calendar. Pass the facts exactly as the calendar gave them; code decides which meetings get a prep (declined, private, all-day and meetings with nobody else are skipped by code, not by you). Times are full ISO WITH the UTC offset.`,
+        `Tell code which meetings are coming up, so it can have a short prep message written shortly before each one. Call it ONCE per run, after you have read the calendar for the next ${HORIZON_MS / 3_600_000} hours (a few more is fine, up to 36), with EVERY event in that window that is not all-day: this list REPLACES what was recorded for the window, so an event you leave out is forgotten (a cancelled or moved one disappears) and an empty list means "nothing is coming up". Do NOT call it if you could not read the calendar. Pass the facts exactly as the calendar gave them; code decides which meetings get a prep (declined, private, all-day and meetings with nobody else are skipped by code, not by you). Times are full ISO WITH the UTC offset.`,
         {
           meetings: z
             .array(

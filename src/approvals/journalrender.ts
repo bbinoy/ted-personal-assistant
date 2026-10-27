@@ -10,6 +10,7 @@ import { zoneOf } from "../tenants/tenants.ts";
 import { callLabel, createdLabel, idsInCall, idsInResult } from "./created.ts";
 import type { RunProvenance } from "./autojudge.ts";
 import { scopeOf } from "./turnscope.ts";
+import { STATUS_PREFIX } from "../memory/notes.ts";
 
 // What the journal says about an action, written by code (core/sinks/journalsink.ts writes the line): WHAT was done (named by the object, not only its id), WHY (first from what code knows:
 // the person's message and when, the approval they answered, the judge's verdict, the run's standing instruction), and how to UNDO it where there is a way. The model's own reason is never
@@ -17,22 +18,25 @@ import { scopeOf } from "./turnscope.ts";
 
 // ---- which calls are actions ----
 
-// Plumbing that is no action worth a line: sending into the chat is the conversation itself, seen-mail is bookkeeping, a status note is the brief's own state, a drawing or a voice is sent as a message.
-const NOT_ACTIONS = new Set(["send", "seenmail", "status", "draw", "voice", "weather"]);
-const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]) }; // (the rest of this server reads: search_logs, journal, memory_changes_since_brief)
+// Plumbing that is no action worth a line: sending into the chat is the conversation itself, seen-mail is bookkeeping, a write of a status- note is the brief's own record (isStatusWrite), a drawing or a voice is sent as a message.
+const NOT_ACTIONS = new Set(["send", "seenmail", "draw", "voice", "weather"]);
+const ACTIONS_OF: Readonly<Record<string, ReadonlySet<string>>> = { memory: new Set(["forget_note", "undo_dream"]) }; // (the rest of this server reads: search_logs, journal)
 const NOTE_WRITES = new Set(["Write", "Edit"]);
 // The SDK's own tools that are no action: a delegation is the expert's actions (each its own line), not an action itself; StructuredOutput is how a run hands in its answer; the to-do
 // list and the tool search are its own bookkeeping. The one place: the journal and the look's count of what it did (look.ts) both ask it.
 const NON_ACTIONS: ReadonlySet<string> = new Set(["Agent", "Task", "TodoWrite", "ToolSearch", "StructuredOutput"]);
 export const isNonAction = (tool: string): boolean => NON_ACTIONS.has(tool);
 
+// A write of one of the assistant's own records (status-<name>.md, such as the brief's headlines): plumbing, not an action.
+const isStatusWrite = (input?: Record<string, unknown>): boolean => typeof input?.file_path === "string" && input.file_path.split("/").pop()!.startsWith(STATUS_PREFIX);
+
 // Pure: does a successful call of this tool belong in the journal? Never a read (a look-up, a search, the journal itself); never plumbing.
-export function journalable(tool: string): boolean {
+export function journalable(tool: string, input?: Record<string, unknown>): boolean {
   if (isReadTool(tool)) return false;
   if (isNonAction(tool)) return false;
   const e = entryFor(tool);
   if (!e) return true; // a tool the manifest does not know is not a read (the verbs say so): an action
-  if (e.provider === "builtin") return NOTE_WRITES.has(tool);
+  if (e.provider === "builtin") return NOTE_WRITES.has(tool) && !isStatusWrite(input);
   const only = ACTIONS_OF[e.provider];
   if (only) return only.has(tool.split("__").pop() ?? tool);
   if (e.action === "skill" || e.action === "web-search" || e.action === "web-fetch" || e.action === "select") return false;
@@ -259,7 +263,7 @@ export async function noteDone(o: { conv: string | undefined; run?: string; sour
       if (entryFor(o.tool)?.cap === "mail" || entryFor(o.tool)?.provider === "gmail" || entryFor(o.tool)?.provider === "mailbird") rememberMail(conv, o.response);
       return;
     }
-    if (!journalable(o.tool)) return;
+    if (!journalable(o.tool, o.input)) return;
     emit({ type: "done", conv, ...(o.run ? { run: o.run } : {}), tool: o.tool, source: o.source, input: o.input, ...render(conv, o.tool, o.input, o.response) });
   } catch (e) {
     console.error(`journal: could not record ${o.tool} (${(e as Error)?.message ?? "error"})`);

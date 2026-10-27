@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -103,6 +103,7 @@
         "mcp__mailbird__trash_conversation",
         "mcp__mailbird__unsubscribe_from_newsletter",
         "mcp__mailbird__update_draft",
+        "mcp__meetings__note_upcoming_meetings",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
         "mcp__memory__search_logs",
@@ -112,8 +113,6 @@
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
         "mcp__tasks__drop_task",
-        "mcp__tasks__import_tasks_commit",
-        "mcp__tasks__import_tasks_preview",
         "mcp__tasks__list_tasks",
         "mcp__tasks__snooze_task",
         "mcp__tasks__update_task",
@@ -142,7 +141,6 @@
         "ted-personal-assistant:setup",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw",
-        "ted-personal-assistant:task-import",
         "ted-personal-assistant:evening-wrap",
         "ted-personal-assistant:weekly-review"
       ],
@@ -166,7 +164,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "snapshot": false
     },
@@ -182,6 +180,7 @@
       "voice",
       "memory",
       "people",
+      "meetings",
       "browse"
     ],
     "tools": [
@@ -216,7 +215,6 @@
       "ted-personal-assistant:setup",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw",
-      "ted-personal-assistant:task-import",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review"
     ],
@@ -567,7 +565,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -670,13 +668,11 @@
         "mcp__meetings__note_upcoming_meetings",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
-        "mcp__memory__memory_changes_since_brief",
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
         "mcp__seenmail__seen_mail",
         "mcp__send__send",
-        "mcp__status__write_status_note",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
         "mcp__tasks__drop_task",
@@ -703,7 +699,6 @@
         "ted-personal-assistant:setup",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw",
-        "ted-personal-assistant:task-import",
         "ted-personal-assistant:evening-wrap",
         "ted-personal-assistant:weekly-review"
       ],
@@ -729,7 +724,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "snapshot": false
     },
@@ -745,7 +740,6 @@
       "voice",
       "memory",
       "people",
-      "status",
       "meetings",
       "browse"
     ],
@@ -781,7 +775,6 @@
       "ted-personal-assistant:setup",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw",
-      "ted-personal-assistant:task-import",
       "ted-personal-assistant:evening-wrap",
       "ted-personal-assistant:weekly-review"
     ],

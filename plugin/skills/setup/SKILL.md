@@ -44,7 +44,7 @@ Calendars and Notion come through connectors in the owner's Claude account. If a
 connector is not connected, its tools simply do not exist in this session (your
 prompt may also say so). Check before you start an item that needs one: the calendar
 tools (`list_calendars`, `list_events`) for calendars, the Notion tools
-(`notion-search`, `notion-fetch`) for meetings (and for the one-time task import).
+(`notion-search`, `notion-fetch`) for meetings.
 
 If one is missing:
 - say plainly that it is not connected, and how to fix it: add it as a connector in
@@ -78,9 +78,7 @@ owner's request needs, or with the first missing item if they just said "set up"
 
 Tasks live in the assistant itself (the `list_tasks` / `add_task` tools): there is no
 task page or database to find, and **a new owner is never asked for one**. Say so in
-one line if tasks come up. Only an owner who still has an old task table in Notion
-(a `setup-tasks` note already exists, or they mention one) is offered the one-time
-move: load `ted-personal-assistant:task-import`.
+one line if tasks come up.
 
 ### 3. Meeting notes (`setup-meetings.md`)
 
