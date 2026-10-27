@@ -110,7 +110,7 @@ export const PROMPTS = {
   delegate: ["who", "delegated"],
   learn: ["who"],
   expert: ["personality", "own", "who"],
-  heartbeat: ["now", "timeZone", "who", "lastLook", "quietFrom", "quietTo", "due", "sources", "routineFacts"],
+  heartbeat: ["now", "timeZone", "who", "lastLook", "quietFrom", "quietTo", "due", "sources", "routineFacts", "mail"],
   tasks: ["own", "group", "who"],
   gateGroup: ["participation", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;

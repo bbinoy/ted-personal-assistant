@@ -244,7 +244,7 @@ export function expertSystem(memory: string, o: { missing?: readonly string[]; m
 
 // The message of one background check (persona/heartbeat.md): the trigger line of a look, with the per-check data and nothing standing (what to do in a check is every conversation's prompt, `background`).
 // The chat log since the last check and the facts go after it as data (heartbeat/look.ts).
-export const heartbeatInstruction = (vars: { now: string; timeZone: string; who: string; lastLook: string; quietFrom: string; quietTo: string; due: string; sources: string; routineFacts?: string }): string => say("heartbeat", { ...vars, routineFacts: vars.routineFacts ?? "" });
+export const heartbeatInstruction = (vars: { now: string; timeZone: string; who: string; lastLook: string; quietFrom: string; quietTo: string; due: string; sources: string; routineFacts?: string; mail?: boolean }): string => say("heartbeat", { mail: false, ...vars, routineFacts: vars.routineFacts ?? "" });
 
 // A name goes into the prompt as one short plain line.
 const oneLineName = (name: string): string => name.replace(/[\r\n<>"]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) || "a friend";

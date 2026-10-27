@@ -88,6 +88,7 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
     due,
     sources: looker.sources,
     routineFacts,
+    mail: looker.mail, // (the inbox step comes first: a look on Haiku skipped it when it was one rule among many in the prompt)
   });
 }
 
