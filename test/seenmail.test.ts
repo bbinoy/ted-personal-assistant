@@ -143,7 +143,7 @@ test("a look that ends well commits what it was told was new; a look that fails 
   assert.equal(instanceDb().num("SELECT COUNT(*) FROM looks") - looksBefore, 2, "two looks, two rows");
 });
 
-test("the first run does not triage the backlog: mail older than MAIL_BACKLOG_DAYS is marked seen unread, later runs are not affected", () => {
+test("the first run does not triage the backlog: mail older than the backlog window is marked seen unread, later runs are not affected", () => {
   const NOW = Date.parse("2026-10-20T12:00:00Z");
   assert.equal(isBacklog("2026-10-01T09:00:00Z", NOW, 7), true);
   assert.equal(isBacklog("2026-10-18T09:00:00Z", NOW, 7), false);

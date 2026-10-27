@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSettings } from "../src/core/settings.ts";
+import { loadSettings, WARM_IDLE_MINUTES } from "../src/core/settings.ts";
 import { qwenReference } from "../src/doctor.ts";
 
 test("settings: Qwen is the default speech provider, with Kokoro standing in; Kokoro alone has no fallback", () => {
@@ -31,24 +31,16 @@ test("settings: remote speech needs its keys and a safe address, or the agent do
   assert.throws(() => loadSettings({ TTS_FALLBACK: "elevenlabs" }), /TTS_FALLBACK/);
 });
 
-test("settings: the timing constants keep the values they had when they were hard-coded, and are validated", () => {
-  const s = loadSettings({});
-  const ms = { stickyMs: s.groupStickyMinutes * 60_000, noticeMs: s.groupNoticeMinutes * 60_000, memberMs: s.groupMemberCacheMinutes * 60_000, slowMs: s.slowReplySeconds * 1000, echoMs: s.echoWindowMinutes * 60_000, refreshMs: s.warmRefreshMinutes * 60_000, noticeAgeMs: s.noticeAgeHours * 3600_000, backoffMs: s.compactBackoffMinutes * 60_000 };
-  assert.deepEqual(ms, { stickyMs: 30 * 60_000, noticeMs: 10 * 60_000, memberMs: 5 * 60_000, slowMs: 20_000, echoMs: 5 * 60_000, refreshMs: 25 * 60_000, noticeAgeMs: 24 * 3600_000, backoffMs: 3600_000 });
-  assert.equal(loadSettings({ GROUP_STICKY_MINUTES: "45" }).groupStickyMinutes, 45);
-  assert.throws(() => loadSettings({ SLOW_REPLY_SECONDS: "soon" }), /SLOW_REPLY_SECONDS/);
-});
-
 test("settings: the local cloned voice (qwen) takes its reference from paths, falls back to Kokoro by default", () => {
   const dir = mkdtempSync(join(tmpdir(), "ref-"));
   writeFileSync(join(dir, "ref.txt"), "  Words spoken in the reference.\n");
-  const q = loadSettings({ TTS_PROVIDER: "qwen", HARNESS_DATA_DIR: dir, TTS_REF_AUDIO: "ref.wav", TTS_REF_TEXT: "ref.txt", WARM_IDLE_MINUTES: "30" }).tts;
+  const q = loadSettings({ TTS_PROVIDER: "qwen", HARNESS_DATA_DIR: dir, TTS_REF_AUDIO: "ref.wav", TTS_REF_TEXT: "ref.txt" }).tts;
   assert.ok(q.provider === "qwen");
   assert.equal(q.fallback, "kokoro");
   assert.equal(q.qwen.refAudio, join(dir, "ref.wav"));
   assert.equal(q.qwen.refText, "Words spoken in the reference.");
   assert.equal(q.qwen.dir, join(dir, "state/tts-qwen"));
-  assert.equal(q.qwen.idleMs, 30 * 60_000);
+  assert.equal(q.qwen.idleMs, WARM_IDLE_MINUTES * 60_000);
   assert.match(q.qwen.model, /Qwen3-TTS-12Hz-0\.6B-Base-8bit$/);
   const inline = loadSettings({ TTS_PROVIDER: "qwen", TTS_REF_TEXT: "Just these words." }).tts;
   assert.ok(inline.provider === "qwen" && inline.qwen.refText === "Just these words." && inline.qwen.refAudio === "");

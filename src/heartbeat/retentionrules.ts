@@ -11,7 +11,7 @@ import { settings } from "../core/settings.ts";
 import { writeFileAtomic } from "../core/state.ts";
 import { dayAt } from "../core/timezone.ts";
 import { layoutOf as openbaoLayout } from "../secrets/openbaoadmin.ts";
-import { snapshotsOf } from "../memory/dreamapply.ts";
+import { NOTES_BACKUP_KEEP, snapshotsOf } from "../memory/dreamapply.ts";
 import { forgetNote } from "../memory/notes.ts";
 import { MAX_AGE_MS as VOICE_SOURCE_WINDOW_MS } from "../modules/voice/voicenote.ts";
 
@@ -288,17 +288,21 @@ export function tmpRule(root: () => string, hours: () => number): RetentionRule 
   };
 }
 
-/** The set the application runs, from the settings and the process's data folder. Called once by main.ts and by `npm run retention`; other stores register their own rules next to these. */
+/** The set the application runs, from the settings (the windows people differ on: audit, attachments) and the process's data folder (the rest are fixed here, with what they are for). Called once by main.ts and by `npm run retention`; other stores register their own rules next to these. */
 export function registerFileRules(): void {
   const L = () => layout(dataRoot());
   for (const r of [
     auditRule(L, () => settings.auditRetentionDays),
     signalAttachmentRule(L, () => settings.signalAttachmentsDir, () => settings.signalAttachmentDays),
-    expiredNotesRule(L, () => settings.expiredNoteDeleteDays),
-    notesBackupRule(L, () => settings.notesBackupKeep),
-    openbaoRule(L, () => settings.openbaoLogMb, () => settings.openbaoBackupKeep),
-    shoreRule(L, () => settings.shoreCacheKeep),
-    tmpRule(() => tmpdir(), () => settings.tmpSweepHours),
+    // an expired note is set aside in notes-backup/expired/; deleted for good this many days after its expiry
+    expiredNotesRule(L, () => 30),
+    notesBackupRule(L, () => NOTES_BACKUP_KEEP),
+    // OpenBao's logs are rotated at this many MB (2 generations kept); raft snapshots kept
+    openbaoRule(L, () => 20, () => 7),
+    // cached shore outlines kept (newest by mtime)
+    shoreRule(L, () => 50),
+    // temporary folders of picture, voice and Google work older than this many hours are swept
+    tmpRule(() => tmpdir(), () => 24),
   ]) registerRetention(r);
   registerDbRules(); // the tables of instance.db (looks, spend, notices; payments only if PAYMENTS_KEEP_YEARS is set)
   registerConvRules(); // the bounded tables of every conversation's assistant.db (seen mail, held posts, the old approval inbox, voice notes)

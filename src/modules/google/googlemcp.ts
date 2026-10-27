@@ -63,8 +63,10 @@ export const googleConfig = (): GoogleConfig => ({
   clientSecret: settings.google.clientSecret,
   tokenUrl: settings.google.tokenUrl,
   scopes: settings.google.scopes,
-  idleMs: settings.google.idleMinutes * 60_000,
-  callMs: settings.google.callSeconds * 1000,
+  // A friend's server process is closed after this long unused (started again on demand: OpenBao read, temp folder, Python start, token refresh). It is the heartbeat interval plus a margin (at least 20),
+  // so a look within the hour finds her server running; the price is one resident Python process per friend with Google while the heartbeat ticks.
+  idleMs: Math.max(20, settings.heartbeatMinutes + 5) * 60_000,
+  callMs: 60_000, // one tool call
   tmpRoot: tmpdir(),
 });
 
@@ -108,7 +110,7 @@ export async function readGrant(tenantId: string): Promise<GoogleGrant | undefin
 // The file name the server gives an account's credentials (python urllib.parse.quote(email, safe="@._-")).
 export const credentialFile = (email: string): string => `${email.replace(/[^A-Za-z0-9@._~-]/g, (c) => [...Buffer.from(c)].map((b) => `%${b.toString(16).toUpperCase().padStart(2, "0")}`).join(""))}.json`;
 
-// One friend's server process: started on first use, closed after GOOGLE_MCP_IDLE_MINUTES without use (or when the app stops: modules/runtime.ts), started again on demand.
+// One friend's server process: started on first use, closed after the idle time of googleConfig() without use (or when the app stops: modules/runtime.ts), started again on demand.
 export class GoogleSession extends UpstreamSession {
   protected readonly label = "her Google server";
   private readonly cfg: () => GoogleConfig;

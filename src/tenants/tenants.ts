@@ -411,12 +411,12 @@ export function setPaused(ctx: Who, until: number | undefined): void {
   const was = friend(ctx)?.paused_until;
   if (until !== undefined || (was !== null && was !== undefined)) convDb(ctx.convId).run("INSERT INTO friend (id, paused_until) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET paused_until = excluded.paused_until", until ?? null);
 }
-// A fixed notice (not set up, budget, cooldown) at most every TENANT_NOTICE_MINUTES: true when it may be sent now (and is marked).
+// A fixed notice (not set up, budget, cooldown) to one person at most every 30 minutes: true when it may be sent now (and is marked).
 export function mayNotice(ctx: Who, kind: string, now = Date.now()): boolean {
   const db = convDb(ctx.convId);
   return db.tx(() => {
     const last = Date.parse(db.get<{ at: string }>("SELECT at FROM friend_notices WHERE kind = ?", kind)?.at ?? "");
-    if (Number.isFinite(last) && now - last < settings.tenantNoticeMinutes * 60_000) return false;
+    if (Number.isFinite(last) && now - last < 30 * 60_000) return false;
     db.run("INSERT INTO friend_notices (kind, at) VALUES (?, ?) ON CONFLICT (kind) DO UPDATE SET at = excluded.at", kind, new Date(now).toISOString());
     return true;
   });

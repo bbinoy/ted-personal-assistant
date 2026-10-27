@@ -29,7 +29,7 @@ const { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } =
 const { FILE: OWNER_LOG } = await import("../src/core/messages.ts");
 const { acceptOwner } = await import("../src/conversation/guards.ts");
 
-const on = settings as unknown as { tenants: boolean; tenantNoticeMinutes: number };
+const on = settings as unknown as { tenants: boolean };
 const ACI_A = "11111111-1111-4111-8111-111111111111";
 const ACI_C = "33333333-3333-4333-8333-333333333333";
 const KEY_A = "sk-" + "ant-api03-AAAAAAAAAAAAAAAAAAAAAAAA";

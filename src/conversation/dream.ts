@@ -22,7 +22,7 @@ import { OWNER, settings } from "../core/settings.ts";
 import { listTenants, speakerOf } from "../tenants/tenants.ts";
 import { LIMITS, oneLine } from "../core/sanitize.ts";
 
-// The dream: once a day, on the first tick at or after DREAM_HOUR (dreamTrigger, a plain tick job: nothing else starts it), a model with NO tools reads what a conversation's person said since the last dream (their messages and
+// The dream: once a day, on the first tick at or after the preset's dream hour (dreamTrigger, a plain tick job: nothing else starts it), a model with NO tools reads what a conversation's person said since the last dream (their messages and
 // reactions) next to that conversation's notes, and proposes changes to the notes as JSON: things worth remembering, and a tidy-up (merge duplicates,
 // drop what has expired). It cannot touch anything itself. Code decides what is applied:
 //   - a new fact needs a verbatim quote from the person's own words that day (checked here);

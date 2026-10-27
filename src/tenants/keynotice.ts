@@ -1,12 +1,11 @@
 import { clearNoticeAt, lastNoticeAt, markNoticeAt } from "../core/capnotice.ts";
-import { settings } from "../core/settings.ts";
 
 // ONE place that tells the owner about a problem with the shared instance key (TENANT_ANTHROPIC_API_KEY) that every friend's run depends on. It is called from where
 // a friend's run FAILS because of the key: errors.ts `failure`, which every model call on the key goes through, whatever started it (her chat turn, the heartbeat, a
 // wake-up, the dream, the mail loops and the mail handler, the idle look, the compaction), and from where a run cannot start at all for want of a key (tenantrun.ts).
 // So there is no per-source branch: a source that fails the same way is reported the same way.
 //
-// The notice goes to the owner's own chat (main.ts sends it there), at most once per problem per TENANT_KEY_NOTICE_MINUTES (default three hours), however many friends
+// The notice goes to the owner's own chat (main.ts sends it there), at most once per problem per three hours), however many friends
 // and runs run into it, and it holds no word of any friend, no name and no key: a fixed sentence.
 
 export type KeyProblem = "refused" | "missing";
@@ -26,7 +25,7 @@ export interface KeyNotices {
 
 // `persist`: the time of the last notice is kept in the notices table of instance.db (capnotice.ts), so a restart does not repeat it; the shared instance is the persistent one.
 export function createKeyNotices(o: { everyMs?: () => number; persist?: boolean } = {}): KeyNotices {
-  const every = o.everyMs ?? (() => settings.tenantKeyNoticeMinutes * 60_000);
+  const every = o.everyMs ?? (() => 180 * 60_000) // the owner hears of a refused or missing instance key at most this often;
   const last = new Map<KeyProblem, number>();
   let send: ((text: string) => void) | undefined;
   return {

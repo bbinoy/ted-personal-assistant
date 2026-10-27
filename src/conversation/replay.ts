@@ -11,17 +11,18 @@ import type { Pipeline } from "./conversation.ts";
 
 // A message waiting in the burst or the queue lives only in memory (conversation.ts), so a crash or restart between "the owner wrote" and "the reply went out" loses it. The
 // line is in the log before any of that happens (the intake records first), so at start-up the log tells what was never answered: lines of the owner, a friend or a group member younger than
-// REPLAY_MINUTES with no reply of the assistant after them. They go through the SAME intake again (intake.ts replay), from the burst on, with a note that they arrived before a restart.
+// REPLAY_MS with no reply of the assistant after them. They go through the SAME intake again (intake.ts replay), from the burst on, with a note that they arrived before a restart.
 // A private chat answers them as one turn. A group answers only the lines the log says were addressed to the assistant, or when the gate, asked again on the tail, says act; untagged chatter
 // stays as unanswered as it would have been. Never an approval answer, an edit or a deleted message (below), and never a second run of something that may have been done already.
 
 // What answers a line (a reply of a turn, or the notice a failed turn sends), what is a question the assistant had open (the line right after one is most likely its answer, "yes", which is
 // not a request to run again) and what the assistant said at all: the kinds' properties `answers`, `asks` and `said` (core/messages.ts). Unprompted notices and briefs say nothing about a message of hers.
 const MAX_REPLAY_LINES = 10;
+const REPLAY_MS = 30 * 60_000; // at start, an owner or friend message younger than this that was never answered (the restart lost it) is answered now
 
 // Pure: the lines of someone's own (owner, member) that were never answered and are younger than `maxAgeMs`, oldest first. Edits are folded into their original and
 // deleted messages are gone (an edit is not a second message; a deleted one must not be acted on). Reactions, the ledger and approval answers are never replayed.
-export function unansweredSince(log: readonly Sent[], now: number, maxAgeMs: number = settings.replayMinutes * 60_000): Sent[] {
+export function unansweredSince(log: readonly Sent[], now: number, maxAgeMs: number = REPLAY_MS): Sent[] {
   if (maxAgeMs <= 0) return [];
   const lines = foldEdits(withoutDeleted(log));
   let from = 0;

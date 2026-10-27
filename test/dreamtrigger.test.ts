@@ -8,15 +8,16 @@ import { dreamTrigger, readNoteFiles } from "../src/conversation/dream.ts";
 import { loadSettings } from "../src/core/settings.ts";
 import { presetFor } from "../src/core/preset.ts";
 
-// The dream has its own daily trigger (a tick job at DREAM_HOUR); nothing else starts it. It stays plain code, never sees a status note, and never undoes one.
+// The dream has its own daily trigger (a tick job at the preset's dream hour); nothing else starts it. It stays plain code, never sees a status note, and never undoes one.
 
 const at = (h: number, m = 0, d = 14) => new Date(2026, 9, d, h, m);
 
-test("DREAM_HOUR: the preset's default (4), overridable, validated", () => {
+test("the dream hour is the preset's (4); DREAM=off switches the dream off", () => {
   assert.equal(presetFor().rhythm.dream.hour, 4);
   assert.equal(loadSettings({}).dreamHour, 4);
-  assert.equal(loadSettings({ DREAM_HOUR: "5" }).dreamHour, 5);
-  assert.throws(() => loadSettings({ DREAM_HOUR: "24" }), /DREAM_HOUR/);
+  assert.equal(loadSettings({ DREAM_HOUR: "5" }).dreamHour, 4, "no env override: one source");
+  assert.equal(loadSettings({}).dream, true);
+  assert.equal(loadSettings({ DREAM: "off" }).dream, false);
   assert.equal(loadSettings({}).model, "sonnet", "the dream's model is the harness model, Sonnet by default");
   assert.equal(loadSettings({ HARNESS_MODEL: "opus" }).model, "opus");
   assert.deepEqual([loadSettings({}).opusModel, loadSettings({ OPUS_MODEL: "claude-opus-x" }).opusModel], ["opus", "claude-opus-x"]);
@@ -28,7 +29,7 @@ test("the trigger: nothing before the hour, the first tick at or after it runs, 
   const tick = dreamTrigger(hit, { hour: () => 4, enabled: () => true });
   tick(at(3, 55));
   tick(at(0, 5));
-  assert.deepEqual(ran, [], "before DREAM_HOUR");
+  assert.deepEqual(ran, [], "before the dream hour");
   tick(at(4, 0));
   assert.deepEqual(ran, ["dream"], "the first tick at the hour");
   tick(at(4, 5));

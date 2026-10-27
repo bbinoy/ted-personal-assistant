@@ -7,7 +7,7 @@ import { userInput } from "./image.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { approveIn } from "../approvals/permissions.ts";
 import { buildOptions, consume, underCeiling, type AgentReply, type RunOptions } from "./agentrun.ts";
-import { settings } from "../core/settings.ts";
+import { settings, WARM_IDLE_MINUTES } from "../core/settings.ts";
 import { auditSource } from "../core/runkind.ts";
 import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 
@@ -21,7 +21,9 @@ import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 // her key, which is in no other conversation's environment) and is handed to nobody else; the owner's has the owner's connectors and is never
 // handed to a group or a tenant. Options (system prompt, tools, MCP servers, output schema) are fixed when a process starts, which is why a slot
 // is keyed by them.
-const idleMs = () => settings.warmIdleMinutes * 60_000;
+const idleMs = () => WARM_IDLE_MINUTES * 60_000;
+// The owner's warm process is renewed this often (main.ts), so it is still fresh after a quiet hour.
+export const WARM_REFRESH_MS = 25 * 60_000;
 const slotOptions = { maxAgeMs: idleMs(), idleMs }; // fresh while not idle-expired: a process that died meanwhile is detected on use (firstWarm) and replaced
 
 type Kind = Conversation["kind"];
@@ -87,7 +89,7 @@ export function warmUp(conv: Who, o: RunOptions, r: Resume, start: typeof startu
   if (!slot) return;
   const key = spareKey(conv.key, o, r);
   // A renewal of a spare that is built from exactly this and stays fresh until the next renewal changes nothing: no new process.
-  if (refresh && slot.has(conv.key, key, settings.warmRefreshMinutes * 60_000)) return;
+  if (refresh && slot.has(conv.key, key, WARM_REFRESH_MS)) return;
   const warm = start({ options: buildOptions(approveIn(conv.key), o, r.resume) });
   warm.catch((e) => console.error(`${labelOf(conv)} warm-up failed:`, (e as Error).message));
   slot.put(conv.key, key, warm, { refresh });

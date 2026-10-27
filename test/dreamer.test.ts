@@ -36,7 +36,7 @@ const counting = (): { calls: string[]; run: () => Runner } => {
 };
 
 test("the preset gives the thresholds: 1 line in a direct chat, 3 in a group, 5 groups a night", () => {
-  assert.deepEqual(preset().rhythm.dream, { enabled: true, hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 });
+  assert.deepEqual(preset().rhythm.dream, { hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 });
 });
 
 test("one dreamer: the owner and the groups, the group threshold and the nightly cap come from the preset", async () => {

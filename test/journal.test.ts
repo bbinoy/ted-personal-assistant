@@ -177,7 +177,7 @@ test("compaction: journal lines are never folded into the summary; the young one
   const left = readFileSync(dataPath(file), "utf8");
   assert.match(left, /"kind":"summary"/);
   assert.match(left, /Archived “Recent”/, "kept verbatim");
-  assert.doesNotMatch(left, /Ancient/, "older than JOURNAL_KEEP_DAYS: dropped");
+  assert.doesNotMatch(left, /Ancient/, "older than the journal window: dropped");
   assert.ok(folded[0]!.length > 0 && !folded[0]!.includes("journal"), "the summary is written from the conversation only");
   assert.deepEqual(journalToKeep([JSON.stringify({ kind: "journal", at: new Date(young).toISOString(), text: "a" }), JSON.stringify({ kind: "owner", at: new Date(young).toISOString(), text: "b" })], 90, 1000).length, 1);
   assert.equal(journalToKeep(Array.from({ length: 50 }, () => JSON.stringify({ kind: "journal", at: new Date(young).toISOString(), text: "x".repeat(100) })), 90, 1000).length < 50, true, "bounded by the share it may keep");

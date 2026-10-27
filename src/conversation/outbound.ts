@@ -1,11 +1,10 @@
 import type { Kind as MessageKind } from "../core/messages.ts";
-import { settings } from "../core/settings.ts";
 import { clean } from "../core/sanitize.ts";
 import { renderMarkdown } from "./markdown.ts";
 import type { Messenger, Quote, Target, TextStyle } from "@ted-assistant/messenger";
 
 const LONG_BODY_MIN = 500; // an echo this long that starts a remembered reply is that reply's cut body
-const ECHO_WINDOW_MS = settings.echoWindowMinutes * 60_000;
+const ECHO_WINDOW_MS = 5 * 60_000; // our own sent text coming back within this long is an echo, not the owner
 
 // Longer than the messenger takes as one message (capabilities.maxMessageBytes; Signal has no limit the app sees): cut into parts that each fit,
 // at a paragraph, line or word break when there is one in the last half of the part, never inside a character. Styles follow their text.

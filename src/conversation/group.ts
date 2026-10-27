@@ -67,18 +67,19 @@ export function groupPrompt(now: Date, lines: readonly string[], addressed?: { l
 // Is the owner in this group? Looked up from the messenger's member list, remembered for a few minutes.
 // Anything that goes wrong means no: a group we cannot vouch for gets no answers and no logging.
 const MAX_CACHED_GROUPS = 200;
+const MEMBER_CACHE_MS = 5 * 60_000; // how long "the owner is in this group" is remembered
 const memberCache = new Map<string, { at: number; ok: boolean; name: string }>();
 // Every group that ever sends a message gets an entry (strangers' groups we were added to as well): the map stays bounded.
 function trimMemberCache(now: number): void {
   if (memberCache.size <= MAX_CACHED_GROUPS) return;
-  for (const [key, v] of memberCache) if (now - v.at >= settings.groupMemberCacheMinutes * 60_000) memberCache.delete(key);
+  for (const [key, v] of memberCache) if (now - v.at >= MEMBER_CACHE_MS) memberCache.delete(key);
   while (memberCache.size > MAX_CACHED_GROUPS) memberCache.delete(memberCache.keys().next().value!);
 }
 export const groupName = (groupId: string): string => oneLine("group name", (memberCache.get(groupId)?.name ?? "").replace(/["<>]/g, " "), 40) || "a group";
 export const memberCacheSize = () => memberCache.size; // tests
 export async function ownerInGroup(groupId: string, lookup: () => Promise<{ id: string; name?: string; members: { number?: string; uuid?: string }[] }[]>, isOwner: (who: { number?: string; uuid?: string }) => boolean, now = Date.now()): Promise<boolean> {
   const hit = memberCache.get(groupId);
-  if (hit && now - hit.at < settings.groupMemberCacheMinutes * 60_000) return hit.ok;
+  if (hit && now - hit.at < MEMBER_CACHE_MS) return hit.ok;
   let ok = false;
   let name = "";
   try {
@@ -109,7 +110,7 @@ export const realRunner: Runner = async (build, { conv, now, firstOutput, apiKey
 // one only when the participation gate says so. The settling pause, the queue and the delivery are the pipeline's, the same as in a private chat; what stays here is that question, the
 // group's own limits (paused, the day's budget, this group's day) and its prompt: the group's recent lines, fenced as data.
 // A direct address that could not be answered (paused, over budget) is dropped after this long.
-const stickyMs = () => settings.groupStickyMinutes * 60_000;
+const STICKY_MS = 30 * 60_000;
 
 type Asked = { line: string; said: string; quote: Quote; incoming?: Quote; voice: boolean; picture?: Picture; document?: Document; at: number; edit?: { before?: string } };
 // What decide() hands the turn: the address it answers, and the gate's hint when there was none.
@@ -145,7 +146,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
   // Can this message lead to an answer at all? In "tagged" mode only one that addresses us does; a picture or file nobody addressed to us is then just a line in the history.
   const mayAnswer = (e: { addressedToMe?: boolean }): boolean => !!e.addressedToMe || settings.groupParticipation !== "tagged";
 
-  // A message came in (recorded already) and may be answered: remember an address of us (sticky until answered, or until it is too old, GROUP_STICKY_MINUTES) and keep the group's process warm.
+  // A message came in (recorded already) and may be answered: remember an address of us (sticky until answered, or until it is too old, STICKY_MS) and keep the group's process warm.
   function note(conv: Conversation, e: Entry): void {
     pruneState(Date.now());
     const st = stateOf(conv.key);
@@ -174,9 +175,9 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
   async function decide(conv: Conversation, { batch, e, showTyping }: Decision): Promise<Go | undefined> {
     const st = stateOf(conv.key);
     const now = new Date(e.arrivedAt);
-    // Still waiting for an answer to a direct address? (It lapses after GROUP_STICKY_MINUTES: answering hours later would be odd.)
+    // Still waiting for an answer to a direct address? (It lapses after STICKY_MS: answering hours later would be odd.)
     const pending = () => {
-      if (st.addressed && now.getTime() - st.addressed.at > stickyMs()) st.addressed = undefined;
+      if (st.addressed && now.getTime() - st.addressed.at > STICKY_MS) st.addressed = undefined;
       return st.addressed;
     };
     const gone = () => !!st.gone?.has(e.timestamp);

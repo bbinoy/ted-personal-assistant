@@ -1,8 +1,11 @@
-import { settings } from "../core/settings.ts";
 import { startTiming } from "../core/timing.ts";
 import type { Batch, Conversation, PipelineDeps } from "./conversationmodel.ts";
 
 // The queue of every conversation: who is waiting, who runs, which unattended look is out. This module owns the three maps (bursts, tails, looks) and nothing else writes them.
+// Every conversation, the owner's chat and each group: wait this long after a message for a burst to end, then answer all of it as one turn; the longest a burst waits since its
+// first message, so continuous chatter cannot postpone the answer forever.
+const SETTLE_MS = 2000;
+const SETTLE_MAX_MS = 10_000;
 export function createQueue(deps: Pick<PipelineDeps, "now" | "wait" | "settleMs" | "settleMaxMs">) {
   const now = deps.now ?? Date.now;
 
@@ -55,9 +58,9 @@ export function createQueue(deps: Pick<PipelineDeps, "now" | "wait" | "settleMs"
     if (!st.pending.length) st.firstAt = now();
     st.pending.push(item);
     const mine = ++st.epoch;
-    const maxMs = deps.settleMaxMs ? deps.settleMaxMs() : settings.settleMaxSeconds * 1000;
+    const maxMs = deps.settleMaxMs ? deps.settleMaxMs() : SETTLE_MAX_MS;
     const left = Math.max(0, maxMs - (now() - (st.firstAt ?? now())));
-    await wait(Math.min(deps.settleMs ? deps.settleMs() : settings.settleSeconds * 1000, left));
+    await wait(Math.min(deps.settleMs ? deps.settleMs() : SETTLE_MS, left));
     if (st.epoch !== mine || st.queued || !st.pending.length) return; // a newer message took over, or a queued run will take this one too
     timing.mark("settle");
     try {

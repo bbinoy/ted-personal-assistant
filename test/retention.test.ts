@@ -343,7 +343,7 @@ test("dream undo ignores the expired/ holding folder (it sorts after every snaps
 
 test("settings: the windows have the documented defaults and RETENTION=off", () => {
   const s = loadSettings({});
-  assert.deepEqual([s.retention, s.auditRetentionDays, s.expiredNoteDeleteDays, s.notesBackupKeep, s.openbaoLogMb, s.openbaoBackupKeep, s.shoreCacheKeep, s.tmpSweepHours], [true, 90, 30, 7, 20, 7, 50, 24]);
+  assert.deepEqual([s.retention, s.auditRetentionDays], [true, 90]);
   assert.equal(s.signalAttachmentDays, process.platform === "darwin" ? 30 : 0);
   const t = loadSettings({ RETENTION: "off", AUDIT_RETENTION_DAYS: "30", SIGNAL_ATTACHMENT_DAYS: "14" });
   assert.deepEqual([t.retention, t.auditRetentionDays, t.signalAttachmentDays], [false, 30, 14]);

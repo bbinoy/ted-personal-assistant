@@ -1,5 +1,5 @@
 import { query, startup, type Options, type SDKMessage, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
-import { settings } from "../core/settings.ts";
+import { settings, WARM_IDLE_MINUTES } from "../core/settings.ts";
 import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 
 // The warm process of the approval judge (JUDGE_MODEL) (approvaljudge.ts: one prompt and schema for the answer and write tasks of approvalmodel.ts and the
@@ -18,8 +18,8 @@ export class JudgeSpare {
   readonly #key: string;
   readonly #slot: SpareSlot<WarmQuery>;
 
-  // `idleMinutes`: how long an unused spare stays up (default: WARM_IDLE_MINUTES; the judge asks for its own, shorter one).
-  constructor(label: string, options: Options, idleMinutes: () => number = () => settings.warmIdleMinutes) {
+  // `idleMinutes`: how long an unused spare stays up (default: the warm idle time of settings.ts; the judge asks for its own, shorter one).
+  constructor(label: string, options: Options, idleMinutes: () => number = () => WARM_IDLE_MINUTES) {
     this.#slot = new SpareSlot<WarmQuery>({ maxAgeMs: idleMinutes() * 60_000, idleMs: () => idleMinutes() * 60_000 });
     this.#label = label;
     this.#options = options;

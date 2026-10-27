@@ -70,7 +70,7 @@ test("three chat approvals: answered independently by reaction and quoted reply"
   assert.deepEqual(await answer("yes", () => {}, undefined, never), { outcome: "none" });
 });
 
-test("a question lapses after APPROVAL_TIMEOUT_MINUTES, a background one too, both SILENTLY; the message has no header or footer", async (t) => {
+test("a question lapses after its timeout, a background one too, both SILENTLY; the message has no header or footer", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   sent.length = 0;
   let chatDone = false;

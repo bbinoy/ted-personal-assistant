@@ -24,14 +24,6 @@ test("settings: the data folders sit under HARNESS_DATA_DIR, default is the repo
   assert.ok(existsSync(join(d.dataDir, "src")), "default data root is the parent of src/");
 });
 
-test("settings: chat session rules are validated", () => {
-  const d = loadSettings({});
-  assert.equal(d.chatCompactTokens, 150_000);
-  assert.throws(() => loadSettings({ CHAT_COMPACT_TOKENS: "9999" }), /CHAT_COMPACT_TOKENS/);
-  assert.throws(() => loadSettings({ CHAT_COMPACT_TOKENS: "500001" }), /CHAT_COMPACT_TOKENS/);
-  assert.equal(loadSettings({ CHAT_COMPACT_TOKENS: "10000" }).chatCompactTokens, 10_000);
-});
-
 test("state: JSON round-trips, owner-only, no temp files left behind", () => {
   const t = join(instancePaths().dir, "t.json");
   writeJson(t, { a: 1 });
@@ -85,9 +77,9 @@ test("settings: defaults, and typos fail loudly instead of becoming NaN", () => 
   assert.deepEqual([d.heartbeatModel, d.heartbeatDayMinutes], ["haiku", 30]);
   assert.equal(loadSettings({ HEARTBEAT_MODEL: "sonnet" }).heartbeatModel, "sonnet");
   assert.equal(d.signalHost, "127.0.0.1");
-  assert.throws(() => loadSettings({ HEARTBEAT_MINUTES: "abc" }), /HEARTBEAT_MINUTES/);
-  assert.throws(() => loadSettings({ HEARTBEAT_MINUTES: "0" }), /HEARTBEAT_MINUTES/);
-  assert.throws(() => loadSettings({ QUIET_START_HOUR: "24" }), /QUIET_START_HOUR/);
+  assert.equal(loadSettings({ HEARTBEAT_MINUTES: "20" }).heartbeatMinutes, 5, "the tick period is the preset's alone");
+  assert.deepEqual([d.quietStartHour, d.quietEndHour], [22, 7]);
+  assert.throws(() => loadSettings({ QUIET_HOURS: "24-7" }), /QUIET_HOURS/);
   // the archive switch and its three older forms are gone: archiving is always live, and a line left in .env stops the agent instead of silently ending a trial week
   for (const old of ["ARCHIVE", "HEARTBEAT_ACTIONS", "GMAIL_ARCHIVE_LIVE", "GOOGLE_ARCHIVE_LIVE"]) assert.throws(() => loadSettings({ [old]: "log" }), new RegExp(`${old} is gone: archiving is always live`));
 });

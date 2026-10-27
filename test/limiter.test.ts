@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sleep } from "./util.ts";
 import { Limiter } from "../src/core/limiter.ts";
-import { loadSettings } from "../src/core/settings.ts";
 
 
 test("limiter: never more than the limit at once, every job runs, in arrival order", async () => {
@@ -33,8 +32,3 @@ test("limiter: a failing job gives its place to the next one", async () => {
   assert.equal(await lim.run(async () => "c"), "c"); // and the place was freed
 });
 
-test("settings: TRANSCRIBE_CONCURRENCY defaults to 2 and is validated", () => {
-  assert.equal(loadSettings({}).transcribeConcurrency, 2);
-  assert.equal(loadSettings({ TRANSCRIBE_CONCURRENCY: "4" }).transcribeConcurrency, 4);
-  assert.throws(() => loadSettings({ TRANSCRIBE_CONCURRENCY: "0" }), /TRANSCRIBE_CONCURRENCY/);
-});

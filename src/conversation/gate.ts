@@ -12,7 +12,7 @@ import { readNotes } from "../memory/notes.ts";
 import { localTime } from "../core/timezone.ts";
 import { isOneEmoji } from "../core/reaction.ts";
 import { GATE_DEFAULTS } from "../run/persona.ts";
-import { OWNER, settings } from "../core/settings.ts";
+import { OWNER, settings, WARM_IDLE_MINUTES } from "../core/settings.ts";
 import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
@@ -37,6 +37,8 @@ export interface GateOutput {
   nextCheckMinutes: number; // when to look at this conversation again, clamped
 }
 
+// The participation gate may ask for a pause before answering an untagged message, to seem natural. "typing…" shows meanwhile, so a long pause only makes the answer late: whatever the gate asks for is cut to this many seconds.
+export const GATE_MAX_DELAY_SECONDS = 4;
 export const GATE_SCHEMA = {
   type: "json_schema" as const,
   schema: {
@@ -47,7 +49,7 @@ export const GATE_SCHEMA = {
       act: { type: "boolean" },
       instructions: { type: "string" },
       reaction: { type: "string" },
-      delaySeconds: { type: "integer", minimum: 0, maximum: settings.gateMaxDelaySeconds },
+      delaySeconds: { type: "integer", minimum: 0, maximum: GATE_MAX_DELAY_SECONDS },
       nextCheckMinutes: { type: "integer", minimum: MIN_CHECK_MINUTES, maximum: MAX_CHECK_MINUTES },
     },
   },
@@ -55,7 +57,7 @@ export const GATE_SCHEMA = {
 
 
 // Pure: whatever the model returned, as an output. Fails closed: only a literal `true` acts.
-export function parseGate(raw: unknown, maxDelay: number = settings.gateMaxDelaySeconds): GateOutput {
+export function parseGate(raw: unknown, maxDelay: number = GATE_MAX_DELAY_SECONDS): GateOutput {
   const v = (raw && typeof raw === "object" ? raw : {}) as { act?: unknown; instructions?: unknown; reaction?: unknown; delaySeconds?: unknown; nextCheckMinutes?: unknown };
   const d = Number(v.delaySeconds);
   const instructions = typeof v.instructions === "string" ? v.instructions.replace(/\s+/g, " ").trim().slice(0, 1000) : "";
@@ -145,7 +147,7 @@ export function logSince(conv: Pick<Conversation, "logFile" | "tenantId">, since
 }
 
 // "typing…" is already showing while a delay runs, so a long one only makes the answer late; the cap is enforced in parseGate.
-const delayText = (max: number = settings.gateMaxDelaySeconds): string =>
+const delayText = (max: number = GATE_MAX_DELAY_SECONDS): string =>
   max === 0
     ? "delaySeconds (always 0: answers are not delayed)"
     : `delaySeconds (0 to ${max}: a short pause before answering a message, only so it feels natural. The typing indicator is already showing while you wait, so a long delay is pointless: use 0 unless a pause really fits, and never more than ${max})`;
@@ -183,7 +185,7 @@ const gateOptions = (system: string): Options => haikuOptions(system, { ...GATE_
 // everything about one conversation (notes, log, clock) goes in the prompt sent at query time. So the spare belongs to no
 // conversation and any group's look may take it, provided the system prompt is exactly the one it was built with (the key).
 const SPARE_ID = "gate";
-export const gateSpare = new SpareSlot<WarmQuery>({ maxAgeMs: settings.warmIdleMinutes * 60_000, idleMs: () => settings.warmIdleMinutes * 60_000 });
+export const gateSpare = new SpareSlot<WarmQuery>({ maxAgeMs: WARM_IDLE_MINUTES * 60_000, idleMs: () => WARM_IDLE_MINUTES * 60_000 });
 const spareSystem = (now: Date) => gateSystem(styleSummary(now));
 
 export function prepareGate(now: Date = new Date(), start: typeof startup = startup, system: string = spareSystem(now)): void {

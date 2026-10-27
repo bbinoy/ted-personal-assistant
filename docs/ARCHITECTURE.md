@@ -30,11 +30,11 @@ flowchart LR
 
 ## Key design decisions
 
-- **The tick is free; a look is one run.** A timer ticks every `HEARTBEAT_MINUTES` (5). When a conversation's next look has come, ONE run on `HEARTBEAT_MODEL` (Haiku) reads its chat and whatever it can read, then acts within the normal rules or stays silent. The same code serves the owner, every group and every friend.
+- **The tick is free; a look is one run.** A timer ticks every `rhythm.heartbeat.everyMinutes` of the preset (5). When a conversation's next look has come, ONE run on `HEARTBEAT_MODEL` (Haiku) reads its chat and whatever it can read, then acts within the normal rules or stays silent. The same code serves the owner, every group and every friend.
 - **Code computes facts, the run decides.** Dates, "is this due" and "what was held" are computed in code and handed to the look as fact blocks. Messages to people are written by the model; fixed texts are the exception (`CLAUDE.md`, principle 4).
 - **Permissions are code, not prompts.** Every tool call passes the floor, then the approval judge, then, in a chat turn only, a question on the phone. Unattended runs never ask. A run that has read mail or a web page is marked untrusted.
 - **One architecture for everyone.** Capabilities decide what a conversation has; there is no owner-only copy of a feature.
-- **Observable and durable.** Every decision is an event. Writes use `writeFileAtomic` (`src/core/state.ts`); a file that does not parse is moved aside as `<name>.corrupt-<time>`, never replaced by defaults. After a restart `src/conversation/replay.ts` puts what the last `REPLAY_MINUTES` (30) left unanswered, in every conversation, back through the intake, unless the audit log shows the run already acted.
+- **Observable and durable.** Every decision is an event. Writes use `writeFileAtomic` (`src/core/state.ts`); a file that does not parse is moved aside as `<name>.corrupt-<time>`, never replaced by defaults. After a restart `src/conversation/replay.ts` puts what the last 30 left unanswered, in every conversation, back through the intake, unless the audit log shows the run already acted.
 
 ## Where the data lives
 
@@ -117,7 +117,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
 - **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail`. `note_upcoming_meetings` is not attended-gated: any run whose capability set has the calendar has it. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
-- The session of a conversation's chat and its look session never mix (different models, different caches). Each resumes between runs and is compacted in the background after `COMPACT_QUIET_MINUTES` (5) of quiet (`src/run/chatsession.ts`, one code for both tracks).
+- The session of a conversation's chat and its look session never mix (different models, different caches). Each resumes between runs and is compacted in the background after 5 of quiet (`src/run/chatsession.ts`, one code for both tracks).
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
 
@@ -169,7 +169,7 @@ The only per-kind differences are the rows of `WAYS` next to the chain in `intak
 | row | private chat | group |
 |---|---|---|
 | who may do what | commands by capability: the owner has all, a friend all but `admin`/`card` | the group's capabilities: `/stop`, `/quiet`, `/tasks`, no owner commands |
-| the answer (`forUs`, `mayAnswer`, `decide`) | always | when addressed (tagged or quoted, then sticky for `GROUP_STICKY_MINUTES`), else when the gate says act; not while paused, over budget or over the group's own day |
+| the answer (`forUs`, `mayAnswer`, `decide`) | always | when addressed (tagged or quoted, then sticky for 30 minutes), else when the gate says act; not while paused, over budget or over the group's own day |
 | who is heard (`everyone`, `vouch`, `optionalPictures`) | every sender gets a read receipt and a reason for an unusable voice message or picture | only someone who spoke to us; the owner must be a member; a picture is opened only when it can be answered |
 | history (`recorded`, `say`) | `owner`, the words as written | `member`, each line starts with its speaker |
 | the turn (`turn`) | the burst's messages as one prompt; a reaction is a quiet turn of its own | the group's recent log, fenced, with the addressed message named; a reaction is chatter like any other |
@@ -179,9 +179,9 @@ A new difference is a new row (with the owner's approval), never an `if` in a st
 
 **Messages in and out.** `src/conversation/intake.ts` handles pictures, documents (PDF, text, audio via whisper), long texts, edits, deletes and quotes, as above.
 
-- A settling pause folds a burst into one turn (`queue.ts`, `SETTLE_SECONDS` 2).
+- A settling pause folds a burst into one turn (`queue.ts`, 2 seconds).
 - Delivery is one function in `conversation.ts` (`[[silent]]`, `[[voice]]`, `[[react: 👍]]`, retry in `outbound.ts`); the `send` tool uses it mid-turn.
-- A voice reply has one deadline (`VOICE_TIMEOUT_SECONDS` 75); on expiry it goes out as text.
+- A voice reply has one deadline (75 seconds); on expiry it goes out as text.
 
 **Messenger.** The app talks to one `Messenger` interface (`packages/messenger`) and loads the platform named by `MESSENGER` (default `signal`, `packages/signal`). Every adapter passes `messengerContract`. A lost connection exits the app and launchd restarts it.
 
@@ -189,7 +189,7 @@ A new difference is a new row (with the owner's approval), never an `if` in a st
 
 A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started from `src/heartbeat/wake.ts`).
 
-**The tick** (`src/heartbeat/heartbeat.ts`). Every `HEARTBEAT_MINUTES` a free timer starts independent jobs, each in its own try/catch: `wake`, `dream` (`dreamTrigger`) and `retention` (`retentionTrigger`, once a day from 03:30). It writes the `heartbeat` row of `kv` for `npm run doctor`. Each `wake` tick, for the owner, every vouched group and every active friend:
+**The tick** (`src/heartbeat/heartbeat.ts`). Every `rhythm.heartbeat.everyMinutes` (preset) a free timer starts independent jobs, each in its own try/catch: `wake`, `dream` (`dreamTrigger`) and `retention` (`retentionTrigger`, once a day from 03:30). It writes the `heartbeat` row of `kv` for `npm run doctor`. Each `wake` tick, for the owner, every vouched group and every active friend:
 
 1. Budget and damage notices (`noticeBudget`, `noticeDamaged`); idle databases are closed.
 2. Reminders (`fireReminders`): every conversation with tasks and a database, whatever its look switches say.
@@ -209,7 +209,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - The message is also the judge's standing provenance, so it holds no mail and no chat.
 - The run answers `{ message, nextCheckMinutes, urgent? }`; the next look is clamped to 10..120 minutes (`clampLook`); `[[silent]]` means nothing to say.
 
-**The look session.** Each conversation has a second SDK session for its looks (`look_session` in `assistant.db`), resumed by every look and compacted by the same code as the chat session (quiet compaction, `CHAT_COMPACT_TOKENS`). It is told the context, the notes index and the facts only when they differ from what it was last shown (`unseen` / `markShown`, per session) and the chat lines since it last saw the log. A look that read mail marks the session untrusted (the judge is told from then on), which persists with it; one that fails leaves the session as it was, and a session the SDK cannot resume is dropped and started fresh. Forgetting a conversation removes both sessions with its folder.
+**The look session.** Each conversation has a second SDK session for its looks (`look_session` in `assistant.db`), resumed by every look and compacted by the same code as the chat session (quiet compaction, `COMPACT_TOKENS` in `src/run/chatsession.ts`). It is told the context, the notes index and the facts only when they differ from what it was last shown (`unseen` / `markShown`, per session) and the chat lines since it last saw the log. A look that read mail marks the session untrusted (the judge is told from then on), which persists with it; one that fails leaves the session as it was, and a session the SDK cannot resume is dropped and started fresh. Forgetting a conversation removes both sessions with its folder.
 
 **Facts handed to the run.** One builder, `factsFor(conversation, now, "look" | "chat")` (`src/heartbeat/facts.ts`), gives the look and every chat turn (owner, friend, group) the same facts for their conversation, so the same agent answers whichever run comes first. The run decides what to say, in Ted's voice. Both are told by the same function (`runTurn`, `src/run/agent.ts`) in front of the trigger's message, each only when that session was not told it already; a look's experts get them too; a chat turn's come from the provider registered by `wire()`.
 
@@ -233,16 +233,16 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - The default is to archive unless the mail needs the owner; the owner's triage notes win.
 - `ARCHIVE_MAX_PER_RUN` (25) caps archives per run (`src/modules/archivecap.ts`). Archives are journaled with the mail's id and reversible (`npm run restore <id>`, or "restore 3" in chat).
 
-**Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_START_HOUR`..`QUIET_END_HOUR`, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (6) is held (`submitPost`) unless the run marked it `urgent`.
+**Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (6) is held (`submitPost`) unless the run marked it `urgent`.
 
 - Code never rewrites a held post. The only fixed texts here are the budget notice and the notice about the owner's own damaged database, once a day and not during quiet.
 
 **Routines** (`src/tasks/routines.ts`, `src/modules/tasks/routinelist.ts`). One mechanism for everything the assistant does at set times: a routine is a name, a repeat rule (`src/tasks/repeat.ts`, the grammar tasks use) and what to do. Code computes "is it due" and "was it done"; the model does the work. There are two sources, planned the same way:
 
-- **A scheduled skill.** `schedule: every weekday at 18:30` in the skill's `SKILL.md` frontmatter: the daily brief (`every day at 07:30`), the evening wrap and the weekly review (`every fri at 16:30`). It exists in conversations whose skills include it (the owner's), and `ROUTINES_OFF=evening-wrap,weekly-review` switches some off. Only the brief is also mailed (`BRIEF_EMAIL`).
+- **A scheduled skill.** `schedule: every weekday at 18:30` in the skill's `SKILL.md` frontmatter: the daily brief (`every day at 07:30`), the evening wrap and the weekly review (`every fri at 16:30`). It exists in conversations whose skills include it (the owner's), and removing the `schedule:` line switches it off. Only the brief is also mailed (`BRIEF_EMAIL`).
 - **A routine note.** A person asks in chat ("every Monday at 9 summarise my week", "every morning at 8 send Anna a pep talk") and the model saves `routine-<slug>.md` in that conversation's notes: front matter `when: <repeat rule>`, body the instruction. Owner, friends and groups all can, wherever the conversation has a look (`heartbeat` and `wake`; the persona says so only there). A write of such a note is answered at once by a `PostToolUse` hook (`routineNoteReply`): how the schedule was read and when it runs next, or that the `when:` line cannot be read and the routine will never run; an unreadable one is also in every run's status and `npm run doctor`. The `routine` category is not in the dream's lists, so the dream never touches it, and an unattended run cannot write one. At most 20 per conversation.
 - A repeat rule may end with an IANA zone (`every day at 08:00 Europe/Zurich`, `src/tasks/repeat.ts`): the planner, the status lines, `/status` and the doctor then use that clock and name it; without one the conversation's zone applies. An unknown zone makes the rule unreadable.
-- `scheduledIn` lists both for a conversation; `planRoutine` says waiting, due, running, done or skipped from `nextInstant` in the conversation's zone (wall time across clock changes) and the `routine_runs` record, keyed by the skill name or the note's file name. At most one run per occurrence (the slot's date); a run `started` for 45 minutes is dead and retried once. A Mac that slept through the time runs it once on waking within the catch-up window (`ROUTINE_CATCHUP_HOURS` 4); otherwise the occurrence is skipped and the next look tells the person once. A routine first seen after its slot owes nothing for it, and an interval counts from the day it was first seen. Editing a note's `when:` takes effect from the next occurrence: what ran today does not run again today.
+- `scheduledIn` lists both for a conversation; `planRoutine` says waiting, due, running, done or skipped from `nextInstant` in the conversation's zone (wall time across clock changes) and the `routine_runs` record, keyed by the skill name or the note's file name. At most one run per occurrence (the slot's date); a run `started` for 45 minutes is dead and retried once. A Mac that slept through the time runs it once on waking within the catch-up window (4 hours); otherwise the occurrence is skipped and the next look tells the person once. A routine first seen after its slot owes nothing for it, and an interval counts from the day it was first seen. Editing a note's `when:` takes effect from the next occurrence: what ran today does not run again today.
 - One routine per look. A skill's expert is `expert-<skill>` (`delegate: sonnet`); code marks it started when the look delegates and delivered or failed when the look ends. A note is handed to the look as the fact `due now: <instruction> (routine <name>)`: it does it or delegates it, and the routine counts as done when the look posted, sent something, or ended silent having acted. Only a look runs a routine; a chat turn sees the status.
 - The brief keeps its headlines in the ordinary note `status-brief.md` (the skill writes it with `Write` and an `expires:` line; whether it ran is `routine_runs`), sends the full brief by the mail provider (`BRIEF_EMAIL=on` for Gmail) and answers with the short chat message. Once a day its expert also sweeps the whole inbox, lists archived mail by number and reports what the dream and the looks changed in the notes.
 - `/status` and `npm run doctor` list every scheduled item (skill or note) with its schedule, next and last run.
@@ -291,7 +291,7 @@ Everything the assistant does or decides is told once as a typed event (`src/cor
 
 - **Audit** (`logs/audit.jsonl`): `{ ts, source, tool, decision, meta? }`, arguments clipped, secrets redacted. A friend's rows have every word-bearing field replaced by its length: the admin never reads what a friend said.
 - **Journal**: one readable line per action (never a read), in the log of the conversation it happened in: `What. Why: ... Undo: ...`. The what is code-rendered (`src/approvals/journalrender.ts`); the why comes from code first. It is written when the call SUCCEEDS (`noteDone`; `test/journalconsistency.test.ts`).
-- **Readers.** The `journal` tool (`src/modules/memory/journaltool.ts`) answers "what did you do today" and "why did you archive X" and returns a numbered list for "restore N"; `/today` is the code-only summary; a look sees the newest twelve lines as `(you did: ...)`. Journal lines survive log compaction for `JOURNAL_KEEP_DAYS` (90).
+- **Readers.** The `journal` tool (`src/modules/memory/journaltool.ts`) answers "what did you do today" and "why did you archive X" and returns a numbered list for "restore N"; `/today` is the code-only summary; a look sees the newest twelve lines as `(you did: ...)`. Journal lines survive log compaction for 90.
 
 ## Memory
 
@@ -302,11 +302,11 @@ Working memory is the conversation's resumed session. Episodic memory is `logs/a
 - **One memory for every run.** A chat turn and a look, of the owner, a group or a friend, are built the same way (`runFor`): the SDK's auto-memory (`autoMemoryDirectory` is the conversation's notes folder), the SDK's `Read`, `Write` and `Edit` confined to that folder by `classify` (`isInside`), and one memory server. There is no second set of note tools for unattended runs and no mark on what they write; what a run that read mail may do is the floor's and the judge's. `MEMORY.md` is **code's**: `writeIndex` (`src/memory/notes.ts`) regenerates it from the notes' front matter, one line per note (`- people: [anna](people-anna.md) - description (until DATE)`, `status-` records and expired notes left out, capped by `MEMORY_MAX_NOTES`), after a `Write` or `Edit` in the notes folder (the PostToolUse hook in `agentrun.ts`, which replaces whatever the model or the SDK wrote there), after `forget_note`, the dream's apply and undo, a saved feedback note, and at the start of every run (`runFor`, for what expired or was edited meanwhile). The SDK's own auto-memory prompt tells the model to maintain `MEMORY.md`; the persona tells it not to, and code's version wins either way. The hook's `Read` of a note feeds the journal's "per your notes: ..." for every run. Policy refuses a write over `MAX_NOTE_CHARS` and a new note beyond `MEMORY_MAX_NOTES`. The expert a look delegates to is handed the index as fenced data (`readIndex`).
 - **Tools and search** (`src/modules/memory/memory-tools.ts`, one server for every run): `forget_note`, `search_logs`, `journal`, `undo_dream`. Search (`src/memory/search*.ts`) uses a rebuildable SQLite FTS5 index per conversation, scored with BM25 in TypeScript (`Ranker.score` is the seam for another ranker).
 
-**The dream** (`src/conversation/dream.ts`, `createDreamer`). Once a day, on the first tick at or after `DREAM_HOUR` (4), for every conversation whose set has `dream` and whose person said enough since the last dream (preset `rhythm.dream`), a tool-less model sees the notes and what the person said and answers with JSON. Code decides (`planOps`, `src/memory/dreamplan.ts`):
+**The dream** (`src/conversation/dream.ts`, `createDreamer`). Once a day, on the first tick at or after the preset's `rhythm.dream.hour` (4), for every conversation whose set has `dream` and whose person said enough since the last dream (preset `rhythm.dream`), a tool-less model sees the notes and what the person said and answers with JSON. Code decides (`planOps`, `src/memory/dreamplan.ts`):
 
 - a new or changed note needs a verbatim quote of the person's own words; a merge may only be shorter; a delete needs an expired date or their words;
 - `setup-`, `voice-` and `status-` notes are refused; at most 8 writes and 12 deletes;
-- notes are snapshotted first (`NOTES_BACKUP_KEEP` 7) and `undo_dream` restores them; a note changed while the model ran is skipped.
+- notes are snapshotted first (7 kept) and `undo_dream` restores them; a note changed while the model ran is skipped.
 
 **What I learned overnight** (`src/memory/learned.ts`). The dream's changes and a look's notes are recorded and told once, to every conversation but a group, as the same `learnedFact` in its next run (the owner's brief expert gets it with the look's context). Groups are off: their notes are shared and nothing is recorded.
 
@@ -356,7 +356,7 @@ Secrets never go through the chat or a model. They are entered at the local CLI 
 
 - **OpenBao** (`src/secrets/openbao.ts`, `secrets.ts`, `keychain.ts`): a small client over `fetch`, loopback only, pinned certificate. `TenantSecrets(bao, tenant)` reaches only `tenants/<tenant>/<kind>/<name>`; `card` is owner only. Callers fail closed. `npm run openbao` installs and runs it.
 - **The intake page** (`src/intake/intakeserver.ts`; `npm run intake`): a separate process on `127.0.0.1:INTAKE_PORT` behind a tunnel (`INTAKE_BASE_URL`). A friend's run has `get_setup_link` and `setup_status`.
-- A link is 128 random bits kept as a hash in `instance/intake/`, bound to one person and one purpose, single use (an atomic rename), expiring after `INTAKE_LINK_MINUTES`. Purposes (`PURPOSES`): `profile`, `card`, `google`, `notion`.
+- A link is 128 random bits kept as a hash in `instance/intake/`, bound to one person and one purpose, single use (an atomic rename), expiring after 15 minutes. Purposes (`PURPOSES`): `profile`, `card`, `google`, `notion`.
 - The page writes through a write-only token, records only names and lengths and never writes the owner's folder.
 - **OAuth** (`src/intake/oauth.ts`): PKCE, a single-use `state` bound to the link, and the callback route, written once; Google and Notion are `OAuthProvider`s.
 
@@ -371,7 +371,7 @@ One instance, one messenger account, several people. Off by default (`TENANTS=of
 - She has no owner connectors, payment, saved details or Drive. Her look needs `heartbeat` and `wake`, her dream `dream`; her approvals go to her chat and her audit rows carry no words.
 - **Groups** have the same shape with a fixed capability set, no connectors, shared skills only and the gate for untagged messages.
 - **Google for friends.** With a Google OAuth client set, a friend connects her own Gmail and Calendar through the `google` purpose (PKCE, offline access; the refresh token goes to `tenants/<id>/google/oauth` through the write-only token).
-  - One pinned MCP server process per friend (`GOOGLE_MCP_COMMAND`, `src/modules/google/googlemcp.ts`) is closed after `GOOGLE_MCP_IDLE_MINUTES`.
+  - One pinned MCP server process per friend (`GOOGLE_MCP_COMMAND`, `src/modules/google/googlemcp.ts`) is closed after the heartbeat interval plus 5 minutes (at least 20) unused.
   - The run never sees it: an in-process credentialed proxy (`src/intake/mcpproxy.ts`) lists only the tools her set offers and pins her address. A revoked grant is marked (`markNeedsReconnect`) and she gets a new link.
 - **Notion for friends.** The hosted MCP server (`NOTION_MCP_URL`) through the same proxy and OAuth helper, with one public client for the instance (`instance/notion-client.json`). Refresh tokens rotate: `NotionTokens` refreshes under a per-friend lock and stores the new token before using the access token.
 
@@ -380,14 +380,14 @@ One instance, one messenger account, several people. Off by default (`TENANTS=of
 Every model call re-sends the whole context, so the levers are what the model sees and keeping the prompt cache warm.
 
 - **The model sees only the tools it uses:** unused connectors are hidden (`HIDDEN_CONNECTORS`), Notion, Google Drive and Google Docs are cut to the tools the skills use (`NOTION_TOOLS`, `DRIVE_TOOLS`, `DOCS_TOOLS`; Drive create/update/copy/share/download and Docs update were ~7k tokens a call), tools policy always denies are hidden (`hiddenTools`). Keep these in step with the skills.
-- **Warm processes** (`src/core/warmslot.ts`, `src/run/agentwarm.ts`; `WARM=on|off`, `WARM_IDLE_MINUTES` 60) for the owner's chat, the most recently active groups (`GROUP_WARM_SLOTS` 2) and friends (`TENANT_WARM_MAX` 2), plus one Haiku spare each for the group gate and the judge.
+- **Warm processes** (`src/core/warmslot.ts`, `src/run/agentwarm.ts`; `WARM=on|off`, 60 minutes idle) for the owner's chat, the most recently active groups (`GROUP_WARM_SLOTS` 2) and friends (`TENANT_WARM_MAX` 2), plus one Haiku spare each for the group gate and the judge.
 - A process is reused only if what it was built from is unchanged, and never for another conversation.
 - **Connectors are waited for at start-up** (`MCP_CONNECTION_NONBLOCKING=false`), or the first call runs without its tools and the cache is lost. The prompt cache lives an hour; per-turn changes go in the turn's message, not the system prompt (`src/run/turncontext.ts`).
 - Every answered turn logs one `timing` line of durations (`src/core/timing.ts`). The run gate and lease are under "The run model".
 
 **Retention.** `src/core/retention.ts` is a registry of rules plus a tick job that runs the due ones once a day from 03:30; file rules are in `src/heartbeat/retentionrules.ts`, stores register their own. `RETENTION=off` stops it; `npm run retention -- --dry-run|--now`.
 
-**Text length tiers.** `LIMITS` in `src/core/sanitize.ts` names one constant per purpose (a control name, a subject, a log line, a message, a mail body, a page view, a text file). One tool result is capped by `TOOL_OUTPUT_MAX_CHARS` (60,000; `capTotal` in `src/core/toolclean.ts`).
+**Text length tiers.** `LIMITS` in `src/core/sanitize.ts` names one constant per purpose (a control name, a subject, a log line, a message, a mail body, a page view, a text file). One tool result is capped by 60,000; `capTotal` in `src/core/toolclean.ts`.
 
 ## Project layout
 

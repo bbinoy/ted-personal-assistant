@@ -9,7 +9,6 @@ By default Ted speaks with the local Qwen3-TTS voice on your Mac (Kokoro stands 
 | `TTS_PROVIDER` | `qwen` (default; local cloned voice, below), `kokoro`, `elevenlabs` or `http` |
 | `TTS_FALLBACK` | `none` (default): a failed remote request is sent as text with the usual note. `kokoro`: speak the same words locally instead (needs `scripts/setup-tts.sh`). Never switches unless you set it. |
 | `TTS_TIMEOUT_SECONDS` | per request, 5 to 300, default 60 |
-| `VOICE_TIMEOUT_SECONDS` | one deadline for the whole voice reply, engine, fallback, conversion and upload together, 20 to 600, default 75; over it Ted sends the text. Kokoro is not tried as a fallback when less than 30 s of it are left |
 
 Keys and tokens live in `.env` only, are sent only in a request header, and are blanked out of any error message. A wrong setting stops the agent at start-up. `npm run doctor` shows which provider is chosen.
 
@@ -78,7 +77,7 @@ TTS_REF_TEXT=state/voice/ref.txt      # exactly what is said in it: the words, o
 ```
 Keep your own reference under `state/` (git-ignored) or elsewhere outside the repo. To change the voice, point these two settings at another recording and restart Ted. Setting only one of the two counts as your own reference (the sample is never mixed in), so set both. `npm run doctor` says whether the "built-in sample voice" or your own file is in use.
 
-How it runs: the model takes about 4 s to load and 3 to 4 GB of memory, so Ted starts one small server (`packages/speech/scripts/qwen-tts-server.py`) at start-up and keeps it loaded, like the warm Claude processes. It listens on 127.0.0.1 on a free port and wants a random key made at each start. It is stopped after `WARM_IDLE_MINUTES` (default 60) without a spoken reply, which frees the memory; the next reply starts it again (a few seconds slower). `WARM=off` skips the start-up launch (it then starts on the first spoken reply). Owner chat and groups use the same code path.
+How it runs: the model takes about 4 s to load and 3 to 4 GB of memory, so Ted starts one small server (`packages/speech/scripts/qwen-tts-server.py`) at start-up and keeps it loaded, like the warm Claude processes. It listens on 127.0.0.1 on a free port and wants a random key made at each start. It is stopped after 60 minutes (`WARM_IDLE_MINUTES` in `src/core/settings.ts`) without a spoken reply, which frees the memory; the next reply starts it again (a few seconds slower). `WARM=off` skips the start-up launch (it then starts on the first spoken reply). Owner chat and groups use the same code path.
 
 If the server is not set up, not ready, fails or exceeds `TTS_TIMEOUT_SECONDS`, Ted logs it and speaks the same words with Kokoro when that is installed (`TTS_FALLBACK` defaults to `kokoro` for this provider; `none` sends text instead). `TTS_SPEED` does not apply to this voice. `npm run doctor` shows whether the voice is ready. Use Kokoro alone with `TTS_PROVIDER=kokoro`.
 

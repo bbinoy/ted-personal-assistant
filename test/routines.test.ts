@@ -13,7 +13,7 @@ const { readRecord } = S;
 const { parseRepeat } = await import("../src/tasks/repeat.ts");
 const { useConvDbAgentMode } = await import("../src/core/convdb.ts");
 useConvDbAgentMode(true);
-const { settings, loadSettings } = await import("../src/core/settings.ts");
+const { settings } = await import("../src/core/settings.ts");
 const { ownerSkills, privateSkills, skillsFor, scheduledSkills, PLUGIN } = await import("../src/modules/skills.ts");
 const { expertSetup } = await import("../src/run/delegation.ts");
 const { lookInstruction } = await import("../src/heartbeat/look.ts");
@@ -327,19 +327,6 @@ test("a note routine is for a conversation that has a look; skills are for the o
   assert.equal(scheduledIn({ ...o, skills: [] }).routines.length, 20);
 });
 
-test("ROUTINES_OFF switches a scheduled skill off; a bad name stops the agent", () => {
-  assert.deepEqual(settings.routinesOff, []);
-  assert.deepEqual(loadSettings({ ROUTINES_OFF: "evening-wrap, weekly-review" }).routinesOff, ["evening-wrap", "weekly-review"]);
-  assert.throws(() => loadSettings({ ROUTINES_OFF: "Evening Wrap" }), /ROUTINES_OFF/);
-  const mutable = settings as unknown as { routinesOff: string[] };
-  mutable.routinesOff = ["evening-wrap"];
-  try {
-    assert.deepEqual(scheduledIn({ skills: lookerOf(owner()).skills, notesDir: join(process.env.HARNESS_DATA_DIR!, "none"), zone: ZONE, now: new Date() }).routines.map((r) => r.name), ["daily-brief", "weekly-review"]);
-  } finally {
-    mutable.routinesOff = [];
-  }
-});
-
 test("the selfTimed text is gone from every prompt; the promise points at the when: note where the conversation has a look", () => {
   const OLD = /A check reads the notes every hour or so/;
   const withLook = new Set(GROUP_CAPABILITIES);
@@ -382,12 +369,6 @@ test("/status lists every scheduled item with its next and last run", () => {
   const text = statusText({ spentUsd: 1, limitUsd: 20, approvals: 0, down: [], routines: lines });
   assert.match(text, /\nRoutines: daily-brief: every day at 07:30, next tomorrow 07:30; last .* \| evening-wrap: every weekday at 18:30, next today 18:30; last .* \| weekly-review: every friday at 16:30, next tomorrow 16:30; last .*\.\nConnectors: none down\./);
   assert.doesNotMatch(statusText({ spentUsd: 1, limitUsd: 20, approvals: 0, down: [] }), /Routines/, "no facts, no line");
-});
-
-test("the catch-up window is at least an hour: 0 would make every routine late the moment its time passes", () => {
-  assert.throws(() => loadSettings({ ROUTINE_CATCHUP_HOURS: "0" }), /ROUTINE_CATCHUP_HOURS must be a number from 1 to 24/);
-  assert.equal(loadSettings({ ROUTINE_CATCHUP_HOURS: "1" }).routineCatchUpHours, 1);
-  assert.equal(loadSettings({}).routineCatchUpHours, 4);
 });
 
 test("the wrap and the review: their experts have exactly the read tools, the calendar reads, Skill and the chat send; no email, no write_note, task writes or seen_mail", () => {

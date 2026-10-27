@@ -470,7 +470,7 @@ test("doctor: the page is off without INTAKE_BASE_URL, and a token that can read
   const lines: { ok: boolean | "warn"; what: string; detail: string }[] = [];
   const line = (ok: boolean | "warn", what: string, detail = "") => void lines.push({ ok, what, detail });
   const keychain = { get: async () => "fake-intake-token", set: async () => {}, remove: async () => true };
-  const off = { baseUrl: undefined, port: 1, allowHttpLoopback: false, linkMinutes: 15, clientIpHeader: "x-forwarded-for", dir: "" };
+  const off = { baseUrl: undefined, port: 1, allowHttpLoopback: false, clientIpHeader: "x-forwarded-for", dir: "" };
   await intakeCheck(line, { cfg: off, keychain, bao: () => bao.bao({ token: bao.intakeToken }) });
   assert.equal(lines[0]!.what, "intake page: off");
   assert.equal(lines[0]!.ok, true);

@@ -1,6 +1,5 @@
 import { htmlToText, looksLikeHtml } from "./html.ts";
 import { cleanText } from "./sanitize.ts";
-import { settings } from "./settings.ts";
 
 // Clean at the door, for tool results: what a tool returns (mail, Notion, calendar, web, notes) is walked and every string is
 // cleaned before the model reads it (the SDK's PostToolUse `updatedToolOutput`, agent.ts). A string that holds JSON is parsed,
@@ -46,7 +45,9 @@ export function capTotal(v: unknown, max: number): { value: unknown; cut: number
   return { value: go(v), cut };
 }
 
-export function cleanToolOutput(tool: string, output: unknown, max: number = settings.toolOutputMaxChars): ToolClean | undefined {
+// The most characters of ONE tool result the model reads (in the PostToolUse path of every tool, MCP results included); the rest is cut with a hint to narrow the query.
+const TOOL_OUTPUT_MAX_CHARS = 60_000;
+export function cleanToolOutput(tool: string, output: unknown, max: number = TOOL_OUTPUT_MAX_CHARS): ToolClean | undefined {
   const mail = MAIL_TOOL.test(tool);
   const gmail = /gmail/i.test(tool);
   const t = { removed: 0, cut: 0, hidden: 0 };

@@ -249,7 +249,7 @@ export class NotionTokens {
     this.store = o.store ?? openbaoGrants();
     this.doFetch = o.fetch ?? fetch;
     this.now = o.now ?? Date.now;
-    this.margin = o.marginMs ?? (() => settings.notion.refreshMarginSeconds * 1000);
+    this.margin = o.marginMs ?? (() => 300_000) // an access token this close to its end is renewed first;
     this.reconnect = o.reconnect ?? ((tenant) => markNeedsReconnect(tenant, "notion"));
   }
 

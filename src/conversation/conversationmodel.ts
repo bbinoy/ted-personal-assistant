@@ -7,7 +7,6 @@ import { NOTES_DIR } from "../memory/notes.ts";
 import { type Picture } from "../run/image.ts";
 import { type Document } from "./document.ts";
 import { tenantKey } from "../core/ownerkey.ts";
-import { settings } from "../core/settings.ts";
 import { convPaths, friendConvId, groupConvId, OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import { clean, LIMITS, oneLine } from "../core/sanitize.ts";
 import { type Timing } from "../core/timing.ts";
@@ -60,7 +59,7 @@ export const group = (groupId: string): Conversation => {
     logFile: p.messages,
     notesDir: p.notes,
     threadAlways: true, // a group scrolls: say whom you answer
-    noticeEveryMs: settings.groupNoticeMinutes * 60_000, // a failure is reported at most this often per group
+    noticeEveryMs: 10 * 60_000, // a failure is reported at most this often per group
     notice: noticeFor("group"), // nobody there should be sent to a terminal
   });
 };
@@ -81,7 +80,7 @@ export const tenant = (id: string): Conversation => {
     logFile: ctx.logFile,
     notesDir: ctx.notesDir,
     threadAlways: false,
-    noticeEveryMs: settings.tenantReplyNoticeMinutes * 60_000, // she is waiting: told promptly, but not once per message of a flood
+    noticeEveryMs: 5 * 60_000, // she is waiting: told promptly, but not once per message of a flood
     notice: noticeFor("friend"), // no terminals, no logs
   });
 };
@@ -153,8 +152,8 @@ export interface PipelineDeps {
   afterTurn?: (conv: Conversation) => void; // after any turn, success or not (the owner: warm up the process for the next message)
   now?: () => number;
   wait?: (ms: number) => Promise<void>; // the settling pause (tests)
-  settleMs?: () => number; // how long a burst must be quiet before it is answered (default: settings.settleSeconds)
-  settleMaxMs?: () => number; // the longest a burst may wait since its first message, however long it keeps going (default: settings.settleMaxSeconds)
+  settleMs?: () => number; // how long a burst must be quiet before it is answered (default: queue.ts SETTLE_MS)
+  settleMaxMs?: () => number; // the longest a burst may wait since its first message, however long it keeps going (default: queue.ts SETTLE_MAX_MS)
 }
 
 // What a settled burst hands its owner: whether a newer message has taken over, and the one queued run that takes every

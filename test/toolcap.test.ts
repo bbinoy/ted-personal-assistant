@@ -1,19 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { capTotal, cleanToolOutput } from "../src/core/toolclean.ts";
-import { loadSettings } from "../src/core/settings.ts";
 
 // A tool result is capped in total (TOOL_OUTPUT_MAX_CHARS), whichever tool made it: an MCP connector's answer goes through the same PostToolUse clean (agentrun.ts).
 
 const filler = (n: number): string => Array.from({ length: n }, (_, i) => ((i + 1) * 7919).toString(36)).join(" ").slice(0, n); // (no long runs of one character: the sanitiser collapses those on its own)
 const mcp = (text: string) => ({ content: [{ type: "text", text }] });
 const text = (r: { output: unknown } | undefined) => ((r!.output as ReturnType<typeof mcp>).content[0] as { text: string }).text;
-
-test("setting: TOOL_OUTPUT_MAX_CHARS defaults to 60000 and is validated", () => {
-  assert.equal(loadSettings({}).toolOutputMaxChars, 60_000);
-  assert.equal(loadSettings({ TOOL_OUTPUT_MAX_CHARS: "5000" }).toolOutputMaxChars, 5000);
-  assert.throws(() => loadSettings({ TOOL_OUTPUT_MAX_CHARS: "10" }), /TOOL_OUTPUT_MAX_CHARS/);
-});
 
 test("a result over the cap keeps its start and ends with how much was cut and what to do", () => {
   const r = cleanToolOutput("mcp__claude_ai_Notion__notion-fetch", mcp(filler(1000)), 400);

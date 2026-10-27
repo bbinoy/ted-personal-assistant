@@ -17,7 +17,7 @@ import { notSetUpReply } from "../tenants/tenantroute.ts";
 //   her day's budget is spent -> a fixed notice until tomorrow (her own ledger, her own ceiling)
 //   the instance key is refused (expired, over its limit, out of credit) -> her run fails as before, and the owner's chat hears of it once (keynotice.ts, called from errors.ts failure for every kind of run)
 // and after the run: her first reply is marked (the model greets her once, in its own voice: persona.ts FIRST_CONTACT). A fixed notice is sent at most every
-// TENANT_NOTICE_MINUTES; in between the turn stays silent ([[silent]]).
+// 30 minutes (tenants.ts mayNotice); in between the turn stays silent ([[silent]]).
 
 const SILENT = "[[silent]]";
 

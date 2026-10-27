@@ -12,6 +12,7 @@ import { variantOf } from "../run/delegation.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { scheduledIn } from "../modules/tasks/routinelist.ts";
+
 import { reminderFacts } from "../tasks/remind.ts";
 import { meetingFacts } from "../tasks/meetings.ts";
 import { tasksFacts } from "../tasks/render.ts";
@@ -20,6 +21,8 @@ import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineOf
 import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
 import { afterLook, waitingReminders } from "./remindtick.ts";
 import { afterPrep, waitingMeetings } from "./preptick.ts";
+// A routine (scheduled skill or routine note) the Mac slept through still runs on waking within this many hours of its time, else that period is skipped.
+const ROUTINE_CATCHUP_HOURS = 4;
 
 // THE FACTS CODE HANDS A RUN (CLAUDE.md §2: one agent, whatever started it). The heartbeat look and every chat turn (the owner's, a friend's, a group's) call `factsFor` and get the same
 // facts for their conversation: held posts, reminders due, meetings to prepare, a friend's learned changes, the welcome, a due routine or routine note, and as information the own posts of the last days,
@@ -134,7 +137,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const finished = new Set<string>();
   let selfMailed = 0; // routine emails sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
   const { routines: ownRoutines, broken } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone, now });
-  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: settings.routineCatchUpHours, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), deliver: deliverHow }) : undefined;
+  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, agentOf: variantOf, approvals: openCount(conv.key), deliver: deliverHow }) : undefined;
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
   for (const n of routineNames) grab(`routine:${n}`);
   const start = (name: string): void => {
@@ -143,7 +146,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   if (routines?.due && !routines.due.routine.skill) start(routines.due.routine.name);
 
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts, learned ? fence("notes_changed_facts", learned.text) : "" ].filter(Boolean);
-  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, settings.routineCatchUpHours), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.join("; ")}.` : "", failingLooksFact(conv)].filter(Boolean);
+  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.join("; ")}.` : "", failingLooksFact(conv)].filter(Boolean);
   let settled = false;
   return {
     blocks,
@@ -185,7 +188,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
 export function routinesWaiting(conv: Conversation, now: Date): boolean {
   const looker = lookerOf(conv);
   const { routines } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone: looker.zone, now });
-  return routines.some((r) => planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), settings.routineCatchUpHours).state === "due");
+  return routines.some((r) => planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), ROUTINE_CATCHUP_HOURS).state === "due");
 }
 
 // Used by tests: forget every pending claim.

@@ -184,7 +184,7 @@ export const noCalendarData = (o: { enabled: boolean; lastNoted?: number; dbAgeM
 
 // ---- the rules (pure) ----
 
-export type Skip = "declined" | "all-day" | "private" | "alone" | "internal";
+export type Skip = "declined" | "all-day" | "private" | "alone";
 
 const PUBLIC_MAIL = new Set(["gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com", "icloud.com", "me.com", "proton.me", "protonmail.com", "gmx.net", "gmx.de", "gmx.ch", "bluewin.ch"]);
 const domainOf = (email: string | undefined): string | undefined => email?.split("@")[1]?.toLowerCase();
@@ -201,13 +201,12 @@ export function hasExternal(m: Pick<Meeting, "attendees">): boolean {
   });
 }
 
-/** Why this meeting gets no prep, or undefined when it does: declined by the owner, an all-day marker, a private event, nobody but the owner (and no video link), and with `onlyExternal` nobody outside her domain. */
-export function prepSkip(m: Meeting, o: { onlyExternal: boolean }): Skip | undefined {
+/** Why this meeting gets no prep, or undefined when it does: declined by the owner, an all-day marker, a private event, nobody but the owner (and no video link). Whether the rest is worth a word is the look's judgement, from the facts in `meetingFacts` (who is on it, whether anyone is outside her domain). */
+export function prepSkip(m: Meeting): Skip | undefined {
   if (m.response === "declined") return "declined";
   if (m.allDay) return "all-day";
   if (m.private) return "private";
   if (othersOf(m).length === 0 && !m.link) return "alone";
-  if (o.onlyExternal && !hasExternal(m)) return "internal";
   return undefined;
 }
 
@@ -229,6 +228,7 @@ export function meetingFacts(rows: readonly MeetingRow[], o: { now: number; zone
       `title: ${m.title}`,
       `start: ${WEEKDAYS[d.weekday]} ${d.date} ${timeIn(start, o.zone)} (in ${Math.max(1, Math.round((m.startMs - o.now) / 60_000))} min)${m.endMs ? `, ends ${timeIn(new Date(m.endMs), o.zone)}` : ""}`,
       `with: ${others.length ? others.slice(0, 12).map(who).join("; ") + (others.length > 12 ? `; and ${others.length - 12} more` : "") : "(nobody else is on the invite)"}`,
+      `outside her e-mail domain: ${others.length ? (hasExternal(m) ? "yes, someone is" : "no, everyone is in her own domain") : "n/a"}`,
       ...(m.link ? [`link: ${m.link}`] : []),
     ].join("\n");
   });

@@ -415,12 +415,9 @@ test("google: the default server command pins the package and the day its depend
   assert.deepEqual(loadSettings({ GOOGLE_MCP_ARGS: "workspace-mcp==2.1.0 --single-user" }).google.args, ["workspace-mcp==2.1.0", "--single-user"], "an explicit value replaces the default whole");
 });
 
-test("google: her server stays up between mail ticks: the idle default is the heartbeat interval plus a margin, at least 20 minutes, and an explicit value wins", async () => {
-  const { loadSettings } = await import("../src/core/settings.ts");
-  const hb = loadSettings({}).heartbeatMinutes;
-  assert.equal(loadSettings({}).google.idleMinutes, Math.max(20, hb + 5));
-  assert.ok(loadSettings({}).google.idleMinutes > hb, "longer than the heartbeat: a tick finds the server running");
-  assert.equal(loadSettings({ HEARTBEAT_MINUTES: "30" }).google.idleMinutes, 35);
-  assert.equal(loadSettings({ HEARTBEAT_MINUTES: "5" }).google.idleMinutes, 20);
-  assert.equal(loadSettings({ GOOGLE_MCP_IDLE_MINUTES: "7" }).google.idleMinutes, 7);
+test("google: her server stays up between mail ticks: the idle time is the heartbeat interval plus a margin, at least 20 minutes", async () => {
+  const { googleConfig } = await import("../src/modules/google/googlemcp.ts");
+  const { settings } = await import("../src/core/settings.ts");
+  assert.equal(googleConfig().idleMs, Math.max(20, settings.heartbeatMinutes + 5) * 60_000);
+  assert.ok(googleConfig().idleMs > settings.heartbeatMinutes * 60_000, "longer than the heartbeat: a tick finds the server running");
 });

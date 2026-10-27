@@ -99,7 +99,7 @@ export function caPemOf(path: string): string | undefined {
 
 // The app's OpenBao client: the token comes from the Keychain (kept in memory once read, never written anywhere else). `as: "intake"` is the intake
 // page's own write-only token; everything else uses the app's.
-export function appBao(o: { keychain?: Keychain; cfg?: typeof settings.openbao; as?: "app" | "intake" } = {}): OpenBao {
+export function appBao(o: { keychain?: Keychain; cfg?: typeof settings.openbao; as?: "app" | "intake"; cacheMs?: number } = {}): OpenBao {
   const cfg = o.cfg ?? settings.openbao;
   const keychain = o.keychain ?? macKeychain;
   let token: { v: string; at: number } | undefined; // kept in memory for a few minutes, so a token replaced by a new setup is picked up without a restart
@@ -109,8 +109,8 @@ export function appBao(o: { keychain?: Keychain; cfg?: typeof settings.openbao; 
     addr: cfg.addr,
     mount: cfg.mount,
     ...(caPem ? { caPem } : {}),
-    timeoutMs: cfg.timeoutMs,
-    cacheMs: cfg.cacheMs,
+    timeoutMs: 5000,
+    cacheMs: o.cacheMs ?? 30_000, // how long profile reads may be served from memory (the card is never cached); a test passes 0
     token: async () => {
       if (!token || Date.now() - token.at > 300_000) {
         const names = keychainNames(cfg.keychainPrefix);

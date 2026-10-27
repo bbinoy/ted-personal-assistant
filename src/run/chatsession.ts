@@ -24,7 +24,12 @@ export interface Resume {
   seenAt?: string;
 }
 
-const chatPlanOpts = (mode: CompactMode) => ({ compactTokens: settings.chatCompactTokens, compactGrowth: settings.chatCompactGrowthTokens, quietMinutes: settings.compactQuietMinutes, mode });
+// When a chat session is compacted (session.ts planSession). The SDK only compacts near the context limit, so a long-lived session would re-send an ever-growing history on every turn.
+const COMPACT_GROWTH_TOKENS = 100_000; // the conversation itself (context minus tools, skills and prompts) this big: compact afterwards, owner and groups alike
+const COMPACT_TOKENS = 150_000; // fallback for a session saved before the baseline was recorded: a turn this big: compact afterwards (tools and skills alone are ~50k)
+const COMPACT_QUIET_MINUTES = 5; // a grown conversation is compacted in the background once its last turn is this old
+const COMPACT_MAX_MINUTES = 10; // a compaction that takes longer is abandoned (the failure backoff in session.ts applies)
+const chatPlanOpts = (mode: CompactMode) => ({ compactTokens: COMPACT_TOKENS, compactGrowth: COMPACT_GROWTH_TOKENS, quietMinutes: COMPACT_QUIET_MINUTES, mode });
 
 // A conversation continues its saved session unless session.ts says to start fresh.
 export function chatResume(conv: ConvId = OWNER_CONV, track: Track = "chat"): Resume {
@@ -71,7 +76,7 @@ export async function compactChatIfNeeded(conv: ConvId = OWNER_CONV, who: Who = 
     console.log(`${source}: context is ${saved.lastContextTokens} tokens, compacting (${mode})`);
     // Bounded in time like every run (ceiling.ts): it runs inside the conversation's queue, and a hung one would block it.
     // It runs inside the conversation's queue, where a message may be waiting, so it never waits for a place in the run gate (rungate.ts) but takes one; the quiet one is started only when a place is free (wake.ts).
-    await gated("chat", () => withCeiling(settings.compactMaxMinutes * 60_000, async (c) => {
+    await gated("chat", () => withCeiling(COMPACT_MAX_MINUTES * 60_000, async (c) => {
       let boundary: { pre_tokens: number; post_tokens?: number } | undefined;
       let lastError: string | undefined;
       for await (const message of query({ prompt: "/compact", options: { ...compactOptions(saved.sessionId, isolated, track === "chat" ? notesDir : undefined, payer, track), abortController: c.controller } })) {

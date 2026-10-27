@@ -4,6 +4,7 @@ import { createPipeline, group, owner, tenant, type Pipeline } from "./conversat
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runLook } from "./run/agent.ts";
+import { WARM_REFRESH_MS } from "./run/agentwarm.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
 import { approveIn } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
@@ -17,7 +18,7 @@ import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
 import { ownerSearchScope, warmSearchIndex } from "./memory/search.ts";
-import { compactIfNeeded, recordMessage, type Extra, type Kind } from "./core/messages.ts";
+import { compactIfNeeded, GROUP_LOG_MAX_BYTES, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
 import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
 import { preparePicture } from "./run/image.ts";
@@ -63,7 +64,7 @@ function record(target: string | undefined, kind: Kind, ts: number, text: string
     if (!rec) return;
     const { logFile } = tenantContext(rec);
     recordMessage(kind, ts, text, new Date(), logFile, extra);
-    return void compactIfNeeded(plainSummary, settings.groupLogMb * 1_000_000, logFile).catch((e) => console.error("tenant log: compaction failed:", e.message));
+    return void compactIfNeeded(plainSummary, GROUP_LOG_MAX_BYTES, logFile).catch((e) => console.error("tenant log: compaction failed:", e.message));
   }
   const groupId = target;
   if (groupId) return void (groupDir(groupId, groupName(groupId)), recordGroup(groupId, kind, ts, text, extra));
@@ -87,7 +88,7 @@ const warmChat = () => prepare(owner(), {});
 
 // Every voice message is transcribed (in a group it may be meant for the assistant), but only a few at a time: a flood waits in line
 // instead of starting that many whisper processes. One line for the owner's chat and every group.
-const transcribing = new Limiter(() => settings.transcribeConcurrency);
+const transcribing = new Limiter(() => 2) // voice notes transcribed at the same time; the rest wait their turn;
 
 // A voice message's words, from the local speech model; the transcript goes into the message log like any message (a
 // mishearing can be searched there). Throws a sentence the user can be told if it cannot be made out.
@@ -223,11 +224,11 @@ if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); 
 welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
 replayUnanswered({ pipeline, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
 if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
-// The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES idle, and the next reply restarts it).
+// The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES (settings.ts) idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
-setInterval(() => prepare(owner(), {}, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
+setInterval(() => prepare(owner(), {}, { refresh: true }), WARM_REFRESH_MS).unref();
 // The owner's search index (memory/search.ts) is brought up to date a little after start-up, in small slices that leave the event loop free, so the first real search_logs is quick.
 setTimeout(() => void warmSearchIndex(ownerSearchScope()).catch(() => {}), 20_000).unref();
 
@@ -263,7 +264,7 @@ startHeartbeat({
     startJobs({
       wake: () => wakeups.tick(),
       retention: () => retentionAtItsHour(), // the first tick at or after 03:30, once a day, never while a chat turn runs (core/retention.ts)
-      dream: () => dreamAtItsHour(), // the first tick at or after DREAM_HOUR; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
+      dream: () => dreamAtItsHour(), // the first tick at or after the preset's dream hour; each conversation is dreamt at most once a day, and only when it said something new (dream.ts)
     });
   },
 });

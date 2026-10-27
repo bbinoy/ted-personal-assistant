@@ -1,6 +1,5 @@
 import { discardJudge, prepareJudge } from "./approvaljudge.ts";
 import { applyChanges, isModifiable, type Change } from "../policy/policy.ts";
-import { settings } from "../core/settings.ts";
 import type { Source } from "../core/audit.ts";
 import { emit } from "../core/events.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
@@ -66,6 +65,8 @@ interface Open {
   scope: string; // the conversation it was asked in (Conversation.key): an answer from another conversation never applies, whoever gives it (the admin included)
   typedYes: boolean; // a card payment: only a typed yes approves it (isTypedYes); never a reaction, an emoji, a voice message or the judge's own reading
 }
+// How long a question asked in a chat turn waits before it lapses (silently: a journal line). Unattended runs ask nobody; a stranger's registration waits a day.
+const APPROVAL_TIMEOUT_MINUTES = 15;
 const slot = (scope: string, ts: number) => `${scope}:${ts}`;
 const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
@@ -284,7 +285,7 @@ export function request(
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
-  const minutes = opts.minutes ?? settings.approvalTimeoutMinutes;
+  const minutes = opts.minutes ?? APPROVAL_TIMEOUT_MINUTES;
   return new Promise<Decision>((resolve) => {
     const label = description.split("\n")[0] ?? "";
     const named = isTenantKey(opts.scope) ? `(${opts.scope})` : label;

@@ -1,6 +1,6 @@
 // One spare ("warm") Claude Code process, built ahead of time for the next message (agent.ts, gate.ts).
 // It is a slot, not a pool: putting another process in closes the one it replaces, so a slot never holds more than one.
-// All slots share the mechanism and the one idle setting (WARM_IDLE_MINUTES): the owner's chat, the latest groups (another
+// All slots share the mechanism and the one idle time (WARM_IDLE_MINUTES in settings.ts): the owner's chat, the latest groups (another
 // group becoming the latest replaces it) and the gate's Haiku. A spare is built from fixed options (system prompt, tools,
 // MCP servers, output schema: the SDK cannot change them per query), so it is handed out only for the same id and the same
 // key, and never to another conversation. A spare can die while idle: firstWarm below falls back to a cold start.

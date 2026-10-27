@@ -4,13 +4,13 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 import { group, owner } from "../src/conversation/conversation.ts";
-import { askGateWith, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/conversation/gate.ts";
+import { askGateWith, GATE_MAX_DELAY_SECONDS, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/conversation/gate.ts";
 import { clampCheck, lookDue, lookState, wakeText } from "../src/conversation/ledger.ts";
 import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/core/messages.ts";
 import { conversationLines } from "../src/conversation/dream.ts";
 import { groupContext, groupLogFile } from "../src/conversation/groupstore.ts";
 import { AuthError, RateLimitError } from "../src/tenants/errors.ts";
-import { loadSettings, settings } from "../src/core/settings.ts";
+import { settings } from "../src/core/settings.ts";
 import { dataPath } from "../src/core/state.ts";
 import { scratchLog } from "./scratch.ts";
 
@@ -23,12 +23,12 @@ const T0 = new Date(2026, 9, 14, 9, 0, 0); // a Wednesday, 09:00 local
 test("gate: the delay is capped by the setting in code, and the prompt says typing is already showing", () => {
   assert.equal(parseGate({ act: true, delaySeconds: 60 }, 4).delaySeconds, 4);
   assert.equal(parseGate({ act: true, delaySeconds: 3 }, 4).delaySeconds, 3);
-  assert.equal(parseGate({ act: true, delaySeconds: 3 }, 0).delaySeconds, 0); // GATE_MAX_DELAY_SECONDS=0: never wait
+  assert.equal(parseGate({ act: true, delaySeconds: 3 }, 0).delaySeconds, 0); // a maximum of 0: never wait
   assert.equal(parseGate({ act: true, delaySeconds: "soon" }, 4).delaySeconds, 0);
-  assert.equal((GATE_SCHEMA.schema.properties.delaySeconds as { maximum: number }).maximum, settings.gateMaxDelaySeconds);
+  assert.equal((GATE_SCHEMA.schema.properties.delaySeconds as { maximum: number }).maximum, GATE_MAX_DELAY_SECONDS);
   const sys = gateSystem("");
   assert.match(sys, /typing indicator is already showing/);
-  assert.match(sys, new RegExp(`never more than ${settings.gateMaxDelaySeconds}`));
+  assert.match(sys, new RegExp(`never more than ${GATE_MAX_DELAY_SECONDS}`));
   assert.doesNotMatch(sys, /0 to 120/);
   const long = Array.from({ length: 60 }, (_, i) => `line ${i}`);
   const p = gatePrompt({ now: T0, tail: long }, "");
@@ -75,13 +75,6 @@ test("gate prompt: the style the gate is told of is one compact line; no style, 
   }
   assert.doesNotMatch(gateSystem(""), /personality/);
   assert.match(gateSystem("warm and folksy; few emoji"), /warm and folksy; few emoji/);
-});
-
-test("settings: GATE_MAX_DELAY_SECONDS defaults to 4 and is validated", () => {
-  assert.equal(loadSettings({}).gateMaxDelaySeconds, 4);
-  assert.equal(loadSettings({ GATE_MAX_DELAY_SECONDS: "0" }).gateMaxDelaySeconds, 0);
-  assert.throws(() => loadSettings({ GATE_MAX_DELAY_SECONDS: "-1" }), /GATE_MAX_DELAY_SECONDS/);
-  assert.throws(() => loadSettings({ GATE_MAX_DELAY_SECONDS: "slow" }), /GATE_MAX_DELAY_SECONDS/);
 });
 
 test("gate: whatever the model returns, only a literal true acts, and the next look is clamped to 15..60", () => {

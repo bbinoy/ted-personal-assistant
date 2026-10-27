@@ -413,7 +413,7 @@ export async function doctor() {
   }
 
   const dream = legacy ? {} : readDream(OWNER_CONV);
-  if (!legacy) line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (DREAM_HOUR); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
+  if (!legacy) line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (the preset); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
 
   if (!legacy) {
     const r = retentionSummary(readRetentionState(instancePaths().retention), settings.retention, localTime);

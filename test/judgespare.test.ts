@@ -86,7 +86,7 @@ test("judge spare: a dead spare falls back to a cold call", async () => {
   }
 });
 
-test("judge spare: its own idle: an unused spare is dropped after it, while the default is the chat's WARM_IDLE_MINUTES", async () => {
+test("judge spare: its own idle: an unused spare is dropped after it, while the default is the chat's warm idle time", async () => {
   const was = settings.warm;
   setWarm(true);
   try {
@@ -102,8 +102,6 @@ test("judge spare: its own idle: an unused spare is dropped after it, while the 
   } finally {
     setWarm(was);
   }
-  assert.equal(settings.judgeIdleMinutes, 10);
-  assert.ok(settings.judgeIdleMinutes < settings.warmIdleMinutes);
 });
 
 test("judge spare: each judge keeps its own spare; one prepared for another purpose is never used", async () => {
