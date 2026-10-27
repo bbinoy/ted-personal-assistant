@@ -6,7 +6,7 @@ import { rowsOf, type ToolModule } from "../types.ts";
 const people = rowsOf("mcp__people__", "people", "chat");
 export const peopleModule: ToolModule = {
   name: "people",
-  connection: { kind: "in-process", name: "people", when: (ctx) => !!ctx.memory && !ctx.browsing },
-  rows: people("read", "find_person", { attended: true }),
+  connection: { kind: "in-process", name: "people", when: (ctx) => (!!ctx.memory || !!ctx.notesRead) && ctx.offers("mcp__people__find_person") },
+  rows: people("read", "find_person"),
   free: ["read"],
 };

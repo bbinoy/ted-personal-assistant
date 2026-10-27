@@ -122,7 +122,7 @@ export function hiddenTools(seen: readonly string[], cfg: { hiddenConnectors: re
 export function classify(tool: string, input: Record<string, unknown>, run: RunKind, groupNotesDir?: string, tools?: ReadonlySet<string>): Verdict {
   const isolated = run.who !== "owner"; // (a group, a friend, the browse worker: none of the owner's data; the files they may touch are their own notes)
   const offered = tools ?? (run.who === "browse" ? browseTools() : run.who === "owner" ? undefined : groupTools(run));
-  if (offered && !offered.has(tool)) return "deny";
+  if (offered && !offered.has(tool) && (isolated || entryFor(tool))) return "deny"; // (a tool the manifest does not know asks the owner, as it always did: a look skips it; an isolated run never has one)
   if (!availableFor(tool, run)) return "deny";
   if (isNeverAllowed(tool, input) || namesLocalFile(input)) return "deny";
   let verdict: Verdict = !confirmsDelete(tool, input) && isFree(tool, undefined, { input, run }) ? "allow" : "ask"; // a delete the person confirms is never free

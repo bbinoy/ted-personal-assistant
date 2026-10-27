@@ -63,7 +63,10 @@ test("a conversation's chat and look have ONE system prompt; the owner's look ha
     assert.equal(text(l.options), text(c.options), `${conv.kind}: the same prompt, whatever starts the run`);
     const servers = Object.keys(l.options.mcpServers ?? {});
     for (const wanted of ["send", "tasks", "weather", "draw", ...(settings.tts.provider === "qwen" ? ["voice"] : [])]) assert.ok(servers.includes(wanted), `${conv.kind} look has ${wanted}`);
-    assert.ok(servers.includes("notes") && !servers.includes("memory"), "a look reads its notes with the notes tools");
+    assert.ok(servers.includes("notes") && servers.includes("memory") && servers.includes("people"), "a look reads its notes with the notes tools and searches the logs like a chat");
+    const memory = (o: Call) => Object.keys((o.options.mcpServers.memory as { instance: { _registeredTools: object } }).instance._registeredTools);
+    assert.deepEqual(memory(l), ["search_logs"], "the memory server of a look has the read only");
+    assert.deepEqual(memory(c).sort(), ["forget_note", "journal", "search_logs", ...(conv.kind === "owner" || conv.kind === "group" ? ["undo_dream"] : [])].sort());
     assert.ok(Object.keys(c.options.mcpServers ?? {}).includes("memory") && !Object.keys(c.options.mcpServers ?? {}).includes("notes"));
     assert.ok(!l.options.tools.includes("Read") && c.options.tools.includes("Read"), "the notes' file tools need a person waiting");
     assert.equal(l.options.tools.includes("WebFetch"), c.options.tools.includes("WebFetch"), "opening a page follows the owner, look or chat");
@@ -119,4 +122,17 @@ test("the owner's look gets browse like any look, but never her card or saved de
   assert.match(browseToolText({ mode: "owner", key: "owner", attended: true }), /saved payment card/);
   assert.doesNotMatch(browseToolText({ mode: "owner", key: "owner", attended: false }), /saved payment card/);
   assert.doesNotMatch(browseToolText({ mode: "group", key: "g", attended: true }), /saved payment card/);
+});
+
+test("a tool nobody declared asks the owner in a chat and is skipped in a look (never denied); a declared tool outside the run's set is denied", async () => {
+  const { classify } = await import("../src/policy/policy.ts");
+  const { capabilitiesOf, toolsFor } = await import("../src/policy/capabilities.ts");
+  const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
+  const chatSet = toolsFor(capabilitiesOf({ kind: "owner" }), { who: "owner", attended: true });
+  const lookSet = toolsFor(capabilitiesOf({ kind: "owner" }), { who: "owner", attended: false });
+  assert.equal(classify("mcp__new_server__do_thing", {}, { who: "owner", attended: true }, undefined, chatSet), "ask");
+  assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, { who: "owner", attended: false }, undefined, lookSet), "deny");
+  const can = makeCanUseTool(approve as never, { who: "owner", attended: false }, undefined, undefined, undefined, lookSet);
+  const r = (await can("mcp__new_server__do_thing", {}, { signal: new AbortController().signal } as never)) as { behavior: string; message?: string };
+  assert.match(r.message ?? "", /background work never asks/);
 });

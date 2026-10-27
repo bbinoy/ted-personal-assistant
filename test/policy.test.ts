@@ -199,9 +199,10 @@ test("data folders: Read is allowed in chat only, Write and Edit never", () => {
   for (const source of ["handler", "radar"] as const) assert.equal(classify("Read", { file_path: log }, kindOf(source)), "deny", source);
 });
 
-test("search_logs: chat only", () => {
+test("search_logs: a read, so a look has it as a chat does", () => {
   assert.equal(classify("mcp__memory__search_logs", { query: "x" }, OWNER_CHAT), "allow");
-  for (const source of ["handler", "radar", "heartbeat"] as const) assert.equal(classify("mcp__memory__search_logs", { query: "x" }, kindOf(source)), "deny", source);
+  assert.equal(classify("mcp__memory__search_logs", { query: "x" }, OWNER_LOOK), "allow");
+  assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, OWNER_LOOK), "deny", "a writer of the notes is for a person waiting");
 });
 
 test("layout 2: the owner's chat reads only conversations/owner/{notes,messages.jsonl} and the three background logs; a group's or friend's file tools reach only their own notes folder", async () => {

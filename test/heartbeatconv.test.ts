@@ -81,7 +81,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   assert.deepEqual(b.settingSources, []);
   const servers = Object.keys(b.mcpServers as object);
   assert.ok(servers.includes("google") && servers.includes("send"));
-  assert.ok(!servers.includes("status") && !servers.includes("memory") && !servers.includes("mailbird"), servers.join(","));
+  assert.ok(!servers.includes("status") && !servers.includes("mailbird"), servers.join(","));
   assert.ok((b.tools as string[]).includes("Agent") && b.agents && Object.keys(b.agents).includes("expert"), "she can read mail: she may delegate heavy work");
   assert.equal(b.hooks!.PreToolUse!.length, 1);
   const env = b.env as Record<string, string | undefined>;
