@@ -4,12 +4,12 @@ import type { RunOptions } from "./agentrun.ts";
 import { tenantOverBudget } from "../core/budget.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { recentNotices } from "../core/messages.ts";
-import { memoryFor, readNotes } from "../memory/notes.ts";
+import { readIndex, readNotes, writeIndex } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
 import { importOffer } from "../modules/tasks/taskfacts.ts";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { RunKind } from "../core/runkind.ts";
-import { categoriesFor, preset } from "../core/preset.ts";
+import { preset } from "../core/preset.ts";
 import { chatContext, chatSystem, expertSystem, FIRST_CONTACT, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, toolsFor } from "../policy/capabilities.ts";
 import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
@@ -32,8 +32,8 @@ import type { Track } from "./sessionstore.ts";
 //   tenant  a group run with one person in it: her persona, notes, session and limits, her ledger, and the instance key in this run's environment only
 //
 // What a message and a look differ in is THIS table and nothing else (the code that reads it never asks which trigger it is):
-//   attended  who is waiting: a message's person is, a look's nobody. It decides the tools the manifest marks `attended` (the notes' file tools and the edits of the person's list for a message,
-//             the look's bookkeeping for a look: toolmanifest.ts), and that an unattended run never asks (permissions.ts)
+//   attended  who is waiting: a message's person is, a look's nobody. It decides the tools the manifest marks `attended` (the edits of the person's list for a message, the look's bookkeeping
+//             for a look: toolmanifest.ts), and that an unattended run never asks (permissions.ts)
 //   track     the session it resumes: the conversation's chat, or its looks' (sessionstore.ts); different models never share a session
 //   model     HARNESS_MODEL, or HEARTBEAT_MODEL (a look is a cheap model that decides and delegates)
 //   answer    a reply, or the look's JSON (message, nextCheckMinutes, urgent)
@@ -127,10 +127,6 @@ const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, attended: bool
 };
 export const turnContext = (conv: Conversation, trigger: Trigger = "message"): string | undefined => CONTEXTS[conv.kind](conv, TRIGGERS[trigger].attended);
 
-// An unattended run has no file tools for its notes: their index, as data, is the context it is told (and again only when it changed). A message turn's notes are the SDK's auto-memory.
-export const notesIndex = (conv: Conversation, trigger: Trigger, now: Date): string | undefined =>
-  TRIGGERS[trigger].attended ? undefined : memoryFor(categoriesFor(conv.kind), now, conv.notesDir, zoneOf(conv)) || undefined;
-
 export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs = {}): RunOptions {
   const t = TRIGGERS[trigger];
   const kind: RunKind = { who: conv.kind, attended: t.attended };
@@ -139,6 +135,7 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
   const skills = skillsFor(caps, conv.kind === "owner");
   const now = inputs.now ?? new Date();
   const { notes, ...rest } = shape;
+  writeIndex(notes.dir, now, notes.zone); // (what changed since the last write: a note that expired, one the SDK's own writer or the person edited)
   return {
     ...rest,
     kind,
@@ -149,23 +146,21 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
     ...(conv.groupId ? { groupId: conv.groupId } : {}),
     tools: toolsFor(caps, kind),
     skills,
-    // Notes: a message turn has the SDK's auto-memory (its file tools and the memory server, confined to the notes folder); an unattended run reads and writes its notes through the notes server
-    // (read_note, write_note), which reads untrusted mail and so cannot change them but as logged, inferred facts (modules/memory/notestools.ts).
-    ...(t.attended
-      ? { memory: { dir: notes.dir, zone: notes.zone, ...(conv.groupId ? { groupId: conv.groupId } : {}), ...(conv.kind === "owner" && inputs.notify ? { notify: inputs.notify } : {}) } }
-      : { notesRead: { dir: notes.dir, categories: categoriesFor(conv.kind), write: preset().notes.background.filter((c) => categoriesFor(conv.kind).includes(c)), maxNotes: settings.memoryMaxNotes, zone: notes.zone } }),
+    // Notes: the SDK's auto-memory for every run (its file tools and the memory server, confined to the notes folder); MEMORY.md is code's, made fresh here from the notes (notes.ts writeIndex).
+    memory: { dir: notes.dir, zone: notes.zone, ...(conv.groupId ? { groupId: conv.groupId } : {}), ...(conv.kind === "owner" && inputs.notify ? { notify: inputs.notify } : {}) },
     model: t.model(),
     effort: t.effort,
     outputFormat: t.answer,
-    experts: { setup: expertSetup(skills, expertText(conv, now)) }, // (a look adds its callbacks: agent.ts)
+    experts: { setup: expertSetup(skills, expertText(conv)) }, // (a look adds its callbacks: agent.ts)
   };
 }
 
-// The expert a run may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem).
-function expertText(conv: Conversation, now: Date): string {
-  if (conv.kind === "owner") return expertSystem(memoryFor(categoriesFor("owner"), now, conv.notesDir, zoneOf(conv)), { missing: missingSetup(readNotes()) });
+// The expert a run may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem): the index of the notes, which it reads in full with its own tools.
+function expertText(conv: Conversation): string {
+  const index = readIndex(conv.notesDir);
+  if (conv.kind === "owner") return expertSystem(index, { missing: missingSetup(readNotes()) });
   const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
   const looker = lookerOf(conv);
   const looked = { name: looker.who, group: looker.group, language: ctx?.language, persona: ctx?.persona };
-  return expertSystem(memoryFor(categoriesFor(conv.kind), now, conv.notesDir, zoneOf(conv)), { looked });
+  return expertSystem(index, { looked });
 }

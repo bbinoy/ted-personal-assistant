@@ -145,13 +145,13 @@ test("a second preset's note categories reach every run: chat, group, friend, he
   writeFileSync(probe, `
     const T = await import(${JSON.stringify(src + "tenants/tenants.ts")});
     const { owner, group, tenant } = await import(${JSON.stringify(src + "conversation/conversation.ts")});
-    const { runFor, notesIndex } = await import(${JSON.stringify(src + "run/runoptions.ts")});
+    const { runFor } = await import(${JSON.stringify(src + "run/runoptions.ts")});
     const { preset } = await import(${JSON.stringify(src + "core/preset.ts")});
     const { dreamScope } = await import(${JSON.stringify(src + "modules/memory/dreamscope.ts")});
     const { dreamSystem, GATE_DEFAULTS } = await import(${JSON.stringify(src + "run/persona.ts")});
     const { writeFileSync, mkdirSync } = await import("node:fs");
     const { join } = await import("node:path");
-    const { NOTES_DIR } = await import(${JSON.stringify(src + "memory/notes.ts")});
+    const { NOTES_DIR, readIndex } = await import(${JSON.stringify(src + "memory/notes.ts")});
     mkdirSync(NOTES_DIR, { recursive: true });
     writeFileSync(join(NOTES_DIR, "goals-run.md"), "---\\nname: run\\n---\\n\\nRun a half marathon in spring.\\n");
     writeFileSync(join(NOTES_DIR, "people-sam.md"), "---\\nname: sam\\n---\\n\\nSam is the training partner.\\n");
@@ -165,8 +165,8 @@ test("a second preset's note categories reach every run: chat, group, friend, he
       friend: prompt(runFor(tenant(rec.id), "message", { apiKey: "k" })),
       heartbeat: runFor(owner(), "look", {}),
       friendHeartbeat: runFor(tenant(rec.id), "look", { apiKey: "k" }),
-      notes: notesIndex(owner(), "look", new Date()),
-      friendNotes: notesIndex(tenant(rec.id), "look", new Date()),
+      notes: readIndex(owner().notesDir),
+      friendNotes: readIndex(tenant(rec.id).notesDir),
       profiles: Object.fromEntries(["chat", "group"].map((k) => [k, [preset().profiles[k].maxTurns, preset().profiles[k].maxBudgetUsd]])),
       scopes: Object.fromEntries(["owner", "group", "tenant"].map((k) => [k, dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories])),
       dream: ["owner", "group", "tenant"].map((k) => dreamSystem({ subject: "S", kind: k, categories: dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories })),
@@ -188,7 +188,7 @@ test("a second preset's note categories reach every run: chat, group, friend, he
   assert.equal(out.heartbeat.systemPrompt, out.chat, "a look has the conversation's one prompt");
   assert.match(out.notes, /half marathon/);
   assert.match(out.notes, /training partner/);
-  assert.doesNotMatch(out.notes, /OLD TRIAGE NOTE/, "a note of a category this assistant does not have is not shown");
+  assert.doesNotMatch(out.notes, /OLD TRIAGE NOTE/, "a note of a category this assistant does not have is not in the index");
   assert.doesNotMatch(out.friendNotes ?? "", /OLD TRIAGE NOTE|half marathon/, "a friend's run has her own notes, in the friend categories, and none of the owner's");
   out.dream.forEach((d: string, i: number) => assert.ok(d.includes(`with a category of ${[["goals, people"], ["people"], ["goals, style"]][i]![0]}.`), `dream ${i}`));
   for (const [where, text] of Object.entries({ chat: out.chat, group: out.group, friend: out.friend, dream: out.dream.join("\n"), gates: out.gates.join("\n"), heartbeat: out.heartbeat.systemPrompt, friendHeartbeat: out.friendHeartbeat.systemPrompt })) {

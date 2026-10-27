@@ -3,7 +3,7 @@ import { settings } from "../src/core/settings.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { idsOf } from "../src/approvals/permissions.ts";
-import { NOTES_DIR } from "../src/memory/notes.ts";
+import { MAX_NOTE_CHARS, NOTES_DIR } from "../src/memory/notes.ts";
 import { applyChanges, classify, hiddenTools, isReadTool } from "../src/policy/policy.ts";
 import { loadSettings } from "../src/core/settings.ts";
 import { neverAllowedTool } from "../src/policy/toolmanifest.ts";
@@ -87,10 +87,13 @@ test("memory notes: chat may read and write inside the notes folder only; everyt
     assert.equal(classify(t, { file_path: `${NOTES_DIR}/../state/seen.json` }, OWNER_CHAT), "deny", `${t} ..`);
     assert.equal(classify(t, { file_path: "/etc/passwd" }, OWNER_CHAT), "deny", `${t} outside`);
     assert.equal(classify(t, {}, OWNER_CHAT), "deny", `${t} no path`);
-    for (const source of ["handler", "heartbeat"] as const) assert.equal(classify(t, { file_path: inside }, kindOf(source)), "deny", `${t} (${source})`);
+    for (const source of ["handler", "heartbeat"] as const) assert.equal(classify(t, { file_path: inside }, kindOf(source)), "allow", `${t} (${source}): a look keeps its notes as a chat does`);
+    assert.equal(classify(t, { file_path: "/etc/passwd" }, OWNER_LOOK), "deny", `${t} outside (look)`);
   }
+  assert.equal(classify("Write", { file_path: inside, content: "x".repeat(MAX_NOTE_CHARS + 1) }, OWNER_CHAT), "deny", "a note over the size cap");
+  assert.equal(classify("Write", { file_path: inside, content: "x" }, OWNER_CHAT), "allow");
   assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, OWNER_CHAT), "allow");
-  for (const source of ["handler", "heartbeat"] as const) assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, kindOf(source)), "deny", source);
+  for (const source of ["handler", "heartbeat"] as const) assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, kindOf(source)), "allow", source);
 });
 
 test("audit ids: keeps ids, drops content", () => {
@@ -196,13 +199,13 @@ test("data folders: Read is allowed in chat only, Write and Edit never", () => {
   assert.equal(classify("Read", { file_path: log }, OWNER_CHAT), "allow");
   assert.equal(classify("Write", { file_path: log }, OWNER_CHAT), "deny");
   assert.equal(classify("Edit", { file_path: log }, OWNER_CHAT), "deny");
-  for (const source of ["handler", "radar"] as const) assert.equal(classify("Read", { file_path: log }, kindOf(source)), "deny", source);
+  for (const source of ["handler", "radar"] as const) assert.equal(classify("Read", { file_path: log }, kindOf(source)), classify("Read", { file_path: log }, OWNER_CHAT), `${source}: the same as a chat`);
 });
 
 test("search_logs: a read, so a look has it as a chat does", () => {
   assert.equal(classify("mcp__memory__search_logs", { query: "x" }, OWNER_CHAT), "allow");
   assert.equal(classify("mcp__memory__search_logs", { query: "x" }, OWNER_LOOK), "allow");
-  assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, OWNER_LOOK), "deny", "a writer of the notes is for a person waiting");
+  assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, OWNER_LOOK), "allow", "the memory tools are every run's");
 });
 
 test("layout 2: the owner's chat reads only conversations/owner/{notes,messages.jsonl} and the three background logs; a group's or friend's file tools reach only their own notes folder", async () => {

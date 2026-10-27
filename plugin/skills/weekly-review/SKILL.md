@@ -3,7 +3,7 @@ name: weekly-review
 description: The owner's weekly review, a routine scheduled on Fridays at 16:30. A heavy skill, so the heartbeat run delegates it to its expert (subagent expert-weekly-review); in chat it runs as is ("weekly review"). Read-only: wins of the week, what slipped, next week's priorities, and the people to follow up with. A phone-sized chat message.
 delegate: sonnet
 schedule: every fri at 16:30
-tools: [Skill, mcp__notes__journal, mcp__tasks__list_tasks, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Google_Calendar__get_event, mcp__claude_ai_Google_Calendar__search_events, mcp__send__send]
+tools: [Skill, mcp__memory__journal, mcp__tasks__list_tasks, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Google_Calendar__get_event, mcp__claude_ai_Google_Calendar__search_events, mcp__send__send]
 ---
 
 # Weekly review

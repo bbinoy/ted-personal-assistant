@@ -309,7 +309,7 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   // she can undo it in her chat: her memory server has undo_dream, closed over HER scope (no `group` argument to name another)
   const { createMemoryServer } = await import("../src/modules/memory/memory-tools.ts");
   const { dreamScope } = await import("../src/modules/memory/dreamscope.ts");
-  const mem = createMemoryServer({ notesDir: hers.notesDir, tenantLog: hers.logFile, dream: dreamScope(tenant(anna.id)), record() {} }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
+  const mem = createMemoryServer({ source: "chat", notesDir: hers.notesDir, tenantLog: hers.logFile, dream: dreamScope(tenant(anna.id)), record() {} }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
   assert.deepEqual(Object.keys(mem.instance._registeredTools).sort(), ["forget_note", "journal", "search_logs", "undo_dream"]);
   const undone = await mem.instance._registeredTools.undo_dream!.handler({}, {});
   assert.match(undone.content[0]!.text, /Restored \d+ notes/);

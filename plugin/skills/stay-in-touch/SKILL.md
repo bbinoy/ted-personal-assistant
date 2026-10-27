@@ -5,7 +5,7 @@ description: Use to keep track of the people who matter to the owner and to help
 
 # Stay in touch
 
-The people who matter are ordinary memory notes, `people-<name>.md`, one per person. You judge; there is no list or matcher in code. Your memory lists every note one line each (the start of the note, so the place a person lives is in that line). When a trip or a date makes people relevant, read the `people-` notes you need in full (the `read_note` tool in a background look, the file itself in chat) and match places and dates against them yourself.
+The people who matter are ordinary memory notes, `people-<name>.md`, one per person. You judge; there is no list or matcher in code. Your memory lists every note one line each (the start of the note, so the place a person lives is in that line). When a trip or a date makes people relevant, read the `people-` notes you need in full (the file itself, with the Read tool) and match places and dates against them yourself.
 
 ## Writing a person's note
 

@@ -63,12 +63,12 @@ test("a conversation's chat and look have ONE system prompt; the owner's look ha
     assert.equal(text(l.options), text(c.options), `${conv.kind}: the same prompt, whatever starts the run`);
     const servers = Object.keys(l.options.mcpServers ?? {});
     for (const wanted of ["send", "tasks", "weather", "draw", ...(settings.tts.provider === "qwen" ? ["voice"] : [])]) assert.ok(servers.includes(wanted), `${conv.kind} look has ${wanted}`);
-    assert.ok(servers.includes("notes") && servers.includes("memory") && servers.includes("people"), "a look reads its notes with the notes tools and searches the logs like a chat");
+    assert.ok(!servers.includes("notes") && servers.includes("memory") && servers.includes("people"), "a look has the one memory server, like a chat");
     const memory = (o: Call) => Object.keys((o.options.mcpServers.memory as { instance: { _registeredTools: object } }).instance._registeredTools);
-    assert.deepEqual(memory(l), ["search_logs"], "the memory server of a look has the read only");
+    assert.deepEqual(memory(l).filter((t) => t !== "memory_changes_since_brief").sort(), memory(c).sort(), "the memory server of a look is a chat's");
     assert.deepEqual(memory(c).sort(), ["forget_note", "journal", "search_logs", ...(conv.kind === "owner" || conv.kind === "group" ? ["undo_dream"] : [])].sort());
     assert.ok(Object.keys(c.options.mcpServers ?? {}).includes("memory") && !Object.keys(c.options.mcpServers ?? {}).includes("notes"));
-    assert.ok(!l.options.tools.includes("Read") && c.options.tools.includes("Read"), "the notes' file tools need a person waiting");
+    assert.ok(l.options.tools.includes("Read") && c.options.tools.includes("Read"), "the notes' file tools are every run's");
     assert.equal(l.options.tools.includes("WebFetch"), c.options.tools.includes("WebFetch"), "opening a page follows the owner, look or chat");
   }
 });
@@ -131,7 +131,7 @@ test("a tool nobody declared asks the owner in a chat and is skipped in a look (
   const chatSet = toolsFor(capabilitiesOf({ kind: "owner" }), { who: "owner", attended: true });
   const lookSet = toolsFor(capabilitiesOf({ kind: "owner" }), { who: "owner", attended: false });
   assert.equal(classify("mcp__new_server__do_thing", {}, { who: "owner", attended: true }, undefined, chatSet), "ask");
-  assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, { who: "owner", attended: false }, undefined, lookSet), "deny");
+  assert.equal(classify("mcp__memory__forget_note", { file: "x.md" }, { who: "owner", attended: false }, undefined, new Set(["Read"])), "deny");
   const can = makeCanUseTool(approve as never, { who: "owner", attended: false }, undefined, undefined, undefined, lookSet);
   const r = (await can("mcp__new_server__do_thing", {}, { signal: new AbortController().signal } as never)) as { behavior: string; message?: string };
   assert.match(r.message ?? "", /background work never asks/);

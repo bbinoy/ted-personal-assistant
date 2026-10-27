@@ -293,7 +293,7 @@ test("the built-in tools of a run come from the builtin module's rows: the same 
   const { buildOptions } = await import("../src/run/agentrun.ts");
   const tools = (kind: typeof OWNER_CHAT, extra: Record<string, unknown> = {}) => buildOptions(async () => ({ approved: false }), { kind, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, ...extra } as never, undefined).tools;
   assert.deepEqual(tools(OWNER_CHAT, { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"]);
-  assert.deepEqual(tools(OWNER_LOOK), ["Skill", "WebSearch", "WebFetch"], "the owner's look: the same, less the notes' file tools (attended)");
+  assert.deepEqual(tools(OWNER_LOOK, { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"], "the owner's look: the same notes' file tools");
   assert.deepEqual(tools(BROWSE_RUN), ["WebSearch"]);
   assert.deepEqual(tools(GROUP_CHAT, { tools: new Set(["WebSearch", "Read", "Skill", "WebFetch"]) }), ["Skill", "Read", "WebSearch"], "never opening a page, even if a set held the name");
   assert.deepEqual(tools(GROUP_CHAT, { tools: new Set() }), []);

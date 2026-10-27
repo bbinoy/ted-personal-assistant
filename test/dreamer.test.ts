@@ -152,7 +152,7 @@ test("undo: a conversation that is dreamt can undo its dream with its own memory
   const wrote = async () => ({ ops: [{ op: "write", file: "scheduling-games.md", description: "games", text: "Games are on Thursdays.", evidence: "we play on Thursdays" }, { op: "delete", file: "context-old.md", reason: "expired" }] });
   await createDreamer({ conversations: () => [groupConversation(g)], run: () => wrote }).run(NOW);
   assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f !== "MEMORY.md"), ["scheduling-games.md"]);
-  const server = createMemoryServer({ notesDir: groupNotesDir(g), groupId: g, dream: dreamScope({ kind: "group", groupId: g }), record() {} }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
+  const server = createMemoryServer({ source: "chat", notesDir: groupNotesDir(g), groupId: g, dream: dreamScope({ kind: "group", groupId: g }), record() {} }) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
   const r = await server.instance._registeredTools.undo_dream!.handler({}, {});
   assert.match(r.content[0]!.text, /Restored 1 notes/);
   assert.deepEqual(readdirSync(groupNotesDir(g)).filter((f) => f !== "MEMORY.md"), ["context-old.md"]);

@@ -103,7 +103,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 
 **One agent, two facts.** A run is made of two independent facts (`src/core/runkind.ts`), never of a "source": `who` (the owner's conversation, a group's, a friend's `tenant`, or the `browse` worker a run starts; derived from `Conversation.kind`) and `attended` (someone waits in the chat for the answer). Tools, skills, isolation, the code floor and the asking all follow from these two plus the conversation's capability set; nothing asks what started the run or whether it is "the owner". The audit log keeps a label for who acted (`auditSource`: `chat`, `group`, `background`, `browse`), a name for the log only.
 
-**One builder.** `runFor(conversation, trigger, inputs)` (`src/run/runoptions.ts`) builds the `RunOptions` of every run: a chat turn of the owner, a group or a friend (`trigger` `message`), a look of any of them (`look`) and the warm process (`prepare`). Tools come from `toolsFor(capabilitiesOf(conversation), kind)`, skills from `skillsFor`, the persona from the conversation's kind, the limits from the preset (`test/runoptions.test.ts`). `runConversation` and `runLook` (`src/run/agent.ts`) both end in one function, `runTurn`: the conversation's session for the trigger, the options, the context told in front of the message (what is set up, a look's notes, the facts of `factsFor`, each only when that session was not told it already) and the trigger's own message.
+**One builder.** `runFor(conversation, trigger, inputs)` (`src/run/runoptions.ts`) builds the `RunOptions` of every run: a chat turn of the owner, a group or a friend (`trigger` `message`), a look of any of them (`look`) and the warm process (`prepare`). Tools come from `toolsFor(capabilitiesOf(conversation), kind)`, skills from `skillsFor`, the persona from the conversation's kind, the limits from the preset (`test/runoptions.test.ts`). `runConversation` and `runLook` (`src/run/agent.ts`) both end in one function, `runTurn`: the conversation's session for the trigger, the options, the context told in front of the message (what is set up, the facts of `factsFor`, each only when that session was not told it already) and the trigger's own message.
 
 What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`, and nothing else branches on the trigger (delegation is not a row: both may delegate, below):
 
@@ -116,7 +116,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
-- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: the notes' file tools (`Read`, `Write`, `Edit`) and the memory writers (`forget_note`, `undo_dream`, and the chat's `journal`), pending the memory unification; the owner's task import and tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `read_note` / `write_note`, `seen_mail`, `note_upcoming_meetings` and the status note. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
+- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: the owner's task import and tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail`, `note_upcoming_meetings` and the status note. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
 - The session of a conversation's chat and its look session never mix (different models, different caches). Each resumes between runs and is compacted in the background after `COMPACT_QUIET_MINUTES` (5) of quiet (`src/run/chatsession.ts`, one code for both tracks).
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
@@ -269,10 +269,10 @@ Everything the assistant does or decides is told once as a typed event (`src/cor
 
 Working memory is the conversation's resumed session. Episodic memory is `logs/audit.jsonl`, the conversation log and the `looks` table. Procedural memory is the bundled skills in `plugin/skills/` (no personal details). Semantic memory is the notes.
 
-- **Notes** live in `conversations/<convId>/notes/`: one markdown note per fact plus `MEMORY.md`, kept by the SDK's auto-memory. The category is the start of the file name (`triage-`, `people-`, `scheduling-`, `context-`, `brief-`, `style-`, `setup-`, `voice-`, `status-`, `routine-`); a note may carry `expires:` and `origin: inferred`; a `routine-` note carries `when:` (see Routines).
+- **Notes** live in `conversations/<convId>/notes/`: one markdown note per fact plus `MEMORY.md`, kept by the SDK's auto-memory. The category is the start of the file name (`triage-`, `people-`, `scheduling-`, `context-`, `brief-`, `style-`, `setup-`, `voice-`, `status-`, `routine-`); a note may carry `expires:` (its fields may sit nested under `metadata:`, where the SDK's writer puts them); a `routine-` note carries `when:` (see Routines).
 - Containment (`isInside`, `src/core/contain.ts`) is the only write gate. Every note written, edited or forgotten is mentioned in the reply and audited. `status-<name>.md` notes (the brief's state) hold at most 1,200 characters, expire after 1 to 30 days and are never touched by the dream.
-- **Unattended runs** see an index of their notes in the prompt (fenced data) and have two narrow tools (`src/modules/memory/notestools.ts`): `read_note`, and `write_note`, which saves only `origin: inferred` facts in the preset's `notes.background` categories. It is free of the judge and audited (`memory_note`). The file tools stay denied to every unattended run.
-- **Tools and search** (`src/modules/memory/memory-tools.ts`): `forget_note`, `search_logs`, `journal`, `undo_dream`. Search (`src/memory/search*.ts`) uses a rebuildable SQLite FTS5 index per conversation, scored with BM25 in TypeScript (`Ranker.score` is the seam for another ranker).
+- **One memory for every run.** A chat turn and a look, of the owner, a group or a friend, are built the same way (`runFor`): the SDK's auto-memory (`autoMemoryDirectory` is the conversation's notes folder), the SDK's `Read`, `Write` and `Edit` confined to that folder by `classify` (`isInside`), and one memory server. There is no second set of note tools for unattended runs and no mark on what they write; what a run that read mail may do is the floor's and the judge's. `MEMORY.md` is **code's**: `writeIndex` (`src/memory/notes.ts`) regenerates it from the notes' front matter, one line per note (`- people: [anna](people-anna.md) - description (until DATE)`, `status-` records and expired notes left out, capped by `MEMORY_MAX_NOTES`), after a `Write` or `Edit` in the notes folder (the PostToolUse hook in `agentrun.ts`, which replaces whatever the model or the SDK wrote there), after `forget_note`, the dream's apply and undo, a saved feedback note, and at the start of every run (`runFor`, for what expired or was edited meanwhile). The SDK's own auto-memory prompt tells the model to maintain `MEMORY.md`; the persona tells it not to, and code's version wins either way. The hook's `Read` of a note feeds the journal's "per your notes: ..." for every run. Policy refuses a write over `MAX_NOTE_CHARS` and a new note beyond `MEMORY_MAX_NOTES`. The expert a look delegates to is handed the index as fenced data (`readIndex`).
+- **Tools and search** (`src/modules/memory/memory-tools.ts`, one server for every run): `forget_note`, `search_logs`, `journal`, `undo_dream` and, in the owner's look only, `memory_changes_since_brief`. Search (`src/memory/search*.ts`) uses a rebuildable SQLite FTS5 index per conversation, scored with BM25 in TypeScript (`Ranker.score` is the seam for another ranker).
 
 **The dream** (`src/conversation/dream.ts`, `createDreamer`). Once a day, on the first tick at or after `DREAM_HOUR` (4), for every conversation whose set has `dream` and whose person said enough since the last dream (preset `rhythm.dream`), a tool-less model sees the notes and what the person said and answers with JSON. Code decides (`planOps`, `src/memory/dreamplan.ts`):
 
@@ -280,7 +280,7 @@ Working memory is the conversation's resumed session. Episodic memory is `logs/a
 - `setup-`, `voice-` and `status-` notes are refused; at most 8 writes and 12 deletes;
 - notes are snapshotted first (`NOTES_BACKUP_KEEP` 7) and `undo_dream` restores them; a note changed while the model ran is skipped.
 
-**What I learned overnight** (`src/memory/learned.ts`). The dream's changes and inferred notes are recorded and told once: to the owner in the brief (`memory_changes_since_brief`), to a friend as `learnedFact` in her next look. Groups are off.
+**What I learned overnight** (`src/memory/learned.ts`). The dream's changes are recorded and told once: to the owner in the brief (`memory_changes_since_brief`), to a friend as `learnedFact` in her next look. Groups are off.
 
 **Feedback** (`src/conversation/feedback.ts`). In a private chat a 👎 on something sent unprompted, or a short quoted reply a helper model classes as feedback, produces one proposed note. Code checks its shape; a valid note is saved as the person's own and mentioned (`FEEDBACK_OFFERS_PER_DAY`). A 👍 counts toward `feedback_signals`, which the dream sees.
 
@@ -501,9 +501,8 @@ src/modules/meetings/meetingtools.ts  `note_upcoming_meetings`: validates and re
 src/modules/meetings/module.ts  manifest row of `note_upcoming_meetings`
 src/modules/memory/dreamscope.ts  where a conversation is dreamt
 src/modules/memory/journaltool.ts  `journal`: what was done and why
-src/modules/memory/memory-tools.ts  `forget_note`, `search_logs`, `journal`, `undo_dream`
-src/modules/memory/module.ts  memory and notes modules
-src/modules/memory/notestools.ts  `read_note`, `write_note`, `memory_changes_since_brief`
+src/modules/memory/memory-tools.ts  `forget_note`, `search_logs`, `journal`, `undo_dream`, `memory_changes_since_brief`
+src/modules/memory/module.ts  the memory module
 src/modules/notion/module.ts  a friend's own Notion tools
 src/modules/notion/notionmcp.ts  the hosted Notion MCP connection
 src/modules/people/module.ts  `find_person` declaration
@@ -614,11 +613,10 @@ Notes, search, the dream's planner, the journal reader.
 ```
 src/memory/dreamapply.ts  snapshots, applying a plan, undo
 src/memory/dreamplan.ts  which dream proposals may apply (pure)
-src/memory/inferred.ts  notes a background look writes itself
 src/memory/journalread.ts  reads journal lines; `/today`; archive list
 src/memory/learned.ts  quiet note changes and the lists that tell them
 src/memory/memorynotice.ts  the one notice about a turn's note changes
-src/memory/notes.ts  notes: reading, path guard, forget
+src/memory/notes.ts  notes: reading, path guard, forget, the code-made `MEMORY.md`
 src/memory/search.ts  ranked search over log and notes
 src/memory/searchindex.ts  the per-conversation FTS5 index
 src/memory/searchtext.ts  text folding and stemming

@@ -183,7 +183,7 @@ export function expiredNotesRule(L: () => Layout, deleteDays: () => number): Ret
               cpSync(path, join(holding, `${expires}-${f}`)); // (dated by its expiry: two days' status-brief.md do not collide, and the age is in the name)
               moved++;
             }
-            forgetNote(f, p.notes); // the file and its line in MEMORY.md (the dream's own helper), after the copy
+            forgetNote(f, p.notes, now); // the file, and the index made again without it, after the copy
           } else if (expires >= deleteBefore) moved++;
           results.push({ removed: 1, freedBytes: expires >= deleteBefore ? 0 : bytes }); // (a moved note frees nothing yet)
         }

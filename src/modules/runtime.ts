@@ -15,7 +15,6 @@ import { viewDraft } from "./mailbird/proposals.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
 import { auditSource } from "../core/runkind.ts";
-import { createNotesServer } from "./memory/notestools.ts";
 import { createPeopleServer } from "./people/peopletool.ts";
 import { createStatusServer } from "./status/statusnote.ts";
 import { createTasksServer } from "./tasks/tasktools.ts";
@@ -61,13 +60,12 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   weather: { server: () => createWeatherServer() },
   draw: { server: (ctx) => createDrawServer(ctx.key!) },
   voice: { server: (ctx) => createVoiceServer(ctx.key!) },
-  memory: { server: (ctx) => createMemoryServer({ notesDir: (ctx.memory ?? ctx.notesRead)!.dir, groupId: ctx.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.groupId ? dreamScope({ kind: "group", groupId: ctx.groupId }) : undefined, record: ctx.memory?.notify ? recordMemoryChange : () => {}, offers: ctx.offers }) },
-  notes: { server: (ctx) => createNotesServer(ctx.notesRead!, auditSource(ctx.kind)) },
+  memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, source: auditSource(ctx.kind), groupId: ctx.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.groupId ? dreamScope({ kind: "group", groupId: ctx.groupId }) : undefined, record: ctx.memory?.notify ? recordMemoryChange : () => {}, offers: ctx.offers }) },
   // find_person: this conversation's people notes and, for a friend whose set has Google, her own Contacts through her own session; a group or the owner has notes only (the owner's Google connectors have no contacts tool).
   people: {
     server: (ctx) =>
       createPeopleServer({
-        notesDir: (ctx.memory ?? ctx.notesRead)!.dir,
+        notesDir: ctx.memory!.dir,
         source: auditSource(ctx.kind),
         zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined,
         contacts: ctx.tenant && ctx.offers(GOOGLE_MAIL_TOOL) ? (query) => searchContacts(ctx.tenant!.id, query) : undefined,

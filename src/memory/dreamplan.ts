@@ -25,11 +25,10 @@ export interface Scope {
   notesDir: string;
   backupsDir: string; // snapshots go here, never inside notesDir
   categories: readonly Category[];
-  index: boolean; // keep MEMORY.md (the index the owner's chat loads) up to date
   maxNotes: number;
 }
 
-export const OWNER_SCOPE: Scope = { notesDir: NOTES_DIR, backupsDir: convPaths(OWNER_CONV).notesBackup, categories: DREAM_CATEGORIES, index: true, maxNotes: settings.memoryMaxNotes };
+export const OWNER_SCOPE: Scope = { notesDir: NOTES_DIR, backupsDir: convPaths(OWNER_CONV).notesBackup, categories: DREAM_CATEGORIES, maxNotes: settings.memoryMaxNotes };
 
 interface Op {
   op: "write" | "delete";
@@ -61,9 +60,9 @@ const FILE = /^[a-z0-9][a-z0-9-]{0,70}\.md$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Pure: the note file the dream writes (same shape the chat's notes have).
-export function noteContent(file: string, description: string, text: string, expires: string | undefined, now: Date, origin: "dream" | "inferred" | "owner" = "dream"): string { // owner: saved from the owner's own confirmed offer (conversation/feedback.ts)
+export function noteContent(file: string, description: string, text: string, expires: string | undefined, now: Date): string {
   const name = file.replace(/\.md$/, "");
-  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n${expires ? `expires: ${expires}\n` : ""}metadata:\n  node_type: memory\n  type: user\n  origin: ${origin}\n  modified: ${now.toISOString()}\n---\n\n${text}\n`;
+  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n${expires ? `expires: ${expires}\n` : ""}metadata:\n  node_type: memory\n  type: user\n  modified: ${now.toISOString()}\n---\n\n${text}\n`;
 }
 
 // Pure: which of the model's proposals may be applied. Never trusts shape or content.
@@ -121,8 +120,7 @@ export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly 
     if (kind === "add" && count >= (ctx.maxNotes ?? scope.maxNotes)) { reject(file, "memory is full"); continue; }
     writes++;
     if (kind === "add") count++;
-    const inferred = kind === "merge" && sources.some((s) => existing.get(s)?.inferred); // merging unconfirmed notes confirms nothing; only the owner's own words do
-    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now, inferred ? "inferred" : "dream"), merged: sources });
+    plan.actions.push({ kind, file, description, content: noteContent(file, description, text, o.expires, ctx.now), merged: sources });
     for (const s of sources) {
       if (s !== file && !gone.has(s)) {
         gone.add(s);

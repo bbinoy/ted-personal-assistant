@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GROUP_LOOK, OWNER_LOOK } from "./runkinds.ts";
@@ -22,7 +22,7 @@ const { buildOptions } = await import("../src/run/agentrun.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
 const { lookerOf, hasSomethingToLookAt } = await import("../src/run/scope.ts");
-const { runFor, notesIndex } = await import("../src/run/runoptions.ts");
+const { runFor } = await import("../src/run/runoptions.ts");
 const { lookInstruction } = await import("../src/heartbeat/look.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const { GOOGLE_MAIL_TOOL } = await import("../src/modules/google/module.ts");
@@ -63,7 +63,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   const conv = tenant(id);
   const o = lookOptions(conv, payerOf(id), { provenance: { kind: "standing", task: "THE LOOK" } }, NOW);
   assert.deepEqual(o.kind, { who: "tenant", attended: false }, "an isolated, unattended run: none of the owner's data, asks nobody");
-  assert.deepEqual([o.sessionConv, o.sessionTrack, o.memory, o.seenAt], [conv.convId, "look", undefined, undefined], "her look session, no auto-memory: a run that reads mail cannot write notes");
+  assert.deepEqual([o.sessionConv, o.sessionTrack, o.memory, o.seenAt], [conv.convId, "look", { dir: conv.notesDir, zone: "Europe/London" }, undefined], "her look session, and the same auto-memory as her chat");
   assert.equal(o.model, settings.heartbeatModel);
   assert.ok(o.outputFormat);
   assert.deepEqual(o.provenance?.(), { kind: "standing", task: "THE LOOK" });
@@ -73,7 +73,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   const tools = [...(o.tools ?? [])];
   assert.ok(tools.includes(GOOGLE_MAIL_TOOL), "her own mail");
   assert.ok(tools.every((t) => !/^mcp__(claude_ai|mailbird)/.test(t)), "none of the owner's connectors");
-  assert.ok(!tools.some((t) => ["Read", "Write", "Edit"].includes(t)), "no file tools: her notes are in the prompt");
+  assert.ok(["Read", "Write", "Edit"].every((t) => tools.includes(t)), "her notes: the same file tools as her chat");
   assert.ok(tools.includes("mcp__send__send"), "the chat's own send is hers too");
 
   const b = buildOptions(async () => ({ approved: false }), o, undefined);
@@ -91,9 +91,11 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   const prompt = system(o);
   assert.match(prompt, /chatting privately on Signal with Ana/);
   assert.equal(prompt, system(runFor(conv, "message", { apiKey: KEY, now: NOW })), "the one prompt of her conversation, whatever starts the run");
-  const notes = notesIndex(conv, "look", NOW) ?? "";
-  assert.match(notes, /Her sister is called Eve/, "her notes, as data, in what the look is told");
+  const notes = readFileSync(join(conv.notesDir, "MEMORY.md"), "utf8");
+  assert.match(notes, /Her sister is called Eve/, "her notes' index, made by code, is what the SDK loads for her look");
   assert.doesNotMatch(prompt + notes, /private fact/, "nothing of the owner's notes");
+  assert.deepEqual(b.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir }, "the SDK's auto-memory, as in her chat");
+  assert.ok(["Read", "Write", "Edit"].every((t) => (b.tools as string[]).includes(t)) && servers.includes("memory") && !servers.includes("notes"), "the same notes tools as a chat turn");
   assert.doesNotMatch(prompt, new RegExp(`${settings.owner}'s personal assistant`));
   assert.match(system({ systemPrompt: (o.experts!.setup.agents.expert as { prompt: string }).prompt }), /working for Ana/, "the expert is told whom it works for, with the same notes");
   assert.match((o.experts!.setup.agents.expert as { prompt: string }).prompt, /Her sister is called Eve/);
@@ -116,7 +118,7 @@ test("a friend's run passes the same permission path: it asks nobody, outside he
     assert.equal(asked.length, 0, "her look asks nobody, not even her"); 
     assert.equal((await can("mcp__google__modify_gmail_message_labels", { message_id: "m", add_label_ids: ["TRASH"] }, { signal } as never)).behavior, "deny", "trash is never allowed");
     assert.equal((await can("mcp__mailbird__send_message_now", {}, { signal } as never)).behavior, "deny", "not a tool of hers");
-    assert.equal((await can("Write", { file_path: join(T.tenantContext(T.tenantById(id)!).notesDir, "people-x.md"), content: "x" }, { signal } as never)).behavior, "deny", "no note writes in a run that reads mail");
+    assert.equal((await can("Write", { file_path: join(T.tenantContext(T.tenantById(id)!).notesDir, "people-x.md"), content: "x" }, { signal } as never)).behavior, "allow", "her notes are hers to write, as in her chat: the judge and the floor judge what a run that reads mail DOES, not a second tool");
     assert.equal(asked.length, 0);
   } finally {
     on.autoApprove = was;
@@ -143,7 +145,7 @@ test("a friend on an instance without Google has no mail in her instruction; a g
   assert.deepEqual(go.kind, { who: "group", attended: false });
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
   assert.deepEqual([...go.tools!].sort(), [...groupTools(GROUP_LOOK)].sort(), "the group's capability set, less what needs a person waiting");
-  assert.deepEqual([go.sessionConv, go.sessionTrack, go.memory, go.tenant], [g.convId, "look", undefined, undefined]);
+  assert.deepEqual([go.sessionConv, go.sessionTrack, go.memory?.dir, go.tenant], [g.convId, "look", g.notesDir, undefined]);
   assert.ok(go.maxBudgetUsd <= 0.5);
   assert.match(system(go), /group chat on Signal/);
   assert.equal(system(go), system(runFor(g, "message", {})), "the group's one prompt");

@@ -4,9 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataPath, readJson, writeFileAtomic, writeJson, writeText } from "../src/core/state.ts";
-import { applyPlan, baseOf, upsertIndex } from "../src/memory/dreamapply.ts";
-import { forgetNote } from "../src/memory/notes.ts";
-import { writeInferredNote } from "../src/memory/inferred.ts";
+import { applyPlan, baseOf } from "../src/memory/dreamapply.ts";
+import { forgetNote, writeIndex } from "../src/memory/notes.ts";
 import { dreamOver, readNoteFiles } from "../src/conversation/dream.ts";
 import { classifySendError, createOutbound } from "../src/conversation/outbound.ts";
 import { actedSince, replayPrompt, replayUnanswered, SORRY, unansweredSince } from "../src/conversation/replay.ts";
@@ -50,16 +49,15 @@ test("state: a corrupt JSON file is moved aside (not lost) and the fallback retu
 
 // ---- notes ----
 
-const scopeIn = () => ({ notesDir: mkdtempSync(join(tmpdir(), "dn-")), backupsDir: mkdtempSync(join(tmpdir(), "db-")), categories: ["people"], index: true, maxNotes: 100 });
+const scopeIn = () => ({ notesDir: mkdtempSync(join(tmpdir(), "dn-")), backupsDir: mkdtempSync(join(tmpdir(), "db-")), categories: ["people"], maxNotes: 100 });
 const add = (file: string, content: string) => ({ kind: "add" as const, file, description: "d", content, merged: [] as string[] });
 
-test("notes: every note and index write is atomic, owner-only (inferred, index, forget)", () => {
+test("notes: every note and index write is atomic, owner-only (index, forget)", () => {
   const dir = mkdtempSync(join(tmpdir(), "dn-"));
-  const r = writeInferredNote({ file: "people-eve.md", text: "Eve moved to Oslo", description: "Eve in Oslo" }, { dir, categories: ["people"], maxNotes: 10 });
-  assert.ok(r.ok);
-  assert.equal(statSync(join(dir, "people-eve.md")).mode & 0o777, 0o600);
+  writeFileSync(join(dir, "people-eve.md"), "---\nname: eve\ndescription: Eve in Oslo\n---\nEve moved to Oslo\n");
+  writeFileSync(join(dir, "people-bob.md"), "Bob\n");
+  writeIndex(dir);
   assert.equal(statSync(join(dir, "MEMORY.md")).mode & 0o777, 0o600);
-  upsertIndex("people-bob.md", "Bob", { notesDir: dir } as never);
   assert.ok(forgetNote("people-eve.md", dir).ok);
   assert.equal(statSync(join(dir, "MEMORY.md")).mode & 0o777, 0o600);
   assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith(".tmp")), []);
@@ -112,7 +110,7 @@ test("dream: a merge whose source changed is not written and its sources are not
     rejected: [],
   };
   applyPlan(plan, new Date("2026-10-14T04:00:00"), scope, base);
-  assert.deepEqual(readdirSync(scope.notesDir).filter((f) => f.endsWith(".md")).sort(), ["people-a.md", "people-b.md"]);
+  assert.deepEqual(readdirSync(scope.notesDir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").sort(), ["people-a.md", "people-b.md"]);
 });
 
 test("dream: the index is merged, not overwritten: a line added meanwhile stays", async () => {

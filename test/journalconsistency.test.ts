@@ -194,23 +194,23 @@ test("an archive names the sender of a Mailbird list row (`lastSender`), so the 
   assert.match(journal(key).slice(before)[0]!.text, /^Archived “Your order shipped” from Shop Example\. /);
 });
 
-test("a look that read notes before acting says so: 'per your notes' in reading order, at most three names, inferred ones marked; one that read none keeps the generic line", async () => {
+test("a look that read notes before acting says so: 'per your notes' in reading order, at most three names, one that read none keeps the generic line", async () => {
   reset();
   const key = fresh("owner");
   const tool = `${MB}archive_conversation`;
-  const seen: { file: string; inferred: boolean }[] = [];
+  const seen: string[] = [];
   const generic = makeCanUseTool(async () => ({ approved: false }), OWNER_LOOK, undefined, judge({ decision: "auto", reason: "routine" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "look" }), conversation: key, notesSeen: () => seen });
   const before = journal(key).length;
   await generic(tool, { conversationId: "n-1" }, opts);
   await noteDone({ conv: key, source: "background", tool, input: { conversationId: "n-1" } });
-  seen.push({ file: "triage-linkedin", inferred: false }, { file: "people-eve", inferred: true }, { file: "triage-newsletters", inferred: false }, { file: "context-trip", inferred: false });
+  seen.push("triage-linkedin", "people-eve", "triage-newsletters", "context-trip");
   await generic(tool, { conversationId: "n-2" }, opts);
   await noteDone({ conv: key, source: "background", tool, input: { conversationId: "n-2" } });
   const lines = journal(key).slice(before);
   assert.equal(lines.length, 2);
   assert.match(lines[0]!.text, /Why: a periodic look at your accounts, on its standing instructions; auto-approved/);
   assert.doesNotMatch(lines[0]!.text, /per your notes/);
-  assert.match(lines[1]!.text, /; per your notes: triage-linkedin, people-eve \(inferred\), triage-newsletters and 1 more\./);
+  assert.match(lines[1]!.text, /; per your notes: triage-linkedin, people-eve, triage-newsletters and 1 more\./);
 });
 
 test("delegations and the SDK's own tools are no actions; plumbing is never armed; a run's why is not used by another run and is dropped when the run ends", async () => {

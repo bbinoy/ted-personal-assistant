@@ -1,7 +1,7 @@
 import { readNotes, type Note } from "../../memory/notes.ts";
 
 // find_person's logic, pure but for the notes folder and the one injected Google lookup: who might "Sam" be, with an address, from the sources THIS conversation may use.
-//   notes     the conversation's own people-* notes (a confirmed note before an inferred one, which is marked)
+//   notes     the conversation's own people-* notes 
 //   contacts  a friend's own Google Contacts, through her own server (tenants only; a group or the owner has none: the owner's Google connectors have no contacts tool)
 // Candidates are ranked, deduped by address and each carries its sources. An address found here is a SUGGESTION: it does not make a send safer or freer (approvals still show the
 // recipients as code reads them from the call, and the recipient floor still asks for an address the owner did not type: docs/SAFETY.md "Finding people").
@@ -12,7 +12,7 @@ export interface Candidate {
   name: string;
   emails: string[];
   phones: string[];
-  from: { source: SourceName; detail: string; confirmed: boolean }[]; // detail: the note's file, or "Google Contacts"
+  from: { source: SourceName; detail: string }[]; // detail: the note's file, or "Google Contacts"
 }
 
 export interface SourceReport {
@@ -50,7 +50,7 @@ export function fromNote(n: Note): Candidate | undefined {
   const spelled = slug.replace(/\b\p{L}/gu, (c) => c.toUpperCase()); // people-anna-silva.md -> Anna Silva
   const name = lead && tokens(lead).length <= 5 && !/@/.test(lead) && (!head || tokens(lead).some((w) => w.startsWith(head))) ? lead : spelled; // (the opening words only when they carry the file's name: "Lives in Porto" is not one)
   const { emails, phones } = contactsIn(n.text);
-  return { name: name || spelled, emails, phones, from: [{ source: "notes", detail: n.file, confirmed: !n.inferred }] };
+  return { name: name || spelled, emails, phones, from: [{ source: "notes", detail: n.file }] };
 }
 
 // Pure: a friend's Google Contacts answer (workspace-mcp's search_contacts text: blocks of "Contact ID:", "Name:", "Email:" or "Emails:" with "  - " lines, "Phone(s):") as candidates.
@@ -76,7 +76,7 @@ export function fromContactsText(text: string): Candidate[] {
       else if (line.startsWith("- ") && list === "phone") phones.push(line.slice(2).replace(/\s*\([^)]*\)\s*$/, "").trim());
       else list = undefined;
     }
-    if (name || emails.length) out.push({ name: name || emails[0]!, emails: [...new Set(emails)], phones: phones.filter(Boolean), from: [{ source: "contacts", detail: "Google Contacts", confirmed: true }] });
+    if (name || emails.length) out.push({ name: name || emails[0]!, emails: [...new Set(emails)], phones: phones.filter(Boolean), from: [{ source: "contacts", detail: "Google Contacts" }] });
   }
   return out;
 }
@@ -92,12 +92,10 @@ export function matchScore(c: Candidate, query: string): number {
   return q.every((w) => hay.includes(w)) ? 1 : 0;
 }
 
-const confirmedOf = (c: Candidate): boolean => c.from.some((f) => f.confirmed);
-
 // Pure: two candidates are the same person when they share an address, or (one has no address) the same normalised name.
 const same = (a: Candidate, b: Candidate): boolean => a.emails.some((e) => b.emails.includes(e)) || ((!a.emails.length || !b.emails.length) && norm(a.name) === norm(b.name));
 
-// Pure: ranked and deduped by address. Order: better match, then a confirmed source before an inferred-only one, then notes before contacts, then name. A person found in two sources is one candidate with both.
+// Pure: ranked and deduped by address. Order: better match, then notes before contacts, then name. A person found in two sources is one candidate with both.
 export function rank(found: readonly Candidate[], query: string, limit = 8): Candidate[] {
   const merged: Candidate[] = [];
   for (const c of found) {
@@ -111,16 +109,16 @@ export function rank(found: readonly Candidate[], query: string, limit = 8): Can
     hit.from.push(...c.from);
     if (c.name.length > hit.name.length) hit.name = c.name; // (the fuller name wins)
   }
-  const src = (c: Candidate) => (c.from.some((f) => f.source === "notes" && f.confirmed) ? 0 : c.from.some((f) => f.source === "contacts") ? 1 : 2);
+  const src = (c: Candidate) => (c.from.some((f) => f.source === "notes") ? 0 : 1);
   return merged
     .map((c) => ({ c, s: matchScore(c, query) }))
     .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s || src(a.c) - src(b.c) || Number(confirmedOf(b.c)) - Number(confirmedOf(a.c)) || a.c.name.localeCompare(b.c.name))
+    .sort((a, b) => b.s - a.s || src(a.c) - src(b.c) || a.c.name.localeCompare(b.c.name))
     .slice(0, limit)
     .map((x) => x.c);
 }
 
-const label = (f: Candidate["from"][number]): string => (f.source === "notes" ? `${f.detail}${f.confirmed ? "" : " (inferred, not confirmed)"}` : f.detail);
+const label = (f: Candidate["from"][number]): string => f.detail;
 
 // Pure: the answer as text (the tool fences it): which sources were used, which were not and why, then the candidates, or the reason there are none.
 export function render(query: string, found: readonly Candidate[], reports: readonly SourceReport[]): string {

@@ -207,7 +207,8 @@ test("expired notes: moved to notes-backup/expired and out of MEMORY.md; live, u
   const r = rule.run(NOW, { dryRun: false });
   assert.equal(r.removed, dry.removed);
   assert.deepEqual(readdirSync(n).sort(), ["MEMORY.md", "people-live.md", "people-today.md", "people-undated.md"]);
-  assert.equal(readFileSync(join(n, "MEMORY.md"), "utf8"), "- [Live](people-live.md) - y\n");
+  const index = readFileSync(join(n, "MEMORY.md"), "utf8");
+  assert.ok(index.includes("(people-live.md)") && !/people-gone|trip-ancient/.test(index), "the index is made again from what is left");
   assert.deepEqual(readdirSync(holding).sort(), [`${dayOf(ago(10))}-people-recent.md`, `${dayOf(ago(1))}-status-brief.md`, `${dayOf(ago(2))}-odd-category.md`, `${dayOf(ago(3))}-people-gone.md`].sort());
   assert.equal(readdirSync(join(L.conv("friend-bo").notesBackup, "expired")).length, 1);
   assert.ok(existsSync(join(L.conversations, "not-a-conversation", "notes", "people-y.md")), "only conversation folders are visited");
@@ -334,7 +335,7 @@ test("dream undo ignores the expired/ holding folder (it sorts after every snaps
   put(join(notes, "people-a.md"), "changed");
   put(join(backups, "2026-06-01T00-00-00-000Z", "people-a.md"), "original");
   put(join(backups, "expired", "2026-01-01-people-b.md"), "set aside");
-  const r = undoLatest({ notesDir: notes, backupsDir: backups, categories: ["people"], index: false, maxNotes: 100 });
+  const r = undoLatest({ notesDir: notes, backupsDir: backups, categories: ["people"], maxNotes: 100 });
   assert.equal(r.ok, true);
   assert.equal(readFileSync(join(notes, "people-a.md"), "utf8"), "original");
   assert.ok(existsSync(join(backups, "expired", "2026-01-01-people-b.md")));
