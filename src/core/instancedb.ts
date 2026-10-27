@@ -6,7 +6,7 @@ import { Db, LedgerCorruptError, openDb, type Migration } from "./db.ts";
 //
 //   spend      one row per charged run (budget.ts): who paid (the instance's login or the instance key), for which conversation, what kind of run, how many dollars, on which local day.
 //              "Owner today", "the key today", "a group today", "a friend today" are indexed sums of it. A LEDGER: never reset, pruned only by age (retention).
-//   notices    the once-a-day notices (day) and the interval-throttled ones (last_at), by key (capnotice.ts)
+//   notices    when each notice was last told, by key: the one "at most once per interval" throttle (capnotice.ts)
 //   looks      one row per heartbeat look of any conversation, counts and flags only (core/looks.ts)
 //   payments   the card payment ledger: one row per status change, never deleted (modules/browse/payments.ts). A LEDGER.
 //   intake     what the intake page stored for a friend (names and counts, never a value) and when a connection stopped working, by tenant and purpose (intake/intakelinks.ts)
@@ -114,6 +114,14 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
     version: 3,
     name: "the layout-2 import is retired: its bookkeeping table goes",
     up: "DROP TABLE legacy_imports;",
+  },
+  {
+    version: 4,
+    name: "one throttle for every notice: a mark is the time it was last told (the once-a-day column is folded into it)",
+    up: `
+      UPDATE notices SET last_at = CAST(strftime('%s', day || ' 12:00:00') AS INTEGER) * 1000 WHERE last_at IS NULL AND day IS NOT NULL;
+      ALTER TABLE notices DROP COLUMN day;
+    `,
   },
 ];
 

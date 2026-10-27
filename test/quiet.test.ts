@@ -1,15 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
 import { owner } from "../src/conversation/conversationmodel.ts";
-import { commandReply, parseCommand, parseQuiet, statusText, untilTime } from "../src/conversation/ownercommands.ts";
-import { clearQuiet, isQuiet, quietOn, quietText, quietValue, setQuiet } from "../src/conversation/quiet.ts";
+import { commandReply, parseCommand, statusText } from "../src/conversation/ownercommands.ts";
+import { parseUntil, untilOn, untilWords } from "../src/core/until.ts";
+import { clearQuiet, isQuiet, quietText, quietValue, setQuiet } from "../src/conversation/quiet.ts";
 import { settings } from "../src/core/settings.ts";
-import { dataPath } from "../src/core/state.ts";
-import { isPaused } from "../src/core/pause.ts";
+import { clearPause, isPaused } from "../src/core/pause.ts";
 import { systemZone } from "../src/core/timezone.ts";
 import { heldWaiting, resetHeld, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
-import { friendConvId, groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { friendConvId, groupConvId, OWNER_CONV } from "../src/core/convpaths.ts";
 import { addTenant, ensureOwner } from "../src/tenants/tenants.ts";
 
 // A friend is a registered person: what her chat may do comes from her capabilities (policy/capabilities.ts), not from a label on the conversation.
@@ -29,7 +28,7 @@ const groupConv = { kind: "group", key: "g", convId: groupConvId("g") } as const
 const clean = () => {
   clearQuiet(ownerConv);
   resetHeld(owner());
-  rmSync(dataPath(instancePaths().paused), { force: true });
+  clearPause();
 };
 const Z = systemZone(); // the machine's zone: NOW is local time
 
@@ -48,21 +47,34 @@ test("parseQuiet: a span, a clock time (today's or tomorrow's), bare /quiet, /un
   assert.deepEqual(parseCommand("/unquiet", NOW), { kind: "unquiet" });
   for (const bad of ["/quiet soon", "/quiet 0h", "/quiet 2x", "/quiet until 25:00", "/quiet until 2026-12-24"]) assert.deepEqual(parseCommand(bad, NOW), { kind: "quiet-usage" }, bad);
   for (const t of ["quiet", "please /quiet", "/quiet! now", "/quietly", "/unquiet 2h", "be quiet"]) assert.equal(parseCommand(t, NOW), undefined, t);
-  assert.equal(parseQuiet("/status", NOW, Z), undefined);
-  assert.notEqual(untilTime("2h", NOW, Z), "usage");
 });
 
 test("the zone counts: 'until 18:00' is 18:00 in the zone given", () => {
-  const berlin = parseQuiet("/quiet until 18:00", new Date(Date.UTC(2026, 9, 14, 12, 0)), "Europe/Berlin"); // 14:00 CEST
+  const berlin = parseCommand("/quiet until 18:00", new Date(Date.UTC(2026, 9, 14, 12, 0)), "Europe/Berlin"); // 14:00 CEST
   assert.equal(berlin?.kind === "quiet" && berlin.until, new Date(Date.UTC(2026, 9, 14, 16, 0)).toISOString());
 });
 
-test("quietOn: no file is not quiet, '' is until /unquiet, a time is until then, a time nobody can read is not quiet", () => {
-  assert.equal(quietOn(undefined, NOW), false);
-  assert.equal(quietOn("", NOW), true);
-  assert.equal(quietOn(new Date(NOW.getTime() + 60_000).toISOString(), NOW), true);
-  assert.equal(quietOn(new Date(NOW.getTime() - 60_000).toISOString(), NOW), false);
-  assert.equal(quietOn("garbage", NOW), false);
+test("/pause and /quiet parse and format through the one until function (core/until.ts)", () => {
+  for (const arg of [undefined, "2h", "30m", "1d", "until 18:00", "until 9", "soon", "0h", "until 25:00", "2026-12-24"]) {
+    const r = parseUntil(arg, NOW, Z);
+    for (const kind of ["pause", "quiet"] as const) {
+      const c = parseCommand(arg === undefined ? `/${kind}` : `/${kind} ${arg}`, NOW, Z);
+      if (r === "usage") assert.deepEqual(c, { kind: `${kind}-usage` }, `${kind} ${arg}`);
+      else assert.ok(c?.kind === kind && c.until === r.until && c.text.includes(r.when), `${kind} ${arg}`);
+    }
+  }
+  assert.equal(untilWords("", Z), "until you switch it off");
+  assert.equal(untilWords(new Date(2026, 9, 14, 16, 30).toISOString(), Z), "until 16:30");
+});
+
+test("untilOn: no value is off, '' is until switched off, a time is until then; a value nobody can read follows the switch (pause: on, quiet: off)", () => {
+  assert.equal(untilOn(undefined, NOW, true), false);
+  assert.equal(untilOn("", NOW, false), true);
+  assert.equal(untilOn(new Date(NOW.getTime() + 60_000).toISOString(), NOW, false), true);
+  assert.equal(untilOn(new Date(NOW.getTime() - 60_000).toISOString(), NOW, true), false);
+  assert.equal(untilOn("garbage", NOW, false), false);
+  assert.equal(untilOn("garbage", NOW, true), true);
+  assert.equal(untilOn(42, NOW, true), true);
 });
 
 test("/quiet and /unquiet: the owner's chat, a friend's own chat and a group (each its own); /quiet leaves /pause alone", () => {
@@ -91,7 +103,7 @@ test("the switch is a file per conversation: set, read, expire, clear; /status s
   assert.doesNotMatch(statusText({ spentUsd: 0, limitUsd: 20, approvals: 0, down: [] }), /Quiet/);
   commandReply(ownerConv, "/quiet", { now: () => NOW });
   assert.equal(quietValue(ownerConv), "");
-  assert.equal(quietText(ownerConv, NOW), "quiet until you say /unquiet");
+  assert.equal(quietText(ownerConv, NOW), "quiet until you switch it off");
   assert.match(commandReply(ownerConv, "/unquiet", { now: () => NOW })!, /^Back to normal/);
   assert.equal(quietValue(ownerConv), undefined);
   clean();

@@ -16,7 +16,7 @@ const { oneShot } = await import("../src/tenants/haiku.ts");
 const { AuthError, InstanceKeyError, RateLimitError, noticeFor } = await import("../src/tenants/errors.ts");
 const { coolingDown, noteRateLimit, resetCooldown } = await import("../src/core/cooldown.ts");
 const { recordCost, spentToday } = await import("../src/core/budget.ts");
-const { keyNotices } = await import("../src/tenants/keynotice.ts");
+const { ownerFacts, resetOwnerFacts } = await import("./ownerfacts.ts");
 const { compactConversation } = await import("../src/run/chatsession.ts");
 const { readSession, writeSession } = await import("../src/run/sessionstore.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
@@ -41,7 +41,7 @@ const her = (rec: { id: string }) => ({ kind: "tenant", tenantId: rec.id }) as c
 beforeEach(() => {
   on.tenants = true;
   resetCooldown();
-  keyNotices.reset();
+  resetOwnerFacts();
 });
 
 test("mayRun: the owner and a group run on the login, held back (unattended) by the pause switch, the shared cooldown and the instance's day budget", () => {
@@ -63,8 +63,7 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
   const p = mayRun(her(anna), "t", { key: () => KEY });
   assert.deepEqual(p, { kind: "instance", id: anna.id, apiKey: KEY, ledger: T.tenantContext(anna).ledger });
   // no key: no run, and the owner hears of it once (never the login as a fallback)
-  const alerts: string[] = [];
-  keyNotices.sendTo((t) => void alerts.push(t));
+  const alerts = ownerFacts();
   assert.deepEqual(mayRun(her(anna), "t", { key: () => undefined }), { refused: "no-key" });
   assert.deepEqual(mayRun(her(bea), "t", { key: () => undefined }), { refused: "no-key" });
   assert.equal(alerts.length, 1);
@@ -155,8 +154,7 @@ test("oneShot on the instance key: her ledger, the key in the environment and no
   assert.equal(seen.options!.env.CLAUDE_CODE_OAUTH_TOKEN, undefined, "never the owner's login");
   assert.equal(spentToday(T.tenantContext(anna).ledger), 0.4);
   assert.equal(spentToday(), before, "not the instance's own ledger");
-  const alerts: string[] = [];
-  keyNotices.sendTo((t) => void alerts.push(t));
+  const alerts = ownerFacts();
   const refused = (() =>
     (async function* () {
       yield { type: "assistant", error: "billing_error" };

@@ -4,11 +4,9 @@ import { tenant } from "./conversationmodel.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
 import type { Picture } from "../run/image.ts";
 import type { Document } from "./document.ts";
-import { FRIEND_CAP_TEXT, takeCapNotice } from "../core/capnotice.ts";
-import { InstanceKeyError } from "../tenants/errors.ts";
+import { InstanceKeyError, refusalOnce, type Reason } from "../tenants/errors.ts";
 import { cooldownOf, isRefusal, mayRun } from "../tenants/payer.ts";
-import { mayNotice, markDisclosed, setPaused, tenantById, tenantContext, type TenantContext } from "../tenants/tenants.ts";
-import { notSetUpReply } from "../tenants/tenantroute.ts";
+import { markDisclosed, setPaused, tenantById, tenantContext, type TenantContext } from "../tenants/tenants.ts";
 
 // A tenant's turn, around the run itself (agent.ts runConversation): the gates that need no model, in code (payer.ts mayRun, the same for every unattended job too):
 //   suspended or deleted since the message arrived -> nothing
@@ -35,7 +33,8 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
   const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt, pictures, documents }), hooks?.firstOutput));
   const prepare = deps.prepare ?? ((ctx: TenantContext, apiKey: string) => prepareWarm(tenant(ctx.id), { apiKey }));
 
-  const notice = (ctx: TenantContext, kind: string, text: string) => ({ text: mayNotice(ctx, kind, now()) ? text : SILENT });
+  // (the one refusal table and the one throttle, tenants/errors.ts: a ceiling is said once a day, a cooldown or a missing key every TENANT_NOTICE_MINUTES)
+  const refuse = (ctx: TenantContext, reason: Reason, o: { until?: string; limit?: number } = {}) => ({ text: refusalOnce(reason, "friend", ctx.convId, o, now()) ?? SILENT });
 
   async function run(conv: Conversation, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]): Promise<{ text: string; costUsd?: number }> {
     const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
@@ -43,10 +42,10 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     const ctx = tenantContext(rec);
     const payer = may(conv, "chat");
     if (isRefusal(payer)) {
-      if (payer.refused === "cooldown") return notice(ctx, "cooldown", `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${timeIn(new Date(payer.until!))}.`);
-      if (payer.refused === "budget") return notice(ctx, "budget", `You've reached your daily limit of ${ctx.dailyBudgetUsd}, so I'm resting until tomorrow.`);
-      if (payer.refused === "instance-budget") return { text: takeCapNotice(`friend:${ctx.id}`, now()) ? FRIEND_CAP_TEXT : SILENT }; // all friends' shared day is spent: told once a day (capnotice.ts), the owner too (mayRun)
-      if (payer.refused === "no-key") return notice(ctx, "setup", notSetUpReply()); // (the admin heard of it in mayRun)
+      if (payer.refused === "cooldown") return refuse(ctx, "cooldown", { until: timeIn(new Date(payer.until!)) });
+      if (payer.refused === "budget") return refuse(ctx, "own-budget", { limit: ctx.dailyBudgetUsd });
+      if (payer.refused === "instance-budget") return refuse(ctx, "shared-budget"); // all friends' shared day is spent: the owner heard of it in mayRun
+      if (payer.refused === "no-key") return refuse(ctx, "no-key"); // (the admin heard of it in mayRun)
       return { text: SILENT }; // suspended or removed
     }
     if (payer.kind !== "instance") return { text: SILENT };

@@ -77,7 +77,7 @@ const out = createOutbound(messenger, (kind, ts, text, target) => record(target,
 // This is the one place the modules' hooks are set (wiring.ts; it stops the start if one is missing): those modules are used by runs that have no pipeline in reach.
 wire({
   approvers: createApprovers(out),
-  notifyOwner: (text) => void out.replyPlain(text, "notice"), // the shared-key notice, the daily cap line, the budget notice
+  notifyOwner: (text) => void out.replyPlain(text, "notice"), // the daily budget notice
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });

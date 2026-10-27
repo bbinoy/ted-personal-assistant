@@ -95,11 +95,6 @@ export const OWNER_BUDGET_NOTICE = "budget:owner"; // (the notices row that says
 // can tell the owner should use that one, or a group message could use up the notice).
 export const budgetSpent = (): boolean => spentToday() >= settings.dailyBudgetUsd;
 
-// A group: one short line per group per day, when someone addressed it and the budget turned the answer away (group.ts). Returns whether to say it now.
-export const GROUP_BUDGET_TEXT = `I've used up my budget for today, so I can't answer until tomorrow. ${settings.owner} can raise it if it is urgent.`;
-// (kept in the notices table like the other once-a-day notices, so a restart does not say it twice)
-export const groupBudgetDue = (groupId: string, now: Date = new Date()): boolean => takeCapNotice(`group-budget:${groupConvId(groupId)}`, now.getTime());
-
 // A forgotten conversation (a group, a removed friend): its rows no longer name it. They stay in the ledger, unnamed (conv ''), so the owner's and the key's day do not shrink
 // when somebody is forgotten; her own day and a group's are gone because nothing names them. True when it had a row today.
 export function forgetSpend(conv: ConvId, now: Date = new Date()): boolean {

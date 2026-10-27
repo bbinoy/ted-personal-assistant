@@ -1,11 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
 import { appendRow, type HeartbeatRow } from "../src/core/looks.ts";
-import { instanceDb } from "../src/core/instancedb.ts";
 import { commandReply, lastOwnerLook, parseCommand, statusText } from "../src/conversation/ownercommands.ts";
-import { isPaused, pauseText } from "../src/core/pause.ts";
-import { dataPath, readText, writeText } from "../src/core/state.ts";
+import { clearPause, importPauseFile, isPaused, pauseText } from "../src/core/pause.ts";
+import { instanceDb } from "../src/core/instancedb.ts";
+import { readText, writeText } from "../src/core/state.ts";
 import { RunStopped, stopRuns, withCeiling } from "../src/run/ceiling.ts";
 import { friendConvId, groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
 import { addTenant, ensureOwner } from "../src/tenants/tenants.ts";
@@ -18,7 +17,7 @@ const friendConv = { kind: "tenant", key: `tenant:${friend.id}`, convId: friendC
 
 const NOW = new Date(2026, 9, 14, 14, 30, 20); // 14:30 local
 const ownerConv = { kind: "owner", key: "owner", convId: OWNER_CONV } as const;
-const clear = () => rmSync(dataPath(instancePaths().paused), { force: true });
+const clear = clearPause;
 
 test("parseCommand: exactly the commands, nothing inside a sentence", () => {
   assert.deepEqual(parseCommand("/stop", NOW), { kind: "stop" });
@@ -39,31 +38,55 @@ test("parseCommand /pause: a span, a clock time (today's or tomorrow's), a day, 
   const next = parseCommand("/pause until 9", NOW);
   assert.equal(next?.kind === "pause" && new Date(next.until).getTime(), new Date(2026, 9, 15, 9, 0, 0).getTime(), "9:00 has passed today: tomorrow");
   assert.match(next?.kind === "pause" ? next.text : "", /tomorrow/);
-  assert.deepEqual(parseCommand("/pause until 2026-12-24", NOW), { kind: "pause", until: "2026-12-24", text: "Paused until 2026-12-24. /resume to undo." });
   assert.equal(parseCommand("/pause", NOW)?.kind === "pause" && (parseCommand("/pause", NOW) as { until: string }).until, "");
-  for (const bad of ["/pause soon", "/pause 0h", "/pause 2x", "/pause until 25:00", "/pause until 2026-13-45"]) assert.deepEqual(parseCommand(bad, NOW), { kind: "pause-usage" }, bad);
+  for (const bad of ["/pause soon", "/pause 0h", "/pause 2x", "/pause until 25:00", "/pause until 2026-12-24"]) assert.deepEqual(parseCommand(bad, NOW), { kind: "pause-usage" }, bad);
 });
 
-test("/pause writes the pause switch (a time inside), /resume removes it, and the switch honours the time", () => {
+test("/pause sets the pause switch (a time inside), /resume clears it, and the switch honours the time", () => {
   clear();
-  const made: string[] = [];
-  const reply = commandReply(ownerConv, "/pause 2h", { now: () => NOW, setPause: (c) => (made.push(c), writeText(instancePaths().paused, c)) });
+  const reply = commandReply(ownerConv, "/pause 2h", { now: () => NOW });
   assert.match(reply!, /^Paused until 16:30\./);
   assert.equal(isPaused(NOW), true);
   assert.equal(isPaused(new Date(NOW.getTime() + 119 * 60_000)), true);
   assert.equal(isPaused(new Date(NOW.getTime() + 121 * 60_000)), false, "the time has come: running again");
   assert.match(pauseText(NOW) ?? "", /^paused until /);
   assert.equal(commandReply(ownerConv, "/resume"), "Resumed.");
-  assert.equal(readText(instancePaths().paused), undefined);
   assert.equal(isPaused(NOW), false);
   commandReply(ownerConv, "/pause", { now: () => NOW });
-  assert.equal(readText(instancePaths().paused), "", "bare /pause: until /resume");
+  assert.equal(pauseText(NOW), "paused until you switch it off", "bare /pause: until /resume");
   assert.equal(isPaused(new Date(2030, 0, 1)), true);
   clear();
-  writeText(instancePaths().paused, "2026-10-20");
-  assert.equal(isPaused(NOW), true, "a day inside still works as before");
-  assert.equal(isPaused(new Date(2026, 9, 20, 8)), false);
+});
+
+test("an existing instance/paused file is honoured once at the start, converted to the row and deleted", () => {
+  for (const [old, check] of [
+    ["", (d: Date) => isPaused(d)],
+    ["2026-10-20", (d: Date) => isPaused(d) === (d < new Date(2026, 9, 20))],
+    [new Date(NOW.getTime() + 3_600_000).toISOString(), (d: Date) => isPaused(d) === (d.getTime() < NOW.getTime() + 3_600_000)],
+    ["garbage", (d: Date) => isPaused(d)],
+  ] as const) {
+    clear();
+    writeText(instancePaths().paused, old);
+    assert.equal(importPauseFile(), true);
+    assert.equal(readText(instancePaths().paused), undefined, "the file is gone");
+    assert.equal(check(NOW) && check(new Date(2026, 9, 14, 20, 0)) && check(new Date(2026, 9, 25)), true, `"${old}"`);
+  }
+  assert.equal(importPauseFile(), false, "nothing to convert the second time");
   clear();
+});
+
+test("the kill switch fails safe: an unreadable value, or a database that cannot be opened, counts as paused", () => {
+  clear();
+  assert.equal(isPaused(NOW), false);
+  instanceDb().run("INSERT INTO kv (key, value, updated_at) VALUES ('paused', 'not json {', 0)");
+  assert.equal(isPaused(NOW), true);
+  instanceDb().run("UPDATE kv SET value = '42' WHERE key = 'paused'");
+  assert.equal(isPaused(NOW), true);
+  assert.match(pauseText(NOW) ?? "", /cannot be read/);
+  instanceDb().run("UPDATE kv SET value = '\"soon\"' WHERE key = 'paused'");
+  assert.equal(isPaused(NOW), true, "a text that is no time");
+  clear();
+  assert.equal(isPaused(NOW), false);
 });
 
 test("pause, resume and status are the owner's; a friend can only stop her own run", () => {
@@ -71,7 +94,7 @@ test("pause, resume and status are the owner's; a friend can only stop her own r
   assert.equal(commandReply(friendConv, "/pause 2h"), undefined);
   assert.equal(commandReply(friendConv, "/status"), undefined);
   assert.equal(commandReply(friendConv, "/resume"), undefined);
-  assert.equal(readText(instancePaths().paused), undefined);
+  assert.equal(isPaused(NOW), false);
   let stopped = "";
   assert.equal(commandReply(friendConv, "stop!", { stop: (s) => ((stopped = s), 1) }), "Stopped.");
   assert.equal(stopped, friendConvId(friend.id));

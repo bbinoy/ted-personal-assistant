@@ -2,10 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { owner } from "../src/conversation/conversationmodel.ts";
 import { settings } from "../src/core/settings.ts";
-import { dayIn } from "../src/core/timezone.ts";
-import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
+import { recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { createFailureTracker, dropUnreachable, holdFact, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, countPosts, takeHeld } from "../src/heartbeat/notices.ts";
+import { createFailureTracker, dropUnreachable, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, countPosts, takeHeld } from "../src/heartbeat/notices.ts";
 import { heldBlock, HELD_MAX } from "../src/heartbeat/facts.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
@@ -16,7 +15,9 @@ import { RunTimeout } from "../src/run/ceiling.ts";
 import { parseHeartbeatAnswer } from "../src/run/rules.ts";
 import { ledgerEntries } from "../src/core/messages.ts";
 import { gateSink, sendNow, withSend } from "../src/modules/send/send.ts";
-import { capNoticesTo, reportInstanceCap } from "../src/core/capnotice.ts";
+import { reportInstanceCap } from "../src/core/capnotice.ts";
+import { holdFact } from "../src/core/ownerfact.ts";
+import { refusal, refusalOnce } from "../src/tenants/errors.ts";
 import { errorLinesSince } from "../src/core/logwindow.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
 
@@ -185,12 +186,17 @@ test("the budget notice waits for the end of quiet and is not used up meanwhile"
   assert.equal(told.length, 1);
   ownerNotices.sendTo(undefined);
 });
-test("a group hears of the spent budget once a day", () => {
-  assert.equal(groupBudgetDue("g1", DAY), true);
-  assert.equal(groupBudgetDue("g1", DAY), false);
-  assert.equal(groupBudgetDue("g2", DAY), true, "another group has its own");
-  assert.equal(groupBudgetDue("g1", MORNING), true, "the next day");
-  assert.doesNotMatch(GROUP_BUDGET_TEXT, /DAILY_BUDGET|\.env|npm/, "nobody in a group is sent to a terminal");
+test("a group and a friend are refused from the one table and throttled the same way: once a day for a ceiling", () => {
+  instanceDb().run("DELETE FROM notices");
+  for (const [audience, id] of [["group", groupConvId("g1")], ["friend", "friend-ann"]] as const) {
+    const said = refusalOnce("own-budget", audience, id, { limit: 5 }, DAY.getTime());
+    assert.equal(said, refusal("own-budget", audience, { limit: 5 }), audience);
+    assert.equal(refusalOnce("own-budget", audience, id, { limit: 5 }, DAY.getTime()), undefined, `${audience}: not again today`);
+    assert.notEqual(refusalOnce("own-budget", audience, `${id}-other`, { limit: 5 }, DAY.getTime()), undefined, `${audience}: another has its own`);
+    assert.notEqual(refusalOnce("own-budget", audience, id, { limit: 5 }, MORNING.getTime()), undefined, `${audience}: the next day`);
+  }
+  assert.doesNotMatch(refusal("owner-budget", "group"), /DAILY_BUDGET|\.env|npm/, "nobody in a group is sent to a terminal");
+  assert.doesNotMatch(refusal("shared-budget", "friend"), /INSTANCE_KEY|\.env|npm/);
 });
 
 test("the doctor's error window: dates are rebuilt from the file's time, so yesterday's errors do not count", () => {
@@ -240,14 +246,13 @@ test("a system matter for the owner (the shared key, a friend's damaged file) is
   reset();
 });
 
-test("the instance-cap notice is handed to the owner's sender; a group's budget line survives a restart", async () => {
+test("the friends' daily cap is a fact for the owner's next look, once a day, and no word of any friend", () => {
   instanceDb().run("DELETE FROM notices");
-  const told: string[] = [];
-  capNoticesTo((t) => told.push(t));
+  reset();
   assert.equal(reportInstanceCap(5, NIGHT.getTime()), true);
-  assert.equal(told.length, 1);
-  capNoticesTo(undefined);
-  assert.equal(groupBudgetDue("gx", DAY), true);
-  assert.equal(instanceDb().get<{ day: string }>("SELECT day FROM notices WHERE key = ?", `group-budget:${groupConvId("gx")}`)?.day, dayIn(DAY), "written to the notices table under the group's folder name, not its id: a restart does not forget it");
-  assert.equal(groupBudgetDue("gx", DAY), false);
+  assert.equal(reportInstanceCap(5, NIGHT.getTime()), false, "not again today");
+  const held = heldPosts(owner());
+  assert.equal(held.length, 1);
+  assert.match(held[0]!.text, /^System status for .*\$5 is reached.*raise INSTANCE_KEY_DAILY_USD in \.env and restart\.$/);
+  reset();
 });
