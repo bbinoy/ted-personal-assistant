@@ -21,7 +21,6 @@ export class TurnScope {
   #recent: { text: string; at: number; reactedOn?: number }[] = []; // reactedOn: for a reaction, when the message it was on was sent (0: not in the log any more)
   #wroteAt = 0; // the person's newest message of any kind (an answer to a question included), when it arrived
   #said = "";
-  #imports = new Map<string, number>(); // import preview number -> when a message showing it was last sent to the owner (tasks/import.ts)
   #derived: Extract<RunProvenance, { kind: "derived" }> | undefined; // (a wake-up's gate-selected task: the person's standing instruction acted on later)
 
   constructor(key: string) {
@@ -51,7 +50,6 @@ export class TurnScope {
   // What the assistant last told the owner in chat (a draft it showed, a plan it announced).
   assistantSaid(text: string): void {
     this.#said = text.slice(0, LIMITS.quote);
-    for (const id of text.match(/\bimp-[0-9a-f]{6}\b/g) ?? []) this.#imports.set(id, Date.now()); // (an import preview was put in front of the owner: showing it again moves its window)
   }
 
   // The turn is over.
@@ -69,15 +67,6 @@ export class TurnScope {
 
   // When the person's newest message of this turn arrived (ms), for the journal's "your message at 09:12" (approvals/journalrender.ts); undefined when there is none.
   lastSaidAt = (): number | undefined => this.#recent.at(-1)?.at;
-
-  // What the owner's newest message of this turn is, as code needs it to check a confirmation (tasks/import.ts): its text, when it arrived, whether it is a reaction and what it was on,
-  // and how many OTHER owner messages arrived since `since` (ms). Undefined: nothing was said (an unattended turn).
-  confirmView = (batchId: string): { text: string; at: number; reaction: boolean; said: string; others: number; shownAt?: number } | undefined => {
-    const last = this.#recent.at(-1);
-    if (last === undefined || this.member || this.#derived) return undefined;
-    const shownAt = this.#imports.get(batchId);
-    return { text: last.text, at: last.at, reaction: last.reactedOn !== undefined, said: this.#said, others: this.#recent.slice(0, -1).filter((m) => shownAt === undefined || m.at > shownAt).length, ...(shownAt !== undefined ? { shownAt } : {}) };
-  };
 
   read = (now = Date.now()): RunProvenance | undefined => {
     if (this.#derived) return this.#derived;

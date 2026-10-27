@@ -23,7 +23,6 @@
       { "name": "meeting-prep", "required": true },
       { "name": "follow-through" },
       { "name": "stay-in-touch" },
-      { "name": "task-import" },
       { "name": "evening-wrap" },
       { "name": "weekly-review" },
       { "name": "setup", "required": true }

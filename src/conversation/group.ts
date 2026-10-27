@@ -2,6 +2,7 @@ import { clockLine } from "../core/brief.ts";
 import { budgetSpent, GROUP_BUDGET_TEXT, groupBudgetDue, groupOverBudget } from "../core/budget.ts";
 import { editNote } from "./edit.ts";
 import { fence } from "../core/fence.ts";
+import { reactionJournal } from "../core/reaction.ts";
 import { prepare, runConversation } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { AuthError, FixedNotice, RateLimitError } from "../tenants/errors.ts";
@@ -156,7 +157,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     if (!e.addressedToMe) return;
     if (!st.running && !isPaused(now) && !budgetSpent()) warm?.(conv, false);
     // The message that addressed us goes to the model whole (a long message too); the 600-character line is for the log and the gate's view.
-    const asked = e.reaction ? e.line : e.said;
+    const asked = e.reaction ? e.line + reactionJournal(e.reaction.journal) : e.said;
     const said = e.reaction ? e.said : asked; // (what the member said, for the approval judge: a reaction is not the text of the message it is on)
     st.addressed = { line: asked, said, quote: { text: e.line.slice(0, LIMITS.preview), author: e.author ?? "", timestamp: e.timestamp }, incoming: e.quote, voice: !!e.voice, picture: e.picture, document: e.document, at: now.getTime(), edit: e.edit };
   }

@@ -29,7 +29,7 @@ is complete, and if a workday looks empty, say so.
 - **Daily brief run:** today + tomorrow (forward), and back to the previous
   brief's send time (for the post-meeting pass handoff to `ted-personal-assistant:meeting-prep`).
 
-- **Heartbeat look:** the next 36 hours. A look that reads the calendar also tells code which meetings are coming with the `note_upcoming_meetings` tool (its instruction says how); code then sends the short prep shortly before each meeting that has other people on it. Pass the facts as the calendar gives them (id, start and end with the UTC offset, everyone on the invite, the video link, the owner's own response, private or not); do not decide yourself which meetings deserve prep.
+- **Heartbeat look:** the next 36 hours. Any run (a look or a chat turn) that reads the calendar for the next hours also tells code which meetings are coming with the `note_upcoming_meetings` tool (its instruction says how); code then sends the short prep shortly before each meeting that has other people on it. Pass the facts as the calendar gives them (id, start and end with the UTC offset, everyone on the invite, the video link, the owner's own response, private or not); do not decide yourself which meetings deserve prep.
 
 Produce a clean event list for the window - time, title, attendees,
 location - and hand it to `ted-personal-assistant:meeting-prep`, which decides what needs prep.

@@ -11,11 +11,9 @@ import { OWNER_CHAT } from "./runkinds.ts";
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "taskfacts-test-"));
 
 const S = await import("../src/tasks/store.ts");
-const I = await import("../src/tasks/import.ts");
-const { tasksNote, importOffer } = await import("../src/modules/tasks/taskfacts.ts");
+const { tasksNote } = await import("../src/modules/tasks/taskfacts.ts");
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { SYSTEM } = await import("../src/approvals/approvaljudge.ts");
-const { chatContext } = await import("../src/run/persona.ts");
 
 const ZONE = "Europe/Berlin";
 const NOW = Date.parse("2026-10-22T10:00:00Z");
@@ -23,7 +21,8 @@ const NOTION = "mcp__claude_ai_Notion__notion-update-page";
 let n = 0;
 const fresh = () => `facts-conv-${++n}`;
 const scope = (key: string): import("../src/tasks/store.ts").Scope => ({ key, zone: ZONE, by: "owner", origin: "owner", source: "chat", now: NOW });
-const yes: import("../src/tasks/import.ts").TurnLook = () => ({ text: "yes", at: NOW + 1000, reaction: false, said: "", others: 0, shownAt: NOW + 500 });
+// (the owner's 28 tasks were brought over by the one-time import, now gone: those rows carry source_kind import)
+const imported = (k: string, title: string) => S.addItem(scope(k), { title, sourceKind: "import", sourceRef: `https://notion.so/${title}` });
 const opts = { signal: new AbortController().signal } as never;
 
 test("the owner's own task actions are free in chat: no judge, no question, for add, update, complete, snooze and drop", async () => {
@@ -47,8 +46,7 @@ test("the judge is told the tasks moved out of Notion only after the import; bef
   assert.equal(tasksNote(NOTION, k), "", "nothing imported yet: no line");
   S.addItem(scope(k), { title: "Own item" });
   assert.equal(tasksNote(NOTION, k), "", "an item of its own is no import");
-  const p = I.previewImport(scope(k), { rows: [{ title: "Old Notion task", source_ref: "https://notion.so/p1" }] });
-  I.commitImport(scope(k), p.batchId, yes);
+  imported(k, "Old Notion task");
   const line = tasksNote(NOTION, k);
   assert.match(line, /^\nTasks: this conversation's tasks live in the assistant's own task list \(2 items, 1 imported from Notion\)/);
   assert.match(line, /should be done with the task tools instead/);
@@ -61,26 +59,11 @@ test("the judge is told the tasks moved out of Notion only after the import; bef
 
 test("the Tasks line reaches the judge with the Notion edit", async () => {
   const k = fresh();
-  const p = I.previewImport(scope(k), { rows: [{ title: "Imported", source_ref: "https://notion.so/p9" }] });
-  I.commitImport(scope(k), p.batchId, yes);
+  imported(k, "Imported");
   const seen: string[] = [];
   const can = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, async (i) => (seen.push(i.description), { decision: "fix", reason: "use the task tools" }), undefined, undefined, false, { conversation: k, provenance: () => ({ kind: "owner", message: "tick off the dentist" }) as never });
   const r = (await can(NOTION, { page_id: "tasks", command: "replace_content_range", new_str: "- [x] Dentist" }, opts)) as { behavior: string; message?: string };
   assert.equal(r.behavior, "deny");
   assert.match(r.message ?? "", /use the task tools/);
   assert.match(seen[0]!, /\nTasks: this conversation's tasks live/);
-});
-
-test("the owner's chat is told once to offer the import while the list is (almost) empty and nothing was imported; not after the import, nor when declined", () => {
-  const k = fresh();
-  const offer = importOffer(k, false);
-  assert.match(offer ?? "", /^Your task list holds 0 items and nothing was ever imported\. .*offer ONCE.*task-import/);
-  assert.match(chatContext({ tasks: offer }) ?? "", /offer ONCE/);
-  assert.equal(importOffer(k, true), undefined, "a setup-tasks note says no");
-  for (const t of ["a", "b", "c"]) S.addItem(scope(k), { title: t });
-  assert.equal(importOffer(k, false), undefined, "the list is in use");
-  const j = fresh();
-  const p = I.previewImport(scope(j), { rows: [{ title: "x", source_ref: "https://notion.so/q" }] });
-  I.commitImport(scope(j), p.batchId, yes);
-  assert.equal(importOffer(j, false), undefined, "imported");
 });

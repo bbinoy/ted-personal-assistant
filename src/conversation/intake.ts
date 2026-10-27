@@ -10,6 +10,7 @@ import { cardCommand } from "../modules/browse/card.ts";
 import { commandReply } from "./ownercommands.ts";
 import { TYPED_YES_NEEDED } from "../modules/browse/paymentrules.ts";
 import { reactionMessage, reactionPrompt } from "../core/reaction.ts";
+import { journalAround } from "../memory/journalread.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { createGroupAnswering, speaker, type Go } from "./group.ts";
 import { replayPrompt } from "./replay.ts";
@@ -127,7 +128,6 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   // ---- THE TABLE: the only places where the kinds of conversation differ on the way in ----
   // A private chat (the owner's, a friend's) and a group are told apart by `conv.direct` here and nowhere else in the chain. Everything else is the same function for all of them.
   //   who may do what   code-only commands are checked against the conversation's capabilities (ownercommands.ts: /card needs "card", /pause "admin", /tasks "tasks", ...), not its kind.
-  //                     Feedback offers (`learns`) are per person: a private chat's, never a shared group's.
   //   the answer        a private chat always answers; a group answers when addressed (`forUs`: tagged or quoted, then sticky until answered) or when the participation gate says act
   //                     (`mayAnswer`, `decide`, group.ts). A paused or over-budget group answers nothing, and says so once to someone who addressed it.
   //   who is heard      `everyone`: every sender gets a read receipt and the reason for a voice message or picture that could not be used; otherwise only someone who spoke to us.
@@ -135,14 +135,13 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   //                     can be answered, and an unusable one is dropped (the caption stays); otherwise it is required.
   //   history           `recorded`/`say`/`sayReaction`: how a line reads in the log (a group's lines name their speaker).
   //   the turn          `turn`: how the burst is shown to the model (a private chat: the messages; a group: its recent log, fenced) and delivered (threading and target are the
-  //                     Conversation's: threadAlways, target). A reaction in a private chat is a quiet turn of its own; in a group it is chatter like any other.
+  //                     Conversation's: threadAlways, target). A reaction in a private chat is a quiet turn of its own; in a group a reaction (or quoted reply) to the assistant's own message is addressed to it, one on anyone else's is chatter.
   // Delivery data that stays on the Conversation: target (where it goes), threadAlways, notice and noticeEveryMs (conversationmodel.ts).
   type Who = { from: string; fromUuid?: string; fromName?: string };
   interface Ways {
     vouch: boolean;
     everyone: boolean;
     optionalPictures: boolean;
-    learns: boolean;
     recorded: "owner" | "member";
     forUs: (m: { addressedToMe?: boolean }) => boolean;
     mayAnswer: (m: { addressedToMe?: boolean }) => boolean;
@@ -150,7 +149,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     sayReaction: (who: Who, emoji: string, on: string) => { line: string; said: string };
     note: (conv: Conversation, e: Entry) => void;
     forget: (conv: Conversation, stamps: readonly number[], deleted: boolean) => void;
-    react: (conv: Conversation, r: IncomingReaction, e: Entry, learned: string | undefined) => Promise<void>;
+    react: (conv: Conversation, r: IncomingReaction, e: Entry) => Promise<void>;
     decide: (conv: Conversation, d: { batch: Batch<Entry>; e: Entry; showTyping: () => void }) => Promise<Go | undefined>;
     turn: (conv: Conversation, items: Entry[], go: Go, batch: Batch<Entry>) => Promise<void>;
   }
@@ -159,7 +158,6 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       vouch: false,
       everyone: true,
       optionalPictures: false,
-      learns: true,
       recorded: "owner",
       forUs: () => true,
       mayAnswer: () => true,
@@ -175,7 +173,6 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       vouch: true,
       everyone: false,
       optionalPictures: true,
-      learns: false,
       recorded: "member",
       forUs: (m) => !!m.addressedToMe,
       mayAnswer: answering.mayAnswer,
@@ -186,11 +183,13 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       },
       note: answering.note,
       forget: answering.forget,
-      react: (conv, _r, e) => settle(conv, WAYS.group, e),
+      react: (conv, _r, e) => (answering.note(conv, e), settle(conv, WAYS.group, e)), // (note remembers an address: a reaction to our own message is one)
       decide: answering.decide,
       turn: answering.turn,
     },
   };
+  const PEOPLE: ReadonlySet<Kind> = new Set<Kind>(["owner", "member", "edit", "reaction", "delete"]); // log kinds written by people; every other kind is the assistant's own
+  const NEGATIVE: ReadonlySet<string> = new Set(["👎"]); // the reactions that are a correction; any other reaction on our message is chatter
   const waysOf = (conv: Conversation): Ways => (conv.direct ? WAYS.private : WAYS.group);
 
   // A private chat's turn: the burst's messages as one prompt, one run.
@@ -200,12 +199,10 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       console.log(`owner message (${x.text.length} chars)`);
       if (x.quote) console.log(`owner is replying to an earlier message (${x.quote.text.length} chars)`);
     }
-    const learned = ms.map((x) => x.learned).filter(Boolean).join("\n\n");
     const late = ms.filter((x) => x.late);
     const shown = late.length ? replayPrompt(late.map((x) => ({ at: x.late!.at, text: x.text }))) : ownerPrompt(ms);
-    const prompt = learned ? `${shown}\n\n${learned}` : shown;
     await runTurn(conv, {
-      run: (hooks) => deps.run(conv, prompt, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
+      run: (hooks) => deps.run(conv, shown, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
       target: { author: last.from, timestamp: last.timestamp },
       threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
       hadQuote: ms.some((x) => x.quote),
@@ -214,29 +211,28 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     });
   }
 
-  // A reaction in a private chat that is not an approval answer is feedback on a message. The model is told which message it was on (looked up by timestamp in the log) and decides what,
-  // if anything, it means. A quiet turn: no typing, no icons, no apology.
-  async function privateReaction(conv: Conversation, r: IncomingReaction, _e: Entry, learned: string | undefined): Promise<void> {
+  // A reaction in a private chat that is not an approval answer is feedback on a message. The model is told which message it was on (looked up by timestamp in the log) and the journal
+  // lines around it, and decides what, if anything, it means (a 👎 on something it did is a correction: the learn rule in its persona). A quiet turn: no typing, no icons, no apology.
+  async function privateReaction(conv: Conversation, r: IncomingReaction, e: Entry): Promise<void> {
     const on = findMessage(r.targetTimestamp, conv.logFile);
     await enqueue(conv, async () => {
       console.log(`owner reacted ${r.emoji}`);
-      const prompt = reactionPrompt(r.emoji, on) + (learned ? `\n\n${learned}` : "");
+      const prompt = reactionPrompt(r.emoji, on, e.reaction?.journal);
       // The judge is told "<owner> reacted <emoji>" as the owner's message and the reacted-to text as what the assistant said (it may quote mail): never as their words.
       await runTurn(conv, { run: () => deps.run(conv, prompt, reactionMessage(oneLine("reaction", r.emoji, 16)), undefined, undefined, undefined, on?.text, on ? Date.parse(on.at) || 0 : 0), target: { author: r.targetAuthor ?? messenger.self, timestamp: r.targetTimestamp }, reaction: true, announce: false });
     });
   }
 
   // ---- THE CHAIN ----
-  // A message of any conversation, in this order (an edit skips 3 to 5: it is never a command, an approval answer or feedback):
+  // A message of any conversation, in this order (an edit skips 2 to 3: it is never a command or an approval answer):
   //   0. the door         hidden characters out, a long message read whole, a group we cannot vouch for gets nothing; read receipt; voice, picture and file made usable; an edit is checked (edit())
   //   1. record           the line goes into the conversation's log, before anything can lose it (replay.ts finds what a restart lost there)
   //   2. commands         code only, before any model: /card off, /stop, /pause, /status, /tasks, /quiet ... each needs a capability the conversation has (ownercommands.ts)
   //   3. approval answer  a message, a quoted reply or a reaction answers a question open in THIS conversation; it is consumed, and never replayed
-  //   4. feedback         where the conversation learns (WAYS.learns): a short quoted reply to something sent unprompted may save a note
-  //   5. declined         a new message: a declined action may be asked for again (declined.ts)
-  //   6. the burst        a message that is for us calls off a look that is running; then a short settling pause, and one turn for everything that arrived (queue.ts)
-  //   7. the answer       WAYS.decide: is anything to be said? (a private chat always; a group when addressed or when the gate says act)
-  //   8. the turn         WAYS.turn: one run for the burst, delivered by delivery.ts
+  //   4. declined         a new message: a declined action may be asked for again (declined.ts)
+  //   5. the burst        a message that is for us calls off a look that is running; then a short settling pause, and one turn for everything that arrived (queue.ts)
+  //   6. the answer       WAYS.decide: is anything to be said? (a private chat always; a group when addressed or when the gate says act)
+  //   7. the turn         WAYS.turn: one run for the burst, delivered by delivery.ts
   async function message(conv: Conversation, incoming: IncomingMessage): Promise<void> {
     const w = waysOf(conv);
     const original = cleanIncoming(await withLongText(incoming)); // the door: hidden characters never get past here
@@ -275,14 +271,13 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     return admit(conv, m, line, arrived);
   }
 
-  // Steps 1 to 8 for a message that is ready (an edit comes here with `edited`: the timestamp of the message it replaces).
+  // Steps 1 to 7 for a message that is ready (an edit comes here with `edited`: the timestamp of the message it replaces).
   async function admit(conv: Conversation, m: Held, line: string, arrived: number, edited?: { of: number }): Promise<void> {
     if (!line.trim()) return;
     const w = waysOf(conv);
     const author = m.from || m.fromUuid;
     // 1. record
     record(conv, edited ? "edit" : w.recorded, m.timestamp, w.say(m, line), { by: author, ...(edited ? { of: edited.of } : {}), ...(m.addressedToMe ? { addressed: true } : {}) });
-    let learned: string | undefined;
     if (!edited) {
       // 2. commands: code only, ahead of the queue, so "stop" works while a turn runs. A caption or a file never makes one.
       if (!m.picture && !m.document) {
@@ -292,18 +287,16 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       // 3. approval answer: it skips the queue (the queue is blocked on the very turn that is waiting for it)
       scopeOf(conv.key).wrote(now()); // (an answer to a question is something written too: a reaction on an older message answers nothing newer)
       if (await approvalAnswer(conv, m, author)) return;
-      // 4. feedback (feedback.ts): the turn below mentions what was learned
-      if (w.learns) learned = await deps.feedback?.message(conv, m);
     }
-    forgetDeclined(conv.key); // 5. a new message: they may be asking for a declined action again (declined.ts)
-    const e: Entry = { ...m, line, said: w.say(m, line, LIMITS.message), author, arrivedAt: arrived, learned };
-    if (w.forUs(m)) overtake(conv); // 6. a look of this conversation that is running gives way to the turn (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
+    forgetDeclined(conv.key); // 4. a new message: they may be asking for a declined action again (declined.ts)
+    const e: Entry = { ...m, line, said: w.say(m, line, LIMITS.message), author, arrivedAt: arrived };
+    if (w.forUs(m)) overtake(conv); // 5. a look of this conversation that is running gives way to the turn (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
     if (!w.mayAnswer(m)) return;
     w.note(conv, e);
     return settle(conv, w, e);
   }
 
-  // Steps 6 to 8: the burst, the answer decision, the turn. Replay (below) joins here too.
+  // Steps 5 to 7: the burst, the answer decision, the turn. Replay (below) joins here too.
   function settle(conv: Conversation, w: Ways, e: Entry): Promise<void> {
     return burst(conv, e, async (b) => {
       let typing: (() => void) | undefined;
@@ -362,7 +355,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     return true;
   }
 
-  // A reaction: the same steps as a message (vouch, approval answer, record, feedback, overtake), then the kind's own way to answer it (WAYS.react).
+  // A reaction: the same steps as a message (vouch, approval answer, record, overtake), then the kind's own way to answer it (WAYS.react). A reaction to a message of the assistant's own
+  // that corrects it (a 👎) is addressed to it (a group answers it without the participation gate); any other reaction, and one to someone else's message, is chatter that has to pass the gate.
   async function reaction(conv: Conversation, r: IncomingReaction): Promise<void> {
     const w = waysOf(conv);
     if (w.vouch && !(await deps.vouch(conv.groupId!))) return;
@@ -374,9 +368,12 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     const { line, said } = w.sayReaction(r, r.emoji, on);
     const t = now();
     record(conv, "reaction", t, line);
-    const learned = w.learns ? await deps.feedback?.reaction(conv, r) : undefined; // a 👎 on something sent unprompted may save a note (feedback.ts); the turn mentions it
-    const e: Entry = { from: r.from, fromUuid: r.fromUuid, fromName: r.fromName, text: "", timestamp: t, direct: r.direct, addressedToMe: false, line, said, arrivedAt: t, learned, reaction: { emoji: oneLine("reaction", r.emoji, 16), on } };
-    return w.react(conv, r, e, learned);
+    const reacted = findMessage(r.targetTimestamp, conv.logFile);
+    const ours = reacted ? !PEOPLE.has(reacted.kind) : r.targetAuthor === messenger.self; // (the log says who wrote it; failing that, the messenger does)
+    const correction = ours && NEGATIVE.has(r.emoji.replace(/[\u{1F3FB}-\u{1F3FF}\uFE0F]/gu, ""));
+    const journal = reacted && ours ? journalAround(conv.logFile, reacted.at) : undefined;
+    const e: Entry = { from: r.from, fromUuid: r.fromUuid, fromName: r.fromName, text: "", timestamp: t, direct: r.direct, addressedToMe: correction, line, said, arrivedAt: t, reaction: { emoji: oneLine("reaction", r.emoji, 16), on, ...(journal ? { journal } : {}) } };
+    return w.react(conv, r, e);
   }
 
   // A message deleted for everyone. Only its author can. Still waiting: it is dropped, so it is never answered and nothing in it is

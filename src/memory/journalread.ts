@@ -1,3 +1,4 @@
+import { LIMITS } from "../core/sanitize.ts";
 import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
 import { dayIn, systemZone, timeIn } from "../core/timezone.ts";
 import { whenIn } from "./search.ts";
@@ -145,4 +146,18 @@ export function todayText(file: string, o: { now?: number; zone?: string; last?:
     return line.length > 160 ? `${line.slice(0, 159)}…` : line;
   });
   return [`Today (${day}): ${lines.length} action${lines.length === 1 ? "" : "s"}: ${counts}.`, ...last].join("\n");
+}
+
+const JOURNAL_BEFORE_MS = 30 * 60_000; // the actions of the look that wrote a message are logged just before it
+const JOURNAL_AFTER_MS = 2 * 60_000;
+const MAX_JOURNAL = 6;
+
+// The journal lines around a message of the assistant's: what it did just before sending it, as "[cat] what (why)". A reaction is a correction when the reaction is 👎 on this: the model
+// works out the rule from what was done and why (the "per your notes: ..." says which note drove it).
+export function journalAround(file: string, at: string): string[] {
+  const t = Date.parse(at);
+  return ledgerEntries(file)
+    .filter((m) => m.kind === "journal" && Date.parse(m.at) >= t - JOURNAL_BEFORE_MS && Date.parse(m.at) <= t + JOURNAL_AFTER_MS)
+    .slice(-MAX_JOURNAL)
+    .map((m) => { const p = splitJournal(m.text); return `[${m.cat ?? "other"}] ${p.what}${p.why ? ` (${p.why})` : ""}`.slice(0, LIMITS.line); });
 }

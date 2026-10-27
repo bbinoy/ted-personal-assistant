@@ -275,28 +275,6 @@ function duplicateOf(db: Db, title: string, kind: Kind, due: string | undefined,
   return hit && toItem(hit);
 }
 
-/** A row the import (tasks/import.ts) has checked: inserted as the owner's own, open or done, with its "added" history row. Call inside the import's transaction; the caller tells the events after it commits. */
-export interface ImportRow {
-  title: string;
-  kind: Kind;
-  details: string | null;
-  due: string | null;
-  person: string | null;
-  status: "open" | "done";
-  doneAt: number | null;
-  sourceRef: string;
-}
-export function insertImported(db: Db, scope: Scope, r: ImportRow): Item {
-  const now = nowOf(scope);
-  const res = db.run(
-    "INSERT INTO items (kind, title, details, due, due_zone, person, status, origin, source_kind, source_ref, created_at, updated_at, done_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'import', ?, ?, ?, ?)",
-    r.kind, r.title, r.details, r.due, r.due ? scope.zone : null, r.person, r.status, scope.origin, r.sourceRef, now, now, r.status === "done" ? (r.doneAt ?? now) : null,
-  );
-  const after = { kind: r.kind, title: r.title, ...(r.details ? { details: r.details } : {}), ...(r.due ? { due: r.due } : {}), ...(r.person ? { person: r.person } : {}), status: r.status };
-  db.run("INSERT INTO task_events (item_id, at, by, action, before, after) VALUES (?, ?, ?, 'added', NULL, ?)", res.lastInsertRowid, now, scope.by, JSON.stringify(after));
-  return toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", res.lastInsertRowid)!);
-}
-
 // (rows written before the looks had their own name say "assistant (inferred)")
 const LOOKS = [LOOK_BY, "assistant (inferred)"];
 const byLooks = `e.action = 'added' AND e.by IN (${LOOKS.map(() => "?").join(", ")})`;

@@ -7,8 +7,8 @@ import type { Plan } from "./dreamplan.ts";
 
 // "What I learned overnight": the notes change without the person being asked (the nightly dream tidies and adds, a background look saves a note), and this makes that VISIBLE
 // without nagging. CODE records each such change where it happens (recordDream, recordLook: a row in the conversation's assistant.db, learned_changes), and later ONE short list is built from
-// the rows not yet told (planBatch / commitBatch): the owner gets it as a section of the daily brief (the `memory_changes_since_brief` tool), a friend as a fact in her next look
-// (learnedFact), which says it in its own words (and so keeps quiet hours). A row is told once (its `batch`), so nothing repeats. Taking one back is an ordinary chat turn (forget_note, undo_dream).
+// the rows not yet told (planBatch / commitBatch): every conversation gets it as a fact in its next run (learnedFact, heartbeat/facts.ts),
+// which says it in its own words (and so keeps quiet hours); the owner's daily brief gets it in its expert's context like any look. A row is told once (its `batch`), so nothing repeats. Taking one back is an ordinary chat turn (forget_note, undo_dream).
 // Groups are off: their notes are shared, and what they keep stays as it was (nothing is recorded for one).
 
 export const MAX_LISTED = 9; // one list holds at most this many (the rest go in the next one)
@@ -121,12 +121,12 @@ export function planBatch(conv: ConvId, dir: string, now: number): Batch | undef
   return items.length || seqs.length ? { items, notes, seqs } : undefined;
 }
 
-/** Writes down that `batch` was told: its rows will not be listed again. Returns the batch id. `brief`: made for a brief that is not sent yet (briefDelivered says it was). */
-export function commitBatch(conv: ConvId, batch: Batch, now: number, o: { brief?: boolean } = {}): number | undefined {
+/** Writes down that `batch` was told: its rows will not be listed again. Returns the batch id. */
+export function commitBatch(conv: ConvId, batch: Batch, now: number): number | undefined {
   const db = liveConvDb(conv);
   if (!db) return undefined;
   return db.tx(() => {
-    const id = db.run("INSERT INTO learned_batches (at, delivered) VALUES (?, ?)", now, o.brief ? null : 1).lastInsertRowid;
+    const id = db.run("INSERT INTO learned_batches (at) VALUES (?)", now).lastInsertRowid;
     const listed = new Set(batch.items.map((i) => i.seq));
     for (const seq of batch.seqs) db.run(listed.has(seq) ? "UPDATE learned_changes SET batch = ? WHERE seq = ?" : "UPDATE learned_changes SET batch = ?, outcome = 'gone' WHERE seq = ?", id, seq);
     prune(db, now);
@@ -149,45 +149,16 @@ const verb = (i: Change): string =>
 /** One line: "- people-anna: Anna moved to Lisbon (saved)". */
 export const lineOf = (i: Change): string => `- ${name(i.file)}: ${i.gist} (${verb(i)})`;
 
-/** The list as data for a run that says it in its own words (the brief's section, a friend's look). */
+/** The list as data for a run that says it in its own words. */
 export const learnedBody = (items: readonly Change[], notes: readonly string[] = []): string => [...items.map(lineOf), ...notes.map((t) => `- ${t}`)].join("\n");
 
-/**
- * The brief's section (the `memory_changes_since_brief` tool): the changes not yet told, as the lines and the hint. A list made for a brief that was never SENT (a prep run or a look read it, the brief died) is
- * taken back first and made again with whatever is new, so it is offered at the next brief; it counts as told only when the brief's status note says delivered (briefDelivered). Empty: nothing to tell.
- */
-export function briefLearned(conv: ConvId, dir: string, now: number): string {
-  if (isGroupConv(conv)) return "";
-  releaseUnsent(conv);
-  const batch = planBatch(conv, dir, now);
-  if (!batch) return "";
-  const listed = batch.items.length > 0 || batch.notes.length > 0;
-  commitBatch(conv, batch, now, { brief: listed }); // (a batch of changes that no longer hold is settled without a word)
-  return listed ? learnedBody(batch.items, batch.notes) : "";
-}
-
-/** The brief was delivered (the status note says so, statusnote.ts): its list is told. */
-export function briefDelivered(conv: ConvId): void {
-  if (!isGroupConv(conv)) peekConvDb(conv)?.run("UPDATE learned_batches SET delivered = 1 WHERE delivered IS NULL");
-}
-
-// Takes back the lists made for a brief that was not sent: their rows are untold again (the ones that were undone stay settled).
-function releaseUnsent(conv: ConvId): void {
-  const db = peekConvDb(conv);
-  if (!db) return;
-  db.tx(() => {
-    db.run("UPDATE learned_changes SET batch = NULL WHERE outcome IS NULL AND batch IN (SELECT id FROM learned_batches WHERE delivered IS NULL)");
-    db.run("DELETE FROM learned_batches WHERE delivered IS NULL");
-  });
-}
-
-/** A friend's look (she has no daily brief): what changed in her notes and she has not been told, as a fact block for that look's prompt, and `told` to call once the look spoke. undefined: nothing to tell. */
+/** What changed in a conversation's notes on its own and it has not been told, as a fact block for a run's prompt (the owner's, a friend's), and `told` to call once the run spoke. undefined: nothing to tell (a group has none). */
 export function learnedFact(conv: ConvId, dir: string, now: number): { text: string; told: () => void } | undefined {
   const batch = planBatch(conv, dir, now);
   if (!batch) return undefined;
   if (!batch.items.length && !batch.notes.length) return void commitBatch(conv, batch, now); // (only changes that no longer hold: settled without a word)
   return {
-    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you saved while looking):\n${learnedBody(batch.items, batch.notes)}\nTell them once, in one short line of your message, what you learned and that "forget <note>" (or "undo the dream" for the night's tidy-up) takes it back. If you say nothing, it stays for the next run.`,
+    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you saved while looking):\n${learnedBody(batch.items, batch.notes)}\nIn this message, tell the person about these changes, briefly and in your own voice: one short line each, or one line for several (in the daily brief, under its 🧠 Learned overnight section). Say how to undo one: "forget <note>", or "undo the dream" for the night's tidy-up. If you say nothing, it stays for the next run.`,
     told: () => void commitBatch(conv, batch, now),
   };
 }

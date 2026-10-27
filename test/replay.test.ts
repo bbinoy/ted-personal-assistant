@@ -46,7 +46,6 @@ function rig(over: { gate?: () => Promise<typeof act | { act: false; delaySecond
     transcript: async () => assert.fail("no voice"),
     speech: { ready: () => false, synth: async () => assert.fail("no speech"), foreign: async () => undefined },
     approvals: { answer: async () => (steps.push("approval"), { outcome: over.approval ?? ("none" as const) }), answerReaction: () => "ignored" },
-    feedback: { message: async () => (steps.push("feedback"), undefined), reaction: async () => undefined },
     vouch: async () => true,
     isOwner: (w) => w.from === OWNER,
     group: {
@@ -175,7 +174,7 @@ test("replay: an approval answer, an edit and a deleted message are not replayed
 
 const say = (conv: Conversation, text: string, over: object = {}): Incoming => ({ type: "message", m: conv.direct ? { from: OWNER, text, timestamp: 900, direct: true, ...over } : { from: EVE, text, timestamp: 900, direct: false, group: { id: GID }, addressedToMe: true, fromName: "Eve", ...over } });
 
-test("one intake: an ordinary message runs the same steps for every kind of conversation; feedback is the one table row that differs", async () => {
+test("one intake: an ordinary message runs the same steps for every kind of conversation", async () => {
   const steps: Record<string, string[]> = {};
   for (const conv of [owner(), tenantLike(), group(GID)]) {
     const r = rig();
@@ -184,9 +183,9 @@ test("one intake: an ordinary message runs the same steps for every kind of conv
     assert.equal(r.records[0]!.kind, conv.direct ? "owner" : "member");
     assert.deepEqual(r.sent.length, 1, `${conv.kind} answered`);
   }
-  assert.deepEqual(steps.owner, ["record", "approval", "feedback", "turn"]);
+  assert.deepEqual(steps.owner, ["record", "approval", "turn"]);
   assert.deepEqual(steps.tenant, steps.owner);
-  assert.deepEqual(steps.group, ["record", "approval", "turn"], "a shared group offers no per-person feedback");
+  assert.deepEqual(steps.group, steps.owner, "no step differs by kind");
 });
 
 test("one intake: a command is answered in code in every conversation that has the capability, and an approval answer is consumed in all of them", async () => {
