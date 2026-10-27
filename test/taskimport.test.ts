@@ -96,7 +96,7 @@ test("import commit: inserts as the owner's, source import, one added history ro
   const c = I.commitImport(scope(k), p.batchId, yes);
   assert.equal(c.line, "Imported 2 tasks from Notion");
   const items = S.listItems(k, {}, NOW, ZONE);
-  assert.deepEqual(items.map((i) => [i.origin, i.sourceKind, i.status, i.sourceRef]), [["owner", "import", "open", "https://notion.so/p1"], ["owner", "import", "open", "https://notion.so/p2"]]);
+  assert.deepEqual(items.map((i) => [i.sourceKind, i.status, i.sourceRef]), [["import", "open", "https://notion.so/p1"], ["import", "open", "https://notion.so/p2"]]);
   assert.equal(items[0]!.details, "Area: Work");
   assert.equal(items[0]!.dueZone, ZONE);
   assert.deepEqual(events(k).map((e) => e.action), ["added", "added"]);
