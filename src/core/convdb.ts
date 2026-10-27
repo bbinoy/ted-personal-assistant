@@ -467,6 +467,13 @@ export const CONV_SCHEMA: readonly Migration[] = [
       ALTER TABLE learned_changes_new RENAME TO learned_changes;
       CREATE INDEX learned_changes_batch ON learned_changes (batch, seq);
     `,
+  },  {
+    version: 17,
+    name: "learning from a 👎 is the general learn rule: the feedback offers and thumbs-up counts are dropped",
+    up: `
+      DROP TABLE feedback_offers;
+      DROP TABLE feedback_signals;
+    `,
   },
 ];
 

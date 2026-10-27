@@ -694,6 +694,48 @@ test("groups: an edit never answers an approval, a picture caption neither, and 
   void r;
 });
 
+// ---- a reaction to the assistant's own message is addressed to it, in every conversation (the learn rule, persona/learn.md) ----
+
+const JOURNAL = "Archived 4 mails from LinkedIn. Why: per your notes: triage-linkedin. Undo: move them back to the inbox.";
+const thumbsDown = (ts: number, over: Partial<IncomingReaction> = {}): Incoming => ({ type: "reaction", r: { from: "+15555550105", emoji: "👎", targetTimestamp: ts, isRemove: false, direct: false, group: { id: GID }, fromName: "Eve", ...over } });
+
+test("groups: a 👎 on the assistant's own message runs a turn as addressed (no gate), with the message and the journal lines around it", async () => {
+  const conv = group(GID);
+  recordMessage("journal", 8001, JOURNAL, new Date(Date.now() - 60_000), conv.logFile, { cat: "archive" });
+  recordMessage("notice", 8002, "📬 LinkedIn: 4 new job alerts and a digest.", new Date(), conv.logFile);
+  let gates = 0;
+  const p = probe(false);
+  const { pipeline } = rig({ group: { ...p.group, gate: async () => (gates++, { act: false, delaySeconds: 0, nextCheckMinutes: 30 }) } });
+  await pipeline.handleIncoming(conv, thumbsDown(8002));
+  assert.equal(gates, 0, "addressed: the participation gate is not asked");
+  assert.equal(p.seen.length, 1);
+  assert.match(p.seen[0]!.prompt, /You were addressed/);
+  assert.match(p.seen[0]!.prompt, /reacted 👎/);
+  assert.match(p.seen[0]!.prompt, /LinkedIn: 4 new job alerts/);
+  assert.match(p.seen[0]!.prompt, /\[archive\] Archived 4 mails from LinkedIn \(.*per your notes: triage-linkedin/);
+});
+
+test("groups: a 👎 on another member's message runs no turn", async () => {
+  const conv = group(GID);
+  recordMessage("member", 8011, "Eve (a member): see you at six", new Date(), conv.logFile);
+  const p = probe(false);
+  const { pipeline } = rig({ group: p.group });
+  await pipeline.handleIncoming(conv, thumbsDown(8011, { from: "+15555550105", fromName: "Bob" }));
+  assert.equal(p.seen.length, 0);
+});
+
+test("private chat: a 👎 runs the quiet turn with the reacted message and the journal lines around it", async () => {
+  recordMessage("journal", 8021, JOURNAL, new Date(Date.now() - 60_000), owner().logFile, { cat: "archive" });
+  recordMessage("notice", 8022, "📬 LinkedIn: a digest of job alerts.", new Date(), owner().logFile);
+  const { r, pipeline } = rig({ run: async () => "[[silent]]" });
+  await pipeline.handleIncoming(owner(), react({ emoji: "👎", targetTimestamp: 8022 }));
+  assert.equal(r.prompts.length, 1);
+  assert.match(r.prompts[0]!, /reacted 👎 to this message of yours \(notice/);
+  assert.match(r.prompts[0]!, /a digest of job alerts/);
+  assert.match(r.prompts[0]!, /\[archive\] Archived 4 mails from LinkedIn \(.*per your notes: triage-linkedin/);
+  assert.deepEqual(r.typing, [], "quiet");
+});
+
 // ---- documents (src/conversation/document.ts): the same steps as pictures, in the owner's chat and in groups ----
 
 const PDF: Document = { kind: "pdf", data: "QUJD", name: "contract.pdf" };

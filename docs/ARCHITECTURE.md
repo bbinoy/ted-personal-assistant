@@ -73,7 +73,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
 | `routine_runs` | last period of each routine (scheduled skill or routine note), keyed by skill name or note file name |
 | `items`, `task_events`, `reminders`, `pending_imports`, `group_remind_noted` | tasks, append-only history, claimed reminders, an import preview, a group notice mark |
-| `learned_changes`, `learned_batches`, `feedback_*`, `voice_*`, `friend*` | quiet note changes and the lists that told them; notes saved after a 👎 and 👍 counts; voice notes received; a friend's bookkeeping |
+| `learned_changes`, `learned_batches`, `voice_*`, `friend*` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
 | `pending_*`, `suggestion_asks` | unused; a shipped migration is never edited; `pending_*` is emptied nightly |
 
 - **Adding state is one migration:** append a step to `CONV_SCHEMA`, write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound. Older code refuses a newer file (`NewerSchemaError`).
@@ -157,20 +157,18 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | 1. record | the line goes into the conversation's log first (`Extra.addressed` marks a line that was meant for the assistant) |
 | 2. commands | code only, before any model: `/card off`, `/stop`, `/quiet`, `/tasks`, `/pause`, `/status`, `/today`, `/resume`; each needs a capability (`ownercommands.ts` `NEEDS`) |
 | 3. approval answer | a message, quoted reply or reaction answers a question open in this conversation; consumed, never run |
-| 4. feedback | where the conversation learns from a 👎 or "less of this" |
-| 5. declined | a new message lets a declined action be asked for again |
-| 6. burst | a message that is for us calls off a running look; settling pause; one turn for the burst (`queue.ts`) |
-| 7. answer | `decide`: is anything to be said? |
-| 8. turn | `turn`: one run, delivered by `delivery.ts` |
+| 4. declined | a new message lets a declined action be asked for again |
+| 5. burst | a message that is for us calls off a running look; settling pause; one turn for the burst (`queue.ts`) |
+| 6. answer | `decide`: is anything to be said? |
+| 7. turn | `turn`: one run, delivered by `delivery.ts` |
 
-An edit skips 2 to 4 (never a command, an approval answer or feedback). A reaction takes the same road (vouch, approval, record, feedback, overtake), then the kind's own `react`. **Replay** joins at step 6: the lines a restart lost are read from the log and sent through the same burst, decision and turn.
+An edit skips 2 and 3 (never a command or an approval answer). A reaction takes the same road (vouch, approval, record, overtake), then the kind's own `react`; a reaction or quoted reply to the assistant's own message is addressed to it in every conversation, so a group answers it without the participation gate (one on someone else's message is chatter). **Replay** joins at step 5: the lines a restart lost are read from the log and sent through the same burst, decision and turn.
 
 The only per-kind differences are the rows of `WAYS` next to the chain in `intake.ts` (a private chat is the owner's or a friend's, `conv.direct`):
 
 | row | private chat | group |
 |---|---|---|
 | who may do what | commands by capability: the owner has all, a friend all but `admin`/`card` | the group's capabilities: `/stop`, `/quiet`, `/tasks`, no owner commands |
-| feedback (`learns`) | yes, per person | no (a shared group has no per-person offers) |
 | the answer (`forUs`, `mayAnswer`, `decide`) | always | when addressed (tagged or quoted, then sticky for `GROUP_STICKY_MINUTES`), else when the gate says act; not while paused, over budget or over the group's own day |
 | who is heard (`everyone`, `vouch`, `optionalPictures`) | every sender gets a read receipt and a reason for an unusable voice message or picture | only someone who spoke to us; the owner must be a member; a picture is opened only when it can be answered |
 | history (`recorded`, `say`) | `owner`, the words as written | `member`, each line starts with its speaker |
@@ -312,7 +310,7 @@ Working memory is the conversation's resumed session. Episodic memory is `logs/a
 
 **What I learned overnight** (`src/memory/learned.ts`). The dream's changes are recorded and told once: to the owner in the brief (`memory_changes_since_brief`), to a friend as `learnedFact` in her next look. Groups are off.
 
-**Feedback** (`src/conversation/feedback.ts`). In a private chat a 👎 on something sent unprompted, or a short quoted reply a helper model classes as feedback, produces one proposed note. Code checks its shape; a valid note is saved as the person's own and mentioned (`FEEDBACK_OFFERS_PER_DAY`). A 👍 counts toward `feedback_signals`, which the dream sees.
+**Corrections** (no code path of their own). A 👎 on something Ted did or sent, an undo, or "don't do that" is learned by the run itself under the general learn rule in the persona (`learn.md`): it works out the rule and saves a note. A reaction turn is given the reacted message (fenced as data) and the journal lines around it with their "why" (`journalAround`). The model writes the note; no code checks it (notes grant nothing; every action is still judged).
 
 Safety rules and operational settings (quiet hours, limits, model, names) are never memory.
 
@@ -437,7 +435,6 @@ src/conversation/delivery.ts  reply delivery: text, voice, picture, typing
 src/conversation/document.ts  files people send, made ready for the model
 src/conversation/dream.ts  the nightly dream: one dreamer for all
 src/conversation/edit.ts  edited and deleted messages (pure parts)
-src/conversation/feedback.ts  a 👎 or "less of this" saves one checked note
 src/conversation/forget.ts  `npm run forget`: a friend or a group
 src/conversation/gate.ts  participation gate for untagged group messages
 src/conversation/group.ts  a group's way of answering (sticky address, the gate, its prompt), ownership check

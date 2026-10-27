@@ -26,7 +26,7 @@ export function noteWritten(tool: string, input: Record<string, unknown>): void 
   memoryChanges.push(`${tool === "Write" ? "➕ saved" : "✏️ updated"} ${file}: ${gist}`);
 }
 
-// The one message that announces note changes, with the way back (the chat's end-of-turn notice, and a note saved from a confirmed offer, conversation/feedback.ts).
+// The one message that announces note changes, with the way back (the chat's end-of-turn notice).
 export const memoryNoticeText = (lines: readonly string[]): string => `🧠 Memory\n${lines.join("\n")}\nWrong? Tell me to undo it.`;
 
 // At the end of the turn: the assistant's own reply says what it saved or forgot, and that is the one message. Only if
