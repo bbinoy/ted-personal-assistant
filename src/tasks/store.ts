@@ -12,25 +12,26 @@ import { isZone, localOf, parseLocal, showInstant, showLocal, todayIn, wallToUtc
 // changed fields), then tells the event stream (a `task` event: the audit row and the journal line). Nothing is ever deleted: `dropped` is the end state (the tables have triggers that refuse a
 // DELETE, and this file has no path to one). A conversation can only reach its own file: the key names it, there is no other connection (convdb.ts).
 //
-// Who may do what is decided here too, in code, below the tools: an `inferred` origin (a background look, the mail handler) can only ADD, at most LIMITS.inferredPerDay a day per conversation
-// (a flood of mail is not a flood of tasks); what it adds is an open task like any other, marked `inferred` with its source (a mail: source_kind mail and the mail id, so the same mail never adds
-// it twice), and the run tells the person in its own words; it can neither change nor finish nor drop anything. Undo is one message ("drop that task"). The tool layer and the permission floor say
-// the same, this is the part that cannot be bypassed. An inferred item's text came from a third party: a run that lists it is told so (modules/tasks/module.ts untrustedWhen).
+// A look (an unattended run) may do what a chat may: add, change, finish, snooze and drop. Its changes are attributed to "assistant (look)" in the history (`by`), the journal says why it ran, and
+// every change is undone with reopen. The one limit in code is the flood guard: at most LIMITS.addedByLooksPerDay items a day per conversation added by looks (a flood of mail is not a flood of
+// tasks). Where an item came from is its source (source_kind, and source_ref such as the mail id, so the same mail never adds it twice); an item from a mail carries a third party's words, so a run
+// that lists one is told so (modules/tasks/module.ts untrustedWhen). `origin` records whose conversation made the row (owner, member, friend); old rows with origin `inferred` are still in the
+// files and are never read as anything.
 //
 // Dates are LOCAL wall times in the conversation's zone ("2026-10-24" or "2026-10-24T14:30", with the zone it was set in); only remind_at and snooze_until are instants (UTC ms).
 
 export const KINDS = ["task", "i_owe", "owed_to_me"] as const;
-export const STATUSES = ["open", "done", "dropped", "snoozed"] as const; // (the schema still allows "suggested": nothing writes it since step 11 turned the last ones open)
-export const ORIGINS = ["owner", "member", "friend", "inferred"] as const;
+export const STATUSES = ["open", "done", "dropped", "snoozed"] as const;
+export const ORIGINS = ["owner", "member", "friend"] as const;
 export const SOURCE_KINDS = ["message", "mail", "meeting", "import", "other"] as const;
-export const ACTIONS = ["added", "edited", "done", "reopened", "dropped", "snoozed", "suggested", "confirmed", "rejected", "reminded"] as const; // (suggested, confirmed, rejected: history rows of the retired suggestions)
+export const ACTIONS = ["added", "edited", "done", "reopened", "dropped", "snoozed", "reminded"] as const; // (old history rows may also say suggested, confirmed or rejected: eventsOf passes them through, nothing renders them)
 export type Kind = (typeof KINDS)[number];
 export type Status = (typeof STATUSES)[number];
 export type Origin = (typeof ORIGINS)[number];
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 export type Action = (typeof ACTIONS)[number];
 
-export const LIMITS = { title: 200, details: 2000, person: 80, assignee: 80, ref: 300, open: 1000, inferredPerDay: 10, list: 200 } as const;
+export const LIMITS = { title: 200, details: 2000, person: 80, assignee: 80, ref: 300, open: 1000, addedByLooksPerDay: 10, list: 200 } as const;
 
 export interface Item {
   id: number;
@@ -45,7 +46,6 @@ export interface Item {
   assignee?: string;
   status: Status;
   snoozeUntil?: number;
-  origin: Origin;
   sourceKind: SourceKind;
   sourceRef?: string;
   createdAt: number;
@@ -68,8 +68,9 @@ export interface TaskEvent {
 export interface Scope {
   key: string; // the Conversation.key: which conversation's file, and where the event is told
   zone: string; // the conversation's time zone
-  by: string; // "owner", a member's or friend's name, "assistant (inferred)", "system"
-  origin: Origin; // what a new item made by this actor is marked as
+  by: string; // "owner", a member's or friend's name, LOOK_BY (an unattended run), "system"
+  origin: Origin; // whose conversation it is: the kind of person a new row is marked with
+  unattended?: boolean; // a look or another background run: no urgent reminders, and the daily add cap
   source: Source; // the policy source of the run (the audit row)
   now?: number; // test clock
   why?: Why; // a journal line made outside a tool call (a command) says its own why; a tool's comes from the run's provenance (journalrender.ts)
@@ -83,6 +84,9 @@ export class TaskError extends Error {
     this.name = "TaskError";
   }
 }
+
+/** How the history names the changes of an unattended run. */
+export const LOOK_BY = "assistant (look)";
 
 export const nowOf = (s: Scope): number => s.now ?? Date.now();
 
@@ -101,7 +105,6 @@ interface Row {
   assignee: string | null;
   status: Status;
   snooze_until: number | null;
-  origin: Origin;
   source_kind: SourceKind;
   source_ref: string | null;
   created_at: number;
@@ -123,7 +126,6 @@ const toItem = (r: Row): Item => ({
   ...(r.assignee !== null ? { assignee: r.assignee } : {}),
   status: r.status,
   ...(r.snooze_until !== null ? { snoozeUntil: r.snooze_until } : {}),
-  origin: r.origin,
   sourceKind: r.source_kind,
   ...(r.source_ref !== null ? { sourceRef: r.source_ref } : {}),
   createdAt: r.created_at,
@@ -184,7 +186,7 @@ function checkInstant(label: string, v: number | null | undefined): number | nul
 // ---- what an event says ----
 
 const NOUN: Record<Kind, string> = { task: "task", i_owe: "promise", owed_to_me: "item owed to you" };
-const VERB: Record<Action, string> = { added: "Added", edited: "Edited", done: "Completed", reopened: "Reopened", dropped: "Dropped", snoozed: "Snoozed", suggested: "Suggested", confirmed: "Confirmed the suggested", rejected: "Rejected the suggested", reminded: "Reminded about" };
+const VERB: Record<Action, string> = { added: "Added", edited: "Edited", done: "Completed", reopened: "Reopened", dropped: "Dropped", snoozed: "Snoozed", reminded: "Reminded about" };
 const FIELD_NAMES: Record<string, string> = { title: "title", details: "details", due: "due", remind_at: "reminder", repeat: "repeat", person: "person", assignee: "assignee", kind: "kind", urgent: "urgent" };
 
 /** The line for the journal and the tool's reply: "Added task #4 'Call Sam' (due Fri 24 Oct)". `zone` and `now` put dates in the conversation's clock. */
@@ -244,11 +246,7 @@ export function told(scope: Scope, id: number, action: Action, line: string): vo
 }
 
 /** Only the person whose chat it is (the owner, a friend in hers) can make a reminder break quiet hours: not a group member, never a background look. */
-export const mayUrgent = (scope: Scope): boolean => scope.origin === "owner" || scope.origin === "friend";
-
-const mayChange = (scope: Scope): void => {
-  if (scope.origin === "inferred") throw new TaskError("A background look can only add a task; the person changes, finishes and drops them.");
-};
+export const mayUrgent = (scope: Scope): boolean => !scope.unattended && (scope.origin === "owner" || scope.origin === "friend");
 
 export interface NewItem {
   title: string;
@@ -299,10 +297,19 @@ export function insertImported(db: Db, scope: Scope, r: ImportRow): Item {
   return toItem(db.get<Row>("SELECT * FROM items WHERE id = ?", res.lastInsertRowid)!);
 }
 
-/** How many items an unattended run (origin inferred) added in this conversation since the start of today, in its zone. */
+// (rows written before the looks had their own name say "assistant (inferred)")
+const LOOKS = [LOOK_BY, "assistant (inferred)"];
+const byLooks = `e.action = 'added' AND e.by IN (${LOOKS.map(() => "?").join(", ")})`;
+
+/** How many items looks added in this conversation since the start of today, in its zone. */
 function addedToday(db: Db, zone: string, now: number): number {
   const p = parseLocal(todayIn(now, zone))!;
-  return db.num("SELECT COUNT(*) FROM items WHERE origin = 'inferred' AND created_at >= ?", wallToUtc(zone, p.date, "00:00"));
+  return db.num(`SELECT COUNT(*) FROM task_events e WHERE ${byLooks} AND e.at >= ?`, ...LOOKS, wallToUtc(zone, p.date, "00:00"));
+}
+
+/** The items looks added since an instant: the fact a look is told about the list (tasks/render.ts tasksFacts). */
+export function addedByLooks(key: string, since: number): Item[] {
+  return readDb(key)?.all<Row>(`SELECT i.* FROM items i JOIN task_events e ON e.item_id = i.id WHERE ${byLooks} AND e.at >= ? ORDER BY i.id LIMIT 50`, ...LOOKS, since).map(toItem) ?? [];
 }
 
 export interface Added {
@@ -316,7 +323,6 @@ export function addItem(scope: Scope, n: NewItem): Added {
   const now = nowOf(scope);
   const kind = n.kind ?? "task";
   if (!KINDS.includes(kind)) throw new TaskError(`kind must be one of ${KINDS.join(", ")}.`);
-  const inferred = scope.origin === "inferred";
   const status: Status = "open";
   const sourceKind = n.sourceKind ?? "message";
   if (!SOURCE_KINDS.includes(sourceKind)) throw new TaskError(`source_kind must be one of ${SOURCE_KINDS.join(", ")}.`);
@@ -334,7 +340,7 @@ export function addItem(scope: Scope, n: NewItem): Added {
   if (dup) return { item: dup, line: `Already on the list: #${dup.id} '${dup.title}' (${dup.status})`, duplicate: true };
   const live = db.num("SELECT COUNT(*) FROM items WHERE status IN ('open', 'snoozed')");
   if (live >= LIMITS.open) throw new TaskError(`The list is full (${LIMITS.open} open items): finish or drop some first.`);
-  if (inferred && addedToday(db, scope.zone, now) >= LIMITS.inferredPerDay) throw new TaskError(`${LIMITS.inferredPerDay} tasks were already added on your own today in this conversation (the daily cap against a flood of mail): add no more today; mention the rest in your message if they matter.`);
+  if (scope.unattended && addedToday(db, scope.zone, now) >= LIMITS.addedByLooksPerDay) throw new TaskError(`${LIMITS.addedByLooksPerDay} tasks were already added on your own today in this conversation (the daily cap against a flood of mail): add no more today; mention the rest in your message if they matter.`);
   const id = db.tx(() => {
     const r = db.run(
       "INSERT INTO items (kind, title, details, due, due_zone, remind_at, repeat, person, assignee, status, origin, source_kind, source_ref, created_at, updated_at, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -372,7 +378,6 @@ const need = (scope: Scope, id: number): Item => {
 };
 
 export function editItem(scope: Scope, id: number, p: Patch): { item: Item; line: string } {
-  mayChange(scope);
   const it = need(scope, id);
   live(it, "change it");
   const set: Change["set"] = {};
@@ -404,7 +409,6 @@ export function editItem(scope: Scope, id: number, p: Patch): { item: Item; line
 
 /** Done. A repeating item is not finished: it moves to its next due (and reminder) and stays open; done_at records this completion and the history says 'done'. */
 export function completeItem(scope: Scope, id: number): { item: Item; line: string; next?: string } {
-  mayChange(scope);
   const it = need(scope, id);
   if (it.status === "done") throw new TaskError(`#${id} is already done.`);
   if (it.status === "dropped") throw new TaskError(`#${id} was dropped; reopen it first if it should be done.`);
@@ -436,7 +440,6 @@ export function completeItem(scope: Scope, id: number): { item: Item; line: stri
 }
 
 export function reopenItem(scope: Scope, id: number): { item: Item; line: string } {
-  mayChange(scope);
   const it = need(scope, id);
   if (it.status !== "done" && it.status !== "dropped" && it.status !== "snoozed") throw new TaskError(`#${id} is ${it.status}, not done or dropped.`);
   return commit(scope, id, { action: "reopened", set: { status: "open", done_at: null, snooze_until: null } });
@@ -444,7 +447,6 @@ export function reopenItem(scope: Scope, id: number): { item: Item; line: string
 
 /** The end state: the item stays in the history, off every list. */
 export function dropItem(scope: Scope, id: number): { item: Item; line: string } {
-  mayChange(scope);
   const it = need(scope, id);
   if (it.status === "dropped") throw new TaskError(`#${id} is already dropped.`);
   return commit(scope, id, { action: "dropped", set: { status: "dropped", snooze_until: null } });
@@ -452,7 +454,6 @@ export function dropItem(scope: Scope, id: number): { item: Item; line: string }
 
 /** Out of the way until an instant (UTC ms): it is not open, not overdue and not reminded until then. */
 export function snoozeItem(scope: Scope, id: number, until: number): { item: Item; line: string } {
-  mayChange(scope);
   const it = need(scope, id);
   live(it, "snooze it");
   const t = checkInstant("until", until)!;
@@ -512,8 +513,8 @@ export function storeFacts(key: string): { items: number; imported: number } {
   return { items: all.length, imported: all.filter((it) => it.sourceKind === "import").length };
 }
 
-/** Does the list hold a live item the assistant added from a mail (its text is a third party's)? (modules/tasks/module.ts: reading the list then counts as reading untrusted text.) */
-export const hasMailItems = (key: string): boolean => (readDb(key)?.num("SELECT COUNT(*) FROM items WHERE origin = 'inferred' AND source_kind = 'mail' AND status IN ('open', 'snoozed')") ?? 0) > 0;
+/** Does the list hold a live item that came from a mail (its text is a third party's)? (modules/tasks/module.ts: reading the list then counts as reading untrusted text.) */
+export const hasMailItems = (key: string): boolean => (readDb(key)?.num("SELECT COUNT(*) FROM items WHERE source_kind = 'mail' AND status IN ('open', 'snoozed')") ?? 0) > 0;
 
 /** Every open or snoozed item (the reminder tick reads these; no cap, unlike a list). */
 export const activeItems = (key: string): Item[] => allItems(key).filter((it) => it.status === "open" || it.status === "snoozed");
