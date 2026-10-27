@@ -1,7 +1,7 @@
 import { readAudit } from "./core/audit.ts";
 import { entryFor } from "./policy/toolmanifest.ts";
 import { mailRuntime } from "./modules/runtime.ts";
-import { localTime } from "./core/pause.ts";
+import { localTime } from "./core/timezone.ts";
 import { doctor } from "./doctor.ts";
 import { settings } from "./core/settings.ts";
 import { agreement } from "./approvals/autojudge.ts";

@@ -724,7 +724,7 @@ src/core/sanitize.ts  text sanitiser and `LIMITS`
 src/core/settings.ts  every tunable, validated at start
 src/core/sleep.ts  the "Mac slept" signal
 src/core/state.ts  atomic file access (writeFileAtomic)
-src/core/timezone.ts  a conversation's clock and quiet hours
+src/core/timezone.ts  a conversation's clock, quiet hours and the one set of time formatters
 src/core/timing.ts  per-turn timing line
 src/core/toolclean.ts  cleans tool results
 src/core/warmslot.ts  one warm model process slot

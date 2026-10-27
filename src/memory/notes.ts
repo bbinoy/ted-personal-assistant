@@ -4,7 +4,7 @@ import { isInside } from "../core/contain.ts";
 import { fence } from "../core/fence.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { preset } from "../core/preset.ts";
-import { localDay } from "../core/pause.ts";
+import { dayIn } from "../core/timezone.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { writeFileAtomic } from "../core/state.ts";
@@ -97,7 +97,7 @@ export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: stri
   } catch {
     return [];
   }
-  const today = localDay(now, zone);
+  const today = dayIn(now, zone);
   const out: Note[] = [];
   for (const f of files) {
     try {

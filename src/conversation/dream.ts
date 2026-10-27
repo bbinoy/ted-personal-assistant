@@ -14,7 +14,8 @@ import { listGroups } from "./groupstore.ts";
 import { recordDream } from "../memory/learned.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { NOTES_DIR, STATUS_PREFIX } from "../memory/notes.ts";
-import { isPaused, localDay } from "../core/pause.ts";
+import { isPaused } from "../core/pause.ts";
+import { dayIn, localTime } from "../core/timezone.ts";
 import { dreamSystem } from "../run/persona.ts";
 import { preset } from "../core/preset.ts";
 import { OWNER, settings } from "../core/settings.ts";
@@ -40,7 +41,6 @@ const MAX_PROMPT_CONVERSATION_CHARS = 40_000;
 
 // ---- what the model sees ----
 
-const hhmm = (iso: string) => `${iso.slice(5, 10)} ${new Date(iso).toTimeString().slice(0, 5)}`;
 
 // Pure: the conversation since the last dream as lines, for any conversation. Only the words of the person (or the members) the notes are about can ground a
 // note (`text`): "owner" is a private chat's person (the owner, or a friend, named `who`), "member" is what the members of a group wrote (their lines start with
@@ -52,9 +52,9 @@ export function conversationLines(messages: readonly Sent[], who: string = OWNER
   const lines: string[] = [];
   const said: string[] = [];
   for (const m of foldEdits(withoutDeleted(messages))) {
-    if (m.kind === evidence) { lines.push(`[${hhmm(m.at)}] ${evidence === "owner" ? `${who}: ` : ""}${m.text.replace(/\n+/g, " / ")}`); said.push(m.text); }
-    else if (m.kind === "reaction" && evidence === "owner") lines.push(`[${hhmm(m.at)}] ${who} reacted ${m.text.replace(/\n+/g, " / ")}`); // shows what was reacted to, which may quote mail: never evidence
-    else if (m.kind === "chat") lines.push(`[${hhmm(m.at)}] assistant (context only): ${m.text.slice(0, LIMITS.line).replace(/\n+/g, " / ")}`);
+    if (m.kind === evidence) { lines.push(`[${localTime(m.at)}] ${evidence === "owner" ? `${who}: ` : ""}${m.text.replace(/\n+/g, " / ")}`); said.push(m.text); }
+    else if (m.kind === "reaction" && evidence === "owner") lines.push(`[${localTime(m.at)}] ${who} reacted ${m.text.replace(/\n+/g, " / ")}`); // shows what was reacted to, which may quote mail: never evidence
+    else if (m.kind === "chat") lines.push(`[${localTime(m.at)}] assistant (context only): ${m.text.slice(0, LIMITS.line).replace(/\n+/g, " / ")}`);
   }
   return { lines, text: said.join("\n"), count: said.length };
 }
@@ -125,7 +125,7 @@ export const readNoteFiles = (dir: string = NOTES_DIR): NoteFile[] => {
 export async function dreamOver(scope: Scope, prompt: string, system: string, evidenceText: string, now: Date, run: Runner): Promise<{ plan: Plan; snapshot?: string }> {
   const notes = readNoteFiles(scope.notesDir);
   const raw = await run(prompt, system);
-  const plan = planOps(raw, { ownerText: evidenceText, notes, today: localDay(now), now, scope });
+  const plan = planOps(raw, { ownerText: evidenceText, notes, today: dayIn(now), now, scope });
   return { plan, snapshot: applyPlan(plan, now, scope, baseOf(notes)) }; // `notes`: as read before the model ran; a note edited meanwhile is not overwritten
 }
 
@@ -181,7 +181,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
     if (!allows(conv, "dream")) return false; // its record: active, with the capability; the instance's DREAM switch
     if (deps.busy?.(conv)) return false; // someone is talking to it: the dream is for the quiet, and does not tidy notes under a turn that is using them
     const stateConv = dreamStateConv(conv);
-    const today = localDay(now);
+    const today = dayIn(now);
     const state: DreamState = readDream(stateConv);
     if (state.day === today) return false;
     const rhythm = preset().rhythm.dream;
@@ -234,7 +234,7 @@ export function dreamTrigger(run: () => unknown, o: { hour?: () => number; every
   let tried: { day: string; at: number } | undefined;
   return (now: Date = new Date()): unknown => {
     if ((o.enabled ?? (() => settings.dream))() === false || now.getHours() < hour()) return undefined;
-    const day = localDay(now);
+    const day = dayIn(now);
     if (tried && tried.day === day && now.getTime() - tried.at < everyMs) return undefined;
     tried = { day, at: now.getTime() };
     return run();

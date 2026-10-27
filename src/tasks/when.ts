@@ -1,10 +1,9 @@
-import { clockIn, isZone } from "../core/timezone.ts";
+import { clockIn, isZone, pad } from "../core/timezone.ts";
 
 // Local calendar and clock arithmetic for tasks, pure and DST-safe. A task's due date is a LOCAL wall time ("2026-10-24" or "2026-10-24T14:30") in the conversation's zone; only a reminder
 // (remind_at) is an instant. So dates here are plain "YYYY-MM-DD" strings moved by calendar arithmetic (a day is not 24 hours across a clock change), and the one place a wall time becomes an
 // instant is wallToUtc, which says what happens on the two clock-change days a year (a time that does not exist moves forward, a time that happens twice is the first).
 
-export const pad = (n: number): string => String(n).padStart(2, "0");
 const DAY_MS = 86_400_000;
 
 export interface Ymd {

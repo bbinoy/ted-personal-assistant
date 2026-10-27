@@ -3,7 +3,7 @@ import { pruneLooks } from "../core/looks.ts";
 import { pruneNotices } from "../core/capnotice.ts";
 import { pruneSpend } from "../core/budget.ts";
 import { instanceDb } from "../core/instancedb.ts";
-import { localDay } from "../core/pause.ts";
+import { dayIn } from "../core/timezone.ts";
 import { registerRetention, type RetentionResult } from "../core/retention.ts";
 import { settings } from "../core/settings.ts";
 
@@ -31,7 +31,7 @@ export function registerDbRules(): void {
     everyHours: 24,
     run(now, o) {
       const days = settings.spendKeepDays;
-      const cutoff = localDay(new Date(now.getTime() - days * 86_400_000));
+      const cutoff = dayIn(new Date(now.getTime() - days * 86_400_000));
       if (o.dryRun) return { removed: instanceDb().num("SELECT COUNT(*) FROM spend WHERE day < ?", cutoff), freedBytes: 0, notes: `spend rows older than ${days} days` };
       return { removed: pruneSpend(days, now), freedBytes: 0, notes: `spend rows older than ${days} days` };
     },
@@ -40,7 +40,7 @@ export function registerDbRules(): void {
     name: "db-notices",
     everyHours: 24,
     run(now, o) {
-      if (o.dryRun) return { removed: instanceDb().num("SELECT COUNT(*) FROM notices WHERE (day IS NULL OR day < ?) AND (last_at IS NULL OR last_at < ?)", localDay(now), now.getTime() - 86_400_000), freedBytes: 0, notes: "notice marks of past days" };
+      if (o.dryRun) return { removed: instanceDb().num("SELECT COUNT(*) FROM notices WHERE (day IS NULL OR day < ?) AND (last_at IS NULL OR last_at < ?)", dayIn(now), now.getTime() - 86_400_000), freedBytes: 0, notes: "notice marks of past days" };
       return { removed: pruneNotices(now.getTime()), freedBytes: 0, notes: "notice marks of past days" };
     },
   });

@@ -1,3 +1,4 @@
+import { fileStamp } from "../core/timezone.ts";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -11,14 +12,13 @@ import { convOfPath, OWNER_CONV } from "../core/convpaths.ts";
 
 // Applying a plan to the notes folder, with a snapshot first, and undoing the latest one.
 
-const stamp = (now: Date) => now.toISOString().replace(/[:.]/g, "-");
 
 // The snapshots of a backups folder, oldest first: only the stamped ones (a folder of anything else in there, such as the retention job's expired/, is neither counted, pruned nor undone).
 export const snapshotsOf = (backupsDir: string): string[] => (existsSync(backupsDir) ? readdirSync(backupsDir).filter((n) => /^\d{4}-\d{2}-\d{2}T/.test(n)).sort() : []);
 
 function snapshot(now: Date, scope: Scope): string {
   mkdirSync(scope.backupsDir, { recursive: true, mode: 0o700 });
-  const dir = join(scope.backupsDir, stamp(now));
+  const dir = join(scope.backupsDir, fileStamp(now));
   cpSync(scope.notesDir, dir, { recursive: true, filter: (src) => !basename(src).startsWith(STATUS_PREFIX) }); // a status note is not the dream's: an undo must not bring back yesterday's
   for (const old of snapshotsOf(scope.backupsDir).slice(0, -settings.notesBackupKeep)) rmSync(join(scope.backupsDir, old), { recursive: true, force: true });
   return dir;

@@ -12,7 +12,7 @@ const { groupConvId, friendConvId, instancePaths } = await import("../src/core/c
 const { instanceDb, kvGet, kvSet, kvDelete, openInstanceDbAt } = await import("../src/core/instancedb.ts");
 const B = await import("../src/core/budget.ts");
 const N = await import("../src/core/capnotice.ts");
-const { localDay } = await import("../src/core/pause.ts");
+const { dayIn } = await import("../src/core/timezone.ts");
 const I = await import("../src/intake/intakelinks.ts");
 const R = await import("../src/core/looks.ts");
 const { dbCheck } = await import("../src/doctor.ts");
@@ -71,7 +71,7 @@ test("spend: the owner's day is every login run (her chat, background work and t
   }
   // each row says who, which payer, what kind, which local day
   const row = instanceDb().get<{ day: string; conv: string; payer: string; kind: string; at: number }>("SELECT * FROM spend WHERE kind = 'dream'")!;
-  assert.deepEqual([row.day, row.conv, row.payer, row.kind], [localDay(new Date()), ANNA, "key", "dream"]);
+  assert.deepEqual([row.day, row.conv, row.payer, row.kind], [dayIn(new Date()), ANNA, "key", "dream"]);
   assert.ok(Math.abs(row.at - Date.now()) < 5000);
   // nothing is recorded for a charge that is not money
   B.recordCost(0);
@@ -107,7 +107,7 @@ test("spend: forgetting a conversation unnames its rows but the owner's and the 
 test("the budget check is fast: well under a millisecond with a year of rows", () => {
   reset();
   const db = instanceDb();
-  const day = localDay(new Date());
+  const day = dayIn(new Date());
   db.tx(() => {
     for (let d = 0; d < 365; d++) for (let i = 0; i < 60; i++) db.run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, 'chat', 0.01)", 1, `2025-${String(1 + (d % 12)).padStart(2, "0")}-${String(1 + (d % 28)).padStart(2, "0")}`, i % 5 === 0 ? ANNA : "owner", i % 5 === 0 ? "key" : "login");
   });
@@ -167,7 +167,7 @@ test("the budget notice is once a day, and OVERBUDGET's first time uses the noti
     B.recordCost(2);
     assert.deepEqual(B.overBudget(), { over: true, firstTime: true, usd: 2 });
     assert.deepEqual(B.overBudget(), { over: true, firstTime: false, usd: 2 });
-    assert.equal(instanceDb().get<{ day: string }>("SELECT day FROM notices WHERE key = ?", B.OWNER_BUDGET_NOTICE)?.day, localDay(new Date()));
+    assert.equal(instanceDb().get<{ day: string }>("SELECT day FROM notices WHERE key = ?", B.OWNER_BUDGET_NOTICE)?.day, dayIn(new Date()));
   } finally {
     s.dailyBudgetUsd = was;
   }

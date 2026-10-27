@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { owner } from "../src/conversation/conversationmodel.ts";
 import { settings } from "../src/core/settings.ts";
-import { localDay } from "../src/core/pause.ts";
+import { dayIn } from "../src/core/timezone.ts";
 import { GROUP_BUDGET_TEXT, groupBudgetDue, recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createFailureTracker, dropUnreachable, holdFact, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, countPosts, takeHeld } from "../src/heartbeat/notices.ts";
@@ -248,6 +248,6 @@ test("the instance-cap notice is handed to the owner's sender; a group's budget 
   assert.equal(told.length, 1);
   capNoticesTo(undefined);
   assert.equal(groupBudgetDue("gx", DAY), true);
-  assert.equal(instanceDb().get<{ day: string }>("SELECT day FROM notices WHERE key = ?", `group-budget:${groupConvId("gx")}`)?.day, localDay(DAY), "written to the notices table under the group's folder name, not its id: a restart does not forget it");
+  assert.equal(instanceDb().get<{ day: string }>("SELECT day FROM notices WHERE key = ?", `group-budget:${groupConvId("gx")}`)?.day, dayIn(DAY), "written to the notices table under the group's folder name, not its id: a restart does not forget it");
   assert.equal(groupBudgetDue("gx", DAY), false);
 });
