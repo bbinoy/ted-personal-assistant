@@ -19,6 +19,7 @@ process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
+const { rememberNames } = await import("../src/approvals/seennames.ts");
 const { SessionHub } = await import("../src/intake/mcpproxy.ts");
 const { GoogleSession, googleProxy, credentialFile, sweepStaleCredentialDirs, TMP_PREFIX } = await import("../src/modules/google/googlemcp.ts");
 const { serversFor, RUNTIME, stopAll, dropAll } = await import("../src/modules/runtime.ts");
@@ -305,6 +306,7 @@ type Out = { behavior: string; message?: string };
 const G = GOOGLE_PREFIX;
 
 function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = "ask") {
+  rememberNames(`tenant:${ctx.id}`, JSON.stringify([{ id: "e1", title: "Dentist" }, { id: "e2", title: "Lunch" }, { id: "p1", title: "Notes" }, { id: "p2", title: "Plan" }])); // (the run has read them: a delete of an unseen object is first sent back to look it up)
   const asked: string[] = [];
   const judged: { description: string; untrustedInput?: boolean }[] = [];
   const approve = async (description: string) => (asked.push(description), { approved: true });

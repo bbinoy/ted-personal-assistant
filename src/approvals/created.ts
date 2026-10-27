@@ -11,7 +11,7 @@ const MAX_PER_CONVERSATION = 500;
 const seen = new Map<string, Map<string, { at: number; label?: string }>>();
 
 // An id as comparable text: a Notion page id with or without dashes or in its URL, a number or a string otherwise.
-const norm = (v: string | number): string => {
+export const norm = (v: string | number): string => {
   const s = String(v).trim();
   const hex = /([0-9a-f]{8})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{12})/i.exec(s);
   return (hex ? hex.slice(1).join("") : s).toLowerCase();

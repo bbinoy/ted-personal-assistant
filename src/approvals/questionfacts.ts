@@ -2,7 +2,7 @@
 // must appear in it verbatim. No second model call. Pure.
 //
 // Required, taken from the exact arguments (and the code-rendered details, which for a mail send are read back from the mail client):
-// every email address and URL in a structured field, ids, titles/subjects, the time zone, every start and end time (HH:MM) and
+// every email address and URL in a structured field, titles/subjects (what a person recognises a thing by; opaque ids of events, conversations, pages and files are NOT required and are better left out), the time zone, every start and end time (HH:MM) and
 // date (D Mon), amounts, and the words Cc / Bcc when there are such recipients. The question may NOT carry an email address or URL that is in
 // neither the arguments nor the details (anywhere in them, a body included): an invented or swapped one cannot pass for a recipient. The code footer
 // (questionfooter.ts) then shows the recipients and the start of the text whatever the question says. What this CANNOT check: what the question says about the action in words ("replace" vs "add",
@@ -15,7 +15,6 @@ const URL_RE = /https?:\/\/[^\s"'<>)\]]+/g;
 const AMOUNT = /\d[\d.,]*\s?(?:€|EUR|USD|GBP|CHF|\$|£)/g;
 const ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const ID_KEY = /(^id$|Id$|_id$)/;
 const TITLE_KEYS = new Set(["summary", "title", "subject"]);
 
 export interface Facts {
@@ -48,7 +47,6 @@ export function factsOf(args: Record<string, unknown>, details: string): Facts {
       if (!LONG_TEXT.has(key)) add(must, trimUrl(m[0]));
     }
     if (/^(cc|bcc)$/i.test(key) && s.trim()) roles.add(key.toLowerCase());
-    if (ID_KEY.test(key) && key !== "calendarId" && s !== "primary" && s.length <= 80) add(must, s);
     if (TITLE_KEYS.has(key) && s.length <= 120 && s.trim()) add(must, s.trim());
     if (/^time_?zone$/i.test(key) && s) add(must, s);
     if (!LONG_TEXT.has(key)) {
@@ -90,7 +88,7 @@ export function factsOf(args: Record<string, unknown>, details: string): Facts {
     }
     add(must, "YES");
   }
-  // A call on an object by its id (describe.ts): the object's title must be in the question, not only its id.
+  // A call on an object by its id (describe.ts): the object's title must be in the question; its id need not be.
   const named = /^Named: .*?“(.+?)”/m.exec(details)?.[1];
   if (named) add(must, named);
   // The call was declined a moment ago (declined.ts): the question must say how long ago, so the owner knows why they are asked again.

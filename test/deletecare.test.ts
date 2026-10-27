@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { rememberNames } from "../src/approvals/seennames.ts";
 import assert from "node:assert/strict";
 import { createdNote, isJudgeable, mayFix, type Verdict } from "../src/approvals/autojudge.ts";
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
@@ -72,6 +73,7 @@ test("through the permission path: classify asks, the judge sees the care line, 
   setAuto();
   forgetCreated();
   noteCreated("c-owner", ["26305"]);
+  rememberNames("c-owner", JSON.stringify([{ id: 99, subject: "Old" }, { id: 100, subject: "Older" }, { id: "e1", summary: "Dinner" }, { id: "p", title: "Notes" }])); // (read by the run: an unseen delete is first sent back to look it up)
   const seen: string[] = [];
   const mk = (decision: Verdict["decision"], conv: string) => {
     const asked: string[] = [];

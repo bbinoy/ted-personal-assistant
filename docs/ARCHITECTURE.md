@@ -279,7 +279,7 @@ Every tool call, in every conversation and run, goes through `src/approvals/perm
 2. **Judge.** A read or the assistant's own plumbing is free (`isFree`); everything else goes to one model (`JUDGE_MODEL`, Sonnet; `approvaljudge.ts`, warm spare in `judgespare.ts`).
    - Its input is code-rendered: the arguments, a PROVENANCE block (`provenanceFor`) and `untrusted_input_in_run`.
    - It answers `auto`, `ask` or `fix` (arguments wrong: denied with a hint, at most 2 per tool); a timeout or an error is `ask`. `AUTO_APPROVE=off` skips it.
-3. **Question**, chat turns only. A model writes it; code adds a footer (`questionfooter.ts`) and checks that every address, URL, id, time and amount appears verbatim (`questionfacts.ts`). A failed check sends nothing.
+3. **Question**, chat turns only. A model writes it; code adds a footer (`questionfooter.ts`) and checks that every address, URL, title, subject, time, date and amount appears verbatim (`questionfacts.ts`). A failed check sends nothing. **Questions name the object, not its id:** opaque ids (event, conversation, page, file) are never required and the writer is told never to show them. The name comes from what the assistant created, from any read result of the conversation (`seennames.ts`: id to title and time, for every connector, the same store that names archived mail in the journal) or from the module's lookup (`describe.ts`). A delete of an object still unnamed is sent back to the run once to look it up first (audit `judge-fix`, reason `unnamed-object`), and asked only if it still cannot be named.
 4. **Unattended runs never ask** (`UNATTENDED_SKIP`, `RunKind.attended` false). A look, its expert, a routine and their browse worker act when the judge says `auto`; otherwise they get one fixed refusal, audited `background-skip`. Their approver is `NEVER_ASKS`. A payment is refused outright.
 
 - **Answers.** Only a message that arrives after the question, or a reaction on it, can answer. An exact yes or no for the single open question and 👍 / 👎 are matched by code; any other reply goes to the judge model with all open questions of that conversation (`approvalmodel.ts`, `approvalprompt.ts`). A failed reading approves nothing.
@@ -575,6 +575,7 @@ src/approvals/autojudge.ts  the judge's input and the vetoes before it
 src/approvals/created.ts  what the assistant itself made (24 hours)
 src/approvals/declined.ts  declines stay final for 30 minutes
 src/approvals/describe.ts  names an object known only by id
+src/approvals/seennames.ts  id to title (and time) from the run's own read results
 src/approvals/format.ts  readable approval text per tool call
 src/approvals/journalrender.ts  journal lines by code: what, why, undo
 src/approvals/judgespare.ts  the judge's warm spare

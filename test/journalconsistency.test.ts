@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import * as approvals from "../src/approvals/approvals.ts";
 import { armedCount, forgetArmed } from "../src/core/sinks/journalsink.ts";
 import { endRun } from "../src/core/events.ts";
-import { forgetSeenMail, journalable, noteDone, rememberMail } from "../src/approvals/journalrender.ts";
+import { journalable, noteDone } from "../src/approvals/journalrender.ts";
+import { forgetSeen, rememberNames } from "../src/approvals/seennames.ts";
 import { resetDeclined } from "../src/approvals/declined.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
@@ -33,7 +34,7 @@ const judge = (verdict: Verdict) => async () => verdict;
 const calendarCall = (title: string) => ({ summary: title, startTime: "2026-10-31T17:10:00", endTime: "2026-10-31T20:00:00", timeZone: "Europe/Zurich" });
 let t0 = new Date().toISOString();
 const audit = (tool: string, pred: (e: AuditEntry) => boolean = () => true) => readAudit((e) => e.ts >= t0 && e.tool === tool && pred(e));
-const reset = () => (forgetArmed(), forgetSeenMail(), resetDeclined(), (t0 = new Date(Date.now() - 1).toISOString()));
+const reset = () => (forgetArmed(), forgetSeen(), resetDeclined(), (t0 = new Date(Date.now() - 1).toISOString()));
 
 function canUse(key: string, o: { approve?: Parameters<typeof makeCanUseTool>[0]; judge?: Parameters<typeof makeCanUseTool>[3]; source?: typeof OWNER_CHAT; friend?: boolean; say?: string; tools?: ReadonlySet<string> } = {}) {
   if (o.say) scopeOf(key).say(o.say);
@@ -172,7 +173,7 @@ test("an archive names the mail the run had seen and says how to undo it", async
   reset();
   const key = fresh("owner");
   const before = journal(key).length;
-  rememberMail(key, JSON.stringify({ conversations: [{ conversationId: "c-9001", subject: "LinkedIn digest: 5 jobs", from: { name: "LinkedIn" } }, { conversationId: "c-9002", subject: "Invoice 4411", sender: "Digitec" }] }));
+  rememberNames(key, JSON.stringify({ conversations: [{ conversationId: "c-9001", subject: "LinkedIn digest: 5 jobs", from: { name: "LinkedIn" } }, { conversationId: "c-9002", subject: "Invoice 4411", sender: "Digitec" }] }));
   const tool = `${MB}archive_conversation`;
   const can = canUse(key, { say: "archive the newsletters", judge: judge({ decision: "auto", reason: "a newsletter, archived on request" }) });
   assert.equal(((await can(tool, { conversationId: "c-9001" }, opts)) as Out).behavior, "allow");
@@ -188,7 +189,7 @@ test("an archive names the sender of a Mailbird list row (`lastSender`), so the 
   reset();
   const key = fresh("owner");
   const before = journal(key).length;
-  rememberMail(key, JSON.stringify({ conversations: [{ conversationId: "c-7001", subject: "Your order shipped", lastSender: "Shop Example", lastMessageId: "m-1" }] }));
+  rememberNames(key, JSON.stringify({ conversations: [{ conversationId: "c-7001", subject: "Your order shipped", lastSender: "Shop Example", lastMessageId: "m-1" }] }));
   const tool = `${MB}archive_conversation`;
   await noteDone({ conv: key, source: "background", tool, input: { conversationId: "c-7001" } });
   assert.match(journal(key).slice(before)[0]!.text, /^Archived “Your order shipped” from Shop Example\. /);

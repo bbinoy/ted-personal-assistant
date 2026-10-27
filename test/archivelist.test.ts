@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { forgetSeenMail, noteDone, rememberMail } from "../src/approvals/journalrender.ts";
+import { noteDone } from "../src/approvals/journalrender.ts";
+import { forgetSeen, rememberNames } from "../src/approvals/seennames.ts";
 import { forgetArmed } from "../src/core/sinks/journalsink.ts";
 import { makeCanUseTool, UNATTENDED_SKIP } from "../src/approvals/permissions.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
@@ -29,11 +30,11 @@ const look = (key: string, decision: Verdict["decision"], asked: string[]) =>
 
 test("an unattended look archives what the judge is sure about: run, journaled with subject, sender and id; the brief's list numbers it by sender with the restore hint", async () => {
   forgetArmed();
-  forgetSeenMail();
+  forgetSeen();
   const key = owner();
   const before = journal(key).length;
   const since = new Date(Date.now() - 1000).toISOString().slice(0, 16);
-  rememberMail(key, JSON.stringify({ conversations: [
+  rememberNames(key, JSON.stringify({ conversations: [
     { conversationId: "a-1", subject: "Your order shipped", from: { name: "Digitec" } },
     { conversationId: "a-2", subject: "Weekly digest", sender: "LinkedIn" },
     { conversationId: "a-3", subject: "Delivered", from: "Digitec" },
