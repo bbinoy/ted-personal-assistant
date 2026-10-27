@@ -1,6 +1,7 @@
 import { query, startup } from "@anthropic-ai/claude-agent-sdk";
 import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
 import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
+import { readIndex } from "../memory/notes.ts";
 import { runFor, turnContext, TRIGGERS, type RunInputs, type Trigger } from "./runoptions.ts";
 import { markShown, spoke, toldKey, turnFacts, unseen, type TurnFacts } from "./turncontext.ts";
 import { chatResume, sessionTaint } from "./chatsession.ts";
@@ -59,6 +60,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   const k = toldKey(conv.convId, t.track);
   const told = [
     [k, turnContext(conv, trigger)],
+    [`${k}:notes`, readIndex(conv.notesDir) || undefined], // (the SDK loads MEMORY.md when a session starts; a resumed one is told the index again when it changed)
     [`${k}:status`, facts?.status.join("\n\n")],
     [`${k}:facts`, facts?.blocks.join("\n\n")],
   ] as const;

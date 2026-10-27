@@ -171,6 +171,28 @@ export const CONV_SCHEMA: readonly Migration[] = [
     `,
   },
   {
+    version: 16,
+    name: "what I learned overnight: a note a look saved is a learned change of source 'look' (not a mark on the note); older rows of the look kind keep their place",
+    up: `
+      CREATE TABLE learned_changes_new (
+        seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+        at      INTEGER NOT NULL,
+        source  TEXT NOT NULL CHECK (source IN ('dream', 'look')),
+        action  TEXT NOT NULL CHECK (action IN ('add', 'update', 'merge', 'delete', 'undone')),
+        file    TEXT NOT NULL,
+        gist    TEXT NOT NULL,
+        merged  TEXT,
+        batch   INTEGER,
+        outcome TEXT CHECK (outcome IS NULL OR outcome IN ('confirmed', 'undone', 'gone'))
+      );
+      INSERT INTO learned_changes_new (seq, at, source, action, file, gist, merged, batch, outcome)
+        SELECT seq, at, CASE source WHEN 'dream' THEN 'dream' ELSE 'look' END, action, file, gist, merged, batch, outcome FROM learned_changes;
+      DROP TABLE learned_changes;
+      ALTER TABLE learned_changes_new RENAME TO learned_changes;
+      CREATE INDEX learned_changes_batch ON learned_changes (batch, seq);
+    `,
+  },
+  {
     version: 2,
     name: "feedback offers and thumbs-up signals (conversation/feedback.ts)",
     up: `

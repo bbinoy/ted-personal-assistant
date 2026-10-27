@@ -5,8 +5,8 @@ import { OWNER_CONV, type ConvId } from "../core/convpaths.ts";
 import type { Db } from "../core/db.ts";
 import type { Plan } from "./dreamplan.ts";
 
-// "What I learned overnight": the notes change without the person being asked (the nightly dream tidies and adds), and this makes that VISIBLE
-// without nagging. CODE records each such change where it happens (recordDream: a row in the conversation's assistant.db, learned_changes), and later ONE short list is built from
+// "What I learned overnight": the notes change without the person being asked (the nightly dream tidies and adds, a background look saves a note), and this makes that VISIBLE
+// without nagging. CODE records each such change where it happens (recordDream, recordLook: a row in the conversation's assistant.db, learned_changes), and later ONE short list is built from
 // the rows not yet told (planBatch / commitBatch): the owner gets it as a section of the daily brief (the `memory_changes_since_brief` tool), a friend as a fact in her next look
 // (learnedFact), which says it in its own words (and so keeps quiet hours). A row is told once (its `batch`), so nothing repeats. Taking one back is an ordinary chat turn (forget_note, undo_dream).
 // Groups are off: their notes are shared, and what they keep stays as it was (nothing is recorded for one).
@@ -19,7 +19,7 @@ const GIST_MAX = 90;
 export interface Change {
   seq: number;
   at: number;
-  source: string; // "dream"; a row of any other kind (an older release wrote one) is settled without a word
+  source: "dream" | "look";
   action: "add" | "update" | "merge" | "delete" | "undone";
   file: string;
   gist: string;
@@ -72,6 +72,18 @@ export function recordDream(conv: ConvId, plan: Plan, dir: string, now: number):
   return n;
 }
 
+/** A look (an unattended run) saved or changed a note. One pending row per note: a second write before the list replaces the first. The note itself carries no mark. */
+export function recordLook(conv: ConvId, file: string, created: boolean, gist: string, now: number): void {
+  if (isGroupConv(conv)) return;
+  const db = liveConvDb(conv);
+  if (!db) return;
+  db.tx(() => {
+    const before = db.get<{ action: string }>("SELECT action FROM learned_changes WHERE source = 'look' AND file = ? AND batch IS NULL AND outcome IS NULL", file);
+    db.run("DELETE FROM learned_changes WHERE source = 'look' AND file = ? AND batch IS NULL AND outcome IS NULL", file);
+    db.run("INSERT INTO learned_changes (at, source, action, file, gist) VALUES (?, 'look', ?, ?, ?)", now, created || before?.action === "add" ? "add" : "update", file, oneLineGist(gist)); // (new tonight stays new)
+  });
+}
+
 // ---- the list ----
 
 export interface Batch {
@@ -97,7 +109,7 @@ export function planBatch(conv: ConvId, dir: string, now: number): Batch | undef
       continue;
     }
     const fresh = now - c.at < STALE_MS;
-    const true_ = c.source === "dream" && (c.action === "delete" ? !existsSync(join(dir, c.file)) : existsSync(join(dir, c.file)));
+    const true_ = c.action === "delete" ? !existsSync(join(dir, c.file)) : existsSync(join(dir, c.file));
     if (!fresh || !true_) {
       seqs.push(c.seq); // settled without a word
       continue;
@@ -175,7 +187,7 @@ export function learnedFact(conv: ConvId, dir: string, now: number): { text: str
   if (!batch) return undefined;
   if (!batch.items.length && !batch.notes.length) return void commitBatch(conv, batch, now); // (only changes that no longer hold: settled without a word)
   return {
-    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up):\n${learnedBody(batch.items, batch.notes)}\nTell them once, in one short line of your message, what you learned and that "forget <note>" (or "undo the dream" for the night's tidy-up) takes it back. If you say nothing, it stays for the next run.`,
+    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you saved while looking):\n${learnedBody(batch.items, batch.notes)}\nTell them once, in one short line of your message, what you learned and that "forget <note>" (or "undo the dream" for the night's tidy-up) takes it back. If you say nothing, it stays for the next run.`,
     told: () => void commitBatch(conv, batch, now),
   };
 }

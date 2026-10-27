@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -198,4 +198,19 @@ test("a friend's look is handed what changed in her notes as a fact; it counts a
   assert.equal(L.learnedFact(c.convId, c.notesDir, NOW + 2 * HOUR), undefined, "told once");
   saved(c, "people-old.md", "Very old", NOW - 8 * 86_400_000);
   assert.equal(L.learnedFact(c.convId, c.notesDir, NOW), undefined, "a stale change is dropped without a word");
+});
+
+test("a note a look saved is a learned change again, unmarked: one line per note, new stays new, listed once; a group records nothing", () => {
+  const c = friend();
+  put(c.notesDir, "people-anna.md", "Anna moved to Lisbon", "Anna lives in Lisbon.");
+  L.recordLook(c.convId, "people-anna.md", true, "Anna moved to Lisbon", NOW);
+  L.recordLook(c.convId, "people-anna.md", false, "Anna moved to Porto", NOW + HOUR);
+  assert.doesNotMatch(readFileSync(join(c.notesDir, "people-anna.md"), "utf8"), /origin|inferred/, "the note itself carries no mark");
+  const b = L.planBatch(c.convId, c.notesDir, NOW + 2 * HOUR)!;
+  assert.deepEqual(b.items.map((i) => L.lineOf(i)), ["- people-anna: Anna moved to Porto (saved)"]);
+  L.commitBatch(c.convId, b, NOW + 2 * HOUR);
+  assert.equal(L.planBatch(c.convId, c.notesDir, NOW + 3 * HOUR), undefined);
+  const g = "R3JvdXAxR3JvdXAxR3JvdXAx";
+  L.recordLook(groupConvId(g), "context-x.md", true, "x", NOW);
+  assert.equal(L.planBatch(groupConvId(g), groupNotesDir(g), NOW), undefined);
 });
