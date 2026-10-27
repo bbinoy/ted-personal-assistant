@@ -201,7 +201,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
               facts.onTool(tool, input, response);
               if (!isReadTool(tool) && !isNonAction(tool) && tool !== "mcp__seenmail__seen_mail") acted++; // (handing in the answer is not acting: a stale post is still dropped)
               if (entryFor(tool)?.action === "archive") archived++;
-              if (journalable(tool)) steps++;
+              if (journalable(tool, input as Record<string, unknown>)) steps++;
             },
           });
         },

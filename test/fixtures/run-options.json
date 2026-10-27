@@ -674,7 +674,6 @@
         "mcp__people__find_person",
         "mcp__seenmail__seen_mail",
         "mcp__send__send",
-        "mcp__status__write_status_note",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
         "mcp__tasks__drop_task",
@@ -742,7 +741,6 @@
       "voice",
       "memory",
       "people",
-      "status",
       "meetings",
       "browse"
     ],

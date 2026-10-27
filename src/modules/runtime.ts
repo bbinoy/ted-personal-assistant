@@ -16,7 +16,6 @@ import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
 import { auditSource } from "../core/runkind.ts";
 import { createPeopleServer } from "./people/peopletool.ts";
-import { createStatusServer } from "./status/statusnote.ts";
 import { createTasksServer } from "./tasks/tasktools.ts";
 import { createSeenMailServer } from "./seenmail/seenmail.ts";
 import { createMeetingsServer } from "./meetings/meetingtools.ts";
@@ -72,7 +71,6 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
         contactsWhy: ctx.tenant ? "she has not connected Google" : ctx.groupId ? "a group has no contacts of its own" : "the Google connectors on the owner's login have no contacts tool",
       }),
   },
-  status: { server: () => createStatusServer() },
   // The conversation's task list. A look has the same task tools as a chat turn (tasktools.ts).
   tasks: {
     server: (ctx) =>

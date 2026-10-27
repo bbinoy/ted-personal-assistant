@@ -97,7 +97,7 @@ test("daily-brief skill: one archive list read after the sweep, no archiving of 
   assert.match(s, /triage notes[\s\S]*win over these defaults/);
   assert.match(s, /cold outreach is noise even from a named person/);
   assert.match(s, /after the email sweep, just before you write the brief\*\*, so the list includes what this very run archived/);
-  assert.match(s, /no time of your own: the code stamps the real write time/);
+  assert.match(s, /written: <now, exactly as the CURRENT TIME line gives it>/); // the time comes from the clock line, never computed
 });
 
 test("mail skills and the look: archive unless the mail needs the owner, cold outreach archived, notes win, only today's brief kept", async () => {
@@ -129,7 +129,7 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
 test("a long overdue pile: the brief offers a clean-up once (remembered in the status note), the task skill says how", () => {
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
   assert.match(read("notion-tasks"), /A long overdue pile[\s\S]*\*\*once\*\*[\s\S]*reschedule, drop or keep[\s\S]*Nothing is dropped without their word/);
-  assert.match(read("daily-brief"), /A long overdue pile[\s\S]*status-overdue-offer[\s\S]*name `overdue-offer`, `days` 30/);
+  assert.match(read("daily-brief"), /A long overdue pile[\s\S]*status-overdue-offer[\s\S]*`status-overdue-offer\.md` with `Write`/);
 });
 
 test("connectors: a run that started without a network records nothing", async () => {

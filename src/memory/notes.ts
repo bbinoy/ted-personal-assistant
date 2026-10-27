@@ -26,8 +26,7 @@ export const CATEGORIES: readonly string[] = preset().notes.categories;
 export type Category = string;
 
 export const MAX_NOTE_CHARS = 20_000; // a bound nobody should meet: it only stops one runaway file from filling a prompt
-export const MAX_STATUS_CHARS = 1200; // a status note is a short record, not memory
-export const STATUS_PREFIX = "status-"; // the assistant's own records (statusnote.ts): not the owner's memory (no notice), not the dream's (neither shown to it nor snapshotted or undone with it)
+export const STATUS_PREFIX = "status-"; // the assistant's own records (status-brief.md, written by the daily-brief skill with Write): not the owner's memory (no notice), not the dream's (neither shown to it nor snapshotted or undone with it)
 const MAX_NOTES_SHOWN = settings.memoryMaxNotes;
 
 export function ensureNotesDir(): void {
