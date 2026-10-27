@@ -84,8 +84,8 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
       }),
   },
   seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
-  // note_upcoming_meetings: a look's, writing that conversation's own meetings table (meetingtools.ts).
-  meetings: { server: (ctx) => createMeetingsServer({ key: ctx.key! }) },
+  // note_upcoming_meetings: any run with the calendar, writing that conversation's own meetings table (meetingtools.ts).
+  meetings: { server: (ctx) => createMeetingsServer({ key: ctx.key!, source: auditSource(ctx.kind) }) },
   browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, attended: ctx.kind.attended, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }) },
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: {

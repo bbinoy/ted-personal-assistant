@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -103,6 +103,7 @@
         "mcp__mailbird__trash_conversation",
         "mcp__mailbird__unsubscribe_from_newsletter",
         "mcp__mailbird__update_draft",
+        "mcp__meetings__note_upcoming_meetings",
         "mcp__memory__forget_note",
         "mcp__memory__journal",
         "mcp__memory__search_logs",
@@ -163,7 +164,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "snapshot": false
     },
@@ -179,6 +180,7 @@
       "voice",
       "memory",
       "people",
+      "meetings",
       "browse"
     ],
     "tools": [
@@ -563,7 +565,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -724,7 +726,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "863a472fb1113195"
+        "sha": "1306e50867d5f52b"
       },
       "snapshot": false
     },

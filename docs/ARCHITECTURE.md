@@ -116,7 +116,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
-- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail`, `note_upcoming_meetings` and the status note. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
+- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail` and the status note. `note_upcoming_meetings` is not attended-gated: any run whose capability set has the calendar has it. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
 - The session of a conversation's chat and its look session never mix (different models, different caches). Each resumes between runs and is compacted in the background after `COMPACT_QUIET_MINUTES` (5) of quiet (`src/run/chatsession.ts`, one code for both tracks).
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
@@ -258,7 +258,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **Meeting prep** (`src/tasks/meetings.ts`, `src/modules/meetings/`, `src/heartbeat/preptick.ts`; `PREP_MINUTES` 15, 0 = off).
 
-- The look reads the calendar and calls `note_upcoming_meetings`; code validates and stores the meetings.
+- Any run that reads the calendar for the next hours (a look or a chat turn; the tool follows the calendar capability) calls `note_upcoming_meetings`; code validates and stores the meetings.
 - Each tick `claimPreps` drops what is too late, skips by rule (`prepSkip`: declined, all-day, private, nobody else) and claims a due row at most once per event id and start, never between 23:00 and 06:00 or during `/quiet`.
 - The look prepares with the `meeting-prep` skill and says it; then `afterPrep` marks the row sent, else it is given back once. Groups have none.
 
