@@ -94,7 +94,7 @@ test("a second preset changes the persona, the rhythm and the limits without tou
     extends: "ted",
     name: "coach",
     rhythm: { heartbeat: { everyMinutes: 30, dayMinutes: 45 } },
-    notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], group: ["people"], tenant: ["people", "style"] },
+    notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], others: ["people", "style"] },
     profiles: { group: { maxTurns: 40 } },
   }));
   writeFileSync(join(dir, "persona", "personality.md"), "You talk like a calm, no-nonsense running coach: short sentences, one clear next step.\n");
@@ -137,7 +137,7 @@ test("a second preset's note categories reach every run: chat, group, friend, he
   writeFileSync(join(dir, "preset.json"), JSON.stringify({
     extends: "ted",
     name: "coach2",
-    notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], group: ["people"], tenant: ["goals", "style"] },
+    notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], others: ["goals", "style"] },
     profiles: { group: { maxTurns: 12, maxBudgetUsd: 0.7 } },
   }));
   const probe = join(scratch, "probe2.ts");
@@ -179,18 +179,18 @@ test("a second preset's note categories reach every run: chat, group, friend, he
   const out = JSON.parse(execFileSync(process.execPath, ["--conditions=workspace-source", probe], {
     env: { ...process.env, HARNESS_DATA_DIR: join(scratch, "data2"), ASSISTANT_PRESET: dir, TENANTS: "on", TENANT_ANTHROPIC_API_KEY: "k", OWNER_NAME: "Alex", ASSISTANT_NAME: "Coach" }, encoding: "utf8",
   }).trim().split("\n").at(-1)!);
-  assert.match(out.chat, /exactly one category of goals, people, style:/);
-  assert.match(out.friend, /with a category of goals, style\./);
+  assert.match(out.chat, /exactly one category of goals, people, style\./);
+  assert.match(out.friend, /exactly one category of goals, style\./);
   assert.deepEqual(out.profiles.chat, [40, 2]);
   assert.deepEqual(out.profiles.group, [12, 0.7]);
-  assert.deepEqual(out.scopes, { owner: ["goals", "people"], group: ["people"], tenant: ["goals", "style"] });
+  assert.deepEqual(out.scopes, { owner: ["goals", "people"], group: ["goals", "style"], tenant: ["goals", "style"] });
   assert.deepEqual([out.heartbeat.maxTurns, out.heartbeat.maxBudgetUsd], [40, 2], "a look has the conversation's own limits (the owner's chat profile)");
   assert.equal(out.heartbeat.systemPrompt, out.chat, "a look has the conversation's one prompt");
   assert.match(out.notes, /half marathon/);
   assert.match(out.notes, /training partner/);
   assert.doesNotMatch(out.notes, /OLD TRIAGE NOTE/, "a note of a category this assistant does not have is not in the index");
   assert.doesNotMatch(out.friendNotes ?? "", /OLD TRIAGE NOTE|half marathon/, "a friend's run has her own notes, in the friend categories, and none of the owner's");
-  out.dream.forEach((d: string, i: number) => assert.ok(d.includes(`with a category of ${[["goals, people"], ["people"], ["goals, style"]][i]![0]}.`), `dream ${i}`));
+  out.dream.forEach((d: string, i: number) => assert.ok(d.includes(`with a category of ${[["goals, people"], ["goals, style"], ["goals, style"]][i]![0]}.`), `dream ${i}`));
   for (const [where, text] of Object.entries({ chat: out.chat, group: out.group, friend: out.friend, dream: out.dream.join("\n"), gates: out.gates.join("\n"), heartbeat: out.heartbeat.systemPrompt, friendHeartbeat: out.friendHeartbeat.systemPrompt })) {
     assert.doesNotMatch(text as string, /\b(triage|scheduling|context)-[a-z]/, `${where}: no Ted file name`);
     for (const m of (text as string).matchAll(/categor(?:y|ies) of ([a-z, ]+)[.:]/g)) for (const c of m[1]!.split(", ")) assert.ok(["goals", "people", "style"].includes(c), `${where}: "${c}" is not this assistant's category`);
