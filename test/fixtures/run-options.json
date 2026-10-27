@@ -12,7 +12,6 @@
         "attended": true
       },
       "sessionConv": "owner",
-      "sessionTrack": "chat",
       "conversation": "owner",
       "stopScope": "owner",
       "tools": [
@@ -327,7 +326,6 @@
         "attended": true
       },
       "sessionConv": "group-ff36ac23eadd0841",
-      "sessionTrack": "chat",
       "conversation": "g-run-options",
       "stopScope": "group-ff36ac23eadd0841",
       "groupId": "g-run-options",
@@ -454,7 +452,6 @@
         "attended": true
       },
       "sessionConv": "friend-<bea>",
-      "sessionTrack": "chat",
       "conversation": "tenant:<bea>",
       "stopScope": "friend-<bea>",
       "tools": [
@@ -573,7 +570,6 @@
         "attended": false
       },
       "sessionConv": "owner",
-      "sessionTrack": "look",
       "freshSession": true,
       "conversation": "owner",
       "stopScope": "owner",
@@ -888,7 +884,6 @@
         "attended": false
       },
       "sessionConv": "group-ff36ac23eadd0841",
-      "sessionTrack": "look",
       "freshSession": true,
       "conversation": "g-run-options",
       "stopScope": "group-ff36ac23eadd0841",
@@ -1019,7 +1014,6 @@
         "attended": false
       },
       "sessionConv": "friend-<bea>",
-      "sessionTrack": "look",
       "freshSession": true,
       "conversation": "tenant:<bea>",
       "stopScope": "friend-<bea>",

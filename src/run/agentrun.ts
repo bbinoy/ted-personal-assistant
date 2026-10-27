@@ -28,7 +28,6 @@ import type { RunProvenance } from "../approvals/autojudge.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { browseTools, capabilitiesOf, groupCapabilities, groupTools, toolsFor } from "../policy/capabilities.ts";
 import { hiddenTools } from "../policy/policy.ts";
-import type { Track } from "./sessionstore.ts";
 import { type ChatSession } from "./session.ts";
 import { settings } from "../core/settings.ts";
 import { cleanToolOutput } from "../core/toolclean.ts";
@@ -53,7 +52,6 @@ export interface RunOptions {
   systemPrompt: string;
   sessionConv?: ConvId; // continue + save the conversation's session here (its assistant.db); the browse worker: none, a fresh run
   freshSession?: boolean; // a run that never resumes or saves its session (a look): sessionConv still names the conversation
-  sessionTrack?: Track; // which of the conversation's two sessions (sessionstore.ts): its chat's (default) or its looks'
   conversation?: string; // the conversation the run acts for (its key); default the owner's, or the tenant's or group's of this run. Keys the per-conversation anti-repeat state (permissions.ts)
   // The SDK's auto-memory, for every run of a conversation: notes in `dir`, the only place the file tools may write (policy.ts); its MEMORY.md is code's (notes.ts writeIndex).
   memory?: { dir: string; zone?: string; groupId?: string };
@@ -256,7 +254,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && conversation === OWNER_KEY, taint: sessionTaint(opts.sessionConv, resume, opts.sessionTrack), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && conversation === OWNER_KEY, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,
@@ -284,10 +282,10 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     if (message.type !== "result") continue;
     if (opts.sessionConv && !opts.freshSession) {
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
-      const before = readSession(opts.sessionConv, opts.sessionTrack);
+      const before = readSession(opts.sessionConv);
       const baseTokens = before.sessionId === message.session_id ? before.baseTokens : lastContext; // a session from before this existed has none: the absolute limit applies until it starts fresh
       const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
-      writeSession(opts.sessionConv, next, opts.sessionTrack);
+      writeSession(opts.sessionConv, next);
     }
     charge(payer, message.total_cost_usd - previousCost, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
     if (message.subtype === "success" && !message.is_error) {
@@ -316,7 +314,7 @@ export async function underCeiling<T>(kind: RunKind, run: (c: Ceiling) => Promis
 }
 
 export async function runAgent(prompt: Parameters<typeof query>[0]["prompt"], approve: Approve, opts: RunOptions, io: { query?: typeof query } = {}): Promise<AgentReply> {
-  const { resume, previousCost } = opts.sessionConv && !opts.freshSession ? chatResume(opts.sessionConv, opts.sessionTrack) : { resume: undefined, previousCost: 0 };
+  const { resume, previousCost } = opts.sessionConv && !opts.freshSession ? chatResume(opts.sessionConv) : { resume: undefined, previousCost: 0 };
   // The entry gate of an unattended run (rungate.ts; every one is a heartbeat look, a chat turn goes through agent.ts runConversation): it waits for a place, and its ceiling starts only once it has one.
   // A background run is always cold, so the approval it waits on belongs to this run and does not count against its ceiling.
   // "/stop" (ceiling.ts stopRuns) reaches a look too, also while it still waits for a place: `wait` is called off by it, by the caller's signal (a message overtook the look)
@@ -338,7 +336,7 @@ export async function runAgent(prompt: Parameters<typeof query>[0]["prompt"], ap
       return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
     }, opts.maxMinutes, opts.stopScope ?? opts.sessionConv);
   }, wait.signal).finally(() => (forget(), endRun(run), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
-    if (opts.sessionConv) forgetUnresumable(opts.sessionConv, e, auditSource(opts.kind), opts.sessionTrack);
+    if (opts.sessionConv && !opts.freshSession) forgetUnresumable(opts.sessionConv, e, auditSource(opts.kind));
     throw e;
   });
 }

@@ -3,7 +3,7 @@ import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agen
 import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
 import { readIndex } from "../memory/notes.ts";
 import { runFor, turnContext, TRIGGERS, type RunInputs, type Trigger } from "./runoptions.ts";
-import { markShown, spoke, toldKey, turnFacts, unseen, type TurnFacts } from "./turncontext.ts";
+import { markShown, spoke, turnFacts, unseen, type TurnFacts } from "./turncontext.ts";
 import { chatResume, sessionTaint } from "./chatsession.ts";
 import { lookerOf } from "./scope.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
@@ -49,7 +49,7 @@ interface Wiring {
 async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder, w: Wiring): Promise<AgentReply> {
   const t = TRIGGERS[trigger];
   const now = w.inputs.now ?? new Date();
-  const r = t.fresh ? { resume: undefined, seenAt: undefined } as ReturnType<typeof chatResume> : chatResume(conv.convId, t.track);
+  const r = t.fresh ? { resume: undefined, seenAt: undefined } as ReturnType<typeof chatResume> : chatResume(conv.convId);
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const built = runFor(conv, trigger, w.inputs);
   const o: RunOptions = { ...built, ...w.extra?.(built), seenAt, onFirstOutput: w.onFirstOutput };
@@ -57,7 +57,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   // each only when it differs from what the session was last told. A claimed fact is settled when the run ends: told if the reply said something, else left for the next run.
   const own = !w.facts; // a look settles its facts itself
   const facts = w.facts ?? turnFacts(conv, now);
-  const k = toldKey(conv.convId, t.track);
+  const k = conv.convId;
   const told = [
     [k, turnContext(conv, trigger)],
     [`${k}:notes`, readIndex(conv.notesDir) || undefined], // (the SDK loads MEMORY.md when a session starts; a resumed one is told the index again when it changed)
@@ -68,7 +68,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
     const fresh = unseen(key, r.resume, text);
     return fresh ? [{ key, text: fresh }] : [];
   });
-  if (facts?.untrusted && shown.some((s) => s.key.endsWith(":status"))) sessionTaint(conv.convId, r.resume, t.track).mark(); // (the session now holds a mail's words: the judge is told from here on)
+  if (facts?.untrusted && shown.some((s) => s.key.endsWith(":status"))) sessionTaint(t.fresh ? undefined : conv.convId, r.resume).mark(); // (the session now holds a mail's words: the judge is told from here on)
   const input = userInput(shown.length ? `${shown.map((s) => s.text).join("\n\n")}\n\n${prompt}` : prompt, pictures, documents);
   let reply: AgentReply;
   try {
@@ -79,7 +79,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
     if (own) facts?.done({ ended: false, said: false, abandoned: true });
     throw e;
   }
-  if (!t.fresh) for (const s of shown) markShown(s.key, chatResume(conv.convId, t.track).resume, s.text); // the run went through: the session has it now
+  if (!t.fresh) for (const s of shown) markShown(s.key, chatResume(conv.convId).resume, s.text); // the run went through: the session has it now
   if (own) {
     const said = spoke(reply.text);
     facts?.done({ ended: said, said, abandoned: !said });
@@ -96,7 +96,7 @@ export function runConversation(conv: Conversation, inputs: RunInputs, build: Tu
 
 // ---- a look: a background check of the owner's conversation, a group's or a friend's ----
 
-// One look of a conversation: the conversation's own look session, resumed. `approve` is that conversation's own approver (main.ts); the payer is the conversation's (payer.ts): the login, or the instance key on her ledger.
+// One look of a conversation: a fresh session every time. `approve` is that conversation's own approver (main.ts); the payer is the conversation's (payer.ts): the login, or the instance key on her ledger.
 export function runLook(conv: Conversation, payer: Payer, build: TurnBuilder, approve: Approve, extra: LookExtra, o: { now?: Date; io?: { query?: typeof query } } = {}): Promise<AgentReply> {
   return runTurn(conv, "look", build, { approve, inputs: lookInputs(payer, extra, o.now ?? new Date()), facts: extra.facts, extra: (built) => lookExtras(conv, built, extra), io: o.io });
 }

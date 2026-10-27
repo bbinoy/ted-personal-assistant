@@ -490,6 +490,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
     name: "a friend's fixed notices are throttled by the one notices table of instance.db (capnotice.ts)",
     up: `DROP TABLE friend_notices;`,
   },
+  {
+    version: 21,
+    name: "a look starts a fresh session every time: the second session per conversation (`look_session`, step 15) is gone",
+    up: `DROP TABLE look_session;`,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----
