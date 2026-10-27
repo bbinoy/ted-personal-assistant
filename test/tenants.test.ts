@@ -14,8 +14,11 @@ const { capabilitiesOfRecord, resolveCapabilities, toolsFor: toolsForCaps } = aw
 const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const R = await import("../src/tenants/tenantroute.ts");
+const { reportKeyProblem } = await import("../src/tenants/keynotice.ts");
+const { ownerNotices } = await import("../src/heartbeat/notices.ts");
+const { refusal } = await import("../src/tenants/errors.ts");
 const { createTenantRunner } = await import("../src/conversation/tenantrun.ts");
-const { keyNotices, createKeyNotices } = await import("../src/tenants/keynotice.ts");
+const { ownerFacts, resetOwnerFacts } = await import("./ownerfacts.ts");
 const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await import("../src/core/cooldown.ts");
 const { failure, InstanceKeyError, RateLimitError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
@@ -109,9 +112,8 @@ test("routing: with TENANTS off nothing is answered, as today", () => {
 
 function runner(over: { key?: string | undefined; ask?: (key: string) => Promise<{ text: string; costUsd: number }>; now?: () => number } = {}) {
   const asked: { id: string; key: string; prompt: string }[] = [];
-  const alerts: string[] = [];
-  keyNotices.reset();
-  keyNotices.sendTo((t) => void alerts.push(t)); // the one notice for the owner about the shared key (keynotice.ts)
+  const alerts = ownerFacts();
+  resetOwnerFacts();
   const r = createTenantRunner({
     apiKey: () => over.key,
     ask: (async (ctx: { id: string }, key: string, prompt: string) => (asked.push({ id: ctx.id, key, prompt }), (over.ask ?? (async () => ({ text: "hello there", costUsd: 0.01 })))(key))) as never,
@@ -124,7 +126,7 @@ test("turn: no instance key means a plain 'not set up for friends', a notice for
   const rec = join_("Eve");
   const { r, asked, alerts } = runner({ key: undefined });
   const first = await r.run(tenant(rec.id), "hello");
-  assert.equal(first.text, R.notSetUpReply());
+  assert.equal(first.text, refusal("no-key", "friend"));
   assert.deepEqual(asked, []);
   assert.equal(alerts.length, 1);
   assert.match(alerts[0]!, /TENANT_ANTHROPIC_API_KEY is not set/);
@@ -154,27 +156,26 @@ test("turn: a refused instance key tells the owner's chat once, not once per ten
   assert.deepEqual(busy.alerts, [], "an overloaded API is not the key's fault");
 });
 
-test("key notice: one mechanism for every kind of run, rate limited by a clock it is given, per problem, and it never throws", () => {
-  const sent: string[] = [];
-  const n = createKeyNotices({ everyMs: () => 3 * 3600_000 });
-  assert.equal(n.report("refused", 1000), false, "no owner chat to send to yet: recorded, not sent");
-  n.reset();
-  n.sendTo((t) => void sent.push(t));
-  assert.equal(n.report("refused", 1000), true);
-  assert.equal(n.report("refused", 1000 + 2 * 3600_000), false, "within the interval");
-  assert.equal(n.report("missing", 1000 + 2 * 3600_000), true, "another problem is another notice");
-  assert.equal(n.report("refused", 1000 + 3 * 3600_000), true, "and again after the interval");
-  assert.equal(sent.length, 3);
-  n.sendTo(() => {
-    throw new Error("the chat is down");
-  });
-  assert.doesNotThrow(() => n.report("missing", 1000 + 9 * 3600_000));
+test("key notice: a refused or missing shared key is a fact for the owner's next run, once per problem per interval, and never a fixed chat line", () => {
+  resetOwnerFacts();
+  const chat: string[] = [];
+  ownerNotices.sendTo((t) => void chat.push(t)); // (the one fixed-text channel to the owner: the daily budget only)
+  const facts = ownerFacts();
+  const every = 3 * 3600_000; // the key notice interval, three hours
+  assert.equal(reportKeyProblem("refused", 1000), true);
+  assert.equal(reportKeyProblem("refused", 1000 + 2 * 3600_000), false, "within the interval");
+  assert.equal(reportKeyProblem("missing", 1000 + 2 * 3600_000), true, "another problem is another notice");
+  assert.equal(reportKeyProblem("refused", 1000 + every), true, "and again after the interval");
+  assert.equal(facts.length, 2, "the same fact still waiting is held once");
+  assert.match(facts[0]!, /^System status for .*in your own words/);
+  assert.deepEqual(chat, [], "the chat never gets a code-written line about it");
+  ownerNotices.sendTo(undefined);
+  assert.doesNotThrow(() => reportKeyProblem("missing", 1000 + 9 * 3600_000));
 });
 
 test("key notice: a failure on the key from an unattended run, a mail loop or the dream reaches the same notice as a chat turn (they all end in failure())", () => {
-  const alerts: string[] = [];
-  keyNotices.reset();
-  keyNotices.sendTo((t) => void alerts.push(t));
+  const alerts = ownerFacts();
+  resetOwnerFacts();
   for (const source of ["gus", "ivy", "gus"]) {
     const e = failure("billing_error", "error_during_execution", PAYER(source));
     assert.ok(e instanceof InstanceKeyError && e.why === "billing");

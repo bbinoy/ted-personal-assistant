@@ -8,8 +8,7 @@
   "notes": {
     "categories": ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status", "routine"],
     "dream": ["triage", "people", "scheduling", "context", "brief", "style"],
-    "group": ["people", "context", "scheduling", "style"],
-    "tenant": ["people", "context", "scheduling", "style"],
+    "others": ["people", "context", "scheduling", "style"],
     "background": ["people", "context", "scheduling"]
   },
   "profiles": {
@@ -27,6 +26,6 @@
       { "name": "weekly-review" },
       { "name": "setup", "required": true }
     ],
-    "order": ["daily-brief", "mailbird", "mailbird-troubleshooting", "gmail", "calendar", "tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"]
+    "order": ["daily-brief", "mail", "mailbird", "gmail", "calendar", "tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"]
   }
 }

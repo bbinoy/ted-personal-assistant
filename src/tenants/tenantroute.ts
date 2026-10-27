@@ -1,6 +1,6 @@
 import { register, takeInvited, type Request } from "./registration.ts";
 import { ACI, addTenant, tenantByAci, type TenantRecord } from "./tenants.ts";
-import { ASSISTANT, OWNER, settings } from "../core/settings.ts";
+import { ASSISTANT, settings } from "../core/settings.ts";
 import { directTarget } from "@ted-assistant/messenger";
 
 // Who is this sender? The door for everybody who is not the owner (main.ts), with TENANTS=on. Pure of Signal: a sender and her text in, a decision out.
@@ -14,7 +14,6 @@ import { directTarget } from "@ted-assistant/messenger";
 
 // The only thing a stranger is ever told before the owner has answered. Fixed, no model.
 export const holdingReply = (): string => `Hi, I'm ${ASSISTANT}, an AI assistant. I've asked my admin whether I may chat with you; if so, you'll hear back from me here.`;
-export const notSetUpReply = (): string => `I'm not set up for friends yet, so I can't reply for now. I've let ${OWNER} know.`;
 
 export type Route =
   | { kind: "tenant"; tenant: TenantRecord }

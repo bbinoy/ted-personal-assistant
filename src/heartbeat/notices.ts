@@ -1,5 +1,6 @@
 import { overBudget } from "../core/budget.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
+import { MAX_HELD, holdFact } from "../core/ownerfact.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { OWNER, settings } from "../core/settings.ts";
@@ -13,7 +14,8 @@ import { onLogin } from "../core/ownerkey.ts";
 
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Three small, separate mechanisms, all pure planners over a little state:
 //   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat, as a fixed text: over budget no model
-//      run is possible (CLAUDE.md allows exactly this). It waits for the end of quiet. The damaged-database notice (1b) is the same kind: the owner's own look cannot run when her own file is the damaged one.
+//      run is possible (CLAUDE.md allows exactly this). It waits for the end of quiet. It is the ONE fixed text to the owner: every other system matter (the damaged database (1b), the shared key,
+//      the friends' daily cap) is a FACT for her next run (core/ownerfact.ts holdFact), which says it in its own words.
 //   2. looks that fail: no message at all. A group's or a friend's go to the log and the doctor; the owner's own become a FACT for her next look after a long awake stretch (below).
 //   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY, is HELD
 //      (state, per conversation). Code never words it again: when quiet is over (and the cap has room) the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts),
@@ -116,7 +118,6 @@ export function resetHeld(conv: Pick<Conversation, "convId">): void {
   db.tx(() => (db.run("DELETE FROM held_posts"), db.run("DELETE FROM hold")));
 }
 
-export const MAX_HELD = 30; // a flood is dropped oldest first: this is a handover to the next look, not an archive (a retention rule, heartbeat/convretention.ts, keeps the same bound)
 function load(conv: Conversation, now: Date, zone: string): HoldState {
   const db = convDb(conv.convId);
   const raw = db.get<{ day: string; posted: number }>("SELECT day, posted FROM hold WHERE id = 1");
@@ -184,19 +185,6 @@ export function takeHeld(conv: Conversation, now: Date): { held: Held[]; done: (
   return { held: stillTrue(st.held, now.getTime()).reverse(), done: () => void db.run("DELETE FROM held_posts WHERE seq <= ?", upTo) };
 }
 
-// A system matter for the owner's NEXT look as a fact (the owner's own look can still run): held like a post, handed over like one. Never throws.
-export function holdFact(text: string, now: Date = new Date()): void {
-  try {
-    const conv = owner();
-    const st = load(conv, now, zoneFor(conv));
-    const fact = `System status for ${OWNER}: say it in one short line in your own words, only if ${OWNER} has to do something. ${text}`;
-    if (!st.held.some((h) => h.text === fact)) st.held.push({ text: fact, why: "quiet", at: now.getTime() });
-    save(conv, st);
-  } catch (e) {
-    console.error("notices: could not keep a fact for the owner:", (e as Error).message);
-  }
-}
-
 // Is something held that may be handed over now? The look is then due at once (look.ts), not at the time it chose at night.
 export const heldWaiting = (conv: Conversation, now: Date): boolean => heldCount(conv) > 0 && ready(conv, now, load(conv, now, zoneFor(conv)));
 
@@ -233,18 +221,14 @@ export function noticeBudget(now: Date = new Date()): boolean {
   return b.firstTime;
 }
 
-// 1b. A conversation's database (assistant.db, core/convdb.ts) was damaged and set aside: once a day, until a person looks (npm run doctor says which file and what to do). Chat in it goes on with a fresh
-// start; its background work is stopped (payer.ts mayRun). Returns how many notices it made.
+// 1b. A conversation's database (assistant.db, core/convdb.ts) was damaged and set aside: once a day, until a person looks (npm run doctor says which file and what to do), as a fact for the owner's next run.
+// Chat in it goes on with a fresh start; its background work is stopped (payer.ts mayRun). Returns how many facts it made.
 export function noticeDamaged(now: Date = new Date()): number {
-  const quiet = holdingNow(owner(), now);
   let n = 0;
   for (const d of damagedConvs()) {
-    if (d.conv === "owner" && quiet) continue; // (her own file: a fixed text, after quiet; asked again at the next tick)
     if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    const text = `The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`;
-    if (d.conv === "owner") noticeOwner(text);
-    else holdFact(text, now); // (the owner's own look can still run: a fact for it)
+    holdFact(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now);
     n++;
   }
   return n;

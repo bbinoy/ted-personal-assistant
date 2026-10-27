@@ -20,7 +20,7 @@ import { LIMITS } from "../core/sanitize.ts";
 //   messages.jsonl everything written in the group and the assistant's replies, size-bounded
 // The owner's chat cannot read it (policy.ts: only conversations/owner/); she searches a group's history with search_logs (a fixed tool), and nothing flows the other way.
 
-const GROUP_CATEGORIES = preset().notes.group;
+const GROUP_CATEGORIES = preset().notes.others;
 
 export const groupLogFile = (groupId: string): string => convPaths(groupConvId(groupId)).messages;
 

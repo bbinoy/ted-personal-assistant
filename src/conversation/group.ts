@@ -1,12 +1,11 @@
 import { clockLine } from "../core/brief.ts";
-import { budgetSpent, GROUP_BUDGET_TEXT, groupBudgetDue, groupOverBudget } from "../core/budget.ts";
+import { budgetSpent, groupOverBudget } from "../core/budget.ts";
 import { editNote } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { reactionJournal } from "../core/reaction.ts";
 import { prepare, runConversation } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { AuthError, FixedNotice, RateLimitError } from "../tenants/errors.ts";
-import { GROUP_CAP_TEXT, groupCapped } from "../core/capnotice.ts";
+import { AuthError, RateLimitError, refusalOnce } from "../tenants/errors.ts";
 import { askGate, logTail, prepareGate, styleLines } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
 import { groupContext } from "./groupstore.ts";
@@ -193,12 +192,14 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
       );
     };
     if (isPaused(now)) return;
-    if (budgetSpent()) {
-      // Someone addressed us and the day's budget turned it away: say so once per group per day (notices.ts), never for a message that was not meant for us.
-      if (pending() && groupBudgetDue(conv.key, now)) await batch.run(async () => void (await delivery.runTurn(conv, { run: async () => ({ text: GROUP_BUDGET_TEXT }), background: true, announce: false, kind: "notice" })));
+    // The owner's day is spent, or this group's own (a noisy group must not spend the owner's): someone addressed us and it turned the answer away, so say so once a day from the one refusal table
+    // (tenants/errors.ts), never for a message that was not meant for us.
+    const spent = budgetSpent() ? "owner-budget" : groupOverBudget(conv.key) ? "own-budget" : undefined;
+    if (spent) {
+      const line = pending() ? refusalOnce(spent, "group", conv.convId, {}, now.getTime()) : undefined;
+      if (line) await batch.run(async () => void (await delivery.runTurn(conv, { run: async () => ({ text: line }), background: true, announce: false, kind: "notice" })));
       return;
     }
-    if (await groupCapped(groupOverBudget(conv.key), !!pending(), conv.key, () => delivery.warn(conv, new FixedNotice(GROUP_CAP_TEXT)))) return; // this group's own day: a noisy group must not spend the owner's (an address is told once a day, capnotice.ts)
     const asked = pending();
     if (asked) showTyping();
     let hint: string | undefined;

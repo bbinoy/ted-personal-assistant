@@ -15,7 +15,9 @@ const { groupDir, recordGroup } = await import("../src/conversation/groupstore.t
 const { forgetGroup, forgetFriend, resolveGroup } = await import("../src/conversation/forget.ts");
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { recordCost, groupSpentToday } = await import("../src/core/budget.ts");
-const { markCapNotice, capNoticeDue, markNoticeAt, lastNoticeAt } = await import("../src/core/capnotice.ts");
+const { takeCapNotice } = await import("../src/core/capnotice.ts");
+const { instanceDb } = await import("../src/core/instancedb.ts");
+const marked = (key: string): boolean => !!instanceDb().get("SELECT 1 FROM notices WHERE key = ?", key);
 const { convDb: rowDb, peekConvDb: peekRowDb } = await import("../src/core/convdb.ts");
 const { convIdOfKey: rowConv } = await import("../src/core/convpaths.ts");
 // A row of the conversation's own database (a held post): what forgetting must take with it, and leave alone elsewhere.
@@ -41,9 +43,9 @@ function group(id: string, name: string, tag: string) {
   holdVoiceNote(id, { ts: NOW, id: `${tag}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
   addRow(id);
   recordCost(1.25, groupConvId(id), "chat");
-  markCapNotice(`group:${groupConvId(id)}`);
-  markCapNotice(`group-budget:${groupConvId(id)}`);
-  markNoticeAt(`warn:${groupConvId(id)}`);
+  takeCapNotice(`refusal:own-budget:${groupConvId(id)}`);
+  takeCapNotice(`refusal:owner-budget:${groupConvId(id)}`);
+  takeCapNotice(`warn:${groupConvId(id)}`, Date.now(), 60_000);
   return { id, dir, p };
 }
 
@@ -59,8 +61,8 @@ test("forget group: its folder, voice-note audio, spend and notice marks go; ano
   assert.equal(existsSync(join(attachments, "a.aac")), false, "the audio signal-cli saved for its voice note");
   assert.equal(hasConvDb(groupConvId(GA)), false, "its database (voice-note index, session, approvals) went with the folder, closed first; a read would make a new empty one, so none is made here");
   assert.equal(groupSpentToday(GA), 0);
-  assert.equal(capNoticeDue(`group:${groupConvId(GA)}`), true, "its notice mark is gone");
-  assert.equal(lastNoticeAt(`warn:${groupConvId(GA)}`), undefined);
+  assert.equal(marked(`refusal:own-budget:${groupConvId(GA)}`), false, "its notice mark is gone");
+  assert.equal(marked(`warn:${groupConvId(GA)}`), false);
   for (const w of ["voice-note index", "folder", "voice-note audio", "spend", "notice marks"]) assert.ok(r.removed.some((x) => x.includes(w)), w);
   assert.deepEqual(r.failed, []);
   // the other group is untouched
@@ -69,7 +71,7 @@ test("forget group: its folder, voice-note audio, spend and notice marks go; ano
   assert.equal(existsSync(join(attachments, "b.aac")), true);
   assert.equal(voiceNotes(GB, NOW).length, 1);
   assert.equal(groupSpentToday(GB), 1.25);
-  assert.equal(capNoticeDue(`group:${groupConvId(GB)}`), false);
+  assert.equal(marked(`refusal:own-budget:${groupConvId(GB)}`), true);
   assert.equal(rowsOf(GB), 1);
   // again, by the folder name: nothing is left and nothing fails
   const again = forgetGroup(groupConvId(GA), { attachmentsDir: attachments });
@@ -107,21 +109,21 @@ test("forget friend: her registry entry, folder (voices, pending, history), audi
     holdVoiceNote(`tenant:${rec.id}`, { ts: NOW, id: `${rec.id}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
     addRow(`tenant:${rec.id}`);
     recordDone(rec.id, "google", [{ name: "token", chars: 3 }]);
-    markCapNotice(`friend:${rec.id}`);
+    takeCapNotice(`refusal:shared-budget:${friendConvId(rec.id)}`);
   }
   const r = await forgetFriend(gone.id, { attachmentsDir: attachments, secrets: [async () => 3] });
   assert.ok(r?.registry);
   assert.equal(existsSync(convPaths(friendConvId(gone.id)).dir), false, "her whole folder");
   assert.equal(existsSync(join(attachments, `${gone.id}.aac`)), false);
   assert.equal(readDone(gone.id, "google"), undefined);
-  assert.equal(capNoticeDue(`friend:${gone.id}`), true);
+  assert.equal(marked(`refusal:shared-budget:${friendConvId(gone.id)}`), false);
   assert.ok(r.removed.some((x) => /secret-store items \(3\)/.test(x)));
   assert.equal(T.tenantById(gone.id), undefined);
   // the other friend and the owner's registry record
   assert.equal(existsSync(convPaths(friendConvId(stay.id)).notes), true);
   assert.equal(existsSync(join(attachments, `${stay.id}.aac`)), true);
   assert.ok(readDone(stay.id, "google"));
-  assert.equal(capNoticeDue(`friend:${stay.id}`), false);
+  assert.equal(marked(`refusal:shared-budget:${friendConvId(stay.id)}`), true);
   assert.equal(rowsOf(`tenant:${stay.id}`), 1);
   assert.ok(T.tenantById(stay.id));
   // again: nothing left; the owner and odd ids are refused

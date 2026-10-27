@@ -128,13 +128,13 @@ test("dream state: the owner's and a group's are each in their own conversation'
 test("one prompt: the same template for the owner, a friend and a group, with their categories from the preset", () => {
   const cats = preset().notes;
   const owned = dreamSystem({ subject: settings.owner, kind: "owner", categories: cats.dream });
-  const friend = dreamSystem({ subject: "Mia", kind: "tenant", categories: cats.tenant });
-  const group = dreamSystem({ subject: 'the group chat "Football"', kind: "group", categories: cats.group });
+  const friend = dreamSystem({ subject: "Mia", kind: "tenant", categories: cats.others });
+  const group = dreamSystem({ subject: 'the group chat "Football"', kind: "group", categories: cats.others });
   assert.match(owned, new RegExp(`${settings.owner} keeps their notes locally`));
   assert.doesNotMatch(friend, /keeps their notes locally/);
   assert.match(friend, /Mia is a friend of /);
   assert.match(group, /what the group's members wrote/);
-  for (const [p, list] of [[owned, cats.dream], [friend, cats.tenant], [group, cats.group]] as const) {
+  for (const [p, list] of [[owned, cats.dream], [friend, cats.others], [group, cats.others]] as const) {
     assert.ok(p.includes(`with a category of ${list.join(", ")}.`), "the categories of that conversation, from the preset");
     assert.match(p, /Every NEW fact or change needs "evidence"/);
   }
