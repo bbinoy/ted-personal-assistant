@@ -7,8 +7,7 @@ import { OWNER, settings } from "../core/settings.ts";
 import { skillsFor } from "../modules/skills.ts";
 
 // What a conversation's background checks are made of, read from its capability set (capabilities.ts capabilitiesOf) and nothing else: the owner, a group and a friend
-// are asked the same way and differ only in data. A conversation that can read mail, a calendar or tasks is told to be proactive and may delegate heavy work to the
-// expert; one that can not (a group, a friend without Google) has only its chat log and its notes to look at, so it acts on what a note asks or the log promised.
+// are asked the same way and differ only in data. A conversation that can read mail, a calendar or tasks is told to be proactive ; one that can not (a group, a friend without Google) has only its chat log and its notes to look at, so it acts on what a note asks or the log promised.
 
 export interface Looker {
   who: string; // how the instruction names the person: the owner, her name, "the group"
@@ -17,7 +16,6 @@ export interface Looker {
   group: boolean;
   reads: boolean; // it can read mail, a calendar or tasks of its own
   mail: boolean; // it has mail tools
-  experts: boolean; // it may delegate heavy work to the expert: whoever has something to read
   tasks: boolean; // it has the task list (an unattended look may add to it)
   meetings: boolean; // meeting prep is on and it has a calendar: its look records the upcoming meetings (modules/meetings); heartbeat/preptick.ts claims them and the look says them
   sources: string; // what the instruction lists after the chat log
@@ -40,7 +38,6 @@ export function lookerOf(conv: Pick<Conversation, "kind" | "tenantId">, mailOn: 
     group: conv.kind === "group",
     reads,
     mail,
-    experts: reads,
     tasks: caps.has("tasks"),
     meetings: settings.prepMinutes > 0 && conv.kind !== "group" && caps.has("calendar"),
     sources: [...parts, "and your notes"].join(", "),

@@ -123,25 +123,22 @@ test("a friend's run passes the same permission path: it asks nobody, outside he
   }
 });
 
-test("a friend on an instance without Google has no expert and no mail in her instruction; a group the same, in its own words", () => {
+test("a friend on an instance without Google has no mail in her instruction; a group the same, in its own words", () => {
   const id = friend("Cy");
   const looker = withoutGoogle(() => lookerOf(tenant(id)));
-  assert.deepEqual([looker.reads, looker.mail, looker.experts, looker.own, looker.group], [false, false, false, false, false]);
+  assert.deepEqual([looker.reads, looker.mail, looker.own, looker.group], [false, false, false, false]);
   const o = withoutGoogle(() => lookOptions(tenant(id), payerOf(id), {}, NOW));
-  assert.equal(o.experts, undefined);
   const b = withoutGoogle(() => buildOptions(async () => ({ approved: false }), o, undefined));
-  assert.ok(!(b.tools as string[]).includes("Agent"));
-  assert.equal(b.agents, undefined);
-  assert.equal(b.hooks!.PreToolUse, undefined);
+  assert.ok((b.tools as string[]).includes("Agent"), "every run may delegate, a friend's too");
   const text = lookInstruction(NOW, undefined, looker);
   assert.match(text, /Cy's local time/);
   const hers = withoutGoogle(() => runFor(tenant(id), "look", { apiKey: KEY, now: NOW }).systemPrompt);
   assert.match(hers, /do nothing unprompted/);
-  assert.doesNotMatch(text + hers, /subagent_type|You decide what needs doing, and you delegate|calendar for the next 36 hours|status-brief|archive every mail/i);
+  assert.doesNotMatch(text + hers, /calendar for the next 36 hours|status-brief|archive every mail/i);
 
   const g = group("hb-conv-group-0123456789abcd");
   const gl = lookerOf(g);
-  assert.deepEqual([gl.who, gl.group, gl.reads, gl.experts], ["the group", true, false, false]);
+  assert.deepEqual([gl.who, gl.group, gl.reads], ["the group", true, false]);
   const go = lookOptions(g, LOGIN, {}, NOW);
   assert.deepEqual(go.kind, { who: "group", attended: false });
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
@@ -163,7 +160,7 @@ test("the owner's run is unchanged by all of it: the login, the background sourc
   assert.equal(o.tenant, undefined);
   assert.ok(o.experts);
   const l = lookerOf(owner());
-  assert.deepEqual([l.own, l.reads, l.mail, l.experts], [true, true, true, true]);
+  assert.deepEqual([l.own, l.reads, l.mail], [true, true, true]);
   assert.match(l.sources, /^the inbox mail you have not looked at yet \(see below\), the calendar for the next 36 hours, tasks, and your notes$/);
 });
 

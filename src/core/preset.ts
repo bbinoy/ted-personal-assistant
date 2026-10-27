@@ -28,7 +28,7 @@ export interface Preset {
   readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly group: readonly string[]; readonly tenant: readonly string[]; readonly background: readonly string[] };
   readonly profiles: Readonly<Record<ProfileKey, ProfileData>>;
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
-  readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert the heartbeat run delegates heavy work to (heartbeat/delegation.ts)
+  readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert every run may delegate to (run/delegation.ts); expert-opus is the same on OPUS_MODEL
   readonly persona: Readonly<Record<PromptKey, Template>>;
 }
 
@@ -106,7 +106,8 @@ export const PROMPTS = {
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "routine", "sources", "reactions", "send"],
   tenant: ["browse", "weather", "draw", "google", "her", "personality", "routine", "sources", "reactions", "send", "categories"],
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
-  background: ["who", "Who", "own", "group", "reads", "mail", "experts", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
+  background: ["who", "Who", "own", "group", "reads", "mail", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
+  delegate: ["who", "delegated"],
   expert: ["personality", "own", "who"],
   heartbeat: ["now", "timeZone", "who", "lastLook", "quietFrom", "quietTo", "due", "sources", "routineFacts"],
   tasks: ["own", "group", "who"],

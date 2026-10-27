@@ -100,11 +100,11 @@ export function runLook(conv: Conversation, payer: Payer, build: TurnBuilder, ap
   return runTurn(conv, "look", build, { approve, inputs: lookInputs(payer, extra, o.now ?? new Date()), facts: extra.facts, extra: (built) => lookExtras(conv, built, extra), io: o.io });
 }
 
-// What a look adds to the builder's options: the callbacks it was given (and, where it has experts, what they are told). Also how tests build a look's options.
+// What a look adds to the builder's options: the callbacks it was given (and what its experts are told). Also how tests build a look's options.
 const lookInputs = (payer: Payer, extra: Pick<LookExtra, "style">, now: Date): RunInputs => ({ ...(payer.kind === "instance" ? { apiKey: payer.apiKey } : {}), ...(extra.style ? { style: extra.style } : {}), now });
 const lookExtras = (conv: Conversation, built: RunOptions, extra: Partial<LookExtra>): Partial<RunOptions> => {
   const { facts: _facts, onDelegate, expertContext, style: _style, provenance, seenMail, ...callbacks } = extra;
-  return { ...callbacks, ...(provenance ? { provenance: () => provenance } : {}), ...(seenMail && lookerOf(conv).mail ? { seenMail } : {}), ...(built.experts ? { experts: { ...built.experts, onDelegate: (d) => onDelegate?.(d.agent), context: () => expertContext } } : {}) };
+  return { ...callbacks, ...(provenance ? { provenance: () => provenance } : {}), ...(seenMail && lookerOf(conv).mail ? { seenMail } : {}), experts: { ...built.experts!, onDelegate: (d) => onDelegate?.(d.agent), context: () => expertContext } };
 };
 export function lookOptions(conv: Conversation, payer: Payer, extra: Partial<LookExtra> = {}, now = new Date()): RunOptions {
   const built = runFor(conv, "look", lookInputs(payer, extra, now));
