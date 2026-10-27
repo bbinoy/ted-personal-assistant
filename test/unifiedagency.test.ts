@@ -11,6 +11,7 @@ import { loadSettings, settings } from "../src/core/settings.ts";
 import * as manifest from "../src/policy/toolmanifest.ts";
 import { CHAT } from "./util.ts";
 import { kindOf, BROWSE_RUN, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
+import { rememberNames } from "../src/approvals/seennames.ts";
 
 // One agent, one authority, one judge: every tool goes through the same floor -> judge -> approval question path in every place.
 
@@ -110,6 +111,7 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
   setAuto("auto");
   scopeOf("owner").say("do whatever you think is right");
   setDraftReader(async () => ({ to: ["a@example.com"], cc: [], bcc: [], subject: "s", body: "b", hasAttachments: false }) as never);
+  rememberNames("owner", JSON.stringify([{ id: "e1", summary: "Dinner" }])); // (read: an unseen delete is first sent back to be looked up)
   const asked: string[] = [];
   const typed: (boolean | undefined)[] = [];
   const run = async (tool: string, input: Record<string, unknown>, source: Parameters<typeof makeCanUseTool>[1] = OWNER_CHAT, guard?: CallGuard, setup: JudgeSetup = CHAT) => {

@@ -28,6 +28,7 @@ process.env.GOOGLE_OAUTH_CLIENT_ID = "fake-client-id.example";
 process.env.GOOGLE_OAUTH_CLIENT_SECRET = "fake-client-secret-not-real";
 
 const { settings } = await import("../src/core/settings.ts");
+const { rememberNames } = await import("../src/approvals/seennames.ts");
 const { startFakeBao } = await import("./fakebao.ts");
 const { readAudit } = await import("../src/core/audit.ts");
 const { IntakeWriter } = await import("../src/intake/intakestore.ts");
@@ -513,6 +514,7 @@ test("notion: the capability decides: only a friend with notion (and a page to s
 const opts = { signal: new AbortController().signal } as never;
 type Out = { behavior: string; message?: string };
 function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = "ask") {
+  rememberNames(`tenant:${ctx.id}`, JSON.stringify([{ id: "e1", title: "Dentist" }, { id: "e2", title: "Lunch" }, { id: "p1", title: "Notes" }, { id: "p2", title: "Plan" }])); // (the run has read them: a delete of an unseen object is first sent back to look it up)
   const asked: string[] = [];
   const judged: { description: string; untrustedInput?: boolean }[] = [];
   const approve = async (description: string) => (asked.push(description), { approved: true });

@@ -280,10 +280,10 @@ test("factsOf / validateQuestion: every address, title and role word must be the
   assert.equal(validateQuestion(`${GOOD} (the body mentions ceo@example.org)`, f), undefined); // an address that is in the call (here its body) is allowed, not required
   // times, dates, ids, zone, amounts, urls
   const cal2 = factsOf({ eventId: "evt_8f2a", calendarId: "primary", summary: "Dentist", startTime: "2026-10-20T16:00:00", endTime: "2026-10-20T17:00:00", timeZone: "Europe/Berlin" }, "");
-  assert.deepEqual(cal2.must, ["evt_8f2a", "Dentist", "Europe/Berlin", "20 Oct", "16:00", "17:00"].sort((a, b) => cal2.must.indexOf(a) - cal2.must.indexOf(b)));
-  const ok = "Change Dentist (evt_8f2a) to Tue 20 Oct 2026, 16:00–17:00 Europe/Berlin?";
+  assert.deepEqual(cal2.must, ["Dentist", "Europe/Berlin", "20 Oct", "16:00", "17:00"].sort((a, b) => cal2.must.indexOf(a) - cal2.must.indexOf(b)));
+  const ok = "Change Dentist to Tue 20 Oct 2026, 16:00–17:00 Europe/Berlin?";
   assert.equal(validateQuestion(ok, cal2), undefined);
-  for (const bad of [ok.replace("16:00", "15:00"), ok.replace("17:00", "17:30"), ok.replace("20 Oct", "21 Oct"), ok.replace("Europe/Berlin", "America/New_York"), ok.replace("evt_8f2a", "evt_8f2b"), ok.replace("Dentist", "Physio")]) assert.notEqual(validateQuestion(bad, cal2), undefined, bad);
+  for (const bad of [ok.replace("16:00", "15:00"), ok.replace("17:00", "17:30"), ok.replace("20 Oct", "21 Oct"), ok.replace("Europe/Berlin", "America/New_York"), ok.replace("Dentist", "Physio")]) assert.notEqual(validateQuestion(bad, cal2), undefined, bad);
   const nz = factsOf({ page_id: "2a1f-77c0", new_str: "Budget 2027: 48,500 EUR" }, "");
   assert.equal(validateQuestion("Replace page 2a1f-77c0 with “Budget 2027: 48,500 EUR”?", nz), undefined);
   assert.notEqual(validateQuestion("Replace page 2a1f-77c0 with “Budget 2027: 4,850 EUR”?", nz), undefined);
