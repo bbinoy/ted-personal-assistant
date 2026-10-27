@@ -34,7 +34,7 @@ flowchart LR
 - **Code computes facts, the run decides.** Dates, "is this due" and "what was held" are computed in code and handed to the look as fact blocks. Messages to people are written by the model; fixed texts are the exception (`CLAUDE.md`, principle 4).
 - **Permissions are code, not prompts.** Every tool call passes the floor, then the approval judge, then, in a chat turn only, a question on the phone. Unattended runs never ask. A run that has read mail or a web page is marked untrusted.
 - **One architecture for everyone.** Capabilities decide what a conversation has; there is no owner-only copy of a feature.
-- **Observable and durable.** Every decision is an event. Writes use `writeFileAtomic` (`src/core/state.ts`); a file that does not parse is moved aside as `<name>.corrupt-<time>`, never replaced by defaults. After a restart `src/conversation/replay.ts` answers messages from the last `REPLAY_MINUTES` (30) that got no reply, unless the audit log shows the run already acted.
+- **Observable and durable.** Every decision is an event. Writes use `writeFileAtomic` (`src/core/state.ts`); a file that does not parse is moved aside as `<name>.corrupt-<time>`, never replaced by defaults. After a restart `src/conversation/replay.ts` puts what the last `REPLAY_MINUTES` (30) left unanswered, in every conversation, back through the intake, unless the audit log shows the run already acted.
 
 ## Where the data lives
 
@@ -99,7 +99,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 
 ## The run model
 
-**One pipeline.** `createPipeline` (`src/conversation/conversation.ts`) serves the owner's chat, every group and every friend. A `Conversation` is plain data from `owner()`, `group(id)` or `tenant(id)`: kind, target, log, notes folder, whether the participation gate applies. Everything else is shared.
+**One pipeline.** `createPipeline` (`src/conversation/conversation.ts`) serves the owner's chat, every group and every friend. A `Conversation` is plain data from `owner()`, `group(id)` or `tenant(id)`: kind, target, log, notes folder, delivery data. Everything else is shared, and the few differences on the way in are one table (below).
 
 **One agent, two facts.** A run is made of two independent facts (`src/core/runkind.ts`), never of a "source": `who` (the owner's conversation, a group's, a friend's `tenant`, or the `browse` worker a run starts; derived from `Conversation.kind`) and `attended` (someone waits in the chat for the answer). Tools, skills, isolation, the code floor and the asking all follow from these two plus the conversation's capability set; nothing asks what started the run or whether it is "the owner". The audit log keeps a label for who acted (`auditSource`: `chat`, `group`, `background`, `browse`), a name for the log only.
 
@@ -149,7 +149,37 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 
 **Group gate** (`src/conversation/gate.ts`). For an untagged group message one tool-less Haiku call decides whether to act, once per settled burst. Tagged or quoted messages, the owner's chat and a friend's chat are always answered.
 
-**Messages in and out.** `src/conversation/intake.ts` handles pictures, documents (PDF, text, audio via whisper), long texts, edits, deletes and quotes.
+**One intake, one table of differences.** Everything that arrives for any conversation, a message (text, voice, picture, file), an edit, a deletion or a reaction, goes through one function (`handleIncoming` in `src/conversation/intake.ts`) and one ordered chain. There is no owner path and group path: a feature is a step of the chain, so it exists for every conversation unless a row of the table or the conversation's capabilities say otherwise (the intake-side twin of "one builder" above).
+
+| step | what it does |
+|---|---|
+| 0. door | hidden characters out, a long message read whole, vouch (a group we cannot vouch for gets nothing), read receipt, voice, picture and file made usable; an edit is checked against its original (author, unchanged) |
+| 1. record | the line goes into the conversation's log first (`Extra.addressed` marks a line that was meant for the assistant) |
+| 2. commands | code only, before any model: `/card off`, `/stop`, `/quiet`, `/tasks`, `/pause`, `/status`, `/today`, `/resume`; each needs a capability (`ownercommands.ts` `NEEDS`) |
+| 3. approval answer | a message, quoted reply or reaction answers a question open in this conversation; consumed, never run |
+| 4. feedback | where the conversation learns from a 👎 or "less of this" |
+| 5. declined | a new message lets a declined action be asked for again |
+| 6. burst | a message that is for us calls off a running look; settling pause; one turn for the burst (`queue.ts`) |
+| 7. answer | `decide`: is anything to be said? |
+| 8. turn | `turn`: one run, delivered by `delivery.ts` |
+
+An edit skips 2 to 4 (never a command, an approval answer or feedback). A reaction takes the same road (vouch, approval, record, feedback, overtake), then the kind's own `react`. **Replay** joins at step 6: the lines a restart lost are read from the log and sent through the same burst, decision and turn.
+
+The only per-kind differences are the rows of `WAYS` next to the chain in `intake.ts` (a private chat is the owner's or a friend's, `conv.direct`):
+
+| row | private chat | group |
+|---|---|---|
+| who may do what | commands by capability: the owner has all, a friend all but `admin`/`card` | the group's capabilities: `/stop`, `/quiet`, `/tasks`, no owner commands |
+| feedback (`learns`) | yes, per person | no (a shared group has no per-person offers) |
+| the answer (`forUs`, `mayAnswer`, `decide`) | always | when addressed (tagged or quoted, then sticky for `GROUP_STICKY_MINUTES`), else when the gate says act; not while paused, over budget or over the group's own day |
+| who is heard (`everyone`, `vouch`, `optionalPictures`) | every sender gets a read receipt and a reason for an unusable voice message or picture | only someone who spoke to us; the owner must be a member; a picture is opened only when it can be answered |
+| history (`recorded`, `say`) | `owner`, the words as written | `member`, each line starts with its speaker |
+| the turn (`turn`) | the burst's messages as one prompt; a reaction is a quiet turn of its own | the group's recent log, fenced, with the addressed message named; a reaction is chatter like any other |
+| delivery (on the `Conversation`) | `target` none or the friend, no forced thread | `target` the group, `threadAlways` |
+
+A new difference is a new row (with the owner's approval), never an `if` in a step. The remaining `kind === "group"` branches are outside the intake: delivery and notices, the group's shared notes, the dream, budgets and the audit label.
+
+**Messages in and out.** `src/conversation/intake.ts` handles pictures, documents (PDF, text, audio via whisper), long texts, edits, deletes and quotes, as above.
 
 - A settling pause folds a burst into one turn (`queue.ts`, `SETTLE_SECONDS` 2).
 - Delivery is one function in `conversation.ts` (`[[silent]]`, `[[voice]]`, `[[react: 👍]]`, retry in `outbound.ts`); the `send` tool uses it mid-turn.
@@ -294,7 +324,7 @@ Each conversation has its own task list in its own `assistant.db` (`src/tasks/`,
 - **Store** (`src/tasks/store.ts`). Every mutation is one transaction plus a `task` event; validation is strict and duplicates are not added. At most 1000 open items and 10 added a day by looks (`LIMITS`; counted from the history's `by`, "assistant (look)"). The model resolves "next friday" into an ISO date; code validates (`repeat.ts`, `when.ts`).
 - **Tools** (`mcp__tasks__`): `add_task`, `update_task`, `complete_task`, `drop_task`, `snooze_task`, `list_tasks`, and for the owner's one-time Notion import `import_tasks_preview` and `import_tasks_commit` (a commit runs only after a confirming message that arrived after the preview).
 - **Who may change what.** The person and any group member. A look has the same task tools as a chat turn (not the import): it adds tasks from mail, completes, edits, snoozes and drops when the chat or a mail clearly shows it, and tells the person. Its changes are attributed to "assistant (look)" in `task_events.by`; reopen undoes any of them. A task whose source is mail marks the run untrusted.
-- Reminders are under "The heartbeat look". `/tasks` lists open items by section; a group's is `taskReply` (`src/conversation/taskreplies.ts`).
+- Reminders are under "The heartbeat look". `/tasks` lists open items by section, in a group too (the intake's command step; the group has the `tasks` capability).
 
 ## Tool modules and the manifest
 
@@ -410,10 +440,10 @@ src/conversation/edit.ts  edited and deleted messages (pure parts)
 src/conversation/feedback.ts  a 👎 or "less of this" saves one checked note
 src/conversation/forget.ts  `npm run forget`: a friend or a group
 src/conversation/gate.ts  participation gate for untagged group messages
-src/conversation/group.ts  group chats: the gate's brain, ownership check
+src/conversation/group.ts  a group's way of answering (sticky address, the gate, its prompt), ownership check
 src/conversation/groupstore.ts  a group's folder and history
 src/conversation/guards.ts  owner check on the sender (pure)
-src/conversation/intake.ts  what arrives: messages, files, edits, reactions
+src/conversation/intake.ts  the one intake: the chain of steps, the table of differences, replay
 src/conversation/lang.ts  the voice reply's language check
 src/conversation/ledger.ts  wake/action ledger in the log: when a look is due
 src/conversation/markdown.ts  Markdown to Signal text styles
@@ -423,9 +453,8 @@ src/conversation/ownercommands.ts  /stop /pause /resume /status /today /quiet /t
 src/conversation/queue.ts  bursts, one turn at a time per conversation
 src/conversation/quiet.ts  a conversation's `/quiet` switch
 src/conversation/quote.ts  quoted text in, threaded answers out
-src/conversation/replay.ts  at start: answers messages a restart lost
+src/conversation/replay.ts  at start: finds what a restart lost, in every conversation
 src/conversation/summarize.ts  the small model that summarises old log lines
-src/conversation/taskreplies.ts  a group's `/tasks`, in code
 src/conversation/tenantremoval.ts  removeFriend with her voice-note index
 src/conversation/tenantrun.ts  a friend's turn: gates that need no model
 src/conversation/voicereply.ts  the [[voice]] marker and voice option
