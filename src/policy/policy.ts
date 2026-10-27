@@ -98,7 +98,7 @@ export function isReadableData(path: unknown, allowed: readonly string[] = reada
 export function hiddenTools(seen: readonly string[], cfg: { hiddenConnectors: readonly string[]; visibleTools: HideConfig; mailProvider?: string } = settings): string[] {
   const hiding = registered().filter((m) => m.hide);
   const server = (m: ToolModule) => m.hide!.prefix.replace(/__$/, ""); // the connector's server name, as HIDDEN_CONNECTORS writes it
-  const inUse = new Set(hiding.filter((m) => loaded(cfg.mailProvider).includes(m)).map(server));
+  const inUse = new Set(hiding.filter((m) => m.slot && loaded(cfg.mailProvider).includes(m)).map(server));
   const unused = hiding.filter((m) => !loaded(cfg.mailProvider).includes(m)).map(server);
   const keeps = hiding.map((m) => ({ prefix: m.hide!.prefix, keep: new Set(cfg.visibleTools[m.name] ?? m.hide!.visible) }));
   const extra = seen.filter((t) => keeps.some((k) => t.startsWith(k.prefix) && !k.keep.has(t.slice(k.prefix.length))) || neverAllowedTool(t));

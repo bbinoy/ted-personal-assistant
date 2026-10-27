@@ -103,7 +103,7 @@ Until something is set up, the parts of the agent that need it skip it and say s
 
 The skills are `daily-brief` (the brief's structure), `mailbird` (triage and drafting rules), `calendar`, `notion-tasks`, `meeting-prep`, `mailbird-troubleshooting` and `setup`. To change how a domain is handled, edit the file in `plugin/skills/`. Your own skills in `~/.claude/skills/` are not offered to the agent.
 
-**Keep the agent's view of tools in step with the skills.** To save cost and time the model only sees four Notion tools (search, fetch, create-pages, update-page), and the Gmail, Claude Docs and trading connectors are hidden (Google Drive and Google Docs are visible: add `mcp__claude_ai_Google_Drive,mcp__claude_ai_Google_Docs` to `HIDDEN_CONNECTORS` to hide them again). If a skill you write needs another tool, add it to `NOTION_TOOLS` or remove the connector from `HIDDEN_CONNECTORS` in `.env`; otherwise that skill silently fails.
+**Keep the agent's view of tools in step with the skills.** To save cost and time the model only sees four Notion tools (search, fetch, create-pages, update-page), and the Gmail, Claude Docs and trading connectors are hidden (Google Drive and Google Docs are visible: add `mcp__claude_ai_Google_Drive,mcp__claude_ai_Google_Docs` to `HIDDEN_CONNECTORS` to hide them again). If a skill you write needs another tool, add it to `NOTION_TOOLS` (or `DRIVE_TOOLS` / `DOCS_TOOLS`) or remove the connector from `HIDDEN_CONNECTORS` in `.env`; otherwise that skill silently fails.
 
 ## Browser (forms and bookings)
 

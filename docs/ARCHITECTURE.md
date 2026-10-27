@@ -290,7 +290,7 @@ A tool is a module: a plain `ToolModule` (`src/modules/types.ts`) in `src/module
 - `src/modules/runtime.ts` binds each module to the code it wraps, so declarations import nothing of the application. To add a tool: write the module, list it, bind a server in `RUNTIME` if needed, add its skill (`test/modules.test.ts`, `test/manifestrows.test.ts`).
 - `src/policy/toolmanifest.ts` is the one table of tools the model might get. A row names the tool, provider, generic action (`read`, `draft`, `send`, `archive`...), the gating capability (`cap`) and optionally `only` (the sources it exists for). `isFree` says whether a tool runs without the judge; an unlisted tool asks unless its name is a read verb.
 - Whatever has the action `send` is judged the same way for any provider; `mailView` normalises an outgoing mail so approval text and judge input are identical.
-- `hiddenTools`, `HIDDEN_CONNECTORS` and `<MODULE>_TOOLS` (`NOTION_TOOLS`, `MAILBIRD_TOOLS`, `GMAIL_TOOLS`) only decide what the model sees, not what needs approval.
+- `hiddenTools`, `HIDDEN_CONNECTORS` and `<MODULE>_TOOLS` (`NOTION_TOOLS`, `MAILBIRD_TOOLS`, `GMAIL_TOOLS`, `DRIVE_TOOLS`, `DOCS_TOOLS`) only decide what the model sees, not what needs approval.
 
 **Skills** are an SDK plugin in `plugin/`, offered with the `skills` option so nothing from `~/.claude/skills` leaks in. The owner's list is `ownerSkills()`; a group's or friend's is the shared skills her capabilities allow.
 
@@ -337,7 +337,7 @@ One instance, one messenger account, several people. Off by default (`TENANTS=of
 
 Every model call re-sends the whole context, so the levers are what the model sees and keeping the prompt cache warm.
 
-- **The model sees only the tools it uses:** unused connectors are hidden (`HIDDEN_CONNECTORS`), Notion is cut to the tools the skills use (`NOTION_TOOLS`), tools policy always denies are hidden (`hiddenTools`). Keep these in step with the skills.
+- **The model sees only the tools it uses:** unused connectors are hidden (`HIDDEN_CONNECTORS`), Notion, Google Drive and Google Docs are cut to the tools the skills use (`NOTION_TOOLS`, `DRIVE_TOOLS`, `DOCS_TOOLS`; Drive create/update/copy/share/download and Docs update were ~7k tokens a call), tools policy always denies are hidden (`hiddenTools`). Keep these in step with the skills.
 - **Warm processes** (`src/core/warmslot.ts`, `src/run/agentwarm.ts`; `WARM=on|off`, `WARM_IDLE_MINUTES` 60) for the owner's chat, the most recently active groups (`GROUP_WARM_SLOTS` 2) and friends (`TENANT_WARM_MAX` 2), plus one Haiku spare each for the group gate and the judge.
 - A process is reused only if what it was built from is unchanged, and never for another conversation.
 - **Connectors are waited for at start-up** (`MCP_CONNECTION_NONBLOCKING=false`), or the first call runs without its tools and the cache is lost. The prompt cache lives an hour; per-turn changes go in the turn's message, not the system prompt (`src/run/turncontext.ts`).
