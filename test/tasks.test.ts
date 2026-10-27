@@ -45,7 +45,7 @@ test("tasks: add, edit, complete, reopen, snooze, drop: each is one history row 
   const a = S.addItem(scope(k), { title: "Call Sam", due: "2026-10-24T14:30", person: "Sam", details: "about the invoice" });
   assert.equal(a.item.id, 1);
   assert.equal(a.line, "Added task #1 'Call Sam' (due Sat 24 Oct 14:30, with Sam)");
-  assert.deepEqual([a.item.status, a.item.origin, a.item.sourceKind, a.item.dueZone], ["open", "owner", "message", ZONE]);
+  assert.deepEqual([a.item.status, a.item.sourceKind, a.item.dueZone], ["open", "message", ZONE]);
   const e = S.editItem(scope(k, { now: NOW + 1000 }), 1, { due: "2026-10-26", details: null });
   assert.equal(e.line, "Edited task #1 'Call Sam' (changed details, due)");
   assert.equal(e.item.details, undefined);
@@ -116,18 +116,23 @@ test("tasks: a repeating item is not finished, it moves to its next due (and kee
   assert.throws(() => S.editItem(scope(k2), 1, { remindAt: null }), /needs a due date or a reminder/);
 });
 
-test("tasks: what an inferred origin adds is an ordinary open item marked inferred; the same mail, or the same words, are not added twice; it can only ADD (the store's own floor)", () => {
+test("tasks: what a look adds is an ordinary open item with its source; the same mail, or the same words, are not added twice; a look changes, finishes, snoozes and drops like a chat (journalled), but adds at most 10 a day", () => {
   const k = fresh();
   S.addItem(scope(k), { title: "Mine" });
-  const bg = scope(k, { by: "assistant (inferred)", origin: "inferred", source: "background" });
+  const bg = scope(k, { by: S.LOOK_BY, unattended: true, source: "background" });
   const s = S.addItem(bg, { title: "Reply to the landlord", sourceKind: "mail", sourceRef: "m-17" });
-  assert.deepEqual([s.item.status, s.item.origin, s.item.sourceKind, s.item.sourceRef], ["open", "inferred", "mail", "m-17"]);
+  assert.deepEqual([s.item.status, s.item.sourceKind, s.item.sourceRef], ["open", "mail", "m-17"]);
   assert.equal(s.line, "Added task #2 'Reply to the landlord'");
   assert.equal(S.addItem(bg, { title: "Reply to the landlord again", sourceKind: "mail", sourceRef: "m-17" }).duplicate, true, "the same mail is not added twice");
   assert.equal(S.addItem(bg, { title: "reply  to the LANDLORD" }).duplicate, true, "nor the same words");
-  for (const f of [() => S.completeItem(bg, 1), () => S.dropItem(bg, 1), () => S.editItem(bg, 1, { title: "x" }), () => S.snoozeItem(bg, 1, NOW + 1e6), () => S.reopenItem(bg, 1)]) assert.throws(f, /can only add/);
-  assert.equal(S.getItem(k, 1)?.status, "open");
-  for (let i = 0; i < S.LIMITS.inferredPerDay - 1; i++) S.addItem(bg, { title: `Idea ${i}` });
+  assert.equal(S.editItem(bg, 1, { title: "Mine, edited" }).item.title, "Mine, edited");
+  assert.equal(S.snoozeItem(bg, 1, NOW + 1e6).item.status, "snoozed");
+  assert.equal(S.reopenItem(bg, 1).item.status, "open");
+  assert.equal(S.completeItem(bg, 1).item.status, "done");
+  assert.equal(S.dropItem(bg, 2).item.status, "dropped", "dropped, not deleted");
+  assert.deepEqual(S.eventsOf(k, 1).map((e) => [e.action, e.by]), [["added", "owner"], ["edited", S.LOOK_BY], ["snoozed", S.LOOK_BY], ["reopened", S.LOOK_BY], ["done", S.LOOK_BY]]);
+  assert.equal(S.reopenItem(bg, 2).item.status, "open", "and undone with reopen");
+  for (let i = 0; i < S.LIMITS.addedByLooksPerDay - 1; i++) S.addItem(bg, { title: `Idea ${i}` });
   assert.throws(() => S.addItem(bg, { title: "One too many" }), /10 tasks were already added on your own today/);
   assert.equal(S.addItem(scope(k), { title: "The person can still add" }).item.status, "open");
 });
@@ -296,52 +301,49 @@ test("tasks: who acted and where it came from: the owner, a friend, a group memb
   const own = toolsOf({ key: "owner", source: "chat", unattended: false, zone: () => ZONE, now: () => NOW });
   await own.add_task!.handler({ title: "Owner's" });
   assert.deepEqual(events("owner").slice(-1).map((e) => e.by), ["owner"]);
-  assert.equal(S.getItem("owner", S.listItems("owner", {}, NOW, ZONE).find((i) => i.title === "Owner's")!.id)!.origin, "owner");
+  const origin = (key: string, id: number) => peekConvDb(convIdOfKey(key))!.get<{ origin: string }>("SELECT origin FROM items WHERE id = ?", id)!.origin;
+  assert.equal(origin("owner", S.listItems("owner", {}, NOW, ZONE).find((i) => i.title === "Owner's")!.id), "owner");
   setAsking(k, { owner: false, author: "+49170", authorName: "Mia" });
   await chat(k).add_task!.handler({ title: "Bring cake", assignee: "Ben" });
   setAsking(k, undefined);
   assert.equal(askingIn(k), undefined);
-  assert.deepEqual([S.getItem(k, 1)!.origin, events(k)[0]!.by, S.getItem(k, 1)!.assignee], ["member", "Mia", "Ben"]);
+  assert.deepEqual([origin(k, 1), events(k)[0]!.by, S.getItem(k, 1)!.assignee], ["member", "Mia", "Ben"]);
   await chat(k).complete_task!.handler({ id: 1 }); // any member may finish it
   assert.equal(S.getItem(k, 1)!.status, "done");
   const friendKey = "tenant:ida";
   await toolsOf({ key: friendKey, source: "group", unattended: false, zone: () => ZONE, now: () => NOW }).add_task!.handler({ title: "Hers" });
-  assert.deepEqual([S.getItem(friendKey, 1)!.origin, events(friendKey)[0]!.by], ["friend", "friend"]);
+  assert.deepEqual([origin(friendKey, 1), events(friendKey)[0]!.by], ["friend", "friend"]);
 });
 
-test("tasks: an unattended run has only list and add, and what it adds is open, inferred, with its mail as the source", async () => {
+test("tasks: an unattended run has the chat's task tools (not the import); what it adds is open, attributed to the look, with its mail as the source", async () => {
   const k = fresh();
   const bg = toolsOf({ key: k, source: "background", unattended: true, zone: () => ZONE, now: () => NOW });
-  assert.deepEqual(Object.keys(bg).sort(), ["add_task", "list_tasks"], "the server itself has no tool that changes anything");
-  assert.match((createTasksServer({ key: k, source: "background", unattended: true, zone: () => ZONE }) as unknown as { instance: { _registeredTools: Record<string, { description: string }> } }).instance._registeredTools.add_task!.description, /goes straight onto the list[\s\S]*tell the person in your message/);
+  assert.deepEqual(Object.keys(bg).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"]);
   const r = await bg.add_task!.handler({ title: "Pay the invoice", source_kind: "mail", source_ref: "mail-9", due: "2026-10-30" });
   assert.match(text(r), /^Added task #1 'Pay the invoice' \(due Fri 30 Oct\)/);
   const it = S.getItem(k, 1)!;
-  assert.deepEqual([it.status, it.origin, it.sourceKind, it.sourceRef], ["open", "inferred", "mail", "mail-9"]);
-  assert.equal(events(k)[0]!.by, "assistant (inferred)");
+  assert.deepEqual([it.status, it.sourceKind, it.sourceRef], ["open", "mail", "mail-9"]);
+  assert.equal(events(k)[0]!.by, "assistant (look)");
   assert.equal(events(k)[0]!.action, "added");
-  assert.match(text(await bg.list_tasks!.handler({})), /#1 \[task\] Pay the invoice \| due Fri 30 Oct \| inferred from mail/, "it can list (a read) to avoid adding twice");
+  assert.match(text(await bg.list_tasks!.handler({})), /#1 \[task\] Pay the invoice \| due Fri 30 Oct \| from mail/, "it can list (a read) to avoid adding twice");
 });
 
-test("tasks: the permission floor: own-data writes in chat are free; a background run can only list and add; nothing else reaches the tools", () => {
+test("tasks: the permission floor: own-data writes are free in chat and in a look; the import stays a chat's; nothing else reaches the tools", () => {
   const MUTATORS = ["update_task", "complete_task", "drop_task", "snooze_task"].map((x) => `mcp__tasks__${x}`);
   const READ = "mcp__tasks__list_tasks";
   const ADD = "mcp__tasks__add_task";
   for (const tool of [READ, ADD, ...MUTATORS]) {
     assert.equal(classify(tool, { id: 1 }, OWNER_CHAT), "allow", `${tool}: no approval for the owner's own list`);
     assert.equal(classify(tool, { id: 1 }, GROUP_CHAT, undefined, groupTools()), "allow", `${tool}: in a group or a friend's chat too`);
+    assert.equal(classify(tool, { id: 1 }, OWNER_LOOK), "allow", `${tool}: a look of the owner's too`);
   }
-  assert.equal(classify(ADD, { title: "x" }, OWNER_LOOK), "allow");
-  assert.equal(classify(READ, {}, OWNER_LOOK), "allow");
-  for (const tool of MUTATORS) assert.equal(classify(tool, { id: 1 }, OWNER_LOOK), "deny", `${tool}: an unattended look cannot change the list`);
-  // a friend's or a group's own look: its tools are its capability set for an unattended run, which has no edits of the list
+  // a friend's or a group's own look has the same tools
   const look = groupTools(GROUP_LOOK);
-  assert.ok(look.has(ADD) && look.has(READ));
-  for (const tool of MUTATORS) {
-    assert.equal(look.has(tool), false, tool);
-    assert.equal(classify(tool, { id: 1 }, GROUP_LOOK, undefined, look), "deny", `${tool}: denied in a look of a friend or a group`);
+  for (const tool of [READ, ADD, ...MUTATORS]) {
+    assert.ok(look.has(tool), tool);
+    assert.equal(classify(tool, { id: 1 }, GROUP_LOOK, undefined, look), "allow", `${tool}: a look of a friend or a group`);
   }
-  assert.equal(classify(ADD, { title: "x" }, GROUP_LOOK, undefined, look), "allow");
+  for (const tool of ["mcp__tasks__import_tasks_preview", "mcp__tasks__import_tasks_commit"]) assert.equal(look.has(tool), false, `${tool}: the import is a confirm-the-preview flow, attended`);
   // unknown names under the server are denied for isolated runs and not free
   assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, GROUP_CHAT, undefined, groupTools()), "deny");
   assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, OWNER_CHAT), "ask", "a name the manifest does not know is never free");
@@ -364,8 +366,8 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   const toolNames = (o: Parameters<typeof buildOptions>[1]) => Object.keys(((servers(o) as Record<string, { instance?: { _registeredTools: object } }>).tasks?.instance?._registeredTools ?? {}) as object);
   assert.equal(toolNames({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).length, 8) // (the owner's chat also has the two import tools);
   assert.equal(toolNames({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 6);
-  assert.deepEqual(toolNames({ ...base, kind: OWNER_LOOK }).sort(), ["add_task", "list_tasks"], "the owner's look");
-  assert.deepEqual(toolNames({ ...base, kind: GROUP_LOOK, groupId: "g", tools: groupTools(GROUP_LOOK) }).sort(), ["add_task", "list_tasks"], "a group's look has no chat memory");
+  assert.deepEqual(toolNames({ ...base, kind: OWNER_LOOK }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "the owner's look");
+  assert.deepEqual(toolNames({ ...base, kind: GROUP_LOOK, groupId: "g", tools: groupTools(GROUP_LOOK) }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "a group's look has no chat memory");
   assert.equal("tasks" in servers({ ...base, kind: BROWSE_RUN }), false);
   assert.equal("tasks" in servers({ ...base, kind: GROUP_CHAT }), false, "an isolated run with no conversation gets no list (not the owner's)");
 });
@@ -383,8 +385,8 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
   add("Contract back", { kind: "owed_to_me", person: "Anna", due: "2026-10-28" });
   add("Send photos", { kind: "i_owe", person: "Lena" });
   add("Water plants", { due: "2026-10-23", repeat: "every day" });
-  S.addItem(scope(k, { origin: "inferred", by: "assistant (inferred)" }), { title: "Maybe reply to Bo", sourceKind: "mail", sourceRef: "m1" });
-  S.addItem(scope(k, { origin: "inferred", by: "assistant (inferred)" }), { title: "Maybe call Cy", sourceKind: "mail", sourceRef: "m2" });
+  S.addItem(scope(k, { unattended: true, by: S.LOOK_BY }), { title: "Maybe reply to Bo", sourceKind: "mail", sourceRef: "m1" });
+  S.addItem(scope(k, { unattended: true, by: S.LOOK_BY }), { title: "Maybe call Cy", sourceKind: "mail", sourceRef: "m2" });
   assert.equal(
     tasksText(k, NOW, ZONE),
     [

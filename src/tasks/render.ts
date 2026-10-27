@@ -1,4 +1,4 @@
-import { counts, dueClass, effectiveStatus, listItems, type Item } from "./store.ts";
+import { addedByLooks, counts, dueClass, effectiveStatus, listItems, type Item } from "./store.ts";
 import { parseLocal, showInstant, showLocal, todayIn } from "./when.ts";
 
 // How tasks are SHOWN, always in the conversation's own clock: one item as a compact line (the tool replies and lists), and the phone-sized /tasks answer. Pure over the store's reads.
@@ -14,7 +14,7 @@ function dueText(it: Item, now: number, zone: string, short = false): string {
   return showLocal(it.due!, today);
 }
 
-/** One item for a model or a list: "#4 [task] Call Sam | due Fri 24 Oct 14:30 | with Sam | remind Thu 23 Oct 09:00 | repeats every monday | inferred from mail". */
+/** One item for a model or a list: "#4 [task] Call Sam | due Fri 24 Oct 14:30 | with Sam | remind Thu 23 Oct 09:00 | repeats every monday | from mail". */
 export function itemLine(it: Item, now: number, zone: string): string {
   const parts = [`#${it.id} [${it.kind}] ${it.title}`];
   const due = dueText(it, now, zone);
@@ -26,7 +26,7 @@ export function itemLine(it: Item, now: number, zone: string): string {
   const status = effectiveStatus(it, now);
   if (status === "snoozed" && it.snoozeUntil !== undefined) parts.push(`snoozed until ${showInstant(it.snoozeUntil, zone, now)}`);
   else if (status !== "open") parts.push(status);
-  if (it.origin === "inferred") parts.push(`inferred from ${it.sourceKind}`);
+  if (it.sourceKind === "mail" || it.sourceKind === "meeting") parts.push(`from ${it.sourceKind}`);
   return parts.join(" | ");
 }
 
@@ -82,11 +82,11 @@ export function tasksText(key: string, now: number, zone: string): string {
 
 export const ADDED_WINDOW_MS = 24 * 3_600_000;
 
-/** The facts about the list a look gets in its prompt: what was added on the assistant's own (from mail or a meeting) in the last day, with where it came from. "" when there is nothing.
+/** The facts about the list a look gets in its prompt: what looks added in the last day, with where it came from. "" when there is nothing.
  *  The titles may carry a mail's words, so it is fenced as data by the caller; `fromMail`: whether any of it came from mail (the run is then told it read untrusted text). */
 export function tasksFacts(key: string, now: number, zone: string): { text: string; fromMail: boolean } {
-  const added = listItems(key, { status: ["open", "snoozed", "done", "dropped"], limit: 50 }, now, zone).filter((it) => it.origin === "inferred" && now - it.createdAt < ADDED_WINDOW_MS);
+  const added = addedByLooks(key, now - ADDED_WINDOW_MS);
   if (!added.length) return { text: "", fromMail: false };
   const lines = added.map((it) => `${itemLine(it, now, zone)} | added ${showInstant(it.createdAt, zone, now)}${it.sourceRef ? ` | source ${it.sourceRef}` : ""}`);
-  return { text: `Added to the list on your own in the last 24 hours (you or another look did it; the chat log and your own posts show whether it was already mentioned):\n${lines.join("\n")}`, fromMail: added.some((it) => it.sourceKind === "mail") };
+  return { text: `Added to the list by looks in the last 24 hours (you or another look did it; the chat log and your own posts show whether it was already mentioned):\n${lines.join("\n")}`, fromMail: added.some((it) => it.sourceKind === "mail") };
 }

@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "3cd83f10badc02b4"
+        "sha": "5bc4272e4da2f3ec"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -166,7 +166,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "3cd83f10badc02b4"
+        "sha": "5bc4272e4da2f3ec"
       },
       "snapshot": false
     },
@@ -321,7 +321,7 @@
     "run": {
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "5f2f2b0557b419e1"
+        "sha": "70c4f87afbe92b99"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -382,7 +382,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "5f2f2b0557b419e1"
+        "sha": "70c4f87afbe92b99"
       },
       "snapshot": false
     },
@@ -439,7 +439,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "1af1a78f3d71a6fc"
+        "sha": "eeedb7a003f5bc27"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -507,7 +507,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "1af1a78f3d71a6fc"
+        "sha": "eeedb7a003f5bc27"
       },
       "snapshot": false
     },
@@ -567,7 +567,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "3cd83f10badc02b4"
+        "sha": "5bc4272e4da2f3ec"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -675,7 +675,11 @@
         "mcp__send__send",
         "mcp__status__write_status_note",
         "mcp__tasks__add_task",
+        "mcp__tasks__complete_task",
+        "mcp__tasks__drop_task",
         "mcp__tasks__list_tasks",
+        "mcp__tasks__snooze_task",
+        "mcp__tasks__update_task",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
         "mcp__weather__get_forecast",
@@ -739,7 +743,7 @@
       "type": "custom",
       "prompt": {
         "key": "ownerLook.system.prompt",
-        "sha": "3cd83f10badc02b4"
+        "sha": "5bc4272e4da2f3ec"
       },
       "snapshot": false
     },
@@ -893,7 +897,7 @@
     "run": {
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "5f2f2b0557b419e1"
+        "sha": "70c4f87afbe92b99"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -918,7 +922,11 @@
         "mcp__people__find_person",
         "mcp__send__send",
         "mcp__tasks__add_task",
+        "mcp__tasks__complete_task",
+        "mcp__tasks__drop_task",
         "mcp__tasks__list_tasks",
+        "mcp__tasks__snooze_task",
+        "mcp__tasks__update_task",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
         "mcp__weather__get_forecast",
@@ -960,7 +968,7 @@
       "type": "custom",
       "prompt": {
         "key": "groupLook.system.prompt",
-        "sha": "5f2f2b0557b419e1"
+        "sha": "70c4f87afbe92b99"
       },
       "snapshot": false
     },
@@ -1014,7 +1022,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "1af1a78f3d71a6fc"
+        "sha": "eeedb7a003f5bc27"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -1047,7 +1055,11 @@
         "mcp__people__find_person",
         "mcp__send__send",
         "mcp__tasks__add_task",
+        "mcp__tasks__complete_task",
+        "mcp__tasks__drop_task",
         "mcp__tasks__list_tasks",
+        "mcp__tasks__snooze_task",
+        "mcp__tasks__update_task",
         "mcp__voice__voice",
         "mcp__weather__get_distance",
         "mcp__weather__get_forecast",
@@ -1089,7 +1101,7 @@
       "type": "custom",
       "prompt": {
         "key": "tenantLook.system.prompt",
-        "sha": "1af1a78f3d71a6fc"
+        "sha": "eeedb7a003f5bc27"
       },
       "snapshot": false
     },

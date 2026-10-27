@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Tasks from mail (src/tasks/store.ts, src/modules/tasks/tasktools.ts, src/heartbeat/look.ts): an unattended look ADDS what a mail asks of the person (no suggestion, no tap), at most 10 a day per
-// conversation, never twice for the same mail, marked inferred with the mail as its source, and tells the person in its own words; a list holding such a task is untrusted text for the judge.
+// conversation, never twice for the same mail, with the mail as its source, and tells the person in its own words; a list holding such a task is untrusted text for the judge.
 // Also the group pieces (/tasks, the "remind me" line once per member) and a friend's own list. One conversation never touches another's.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "mailtasks-test-"));
 
@@ -20,6 +20,7 @@ const { convIdOfKey } = await import("../src/core/convpaths.ts");
 const { setAsking } = await import("../src/modules/voice/voicenote.ts");
 const { readsUntrusted } = await import("../src/policy/toolmanifest.ts");
 const { chatSystem, groupSystem, tenantSystem } = await import("../src/run/persona.ts");
+const { itemLine } = await import("../src/tasks/render.ts");
 const { lookerOf } = await import("../src/run/scope.ts");
 const { groupCapabilities } = await import("../src/policy/capabilities.ts");
 
@@ -34,21 +35,28 @@ const conv = (key: string, kind: "owner" | "group" | "tenant" = "group") => ({ k
 const fromMail = (key: string, title: string, ref: string, o: { now?: number; kind?: string } = {}) => tools(key, { unattended: true, now: o.now }).add_task!.handler({ title, source_kind: "mail", source_ref: ref, due: "2026-10-30", ...(o.kind ? { kind: o.kind } : {}) });
 const LIST = "mcp__tasks__list_tasks";
 
-test("from mail: an unattended look ADDS the task, open at once, marked inferred with the mail as its source; the reply tells it to say so; nothing waits for a tap", async () => {
+test("from mail: an unattended look ADDS the task, open at once, with the mail as its source; the reply tells it to say so; nothing waits for a tap", async () => {
   const k = fresh();
   const bg = tools(k, { unattended: true });
-  assert.deepEqual(Object.keys(bg).sort(), ["add_task", "list_tasks"], "it can list and add, nothing else");
+  assert.deepEqual(Object.keys(bg).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "the chat's task tools, without the owner's import");
   const r = await fromMail(k, "Pay the plumber's invoice", "mail-plumber-1");
   assert.equal(r.isError, undefined);
   assert.match(text(r), /^Added task #1 'Pay the plumber's invoice' \(due Fri 30 Oct\)/);
   const it = S.getItem(k, 1)!;
-  assert.deepEqual([it.status, it.origin, it.sourceKind, it.sourceRef], ["open", "inferred", "mail", "mail-plumber-1"]);
-  assert.deepEqual(S.eventsOf(k, 1).map((e) => [e.action, e.by]), [["added", "assistant (inferred)"]]);
+  assert.deepEqual([it.status, it.sourceKind, it.sourceRef], ["open", "mail", "mail-plumber-1"]);
+  assert.deepEqual(S.eventsOf(k, 1).map((e) => [e.action, e.by]), [["added", "assistant (look)"]]);
   assert.equal(S.listItems(k, {}, NOW, ZONE).length, 1, "on the open list right away");
-  // a status argument is no way around it, and the model cannot change, finish or drop it
-  for (const fn of [() => S.completeItem({ key: k, zone: ZONE, by: "assistant (inferred)", origin: "inferred", source: "background", now: NOW }, 1), () => S.dropItem({ key: k, zone: ZONE, by: "assistant (inferred)", origin: "inferred", source: "background", now: NOW }, 1)]) assert.throws(fn, /can only add/);
-  // the person undoes it with one message: drop_task in chat
-  assert.match(text(await tools(k).drop_task!.handler({ id: 1 })), /^Dropped task #1/);
+  //   // a look may also finish, edit, snooze and drop (every change in the history, attributed to the look), nothing is deleted
+  const look = tools(k, { unattended: true });
+  assert.match(text(await look.update_task!.handler({ id: 1, title: "Pay the plumber" })), /^Edited task #1/);
+  assert.match(text(await look.snooze_task!.handler({ id: 1, until: "2026-10-29T09:00" })), /^Snoozed task #1/);
+  assert.match(text(await look.update_task!.handler({ id: 1, reopen: true })), /^Reopened task #1/);
+  assert.match(text(await look.complete_task!.handler({ id: 1 })), /^Completed task #1/);
+  assert.match(text(await look.update_task!.handler({ id: 1, reopen: true })), /^Reopened task #1/);
+  assert.match(text(await look.drop_task!.handler({ id: 1 })), /^Dropped task #1/);
+  assert.deepEqual(S.eventsOf(k, 1).map((e) => [e.action, e.by]), ["added", "edited", "snoozed", "reopened", "done", "reopened", "dropped"].map((a) => [a, "assistant (look)"]));
+  // the person undoes it with one message: reopen in chat
+  assert.match(text(await tools(k).update_task!.handler({ id: 1, reopen: true })), /^Reopened task #1/);
 });
 
 test("from mail: the same mail never adds its task twice, also after the person dropped it", async () => {
@@ -105,12 +113,12 @@ test("the look's prompt carries what was added from mail in the last day, fenced
   });
   recordMessage("owner", Date.now(), "hi", new Date(), c.logFile);
   await hb.look(c, {} as never, new Date(NOW));
-  assert.doesNotMatch(seen[0]!.prompt, /Added to the list on your own/);
+  assert.doesNotMatch(seen[0]!.prompt, /Added to the list by looks/);
   assert.equal(seen[0]!.untrusted, undefined);
   await tools("owner", { unattended: true, now: Date.now() }).add_task!.handler({ title: "Answer the tax office", source_kind: "mail", source_ref: "mail-tax-1", due: "2026-10-30" });
   recordMessage("owner", Date.now(), "and?", new Date(), c.logFile);
   await hb.look(c, {} as never, new Date());
-  assert.match(seen[1]!.prompt, /<task_list_facts[^>]*>[\s\S]*Added to the list on your own in the last 24 hours[\s\S]*Answer the tax office \| due Fri 30 Oct \| inferred from mail \| added [^|]+ \| source mail-tax-1/);
+  assert.match(seen[1]!.prompt, /<task_list_facts[^>]*>[\s\S]*Added to the list by looks in the last 24 hours[\s\S]*Answer the tax office \| due Fri 30 Oct \| from mail \| added [^|]+ \| source mail-tax-1/);
   assert.equal(seen[1]!.untrusted, true);
   assert.doesNotMatch(seen[1]!.prompt, /💡|👍 to add/);
 });
@@ -122,10 +130,12 @@ test("migration 11: a task still waiting as a suggestion becomes an ordinary ope
   db.run("INSERT INTO items (kind, title, status, origin, source_kind, created_at, updated_at) VALUES ('task', 'Old no', 'dropped', 'inferred', 'mail', 1, 1)");
   db.exec(CONV_SCHEMA.find((m) => m.version === 11)!.up as string);
   const [a, b] = [S.getItem(k, 1)!, S.getItem(k, 2)!];
-  assert.deepEqual([a.status, a.origin, a.sourceKind, a.sourceRef], ["open", "inferred", "mail", "mail-inv-6"]);
+  assert.deepEqual([a.status, a.sourceKind, a.sourceRef], ["open", "mail", "mail-inv-6"]);
+  assert.match(itemLine(a, NOW, ZONE), /from mail/, "an old row with origin inferred still renders");
   assert.equal(b.status, "dropped", "a rejected one stays rejected");
   assert.deepEqual(S.eventsOf(k, 1).map((e) => [e.action, e.by, e.before, e.after]), [["confirmed", "system (suggestions retired)", { status: "suggested" }, { status: "open" }]]);
   assert.equal(readsUntrusted(LIST, undefined, k), true, "still a mail's words: untrusted for the judge");
+  assert.match(S.dropItem({ key: k, zone: ZONE, by: "owner", origin: "owner", source: "chat", now: NOW }, 1).line, /^Dropped/, "and can be changed");
 });
 
 test("groups: /tasks lists the group's items, code only; there is no '/tasks suggestions' any more", async () => {
@@ -156,7 +166,7 @@ test("groups: 'Sam by Friday' sets the assignee; 'remind me' makes a GROUP task 
   setAsking(k, { owner: false, author: "+492", authorName: "Ben" });
   assert.match(text(await t.add_task!.handler({ title: "Pack chairs", remind: "2026-10-24T10:00" })), /first reminder here/);
   setAsking(k, undefined);
-  assert.equal(S.getItem(k, 2)!.origin, "member");
+  assert.equal(peekConvDb(convIdOfKey(k))!.get<{ origin: string }>("SELECT origin FROM items WHERE id = 2")!.origin, "member");
   assert.equal(peekConvDb(convIdOfKey(k))!.num("SELECT COUNT(*) FROM group_remind_noted"), 2, "persisted, not in memory");
   // a friend's and the owner's chat never get the group line
   const own = tools("tenant:ida");
@@ -170,14 +180,14 @@ test("friends: the same tools in their own chat, on their own list; their looks 
   for (const name of ["list_tasks", "update_task", "complete_task", "drop_task", "snooze_task"]) assert.ok(t[name], `${name} is there`);
   for (const name of ["confirm_suggestion", "reject_suggestion"]) assert.equal(t[name], undefined, `${name} is gone`);
   await fromMail(k, "Her dentist bill", "mail-bo-1");
-  assert.equal(S.listItems(k, {}, NOW, ZONE).find((i) => i.title === "Her dentist bill")?.origin, "inferred");
+  assert.equal(peekConvDb(convIdOfKey(k))!.get<{ origin: string }>("SELECT origin FROM items WHERE title = 'Her dentist bill'")!.origin, "friend", "a look in her conversation records whose list it is");
 });
 
 test("prompts: the task tools are explained to the owner, a group and a friend; the look is told to ADD and then tell, never to ask", () => {
   const chat = chatSystem(new Date(NOW));
   assert.match(chat, /Tasks: you keep .*'s own to-do list/);
   assert.match(chat, /"Remind me to email Sam" never sends an email/);
-  assert.match(chat, /inferred from mail/);
+  assert.match(chat, /Items marked "from mail"/);
   assert.doesNotMatch(chat, /confirm_suggestion|suggested/);
   const grp = groupSystem({ caps: groupCapabilities() });
   assert.match(grp, /any member may add, change and finish items/);
