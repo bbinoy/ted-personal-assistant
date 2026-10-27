@@ -715,6 +715,15 @@ test("groups: a 👎 on the assistant's own message runs a turn as addressed (no
   assert.match(p.seen[0]!.prompt, /\[archive\] Archived 4 mails from LinkedIn \(.*per your notes: triage-linkedin/);
 });
 
+test("groups: a 😂 on the assistant's own message is chatter: no addressed turn", async () => {
+  const conv = group(GID);
+  recordMessage("notice", 8003, "📬 LinkedIn: a digest.", new Date(), conv.logFile);
+  const p = probe(false);
+  const { pipeline } = rig({ group: p.group });
+  await pipeline.handleIncoming(conv, { ...thumbsDown(8003), r: { ...(thumbsDown(8003) as any).r, emoji: "😂" } });
+  assert.equal(p.seen.length, 0);
+});
+
 test("groups: a 👎 on another member's message runs no turn", async () => {
   const conv = group(GID);
   recordMessage("member", 8011, "Eve (a member): see you at six", new Date(), conv.logFile);

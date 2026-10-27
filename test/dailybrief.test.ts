@@ -1,21 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { delegationHook, expertSetup } from "../src/run/delegation.ts";
 import { lookInstruction } from "../src/heartbeat/look.ts";
 import { chatSystem } from "../src/run/persona.ts";
 import { announceMemoryChanges, noteWritten } from "../src/memory/memorynotice.ts";
-import { registered } from "../src/modules/index.ts";
-import { categoryOf, MAX_STATUS_CHARS, readNotes } from "../src/memory/notes.ts";
+import { categoryOf, indexOf, NOTES_DIR, readNotes } from "../src/memory/notes.ts";
+import { journalable } from "../src/approvals/journalrender.ts";
+import { settings } from "../src/core/settings.ts";
 import { classify } from "../src/policy/policy.ts";
 import { preset } from "../src/core/preset.ts";
 import { dreamScope } from "../src/modules/memory/dreamscope.ts";
 import { ownerSkills, skillHint } from "../src/modules/skills.ts";
-import { writeStatusNote } from "../src/modules/status/statusnote.ts";
-import { GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
-import { capabilitiesOf, groupCapabilities, toolsFor } from "../src/policy/capabilities.ts";
+import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
+import { capabilitiesOf, toolsFor } from "../src/policy/capabilities.ts";
 
 // The daily brief is a skill the heartbeat run delegates to its expert; code schedules and records it like the other routines (routine_runs); the status-brief note is only its content for the next brief.
 
@@ -45,48 +45,36 @@ test("the prompt names the heavy skills and the routines; the routine fact (time
   assert.match(lookInstruction(new Date(2026, 9, 14, 8, 0), undefined, undefined, "daily-brief: due now (every day at 07:30)."), /daily-brief: due now \(every day at 07:30\)\./);
 });
 
-test("the status note: written by the one narrow tool, status-<name>.md only, one note's worth, expiring tomorrow; the dream and the memory notices leave it alone", () => {
+test("the status notes are ordinary notes the skills write with Write: expiring, outside the index, the dream and the notices, and not in the journal", () => {
   const dir = mkdtempSync(join(tmpdir(), "status-"));
   const now = new Date(2026, 9, 14, 9, 0);
-  assert.deepEqual(writeStatusNote("brief", "2026-10-14\nstatus: started", now, dir), { ok: true, file: "status-brief.md" });
-  assert.match(readFileSync(join(dir, "status-brief.md"), "utf8"), /^---\nexpires: 2026-10-15\nwritten: 2026-10-14T[\d:.]+Z\n---\n2026-10-14\nstatus: started\n$/);
+  // what the daily-brief skill writes (and what the owner's older, code-stamped note looks like: the same shape)
+  writeFileSync(join(dir, "status-brief.md"), "---\nexpires: 2026-10-15\nwritten: 2026-10-14T09:00:00\n---\n2026-10-14\nHeadlines\n");
+  writeFileSync(join(dir, "status-overdue-offer.md"), "---\nexpires: 2026-11-13\n---\n2026-10-14 clean-up offered\n");
+  writeFileSync(join(dir, "people-anna.md"), "---\ndescription: Anna\n---\nAnna lives in Lisbon\n");
   assert.equal(categoryOf("status-brief.md"), "status");
-  assert.deepEqual(readNotes(now, dir).map((n) => [n.file, n.category, n.text]), [["status-brief.md", "status", "2026-10-14\nstatus: started"]]);
-  assert.deepEqual(readNotes(new Date(2026, 9, 16, 9, 0), dir), [], "expired after tomorrow");
-  // replaced by name
-  writeStatusNote("brief", "2026-10-14\nstatus: delivered", now, dir);
-  assert.equal(readdirSync(dir).length, 1);
-  // refused: a path, a bad name, empty, too long. Nothing else is written.
-  for (const name of ["../x", "Brief", "a/b", "", "x".repeat(41), "-x"]) assert.equal(writeStatusNote(name, "t", now, dir).ok, false, name);
-  assert.equal(writeStatusNote("brief", "   ", now, dir).ok, false);
-  const long = writeStatusNote("brief", "x".repeat(MAX_STATUS_CHARS + 1), now, dir);
-  assert.ok(!long.ok && /too long/.test(long.error));
-  assert.deepEqual(readdirSync(dir), ["status-brief.md"]);
-  // `days`: a record that outlasts the day (the clean-up offer), bounded 1 to 30, the narrow name and the length cap unchanged
-  assert.deepEqual(writeStatusNote("overdue-offer", "2026-10-14\noffered", now, dir, 30), { ok: true, file: "status-overdue-offer.md" });
-  assert.match(readFileSync(join(dir, "status-overdue-offer.md"), "utf8"), /^---\nexpires: 2026-11-13\n/);
-  for (const days of [0, 31, 1.5, -1, NaN]) assert.equal(writeStatusNote("overdue-offer", "x", now, dir, days).ok, false, String(days));
-  assert.equal(writeStatusNote("x/y", "x", now, dir, 30).ok, false);
-  assert.equal(writeStatusNote("overdue-offer", "x".repeat(MAX_STATUS_CHARS + 1), now, dir, 30).ok, false);
-  rmSync(join(dir, "status-overdue-offer.md"));
-  // protected from the dream (its categories), and never announced as a memory change
+  assert.deepEqual(readNotes(now, dir).map((n) => n.file).sort(), ["people-anna.md", "status-brief.md", "status-overdue-offer.md"]);
+  assert.deepEqual(readNotes(new Date(2026, 9, 16, 9, 0), dir).map((n) => n.file).sort(), ["people-anna.md", "status-overdue-offer.md"], "the brief's note expires after tomorrow, the offer's after 30 days");
+  assert.doesNotMatch(indexOf(readNotes(now, dir)), /status-/, "not in MEMORY.md");
   assert.ok(preset().notes.categories.includes("status") && !preset().notes.dream.includes("status"));
   assert.ok(!dreamScope({ kind: "owner" }).categories.includes("status"));
   const shown: string[] = [];
   noteWritten("Write", { file_path: join(dir, "status-brief.md"), content: "x" });
   announceMemoryChanges(async (t) => void shown.push(t), "");
   assert.deepEqual(shown, [], "a status note is not the owner's memory: no notice");
+  assert.equal(journalable("Write", { file_path: join(dir, "status-brief.md") }), false, "plumbing, not an action");
+  assert.equal(journalable("Write", { file_path: join(dir, "people-anna.md") }), true, "any other note write is");
+  // the tool is gone; the owner's look and a chat turn write the note with Write
+  assert.equal(toolsFor(capabilitiesOf({ kind: "owner" }), OWNER_LOOK).has("mcp__status__write_status_note"), false);
+  const path = join(NOTES_DIR, "status-brief.md");
+  for (const run of [OWNER_LOOK, OWNER_CHAT]) assert.equal(classify("Write", { file_path: path, content: "x" }, run), "allow", run.who);
 });
 
-test("the status tool: only an unattended owner run has it, and it is free for them; chat, groups and friends do not", () => {
-  const mod = registered().find((m) => m.name === "status")!;
-  const TOOL = "mcp__status__write_status_note";
-  const offers = (caps: ReadonlySet<never>, run: typeof OWNER_LOOK) => { const tools = toolsFor(caps, run); return (t: string) => tools.has(t); };
-  const c = (o: object) => ({ kind: OWNER_LOOK, browsing: false, mode: "owner", key: "owner", offers: offers(capabilitiesOf({ kind: "owner" }) as never, OWNER_LOOK), browseRun: async () => ({}), ...o }) as never;
-  const when = (o: object) => mod.connection.kind === "in-process" && mod.connection.when(c(o));
-  assert.equal(when({}), true);
-  assert.equal(when({ kind: OWNER_CHAT, offers: offers(capabilitiesOf({ kind: "owner" }) as never, OWNER_CHAT) }), false, "not in her chat");
-  assert.equal(when({ kind: GROUP_LOOK, key: "g", offers: offers(groupCapabilities() as never, GROUP_LOOK) }), false);
-  assert.equal(classify(TOOL, { name: "brief", text: "t" }, OWNER_LOOK), "allow");
-  for (const run of [OWNER_CHAT, GROUP_CHAT, GROUP_LOOK]) assert.equal(classify(TOOL, { name: "brief", text: "t" }, run), "deny", run.who);
+test("the daily-brief skill writes status-brief.md and status-overdue-offer.md itself, with an expiry; no tool, no state", () => {
+  const skill = readFileSync(join(settings.pluginDir, "skills", "daily-brief", "SKILL.md"), "utf8");
+  assert.doesNotMatch(skill, /write_status_note|memory_changes_since_brief/);
+  assert.match(skill, /`status-brief\.md`[^\n]*written with `Write`/);
+  assert.match(skill, /notes_changed_facts/, "the learned block comes from code in the context");
+  assert.match(skill, /expires: <tomorrow, YYYY-MM-DD>/);
+  assert.match(skill, /status-overdue-offer\.md` with `Write` \(front matter `expires:` 30 days/);
 });

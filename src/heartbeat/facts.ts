@@ -7,7 +7,7 @@ import { PLUGIN } from "../core/preset.ts";
 import { settings } from "../core/settings.ts";
 import { takeWelcome } from "../core/welcome.ts";
 import { mailSlot } from "../modules/index.ts";
-import { briefDelivered, learnedFact } from "../memory/learned.ts";
+import { learnedFact } from "../memory/learned.ts";
 import { variantOf } from "../run/delegation.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
@@ -120,7 +120,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const welcome = looker.own ? takeWelcome() : ""; // (once ever, on the owner's first run, whichever it is)
   const handed = looker.tasks ? waitingReminders(conv).filter((w) => grab(`rem:${w.item.id}|${w.key}`)) : [];
   const prepping = looker.meetings ? waitingMeetings(conv).filter((m) => grab(`prep:${m.eventId}|${m.startMs}`)) : [];
-  const learned = conv.kind === "tenant" && !isBusy(conv.key, "learned") ? learnedFact(conv.convId, conv.notesDir, t) : undefined; // a friend's notes that changed on their own (memory/learned.ts)
+  const learned = !isBusy(conv.key, "learned") ? learnedFact(conv.convId, conv.notesDir, t) : undefined; // notes that changed on their own (memory/learned.ts; a group has none: its notes are shared and nothing is recorded)
   if (learned) grab("learned");
   const tasks = looker.tasks ? tasksFacts(conv.key, t, zone) : { text: "", fromMail: false };
   const dueFacts = looker.tasks ? reminderFacts(handed, kind === "look" ? activeItems(conv.key) : [], { now: t, zone, group: conv.kind === "group" }) : "";
@@ -170,7 +170,6 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
         const note = routines?.due && !routines.due.routine.skill ? routines.due.routine.name : undefined;
         if (note && end.ended) finished.add(note); // (a routine note is done once the look ended well, whether it posted, sent, acted or decided to say nothing; a failed or called-off look leaves it for the retry)
         settleRoutines(conv.convId, started, finished, { calledOff: abandoned, sends }, Date.now());
-        if (finished.has("daily-brief")) briefDelivered(conv.convId); // the "learned overnight" list the brief carried is told now, not when the tool handed it out (memory/learned.ts)
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
         if (handed.length && (kind === "look" || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
         if (prepping.length && (kind === "look" ? !abandoned : end.said)) afterPrep(conv, prepping, end.said, t); // (a look a message overtook leaves them claimed: the next run is handed them)

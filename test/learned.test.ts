@@ -4,13 +4,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// "What I learned overnight" (src/memory/learned.ts): the quiet memory changes (the dream) are recorded where they happen and handed ONCE as facts: to the owner's brief (the brief tool)
-// and to a friend's next look (learnedFact). The run says them in its words; taking one back is an ordinary chat turn. A group has none.
+// "What I learned overnight" (src/memory/learned.ts): the quiet memory changes (the dream) are recorded where they happen and handed ONCE as a fact to the conversation's next run
+// (learnedFact, the same for the owner and a friend; the brief's expert gets it with the rest of the look's context). The run says them in its words; taking one back is an ordinary chat turn. A group has none.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "learned-test-"));
 
 const L = await import("../src/memory/learned.ts");
 const { noteContent } = await import("../src/memory/dreamplan.ts");
 const { createMemoryServer } = await import("../src/modules/memory/memory-tools.ts");
+const F = await import("../src/heartbeat/facts.ts");
 const { createDreamer } = await import("../src/conversation/dream.ts");
 const { group: groupConversation } = await import("../src/conversation/conversationmodel.ts");
 const { groupDir, groupLogFile, groupNotesDir } = await import("../src/conversation/groupstore.ts");
@@ -31,6 +32,12 @@ const friend = () => {
 };
 const put = (dir: string, file: string, description: string, text: string) => writeFileSync(join(dir, file), noteContent(file, description, text, undefined, new Date(NOW)));
 const plan = (actions: object[]) => ({ actions, rejected: [] }) as never;
+// The fact a run would be handed now, settled as told (the run spoke): its text, or "" when there is none.
+const told = (c: { convId: string; notesDir: string }, now: number): string => {
+  const f = L.learnedFact(c.convId, c.notesDir, now);
+  f?.told();
+  return f?.text ?? "";
+};
 // A note the dream added at `at`, and its row.
 const saved = (c: { convId: string; notesDir: string }, file: string, description: string, at = NOW) => {
   put(c.notesDir, file, description, description);
@@ -57,17 +64,16 @@ test("the list: dream changes, one line each with the note name and gist; merges
   ]);
 });
 
-test("no repeats: a list is told once; the brief tool hands the same list out again only inside the redo window; later changes make a new list", () => {
+test("no repeats: a list is told once; later changes make a new list", () => {
   const c = friend();
   saved(c, "people-anna.md", "Anna moved to Lisbon");
-  const first = L.briefLearned(c.convId, c.notesDir, NOW);
-  assert.match(first, /^- people-anna: Anna moved to Lisbon \(saved\)$/);
-  assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + HOUR), first, "the brief was redone: the same list");
-  L.briefDelivered(c.convId); // the brief's status note says delivered
-  assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 7 * HOUR), "", "told; nothing new");
+  assert.match(told(c, NOW), /^[\s\S]*\n- people-anna: Anna moved to Lisbon \(saved\)\n/);
+  assert.equal(told(c, NOW + 7 * HOUR), "", "told; nothing new");
   assert.equal(L.planBatch(c.convId, c.notesDir, NOW + 7 * HOUR), undefined);
   saved(c, "people-bo.md", "Bo has a new job", NOW + 8 * HOUR);
-  assert.match(L.briefLearned(c.convId, c.notesDir, NOW + 9 * HOUR), /^- people-bo: Bo has a new job \(saved\)/);
+  const next = told(c, NOW + 9 * HOUR);
+  assert.match(next, /- people-bo: Bo has a new job \(saved\)/);
+  assert.doesNotMatch(next, /people-anna/);
 });
 
 test("a change to a note that is gone by list time is not listed; an old change is dropped silently", () => {
@@ -82,22 +88,41 @@ test("a change to a note that is gone by list time is not listed; an old change 
   assert.equal(L.planBatch(c.convId, c.notesDir, NOW), undefined, "the dropped ones are settled too");
 });
 
-test("the owner's brief tool: the facts in markers, empty when nothing changed, only for the owner's notes, in the one memory server", async () => {
+test("the owner gets the learned changes as the same fact a friend does, once; the brief tool is gone from the one memory server", () => {
+  rmSync(NOTES_DIR, { recursive: true, force: true });
   mkdirSync(NOTES_DIR, { recursive: true });
-  type Srv = { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
-  const tools = (dir: string) => (createMemoryServer({ source: "background", notesDir: dir, record() {} }) as unknown as Srv).instance._registeredTools;
-  const t = tools(NOTES_DIR);
-  assert.ok(t.memory_changes_since_brief);
-  assert.match((await t.memory_changes_since_brief!.handler({}, {})).content[0]!.text, /Nothing changed on its own/);
-  saved({ convId: OWNER_CONV, notesDir: NOTES_DIR }, "people-anna.md", "Anna moved to Lisbon");
-  const out = (await t.memory_changes_since_brief!.handler({}, {})).content[0]!.text;
-  assert.match(out, /- people-anna: Anna moved to Lisbon \(saved\)/);
-  assert.match(out, /<learned>|learned/);
-  assert.match((await t.memory_changes_since_brief!.handler({}, {})).content[0]!.text, /people-anna/, "a redone brief gets the same list");
-  const f = friend();
-  assert.equal(tools(f.notesDir).memory_changes_since_brief, undefined, "a friend has no brief");
+  type Srv = { instance: { _registeredTools: Record<string, unknown> } };
+  const names = Object.keys((createMemoryServer({ source: "background", notesDir: NOTES_DIR, record() {} }) as unknown as Srv).instance._registeredTools);
+  assert.ok(!names.includes("memory_changes_since_brief"));
+  const o = { convId: OWNER_CONV, notesDir: NOTES_DIR };
+  assert.equal(L.learnedFact(o.convId, o.notesDir, NOW), undefined, "nothing changed");
+  saved(o, "people-anna.md", "Anna moved to Lisbon");
+  const f = L.learnedFact(o.convId, o.notesDir, NOW)!;
+  assert.match(f.text, /- people-anna: Anna moved to Lisbon \(saved\)/);
+  assert.match(f.text, /forget <note>/);
+  f.told();
+  assert.equal(L.learnedFact(o.convId, o.notesDir, NOW + HOUR), undefined, "settled told");
   peekConvDb(OWNER_CONV)?.run("DELETE FROM learned_changes");
   peekConvDb(OWNER_CONV)?.run("DELETE FROM learned_batches"); // (the owner's rows are shared with the tests below)
+});
+
+test("factsFor hands the owner's look the learned block (the brief's expert context carries the blocks), settles it when the run spoke, and leaves a group out", async () => {
+  const { owner } = await import("../src/conversation/conversationmodel.ts");
+  rmSync(NOTES_DIR, { recursive: true, force: true });
+  mkdirSync(NOTES_DIR, { recursive: true });
+  saved({ convId: OWNER_CONV, notesDir: NOTES_DIR }, "people-di.md", "Di moved");
+  const silent = F.factsFor(owner(), new Date(NOW), "look");
+  assert.match(silent.blocks.join("\n"), /<notes_changed_facts>[\s\S]*- people-di: Di moved \(saved\)/);
+  silent.done({ ended: true, said: false } as never);
+  const again = F.factsFor(owner(), new Date(NOW + HOUR), "chat");
+  assert.match(again.blocks.join("\n"), /people-di/, "nothing was said: still owed, to a chat turn too");
+  again.done({ ended: true, said: true } as never);
+  assert.doesNotMatch(F.factsFor(owner(), new Date(NOW + 2 * HOUR), "look").blocks.join("\n"), /people-di/, "told once");
+  const g = "R3JvdXAxR3JvdXAxR3JvdXAx";
+  groupDir(g, "Chess");
+  assert.doesNotMatch(F.factsFor(groupConversation(g), new Date(NOW), "look").blocks.join("\n"), /notes_changed_facts/);
+  peekConvDb(OWNER_CONV)?.run("DELETE FROM learned_changes");
+  peekConvDb(OWNER_CONV)?.run("DELETE FROM learned_batches");
 });
 
 test("groups are off: a group's dream records nothing", async () => {
@@ -110,10 +135,7 @@ test("groups are off: a group's dream records nothing", async () => {
   assert.equal(peekConvDb(groupConvId(g))?.num("SELECT COUNT(*) FROM learned_changes") ?? 0, 0);
   assert.equal(L.recordDream(groupConvId(g), plan([{ kind: "add", file: "scheduling-games.md", description: "x", content: "", merged: [] }]), groupNotesDir(g), NOW), 0);
   assert.equal(L.planBatch(groupConvId(g), groupNotesDir(g), NOW), undefined);
-  assert.equal(L.briefLearned(groupConvId(g), groupNotesDir(g), NOW), "");
   assert.equal(L.learnedFact(groupConvId(g), groupNotesDir(g), NOW), undefined);
-  const tools = (createMemoryServer({ source: "group", notesDir: groupNotesDir(g), groupId: g, record() {} }) as unknown as { instance: { _registeredTools: Record<string, unknown> } }).instance._registeredTools;
-  assert.equal(tools.memory_changes_since_brief, undefined);
 });
 
 test("the owner's dream: what it applied is recorded and listed once (a forgotten note, a saved one), not what it skipped", async () => {
@@ -124,9 +146,8 @@ test("the owner's dream: what it applied is recorded and listed once (a forgotte
   const ran = async () => ({ ops: [{ op: "write", file: "people-anna.md", description: "Anna is the owner's sister", text: "Anna is the sister.", evidence: "Anna is my sister" }, { op: "delete", file: "context-old.md", reason: "expired" }] });
   const { owner } = await import("../src/conversation/conversationmodel.ts");
   await createDreamer({ conversations: () => [owner()], run: () => ran }).run(new Date("2026-10-14T07:00:00"));
-  const text = L.briefLearned(OWNER_CONV, NOTES_DIR, Date.parse("2026-10-14T08:00:00"));
+  const text = told({ convId: OWNER_CONV, notesDir: NOTES_DIR }, Date.parse("2026-10-14T08:00:00"));
   assert.match(text, /- people-anna: Anna is the owner's sister \(saved\)\n- context-old: expired \(forgotten\)/);
-  L.briefDelivered(OWNER_CONV);
 });
 
 test("a whole-dream undo: lines not yet told are never listed; lines already told get one 'the dream of <day> was undone' note in the next list", () => {
@@ -138,15 +159,11 @@ test("a whole-dream undo: lines not yet told are never listed; lines already tol
   assert.equal(L.planBatch(c.convId, c.notesDir, NOW + HOUR), undefined, "never told: nothing to say, nothing listed");
   // told first, then undone
   L.recordDream(c.convId, add("style-new.md"), c.notesDir, NOW + 2 * HOUR);
-  const first = L.briefLearned(c.convId, c.notesDir, NOW + 3 * HOUR);
-  assert.match(first, /- style-new/);
-  L.briefDelivered(c.convId);
+  assert.match(told(c, NOW + 3 * HOUR), /- style-new/);
   L.dreamUndone(c.convId, NOW + 4 * HOUR);
   saved(c, "people-bo.md", "Bo has a new job", NOW + 4 * HOUR);
-  const next = L.briefLearned(c.convId, c.notesDir, NOW + 20 * HOUR);
-  assert.match(next, /^- people-bo: Bo has a new job \(saved\)\n- the dream of 2026-10-22 was undone \(what it changed was put back\)$/);
-  L.briefDelivered(c.convId);
-  assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 40 * HOUR), "", "said once");
+  assert.match(told(c, NOW + 20 * HOUR), /\n- people-bo: Bo has a new job \(saved\)\n- the dream of 2026-10-22 was undone \(what it changed was put back\)\n/);
+  assert.equal(told(c, NOW + 40 * HOUR), "", "said once");
   assert.equal(L.planBatch(c.convId, c.notesDir, NOW + 40 * HOUR), undefined);
 });
 
@@ -159,34 +176,10 @@ test("undo_dream's own path (undoLatest) marks the owner's dream lines undone", 
   const { owner } = await import("../src/conversation/conversationmodel.ts");
   await createDreamer({ conversations: () => [owner()], run: () => ran }).run(new Date("2026-10-15T07:00:00"));
   assert.equal(undoLatest().ok, true);
-  assert.equal(L.briefLearned(OWNER_CONV, NOTES_DIR, Date.parse("2026-10-15T08:00:00")), "", "its lines are never listed");
+  assert.equal(told({ convId: OWNER_CONV, notesDir: NOTES_DIR }, Date.parse("2026-10-15T08:00:00")), "", "its lines are never listed");
 });
 
-test("the brief tool is its own manifest action (not a read), and a list handed out for a brief that was never sent is offered again at the next one", async () => {
-  const { entryFor } = await import("../src/policy/toolmanifest.ts");
-  const action = entryFor("mcp__memory__memory_changes_since_brief")?.action;
-  assert.equal(action, "memory-told");
-  const c = friend();
-  saved(c, "people-anna.md", "Anna moved to Lisbon");
-  const first = L.briefLearned(c.convId, c.notesDir, NOW);
-  saved(c, "people-bo.md", "Bo has a new job", NOW + HOUR);
-  const second = L.briefLearned(c.convId, c.notesDir, NOW + 2 * HOUR);
-  assert.match(second, /^- people-anna[\s\S]*\n- people-bo/, "not delivered: the old line is offered again with the new one");
-  assert.ok(first.includes("people-anna"));
-  L.briefDelivered(c.convId);
-  assert.equal(L.briefLearned(c.convId, c.notesDir, NOW + 30 * HOUR), "", "delivered: told");
-  // the real trigger is code's: the brief routine's expert came back with its result (look.ts), for the owner
-  mkdirSync(NOTES_DIR, { recursive: true });
-  rmSync(NOTES_DIR, { recursive: true, force: true });
-  mkdirSync(NOTES_DIR, { recursive: true });
-  saved({ convId: OWNER_CONV, notesDir: NOTES_DIR }, "people-di.md", "Di moved");
-  assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW), /people-di/);
-  assert.match(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + HOUR), /people-di/, "still offered");
-  L.briefDelivered(OWNER_CONV);
-  assert.equal(L.briefLearned(OWNER_CONV, NOTES_DIR, NOW + 3 * HOUR), "");
-});
-
-test("a friend's look is handed what changed in her notes as a fact; it counts as told only once the look spoke, and an empty or stale list says nothing", () => {
+test("a run is handed what changed in the conversation's notes as a fact; it counts as told only once the look spoke, and an empty or stale list says nothing", () => {
   const c = friend();
   assert.equal(L.learnedFact(c.convId, c.notesDir, NOW), undefined, "nothing changed");
   saved(c, "people-anna.md", "Anna moved to Lisbon");

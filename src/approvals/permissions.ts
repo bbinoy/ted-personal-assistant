@@ -217,7 +217,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     }
     // Bringing mail back ("restore 3", "bring back the Digitec mail") in the owner's own chat: the reverse of an archive, so no judge and no question; audited and journaled like an allow.
     if (base === "ask" && !g && setup.restoreFree && restoredBy(tool, input)) {
-      log(tool, "allow", source, { ...idsOf(input), free: "restore" }, journalable(tool) ? { call: { input }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) } : undefined);
+      log(tool, "allow", source, { ...idsOf(input), free: "restore" }, journalable(tool, input) ? { call: { input }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) } : undefined);
       return { behavior: "allow", updatedInput: input };
     }
     const verdict = g?.kind === "allow" && base !== "deny" ? "allow" : g?.kind === "ask" && base !== "deny" ? "ask" : base;
@@ -233,7 +233,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       // content), so "what did it archive?" can always be answered from the audit log.
       if (g?.skipped) log(tool, "judge-skipped", source, { reason: g.skipped.reason, host: g.skipped.host });
       const reads = isReadTool(tool);
-      log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) });
+      log(tool, "allow", source, publicArgs(tool, input) ?? (reads ? undefined : idsOf(input)), reads || g?.resolve || !journalable(tool, input) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) });
       const f = await final();
       if ("deny" in f) return { behavior: "deny", message: f.deny };
       return { behavior: "allow", updatedInput: f.input };
@@ -298,7 +298,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       } else log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
       if (judged.decision === "ask") skipWhy = declinedMs !== undefined ? "redeclined" : skipWhy === "fix" ? "fix" : "judge";
       if (mayAutoApprove(settings.autoApprove, judged)) {
-        log(tool, "auto-approved", source, { reason: judged.reason }, !journalable(tool) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
+        log(tool, "auto-approved", source, { reason: judged.reason }, !journalable(tool, input) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
         if (readsUntrusted(tool, undefined, conversation)) markUntrusted();
@@ -341,7 +341,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       d.approved ? (d.updatedInput ? "ask-approved-modified" : "ask-approved") : d.feedback ? "ask-feedback" : "ask-declined",
       source,
       undefined,
-      d.approved && !g?.resolve && journalable(tool) ? { call: { input, final: g?.input ?? (g?.redacted ? input : (d.updatedInput ?? input)) }, why: whyOf({ conv: conversation, step: "approved", notes: setup.notesSeen?.(), input, provenance }) } : undefined,
+      d.approved && !g?.resolve && journalable(tool, input) ? { call: { input, final: g?.input ?? (g?.redacted ? input : (d.updatedInput ?? input)) }, why: whyOf({ conv: conversation, step: "approved", notes: setup.notesSeen?.(), input, provenance }) } : undefined,
     );
     if (d.approved) clearDeclined(conversation, tool, input, Date.now(), g?.description);
     else if (!d.feedback && !d.expired && !signal.aborted && !g?.payment) noteDeclined(conversation, tool, input, Date.now(), g?.description); // a plain no (not a reply, not silence, not an aborted turn)

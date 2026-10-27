@@ -17,7 +17,7 @@ export interface Looker {
   reads: boolean; // it can read mail, a calendar or tasks of its own
   mail: boolean; // it has mail tools
   tasks: boolean; // it has the task list (an unattended look may add to it)
-  meetings: boolean; // meeting prep is on and it has a calendar: its look records the upcoming meetings (modules/meetings); heartbeat/preptick.ts claims them and the look says them
+  meetings: boolean; // meeting prep is on and it has a calendar: any run that reads it records the upcoming meetings (modules/meetings); heartbeat/preptick.ts claims them and the look says them
   sources: string; // what the instruction lists after the chat log
   skills: readonly string[]; // the skills of its run (plugin-qualified)
 }
@@ -39,7 +39,7 @@ export function lookerOf(conv: Pick<Conversation, "kind" | "tenantId">, mailOn: 
     reads,
     mail,
     tasks: caps.has("tasks"),
-    meetings: settings.prepMinutes > 0 && conv.kind !== "group" && caps.has("calendar"),
+    meetings: settings.prepMinutes > 0 && caps.has("calendar"),
     sources: [...parts, "and your notes"].join(", "),
     skills,
   };

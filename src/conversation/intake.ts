@@ -189,6 +189,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     },
   };
   const PEOPLE: ReadonlySet<Kind> = new Set<Kind>(["owner", "member", "edit", "reaction", "delete"]); // log kinds written by people; every other kind is the assistant's own
+  const NEGATIVE: ReadonlySet<string> = new Set(["👎"]); // the reactions that are a correction; any other reaction on our message is chatter
   const waysOf = (conv: Conversation): Ways => (conv.direct ? WAYS.private : WAYS.group);
 
   // A private chat's turn: the burst's messages as one prompt, one run.
@@ -355,7 +356,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   }
 
   // A reaction: the same steps as a message (vouch, approval answer, record, overtake), then the kind's own way to answer it (WAYS.react). A reaction to a message of the assistant's own
-  // is addressed to it, in every conversation (a group answers it without the participation gate); one to anyone else's message is chatter that has to pass the gate.
+  // that corrects it (a 👎) is addressed to it (a group answers it without the participation gate); any other reaction, and one to someone else's message, is chatter that has to pass the gate.
   async function reaction(conv: Conversation, r: IncomingReaction): Promise<void> {
     const w = waysOf(conv);
     if (w.vouch && !(await deps.vouch(conv.groupId!))) return;
@@ -369,8 +370,9 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     record(conv, "reaction", t, line);
     const reacted = findMessage(r.targetTimestamp, conv.logFile);
     const ours = reacted ? !PEOPLE.has(reacted.kind) : r.targetAuthor === messenger.self; // (the log says who wrote it; failing that, the messenger does)
+    const correction = ours && NEGATIVE.has(r.emoji.replace(/[\u{1F3FB}-\u{1F3FF}\uFE0F]/gu, ""));
     const journal = reacted && ours ? journalAround(conv.logFile, reacted.at) : undefined;
-    const e: Entry = { from: r.from, fromUuid: r.fromUuid, fromName: r.fromName, text: "", timestamp: t, direct: r.direct, addressedToMe: ours, line, said, arrivedAt: t, reaction: { emoji: oneLine("reaction", r.emoji, 16), on, ...(journal ? { journal } : {}) } };
+    const e: Entry = { from: r.from, fromUuid: r.fromUuid, fromName: r.fromName, text: "", timestamp: t, direct: r.direct, addressedToMe: correction, line, said, arrivedAt: t, reaction: { emoji: oneLine("reaction", r.emoji, 16), on, ...(journal ? { journal } : {}) } };
     return w.react(conv, r, e);
   }
 

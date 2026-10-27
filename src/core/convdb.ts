@@ -467,8 +467,19 @@ export const CONV_SCHEMA: readonly Migration[] = [
       ALTER TABLE learned_changes_new RENAME TO learned_changes;
       CREATE INDEX learned_changes_batch ON learned_changes (batch, seq);
     `,
-  },  {
+  },
+  {
     version: 17,
+    name: "tasks: the one-time Notion import is gone, so its pending previews are too (items keep source_kind 'import')",
+    up: `DROP TABLE IF EXISTS pending_imports;`,
+  },
+  {
+    version: 18,
+    name: "what I learned overnight: every list is told once, the brief's 'delivered' mark is gone",
+    up: `ALTER TABLE learned_batches DROP COLUMN delivered;`,
+  },
+  {
+    version: 19,
     name: "learning from a 👎 is the general learn rule: the feedback offers and thumbs-up counts are dropped",
     up: `
       DROP TABLE feedback_offers;

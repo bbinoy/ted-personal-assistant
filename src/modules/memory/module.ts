@@ -7,6 +7,6 @@ const memory = rowsOf("mcp__memory__", "memory", "chat");
 export const memoryModule: ToolModule = {
   name: "memory",
   connection: { kind: "in-process", name: "memory", when: (ctx) => !!ctx.memory && ctx.offers("mcp__memory__search_logs") },
-  rows: [...memory("memory", "forget_note journal search_logs"), ...memory("memory-told", "memory_changes_since_brief", { attended: false, who: ["owner"], cap: "heartbeat" }), ...memory("memory", "undo_dream", { cap: "dream" })],
+  rows: [...memory("memory", "forget_note journal search_logs"), ...memory("memory", "undo_dream", { cap: "dream" })],
   free: true,
 };

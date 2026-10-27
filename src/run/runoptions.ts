@@ -6,8 +6,6 @@ import type { Conversation } from "../conversation/conversationmodel.ts";
 import { recentNotices } from "../core/messages.ts";
 import { readIndex, readNotes, writeIndex } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
-import { importOffer } from "../modules/tasks/taskfacts.ts";
-import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { RunKind } from "../core/runkind.ts";
 import { preset } from "../core/preset.ts";
 import { chatContext, chatSystem, expertSystem, FIRST_CONTACT, groupSystem, tenantSystem } from "./persona.ts";
@@ -116,7 +114,7 @@ const SHAPES: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) =>
 const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, attended: boolean) => string | undefined> = {
   owner: (_conv, attended) => {
     const notes = readNotes();
-    return chatContext({ missing: missingSetup(notes), pings: recentNotices(), tasks: importOffer(OWNER_KEY, notes.some((n) => n.file.startsWith("setup-task"))) }, undefined, attended);
+    return chatContext({ missing: missingSetup(notes), pings: recentNotices() }, undefined, attended);
   },
   group: () => undefined,
   // Her first turn after the owner let her in (tenantrun.ts marks it with the first reply): she is new here. Only a message can greet her. (Her mail is read by her look and her tools when she asks: there is no digest to show.)
