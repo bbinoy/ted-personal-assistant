@@ -56,25 +56,25 @@ test("limiter: a failing urgent job releases its place; a waiting job can be cal
   assert.equal(await lim.run(async () => "after"), "after");
 });
 
-test("run gate: MAX_CONCURRENT_RUNS places for looks and dreams; a chat turn never waits and a look goes before a dream", async () => {
+test("run gate: MAX_CONCURRENT_RUNS places for dreams; a chat turn (a look is one) never waits", async () => {
   const was = settings.maxConcurrentRuns;
   s.maxConcurrentRuns = 2;
   try {
     const free: (() => void)[] = [];
     const log: string[] = [];
     const hold = (name: string) => () => new Promise<void>((r) => (log.push(`start ${name}`), free.push(r)));
-    const l1 = gated("look", hold("look1"));
-    const l2 = gated("look", hold("look2"));
-    const dream = gated("dream", hold("dream"));
-    const look3 = gated("look", hold("look3"));
+    const l1 = gated("dream", hold("dream1"));
+    const l2 = gated("dream", hold("dream2"));
+    const dream = gated("dream", hold("dream3"));
+    const look3 = gated("dream", hold("dream4"));
     await sleep(5);
-    assert.deepEqual(log, ["start look1", "start look2"], "two places, the rest wait");
+    assert.deepEqual(log, ["start dream1", "start dream2"], "two places, the rest wait");
     assert.equal(runGate.full, true);
     await gated("chat", async () => void log.push("chat"));
     assert.ok(log.includes("chat"), "chat did not wait for a place");
     free[0]!();
     await sleep(5);
-    assert.deepEqual(log.slice(2).filter((x) => x !== "chat"), ["start look3"], "the look is ahead of the dream that came earlier");
+    assert.deepEqual(log.slice(2).filter((x) => x !== "chat"), ["start dream3"], "in order");
     free[1]!();
     await sleep(5);
     free[2]!();
@@ -121,8 +121,8 @@ test("/stop reaches a look that still waits for a place in the run gate, and the
   s.maxConcurrentRuns = 1;
   try {
     let free!: () => void;
-    const holder = gated("look", () => new Promise<void>((r) => (free = r)));
-    const look = runAgent("p", (async () => ({ approved: false })) as never, { source: "background", stopScope: "scope-x" } as never, { query: (() => assert.fail("never started")) as never });
+    const holder = gated("dream", () => new Promise<void>((r) => (free = r)));
+    const look = runAgent("p", (async () => ({ approved: false })) as never, { kind: OWNER_LOOK, gate: "dream", stopScope: "scope-x" } as never, { query: (() => assert.fail("never started")) as never });
     await sleep(5);
     assert.equal(runGate.queued, 1);
     assert.equal(stopRuns("scope-x"), 1);
@@ -145,10 +145,10 @@ test("a browse child (gate: helper) never queues for a place, even when every pl
   const was = settings.maxConcurrentRuns;
   s.maxConcurrentRuns = 2;
   try {
-    const looks = [0, 1].map(() => gated("look", () => runAgent("p", async () => ({ approved: true }), { ...base, gate: "helper" } as never, { query: quick }))); // a look that browses: its child runs under the place the look holds
+    const looks = [0, 1].map(() => gated("dream", () => runAgent("p", async () => ({ approved: true }), { ...base, gate: "helper" } as never, { query: quick }))); // a look that browses: its child runs under the place the look holds
     assert.deepEqual((await Promise.all(looks)).map((r) => r.text), ["hi", "hi"]);
     const free: (() => void)[] = [];
-    const blockers = [0, 1].map(() => gated("look", () => new Promise<void>((r) => free.push(r)))); // all places taken
+    const blockers = [0, 1].map(() => gated("dream", () => new Promise<void>((r) => free.push(r)))); // all places taken
     assert.equal(runGate.full, true);
     assert.equal((await runAgent("p", async () => ({ approved: true }), { ...base, gate: "helper" } as never, { query: quick })).text, "hi", "a chat turn's browse child does not wait behind looks");
     assert.equal(runGate.queued, 0);
@@ -169,10 +169,10 @@ test("a run parked on an approval gives its place to others meanwhile and takes 
       await p.options.canUseTool("mcp__browser__browser_navigate", {}, { signal: new AbortController().signal });
       yield okResult;
     })()) as never;
-    const look = runAgent("p", approve as never, { ...base, kind: BROWSE_RUN } as never, { query: q });
+    const look = runAgent("p", approve as never, { ...base, kind: BROWSE_RUN, gate: "dream" } as never, { query: q });
     await sleep(20);
     assert.equal(runGate.running, 0, "parked: the place is free");
-    assert.equal(await gated("look", async () => "another look ran"), "another look ran");
+    assert.equal(await gated("dream", async () => "another look ran"), "another look ran");
     answer();
     assert.equal((await look).text, "hi");
     assert.equal(runGate.running, 0);

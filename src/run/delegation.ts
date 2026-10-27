@@ -15,7 +15,7 @@ import { skillHint, type SkillHint } from "../modules/skills.ts";
 //   * An expert always runs in the FOREGROUND: the SDK starts an Agent call in the background unless it says `run_in_background: false`, and a run ends at its
 //     first result (agentrun.ts consume), which kills a background subagent mid-work (the daily brief of 22 Oct: the look ended "silent" seconds after it
 //     delegated, the brief was never written). So the hook rewrites every accepted call to `run_in_background: false` (updatedInput), each agent is declared
-//     `background: false`, and background tasks are off for every run (agentrun.ts env). The look then waits for its expert, bounded by EXPERT_TIMEOUT_MINUTES.
+//     `background: false`, and background tasks are off for every run (agentrun.ts env). The look then waits for its expert, bounded by the run's ceiling (RUN_MAX_MINUTES_CHAT).
 
 export const EXPERT = "expert";
 export const MAX_DELEGATIONS = 2; // per look

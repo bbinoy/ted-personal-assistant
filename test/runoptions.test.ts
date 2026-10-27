@@ -147,9 +147,10 @@ test("run options: a look is its conversation's message run but for the trigger 
   const c = cases();
   const TABLE = new Set([
     "model", "run.model", "run.effort", "run.outputFormat", // the model and the answer
+    // (no limits: a look has the same turn cap, budget, ceiling and gate place as a message)
     "run.sessionTrack", // the session
     "run.kind", "run.tools", "tools", "mcpServers", "run.memory", "run.notesRead", "settings.autoMemoryDirectory", "settings.autoMemoryEnabled", "system.append", "system.preset", "system.prompt", "system.type", // attended: the tools it removes or adds, and the notes' way in
-    "run.maxTurns", "maxTurns", "run.maxMinutes", "run.expertMaxMinutes", "run.gate", "run.experts", "hooks", // a look's limits, its place in the gate, and its experts
+    "run.experts", "hooks", // experts (a look only, until delegation is built for every run)
     "run.systemPrompt", // (the pin's key names the case: the hash is compared below)
   ]);
   const attendedRows = new Set(allRows().filter((r) => r.attended !== undefined).map((r) => r.tool));

@@ -114,7 +114,6 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | message | the person's words (quote, pictures, documents) | "Background check at HH:MM, nothing new from X", why it is due, the routines due, and the chat lines since the look session last saw the log (a fresh one: the last 40) |
 | attended | yes | no |
 | answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
-| limits | one row (cost and time bounds): the preset's chat or group profile | the heartbeat profile's turns, a short ceiling (`HEARTBEAT_TIMEOUT_MINUTES`), a place in the gate (owner first) |
 | experts | none yet | may delegate to the expert (until delegation is built for every run) |
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
@@ -140,9 +139,9 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 
 **Run gate and lease.**
 
-- Every model process takes a place in one gate (`src/core/rungate.ts`, `MAX_CONCURRENT_RUNS` 3). Chat turns and small helper calls (judge, gate, language check) never queue; looks queue owner first, then friends, then groups; dreams last.
+- Every model process takes a place in one gate (`src/core/rungate.ts`, `MAX_CONCURRENT_RUNS` 3). Chat turns, looks and small helper calls (judge, gate, language check) never queue; dreams wait. Only the start of looks after a restart is spread out (`startupStagger`).
 - A look never starts while a turn of its conversation is settling, queued or running (`Pipeline.busy`). A message that arrives during a look overtakes it (`preempted`, mail not marked seen) unless it waits on an approval or would starve it (`preemptible`). `/stop` reaches looks too.
-- Ceilings (`src/run/ceiling.ts`): chat runs 40 minutes (`RUN_MAX_MINUTES_CHAT`), other runs 180; a look 10 (`HEARTBEAT_TIMEOUT_MINUTES`), 20 once it delegates. Approval waits do not count.
+- Ceilings (`src/run/ceiling.ts`): every run of a conversation, a look included, 40 minutes (`RUN_MAX_MINUTES_CHAT`). Approval waits do not count.
 
 **Delegation** (`src/run/delegation.ts`). A look delegates by default whatever needs judgement or careful wording (Haiku keeps the mechanical work) to a Sonnet expert (`expert`, or `expert-<skill>` for a skill declaring `delegate: sonnet|opus`).
 

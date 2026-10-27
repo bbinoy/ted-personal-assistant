@@ -182,27 +182,14 @@ test("something to look at: mail or a calendar (her own Google, once the instanc
   assert.equal(hasSomethingToLookAt(group("hb-conv-empty-0123456789abcdef"), NOW), false);
 });
 
-test("the owner's look goes first in the run gate, then a friend's, then a group's; the owner's startup stagger is none", async () => {
-  const { gated, runGate } = await import("../src/core/rungate.ts");
+test("a look has the limits of a chat turn of its conversation, and its place in the run gate like a chat turn's; only the owner's startup stagger is none", async () => {
   const { startupStagger } = await import("../src/heartbeat/wake.ts");
   const id = friend("Bea");
-  const gateOf = (conv: ReturnType<typeof owner>) => lookOptions(conv, payerOf(id), {}, NOW).gate;
-  assert.deepEqual([gateOf(owner()), gateOf(tenant(id)), gateOf(group("g1"))], ["ownerLook", "friendLook", "look"]);
-  assert.equal(startupStagger(owner()), 0);
-  const was = settings.maxConcurrentRuns;
-  on.maxConcurrentRuns = 1;
-  try {
-    const started: string[] = [];
-    let free: () => void = () => {};
-    const holder = gated("look", () => new Promise<void>((r) => (free = r)));
-    const hold = (name: string) => () => (started.push(name), Promise.resolve());
-    // after a long sleep the groups' looks are asked for first
-    const all = [gated("look", hold("group1")), gated("look", hold("group2")), gated("friendLook", hold("friend")), gated("ownerLook", hold("owner")), gated("dream", hold("dream"))];
-    free();
-    await Promise.all([holder, ...all]);
-    assert.deepEqual(started, ["owner", "friend", "group1", "group2", "dream"]);
-    assert.equal(runGate.running, 0);
-  } finally {
-    on.maxConcurrentRuns = was;
+  for (const conv of [owner(), tenant(id), group("g1")]) {
+    const look = lookOptions(conv, payerOf(id), {}, NOW);
+    const chat = runFor(conv, "message", { apiKey: KEY, now: NOW });
+    assert.deepEqual([look.maxTurns, look.maxBudgetUsd, look.maxMinutes, look.gate], [chat.maxTurns, chat.maxBudgetUsd, chat.maxMinutes, chat.gate], conv.kind);
+    assert.deepEqual([look.maxMinutes, look.gate], [undefined, undefined], "the one ceiling (RUN_MAX_MINUTES_CHAT) and the chat's gate place");
   }
+  assert.equal(startupStagger(owner()), 0);
 });

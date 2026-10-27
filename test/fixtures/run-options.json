@@ -547,7 +547,7 @@
         "key": "ownerLook.run.systemPrompt",
         "sha": "182341b0231aad9d"
       },
-      "maxTurns": 120,
+      "maxTurns": 40,
       "maxBudgetUsd": 2,
       "kind": {
         "who": "owner",
@@ -703,9 +703,6 @@
       "model": "haiku",
       "effort": "high",
       "outputFormat": "[schema]",
-      "maxMinutes": 10,
-      "expertMaxMinutes": 20,
-      "gate": "ownerLook",
       "experts": [
         "expert",
         "expert-daily-brief",
@@ -857,7 +854,7 @@
       "mcp__claude_ai_Gmail__update_message_labels"
     ],
     "permissionMode": "default",
-    "maxTurns": 120,
+    "maxTurns": 40,
     "maxBudgetUsd": 2,
     "envChanged": {
       "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
@@ -875,7 +872,7 @@
         "key": "groupLook.run.systemPrompt",
         "sha": "58c0d4cbbe33901b"
       },
-      "maxTurns": 120,
+      "maxTurns": 8,
       "maxBudgetUsd": 0.5,
       "kind": {
         "who": "group",
@@ -929,10 +926,7 @@
       },
       "model": "haiku",
       "effort": "high",
-      "outputFormat": "[schema]",
-      "maxMinutes": 10,
-      "expertMaxMinutes": 20,
-      "gate": "look"
+      "outputFormat": "[schema]"
     },
     "model": "haiku",
     "system": {
@@ -976,7 +970,7 @@
       "ted-personal-assistant:draw"
     ],
     "permissionMode": "default",
-    "maxTurns": 120,
+    "maxTurns": 8,
     "maxBudgetUsd": 0.5,
     "envChanged": {
       "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
@@ -993,7 +987,7 @@
         "key": "tenantLook.run.systemPrompt",
         "sha": "ea25ade1fa8daa07"
       },
-      "maxTurns": 120,
+      "maxTurns": 12,
       "maxBudgetUsd": 0.5,
       "tenant": {
         "id": "<bea>",
@@ -1055,10 +1049,7 @@
       },
       "model": "haiku",
       "effort": "high",
-      "outputFormat": "[schema]",
-      "maxMinutes": 10,
-      "expertMaxMinutes": 20,
-      "gate": "friendLook"
+      "outputFormat": "[schema]"
     },
     "model": "haiku",
     "system": {
@@ -1102,7 +1093,7 @@
       "ted-personal-assistant:draw"
     ],
     "permissionMode": "default",
-    "maxTurns": 120,
+    "maxTurns": 12,
     "maxBudgetUsd": 0.5,
     "envChanged": {
       "ANTHROPIC_API_KEY": "<instance-key>",

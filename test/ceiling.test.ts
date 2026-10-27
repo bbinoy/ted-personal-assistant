@@ -42,18 +42,18 @@ test("ceiling: time spent paused (an approval wait) is not counted", async () =>
   }), RunTimeout);
 });
 
-test("settings: the run ceilings default to 40 (chat, groups) and 180 (background) minutes and are validated", () => {
-  const s = loadSettings({});
+test("settings: the run ceiling is 40 minutes for every run, a look included, and is validated", () => {
+  const s = loadSettings({}) as unknown as Record<string, unknown>;
   assert.equal(s.runMaxMinutesChat, 40);
-  assert.equal(s.runMaxMinutesBackground, 180);
-  assert.equal(loadSettings({ RUN_MAX_MINUTES_CHAT: "10", RUN_MAX_MINUTES_BACKGROUND: "300" }).runMaxMinutesBackground, 300);
+  assert.equal(s.runMaxMinutesBackground, undefined, "no second ceiling for background runs");
+  assert.equal(s.heartbeatTimeoutMinutes, undefined, "none for a look either");
+  assert.equal((loadSettings({ RUN_MAX_MINUTES_CHAT: "10" }) as unknown as Record<string, unknown>).runMaxMinutesChat, 10);
   assert.throws(() => loadSettings({ RUN_MAX_MINUTES_CHAT: "0" }), /RUN_MAX_MINUTES_CHAT/);
-  assert.throws(() => loadSettings({ RUN_MAX_MINUTES_BACKGROUND: "soon" }), /RUN_MAX_MINUTES_BACKGROUND/);
 });
 
 // ---- in the run wrapper ----
 
-const mutable = settings as { runMaxMinutesChat: number; runMaxMinutesBackground: number; warm: boolean };
+const mutable = settings as unknown as { runMaxMinutesChat: number; warm: boolean };
 const result = { type: "result", subtype: "success", is_error: false, result: "hi", session_id: "s", total_cost_usd: 0 };
 const ok = (async function* () { yield result; });
 const hung = (seen: { aborted?: () => boolean }) => ((p: any) => {
@@ -107,10 +107,9 @@ test("run wrapper: a warm process that hangs is closed on timeout, and the conve
   }
 });
 
-test("run wrapper: a background run has its own limit and its approval wait is not counted", async () => {
+test("run wrapper: a look has the same ceiling as a chat turn and its approval wait is not counted", async () => {
   const was = { ...mutable };
-  mutable.runMaxMinutesChat = 40;
-  mutable.runMaxMinutesBackground = 0.002; // 120 ms
+  mutable.runMaxMinutesChat = 0.002; // 120 ms
   try {
     const opts = { kind: OWNER_LOOK, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as const;
     // waits 300 ms in a (slow) approval, longer than the whole ceiling, and still finishes

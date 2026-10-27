@@ -37,7 +37,7 @@ import type { Track } from "./sessionstore.ts";
 //   track     the session it resumes: the conversation's chat, or its looks' (sessionstore.ts); different models never share a session
 //   model     HARNESS_MODEL, or HEARTBEAT_MODEL (a look is a cheap model that decides and delegates)
 //   answer    a reply, or the look's JSON (message, nextCheckMinutes, urgent)
-//   limits    cost and time bounds, one row: a look's turn cap and wall-clock ceiling and its place in the run gate (the owner's first)
+// Not in the table, on purpose: the limits. A look has the conversation's own turn cap, budget, ceiling (RUN_MAX_MINUTES_CHAT) and place in the run gate, exactly as a message has.
 //   experts   a look may delegate to the expert (a look only until delegation is built for every run)
 // Security stays where it was and is not decided here: the isolation (strictMcpConfig, no settings sources, no plugins) follows from `who` in buildOptions; the tools and skills come from
 // the capabilities (capabilities.ts, skills.ts) and policy.ts classify; the instance key goes only into the run's environment (tenanttools.ts tenantEnv).
@@ -50,12 +50,10 @@ interface TriggerRow {
   model: () => string | undefined; // undefined: HARNESS_MODEL
   effort?: Options["effort"];
   answer?: Options["outputFormat"]; // constrained JSON; absent: a normal reply
-  // The run's limits: cost and time bounds, read from here and nowhere else. `own`: the conversation's own turn and budget caps (its profile, a friend's record).
-  limits: (conv: Pick<Conversation, "kind">, own: Pick<RunOptions, "maxTurns" | "maxBudgetUsd">) => Pick<RunOptions, "maxTurns" | "maxBudgetUsd" | "maxMinutes" | "expertMaxMinutes" | "gate">;
   experts: boolean; // may delegate to the expert (a look only until delegation is built for every run)
 }
 export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
-  message: { attended: true, track: "chat", model: () => undefined, limits: (_conv, own) => ({ maxTurns: own.maxTurns, maxBudgetUsd: own.maxBudgetUsd }), experts: false },
+  message: { attended: true, track: "chat", model: () => undefined, experts: false },
   look: {
     attended: false,
     track: "look",
@@ -63,13 +61,6 @@ export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
     effort: "high",
     answer: HEARTBEAT_SCHEMA,
     experts: true,
-    limits: (conv, own) => ({
-      maxTurns: preset().profiles.heartbeat.maxTurns,
-      maxBudgetUsd: Math.min(preset().profiles.heartbeat.maxBudgetUsd, own.maxBudgetUsd),
-      maxMinutes: settings.heartbeatTimeoutMinutes, // short on purpose: a look that hangs frees its conversation and is retried on the next ticks
-      expertMaxMinutes: settings.expertTimeoutMinutes,
-      gate: conv.kind === "owner" ? "ownerLook" : conv.kind === "tenant" ? "friendLook" : "look", // the owner's look goes first after a wake or a start, then friends, then groups (rungate.ts)
-    }),
   },
 };
 
@@ -169,7 +160,6 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
     model: t.model(),
     effort: t.effort,
     outputFormat: t.answer,
-    ...t.limits(conv, shape),
     ...(t.experts && looker.experts ? { experts: { setup: expertSetup(looker.skills, expertText(conv, now)) } } : {}),
   };
 }

@@ -206,10 +206,10 @@ export function routineStatus(conv: ConvRef, routines: readonly Routine[], now: 
   const lines = routines.map((r) => {
     const rec = readRecord(conv, r.name);
     const plan = planRoutine(r, now, zone, rec, catchUpHours);
-    const what = plan.state === "due" ? `due now${plan.retry ? " (the earlier attempt died)" : ""}; the next look runs it` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"})` : `next: ${nextText(r, now, zone, rec)}`;
+    const what = plan.state === "due" ? `due now${plan.retry ? " (the earlier attempt died)" : ""}` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"})` : `next: ${nextText(r, now, zone, rec)}`;
     return `${r.name}: ${what}`;
   });
-  return lines.length ? `Routines, status only (code schedules them and only a look runs them: never start one yourself; use this to answer "did my brief go out?" or to avoid repeating what one is about to say):\n${lines.join("\n")}` : "";
+  return lines.length ? `Routines, status only (code schedules them; use this to answer "did my brief go out?" or to avoid repeating what one is about to say):\n${lines.join("\n")}` : "";
 }
 
 // "/status" and the doctor: one line per routine with its schedule, next run and last run.

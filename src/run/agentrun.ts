@@ -73,8 +73,7 @@ export interface RunOptions {
   gate?: GateKind; // its place in the run gate (rungate.ts), default a look's; the browse run is a CHILD of a run that already holds a place, so it never queues for another
   stopScope?: string; // what "/stop" names to reach this run (ceiling.ts stopRuns): the conversation's id
   signal?: AbortSignal; // an unattended run is called off from outside (a chat message overtook the heartbeat look, look.ts): while waiting for a place (rungate.ts) it never starts, once running the query is aborted
-  maxMinutes?: number; // a wall-clock ceiling of its own (the browse run, a heartbeat look), else the chat or background one
-  expertMaxMinutes?: number; // a heartbeat look: when it delegates to an expert the whole ceiling becomes this many minutes (never less than maxMinutes)
+  maxMinutes?: number; // a wall-clock ceiling of its own (the browse run), else RUN_MAX_MINUTES_CHAT, the same for every run of a conversation
   // Whose words or which text started the run, for the approval judge (autojudge.ts RunProvenance). Set by the code that starts the run, a function because it is
   // read at every call (a warm process is built before the message that uses it arrives): a job passes `() => ({ kind: "standing", task })` with its fixed text, an
   // unattended turn of a conversation `derived` text (turnscope.ts derivedTurn). A conversation's own turn passes nothing: its turn-scoped messages are its scope's
@@ -297,10 +296,9 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
 // timeout is logged and audited, and the rejection takes the usual error path (a notice, rate-limited in groups; the queue moves on).
 // A chat run (the owner's chat and groups alike) and a background run have their own limits (settings.ts).
 export async function underCeiling<T>(kind: RunKind, run: (c: Ceiling) => Promise<T>, minutes?: number, scope?: string): Promise<T> {
-  const chat = kind.attended;
   const source = auditSource(kind);
   try {
-    return await withCeiling((minutes ?? (chat ? settings.runMaxMinutesChat : settings.runMaxMinutesBackground)) * 60_000, run, scope);
+    return await withCeiling((minutes ?? settings.runMaxMinutesChat) * 60_000, run, scope);
   } catch (e) {
     if (e instanceof RunTimeout) {
       console.error(`run: timed out after ${e.minutes} minutes (${source})`);
@@ -323,16 +321,14 @@ export async function runAgent(prompt: Parameters<typeof query>[0]["prompt"], ap
   let started = false;
   const run = randomUUID(); // this run's id: what the journal kept for its calls is dropped when it ends
   const forget = opts.stopScope ? onStop(opts.stopScope, (e) => void (started || wait.abort(e))) : () => {};
-  return gated(opts.gate ?? "look", () => {
+  return gated(opts.gate ?? "chat", () => {
     started = true;
     forget(); // from here on the ceiling answers "/stop" itself
     return underCeiling(opts.kind, (c) => {
       const off = () => c.controller.abort();
       if (wait.signal.aborted) off();
       wait.signal.addEventListener("abort", off, { once: true });
-      // (a delegation gives the look more time: the first call to an expert extends the ceiling)
-      const o = opts.experts && opts.expertMaxMinutes ? { ...opts, experts: { ...opts.experts, onDelegate: (d: Delegation) => (c.extend(opts.expertMaxMinutes! * 60_000), opts.experts!.onDelegate?.(d)) } } : opts;
-      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), o, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
+      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
     }, opts.maxMinutes, opts.stopScope ?? opts.sessionConv);
   }, wait.signal).finally(() => (forget(), endRun(run), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
     if (opts.sessionConv) forgetUnresumable(opts.sessionConv, e, auditSource(opts.kind), opts.sessionTrack);

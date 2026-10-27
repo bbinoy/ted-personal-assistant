@@ -14,7 +14,6 @@
   },
   "profiles": {
     "chat": { "maxTurns": 40, "maxBudgetUsd": 2 },
-    "heartbeat": { "maxTurns": 120, "maxBudgetUsd": 2 },
     "group": { "maxTurns": 8, "maxBudgetUsd": 0.5 }
   },
   "expert": { "model": "sonnet", "maxTurns": 40 },

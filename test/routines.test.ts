@@ -257,7 +257,7 @@ test("a chat turn sees a routine note's status and never starts or records it; o
   const conv = groupWith("every day at 08:00");
   F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
   const chat = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "chat");
-  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-fun-fact: due now; the next look runs it/);
+  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-fun-fact: due now/);
   assert.equal(chat.routines, "");
   chat.done({ ended: true, said: true });
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, undefined);
@@ -265,6 +265,17 @@ test("a chat turn sees a routine note's status and never starts or records it; o
   assert.match(look.routines, /due now: Post a fun fact/);
   look.done({ ended: true, said: true });
   assert.match(F.factsFor(conv, at("2026-10-22T06:30:00Z"), "chat").status.join("\n"), /routine-fun-fact: delivered /);
+});
+
+test("a look handed a routine is told to do it and nothing else about it: no status line that says it is started, running or not for it to start", () => {
+  const conv = groupWith("every day at 08:00");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  const look = F.factsFor(conv, at("2026-10-22T06:06:00Z"), "look");
+  assert.match(look.routines, /due now: Post a fun fact/);
+  const told = [...look.status, look.routines, ...look.blocks].join("\n");
+  assert.doesNotMatch(look.status.join("\n"), /routine-fun-fact/, "not in the status block of the run that was handed it");
+  assert.doesNotMatch(told, /never start one yourself|the next look runs it|a look started it|being produced/);
+  look.done({ ended: true, said: true });
 });
 
 test("an unparseable when: is never silent: the status says so, the tool reply says so when the note is written, and the doctor line says it never runs", () => {
