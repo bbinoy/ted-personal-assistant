@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { isInside } from "../core/contain.ts";
 import { fence } from "../core/fence.ts";
 import { LIMITS } from "../core/sanitize.ts";
@@ -37,6 +37,13 @@ export function ensureNotesDir(): void {
 // and symlinks followed first (contain.ts). This is the one gate on what the file tools may write.
 export const isNotePath = (path: unknown, dir: string = NOTES_DIR): path is string => isInside(path, dir);
 
+/** The tool result's hint after a note was saved: the reply says so (a reaction alone would leave the change unmentioned). Not for the index, the assistant's own status records or a routine (its result says more). */
+export function noteSavedHint(tool: string, input: Record<string, unknown>, dir?: string): string | undefined {
+  const path = input.file_path;
+  if ((tool !== "Write" && tool !== "Edit") || !dir || !isNotePath(path, dir) || isIndex(path, dir)) return undefined;
+  const file = basename(path);
+  return file.startsWith(STATUS_PREFIX) || file.startsWith("routine-") ? undefined : "Note saved. Mention what you saved or updated in your reply, in a few words, even if you only react.";
+}
 export const isIndex = (path: string, dir: string = NOTES_DIR) => resolve(path) === join(dir, "MEMORY.md");
 
 export interface Note {

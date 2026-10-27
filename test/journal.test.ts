@@ -203,13 +203,13 @@ test("the journal tool: a conversation reads only its own journal, in its zone; 
   line(mine.messages, "2026-10-21T07:12:00Z", "archive", "Archived “Mine”. Why: x.");
   line(hers.messages, "2026-10-21T07:13:00Z", "archive", "Archived “Hers”. Why: y.");
   type Srv = { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[] }> }> } };
-  const mem = createMemoryServer({ source: "chat", notesDir: mine.notes, tenantLog: mine.messages, zone: () => "Asia/Tokyo", record() {} }) as unknown as Srv;
+  const mem = createMemoryServer({ source: "chat", notesDir: mine.notes, tenantLog: mine.messages, zone: () => "Asia/Tokyo" }) as unknown as Srv;
   const out = (await mem.instance._registeredTools.journal!.handler({ since: "2026-10-21", until: "2026-10-21" }, {})).content[0]!.text;
   assert.match(out, /Archived “Mine”/);
   assert.doesNotMatch(out, /Hers/);
   assert.match(out, /16:12 \[archive\]/, "times in the conversation's zone (Tokyo)");
   assert.match(out, /<journal>|journal/i, "fenced as data");
-  const notes = createMemoryServer({ source: "group", notesDir: hers.notes, tenantLog: hers.messages, zone: () => "UTC", record() {} }) as unknown as Srv;
+  const notes = createMemoryServer({ source: "group", notesDir: hers.notes, tenantLog: hers.messages, zone: () => "UTC" }) as unknown as Srv;
   assert.match((await notes.instance._registeredTools.journal!.handler({ since: "2026-10-21", until: "2026-10-21" }, {})).content[0]!.text, /Archived “Hers”/);
   assert.ok(readAudit((e) => e.tool === "journal" && e.decision === "read").length >= 2);
 });
@@ -254,7 +254,7 @@ test("a subject that says 'Why:' or 'Undo:' cannot fake the why of a line, in th
 test("the journal tool refuses a notes folder that belongs to no conversation instead of reading the owner's journal", async () => {
   type Srv = { instance: { _registeredTools: Record<string, { handler: (a: object, x: object) => Promise<{ content: { text: string }[]; isError?: boolean }> }> } };
   const stray = mkdtempSync(join(tmpdir(), "stray-notes-"));
-  const mem = createMemoryServer({ source: "chat", notesDir: stray, record() {} }) as unknown as Srv;
+  const mem = createMemoryServer({ source: "chat", notesDir: stray }) as unknown as Srv;
   const r = await mem.instance._registeredTools.journal!.handler({}, {});
   assert.equal(r.isError, true);
   assert.match(r.content[0]!.text, /not available here/);

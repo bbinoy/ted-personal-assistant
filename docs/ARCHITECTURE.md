@@ -644,7 +644,6 @@ src/memory/dreamapply.ts  snapshots, applying a plan, undo
 src/memory/dreamplan.ts  which dream proposals may apply (pure)
 src/memory/journalread.ts  reads journal lines; `/today`; archive list
 src/memory/learned.ts  quiet note changes and the lists that tell them
-src/memory/memorynotice.ts  the one notice about a turn's note changes
 src/memory/notes.ts  notes: reading, path guard, forget, the code-made `MEMORY.md`
 src/memory/search.ts  ranked search over log and notes
 src/memory/searchindex.ts  the per-conversation FTS5 index

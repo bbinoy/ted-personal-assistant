@@ -81,9 +81,9 @@ wire({
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });
-// `say` is a plain message to the owner (memory announcements, chat answers; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
+// `say` is a plain message to the owner (start-up problems; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
-const warmChat = () => prepare(owner(), { notify: say });
+const warmChat = () => prepare(owner(), {});
 
 // Every voice message is transcribed (in a group it may be meant for the assistant), but only a few at a time: a flood waits in line
 // instead of starting that many whisper processes. One line for the owner's chat and every group.
@@ -128,7 +128,7 @@ const tenantRunner = createTenantRunner({});
 const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
   turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
-  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, { notify: say }, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
+  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, {}, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
 };
 const pipeline: Pipeline = createPipeline({
   messenger,
@@ -227,7 +227,7 @@ if (settings.tenants) registrar.askOpen(); // requests still open from before th
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
-setInterval(() => prepare(owner(), { notify: say }, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
+setInterval(() => prepare(owner(), {}, { refresh: true }), settings.warmRefreshMinutes * 60_000).unref();
 // The owner's search index (memory/search.ts) is brought up to date a little after start-up, in small slices that leave the event loop free, so the first real search_logs is quick.
 setTimeout(() => void warmSearchIndex(ownerSearchScope()).catch(() => {}), 20_000).unref();
 

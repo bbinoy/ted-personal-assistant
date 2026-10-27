@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "5bc8e520ba025a83"
+        "sha": "db22987b551ff845"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -146,8 +146,7 @@
       ],
       "memory": {
         "dir": "<data>/conversations/owner/notes",
-        "zone": "Europe/London",
-        "notify": "[fn]"
+        "zone": "Europe/London"
       },
       "experts": [
         "expert",
@@ -164,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "5bc8e520ba025a83"
+        "sha": "db22987b551ff845"
       },
       "snapshot": false
     },
@@ -565,7 +564,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "5bc8e520ba025a83"
+        "sha": "db22987b551ff845"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -724,7 +723,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "5bc8e520ba025a83"
+        "sha": "db22987b551ff845"
       },
       "snapshot": false
     },
