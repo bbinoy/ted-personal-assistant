@@ -7,7 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 // The isolation boundary of a group and of a tenant, checked WITHOUT a model. The options are built exactly as production builds them
-// (runoptions.ts runOptionsFor + agentrun.ts buildOptions), then:
+// (runoptions.ts runFor + agentrun.ts buildOptions), then:
 //   1. their SHAPE: strict MCP config, no settings sources, her own notes folder as the auto-memory, the tools and servers of the set, the environment
 //   2. the real canUseTool, called directly with a scripted table of forbidden and allowed calls
 //   3. the real memory server, over an in-memory MCP transport: search_logs finds nothing of anybody else's, forget_note cannot reach another's notes
@@ -57,7 +57,7 @@ const SYSTEM = "You are a test assistant. Do exactly what the user asks, with th
 export async function buildWorld(): Promise<World> {
   const { settings } = await import("../src/core/settings.ts");
   const { NOTES_DIR } = await import("../src/memory/notes.ts");
-  const { runOptionsFor } = await import("../src/run/runoptions.ts");
+  const { runFor } = await import("../src/run/runoptions.ts");
   const { group, tenant } = await import("../src/conversation/conversation.ts");
   const { buildOptions } = await import("../src/run/agentrun.ts");
   const { addTenant, tenantContext } = await import("../src/tenants/tenants.ts");
@@ -115,8 +115,8 @@ export async function buildWorld(): Promise<World> {
     }
     try {
       return s === "group"
-        ? buildOptions(noop, { ...runOptionsFor(gconv), systemPrompt: SYSTEM }, undefined)
-        : buildOptions(noop, { ...runOptionsFor(tenant(ann.id), { apiKey: instanceKey }), systemPrompt: SYSTEM }, undefined);
+        ? buildOptions(noop, { ...runFor(gconv, "message"), systemPrompt: SYSTEM }, undefined)
+        : buildOptions(noop, { ...runFor(tenant(ann.id), "message", { apiKey: instanceKey }), systemPrompt: SYSTEM }, undefined);
     } finally {
       for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k];
       else process.env[k] = v;

@@ -16,13 +16,14 @@ import { RateLimitError } from "../src/tenants/errors.ts";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runOptionsFor } from "../src/run/runoptions.ts";
+import { runFor } from "../src/run/runoptions.ts";
 import { buildOptions } from "../src/run/agentrun.ts";
 import { compactOptions } from "../src/run/chatsession.ts";
 import { owner } from "../src/conversation/conversation.ts";
 import { NOTES_DIR } from "../src/memory/notes.ts";
 import { LIMITS } from "../src/core/sanitize.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
+import { GROUP_CHAT, OWNER_CHAT } from "./runkinds.ts";
 
 const OWNER = "+10000000000";
 const GID = "Zm9vYmFyZm9vYmFyZm9vYmFy";
@@ -31,36 +32,36 @@ test("groups: web search, the memory tools (scoped by their server) and the file
   const dir = join(mkdtempSync(join(tmpdir(), "group-policy-")), "notes");
   mkdirSync(dir, { recursive: true });
   mkdirSync(NOTES_DIR, { recursive: true });
-  assert.equal(classify("WebSearch", { query: "x" }, "group"), "allow");
-  for (const t of ["mcp__memory__search_logs", "mcp__memory__forget_note", "mcp__memory__undo_dream"]) assert.equal(classify(t, {}, "group"), "allow", t);
-  for (const t of ["WebFetch", "Bash", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, "group"), "deny", t);
+  assert.equal(classify("WebSearch", { query: "x" }, GROUP_CHAT), "allow");
+  for (const t of ["mcp__memory__search_logs", "mcp__memory__forget_note", "mcp__memory__undo_dream"]) assert.equal(classify(t, {}, GROUP_CHAT), "allow", t);
+  for (const t of ["WebFetch", "Bash", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, GROUP_CHAT), "deny", t);
   for (const t of ["Read", "Write", "Edit"]) {
-    assert.equal(classify(t, { file_path: join(dir, "people-eve.md") }, "group", dir), "allow", t);
-    assert.equal(classify(t, { file_path: join(dir, "anything at all.txt") }, "group", dir), "allow", `${t}: no file name rules, containment is the only gate`);
-    for (const bad of [join(dir, "..", "x.md"), join(dir, "..", "notes-evil", "x.md"), dir, "", undefined, join(NOTES_DIR, "style-x.md")]) assert.equal(classify(t, { file_path: bad }, "group", dir), "deny", `${t} ${String(bad)}`);
-    assert.equal(classify(t, { file_path: join(dir, "x.md") }, "group"), "deny", `${t}: no folder given, no files`);
+    assert.equal(classify(t, { file_path: join(dir, "people-eve.md") }, GROUP_CHAT, dir), "allow", t);
+    assert.equal(classify(t, { file_path: join(dir, "anything at all.txt") }, GROUP_CHAT, dir), "allow", `${t}: no file name rules, containment is the only gate`);
+    for (const bad of [join(dir, "..", "x.md"), join(dir, "..", "notes-evil", "x.md"), dir, "", undefined, join(NOTES_DIR, "style-x.md")]) assert.equal(classify(t, { file_path: bad }, GROUP_CHAT, dir), "deny", `${t} ${String(bad)}`);
+    assert.equal(classify(t, { file_path: join(dir, "x.md") }, GROUP_CHAT), "deny", `${t}: no folder given, no files`);
   }
   symlinkSync(NOTES_DIR, join(dir, "sneaky"), "dir"); // a link inside the folder that leads out of it
-  assert.equal(classify("Read", { file_path: join(dir, "sneaky", "style-x.md") }, "group", dir), "deny");
-  assert.equal(classify("Write", { file_path: join(dir, "sneaky", "style-x.md") }, "group", dir), "deny");
+  assert.equal(classify("Read", { file_path: join(dir, "sneaky", "style-x.md") }, GROUP_CHAT, dir), "deny");
+  assert.equal(classify("Write", { file_path: join(dir, "sneaky", "style-x.md") }, GROUP_CHAT, dir), "deny");
 });
 
 test("groups: a group run is built with its own memory folder, its own session and nothing of the owner's", () => {
   const conv = group("g-build");
-  const o = buildOptions(async () => ({ approved: false }), runOptionsFor(conv), undefined);
+  const o = buildOptions(async () => ({ approved: false }), runFor(conv, "message"), undefined);
   assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
   assert.notEqual(conv.notesDir, owner().notesDir);
-  assert.equal(runOptionsFor(conv).sessionConv, groupConvId("g-build"), "its own session: the session row of its own assistant.db");
+  assert.equal(runFor(conv, "message").sessionConv, groupConvId("g-build"), "its own session: the session row of its own assistant.db");
   assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "tasks", "voice", "memory", "people", "browse"]]);
   assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch"]);
-  const oo = buildOptions(async () => ({ approved: false }), { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: NOTES_DIR } }, undefined);
+  const oo = buildOptions(async () => ({ approved: false }), { kind: OWNER_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: NOTES_DIR } }, undefined);
   assert.deepEqual(oo.settings, { autoMemoryEnabled: true, autoMemoryDirectory: NOTES_DIR }); // the owner's wiring is unchanged
   assert.deepEqual(oo.settingSources, ["user"]);
 });
 
 test("groups: compaction of a group session is isolated exactly like the group run; the owner's is unchanged", () => {
   const conv = group("g-compact");
-  const run = buildOptions(async () => ({ approved: false }), runOptionsFor(conv), undefined);
+  const run = buildOptions(async () => ({ approved: false }), runFor(conv, "message"), undefined);
   const c = compactOptions("sess-1", true, conv.notesDir);
   assert.deepEqual([c.settingSources, c.strictMcpConfig, c.settings, c.resume, c.tools], [run.settingSources, run.strictMcpConfig, run.settings, "sess-1", []]);
   assert.deepEqual([c.plugins, c.skills], [undefined, undefined], "compaction has no tools, so it loads none of the skills the group run has");

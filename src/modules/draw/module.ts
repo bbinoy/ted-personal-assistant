@@ -5,7 +5,7 @@ import { rowsOf, type ToolModule } from "../types.ts";
 export const drawModule: ToolModule = {
   name: "draw",
   connection: { kind: "in-process", name: "draw", when: (ctx) => !!ctx.key && settings.draw && ctx.offers("mcp__draw__draw") },
-  rows: rowsOf("mcp__draw__", "draw", "draw")("draw", "draw", { only: ["chat", "group"] }),
+  rows: rowsOf("mcp__draw__", "draw", "draw")("draw", "draw"),
   free: true,
   skills: [{ name: "draw", shared: ["draw"], when: () => settings.draw }],
 };

@@ -6,7 +6,7 @@ import { rowsOf, type ToolModule } from "../types.ts";
 const seen = rowsOf("mcp__seenmail__", "seenmail", "mail");
 export const seenMailModule: ToolModule = {
   name: "seenmail",
-  connection: { kind: "in-process", name: "seenmail", when: (ctx) => !!ctx.seenMail && !ctx.browsing },
-  rows: seen("seen-mail", "seen_mail", { only: ["background", "group"] }),
+  connection: { kind: "in-process", name: "seenmail", when: (ctx) => !!ctx.seenMail && ctx.offers("mcp__seenmail__seen_mail") },
+  rows: seen("seen-mail", "seen_mail", { attended: false }),
   free: true,
 };

@@ -8,6 +8,7 @@ import type { Verdict } from "../src/approvals/autojudge.ts";
 import type { AnswerDeps } from "../src/approvals/approvals.ts";
 import type { AnswerJudgement } from "../src/approvals/approvalprompt.ts";
 import { settings } from "../src/core/settings.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 (settings as { warm: boolean }).warm = false;
 const CREATE = "mcp__claude_ai_Google_Calendar__create_event";
@@ -21,7 +22,7 @@ test("a change as the reply closes the open question; the agent re-proposes and 
   let ts = 70_000;
   const sent: string[] = [];
   const approve = (description: string, call: { tool: string; input: Record<string, unknown> }, signal: AbortSignal) => request(async (t) => (sent.push(t), ++ts), description, call, signal, { question: description });
-  const canUse = makeCanUseTool(approve as never, "chat", undefined, ask as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "coffee tomorrow with Benjamin" }), conversation: "owner" });
+  const canUse = makeCanUseTool(approve as never, OWNER_CHAT, undefined, ask as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "coffee tomorrow with Benjamin" }), conversation: "owner" });
   const first = canUse(CREATE, { summary: "Coffee", startTime: "2026-10-21T10:00:00", endTime: "2026-10-21T11:00:00" }, opts);
   await settle();
   // "Make it 9-10 and invite Benjamin": neither yes nor no, and not an allowed edit
@@ -46,7 +47,7 @@ test("a reply that supersedes is not a decline: the same action can be proposed 
   const sent: string[] = [];
   let ts = 71_000;
   const approve = (description: string, call: { tool: string; input: Record<string, unknown> }, signal: AbortSignal) => request(async (t) => (sent.push(t), ++ts), description, call, signal, { question: description });
-  const canUse = makeCanUseTool(approve as never, "chat", undefined, ask as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "m" }), conversation: "owner" });
+  const canUse = makeCanUseTool(approve as never, OWNER_CHAT, undefined, ask as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "m" }), conversation: "owner" });
   const input = { summary: "Dinner", startTime: "2026-10-21T19:00:00" };
   const p = canUse(CREATE, input, opts);
   await settle();

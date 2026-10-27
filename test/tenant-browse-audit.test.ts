@@ -8,6 +8,7 @@ import { browse } from "../src/modules/browse/browse.ts";
 import { BrowseGuard } from "../src/modules/browse/browseguard.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // A tenant's browse run: the audit log is the admin's, so its rows carry no words.
 
@@ -38,7 +39,7 @@ test("a tenant's browse run: no host, control name, task or error text in the au
     const g = new BrowseGuard({ mode: "group", tenant, task: "book a root canal at Dr Strange for Anneliese tooth-pain-task", outDir: join(tmpdir(), "nope"), resolver });
     g.shape("mcp__browser__browser_snapshot", {}, FORM);
     const j = fake("ask", "Anneliese wants a root canal at clinic-secret.example");
-    const can = makeCanUseTool(async () => ({ approved: false }), "browse", undefined, j.fn, g, undefined, tenant, { provenance: () => ({ kind: "member", message: "book a root canal for Anneliese" }), browseTask: g.task, untrusted: true });
+    const can = makeCanUseTool(async () => ({ approved: false }), BROWSE_RUN, undefined, j.fn, g, undefined, tenant, { provenance: () => ({ kind: "member", message: "book a root canal for Anneliese" }), browseTask: g.task, untrusted: true });
     await can("mcp__browser__browser_navigate", { url: "https://clinic-secret.example/booking" }, opts);
     await can("mcp__browser__browser_click", { target: "e71" }, opts); // a commit step: the judge, then the question
     await can("mcp__browser__browser_navigate", { url: "http://127.0.0.1/admin" }, opts); // a refusal with the address in it

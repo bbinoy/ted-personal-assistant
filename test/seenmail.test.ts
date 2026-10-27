@@ -12,7 +12,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "seenmail-test-"));
 
 const { createSeenMail, createSeenMailServer, isBacklog, SEEN_MAX } = await import("../src/modules/seenmail/seenmail.ts");
 const { createHeartbeatLook } = await import("../src/heartbeat/look.ts");
-const { heartbeatOptions } = await import("../src/run/agent.ts");
+const { lookOptions } = await import("../src/run/agent.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
@@ -97,9 +97,9 @@ test("the heartbeat run is given the tracker only where there is mail, and the e
   T.provision(ana);
   const tracker = createSeenMail(file("f"));
   const g = group("seen-group-1123456789abcd");
-  const og = heartbeatOptions(g, LOGIN, { seenMail: tracker });
+  const og = lookOptions(g, LOGIN, { seenMail: tracker });
   assert.equal(og.seenMail, undefined, "a group has no mail");
-  const owned = heartbeatOptions(owner(), LOGIN, { seenMail: tracker });
+  const owned = lookOptions(owner(), LOGIN, { seenMail: tracker });
   assert.equal(owned.seenMail, tracker);
   const servers = Object.keys(buildOptions(async () => ({ approved: false }), owned, undefined).mcpServers as object);
   assert.ok(servers.includes("seenmail") && servers.includes("send"));

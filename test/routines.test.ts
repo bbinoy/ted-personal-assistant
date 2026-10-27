@@ -333,22 +333,23 @@ test("the selfTimed text is gone from every prompt; the promise points at the wh
   const OLD = /A check reads the notes every hour or so/;
   const withLook = new Set(GROUP_CAPABILITIES);
   const noLook = new Set([...GROUP_CAPABILITIES].filter((c) => c !== "wake" && c !== "heartbeat"));
-  for (const [name, text] of [["chat", chatSystem(new Date())], ["group", groupSystem({ caps: withLook as never })], ["tenant", tenantSystem({ name: "Eve", caps: withLook as never, timed: true })]] as const) {
+  for (const [name, text] of [["chat", chatSystem(new Date())], ["group", groupSystem({ caps: withLook as never })], ["tenant", tenantSystem({ name: "Eve", caps: withLook as never, timed: true, looker: lookerOf({ kind: "tenant" }) })]] as const) {
     assert.doesNotMatch(text, OLD, name);
     assert.match(text, /routine-<short-slug>\.md[\s\S]*`when:`/, `${name}: the when: note`);
   }
   assert.doesNotMatch(groupSystem({ caps: noLook as never }), /routine-<short-slug>/, "a group without a look is not promised one");
-  assert.match(tenantSystem({ name: "Eve", caps: noLook as never, timed: false }), /You cannot act on your own later or on a schedule/);
+  assert.match(tenantSystem({ name: "Eve", caps: noLook as never, timed: false, looker: lookerOf({ kind: "tenant" }) }), /You cannot act on your own later or on a schedule/);
   assert.doesNotMatch(lookInstruction(new Date(2026, 9, 14, 9, 0), undefined, lookerOf(owner())), /a note says is due|note asks for it and it is due/);
 });
 
-test("the look: facts are in the instruction only when there are some", () => {
+test("the look: how routines work is the prompt's; the message holds the facts only when there are some", () => {
   const looker = lookerOf(owner());
   const now = new Date(2026, 9, 14, 9, 0, 0);
+  assert.match(chatSystem(now), /Routines are things that happen at a set time[\s\S]*routine notes/);
   const plain = lookInstruction(now, undefined, looker);
-  assert.doesNotMatch(plain, /Routines are things that happen at a set time/);
+  assert.doesNotMatch(plain, /Routines are things that happen at a set time|daily-brief: due now/);
   const withFacts = lookInstruction(now, undefined, looker, "daily-brief: due now (every day at 07:30).");
-  assert.match(withFacts, /Routines are things that happen at a set time[\s\S]*routine notes[\s\S]*daily-brief: due now \(every day at 07:30\)\./);
+  assert.match(withFacts, /daily-brief: due now \(every day at 07:30\)\./);
 });
 
 test("skills: all three are in the plugin, the owner is offered them, they are heavy (own expert) and never shared with a friend or a group", () => {

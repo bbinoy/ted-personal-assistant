@@ -1,11 +1,11 @@
-import type { Source } from "../core/audit.ts";
+import type { RunKind } from "../core/runkind.ts";
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { isInside, realish } from "../core/contain.ts";
 import { isNotePath } from "../memory/notes.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, conversationsDir, instancePaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
-import { groupTools } from "./capabilities.ts";
+import { browseTools, groupTools } from "./capabilities.ts";
 import { loaded, registered } from "../modules/index.ts";
 import type { Denial, HideConfig, ToolModule } from "../modules/types.ts";
 import { confirmedArguments, destinationIsTrashOrSpam, namesLocalFile, neverActionValue } from "./neverallowed.ts";
@@ -16,7 +16,7 @@ import { availableFor, confirmDeleteOf, confirmsDelete, entryFor, isFree, isRead
 //   allow - run it
 //   ask   - the owner approves or declines on their phone
 //   deny  - never, whatever anyone says
-// The same for every tool in every place, ONE fold (classify below): a tool that does not exist for this source or this capability set is denied; the
+// The same for every tool in every place, ONE fold (classify below): a tool that does not exist for this run (its conversation's capability set, attended or not) is denied; the
 // never-allowed set is denied; so are local files; a free tool (a read, the assistant's own plumbing: toolmanifest.ts isFree) is allowed; anything else is
 // "ask", and permissions.ts lets the approval judge skip the question where code allows it. A module's floor can only lower the result.
 // Unknown tools default to "ask", never to "allow".
@@ -109,24 +109,24 @@ export function hiddenTools(seen: readonly string[], cfg: { hiddenConnectors: re
 // string. A search is free; opening a page is judged, and the address veto is autojudge.ts. A group or a tenant never opens a page.
 
 // groupNotesDir: for an isolated run (a group, a tenant), THE one folder its file tools may touch (its own notes). Without it an isolated run gets no file access.
-// tools: the tools that exist for an isolated conversation (a group, a tenant), from its capability set (capabilities.ts); a group's own by default.
-// A tool outside it is denied, whatever it is called.
+// tools: the tools that exist for the run, from its conversation's capability set (capabilities.ts toolsFor; the owner's included); a group's own by default. The browse worker and
+// a bare check have none: only the row decides. A tool outside the set is denied, whatever it is called.
 //
-// ONE fold for every source (owner, group, tenant, unattended): each step can only lower the verdict.
-//   1. it exists here: the capability set of an isolated run, and `only` of the row
+// ONE fold for every run (the owner's, a group's, a friend's; attended or not): each step can only lower the verdict.
+//   1. it exists here: the run's tool set, and the row's `attended` / `who`
 //   2. never allowed (trading, trash, delete, spam, block: by row, by name, by arguments) and no local files: deny
 //   3. the manifest: free (a read, the assistant's own plumbing, a call a module declares free) is allow, everything else ask
 //   4. every module's floor, the minimum (a friend's Google: no attachments; Gmail: attachment content)
 //   5. the note file tools: only on a path inside the notes (a group's: inside that group's notes folder; the owner's chat: or, for Read, the data folders)
 // What an isolated run holds and the owner does not is the capability set in 1; there is no second rule for it.
-export function classify(tool: string, input: Record<string, unknown>, source: Source, groupNotesDir?: string, tools?: ReadonlySet<string>): Verdict {
-  const isolated = source === "group" || tools !== undefined;
-  const offered = tools ?? (isolated ? groupTools() : undefined);
+export function classify(tool: string, input: Record<string, unknown>, run: RunKind, groupNotesDir?: string, tools?: ReadonlySet<string>): Verdict {
+  const isolated = run.who !== "owner"; // (a group, a friend, the browse worker: none of the owner's data; the files they may touch are their own notes)
+  const offered = tools ?? (run.who === "browse" ? browseTools() : run.who === "owner" ? undefined : groupTools(run));
   if (offered && !offered.has(tool)) return "deny";
-  if (!availableFor(tool, source)) return "deny";
+  if (!availableFor(tool, run)) return "deny";
   if (isNeverAllowed(tool, input) || namesLocalFile(input)) return "deny";
-  let verdict: Verdict = !confirmsDelete(tool, input) && isFree(tool, undefined, { input, source }) ? "allow" : "ask"; // a delete the person confirms is never free
-  for (const m of registered()) verdict = lower(verdict, m.floor?.verdict?.(tool, input, source)); // every registered module's, loaded or not: they only restrict
+  let verdict: Verdict = !confirmsDelete(tool, input) && isFree(tool, undefined, { input, run }) ? "allow" : "ask"; // a delete the person confirms is never free
+  for (const m of registered()) verdict = lower(verdict, m.floor?.verdict?.(tool, input, run)); // every registered module's, loaded or not: they only restrict
   if (NOTE_FILE_TOOLS.has(tool)) {
     const ok = isolated ? !!groupNotesDir && isInside(input.file_path, groupNotesDir) : isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path));
     if (!ok) return "deny";

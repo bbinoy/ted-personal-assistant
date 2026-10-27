@@ -8,7 +8,7 @@ flowchart LR
   msgr <--> main["main.ts<br/>who wrote? (guards, tenantroute)"]
 
   subgraph agent["one process, supervised by launchd"]
-    main -->|"owner · group · friend"| conv["conversation pipeline<br/>ONE path for all three<br/>(conversation.ts, runoptions.ts)"]
+    main -->|"owner · group · friend"| conv["conversation pipeline<br/>ONE path for all three<br/>(conversation.ts, runoptions.ts runFor)"]
     tick["free tick, no model (heartbeat.ts)<br/>jobs: wake · dream · retention"] --> look["heartbeat look: ONE run per conversation<br/>facts from code, routines incl. the brief<br/>(look.ts)"]
     look --> conv
     conv --> caps["capability set<br/>(capabilities.ts: who she is,<br/>what is set up, the instance's switches)"]
@@ -99,20 +99,32 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 
 ## The run model
 
-**One pipeline.** `createPipeline` (`src/conversation/conversation.ts`) serves the owner's chat, every group and every friend. A `Conversation` is plain data from `owner()`, `group(id)` or `tenant(id)`: target, policy source (`chat` or `group`), log, notes folder, whether the participation gate applies. Everything else is shared.
+**One pipeline.** `createPipeline` (`src/conversation/conversation.ts`) serves the owner's chat, every group and every friend. A `Conversation` is plain data from `owner()`, `group(id)` or `tenant(id)`: kind, target, log, notes folder, whether the participation gate applies. Everything else is shared.
 
-**Run options.** `runOptionsFor(conversation, inputs)` (`src/run/runoptions.ts`) builds the `RunOptions` of all three kinds from a small table (`test/runoptions.test.ts`); `runConversation` and `prepare` (`src/run/agent.ts`) run and warm them.
+**One agent, two facts.** A run is made of two independent facts (`src/core/runkind.ts`), never of a "source": `who` (the owner's conversation, a group's, a friend's `tenant`, or the `browse` worker a run starts; derived from `Conversation.kind`) and `attended` (someone waits in the chat for the answer). Tools, skills, isolation, the code floor and the asking all follow from these two plus the conversation's capability set; nothing asks what started the run or whether it is "the owner". The audit log keeps a label for who acted (`auditSource`: `chat`, `group`, `background`, `browse`), a name for the log only.
 
-- `RunOptions` (`src/run/agentrun.ts`) carries the policy `source`, prompt, session, memory folder, skills, tools, model, caps, `provenance`, `untrusted`, `unattended` and experts.
-- A session resumes between messages and is compacted in the background after `COMPACT_QUIET_MINUTES` (5) of quiet (`src/run/chatsession.ts`).
+**One builder.** `runFor(conversation, trigger, inputs)` (`src/run/runoptions.ts`) builds the `RunOptions` of every run: a chat turn of the owner, a group or a friend (`trigger` `message`), a look of any of them (`look`) and the warm process (`prepare`). Tools come from `toolsFor(capabilitiesOf(conversation), kind)`, skills from `skillsFor`, the persona from the conversation's kind, the limits from the preset (`test/runoptions.test.ts`). `runConversation` and `runLook` (`src/run/agent.ts`) both end in one function, `runTurn`: the conversation's session for the trigger, the options, the context told in front of the message (what is set up, a look's notes, the facts of `factsFor`, each only when that session was not told it already) and the trigger's own message.
 
-**Profiles** (`PROFILES`, `src/run/profiles.ts`; limits from the preset) are fixed in code; no model can name or edit one: `chat` (the owner's turns), `group` (group and friend turns), `heartbeat` (every look; policy source `background` for the owner, `group` otherwise; `HEARTBEAT_MODEL`, Haiku, effort `high`) and `browse` (the browse worker). Chat and group turns use `HARNESS_MODEL` (Sonnet).
+What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`, and nothing else branches on the trigger:
+
+| | message | look |
+|---|---|---|
+| model | `HARNESS_MODEL` (Sonnet) | `HEARTBEAT_MODEL` (Haiku), effort `high` |
+| session | the conversation's chat session (`session`), resumed | the conversation's look session (`look_session`), resumed |
+| message | the person's words (quote, pictures, documents) | "Background check at HH:MM, nothing new from X", why it is due, the routines due, and the chat lines since the look session last saw the log (a fresh one: the last 40) |
+| attended | yes | no |
+| answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
+| limits | the preset's chat or group profile; the warm process | the heartbeat profile's turns, a short ceiling (`HEARTBEAT_TIMEOUT_MINUTES`), a place in the gate (owner first), experts to delegate to |
+
+- `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session and its track, the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
+- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: for a message, the notes' file tools (`Read`, `Write`, `Edit`, and the memory and people tools, pending the memory unification), the edits of the person's task list (`update_task`, `complete_task`, `drop_task`, `snooze_task`; they are free of the judge, so a run that reads mail does not get them) and the owner's task import and tenant administration; for a look, `read_note` / `write_note`, `seen_mail`, `note_upcoming_meetings` and the status note. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
+- The session of a conversation's chat and its look session never mix (different models, different caches). Each resumes between runs and is compacted in the background after `COMPACT_QUIET_MINUTES` (5) of quiet (`src/run/chatsession.ts`, one code for both tracks).
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
 
 - The owner has all. A friend has all but `OWNER_ONLY` (`profile`, `card`, `admin`, `drive`). A group has the fixed `GROUP_CAPABILITIES`.
 - Every later step only takes away: nothing unless the person is active; less what is not set up (`mail`, `calendar`, `google` need the Google OAuth client, `notion` needs `INTAKE_BASE_URL`); less what the instance switched off (`BROWSE`, `WEATHER`, `DRAW`, `DREAM`, `WAKEUPS`); less the friend's own `tenant.json` switches.
-- Manifest rows name their gating capability (`cap`); `toolsFor(capabilities)` is what exists for a group or friend, and `classify` denies anything outside it. Private skills (brief, mail, calendar, setup, routines) are never offered to a group or friend. `NEVER_FOR_ISOLATED` and each module's `ownerOnly` keep the owner's connectors out of every other conversation.
+- Manifest rows name their gating capability (`cap`) and where they exist (`attended`, `who`); `toolsFor(capabilities, kind)` is what exists for the run, the owner's included, and `classify` denies anything outside it. Private skills (brief, mail, calendar, setup, routines) are the owner's alone (`skillsFor(caps, owner)`). `NEVER_FOR_ISOLATED` and each module's `ownerOnly` keep the owner's connectors out of every other conversation.
 
 **The preset** (`assistants/<name>/`, default `ted`, `ASSISTANT_PRESET`; `src/core/preset.ts`).
 
@@ -165,12 +177,14 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - `hasSomethingToLookAt` (`src/run/scope.ts`) wants the capability `mail`, `calendar` or `notion`, or an active note; otherwise no model call is made.
 - Then `mayRun` must allow it and the conversation must not be busy.
 
-**The instruction** is `persona/heartbeat.md`, filled by `lookInstruction` from the capability set (`lookerOf`): clock and zone, last look, quiet window, what it can read, expert paragraph, routine facts, answer format.
+**What a look is told.** The standing instruction for what to do on its own when woken (what to read, mail triage, tasks, meetings, quiet hours, delegation, the answer format) is part of every conversation's one system prompt (`persona/background.md`, appended by `chatSystem`, `groupSystem` and `tenantSystem` from the capability set via `lookerOf`), so a chat turn and a look have the same prompt and the cache holds. What changes per look is the message (`persona/heartbeat.md`, `lookInstruction`): the clock and zone, the last check, the quiet window, why it is due and the routine facts, followed by the chat lines the look session has not seen.
 
-- It is also the judge's standing provenance, so it holds no mail and no chat.
+- The message is also the judge's standing provenance, so it holds no mail and no chat.
 - The run answers `{ message, nextCheckMinutes, urgent? }`; the next look is clamped to 10..120 minutes (`clampLook`); `[[silent]]` means nothing to say.
 
-**Facts handed to the run.** One builder, `factsFor(conversation, now, "look" | "chat")` (`src/heartbeat/facts.ts`), gives the look and every chat turn (owner, friend, group) the same facts for their conversation, so the same agent answers whichever run comes first. The run decides what to say, in Ted's voice. A look puts them in the prompt next to the instruction (`lookPrompt`) and its experts get them too; a chat turn gets them in front of its message (`chatTurn`, `src/run/agent.ts`), registered by `wire()`.
+**The look session.** Each conversation has a second SDK session for its looks (`look_session` in `assistant.db`), resumed by every look and compacted by the same code as the chat session (quiet compaction, `CHAT_COMPACT_TOKENS`). It is told the context, the notes index and the facts only when they differ from what it was last shown (`unseen` / `markShown`, per session) and the chat lines since it last saw the log. A look that read mail marks the session untrusted (the judge is told from then on), which persists with it; one that fails leaves the session as it was, and a session the SDK cannot resume is dropped and started fresh. Forgetting a conversation removes both sessions with its folder.
+
+**Facts handed to the run.** One builder, `factsFor(conversation, now, "look" | "chat")` (`src/heartbeat/facts.ts`), gives the look and every chat turn (owner, friend, group) the same facts for their conversation, so the same agent answers whichever run comes first. The run decides what to say, in Ted's voice. Both are told by the same function (`runTurn`, `src/run/agent.ts`) in front of the trigger's message, each only when that session was not told it already; a look's experts get them too; a chat turn's come from the provider registered by `wire()`.
 
 | fact | built by | handed over |
 |---|---|---|
@@ -233,7 +247,7 @@ Every tool call, in every conversation and run, goes through `src/approvals/perm
    - Its input is code-rendered: the arguments, a PROVENANCE block (`provenanceFor`) and `untrusted_input_in_run`.
    - It answers `auto`, `ask` or `fix` (arguments wrong: denied with a hint, at most 2 per tool); a timeout or an error is `ask`. `AUTO_APPROVE=off` skips it.
 3. **Question**, chat turns only. A model writes it; code adds a footer (`questionfooter.ts`) and checks that every address, URL, id, time and amount appears verbatim (`questionfacts.ts`). A failed check sends nothing.
-4. **Unattended runs never ask** (`UNATTENDED_SKIP`, `isUnattended`). A look, its expert, a routine and their browse worker act when the judge says `auto`; otherwise they get one fixed refusal, audited `background-skip`. Their approver is `NEVER_ASKS`. A payment is refused outright.
+4. **Unattended runs never ask** (`UNATTENDED_SKIP`, `RunKind.attended` false). A look, its expert, a routine and their browse worker act when the judge says `auto`; otherwise they get one fixed refusal, audited `background-skip`. Their approver is `NEVER_ASKS`. A payment is refused outright.
 
 - **Answers.** Only a message that arrives after the question, or a reaction on it, can answer. An exact yes or no for the single open question and 👍 / 👎 are matched by code; any other reply goes to the judge model with all open questions of that conversation (`approvalmodel.ts`, `approvalprompt.ts`). A failed reading approves nothing.
 - **One approver per conversation** (`approvers.ts`): the question goes to the conversation that triggered the action; an answer from anywhere else, the admin included, never applies. A stranger's registration asks the owner in her own chat (`registerask.ts`).
@@ -288,11 +302,11 @@ A tool is a module: a plain `ToolModule` (`src/modules/types.ts`) in `src/module
 
 - `src/modules/index.ts` lists them; `loaded()` is every module without a slot plus the one `MAIL_PROVIDER` names (`mailbird`, `gmail` or `none`).
 - `src/modules/runtime.ts` binds each module to the code it wraps, so declarations import nothing of the application. To add a tool: write the module, list it, bind a server in `RUNTIME` if needed, add its skill (`test/modules.test.ts`, `test/manifestrows.test.ts`).
-- `src/policy/toolmanifest.ts` is the one table of tools the model might get. A row names the tool, provider, generic action (`read`, `draft`, `send`, `archive`...), the gating capability (`cap`) and optionally `only` (the sources it exists for). `isFree` says whether a tool runs without the judge; an unlisted tool asks unless its name is a read verb.
+- `src/policy/toolmanifest.ts` is the one table of tools the model might get. A row names the tool, provider, generic action (`read`, `draft`, `send`, `archive`...), the gating capability (`cap`) and optionally `attended` (only where someone waits, or only in unattended runs) and `who` (only for a friend's own connection, the browse worker's browser, the owner's own records). `isFree` says whether a tool runs without the judge; an unlisted tool asks unless its name is a read verb.
 - Whatever has the action `send` is judged the same way for any provider; `mailView` normalises an outgoing mail so approval text and judge input are identical.
 - `hiddenTools`, `HIDDEN_CONNECTORS` and `<MODULE>_TOOLS` (`NOTION_TOOLS`, `MAILBIRD_TOOLS`, `GMAIL_TOOLS`, `DRIVE_TOOLS`, `DOCS_TOOLS`) only decide what the model sees, not what needs approval.
 
-**Skills** are an SDK plugin in `plugin/`, offered with the `skills` option so nothing from `~/.claude/skills` leaks in. The owner's list is `ownerSkills()`; a group's or friend's is the shared skills her capabilities allow.
+**Skills** are an SDK plugin in `plugin/`, offered with the `skills` option so nothing from `~/.claude/skills` leaks in. `skillsFor(capabilities, owner)` is the list: the owner's is the whole plugin (`ownerSkills()`); a group's or friend's is the shared skills her capabilities allow.
 
 - A skill's frontmatter may say `delegate: sonnet|opus` and `tools: [...]`.
 - The `setup` skill saves calendars, tasks and writing style as `setup-` and `voice-` notes (`missingSetup`).
@@ -422,7 +436,7 @@ src/conversation/voicereply.ts  the [[voice]] marker and voice option
 What a model run is made of.
 
 ```
-src/run/agent.ts  runConversation, prepare, runHeartbeat
+src/run/agent.ts  runConversation, runLook, prepare: one runTurn for every trigger
 src/run/agentrun.ts  RunOptions, buildOptions, runAgent, the stream
 src/run/agentwarm.ts  the keyed pool of warm processes
 src/run/ceiling.ts  wall-clock ceiling of a run, `/stop`
@@ -430,10 +444,8 @@ src/run/chatsession.ts  session resume and in-place compaction
 src/run/delegation.ts  experts and the hooks that enforce delegation
 src/run/image.ts  pictures people send, checked and shrunk
 src/run/persona.ts  system prompts from the preset's templates
-src/run/profiles.ts  chat, heartbeat, group and browse profiles
-src/run/profiletools.ts  which connector tools an unattended job sees
 src/run/rules.ts  the look's answer schema, clamp and parser
-src/run/runoptions.ts  runOptionsFor: one builder for all conversations
+src/run/runoptions.ts  runFor and the message/look table: one builder for every run
 src/run/scope.ts  what a look is made of; "anything to look at?"
 src/run/session.ts  when a session resumes, restarts or compacts
 src/run/sessionstore.ts  the `session` and `look_session` rows of assistant.db

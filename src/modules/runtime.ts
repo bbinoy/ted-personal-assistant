@@ -14,7 +14,7 @@ import { recordMemoryChange } from "../memory/memorynotice.ts";
 import { viewDraft } from "./mailbird/proposals.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
-import { OWNER_KEY } from "../core/ownerkey.ts";
+import { auditSource } from "../core/runkind.ts";
 import { createNotesServer } from "./memory/notestools.ts";
 import { createPeopleServer } from "./people/peopletool.ts";
 import { createStatusServer } from "./status/statusnote.ts";
@@ -57,38 +57,38 @@ export interface ModuleLifecycle {
 }
 
 export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
-  send: { server: (ctx) => createSendServer(ctx.key ?? OWNER_KEY) }, // (no key: the owner's heartbeat run, policy source "background", the only unattended run with a conversation of its own on the login)
+  send: { server: (ctx) => createSendServer(ctx.key!) },
   weather: { server: () => createWeatherServer() },
   draw: { server: (ctx) => createDrawServer(ctx.key!) },
   voice: { server: (ctx) => createVoiceServer(ctx.key!) },
   memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, groupId: ctx.memory!.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.memory!.groupId ? dreamScope({ kind: "group", groupId: ctx.memory!.groupId }) : undefined, record: ctx.memory!.notify ? recordMemoryChange : () => {} }) },
-  notes: { server: (ctx) => createNotesServer(ctx.notesRead!, ctx.source) },
+  notes: { server: (ctx) => createNotesServer(ctx.notesRead!, auditSource(ctx.kind)) },
   // find_person: this conversation's people notes and, for a friend whose set has Google, her own Contacts through her own session; a group or the owner has notes only (the owner's Google connectors have no contacts tool).
   people: {
     server: (ctx) =>
       createPeopleServer({
         notesDir: ctx.memory!.dir,
-        source: ctx.source,
+        source: auditSource(ctx.kind),
         zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined,
         contacts: ctx.tenant && ctx.offers(GOOGLE_MAIL_TOOL) ? (query) => searchContacts(ctx.tenant!.id, query) : undefined,
         contactsWhy: ctx.tenant ? "she has not connected Google" : ctx.groupId ? "a group has no contacts of its own" : "the Google connectors on the owner's login have no contacts tool",
       }),
   },
   status: { server: () => createStatusServer() },
-  // The conversation's task list. An unattended run (the owner's background source, or an isolated run with no chat memory: a friend's or a group's look, a mail handler) can only list and add (tasktools.ts).
+  // The conversation's task list. An unattended run (a look of any conversation) can only list and add (tasktools.ts).
   tasks: {
     server: (ctx) =>
       createTasksServer({
-        key: ctx.tenant?.key ?? ctx.groupId ?? ctx.key ?? OWNER_KEY,
-        source: ctx.source,
-        unattended: ctx.source === "background" || (ctx.source === "group" && !ctx.memory),
+        key: ctx.key!,
+        source: auditSource(ctx.kind),
+        unattended: !ctx.kind.attended,
         zone: () => zoneOf({ tenantId: ctx.tenant?.id }),
       }),
   },
   seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
-  // note_upcoming_meetings: the owner's look or a friend's, writing that conversation's own meetings table (meetingtools.ts).
-  meetings: { server: (ctx) => createMeetingsServer({ key: ctx.tenant?.key ?? OWNER_KEY }) },
-  browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }) },
+  // note_upcoming_meetings: a look's, writing that conversation's own meetings table (meetingtools.ts).
+  meetings: { server: (ctx) => createMeetingsServer({ key: ctx.key! }) },
+  browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, attended: ctx.kind.attended, tenant: !!ctx.tenant, spent: ctx.tenant?.overBudget, run: ctx.browseRun }) },
   // The browse run's browser: a separate @playwright/mcp process under the guard's directory (browseserver.ts).
   browser: {
     server: (ctx) => {

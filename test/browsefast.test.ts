@@ -8,6 +8,7 @@ import { BrowseGuard, FAST_NAVIGATIONS } from "../src/modules/browse/browseguard
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
 import { standing } from "./util.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // The navigate fast path: a navigate skips the judge only for a site this run was already cleared for (judged auto, or approved by the owner), when the address is
 // plain (https, no port, no login, no fragment, a query of at most 120 characters) and the run has used fewer than FAST_NAVIGATIONS of them. The address floor and the
@@ -25,7 +26,7 @@ function rig(o: { tenant?: boolean; judge?: Verdict["decision"]; owner?: boolean
   const asked: string[] = [];
   const can = makeCanUseTool(
     async (d) => (asked.push(d), { approved: o.owner ?? false }),
-    "browse",
+    BROWSE_RUN,
     undefined,
     (async (i: { description: string }): Promise<Verdict> => (judged.push(i.description), { decision: o.judge ?? "auto", reason: "fits the task" })) as never,
     g,

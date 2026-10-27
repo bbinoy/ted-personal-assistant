@@ -1,10 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { delegatedText, expertSetup } from "../src/run/delegation.ts";
 import { missingSetup, setupItems } from "../src/modules/index.ts";
-import { chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, heartbeatInstruction, heartbeatSystem } from "../src/run/persona.ts";
-import { PROFILES } from "../src/run/profiles.ts";
+import { chatContext, chatSystem, GATE_DEFAULTS, groupSystem, expertSystem, heartbeatInstruction } from "../src/run/persona.ts";
 import { ownerSkills } from "../src/modules/skills.ts";
 import { settings } from "../src/core/settings.ts";
 
@@ -26,15 +24,14 @@ export function snapshot(): Record<string, unknown> {
     const missing = missingSetup([]);
     return {
       offeredSkills: ownerSkills(settings.mail),
-      profileSkills: Object.fromEntries(Object.entries(PROFILES).map(([k, p]) => [k, p.skills])),
       setupLabels: setupItems().map((i) => i.label),
       hiddenConnectors: settings.hiddenConnectors,
       chat: portable(chatSystem(NOW)),
       chatContext: portable(chatContext({ pings: ["10:00 an alert"] }) ?? ""),
       chatContextSetup: portable(chatContext({ missing }) ?? ""),
-      heartbeat: portable(heartbeatSystem("MEMORY", { missing })),
+      checkContextSetup: portable(chatContext({ missing }, undefined, false) ?? ""),
       expert: portable(expertSystem("MEMORY", { missing })),
-      heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", lastLook: "Your last look was at 08:30.", quietFrom: "22:00", quietTo: "07:00", dayMinutes: "30", delegated: delegatedText(expertSetup(PROFILES.heartbeat.skills, "")), who: settings.owner, own: true, reads: true, mail: true, experts: true, sources: "the inbox mail you have not looked at yet (see below), the calendar for the next 36 hours, tasks, and your notes", tasks: true, group: false }),
+      heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", who: settings.owner, lastLook: "Your last check was at 08:30.", quietFrom: "22:00", quietTo: "07:00", due: "The time you chose for this check has come.", sources: "the inbox mail you have not looked at yet (see below), the calendar for the next 36 hours, tasks, and your notes" }),
       group: portable(groupSystem()),
       gateGroup: GATE_DEFAULTS.group,
     };

@@ -10,6 +10,7 @@ import type { Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool, type CallGuard, type GuardDecision } from "../src/approvals/permissions.ts";
 import { TYPED_YES_NEEDED } from "../src/modules/browse/paymentrules.ts";
 import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // The payment approval: the owner's typed yes, and nothing else, approves a card payment. Fake values only.
 const call = { tool: "mcp__browser__browser_type", input: { target: "e8", text: "{{card:number}}" } };
@@ -111,7 +112,7 @@ test("the permission layer: a payment ask skips the judge even in broad mode, pa
   const g: GuardDecision = { kind: "ask", judge: false, payment: true, once: true, description: "💳 Card payment approval", resolve: async () => (order.push("resolved"), { ...call.input, text: "RESOLVED" }) };
   const guard: CallGuard = { decide: async () => g };
   const seen: unknown[] = [];
-  const canUse = makeCanUseTool(async (_d, c, _s, o) => (order.push("asked"), seen.push([c.input, o]), { approved: true }), "browse", undefined, judge, guard, undefined, false, { provenance: standing("buy") });
+  const canUse = makeCanUseTool(async (_d, c, _s, o) => (order.push("asked"), seen.push([c.input, o]), { approved: true }), BROWSE_RUN, undefined, judge, guard, undefined, false, { provenance: standing("buy") });
   const r = (await canUse(call.tool, call.input, { signal: new AbortController().signal } as never)) as { behavior: string; updatedInput?: Record<string, unknown> };
   assert.equal(r.behavior, "allow");
   assert.equal(r.updatedInput?.text, "RESOLVED");
@@ -120,12 +121,12 @@ test("the permission layer: a payment ask skips the judge even in broad mode, pa
   assert.deepEqual(seen, [[call.input, { typedYes: true }]], "the approver sees the placeholder call and the typed-yes flag");
   // not approved: nothing is resolved
   order.length = 0;
-  const no = makeCanUseTool(async () => (order.push("asked"), { approved: false }), "browse", undefined, judge, guard, undefined, false, { provenance: standing("buy") });
+  const no = makeCanUseTool(async () => (order.push("asked"), { approved: false }), BROWSE_RUN, undefined, judge, guard, undefined, false, { provenance: standing("buy") });
   assert.equal((await no(call.tool, call.input, { signal: new AbortController().signal } as never))!.behavior, "deny");
   assert.deepEqual(order, ["asked"]);
   // a resolve that refuses (kill switch, page changed) denies even after a yes
   const refusing: CallGuard = { decide: async () => ({ ...g, resolve: async () => "Card payments are switched off." }) };
-  const late = makeCanUseTool(async () => ({ approved: true }), "browse", undefined, judge, refusing, undefined, false, { provenance: standing("buy") });
+  const late = makeCanUseTool(async () => ({ approved: true }), BROWSE_RUN, undefined, judge, refusing, undefined, false, { provenance: standing("buy") });
   const l = (await late(call.tool, call.input, { signal: new AbortController().signal } as never)) as { behavior: string; message?: string };
   assert.equal(l.behavior, "deny");
   assert.match(l.message!, /switched off/);

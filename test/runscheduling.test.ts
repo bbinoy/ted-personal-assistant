@@ -7,6 +7,7 @@ import { loadSettings, settings } from "../src/core/settings.ts";
 import { browseRunOptions, runAgent } from "../src/run/agentrun.ts";
 import { RunStopped, stopRuns } from "../src/run/ceiling.ts";
 import { WarmPool } from "../src/run/agentwarm.ts";
+import { BROWSE_RUN, OWNER_LOOK } from "./runkinds.ts";
 
 const s = settings as unknown as Record<string, unknown>;
 
@@ -138,7 +139,7 @@ test("/stop reaches a look that still waits for a place in the run gate, and the
 // ---- the run gate seen from runAgent: a browse child never queues, a look parked on an approval gives its place away ----
 const okResult = { type: "result", subtype: "success", is_error: false, result: "hi", total_cost_usd: 0, session_id: "s", duration_ms: 1, duration_api_ms: 1, num_turns: 1, usage: {} } as never;
 const quick = (() => (async function* () { yield okResult; })()) as never;
-const base = { source: "handler", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as const;
+const base = { kind: OWNER_LOOK, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 } as const;
 
 test("a browse child (gate: helper) never queues for a place, even when every place is held by looks that wait for it", async () => {
   const was = settings.maxConcurrentRuns;
@@ -165,10 +166,10 @@ test("a run parked on an approval gives its place to others meanwhile and takes 
     let answer!: () => void;
     const approve = () => new Promise<{ approved: boolean }>((r) => (answer = () => r({ approved: true })));
     const q = ((p: { options: { canUseTool: (t: string, i: object, o: object) => Promise<unknown> } }) => (async function* () {
-      await p.options.canUseTool("mcp__x__do", {}, { signal: new AbortController().signal });
+      await p.options.canUseTool("mcp__browser__browser_navigate", {}, { signal: new AbortController().signal });
       yield okResult;
     })()) as never;
-    const look = runAgent("p", approve as never, { ...base, source: "browse" } as never, { query: q });
+    const look = runAgent("p", approve as never, { ...base, kind: BROWSE_RUN } as never, { query: q });
     await sleep(20);
     assert.equal(runGate.running, 0, "parked: the place is free");
     assert.equal(await gated("look", async () => "another look ran"), "another look ran");

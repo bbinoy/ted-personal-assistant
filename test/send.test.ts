@@ -14,6 +14,7 @@ import { sendNow, withSend, type Content } from "../src/modules/send/send.ts";
 import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { access } from "./util.ts";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";
+import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // send: the model's one way to say something mid-turn (text, voice note, picture, reaction). Text before a tool call is never sent.
 
@@ -35,28 +36,26 @@ test("send_picture: the guard keeps only real jpeg bytes, under names code choos
 });
 
 
-test("send: manifest and policy: free in a chat turn and in every conversation's heartbeat run (group, background), never in the other unattended runs", () => {
-  assert.equal(access(TOOL, "chat"), "free");
-  assert.equal(classify(TOOL, { text: "On it." }, "chat"), "allow");
-  assert.equal(classify(TOOL, { text: "On it." }, "group"), "allow");
-  assert.equal(access(TOOL, "background"), "free", "the owner's heartbeat run: the same tool, the same floor");
-  assert.equal(classify(TOOL, { text: "x" }, "background"), "allow");
-  for (const source of ["radar", "handler", "heartbeat", "dream", "browse"] as const) {
-    assert.equal(access(TOOL, source), undefined, source);
-    assert.equal(classify(TOOL, { text: "x" }, source), "deny", source);
-  }
+test("send: manifest and policy: free in a chat turn and in every conversation's look, the same floor", () => {
+  assert.equal(access(TOOL, OWNER_CHAT), "free");
+  assert.equal(classify(TOOL, { text: "On it." }, OWNER_CHAT), "allow");
+  assert.equal(classify(TOOL, { text: "On it." }, GROUP_CHAT), "allow");
+  assert.equal(access(TOOL, OWNER_LOOK), "free", "the owner's look: the same tool, the same floor");
+  assert.equal(classify(TOOL, { text: "x" }, OWNER_LOOK), "allow");
+  assert.equal(classify(TOOL, { text: "x" }, GROUP_LOOK), "allow");
 });
 
-test("send: chat, group and heartbeat runs are given the tool server, the other unattended runs are not (and the old tools are gone)", () => {
+test("send: every run of a conversation is given the tool server, the browse worker is not (and the old tools are gone)", () => {
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {});
-  assert.equal(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes("send"), true);
-  assert.equal(servers({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g1" } }).includes("send"), true);
-  assert.equal(servers({ ...base, source: "background" }).includes("send"), true, "the owner's heartbeat run (policy source background) speaks in her chat");
-  for (const source of ["radar", "handler", "dream"] as const) assert.equal(servers({ ...base, source }).includes("send"), false, source);
-  for (const old of ["tell", "picture"]) assert.equal(servers({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).includes(old), false, old);
-  assert.equal(classify("mcp__tell__tell_user", { message: "x" }, "group"), "deny");
-  assert.equal(classify("mcp__picture__send_picture", { id: "shot1" }, "group"), "deny");
+  assert.equal(servers({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes("send"), true);
+  assert.equal(servers({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g1" } }).includes("send"), true);
+  assert.equal(servers({ ...base, kind: OWNER_LOOK }).includes("send"), true, "the owner's look speaks in her chat");
+  assert.equal(servers({ ...base, kind: GROUP_LOOK, groupId: "g1" }).includes("send"), true);
+  assert.equal(servers({ ...base, kind: BROWSE_RUN }).includes("send"), false);
+  for (const old of ["tell", "picture"]) assert.equal(servers({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes(old), false, old);
+  assert.equal(classify("mcp__tell__tell_user", { message: "x" }, GROUP_CHAT), "deny");
+  assert.equal(classify("mcp__picture__send_picture", { id: "shot1" }, GROUP_CHAT), "deny");
 });
 
 test("send: the sink is found by conversation while the turn runs, and only then", async () => {

@@ -2,13 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildOptions } from "../src/run/agentrun.ts";
 import { createdFact, forgetCreated } from "../src/approvals/created.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 const MB = "mcp__mailbird__";
 const signal = new AbortController().signal;
 
 test("the run records what the assistant creates (PostToolUse), under the run's conversation, and nothing an update touched", async () => {
   forgetCreated();
-  const o = buildOptions(async () => ({ approved: false }), { source: "chat", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, conversation: "c-hook" } as never, undefined);
+  const o = buildOptions(async () => ({ approved: false }), { kind: OWNER_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, conversation: "c-hook" } as never, undefined);
   const hook = o.hooks!.PostToolUse![0]!.hooks[0]!;
   const text = (v: unknown) => ({ content: [{ type: "text", text: JSON.stringify(v) }] });
   await hook({ hook_event_name: "PostToolUse", tool_name: `${MB}create_draft`, tool_input: { to: "a@example.org" }, tool_response: text({ messageId: 4711 }) } as never, undefined, { signal });

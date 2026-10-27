@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { told } from "./told.ts";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import { group, owner, type Conversation } from "../src/conversation/conversatio
 import { clampLook, parseHeartbeatAnswer, HEARTBEAT_SCHEMA } from "../src/run/rules.ts";
 import { lastLookText, lookInstruction, lookPrompt, preemptible } from "../src/heartbeat/look.ts";
 import { heartbeatReport } from "../src/heartbeat/report.ts";
+import { chatSystem } from "../src/run/persona.ts";
 import { readRows, type HeartbeatRow } from "../src/core/looks.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
@@ -54,9 +56,9 @@ function rig(answer: () => Answer, o: { clocks?: { wall: () => number; mono: () 
     groupChats: !!o.groups,
     vouch: async () => true,
     groups: () => o.groups ?? [],
-    run: async (c, _payer, prompt, extra) => {
+    run: async (c, _payer, build, extra) => {
       seen.runs.push(c.kind);
-      seen.prompts.push(prompt);
+      seen.prompts.push(told(build, extra));
       seen.provenance.push(extra.provenance);
       const a = answer();
       sends = a.sends ?? 0;
@@ -112,19 +114,22 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   const text = lookInstruction(DAY, new Date(2026, 9, 14, 13, 30).toISOString());
   assert.match(text, /Wednesday 2026-10-14 14:00/);
   assert.ok(text.includes(Intl.DateTimeFormat().resolvedOptions().timeZone));
-  assert.match(text, /Your last look was at 13:30\./);
+  assert.match(text, /Your last check was at 13:30\./);
   assert.match(text, /Quiet hours \(night\) are 22:00-07:00/);
-  assert.match(text, /Code holds what you would post unprompted at night/);
-  assert.match(text, /Set "urgent" to true only for what is truly time-critical/);
-  assert.match(text, /working late, tell me everything tonight/);
-  assert.match(text, /memory note/);
-  assert.match(text, /seen_mail tool/);
-  assert.match(text, /Unread is no reason to keep a mail/);
-  assert.match(text, /with the send tool/);
-  assert.doesNotMatch(text, /at most 5 mails|never mail you have not read/, "the archive floor is gone");
-  assert.match(text, /\[\[silent\]\]/);
-  assert.doesNotMatch(text, /idle fingerprint|nextCheckMinutes|"act"/i);
-  assert.match(lastLookText(undefined, DAY), /first look/);
+  assert.match(text, /^Background check at /);
+  // what to do in a check is the conversation's prompt (the same for a chat turn): the message holds only the time and the facts
+  const rules = chatSystem(DAY);
+  assert.match(rules, /Code holds what you would post unprompted at night/);
+  assert.match(rules, /Set "urgent" to true only for what is truly time-critical/);
+  assert.match(rules, /working late, tell me everything tonight/);
+  assert.match(rules, /memory note/);
+  assert.match(rules, /seen_mail tool/);
+  assert.match(rules, /Unread is no reason to keep a mail/);
+  assert.match(rules, /with the send tool/);
+  assert.doesNotMatch(rules + text, /at most 5 mails|never mail you have not read/, "the archive floor is gone");
+  assert.match(rules, /\[\[silent\]\]/);
+  assert.doesNotMatch(rules + text, /idle fingerprint|nextCheckMinutes|"act"/i);
+  assert.match(lastLookText(undefined, DAY), /first check/);
   assert.match(lastLookText(new Date(2026, 9, 13, 9, 0).toISOString(), DAY), /an earlier day/);
   const prompt = lookPrompt(DAY, text, ["[10-14 13:00] Ben: call Eve"]);
   assert.match(prompt, /CURRENT TIME/);
@@ -136,7 +141,7 @@ test("owner's look: ONE heartbeat run with standing provenance, no gate, the mes
   assert.equal(await w.look(conv, DAY), "posted");
   assert.deepEqual(seen.runs, ["owner"]);
   assert.equal(seen.provenance[0]?.kind, "standing", "the judge reads the fixed instruction as the reason for the run");
-  assert.match((seen.provenance[0] as { task: string }).task, /periodic look/);
+  assert.match((seen.provenance[0] as { task: string }).task, /Background check at/);
   assert.doesNotMatch((seen.provenance[0] as { task: string }).task, /call Eve|Friday/, "no chat in the standing task");
   assert.deepEqual(seen.posted, ["Eve still waits for your answer about Friday."]);
   const wake = wakeLine();
@@ -414,9 +419,9 @@ test("groups get the same heartbeat run: one per look, with their own notes, in 
   at(DAY);
   await w.tick(DAY);
   await w.idle();
-  assert.deepEqual(seen.runs.sort(), ["group", "owner"], "the owner's look and the group's, nothing for the group with no notes and no tools to read");
+  assert.deepEqual([...seen.runs].sort(), ["group", "owner"], "the owner's look and the group's, nothing for the group with no notes and no tools to read");
   assert.deepEqual(seen.posted, ["Fun fact: biscuits.", "Fun fact: biscuits."]);
-  const groupPrompt = seen.prompts.find((p) => /do nothing unprompted/.test(p))!;
+  const groupPrompt = seen.prompts[seen.runs.indexOf("group")]!;
   assert.match(groupPrompt, /the group's local time/);
   assert.doesNotMatch(groupPrompt, /archive|calendar for the next 36 hours|expert/i, "a group has no mail, calendar or expert in its instruction");
   assert.deepEqual(readRows().map((r) => r.kind).sort(), ["group", "owner"]);
@@ -443,7 +448,7 @@ test("the repeated fact of the day: yesterday's post is listed once as the group
   at(DAY);
   await w.tick(DAY);
   await w.idle();
-  const prompt = seen.prompts.find((p) => /do nothing unprompted/.test(p))!;
+  const prompt = seen.prompts[seen.runs.indexOf("group")]!;
   const own = "[2026-10-13 09:17] Fun fact: octopuses have three hearts.";
   assert.equal(prompt.split(own).length - 1, 1, "listed once among its own posts");
   assert.match(prompt, /Your own posts here in the last 7 days \(newest first\):\n<own_posts>/);

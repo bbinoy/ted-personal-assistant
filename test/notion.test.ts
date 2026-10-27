@@ -11,6 +11,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { startFakeNotion } from "./fakenotion.ts";
 import type { FakeBao } from "./fakebao.ts";
 import { instancePaths } from "../src/core/convpaths.ts";
+import { FRIEND_CHAT, OWNER_CHAT } from "./runkinds.ts";
 
 // Notion for friends (src/intake/notionoauth.ts, src/modules/notion/notionmcp.ts, src/modules/notion/module.ts, the shared src/intake/oauth.ts and src/intake/mcpproxy.ts) against FAKES: a fake Notion OAuth server
 // with discovery, dynamic registration and ROTATING refresh tokens, a fake hosted MCP endpoint that answers only a live bearer, and a fake OpenBao. Nothing talks to Notion.
@@ -45,7 +46,7 @@ const { serversFor } = await import("../src/modules/runtime.ts");
 const { NOTION_FRIEND_PREFIX: P, NOTION_FRIEND_TOOLS } = await import("../src/modules/notion/module.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { id?: string; config: any }) => resolveCapabilities((ctx.id && held.get(ctx.id) && [...held.get(ctx.id)!]) || T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
-const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
+const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx), FRIEND_CHAT);
 const { makeCanUseTool } = await import("../src/approvals/permissions.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
@@ -480,7 +481,7 @@ test("notion: two friends are isolated: each call carries her own bearer and rea
 
 const runCtx = (ctx: ReturnType<typeof T.tenantContext>) => {
   const tools = tenantTools(ctx);
-  return { source: "group" as const, browsing: false, key: `tenant:${ctx.id}`, mode: "group" as const, tenant: { id: ctx.id } as never, offers: (t: string) => tools.has(t), browseRun: async () => ({ text: "", costUsd: 0 }), memory: { dir: ctx.notesDir } };
+  return { kind: FRIEND_CHAT, browsing: false, key: `tenant:${ctx.id}`, mode: "group" as const, tenant: { id: ctx.id } as never, offers: (t: string) => tools.has(t), browseRun: async () => ({ text: "", costUsd: 0 }), memory: { dir: ctx.notesDir } };
 };
 const ctxOf = (rec: { id: string }) => T.tenantContext(T.tenantById(rec.id)!);
 
@@ -492,7 +493,7 @@ test("notion: the capability decides: only a friend with notion (and a page to s
   assert.equal(serversFor(runCtx(ctxOf(anna))).notion!.type, "sdk");
   assert.equal(serversFor(runCtx(ctxOf(plain))).notion, undefined);
   assert.equal([...tenantTools(ctxOf(plain))].filter((t) => t.startsWith(P)).length, 0);
-  assert.equal(serversFor({ ...runCtx(ctxOf(anna)), source: "chat", tenant: undefined, key: "owner", mode: "owner", offers: () => true }).notion, undefined, "the owner's runs never have her server");
+  assert.equal(serversFor({ ...runCtx(ctxOf(anna)), kind: OWNER_CHAT, tenant: undefined, key: "owner", mode: "owner", offers: () => true }).notion, undefined, "the owner's runs never have her server");
   // without a page to sign in on there is no way to connect: the capability is dropped
   const on = settings as unknown as { intake: { baseUrl: string | undefined } };
   const keep = on.intake.baseUrl;
@@ -504,9 +505,9 @@ test("notion: the capability decides: only a friend with notion (and a page to s
     on.intake.baseUrl = keep;
   }
   // the owner's own rows are the connector's and unchanged
-  assert.equal(classify("mcp__claude_ai_Notion__notion-search", {}, "group", ctxOf(anna).notesDir, set), "deny", "a friend never gets the owner's Notion");
-  assert.equal(classify("mcp__claude_ai_Notion__notion-search", {}, "chat"), "allow", "the owner's read is as it was");
-  assert.equal(classify(P + "notion-search", {}, "chat"), "deny", "and the owner's source has no tool of hers");
+  assert.equal(classify("mcp__claude_ai_Notion__notion-search", {}, FRIEND_CHAT, ctxOf(anna).notesDir, set), "deny", "a friend never gets the owner's Notion");
+  assert.equal(classify("mcp__claude_ai_Notion__notion-search", {}, OWNER_CHAT), "allow", "the owner's read is as it was");
+  assert.equal(classify(P + "notion-search", {}, OWNER_CHAT), "deny", "and the owner's source has no tool of hers");
 });
 
 const opts = { signal: new AbortController().signal } as never;
@@ -516,7 +517,7 @@ function rig(ctx: ReturnType<typeof T.tenantContext>, verdict: "auto" | "ask" = 
   const judged: { description: string; untrustedInput?: boolean }[] = [];
   const approve = async (description: string) => (asked.push(description), { approved: true });
   const judge = (async (i: { description: string; untrustedInput?: boolean }) => (judged.push(i), { decision: verdict, reason: "t" })) as never;
-  const can = makeCanUseTool(approve as never, "group", ctx.notesDir, judge, undefined, tenantTools(ctx), true, { provenance: scopeOf(`tenant:${ctx.id}`).read, conversation: `tenant:${ctx.id}` });
+  const can = makeCanUseTool(approve as never, FRIEND_CHAT, ctx.notesDir, judge, undefined, tenantTools(ctx), true, { provenance: scopeOf(`tenant:${ctx.id}`).read, conversation: `tenant:${ctx.id}` });
   return { asked, judged, run: (tool: string, input: Record<string, unknown>) => can(P + tool, input, opts) as Promise<Out> };
 }
 

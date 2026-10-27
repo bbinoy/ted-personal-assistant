@@ -209,7 +209,7 @@ export function createTasksServer(run: TasksRun) {
     );
   }
   // The one-time import (tasks/import.ts): the OWNER's own chat only. A friend's or a group's list, a background run and an isolated run never get these two (the manifest rows say chat, this says whose).
-  if (!run.unattended && run.key === OWNER_KEY && run.source === "chat") {
+  if (!run.unattended && run.key === OWNER_KEY) {
     const importer = async (fn: (s: Scope) => { line: string; text: string }) => {
       try {
         const r = fn(scope());

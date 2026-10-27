@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // Tasks (src/tasks, src/modules/tasks): the store over a conversation's assistant.db, its history, the strict validation, the tools and what each kind of run may do with them, the permission
 // floor, the /tasks command, the journal lines and the audit rows, one conversation never seeing another's list, and the list going with the conversation when it is forgotten.
@@ -13,7 +14,6 @@ const { itemLine, tasksText } = await import("../src/tasks/render.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { allows, groupCapabilities, groupTools, toolsFor, capabilitiesOf } = await import("../src/policy/capabilities.ts");
-const { unattendedTools } = await import("../src/run/scope.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
 const { commandReply, parseCommand } = await import("../src/conversation/ownercommands.ts");
 const { noteDone } = await import("../src/approvals/journalrender.ts");
@@ -328,24 +328,23 @@ test("tasks: the permission floor: own-data writes in chat are free; a backgroun
   const READ = "mcp__tasks__list_tasks";
   const ADD = "mcp__tasks__add_task";
   for (const tool of [READ, ADD, ...MUTATORS]) {
-    assert.equal(classify(tool, { id: 1 }, "chat"), "allow", `${tool}: no approval for the owner's own list`);
-    assert.equal(classify(tool, { id: 1 }, "group", undefined, groupTools()), "allow", `${tool}: in a group or a friend's chat too`);
+    assert.equal(classify(tool, { id: 1 }, OWNER_CHAT), "allow", `${tool}: no approval for the owner's own list`);
+    assert.equal(classify(tool, { id: 1 }, GROUP_CHAT, undefined, groupTools()), "allow", `${tool}: in a group or a friend's chat too`);
   }
-  assert.equal(classify(ADD, { title: "x" }, "background"), "allow");
-  assert.equal(classify(READ, {}, "background"), "allow");
-  for (const tool of MUTATORS) assert.equal(classify(tool, { id: 1 }, "background"), "deny", `${tool}: a background look cannot change the list`);
-  for (const source of ["handler", "radar", "heartbeat", "dream", "browse"] as const) for (const tool of [READ, ADD, ...MUTATORS]) assert.equal(classify(tool, { id: 1 }, source), "deny", `${source} ${tool}`);
-  // a friend's or a group's own look: its tools are its capability set, less what changes the list
-  const look = unattendedTools(groupTools());
+  assert.equal(classify(ADD, { title: "x" }, OWNER_LOOK), "allow");
+  assert.equal(classify(READ, {}, OWNER_LOOK), "allow");
+  for (const tool of MUTATORS) assert.equal(classify(tool, { id: 1 }, OWNER_LOOK), "deny", `${tool}: an unattended look cannot change the list`);
+  // a friend's or a group's own look: its tools are its capability set for an unattended run, which has no edits of the list
+  const look = groupTools(GROUP_LOOK);
   assert.ok(look.has(ADD) && look.has(READ));
   for (const tool of MUTATORS) {
     assert.equal(look.has(tool), false, tool);
-    assert.equal(classify(tool, { id: 1 }, "group", undefined, look), "deny", `${tool}: denied in a look of a friend or a group`);
+    assert.equal(classify(tool, { id: 1 }, GROUP_LOOK, undefined, look), "deny", `${tool}: denied in a look of a friend or a group`);
   }
-  assert.equal(classify(ADD, { title: "x" }, "group", undefined, look), "allow");
+  assert.equal(classify(ADD, { title: "x" }, GROUP_LOOK, undefined, look), "allow");
   // unknown names under the server are denied for isolated runs and not free
-  assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, "group", undefined, groupTools()), "deny");
-  assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, "chat"), "ask", "a name the manifest does not know is never free");
+  assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, GROUP_CHAT, undefined, groupTools()), "deny");
+  assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, OWNER_CHAT), "ask", "a name the manifest does not know is never free");
 });
 
 test("tasks: the capability: on for the owner, every friend and every group, and a tool only with it", () => {
@@ -363,12 +362,12 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {};
   const toolNames = (o: Parameters<typeof buildOptions>[1]) => Object.keys(((servers(o) as Record<string, { instance?: { _registeredTools: object } }>).tasks?.instance?._registeredTools ?? {}) as object);
-  assert.equal(toolNames({ ...base, source: "chat", memory: { dir: "/tmp/n" } }).length, 8) // (the owner's chat also has the two import tools);
-  assert.equal(toolNames({ ...base, source: "group", memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 6);
-  assert.deepEqual(toolNames({ ...base, source: "background" }).sort(), ["add_task", "list_tasks"], "the owner's look");
-  assert.deepEqual(toolNames({ ...base, source: "group", groupId: "g", tools: groupTools() }).sort(), ["add_task", "list_tasks"], "a group's look has no chat memory");
-  for (const source of ["radar", "handler", "browse"] as const) assert.equal("tasks" in servers({ ...base, source }), false, source);
-  assert.equal("tasks" in servers({ ...base, source: "group" }), false, "an isolated run with no conversation gets no list (not the owner's)");
+  assert.equal(toolNames({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).length, 8) // (the owner's chat also has the two import tools);
+  assert.equal(toolNames({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 6);
+  assert.deepEqual(toolNames({ ...base, kind: OWNER_LOOK }).sort(), ["add_task", "list_tasks"], "the owner's look");
+  assert.deepEqual(toolNames({ ...base, kind: GROUP_LOOK, groupId: "g", tools: groupTools(GROUP_LOOK) }).sort(), ["add_task", "list_tasks"], "a group's look has no chat memory");
+  assert.equal("tasks" in servers({ ...base, kind: BROWSE_RUN }), false);
+  assert.equal("tasks" in servers({ ...base, kind: GROUP_CHAT }), false, "an isolated run with no conversation gets no list (not the owner's)");
 });
 
 test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, grouped; a group has no commands", () => {

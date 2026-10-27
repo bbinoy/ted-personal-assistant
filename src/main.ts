@@ -4,7 +4,7 @@ import { createPipeline, group, owner, tenant, type Pipeline } from "./conversat
 import { createFeedback } from "./conversation/feedback.ts";
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
-import { dropTenantWarm, prepare, runConversation, runHeartbeat } from "./run/agent.ts";
+import { dropTenantWarm, prepare, runConversation, runLook } from "./run/agent.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
 import { approveIn } from "./approvals/permissions.ts";
 import { scopeOf } from "./approvals/turnscope.ts";
@@ -256,7 +256,7 @@ const wakeups = createWakeups({
   groupChats: messenger.capabilities.groups,
   stagger: startupStagger,
   vouch,
-  run: (conv, payer, prompt, extra) => runHeartbeat(conv, payer, prompt, approveIn(conv.key, { background: true }), extra),
+  run: (conv, payer, build, extra) => runLook(conv, payer, build, approveIn(conv.key, { background: true }), extra),
   compact: { due: (conv) => compactDue(conv.convId), run: (conv) => compactConversation(conv, "quiet") },
 });
 

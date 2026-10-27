@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { told } from "./told.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -161,7 +162,7 @@ test("the look: a due reminder makes it run now; its prompt carries the reminder
   const pipeline = { enqueue: <X>(_c: unknown, job: () => Promise<X>) => job(), record: () => {}, busy: () => false, sendWhile: async (_c: unknown, r: () => Promise<unknown>) => r(), runTurn: async (_c: unknown, turn: { run: () => Promise<{ text: string }> }) => (posted.push((await turn.run()).text), { spoke: true }) };
   const hb = createHeartbeatLook({
     pipeline: pipeline as never,
-    run: (async (_c: unknown, _p: unknown, prompt: string) => (prompts.push(prompt), { text: "", structured: { message: "Hey, you wanted a nudge to ring the vet now.", nextCheckMinutes: 30 } })) as never,
+    run: (async (_c: unknown, _p: unknown, build: (s?: string) => { prompt: string }, extra: { facts?: { status: string[]; blocks: string[] } }) => (prompts.push(told(build, extra)), { text: "", structured: { message: "Hey, you wanted a nudge to ring the vet now.", nextCheckMinutes: 30 } })) as never,
     may: () => LOGIN,
     why: () => "x",
     notesChangedAt: () => 0,

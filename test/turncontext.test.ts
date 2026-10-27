@@ -11,7 +11,7 @@ process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "turncontext-"));
 
 const { runConversation } = await import("../src/run/agent.ts");
 const { owner } = await import("../src/conversation/conversation.ts");
-const { runOptionsFor } = await import("../src/run/runoptions.ts");
+const { runFor } = await import("../src/run/runoptions.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 const { recordConnectors } = await import("../src/modules/connectors.ts");
 const { forgetShown, markShown, unseen } = await import("../src/run/turncontext.ts");
@@ -30,10 +30,10 @@ const warm = settings.warm;
 
 test("turn context: the system prompt does not move with notices or the connectors", () => {
   (settings as { warm: boolean }).warm = false;
-  const before = runOptionsFor(conv, inputs).systemPrompt;
+  const before = runFor(conv, "message", inputs).systemPrompt;
   recordMessage("notice", Date.now(), "Meeting prep: call at 11:00", new Date());
   recordConnectors([], [{ name: "claude.ai Notion", status: "failed" }]);
-  assert.equal(runOptionsFor(conv, inputs).systemPrompt, before);
+  assert.equal(runFor(conv, "message", inputs).systemPrompt, before);
   assert.ok(!before.includes("Meeting prep: call at 11:00") && !before.includes("Not connected right now"));
   (settings as { warm: boolean }).warm = warm;
 });

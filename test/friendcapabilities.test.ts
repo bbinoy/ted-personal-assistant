@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FRIEND_CHAT } from "./runkinds.ts";
 
 // What a friend may use is derived, never stored: every capability but the owner's own (tenants.ts OWNER_ONLY), then what is not set up, what the instance switched off and
 // what her tenant.json turned off (capabilities.ts). A new capability therefore reaches every friend by being added to CAPABILITIES, and the owner's own ones never do.
@@ -18,7 +19,7 @@ const T = await import("../src/tenants/tenants.ts");
 const { capabilitiesOf, capabilitiesOfRecord, resolveCapabilities, toolsFor } = await import("../src/policy/capabilities.ts");
 const { allRows } = await import("../src/policy/toolmanifest.ts");
 const { skillsFor } = await import("../src/modules/skills.ts");
-const { runOptionsFor } = await import("../src/run/runoptions.ts");
+const { runFor } = await import("../src/run/runoptions.ts");
 const { tenant } = await import("../src/conversation/conversationmodel.ts");
 
 T.ensureOwner({ number: "+15555550114" });
@@ -45,7 +46,7 @@ test("the owner-only capabilities are never in a friend's set, however the set i
   for (const c of T.OWNER_ONLY) assert.ok(!her(rec.id).has(c), c);
   for (const c of T.OWNER_ONLY) assert.ok(!capabilitiesOfRecord(rec).has(c), c);
   for (const c of T.OWNER_ONLY) assert.ok(!resolveCapabilities(T.CAPABILITIES, { own: {} }).has(c), `${c}: not even when something lists it`);
-  const tools = toolsFor(her(rec.id));
+  const tools = toolsFor(her(rec.id), FRIEND_CHAT);
   for (const row of allRows()) if (ownerOnly.has(row.cap)) assert.ok(!tools.has(row.tool), `${row.tool} (${row.cap}) is not hers`);
   const owner = capabilitiesOf({ kind: "owner" });
   for (const c of T.OWNER_ONLY) assert.ok(owner.has(c), `the owner has ${c}`);
@@ -72,17 +73,17 @@ test("not set up means nothing: no google, mail, calendar, notion or intake capa
   const apiKey = settings.tenantApiKey!;
   try {
     for (const c of gated) assert.ok(her(rec.id).has(c), `${c} is on when set up`);
-    assert.ok(toolsFor(her(rec.id)).has("mcp__google__search_gmail_messages"));
-    assert.match(runOptionsFor(tenant(rec.id), { apiKey }).systemPrompt as string, /Gmail/);
+    assert.ok(toolsFor(her(rec.id), FRIEND_CHAT).has("mcp__google__search_gmail_messages"));
+    assert.match(runFor(tenant(rec.id), "message", { apiKey }).systemPrompt as string, /Gmail/);
 
     g.clientId = undefined; // no OAuth client
     (settings.intake as { baseUrl?: string }).baseUrl = undefined; // and no sign-in page
     const set = her(rec.id);
     for (const c of gated) assert.ok(!set.has(c), `${c} is off when not set up`);
-    const tools = [...toolsFor(set)];
+    const tools = [...toolsFor(set, FRIEND_CHAT)];
     assert.deepEqual(tools.filter((t) => /^mcp__(google|notion|intake)__/.test(t)), [], "no tool, so no connect link either");
     assert.deepEqual(skillsFor(set).filter((s) => /mail|calendar|notion|setup/.test(s)), []);
-    const o = runOptionsFor(tenant(rec.id), { apiKey });
+    const o = runFor(tenant(rec.id), "message", { apiKey });
     assert.doesNotMatch(o.systemPrompt as string, /Gmail|Google|Notion|setup link/i);
     assert.ok(!(o.tools as ReadonlySet<string>).has("mcp__intake__get_setup_link"));
     assert.ok(her(rec.id).has("chat") && her(rec.id).has("browse"), "everything else is still hers");

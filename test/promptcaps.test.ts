@@ -12,9 +12,10 @@ process.env.TENANT_ANTHROPIC_API_KEY = "instance-key-for-prompt-tests";
 const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { capabilitiesOf } = await import("../src/policy/capabilities.ts");
-const { runOptionsFor } = await import("../src/run/runoptions.ts");
+const { runFor } = await import("../src/run/runoptions.ts");
 const { group, tenant } = await import("../src/conversation/conversation.ts");
 const { groupSystem, tenantSystem } = await import("../src/run/persona.ts");
+const { lookerOf } = await import("../src/run/scope.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 on.tenants = true;
@@ -25,7 +26,7 @@ function friend(name: string, config?: object) {
   if (config) writeFileSync(T.tenantContext(rec).configFile, JSON.stringify(config));
   return rec;
 }
-const promptOf = (id: string): string => runOptionsFor(tenant(id), { apiKey: "k" }).systemPrompt as string;
+const promptOf = (id: string): string => runFor(tenant(id), "message", { apiKey: "k" }).systemPrompt as string;
 
 test("a friend whose tenant.json turns browsing off is not told she can browse; the others are, with weather and draw by capability", () => {
   const withBrowse = friend("Ada");
@@ -53,7 +54,7 @@ test("a group's prompt follows its capability set too", () => {
   const less = new Set([...caps].filter((c) => c !== "weather" && c !== "browse" && c !== "draw"));
   const text = groupSystem({ caps: less });
   assert.doesNotMatch(text, /weather tools|use the browse tool|simple picture with the draw tool/);
-  assert.equal(runOptionsFor(group("g-caps"), {}).systemPrompt, groupSystem({ caps }), "the run builds it from the same set");
+  assert.equal(runFor(group("g-caps"), "message", {}).systemPrompt, groupSystem({ caps }), "the run builds it from the same set");
 });
 
 test("the voice rule is a template with the kind of conversation as flags, and only when the run has the voice tool", () => {
@@ -64,10 +65,10 @@ test("the voice rule is a template with the kind of conversation as flags, and o
     const caps = capabilitiesOf({ kind: "group" });
     assert.match(groupSystem({ caps }), /sets your spoken voice for THIS group only \(a member asks you to talk as them, with their voice note or audio file, or one they reply to\); anyone can ask for the normal voice again\./);
     const f = friend("Cy");
-    const hers = tenantSystem({ name: "Cy", caps: capabilitiesOf({ kind: "tenant", tenantId: f.id }) });
+    const hers = tenantSystem({ name: "Cy", caps: capabilitiesOf({ kind: "tenant", tenantId: f.id }), looker: lookerOf({ kind: "tenant", tenantId: f.id }) });
     assert.match(hers, /sets your spoken voice for THIS chat only \(she asks you to talk as someone, with their voice note or audio file, or one they reply to\); she can ask for the normal voice again\./);
     const mute = friend("Di", { voice: false });
-    assert.doesNotMatch(tenantSystem({ name: "Di", caps: capabilitiesOf({ kind: "tenant", tenantId: mute.id }) }), /voice tool/);
+    assert.doesNotMatch(tenantSystem({ name: "Di", caps: capabilitiesOf({ kind: "tenant", tenantId: mute.id }), looker: lookerOf({ kind: "tenant", tenantId: mute.id }) }), /voice tool/);
   } finally {
     tts.provider = was;
   }

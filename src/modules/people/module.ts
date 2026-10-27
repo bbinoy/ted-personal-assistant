@@ -7,6 +7,6 @@ const people = rowsOf("mcp__people__", "people", "chat");
 export const peopleModule: ToolModule = {
   name: "people",
   connection: { kind: "in-process", name: "people", when: (ctx) => !!ctx.memory && !ctx.browsing },
-  rows: people("read", "find_person", { only: ["chat", "group"] }),
+  rows: people("read", "find_person", { attended: true }),
   free: ["read"],
 };

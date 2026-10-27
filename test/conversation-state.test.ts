@@ -2,6 +2,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { failureCount, makeCanUseTool } from "../src/approvals/permissions.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 // The anti-repeat state of permissions.ts ("already done", failed asks) is kept per conversation.
 
@@ -13,7 +14,7 @@ const noJudge = async (): Promise<Verdict> => ({ decision: "ask", reason: "test"
 test("an approved call is 'already done' only in the conversation that approved it; another conversation's identical call is its own", async () => {
   const call = { summary: "Dinner-per-conversation", startTime: "2026-10-20T19:00:00" };
   let asked = 0;
-  const mk = (conversation: string) => makeCanUseTool(async () => (asked++, { approved: true }), "chat", undefined, noJudge, undefined, undefined, false, { conversation });
+  const mk = (conversation: string) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, noJudge, undefined, undefined, false, { conversation });
   const a = mk("conv-a");
   const b = mk("conv-b");
   assert.equal(((await a(CAL, call, opts)) as Out).behavior, "allow");
@@ -28,7 +29,7 @@ test("failed asks are counted per conversation and pruned with time", async () =
   try {
     const call = { summary: "Failing-per-conversation", startTime: "2026-10-21T19:00:00" };
     let asked = 0;
-    const mk = (conversation: string) => makeCanUseTool(async () => (asked++, { approved: false, failure: "no question could be written" }), "chat", undefined, noJudge, undefined, undefined, false, { conversation });
+    const mk = (conversation: string) => makeCanUseTool(async () => (asked++, { approved: false, failure: "no question could be written" }), OWNER_CHAT, undefined, noJudge, undefined, undefined, false, { conversation });
     const a = mk("fail-a");
     for (let i = 0; i < 2; i++) assert.match(((await a(CAL, call, opts)) as Out).message ?? "", /could not be confirmed/);
     assert.match(((await a(CAL, call, opts)) as Out).message ?? "", /failed 2 times, so it is not asked again/);

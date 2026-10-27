@@ -8,6 +8,7 @@ import { NOTES_DIR } from "../memory/notes.ts";
 import { approveIn } from "../approvals/permissions.ts";
 import { buildOptions, consume, underCeiling, type AgentReply, type RunOptions } from "./agentrun.ts";
 import { settings } from "../core/settings.ts";
+import { auditSource } from "../core/runkind.ts";
 import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 
 // --- warm processes for the next message ---
@@ -100,7 +101,7 @@ export async function runWarmOrCold(conv: Who, o: RunOptions, r: Resume, input: 
   slot?.touch(conv.key); // in use: the idle period starts over
   const label = labelOf(conv);
   try {
-    return await underCeiling(o.source, async (c) => {
+    return await underCeiling(o.kind, async (c) => {
       const warm = await slot?.take(conv.key, spareKey(conv.key, o, r))?.catch((e: Error) => console.error(`${label}: warm process unavailable, starting normally:`, e.message));
       // A warm process is stopped through its query: its abort controller was fixed when it started.
       const onWarm = () => {
@@ -112,7 +113,7 @@ export async function runWarmOrCold(conv: Who, o: RunOptions, r: Resume, input: 
     }, undefined, o.sessionConv);
   } catch (e) {
     if ((e instanceof RunTimeout || e instanceof RunStopped) && slot?.holder === conv.key) slot.drop(); // after an abort the conversation gets no spare built meanwhile
-    if (o.sessionConv) forgetUnresumable(o.sessionConv, e, o.source);
+    if (o.sessionConv) forgetUnresumable(o.sessionConv, e, auditSource(o.kind), o.sessionTrack);
     throw e;
   }
 }

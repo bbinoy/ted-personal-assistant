@@ -106,9 +106,9 @@ export const PROMPTS = {
   group: ["weather", "browse", "draw", "categories", "personality", "participation", "routine", "sources", "reactions", "send"],
   tenant: ["browse", "weather", "draw", "google", "her", "personality", "routine", "sources", "reactions", "send", "categories"],
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
-  heartbeatSystem: ["personality", "own", "who", "group"],
+  background: ["who", "Who", "own", "group", "reads", "mail", "experts", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
   expert: ["personality", "own", "who"],
-  heartbeat: ["now", "timeZone", "lastLook", "quietFrom", "quietTo", "dayMinutes", "delegated", "routines", "routineFacts", "who", "Who", "own", "reads", "mail", "experts", "sources", "tasks", "meetings", "group"],
+  heartbeat: ["now", "timeZone", "who", "lastLook", "quietFrom", "quietTo", "due", "sources", "routineFacts"],
   tasks: ["own", "group", "who"],
   gateGroup: ["participation", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;

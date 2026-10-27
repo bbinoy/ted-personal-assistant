@@ -7,6 +7,7 @@ import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 import { settings } from "../src/core/settings.ts";
 import { TurnScope } from "../src/approvals/turnscope.ts";
 import { readAudit } from "../src/core/audit.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 const CREATE = "mcp__claude_ai_Google_Calendar__create_event";
 const DELETE = "mcp__claude_ai_Google_Calendar__delete_event";
@@ -55,10 +56,10 @@ test("a declined create is never auto-approved by the judge: forced ask, audited
   const prov = () => ({ kind: "owner" as const, message: "add coffee tomorrow", earlier: ["Ben reacted 👍"] });
   const approve = async (description: string) => (asked.push(description), { approved: answers.shift()! });
   // the first create is judged ask and the owner says no
-  const canAsk = makeCanUseTool(approve, "chat", undefined, (async () => ({ decision: "ask", reason: "mismatch" })) as never, undefined, undefined, false, { provenance: prov, conversation: conv });
+  const canAsk = makeCanUseTool(approve, OWNER_CHAT, undefined, (async () => ({ decision: "ask", reason: "mismatch" })) as never, undefined, undefined, false, { provenance: prov, conversation: conv });
   assert.equal((await canAsk(CREATE, at10, opts))!.behavior, "deny");
   assert.notEqual(declinedAgo(conv, CREATE, at10), undefined, "the plain no is on record");
-  const canUse = makeCanUseTool(approve, "chat", undefined, judge, undefined, undefined, false, { provenance: prov, conversation: conv });
+  const canUse = makeCanUseTool(approve, OWNER_CHAT, undefined, judge, undefined, undefined, false, { provenance: prov, conversation: conv });
   // 20 seconds later the same chat agent tries again; the judge says auto
   const again = await canUse(CREATE, { ...at9, description: "x" }, opts);
   assert.equal(again!.behavior, "deny", "asked, and declined again");
@@ -77,7 +78,7 @@ test("an approved call clears the decline, a reply (feedback) or silence is no d
   resetDeclined();
   const conv = "owner-clear";
   const out = [{ approved: false, feedback: "make it 9" }, { approved: false, expired: true as const }, { approved: false }, { approved: true }];
-  const canUse = makeCanUseTool(async () => out.shift()!, "chat", undefined, (async () => ({ decision: "ask", reason: "x" })) as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "m" }), conversation: conv });
+  const canUse = makeCanUseTool(async () => out.shift()!, OWNER_CHAT, undefined, (async () => ({ decision: "ask", reason: "x" })) as never, undefined, undefined, false, { provenance: () => ({ kind: "owner", message: "m" }), conversation: conv });
   await canUse(CREATE, at10, opts);
   assert.equal(declinedAgo(conv, CREATE, at10), undefined, "feedback");
   await canUse(CREATE, at10, opts);

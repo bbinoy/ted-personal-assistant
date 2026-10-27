@@ -1,5 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { told } from "./told.ts";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,8 +81,8 @@ function rig(o: { key?: string | undefined; answer?: (c: Conv) => { message?: st
     pipeline: pipeline as never,
     groupChats: true,
     vouch: async () => true,
-    run: async (conv, payer, prompt, extra) => {
-      seen.runs.push({ conv, payer, prompt });
+    run: async (conv, payer, build, extra) => {
+      seen.runs.push({ conv, payer, prompt: told(build, extra) });
       seen.provenance.push(extra.provenance);
       const a = o.answer?.(conv) ?? { message: "Good morning! A reminder from me." };
       if (a === "throw") throw new Error("run crashed");
@@ -193,8 +194,9 @@ test("a tenant's night is the instruction's, not a rule in code: her look runs a
   assert.equal(await r.wakeups.look(tenant(anna.id), night), "silent");
   assert.equal(r.seen.runs.length, 1);
   assert.match(r.seen.runs[0]!.prompt, /\(Pacific\/Auckland\)/, "the clock line is hers");
-  assert.match(r.seen.runs[0]!.prompt, /Quiet hours \(night\) are 22:00-07:00, Anna3's local time/);
-  assert.match(r.seen.runs[0]!.prompt, /do nothing unprompted/, "no mail or calendar: she acts only on a note or a promise");
+  assert.match(r.seen.runs[0]!.prompt, /Quiet hours \(night\) are 22:00-07:00\./);
+  const { runFor } = await import("../src/run/runoptions.ts");
+  assert.match(runFor(tenant(anna.id), "look", { apiKey: KEY }).systemPrompt, /do nothing unprompted/, "no mail or calendar: she acts only on a note or a promise (her prompt says so)");
 });
 
 test("one tenant's failing look or run does not stop the others or the owner", async () => {
@@ -366,13 +368,15 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
 
 test("her prompt says she can act later only when the loops will run for her", async () => {
   const { tenantSystem } = await import("../src/run/persona.ts");
-  const { runOptionsFor } = await import("../src/run/runoptions.ts");
-  assert.match(tenantSystem({ name: "Vi", caps: new Set() }), /You cannot act on your own later/);
-  assert.match(tenantSystem({ name: "Vi", caps: new Set(), timed: true }), /You can act on your own at set times/);
+  const { runFor } = await import("../src/run/runoptions.ts");
+  const { lookerOf } = await import("../src/run/scope.ts");
+  const looker = lookerOf({ kind: "tenant" });
+  assert.match(tenantSystem({ name: "Vi", caps: new Set(), looker }), /You cannot act on your own later/);
+  assert.match(tenantSystem({ name: "Vi", caps: new Set(), timed: true, looker }), /You can act on your own at set times/);
   const timed = person("Xan");
-  assert.match(runOptionsFor(tenant(timed.id), { apiKey: KEY }).systemPrompt as string, /You can act on your own at set times/);
+  assert.match(runFor(tenant(timed.id), "message", { apiKey: KEY }).systemPrompt as string, /You can act on your own at set times/);
   on.wakeups = false; // the instance switched the wake-ups off: the prompt promises nothing
-  assert.match(runOptionsFor(tenant(timed.id), { apiKey: KEY }).systemPrompt as string, /You cannot act on your own later/);
+  assert.match(runFor(tenant(timed.id), "message", { apiKey: KEY }).systemPrompt as string, /You cannot act on your own later/);
   on.wakeups = true;
 });
 

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { FRIEND_CHAT, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT } from "./runkinds.ts";
 
 // Capabilities decide the tools and the skills of every isolated conversation (capabilities.ts, skills.ts): a group has a fixed set, a tenant her
 // record's. The tables below are pinned; adding a capability to a record must change exactly its tools and skills and nothing else.
@@ -10,7 +11,7 @@ const { settings } = await import("../src/core/settings.ts");
 const { CAPABILITIES } = await import("../src/tenants/tenants.ts");
 type Capability = (typeof CAPABILITIES)[number];
 const { groupCapabilities, groupTools, resolveCapabilities, toolsFor } = await import("../src/policy/capabilities.ts");
-const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsFor(resolveCapabilities(ctx.capabilities, { own: ctx.config }));
+const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsFor(resolveCapabilities(ctx.capabilities, { own: ctx.config }), FRIEND_CHAT);
 const { privateSkills, sharedSkills, skillsFor } = await import("../src/modules/skills.ts");
 const PRIVATE_SKILLS = privateSkills();
 const SHARED_SKILLS = sharedSkills();
@@ -31,10 +32,15 @@ const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities })
 const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
-  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__notes__journal", "mcp__notes__read_note", "mcp__notes__write_note", "mcp__voice__voice", ...WEATHER, ...TASKS]);
+  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER, ...TASKS]);
   const shared = [P("research-booking"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(groupTools()), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
+  // its look: the same set, less what needs a person waiting (the notes' file tools, the edits of the list, the memory tools) and plus the look's bookkeeping (the notes tools)
+  assert.deepEqual(
+    sorted(groupTools(GROUP_LOOK)),
+    sorted([...full.filter((t) => !["Edit", "Read", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__memory__undo_dream", "mcp__people__find_person", "mcp__tasks__complete_task", "mcp__tasks__drop_task", "mcp__tasks__snooze_task", "mcp__tasks__update_task"].includes(t)), "mcp__notes__journal", "mcp__notes__read_note", "mcp__notes__write_note"]),
+  );
   // a new friend's record is the same set as a group's
   const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw", "tasks");
   assert.deepEqual(sorted(toolsFor(friend)), full);
@@ -56,7 +62,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     chat: { tools: [], skills: [] },
     browse: { tools: ["Skill", "mcp__browse__browse"], skills: [P("research-booking")] },
     voice: { tools: ["mcp__voice__voice"], skills: [] },
-    heartbeat: { tools: ["mcp__notes__journal", "mcp__notes__read_note", "mcp__notes__write_note"], skills: [] }, // a schedule, and the note tools of its looks
+    heartbeat: { tools: [], skills: [] }, // a schedule: its looks' note tools are the unattended run's (above)
     dream: { tools: ["mcp__memory__undo_dream"], skills: [] },
     wake: { tools: [], skills: [] },
     weather: { tools: ["Skill", ...WEATHER], skills: [P("surf-conditions")] },
@@ -114,7 +120,7 @@ test("capabilities: a feature switched off in .env, or by her own settings, take
     f.draw = was.draw;
     f.browse = false;
     assert.ok(!groupTools().has("mcp__browse__browse") && !skillsFor(groupCapabilities()).includes(P("research-booking")));
-    assert.equal(classify("mcp__browse__browse", {}, "group"), "deny");
+    assert.equal(classify("mcp__browse__browse", {}, GROUP_CHAT), "deny");
     f.browse = was.browse;
     const mine = { config: { browse: false, voice: false }, capabilities: ["chat", "browse", "voice"] as Capability[] };
     assert.deepEqual(sorted(tenantTools(mine)), CHAT, "her own settings only take away");
@@ -151,11 +157,11 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
     ["Bash", {}],
     ["mcp__something__unknown", {}],
   ];
-  const owner = (t: string, i: Record<string, unknown>) => classify(t, i, "chat");
-  const group = (t: string, i: Record<string, unknown>) => classify(t, i, "group", notes);
-  const friend = (t: string, i: Record<string, unknown>) => classify(t, i, "group", notes, tenantTools(tenant("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw")));
-  const bare = (t: string, i: Record<string, unknown>) => classify(t, i, "group", notes, tenantTools(tenant("chat")));
-  const all = (t: string, i: Record<string, unknown>) => classify(t, i, "group", notes, tenantTools(tenant(...CAPABILITIES)));
+  const owner = (t: string, i: Record<string, unknown>) => classify(t, i, OWNER_CHAT);
+  const group = (t: string, i: Record<string, unknown>) => classify(t, i, GROUP_CHAT, notes);
+  const friend = (t: string, i: Record<string, unknown>) => classify(t, i, GROUP_CHAT, notes, tenantTools(tenant("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw")));
+  const bare = (t: string, i: Record<string, unknown>) => classify(t, i, GROUP_CHAT, notes, tenantTools(tenant("chat")));
+  const all = (t: string, i: Record<string, unknown>) => classify(t, i, GROUP_CHAT, notes, tenantTools(tenant(...CAPABILITIES)));
   const row = (who: typeof owner) => probes.map(([t, i]) => who(t, i));
   const A = "allow";
   const D = "deny";
@@ -180,7 +186,7 @@ test("capabilities: no private skill and no tool of the owner's login is ever of
   // the owner's list is the whole plugin; the private skills are only there
   assert.deepEqual(ownerSkills(true).filter((s) => !skillsFor(everything).includes(s)).map((s) => s.slice(s.indexOf(":") + 1)).sort(), PRIVATE_SKILLS.filter((s) => ownerSkills(true).includes(P(s))).sort());
   // the run's own options carry exactly the shared list, whatever a caller passes in the skills of a run it did not build
-  const run = buildOptions(async () => ({ approved: false }), { source: "group", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: "/nonexistent-notes" } }, undefined);
+  const run = buildOptions(async () => ({ approved: false }), { kind: GROUP_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: "/nonexistent-notes" } }, undefined);
   assert.deepEqual(run.skills, skillsFor(groupCapabilities()));
   assert.deepEqual([run.settingSources, run.strictMcpConfig], [[], true]);
   assert.ok(!(run.skills ?? []).some((s) => PRIVATE_SKILLS.some((p) => s.endsWith(`:${p}`))));
@@ -192,6 +198,6 @@ test("capabilities: every manifest row names its capability, and a group never h
   for (const e of MANIFEST.filter((x) => ["mail", "calendar", "notion", "google", "drive", "admin", "profile", "card"].includes(x.cap))) {
     assert.ok(!GROUP_ONLY_CAPS.has(e.cap), e.tool);
     assert.ok(!groupTools().has(e.tool), e.tool);
-    assert.equal(classify(e.tool, {}, "group"), "deny", e.tool);
+    assert.equal(classify(e.tool, {}, GROUP_CHAT), "deny", e.tool);
   }
 });

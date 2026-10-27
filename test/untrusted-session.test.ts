@@ -8,6 +8,7 @@ import { readSession } from "../src/run/sessionstore.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
 import { settings } from "../src/core/settings.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
+import { OWNER_CHAT } from "./runkinds.ts";
 
 // The untrusted-input flag of a chat session: kept in the session record, so a resumed session that holds a hostile mail is still told to the judge.
 
@@ -26,7 +27,7 @@ const turnEnd = async (sessionId: string) => {
   async function* stream() {
     yield { type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.01, result: "ok" } as never;
   }
-  await consume(stream(), { source: "chat", systemPrompt: "x", sessionConv: FILE, maxTurns: 1, maxBudgetUsd: 1 }, 0);
+  await consume(stream(), { kind: OWNER_CHAT, systemPrompt: "x", sessionConv: FILE, maxTurns: 1, maxBudgetUsd: 1 }, 0);
 };
 
 test("the untrusted flag is kept in the session record: set by a read of mail, still on the next turn of that session, kept by a compaction, cleared by a new session", async () => {
@@ -34,7 +35,7 @@ test("the untrusted flag is kept in the session record: set by a read of mail, s
   scopeOf("owner").say("tidy my inbox");
   const turn = (resume: string | undefined) => {
     const j = fake("auto");
-    const can = makeCanUseTool(async () => ({ approved: false }), "chat", undefined, j.fn, undefined, undefined, false, { provenance: scopeOf("owner").read, conversation: `taint-${Math.random()}`, taint: sessionTaint(FILE, resume) });
+    const can = makeCanUseTool(async () => ({ approved: false }), OWNER_CHAT, undefined, j.fn, undefined, undefined, false, { provenance: scopeOf("owner").read, conversation: `taint-${Math.random()}`, taint: sessionTaint(FILE, resume) });
     return { j, can };
   };
   let n = 0;

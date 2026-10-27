@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { sleep } from "./util.ts";
 import { RunTimeout, withCeiling } from "../src/run/ceiling.ts";
 import { runAgent } from "../src/run/agentrun.ts";
-import { heartbeatOptions } from "../src/run/agent.ts";
+import { lookOptions } from "../src/run/agent.ts";
 import { expertSetup } from "../src/run/delegation.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
 import { owner } from "../src/conversation/conversation.ts";
 import { LOGIN } from "../src/tenants/payer.ts";
+import { OWNER_LOOK } from "./runkinds.ts";
 
 // A heartbeat look is a short job (HEARTBEAT_TIMEOUT_MINUTES, 10) and an expert it delegates to gets EXPERT_TIMEOUT_MINUTES (20) in all; the run is aborted at the ceiling.
 
@@ -25,7 +26,7 @@ test("settings: a look is cut at 10 minutes, an expert's look at 20, both overri
 });
 
 test("the heartbeat run's options carry both limits", () => {
-  const o = heartbeatOptions(owner(), LOGIN);
+  const o = lookOptions(owner(), LOGIN);
   assert.deepEqual([o.maxMinutes, o.expertMaxMinutes], [settings.heartbeatTimeoutMinutes, settings.expertTimeoutMinutes]);
 });
 
@@ -53,7 +54,7 @@ test("ceiling: extend() makes the allowance longer, never shorter, also while pa
 test("a look that hangs is aborted at its ceiling (the query is stopped); one that delegates to an expert gets the longer allowance", async () => {
   const was = { ...mutable };
   try {
-    const base = { source: "handler", systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, maxMinutes: 0.001, expertMaxMinutes: 0.01 } as const; // 60 ms, 600 ms
+    const base = { kind: OWNER_LOOK, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, maxMinutes: 0.001, expertMaxMinutes: 0.01 } as const; // 60 ms, 600 ms
     let aborted = false;
     const hung = ((p: any) => (p.options.abortController.signal.addEventListener("abort", () => (aborted = true)), (async function* () { await never(); })())) as any;
     await assert.rejects(runAgent("p", no, base, { query: hung }), (e: Error) => e instanceof RunTimeout);

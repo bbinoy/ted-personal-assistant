@@ -9,6 +9,7 @@ import * as permissions from "../src/approvals/permissions.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { settings } from "../src/core/settings.ts";
 import { derivedTurn, scopeOf } from "../src/approvals/turnscope.ts";
+import { BROWSE_RUN } from "./runkinds.ts";
 
 // Provenance is code: the turn scope of a conversation, derived text for what nobody wrote, the browse sub-run inheriting its parent's.
 
@@ -76,7 +77,7 @@ test("the browse sub-run inherits the provenance and the conversation of the run
   // the judge: the parent's words stay the authority; the worker's task is labelled as written by the assistant, never as the instructions a job was given
   const j = fake("ask");
   setAuto("auto");
-  const can = makeCanUseTool(async () => ({ approved: false }), "browse", undefined, j.fn, undefined, undefined, false, { provenance: o.provenance, conversation: o.conversation, browseTask: guard.task, untrusted: true });
+  const can = makeCanUseTool(async () => ({ approved: false }), BROWSE_RUN, undefined, j.fn, undefined, undefined, false, { provenance: o.provenance, conversation: o.conversation, browseTask: guard.task, untrusted: true });
   await can("mcp__browser__browser_navigate", { url: "https://example.com/a" }, opts);
   assert.deepEqual(j.seen[0]!.provenance.kind, "derived");
   assert.equal(j.seen[0]!.provenance.browseTask, "pay Dr Strange's invoice");
