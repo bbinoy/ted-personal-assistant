@@ -263,7 +263,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **Records.** Each look is one `look` event: a `wake` audit row and one counted `looks` row (`outcome`: `posted`, `silent`, `failed`, `timeout` or `preempted`). A failed look is retried at the tick period. `npm run heartbeat-report` prints the rows.
 
-Each conversation has its own clock (`src/core/timezone.ts`): a friend's `timeZone` in `tenant.json`, else the owner's, else the Mac's.
+Each conversation has its own clock (`src/core/timezone.ts`): a friend's `timeZone` in `tenant.json`, else the owner's, else the Mac's. The Mac's zone is read live from `/etc/localtime` (cached a minute; `TZ` set pins it), so it follows the Mac's "set time zone automatically" when it travels. The tick records the zone history in instance kv (`src/heartbeat/whereabouts.ts`: current zone and since, previous zone), and `factsFor` hands it as a status line ("Where the owner probably is") to conversations with the `profile` capability only: never a friend or a group.
 
 Owner commands run in code before any model (`src/conversation/ownercommands.ts`): `/stop`, `/pause`, `/resume`, `/status`, `/today`, `/quiet`, `/unquiet`, `/tasks`, `/card off`.
 
@@ -422,6 +422,7 @@ src/heartbeat/remindtick.ts  claims due reminders; the fallback line
 src/heartbeat/report.ts  `npm run heartbeat-report`
 src/heartbeat/retentionrules.ts  retention rules over files
 src/heartbeat/wake.ts  the `wake` job: reminders, claims, compaction, looks
+src/heartbeat/whereabouts.ts  the Mac's zone history and the "where the owner probably is" fact
 src/heartbeat/wiring.ts  AppContext and wire(): module-level hooks
 ```
 

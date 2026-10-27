@@ -1,9 +1,37 @@
+import { readlinkSync } from "node:fs";
+
 // A conversation's own clock. The Mac's time zone is the owner's and the default for everybody (a group's included); a friend can have her own (tenant.json "timeZone",
 // set with `npm run tenants -- timezone <id> <zone>`). Everything that says what time or day it is for a conversation (the heartbeat run's clock line and last-look time,
 // the day a note's `expires:` is compared with, the quiet-hours flag in the heartbeat's rows) reads the time here, in that zone, with Intl: no Date getter of the Mac.
-// Pure and without imports, so the low-level files can use it. Without a zone the process's own is used, which is what the getters would have said.
+// Pure apart from one read of the Mac's own zone (below), so the low-level files can use it. Without a zone the Mac's is used.
 
-export const systemZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const intlZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// The zone a /etc/localtime link target names ("/var/db/timezone/zoneinfo/Europe/Zurich" -> "Europe/Zurich"), else undefined. Pure.
+export function zoneFromLink(target: string | undefined): string | undefined {
+  const at = target?.lastIndexOf("zoneinfo/") ?? -1;
+  const zone = at < 0 ? undefined : target!.slice(at + "zoneinfo/".length);
+  return isZone(zone) ? zone : undefined;
+}
+const readLocaltime = (): string | undefined => {
+  try {
+    return readlinkSync("/etc/localtime");
+  } catch {
+    return undefined;
+  }
+};
+
+// The Mac's zone as it is NOW. With TZ set (tests, a pinned server) it is the process's, from Intl. Otherwise the /etc/localtime link names it: macOS "Set time zone automatically using
+// your current location" rewrites it when the Mac travels, while Intl keeps the zone the process started in. Intl is the fallback.
+export const macZone = (read: () => string | undefined = readLocaltime): string => (process.env.TZ ? intlZone() : (zoneFromLink(read()) ?? intlZone()));
+
+// Cached for a minute: the callers are many and the zone changes with a flight, not a second.
+let cached: { zone: string; at: number } | undefined;
+export function systemZone(): string {
+  const t = Date.now();
+  if (!cached || t - cached.at > 60_000 || t < cached.at) cached = { zone: macZone(), at: t };
+  return cached.zone;
+}
 
 // Is this a time zone the runtime knows ("Europe/Lisbon")? Never throws.
 export function isZone(zone: unknown): zone is string {

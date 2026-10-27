@@ -51,6 +51,10 @@ the owner says plainly to drop or remove that item.
 Every deadline is a task; the list ordered by date is the deadline view. After you add,
 change or finish a task in chat, load `ted-personal-assistant:follow-through`.
 
+## Tasks that fit a place or a moment
+
+Whenever you read the calendar, mail or chat, notice links between open tasks and where the person is or will be: the computer's location line where there is one, trips and events on the calendar, what they say. When a task fits (shopping when heading into town, flat errands when back home, things to buy before a trip, something to bring to a meeting), remind once, briefly, at a sensible moment before it matters. No standing section in every brief, no message when nothing fits, and never state a location as certain: it is a likely place, the calendar or the chat may say otherwise.
+
 ## A long overdue pile
 
 When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Offer a clean-up **once**, in your own words and in one or two lines: reschedule, drop or keep, offering to go through them in chat in a few quick rounds. Remember that you offered with a short note (`overdue-cleanup`, with the date; the brief uses `status-overdue-offer.md`, written with Write and an `expires:` 30 days out), and never offer again unless the owner asks or the pile grows well past what it was. When they say yes, go through the oldest first in small batches, each task one line with a suggestion ("drop", "move to Friday", "keep"), act on the answers with `update_task`, `snooze_task` or `drop_task`, and mention the result in one line. Nothing is dropped without their word. An unattended run makes the offer only and changes nothing.

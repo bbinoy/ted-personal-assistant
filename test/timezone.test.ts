@@ -101,3 +101,41 @@ test("a friend's time zone lives in her tenant.json; a group and the owner have 
   writeFileSync(ctx.configFile, JSON.stringify({ timeZone: "Not/AZone" }));
   assert.equal(zoneOf(tenant(rec.id)), Z.systemZone(), "a damaged value falls back to the owner's zone instead of failing the look");
 });
+
+test("the Mac's zone: read from the /etc/localtime link, TZ pins it, the history moves on a change", async () => {
+  assert.equal(Z.zoneFromLink("/var/db/timezone/zoneinfo/Europe/Zurich"), "Europe/Zurich");
+  assert.equal(Z.zoneFromLink("/usr/share/zoneinfo/America/Argentina/Buenos_Aires"), "America/Argentina/Buenos_Aires");
+  assert.equal(Z.zoneFromLink("/var/db/timezone/zoneinfo/Not/AZone"), undefined);
+  assert.equal(Z.zoneFromLink("/somewhere/else"), undefined);
+  assert.equal(Z.zoneFromLink(undefined), undefined);
+  const tz = process.env.TZ;
+  try {
+    assert.equal(Z.macZone(() => "/var/db/timezone/zoneinfo/Asia/Tokyo"), Intl.DateTimeFormat().resolvedOptions().timeZone, "TZ set: the process's zone, the link is not read");
+    delete process.env.TZ;
+    assert.equal(Z.macZone(() => "/var/db/timezone/zoneinfo/Asia/Tokyo"), "Asia/Tokyo");
+    assert.equal(Z.macZone(() => undefined), Intl.DateTimeFormat().resolvedOptions().timeZone, "no link: Intl");
+  } finally {
+    process.env.TZ = tz;
+  }
+  const { noteMacZone, whereaboutsFact } = await import("../src/heartbeat/whereabouts.ts");
+  assert.equal(whereaboutsFact(new Date(), "Europe/Paris", "Sam"), "", "nothing recorded yet");
+  assert.deepEqual(noteMacZone(1000, "Europe/Lisbon"), { zone: "Europe/Lisbon" }, "first record: since unknown");
+  assert.match(whereaboutsFact(new Date(), "Europe/Paris", "Sam"), /Sam probably is: .* in Europe\/Lisbon for as long as it has been watched \(how long is not known\)\./);
+  assert.deepEqual(noteMacZone(2000, "Europe/Lisbon"), { zone: "Europe/Lisbon" }, "same zone: no change");
+  const at = Date.parse("2026-10-31T18:40:00Z");
+  assert.deepEqual(noteMacZone(at, "Asia/Tokyo"), { zone: "Asia/Tokyo", since: at, previous: { zone: "Europe/Lisbon" } });
+  assert.match(whereaboutsFact(new Date(at + 3600_000), "Europe/Paris", "Sam"), /it is in Asia\/Tokyo since Sat 31 Oct 19:40 \(before that Europe\/Lisbon\)\./);
+  const later = at + 86_400_000;
+  assert.deepEqual(noteMacZone(later, "Europe/Lisbon"), { zone: "Europe/Lisbon", since: later, previous: { zone: "Asia/Tokyo", since: at } });
+});
+
+test("the whereabouts fact is only for a conversation with the profile capability", async () => {
+  const F = await import("../src/heartbeat/facts.ts");
+  const { noteMacZone } = await import("../src/heartbeat/whereabouts.ts");
+  noteMacZone(Date.parse("2026-10-31T18:40:00Z"), "Asia/Tokyo");
+  const now = new Date("2026-11-01T10:00:00Z");
+  const has = (c: Parameters<typeof F.factsFor>[0]) => F.factsFor(c, now, "chat").status.some((s) => /probably is/.test(s));
+  assert.ok(has(owner()), "the owner's conversation");
+  assert.ok(!has(group("whereabouts-group")), "not a group");
+  assert.ok(!has(tenant(T.addTenant({ aci: "00000000-0000-4000-8000-0000000000bb", name: "Bo" })!.id)), "not a friend");
+});

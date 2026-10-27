@@ -18,6 +18,8 @@ import { meetingFacts } from "../tasks/meetings.ts";
 import { tasksFacts } from "../tasks/render.ts";
 import { activeItems } from "../tasks/store.ts";
 import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineOfAgent, routineStatus, settleRoutines, type Routine } from "../tasks/routines.ts";
+import { capabilitiesOf } from "../policy/capabilities.ts";
+import { whereaboutsFact } from "./whereabouts.ts";
 import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
 import { afterLook, waitingReminders } from "./remindtick.ts";
 import { afterPrep, waitingMeetings } from "./preptick.ts";
@@ -146,7 +148,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   if (routines?.due && !routines.due.routine.skill) start(routines.due.routine.name);
 
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts, learned ? fence("notes_changed_facts", learned.text) : "" ].filter(Boolean);
-  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.join("; ")}.` : "", failingLooksFact(conv)].filter(Boolean);
+  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.join("; ")}.` : "", failingLooksFact(conv), capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
   let settled = false;
   return {
     blocks,
