@@ -15,8 +15,7 @@ import { onStop, pausing, RunTimeout, withCeiling, type Ceiling } from "./ceilin
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
-import { announceMemoryChanges, noteWritten } from "../memory/memorynotice.ts";
-import { isNotePath, parseNote, STATUS_PREFIX, writeIndex } from "../memory/notes.ts";
+import { isNotePath, noteSavedHint, parseNote, STATUS_PREFIX, writeIndex } from "../memory/notes.ts";
 import { recordLook } from "../memory/learned.ts";
 import { routineNoteReply } from "../modules/tasks/routinelist.ts";
 import { builtinModule } from "../modules/builtin.ts";
@@ -56,8 +55,7 @@ export interface RunOptions {
   sessionTrack?: Track; // which of the conversation's two sessions (sessionstore.ts): its chat's (default) or its looks'
   conversation?: string; // the conversation the run acts for (its key); default the owner's, or the tenant's or group's of this run. Keys the per-conversation anti-repeat state (permissions.ts)
   // The SDK's auto-memory, for every run of a conversation: notes in `dir`, the only place the file tools may write (policy.ts); its MEMORY.md is code's (notes.ts writeIndex).
-  // `notify` announces every change on the phone: the owner's chat only; a group's reply says what was saved.
-  memory?: { dir: string; zone?: string; groupId?: string; notify?: (text: string) => Promise<void> };
+  memory?: { dir: string; zone?: string; groupId?: string };
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
   groupId?: string; // a group's run: its send, its browse approvals and its questions go there
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
@@ -147,7 +145,6 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
         }
       }
     }
-    if (opts.memory?.notify) noteWritten(tool, input);
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
     void noteDone({ conv: conversation, run, source: auditSource(opts.kind), tool, input, response }); // the journal line of an action, with the why the permission layer recorded (core/events.ts)
     opts.onToolSuccess?.(tool, input, response);
@@ -162,7 +159,9 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
             if (input.hook_event_name !== "PostToolUse") return {};
             await afterTool(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, input.tool_response);
             // A routine note was written: the model is told at once how its schedule was read and when it runs, or that it cannot run (tasks/routines.ts).
-            const additionalContext = routineNoteReply(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, opts.memory?.dir, opts.memory?.zone);
+            // A note was saved in a turn someone waits on: the result says to mention it, so even a reply that is only a reaction says what was saved (the persona asks the same).
+            const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
+            const additionalContext = routineNoteReply(input.tool_name, toolInput, opts.memory?.dir, opts.memory?.zone) ?? (opts.kind.attended ? noteSavedHint(input.tool_name, toolInput, opts.memory?.dir) : undefined);
             // The browse run: a page view is read into the result (the server only links its snapshot file), cut to size and remembered
             // by the guard (the refs, the real names of the controls, what was typed) before it is cleaned like any other result.
             let response: unknown = input.tool_response;
@@ -282,7 +281,6 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       if (!message.parent_tool_use_id) lastContext = contextTokens(message.message.usage);
     }
     if (message.type !== "result") continue;
-    if (opts.memory?.notify) announceMemoryChanges(opts.memory.notify, message.subtype === "success" ? message.result : "");
     if (opts.sessionConv) {
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
       const before = readSession(opts.sessionConv, opts.sessionTrack);

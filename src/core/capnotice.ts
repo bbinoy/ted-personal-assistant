@@ -1,4 +1,4 @@
-import { localDay } from "./pause.ts";
+import { dayIn } from "./timezone.ts";
 import { groupConvId } from "./convpaths.ts";
 import { instanceDb } from "./instancedb.ts";
 
@@ -45,7 +45,7 @@ function clearNoticeAtNow(prefix: string): void {
 // A conversation that is forgotten (a removed friend, a group): its keys go. Returns how many. (Every key of a group carries its convId, never its raw id.)
 export function forgetNotices(match: (key: string) => boolean): number {
   const db = instanceDb();
-  const today = localDay(new Date());
+  const today = dayIn(new Date());
   return db.tx(() => {
     let n = 0;
     for (const r of db.all<{ key: string; day: string | null; last_at: number | null }>("SELECT key, day, last_at FROM notices")) {
@@ -57,9 +57,9 @@ export function forgetNotices(match: (key: string) => boolean): number {
     return n;
   });
 }
-export const capNoticeDue = (key: string, now = Date.now()): boolean => quiet(() => instanceDb().get<{ day: string | null }>("SELECT day FROM notices WHERE key = ?", key)?.day !== localDay(new Date(now)), false);
+export const capNoticeDue = (key: string, now = Date.now()): boolean => quiet(() => instanceDb().get<{ day: string | null }>("SELECT day FROM notices WHERE key = ?", key)?.day !== dayIn(new Date(now)), false);
 export function markCapNotice(key: string, now = Date.now()): void {
-  quiet(() => instanceDb().run("INSERT INTO notices (key, day) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET day = excluded.day", key, localDay(new Date(now))), undefined);
+  quiet(() => instanceDb().run("INSERT INTO notices (key, day) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET day = excluded.day", key, dayIn(new Date(now))), undefined);
 }
 // Due now, and marked: for a notice that is delivered by the caller's own return value (a friend's reply).
 export function takeCapNotice(key: string, now = Date.now()): boolean {
@@ -76,7 +76,7 @@ function takeNow(key: string, now: number): boolean {
 
 /** Retention: rows of a past day, or an interval notice older than a day, mean nothing any more (a once-a-day notice is due again anyway). Returns how many went. */
 export function pruneNotices(now = Date.now()): number {
-  return instanceDb().run("DELETE FROM notices WHERE (day IS NULL OR day < ?) AND (last_at IS NULL OR last_at < ?)", localDay(new Date(now)), now - 24 * 3_600_000).changes;
+  return instanceDb().run("DELETE FROM notices WHERE (day IS NULL OR day < ?) AND (last_at IS NULL OR last_at < ?)", dayIn(new Date(now)), now - 24 * 3_600_000).changes;
 }
 
 // ---- the texts (fixed; no name, no word of anybody) ----

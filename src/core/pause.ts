@@ -1,17 +1,6 @@
 import { readText } from "./state.ts";
 import { instancePaths } from "./convpaths.ts";
-import { dayIn } from "./timezone.ts";
-
-// The day as YYYY-MM-DD: the Mac's by default, a conversation's own with its zone (timezone.ts).
-export const localDay = (d: Date, zone?: string) =>
-  zone ? dayIn(d, zone) : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-// Local wall time (MM-DD HH:MM), like the agent's own log.
-export const localTime = (iso: string) => {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-};
+import { dayIn, localTime } from "./timezone.ts";
 
 // One pause switch for everything (heartbeat, triage actions, daily brief).
 // `touch instance/paused` = paused until the file is removed; a date inside (YYYY-MM-DD)
@@ -22,7 +11,7 @@ export function isPaused(now = new Date()): boolean {
   if (until === undefined) return false;
   if (until === "") return true;
   if (until.includes("T")) return !(Date.parse(until) <= now.getTime()); // (a time nobody can read stays paused: fail safe)
-  return localDay(now) < until;
+  return dayIn(now) < until;
 }
 
 // What the pause file says, for "/status": undefined when not paused.

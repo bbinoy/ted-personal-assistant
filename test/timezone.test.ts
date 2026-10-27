@@ -13,7 +13,7 @@ const { clockLine } = await import("../src/core/brief.ts");
 const { lastLookText, lookInstruction, lookPrompt } = await import("../src/heartbeat/look.ts");
 const { lookerOf } = await import("../src/run/scope.ts");
 const { readNotes } = await import("../src/memory/notes.ts");
-const { localDay } = await import("../src/core/pause.ts");
+const { dayIn } = await import("../src/core/timezone.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversationmodel.ts");
 const { zoneOf } = T;
@@ -71,8 +71,8 @@ test("a note's expiry day is the conversation's own day: the status note of 'tod
   writeFileSync(join(dir, "context-trip.md"), "---\nexpires: 2026-10-20\n---\nTrip until today\n");
   assert.deepEqual(readNotes(AT, dir, "America/New_York").map((n) => n.file), ["context-trip.md"], "still the 20th in New York");
   assert.deepEqual(readNotes(AT, dir, "Europe/Lisbon"), [], "already the 21st in Lisbon");
-  assert.equal(localDay(AT, "Europe/Lisbon"), "2026-10-21");
-  assert.equal(localDay(new Date(2026, 0, 5, 0, 0)), "2026-01-05", "no zone: the Mac's day, as before");
+  assert.equal(dayIn(AT, "Europe/Lisbon"), "2026-10-21");
+  assert.equal(dayIn(new Date(2026, 0, 5, 0, 0)), "2026-01-05", "no zone: the Mac's day, as before");
 });
 
 test("a friend's time zone lives in her tenant.json; a group and the owner have the Mac's", () => {

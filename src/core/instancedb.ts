@@ -144,16 +144,10 @@ export function openAtStart(): boolean {
     return false;
   }
 }
-/** Tests: forget a recorded damage. */
-export const clearLedgerDamage = (): void => void (damage = undefined);
 /** The instance database of the current data folder (the path comes from core/convpaths.ts). Throws the damage while the degraded mode is on. */
 export function instanceDb(): Db {
   if (damage) throw damage;
   return openInstanceDbAt(instancePaths().db);
-}
-export function closeInstanceDb(): void {
-  for (const d of dbs.values()) d.close();
-  dbs.clear();
 }
 
 // ---- kv: small single values, JSON ----

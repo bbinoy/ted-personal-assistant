@@ -51,7 +51,7 @@ const withSettings = async (change: Record<string, unknown>, fn: () => Promise<v
   }
 };
 
-const inputsOf = (conv: ReturnType<typeof tenant | typeof group | typeof owner>, apiKey = INSTANCE_KEY) => (conv.kind === "tenant" ? { apiKey } : conv.kind === "group" ? { style: "" } : { notify: async () => {} });
+const inputsOf = (conv: ReturnType<typeof tenant | typeof group | typeof owner>, apiKey = INSTANCE_KEY) => (conv.kind === "tenant" ? { apiKey } : conv.kind === "group" ? { style: "" } : {});
 const prepare = (conv: any, start: any, apiKey?: string) => warmUp(conv, runFor(conv, "message", inputsOf(conv, apiKey)), chatResume(conv.convId), start);
 const turn = (conv: any, log: string[], apiKey?: string) => {
   const o = runFor(conv, "message", inputsOf(conv, apiKey));

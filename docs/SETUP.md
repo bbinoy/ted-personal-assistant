@@ -101,7 +101,7 @@ After the agent is running, send it **"set up"** on Signal. It walks you through
 
 Until something is set up, the parts of the agent that need it skip it and say so (in chat, it offers to set it up; in the daily brief, a one-line "🛠 Setup" note at the end). `npm run doctor` shows what is missing. To change something later, say "set up my calendar" (or tasks, meetings, writing) again, or edit the note in `conversations/owner/notes/`.
 
-The skills are `daily-brief` (the brief's structure), `mailbird` (triage and drafting rules), `calendar`, `notion-tasks`, `meeting-prep`, `mailbird-troubleshooting` and `setup`. To change how a domain is handled, edit the file in `plugin/skills/`. Your own skills in `~/.claude/skills/` are not offered to the agent.
+The skills are `daily-brief` (the brief's structure), `mailbird` (triage and drafting rules), `calendar`, `tasks`, `meeting-prep`, `mailbird-troubleshooting` and `setup`. To change how a domain is handled, edit the file in `plugin/skills/`. Your own skills in `~/.claude/skills/` are not offered to the agent.
 
 **Keep the agent's view of tools in step with the skills.** To save cost and time the model only sees four Notion tools (search, fetch, create-pages, update-page), and the Gmail, Claude Docs and trading connectors are hidden (Google Drive and Google Docs are visible: add `mcp__claude_ai_Google_Drive,mcp__claude_ai_Google_Docs` to `HIDDEN_CONNECTORS` to hide them again). If a skill you write needs another tool, add it to `NOTION_TOOLS` (or `DRIVE_TOOLS` / `DOCS_TOOLS`) or remove the connector from `HIDDEN_CONNECTORS` in `.env`; otherwise that skill silently fails.
 

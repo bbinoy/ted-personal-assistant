@@ -1,14 +1,12 @@
 ---
-name: notion-tasks
-description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. Tasks no longer live in Notion: they live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy. Pairs with `ted-personal-assistant:mailbird` and `ted-personal-assistant:daily-brief`.
+name: tasks
+description: Use for anything about the owner's task list - reviewing it, adding a task or deadline, ticking something off, "what's on my list", syncing it with email activity. They live in the assistant itself (list_tasks, add_task and the other task tools). This skill says how to keep them tidy. Pairs with `ted-personal-assistant:mailbird` and `ted-personal-assistant:daily-brief`.
 ---
 
 # The task list (it lives in the assistant, not in Notion)
 
 The owner's tasks, the promises they made (`i_owe`) and what they wait on from others
-(`owed_to_me`) are items in the assistant's own list. Use the task tools: `list_tasks`
-(read), `add_task`, and in chat `update_task`, `complete_task`, `drop_task`,
-`snooze_task`. **Never write a task to
+(`owed_to_me`) are items in the assistant's own list (the task tools are described in the persona). **Never write a task to
 Notion** (no page edit, no new page, no row for a task): after the
 move the Notion table is an archive nobody updates. If the owner asks to bring tasks
 over from Notion again, read Notion and use `add_task` for each, like any other request.
@@ -31,12 +29,13 @@ the owner says plainly to drop or remove that item.
 
 - **In chat** you may add, edit, finish, drop and snooze items when the owner asks, and
   finish one when concrete evidence says it is done (the owner sent the mail the task
-  said to send). Say what you changed. In doubt, ask.
-- **In an unattended run** (the daily brief, a heartbeat look, the mail handler) you can
-  only `list_tasks` and `add_task`: what you add goes straight onto the list (marked as
-  added by you) and you tell the owner in your message; you cannot finish, change or drop anything. So "this looks done"
-  and "this task is waiting on a reply that has come" are lines in the brief
-  ("looks like 'Foo' may be done - confirm?"), not edits.
+  said to send). Say what you changed.
+- **In an unattended run** (the daily brief, a heartbeat look, the mail handler) you have
+  the same task tools. Your changes are attributed to "assistant (look)", the journal
+  records each one, and every change is undone with `update_task` and `reopen: true`. At
+  most 10 items a day can be added by looks. When evidence is concrete (the reply the task
+  called for was sent, the signed document arrived), tick it off or snooze it and say so
+  in one line; when it is not, leave it alone.
 
 ## Email and meeting sync
 
@@ -54,7 +53,7 @@ change or finish a task in chat, load `ted-personal-assistant:follow-through`.
 
 ## A long overdue pile
 
-When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Offer a clean-up **once**, in your own words and in one or two lines: reschedule, drop or keep, offering to go through them in chat in a few quick rounds. Remember that you offered with a short note (`overdue-cleanup`, with the date; the brief uses `status-overdue-offer.md`, written with Write and an `expires:` 30 days out), and never offer again unless the owner asks or the pile grows well past what it was. When they say yes, go through the oldest first in small batches, each task one line with a suggestion ("drop", "move to Friday", "keep"), act on the answers with `update_task`, `snooze_task` or `drop_task`, and mention the result in one line. Nothing is dropped without their word. An unattended run (the daily brief) can only make the offer: it cannot change tasks.
+When many tasks are long overdue (say ten or more, many of them weeks late: an import from another tool does this), the list is noise and the owner stops reading it. Offer a clean-up **once**, in your own words and in one or two lines: reschedule, drop or keep, offering to go through them in chat in a few quick rounds. Remember that you offered with a short note (`overdue-cleanup`, with the date; the brief uses `status-overdue-offer.md`, written with Write and an `expires:` 30 days out), and never offer again unless the owner asks or the pile grows well past what it was. When they say yes, go through the oldest first in small batches, each task one line with a suggestion ("drop", "move to Friday", "keep"), act on the answers with `update_task`, `snooze_task` or `drop_task`, and mention the result in one line. Nothing is dropped without their word. An unattended run makes the offer only and changes nothing.
 
 ## If the task tools are not there
 

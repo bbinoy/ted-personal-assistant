@@ -1,4 +1,4 @@
-import { localDay } from "../core/pause.ts";
+import { dayIn } from "../core/timezone.ts";
 import type { HeartbeatRow } from "../core/looks.ts";
 
 // `npm run heartbeat-report [days]`: what the heartbeat run did for every conversation, from its rows (the looks table of instance.db): counts and dollars, never words or names.
@@ -15,7 +15,7 @@ export function heartbeatReport(rows: readonly HeartbeatRow[], now: Date, days =
   if (mine.length === 0) return [`No heartbeat looks in the last ${days} day(s).`];
 
   const byDay = new Map<string, HeartbeatRow[]>();
-  for (const r of mine) byDay.set(localDay(new Date(r.at)), [...(byDay.get(localDay(new Date(r.at))) ?? []), r]);
+  for (const r of mine) byDay.set(dayIn(new Date(r.at)), [...(byDay.get(dayIn(new Date(r.at))) ?? []), r]);
   const sum = (rs: readonly HeartbeatRow[], f: (r: HeartbeatRow) => number) => rs.reduce((n, r) => n + f(r), 0);
   const lines = [`Heartbeat run, last ${days} day(s): ${mine.length} look(s) on ${byDay.size} day(s)`, "", "day         looks  msgs  night  failed  tools  archived  cost"];
   for (const [day, rs] of [...byDay].sort(([a], [b]) => (a < b ? -1 : 1))) {

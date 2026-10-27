@@ -8,7 +8,7 @@ import type { FrameProbe, Probe } from "./browsecdp.ts";
 import { expiryText, type CardAccess, type CardInfo } from "./card.ts";
 import { capProblem } from "./payments.ts";
 import { approvalId, CARD_PLACEHOLDER, cartHash, cartLines, expirySplit, findPayableTotal, formatMoney, frameVerdict, HAS_CARD_PLACEHOLDER, isPsp, kindOfFieldName, parseMoney, paymentOutcome, PSP_HOSTS, riskyBoxes, sameMoney, WORDS, type FieldKind, type Money } from "./paymentrules.ts";
-import { localDay } from "../../core/pause.ts";
+import { dayIn } from "../../core/timezone.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, nodeOfPoint, screenshotInput, validPoint } from "./browsevision.ts";
 import { emit } from "../../core/events.ts";
 import { OWNER_KEY } from "../../core/ownerkey.ts";
@@ -488,7 +488,7 @@ export class BrowseGuard {
     const capped = capProblem(total.money.minor, card.caps, card.ledger.spentToday(card.info.currency));
     if (capped) return stop(`The payment is refused by the card caps: ${capped}.`, { cap: true });
     this.pay.asks++;
-    const id = approvalId([localDay(new Date()), target.merchant, target.psp, total.money.minor, total.money.currency, hash, card.info.last4]);
+    const id = approvalId([dayIn(new Date()), target.merchant, target.psp, total.money.minor, total.money.currency, hash, card.info.last4]);
     const prior = card.ledger.rows().filter((r) => r.merchant === target.merchant && r.cartHash === hash && r.id !== id).map((r) => `${r.id} ${r.status}`);
     const description = payDetails({ ...target, money: total.money, card: card.info, id, cart: lines, task: this.task, prior });
     const meta = { id, merchant: target.merchant, pspHost: target.psp.join(","), total: formatMoney(total.money), currency: total.money.currency, last4: card.info.last4, cartHash: hash };

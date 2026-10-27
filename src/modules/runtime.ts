@@ -10,7 +10,6 @@ import { gmailReaders, putBackInInbox } from "./gmail/gmail.ts";
 import { createIntakeServer } from "../intake/intaketools.ts";
 import { Mailbird } from "./mailbird/mailbird.ts";
 import { createMemoryServer } from "./memory/memory-tools.ts";
-import { recordMemoryChange } from "../memory/memorynotice.ts";
 import { viewDraft } from "./mailbird/proposals.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { createSendServer } from "./send/send.ts";
@@ -59,7 +58,7 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   weather: { server: () => createWeatherServer() },
   draw: { server: (ctx) => createDrawServer(ctx.key!) },
   voice: { server: (ctx) => createVoiceServer(ctx.key!) },
-  memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, source: auditSource(ctx.kind), groupId: ctx.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.groupId ? dreamScope({ kind: "group", groupId: ctx.groupId }) : undefined, record: ctx.memory?.notify ? recordMemoryChange : () => {}, offers: ctx.offers }) },
+  memory: { server: (ctx) => createMemoryServer({ notesDir: ctx.memory!.dir, source: auditSource(ctx.kind), groupId: ctx.groupId, tenantLog: ctx.tenant?.logFile, zone: ctx.tenant ? () => zoneOf({ tenantId: ctx.tenant!.id }) : undefined, dream: ctx.tenant ? dreamScope({ kind: "tenant", tenantId: ctx.tenant.id }) : ctx.groupId ? dreamScope({ kind: "group", groupId: ctx.groupId }) : undefined, offers: ctx.offers }) },
   // find_person: this conversation's people notes and, for a friend whose set has Google, her own Contacts through her own session; a group or the owner has notes only (the owner's Google connectors have no contacts tool).
   people: {
     server: (ctx) =>

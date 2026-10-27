@@ -74,8 +74,7 @@ buses. The daily brief also scans recent booking confirmations via
   `+02:00`). Work out each offset for the actual date and place.
 - Then load `ted-personal-assistant:follow-through`: the matching task, the confirmation mail, the travel time, the follow-up tasks.
 - Note each created event in the brief under "Changed by the assistant".
-- Ambiguous booking (no firm time, possible duplicate): do not create -
-  list it as "booking found, no calendar entry - add it?".
+- No firm date or time, or a likely duplicate: do not create. Keep the mail and mention it.
 
 ## Scheduling emails: think a step ahead (in chat, when the owner talks to you)
 

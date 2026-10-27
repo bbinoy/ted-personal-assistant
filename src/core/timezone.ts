@@ -39,7 +39,7 @@ export function clockIn(now: Date, zone: string = systemZone()): Clock {
   return { year: p.year!, month: p.month!, day: p.day!, hour: p.hour!, minute: p.minute!, weekday: new Date(Date.UTC(p.year!, p.month! - 1, p.day!)).getUTCDay() };
 }
 
-const pad = (n: number): string => String(n).padStart(2, "0");
+export const pad = (n: number, width = 2): string => String(n).padStart(width, "0");
 const ymd = (d: { year: number; month: number; day: number }): string => `${d.year}-${pad(d.month)}-${pad(d.day)}`;
 
 export const dayIn = (now: Date, zone?: string): string => ymd(clockIn(now, zone));
@@ -47,6 +47,15 @@ export const timeIn = (now: Date, zone?: string): string => {
   const c = clockIn(now, zone);
   return `${pad(c.hour)}:${pad(c.minute)}`;
 };
+
+// "MM-DD HH:MM" of an ISO time in the zone (default: the process's), like the agent's own log.
+export const localTime = (iso: string, zone?: string): string => {
+  const c = clockIn(new Date(iso), zone);
+  return `${pad(c.month)}-${pad(c.day)} ${pad(c.hour)}:${pad(c.minute)}`;
+};
+
+// A time as part of a file name (2026-10-27T09-00-00-000Z): the stamp of a backup, a set-aside file, a snapshot.
+export const fileStamp = (d: Date = new Date()): string => d.toISOString().replace(/[:.]/g, "-");
 
 // The calendar day `offset` days from now's, in the zone: its weekday and date, by calendar arithmetic (a day is not 24 hours across a clock change).
 export function dayAt(now: Date, offset: number, zone?: string): { weekday: number; date: string } {

@@ -194,19 +194,7 @@ added straight onto the list, and told), and note it in the brief. Don't create 
 While triaging, pull any explicit date-bound ask - payment due, RSVP
 by, sign by, respond by, application deadline - and add it with
 `add_task` (`source_kind` mail, `source_ref` the mail id) as a task with that due date (if no matching
-item exists; unattended it is added and told; see `ted-personal-assistant:notion-tasks`). Every deadline is a task; there is no separate list.
-
-### Automated runs
-
-This skill is run unattended by the agent, in two ways:
-
-- **Heartbeat run, about every 30 min (in the day; the model chooses the next look):** one
-  run looks at the chat, the new mail and the calendar. It archives clear noise, drafts routine
-  replies, and tells the owner on their phone only what is worth interrupting for. Everything
-  that sends, shares or spends still asks the owner.
-- **Daily brief, once per day**, delegated by the heartbeat run at the usual time:
-  the `ted-personal-assistant:daily-brief` skill sweeps what is left, then delivers one brief by
-  email and Signal.
+item exists; unattended it is added and told; see `ted-personal-assistant:tasks`). Every deadline is a task; there is no separate list.
 
 Operate the agent with `npm run doctor` (health), `npm run report` (what it
 did) and `npm run restore <id>` (un-archive). Mailbird must be running with

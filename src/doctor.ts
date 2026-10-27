@@ -13,7 +13,7 @@ import { kvGet, openInstanceDbAt } from "./core/instancedb.ts";
 import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
 import { ownerSkills } from "./modules/skills.ts";
-import { isPaused, localTime, pauseText } from "./core/pause.ts";
+import { isPaused, pauseText } from "./core/pause.ts";
 import { errorLinesSince } from "./core/logwindow.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./modules/browse/browseserver.ts";
 import { killSwitch } from "./modules/browse/card.ts";
@@ -40,7 +40,7 @@ import { readDream } from "./modules/memory/dreamscope.ts";
 import { conversationsDir, convPaths, dataRoot, instancePaths, isConvId, LAYOUT_VERSION, layout, layoutProblem, logPaths, OWNER_CONV } from "./core/convpaths.ts";
 import { readRetentionState, retentionSummary } from "./core/retention.ts";
 import { scheduleLines } from "./modules/tasks/routinelist.ts";
-import { systemZone } from "./core/timezone.ts";
+import { localTime, systemZone } from "./core/timezone.ts";
 import { noCalendarData } from "./tasks/meetings.ts";
 
 type Line = DoctorLine;

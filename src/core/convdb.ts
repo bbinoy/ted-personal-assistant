@@ -660,12 +660,6 @@ export function closeConvDb(conv: ConvRef): void {
   e.db.close();
   open.delete(p.db);
 }
-export function closeConvDbAt(root: string, conv: ConvId): void {
-  const e = open.get(layout(root).conv(conv).db);
-  if (!e) return;
-  e.db.close();
-  open.delete(layout(root).conv(conv).db);
-}
 /** Close the connections nobody has used for `idleMs` (the tick does; a conversation that talks keeps its). Returns how many. A store never holds a Db across calls, so a closed one is simply opened again. */
 export function closeIdleConvDbs(now = Date.now(), idleMs = IDLE_MS): number {
   let n = 0;

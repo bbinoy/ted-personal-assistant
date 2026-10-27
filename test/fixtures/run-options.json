@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "c66457c868a5d70c"
+        "sha": "db22987b551ff845"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -133,7 +133,7 @@
         "ted-personal-assistant:mailbird",
         "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
         "ted-personal-assistant:follow-through",
@@ -146,8 +146,7 @@
       ],
       "memory": {
         "dir": "<data>/conversations/owner/notes",
-        "zone": "Europe/London",
-        "notify": "[fn]"
+        "zone": "Europe/London"
       },
       "experts": [
         "expert",
@@ -164,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "c66457c868a5d70c"
+        "sha": "db22987b551ff845"
       },
       "snapshot": false
     },
@@ -207,7 +206,7 @@
       "ted-personal-assistant:mailbird",
       "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
-      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:follow-through",
@@ -565,7 +564,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "c66457c868a5d70c"
+        "sha": "db22987b551ff845"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -691,7 +690,7 @@
         "ted-personal-assistant:mailbird",
         "ted-personal-assistant:mailbird-troubleshooting",
         "ted-personal-assistant:calendar",
-        "ted-personal-assistant:notion-tasks",
+        "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
         "ted-personal-assistant:follow-through",
@@ -724,7 +723,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "c66457c868a5d70c"
+        "sha": "db22987b551ff845"
       },
       "snapshot": false
     },
@@ -767,7 +766,7 @@
       "ted-personal-assistant:mailbird",
       "ted-personal-assistant:mailbird-troubleshooting",
       "ted-personal-assistant:calendar",
-      "ted-personal-assistant:notion-tasks",
+      "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
       "ted-personal-assistant:follow-through",

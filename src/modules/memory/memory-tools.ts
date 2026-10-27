@@ -33,7 +33,6 @@ interface MemoryScope {
   dream?: Scope; // a group's or a friend's own dream (dreamscope.ts): where its snapshots are; unset: the owner's
   zone?: () => string; // the conversation's time zone (timezone.ts): a friend's own, else the owner's; the clock of the times a search shows
   source: Source; // the run's audit source (core/runkind.ts auditSource)
-  record: (line: string) => void; // a change made through a tool, for the owner's announcement (a group passes a no-op)
   offers?: (tool: string) => boolean; // the tools the run's tool set holds (a look has the reads only); unset: all
 }
 
@@ -56,7 +55,7 @@ const searchShape = (owner: boolean) => ({
 });
 
 export function createMemoryServer(scope: MemoryScope) {
-  const { notesDir, groupId, tenantLog, record, dream: own, zone, offers, source } = scope;
+  const { notesDir, groupId, tenantLog, dream: own, zone, offers, source } = scope;
   return createSdkMcpServer({
     name: "memory",
     version: "3.0.0",
@@ -73,8 +72,7 @@ export function createMemoryServer(scope: MemoryScope) {
           const r = forgetNote(file, notesDir);
           emitRecord("memory_forget", r.ok ? "removed" : "not-removed", source);
           if (!r.ok) return reply(r.error, true);
-          record(`➖ forgot ${file}`);
-          return reply(`Forgot ${file}.`);
+          return reply(`Forgot ${file}. Mention it in your reply, in a few words, even if you only react.`);
         },
       ),
       tool(
@@ -93,7 +91,6 @@ export function createMemoryServer(scope: MemoryScope) {
           }
           const r = undoLatest(target);
           if (!r.ok) return reply(r.error, true);
-          record(`↩️ undid the dream (${r.restored} notes restored)`);
           return reply(`Restored ${r.restored} notes to how they were before the dream.`);
         },
       ),

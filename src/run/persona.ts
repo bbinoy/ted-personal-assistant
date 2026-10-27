@@ -3,7 +3,7 @@ import { allows, capabilitiesOf, groupCapabilities } from "../policy/capabilitie
 import { fence } from "../core/fence.ts";
 import type { Capability } from "../tenants/tenants.ts";
 import { mailSlot } from "../modules/index.ts";
-import { localDay } from "../core/pause.ts";
+import { dayIn } from "../core/timezone.ts";
 import { categoriesFor, PLUGIN, preset, render, type PromptKey, type Value } from "../core/preset.ts";
 import { ASSISTANT, OWNER, settings } from "../core/settings.ts";
 import { convPaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
@@ -76,7 +76,7 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 
 // A date only (no clock), so the chat prompt changes once a day at most. The model needs it
 // to turn "until 24 Oct" into a full date for a temporary fact.
-const todayLine = (now: Date) => `Today is ${DAYS[now.getDay()]} ${localDay(now)} (local time).`;
+const todayLine = (now: Date) => `Today is ${DAYS[now.getDay()]} ${dayIn(now)} (local time).`;
 
 // What is not set up yet. In chat the agent offers to do it; unattended runs cannot ask, so they
 // skip that part and say so.

@@ -1,4 +1,5 @@
 import { prepare as prepareWarm, runConversation } from "../run/agent.ts";
+import { timeIn } from "../core/timezone.ts";
 import { tenant } from "./conversationmodel.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
 import type { Picture } from "../run/image.ts";
@@ -19,7 +20,6 @@ import { notSetUpReply } from "../tenants/tenantroute.ts";
 // TENANT_NOTICE_MINUTES; in between the turn stays silent ([[silent]]).
 
 const SILENT = "[[silent]]";
-const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 
 export interface TenantRunnerDeps {
   apiKey?: () => string | undefined; // the instance key tenants run on (default: settings.tenantApiKey)
@@ -43,7 +43,7 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     const ctx = tenantContext(rec);
     const payer = may(conv, "chat");
     if (isRefusal(payer)) {
-      if (payer.refused === "cooldown") return notice(ctx, "cooldown", `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${hhmm(payer.until!)}.`);
+      if (payer.refused === "cooldown") return notice(ctx, "cooldown", `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${timeIn(new Date(payer.until!))}.`);
       if (payer.refused === "budget") return notice(ctx, "budget", `You've reached your daily limit of ${ctx.dailyBudgetUsd}, so I'm resting until tomorrow.`);
       if (payer.refused === "instance-budget") return { text: takeCapNotice(`friend:${ctx.id}`, now()) ? FRIEND_CAP_TEXT : SILENT }; // all friends' shared day is spent: told once a day (capnotice.ts), the owner too (mayRun)
       if (payer.refused === "no-key") return notice(ctx, "setup", notSetUpReply()); // (the admin heard of it in mayRun)
