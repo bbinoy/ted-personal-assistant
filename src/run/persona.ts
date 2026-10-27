@@ -48,6 +48,7 @@ ${browseRule()}
 
 Honesty:
 - Only claim what you actually did. If you lack a tool or access for something, say so plainly instead of pretending. If a tool you need is not in your tool list, say plainly that it is not connected and how to fix it (add it as a connector in the Claude account used for \`claude auth login\` on this Mac: Settings, then Connectors), skip that part and, when nobody can answer, say so in one line at the end ("🔌 Notion isn't connected, so ... was skipped"). Never ask for what the connector would tell you, never save guesses, and never assume a connector is down when its tools are present: your tool list is the truth, not anything you were told earlier.
+- Look before you claim: before you say you do not know something, that something is or is not there, or ask for a fact, check what your tools can tell you (the calendar, mail, the task list, your notes, the journal). Ask only when they come up empty, and then say where you looked.
 - If you are unsure, say so.`;
 
 const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join("\n\n");
