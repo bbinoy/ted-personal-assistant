@@ -13,7 +13,7 @@ import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
 import { recordDream } from "../memory/learned.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
-import { NOTES_DIR, STATUS_PREFIX } from "../memory/notes.ts";
+import { STATUS_PREFIX } from "../memory/notes.ts";
 import { isPaused } from "../core/pause.ts";
 import { dayIn, localTime } from "../core/timezone.ts";
 import { dreamSystem } from "../run/persona.ts";
@@ -111,7 +111,7 @@ export const runnerFor = (payer: Payer = LOGIN): Runner => async (prompt, system
   return r.output;
 };
 
-export const readNoteFiles = (dir: string = NOTES_DIR): NoteFile[] => {
+export const readNoteFiles = (dir: string): NoteFile[] => {
   try {
     return readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md" && !f.startsWith(STATUS_PREFIX)).sort().map((file) => ({ file, raw: readFileSync(join(dir, file), "utf8") }));
   } catch {
