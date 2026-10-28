@@ -512,8 +512,8 @@ test("options: chat, look and group runs get the entry tool; the browse run gets
   const { browseStatus } = await import("../src/modules/browse/browseserver.ts");
   const deny = async () => ({ approved: false });
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
-  const chat = buildOptions(deny, { ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/notes" } }, undefined);
-  const bg = buildOptions(deny, { ...base, kind: OWNER_LOOK }, undefined);
+  const chat = buildOptions(deny, { ...base, conversation: "owner", kind: OWNER_CHAT, memory: { dir: "/tmp/notes" } }, undefined);
+  const bg = buildOptions(deny, { ...base, conversation: "owner", kind: OWNER_LOOK }, undefined);
   const group = buildOptions(deny, { ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/notes", groupId: "g" } }, undefined);
   for (const o of [chat, bg, group]) assert.ok(Object.keys(o.mcpServers ?? {}).includes("browse") === settings.browse);
   const groupLook = buildOptions(deny, { ...base, kind: GROUP_LOOK, groupId: "g" }, undefined);

@@ -363,9 +363,9 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {};
   const toolNames = (o: Parameters<typeof buildOptions>[1]) => Object.keys(((servers(o) as Record<string, { instance?: { _registeredTools: object } }>).tasks?.instance?._registeredTools ?? {}) as object);
-  assert.equal(toolNames({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).length, 6);
+  assert.equal(toolNames({ ...base, conversation: "owner", kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).length, 6);
   assert.equal(toolNames({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 6);
-  assert.deepEqual(toolNames({ ...base, kind: OWNER_LOOK }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "the owner's look");
+  assert.deepEqual(toolNames({ ...base, conversation: "owner", kind: OWNER_LOOK }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "the owner's look");
   assert.deepEqual(toolNames({ ...base, kind: GROUP_LOOK, groupId: "g", tools: toolsFor(groupCapabilities(), GROUP_LOOK) }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "a group's look has no chat memory");
   assert.equal("tasks" in servers({ ...base, kind: BROWSE_RUN }), false);
   assert.equal("tasks" in servers({ ...base, kind: GROUP_CHAT }), false, "an isolated run with no conversation gets no list (not the owner's)");

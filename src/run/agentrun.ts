@@ -5,8 +5,8 @@ import { emitRecord, endRun } from "../core/events.ts";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { noteDone } from "../approvals/journalrender.ts";
-import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
+import { UNSCOPED_KEY } from "../core/ownerkey.ts";
 import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
 import { BROWSE_SCHEMA, browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard } from "../modules/browse/browseguard.ts";
@@ -52,7 +52,7 @@ export interface RunOptions {
   systemPrompt: string;
   sessionConv?: ConvId; // continue + save the conversation's session here (its assistant.db); the browse worker: none, a fresh run
   freshSession?: boolean; // a run that never resumes or saves its session (a look): sessionConv still names the conversation
-  conversation?: string; // the conversation the run acts for (its key); default the owner's, or the tenant's or group's of this run. Keys the per-conversation anti-repeat state (permissions.ts)
+  conversation?: string; // the conversation the run acts for (its key; runFor always says; else the tenant's or group's of this run, none for a bare isolated run). Keys the per-conversation anti-repeat state (permissions.ts)
   // The SDK's auto-memory, for every run of a conversation: notes in `dir`, the only place the file tools may write (policy.ts); its MEMORY.md is code's (notes.ts writeIndex).
   memory?: { dir: string; zone?: string; groupId?: string };
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
@@ -194,8 +194,8 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const plugin = [{ type: "local" as const, path: settings.pluginDir, skipMcpDiscovery: true }];
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
   const groupId = opts.groupId ?? opts.memory?.groupId;
-  const own = opts.conversation ?? tenant?.key ?? groupId ?? (login ? OWNER_KEY : undefined); // the conversation the run acts for; a run without the login and without one is never handed the owner's
-  const conversation = own ?? OWNER_KEY; // (keys the per-conversation state of permissions.ts)
+  const own = opts.conversation ?? tenant?.key ?? groupId; // the conversation the run acts for: never guessed to be the owner's
+  const conversation = own ?? UNSCOPED_KEY; // (keys the per-conversation state of permissions.ts)
   const tellKey = browsing ? undefined : own; // (the browse worker has none of its own)
   // Whose words the approval judge reads as the provenance of this run's calls: what the code that started it said (a look: its standing task), else the conversation's own turn when
   // someone is waiting (turnscope.ts); the browse worker: its parent's.
@@ -253,7 +253,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? HIDDEN_BROWSER_TOOLS : login ? hiddenTools(toolsSeen()) : undefined, // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && conversation === OWNER_KEY, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && login, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

@@ -77,8 +77,8 @@ test("spend: the owner's day is every login run (her chat, background work and t
 test("spend: yesterday's rows are not today's; the day is the local one at the moment of the charge", () => {
   reset();
   const yesterday = new Date(Date.now() - DAY_MS);
-  B.recordSpend({ usd: 9, now: yesterday });
-  B.recordSpend({ usd: 1 });
+  B.recordSpend({ usd: 9, conv: "owner", now: yesterday });
+  B.recordSpend({ usd: 1, conv: "owner" });
   assert.equal(B.spentToday(), 1);
   assert.equal(B.spentToday(undefined, yesterday), 9);
   assert.equal(B.pruneSpend(1, new Date()), 0, "a day old is inside a 1-day window");

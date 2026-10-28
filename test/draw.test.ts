@@ -113,9 +113,9 @@ test("draw: manifest and policy: free in every run of a conversation that has th
 test("draw: the server exists for the owner's and a group's runs alike, look or chat (its capability), and the skill is offered with DRAW=on", () => {
   const servers = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {});
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
-  assert.ok(servers({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes("draw"));
+  assert.ok(servers({ ...base, conversation: "owner", kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes("draw"));
   assert.ok(servers({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g" } }).includes("draw"));
-  assert.ok(servers({ ...base, kind: OWNER_LOOK }).includes("draw"), "the owner's look has draw, like a group's look");
+  assert.ok(servers({ ...base, conversation: "owner", kind: OWNER_LOOK }).includes("draw"), "the owner's look has draw, like a group's look");
   assert.ok(servers({ ...base, kind: GROUP_LOOK, groupId: "g" }).includes("draw"));
   assert.ok(!servers({ ...base, kind: BROWSE_RUN }).includes("draw"));
   assert.equal(ownerSkills(true).includes("ted-personal-assistant:draw"), settings.draw);

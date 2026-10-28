@@ -221,7 +221,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "people", "send", "weather", "draw", "tasks", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
   assert.equal((o.settings as { autoMemoryDirectory: string }).autoMemoryDirectory, ann.notesDir);
   // the owner's chat is as it was: the process environment, no key injected, and no tenant tools without TENANTS
-  const ownerOpts = { kind: OWNER_CHAT, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { conversation: "owner", kind: OWNER_CHAT, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
   const off = buildOptions(noop, ownerOpts, undefined);
   assert.equal(off.env!.ANTHROPIC_API_KEY, process.env.ANTHROPIC_API_KEY);
   assert.ok(!("tenants" in (off.mcpServers as object)));
@@ -274,7 +274,7 @@ test("the instance key: read into settings, gone from the process environment, i
   assert.equal(settings.tenantApiKey, INSTANCE_KEY);
   assert.equal(process.env.TENANT_ANTHROPIC_API_KEY, undefined, "no child process (Claude Code, MCP servers, the owner's runs) inherits it");
   const noop = async () => ({ approved: false });
-  const ownerOpts = { kind: OWNER_CHAT, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { conversation: "owner", kind: OWNER_CHAT, systemPrompt: "x", sessionConv: OWNER_CONV, memory: { dir: NOTES_DIR }, maxTurns: 3, maxBudgetUsd: 1 };
   const owners = buildOptions(noop, ownerOpts, undefined);
   assert.ok(!JSON.stringify(owners.env).includes(INSTANCE_KEY), "the owner's run never carries it");
   const logged: string[] = [];

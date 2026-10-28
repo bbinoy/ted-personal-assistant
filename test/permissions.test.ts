@@ -33,7 +33,7 @@ test("an approved call is never asked about or done twice", async () => {
 test("a call approved with an edit runs with the edit, and its result tells the run what changed (once)", async () => {
   setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], subject: "Re: hi", body: "Hi Jessica" }) as never);
   const edited = { messageId: 26101, confirm: true, note: "later" };
-  const canUse = makeCanUseTool(async () => ({ approved: true, updatedInput: edited, changes: [{ field: "note", value: "later" }] }), OWNER_CHAT, undefined, noJudge);
+  const canUse = makeCanUseTool(async () => ({ approved: true, updatedInput: edited, changes: [{ field: "note", value: "later" }] }), OWNER_CHAT, undefined, noJudge, undefined, undefined, false, { conversation: OWNER_KEY });
   const res = await canUse(SEND, { messageId: 26101, confirm: true }, { signal: new AbortController().signal } as never);
   assert.equal(res!.behavior, "allow");
   const note = editedNote(OWNER_KEY, SEND, edited);
