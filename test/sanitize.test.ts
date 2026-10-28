@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clean, cleanText, defuseLines, defuseSpeakers, defuseTags, marker, oneLine } from "../src/core/sanitize.ts";
+import { LIMITS, clean, cleanText, defuseLines, defuseSpeakers, defuseTags, marker, oneLine } from "../src/core/sanitize.ts";
 import { fence } from "../src/core/fence.ts";
 import { htmlToText, looksLikeHtml } from "../src/core/html.ts";
-import { mailBody } from "../src/core/mailtext.ts";
 import { cleanToolOutput } from "../src/core/toolclean.ts";
 import { cleanIncoming } from "../src/conversation/conversation.ts";
 
@@ -204,6 +203,7 @@ test("incoming messages: text, caption, name and quote are cleaned at the door; 
 
 // ---- HTML ----
 
+const mailBody = (raw: string) => quiet(() => (looksLikeHtml(raw) ? clean("mail body", htmlToText(raw).text, { max: LIMITS.body }) : clean("mail body", raw, { max: LIMITS.body })));
 const text = (html: string) => quiet(() => htmlToText(html).text);
 
 test("html: comments, script, style, head, template and noscript are dropped", () => {
