@@ -23,7 +23,7 @@ import { createsOf } from "../policy/toolmanifest.ts";
 import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
 import { serversFor } from "../modules/runtime.ts";
 import type { RunContext } from "../modules/types.ts";
-import { approveIn, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
+import { approveIn, editedNote, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { browseTools, runCapabilities, toolsFor } from "../policy/capabilities.ts";
@@ -160,7 +160,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
             // A routine note was written: the model is told at once how its schedule was read and when it runs, or that it cannot run (tasks/routines.ts).
             // A note was saved in a turn someone waits on: the result says to mention it, so even a reply that is only a reaction says what was saved (the persona asks the same).
             const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
-            const additionalContext = routineNoteReply(input.tool_name, toolInput, opts.memory?.dir, opts.memory?.zone) ?? (opts.kind.attended ? noteSavedHint(input.tool_name, toolInput, opts.memory?.dir) : undefined);
+            const additionalContext = editedNote(conversation, input.tool_name, toolInput) ?? routineNoteReply(input.tool_name, toolInput, opts.memory?.dir, opts.memory?.zone) ?? (opts.kind.attended ? noteSavedHint(input.tool_name, toolInput, opts.memory?.dir) : undefined);
             // The browse run: a page view is read into the result (the server only links its snapshot file), cut to size and remembered
             // by the guard (the refs, the real names of the controls, what was typed) before it is cleaned like any other result.
             let response: unknown = input.tool_response;

@@ -272,7 +272,7 @@ test("private chat: an approval answer is handled before the queue and never rea
   assert.deepEqual(r.reacts.map((x) => x.emoji), ["👍"]);
   const modified = rig({ approval: { outcome: "modified", changes: [{ field: "start", value: "15:00" }] } });
   await modified.pipeline.handleIncoming(owner(), msg({ text: "make it 3" }));
-  assert.deepEqual(modified.r.sent.map((s) => s.text), ["Applied your change: start → 15:00"]);
+  assert.deepEqual(modified.r.sent.map((s) => s.text), []); // the run says what changed (permissions.ts editedNote), code writes no text
 });
 
 test("private chat: a clarifying reply is sent and consumes the message; the reply parts of a multi-answer are sent too", async () => {

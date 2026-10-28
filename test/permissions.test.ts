@@ -5,8 +5,9 @@ import { readAudit } from "../src/core/audit.ts";
 import { standing } from "./util.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
-import { callKey, doneCount, makeCanUseTool } from "../src/approvals/permissions.ts";
+import { callKey, doneCount, editedNote, makeCanUseTool } from "../src/approvals/permissions.ts";
 import { CHAT } from "./util.ts";
+import { OWNER_KEY } from "../src/core/ownerkey.ts";
 import { kindOf, OWNER_CHAT } from "./runkinds.ts";
 
 const SEND = "mcp__mailbird__send_message_now";
@@ -27,6 +28,17 @@ test("an approved call is never asked about or done twice", async () => {
   // another draft is a different send
   assert.equal((await canUse(SEND, { messageId: 26002, confirm: true }, opts))!.behavior, "allow");
   assert.equal(asked, 2);
+});
+
+test("a call approved with an edit runs with the edit, and its result tells the run what changed (once)", async () => {
+  setDraftReader(async () => ({ to: ["jessica@example.com"], cc: [], subject: "Re: hi", body: "Hi Jessica" }) as never);
+  const edited = { messageId: 26101, confirm: true, note: "later" };
+  const canUse = makeCanUseTool(async () => ({ approved: true, updatedInput: edited, changes: [{ field: "note", value: "later" }] }), OWNER_CHAT, undefined, noJudge);
+  const res = await canUse(SEND, { messageId: 26101, confirm: true }, { signal: new AbortController().signal } as never);
+  assert.equal(res!.behavior, "allow");
+  const note = editedNote(OWNER_KEY, SEND, edited);
+  assert.match(note!, /note = later/);
+  assert.equal(editedNote(OWNER_KEY, SEND, edited), undefined);
 });
 
 test("a declined send can be asked again", async () => {

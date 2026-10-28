@@ -121,6 +121,7 @@ test("a modification inside the allow-list is applied; one outside it (recipient
   const r = await answer("yes but make it 16:00", () => {}, undefined, judging({ target: "A1", outcome: "approve_modified", changes: [{ field: "startTime", value: "2026-10-20T16:00:00" }, { field: "endTime", value: "2026-10-20T17:00:00" }] }));
   assert.equal(r.outcome, "modified");
   assert.equal((a.d.updatedInput as any).startTime, "2026-10-20T16:00:00");
+  assert.deepEqual(a.d.changes.map((c: { field: string }) => c.field), ["startTime", "endTime"]); // (the run is told what changed: permissions.ts editedNote)
   const m = ask("Send mail", mail);
   await settle();
   // a mail is not modifiable at all, and a protected field is refused even on a calendar event: not approved, the words go to the agent
