@@ -102,15 +102,15 @@ export const PROMPTS = {
   chat: ["mail", "personality", "sources", "reactions", "send", "shared", "channel", "mailNote", "logsDir", "ownerDir", "routine"],
   voice: ["own", "group"],
   summary: [],
-  shared: ["whose", "asker", "categories", "own"],
+  shared: ["whose", "asker", "categories", "own", "reads"],
   others: ["group", "who", "weather", "browse", "draw", "google", "personality", "participation", "routine", "sources", "reactions", "send", "shared"],
   dream: ["subject", "own", "group", "categories", "peopleGuide"],
   background: ["who", "Who", "own", "group", "reads", "mail", "sources", "tasks", "meetings", "delegated", "routines", "dayMinutes"],
   delegate: ["who", "delegated"],
-  learn: ["who"],
+  learn: ["who", "mail"],
   expert: ["personality", "own", "who"],
   heartbeat: ["now", "timeZone", "who", "lastLook", "quietFrom", "quietTo", "due", "sources", "routineFacts", "mail"],
-  tasks: ["own", "group", "who"],
+  tasks: ["own", "group", "who", "reads"],
   gateGroup: ["participation", "unprompted"],
 } as const satisfies Record<string, readonly string[]>;
 export type PromptKey = keyof typeof PROMPTS;
