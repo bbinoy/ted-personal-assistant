@@ -26,14 +26,14 @@ const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude
 const P = (s: string) => `ted-personal-assistant:${s}`;
 const WEATHER = ["get_distance", "get_forecast", "get_marine_forecast", "get_spot_info", "search_places"].map((t) => `mcp__weather__${t}`);
 const TASKS = ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"].map((t) => `mcp__tasks__${t}`);
-const CHAT = ["Edit", "Read", "WebFetch", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__people__find_person", "mcp__send__send"];
+const CHAT = ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__people__find_person", "mcp__send__send"];
 const sorted = (s: Iterable<string>) => [...s].sort();
 const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities });
 const caps = (...c: Capability[]) => resolveCapabilities(c);
 
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
-  const full = sorted([...CHAT, "Skill", "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER, ...TASKS]);
-  const shared = [P("research-booking"), P("surf-conditions"), P("draw")];
+  const full = sorted([...CHAT, "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER, ...TASKS]);
+  const shared = [P("research-booking"), P("web-research"), P("surf-conditions"), P("draw")];
   assert.deepEqual(sorted(groupTools()), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
   // its look: the same set (the notes, memory and list tools are every run's)
@@ -42,28 +42,28 @@ test("capabilities: what a group, a friend and a person with less have, pinned (
   const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw", "tasks");
   assert.deepEqual(sorted(toolsFor(friend)), full);
   assert.deepEqual(skillsFor(friend), shared);
-  // chat alone: the basics, no skill and so no Skill tool
+  // chat alone: the basics and the web-research skill (so the Skill tool)
   assert.deepEqual(sorted(toolsFor(caps("chat"))), CHAT);
-  assert.deepEqual(skillsFor(caps("chat")), []);
+  assert.deepEqual(skillsFor(caps("chat")), [P("web-research")]);
   // no chat: no tools at all, whatever else she has (the basics are the capability chat)
   assert.deepEqual(sorted(toolsFor(caps("weather", "draw"))), sorted([...WEATHER, "mcp__draw__draw"]));
   assert.deepEqual(sorted(toolsFor(caps())), []);
   // weather without draw and browse
-  assert.deepEqual(sorted(toolsFor(caps("chat", "weather"))), sorted([...CHAT, "Skill", ...WEATHER]));
-  assert.deepEqual(skillsFor(caps("chat", "weather")), [P("surf-conditions")]);
+  assert.deepEqual(sorted(toolsFor(caps("chat", "weather"))), sorted([...CHAT, ...WEATHER]));
+  assert.deepEqual(skillsFor(caps("chat", "weather")), [P("web-research"), P("surf-conditions")]);
 });
 
 test("capabilities: adding one capability to a record changes exactly its tools and its skills", () => {
   const base = caps("chat");
   const adds: Record<Capability, { tools: string[]; skills: string[] }> = {
-    chat: { tools: [], skills: [] },
-    browse: { tools: ["Skill", "mcp__browse__browse"], skills: [P("research-booking")] },
+    chat: { tools: [], skills: [] }, // (its web-research skill and the Skill tool are the base of every record)
+    browse: { tools: ["mcp__browse__browse"], skills: [P("research-booking")] },
     voice: { tools: ["mcp__voice__voice"], skills: [] },
     heartbeat: { tools: [], skills: [] }, // a schedule: its looks' note tools are the unattended run's (above)
     dream: { tools: ["mcp__memory__undo_dream"], skills: [] },
     wake: { tools: [], skills: [] },
-    weather: { tools: ["Skill", ...WEATHER], skills: [P("surf-conditions")] },
-    draw: { tools: ["Skill", "mcp__draw__draw"], skills: [P("draw")] },
+    weather: { tools: WEATHER, skills: [P("surf-conditions")] },
+    draw: { tools: ["mcp__draw__draw"], skills: [P("draw")] },
     tasks: { tools: TASKS, skills: [] }, // the conversation's own list: on for the owner, every friend and every group
     notes: { tools: [], skills: [] },
     intake: { tools: [], skills: [] }, // its tools also need INTAKE_BASE_URL and a purpose (below)
@@ -83,7 +83,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     const withIt = caps("chat", c);
     assert.deepEqual(sorted(toolsFor(withIt)).filter((t) => !toolsFor(base).has(t)), sorted(adds[c].tools), `${c}: tools`);
     assert.deepEqual(sorted(toolsFor(base)).filter((t) => !toolsFor(withIt).has(t)), [], `${c}: takes nothing away`);
-    assert.deepEqual(skillsFor(withIt), adds[c].skills, `${c}: skills`);
+    assert.deepEqual(skillsFor(withIt).filter((k) => k !== P("web-research")), adds[c].skills, `${c}: skills`);
   }
   // everything at once is still only the sum of the free ones
   assert.deepEqual(sorted(toolsFor(caps(...CAPABILITIES))), sorted(groupTools()));
@@ -167,7 +167,7 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
   const g = [A, "ask", A, A, A, A, A, A, A, A, D, "ask", D, D, D, D, D, D, D, D, D, D, D, D]; // (browse is judged in a group like in the owner's chat, with the member's words as provenance)
   assert.deepEqual(row(group), g, "group");
   assert.deepEqual(row(friend), g, "friend (the default record)");
-  assert.deepEqual(row(bare), [A, "ask", D, A, A, D, A, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D], "chat only");
+  assert.deepEqual(row(bare), [A, "ask", A, A, A, D, A, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D], "chat only");
   assert.deepEqual(row(all), g, "every capability at once is still a group's set, not the owner's");
 });
 

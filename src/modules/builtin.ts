@@ -7,6 +7,7 @@ const builtin = rowsOf("", "builtin", "chat");
 export const builtinModule: ToolModule = {
   name: "builtin",
   connection: { kind: "builtin" },
+  skills: [{ name: "web-research", shared: ["chat"] }], // every conversation that has WebSearch (the web-search row's capability)
   rows: [
     ...builtin("skill", "Skill"), // which skills load is limited by the SDK's skills allowlist (agent.ts, skills.ts); a group or tenant has the tool only with a shared skill to load
     // The file tools are every run's way into its notes (the SDK's auto-memory): the owner's anywhere in her notes (and, to read, her data folders), an isolated conversation's inside its own notes folder only;
