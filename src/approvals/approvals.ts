@@ -38,6 +38,7 @@ export interface Decision {
   approved: boolean;
   feedback?: string;
   updatedInput?: Record<string, unknown>; // set when approved with an accepted edit
+  changes?: Change[]; // with updatedInput: what the person changed (field and new value), for the run to say (permissions.ts editedNote)
   question?: string; // set by makeApprove (approvalask.ts): the question exactly as the owner was shown it and answered
   expired?: true; // set by request() when nobody answered in time (not a no): a caller that keeps the matter open can tell the two apart
   superseded?: true; // a newer question about the same action was asked while this one was open: this one is closed, nothing was approved
@@ -254,7 +255,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
     const patched = applyChanges(call.tool, call.input, j.changes ?? []);
     if (patched) {
       record("modified", current);
-      current.resolve({ approved: true, updatedInput: patched });
+      current.resolve({ approved: true, updatedInput: patched, changes: j.changes });
       return { outcome: "modified", changes: j.changes };
     }
     supersede(current); // a change code does not allow (a recipient): not approved, the agent gets the words and re-proposes

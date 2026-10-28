@@ -184,13 +184,13 @@ test("oneShot: other failures are not ok, not thrown; a hung call times out and 
 });
 
 test("notices: one table by what went wrong and who reads it; a friend is told about the account the instance runs on, not about her own key", () => {
-  const friendTexts = [new RateLimitError("x"), new InstanceKeyError("limit"), new InstanceKeyError("billing"), new InstanceKeyError("refused"), new Error("x")].map(noticeFor("friend"));
-  for (const t of friendTexts) assert.doesNotMatch(t, /your (Anthropic|API)|your own/i);
-  assert.match(noticeFor("friend")(new InstanceKeyError("billing")), /no credit left/);
-  assert.match(noticeFor("owner")(new AuthError("x")), /claude auth login/);
-  assert.match(noticeFor("group")(new AuthError("x")), /needs to fix it/);
-  assert.match(noticeFor("owner")(new Error("x")), /Check the logs/);
-  assert.doesNotMatch(noticeFor("friend")(new Error("x")), /logs/);
+  const friendTexts = [new RateLimitError("x"), new InstanceKeyError("limit"), new InstanceKeyError("billing"), new InstanceKeyError("refused")].map(noticeFor("friend"));
+  for (const t of friendTexts) assert.doesNotMatch(t!, /your (Anthropic|API)|your own/i);
+  assert.match(noticeFor("friend")(new InstanceKeyError("billing"))!, /no credit left/);
+  assert.match(noticeFor("owner")(new AuthError("x"))!, /claude auth login/);
+  assert.match(noticeFor("group")(new AuthError("x"))!, /needs to fix it/);
+  assert.match(noticeFor("owner")(new Error("x"))!, /Check the logs/);
+  assert.equal(noticeFor("friend")(new Error("x")), undefined, "a run that merely failed: no fixed text for a friend");
 });
 
 test("approval context: a friend's prompt reads her own log, a group none, and nobody reads another's", () => {

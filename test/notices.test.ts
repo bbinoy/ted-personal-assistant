@@ -153,11 +153,13 @@ test("causeOf and the owner's failure messages: login, limit, timeout, connector
   assert.equal(causeOf(new Error("MCP server notion failed to connect")), "connector");
   assert.equal(causeOf(new Error("fetch failed")), "connector");
   assert.equal(causeOf(new Error("agent turn ended with error_during_execution")), "other");
-  assert.match(noticeFor("owner")(new RunTimeout(60_000)), /too long.*RUN_MAX_MINUTES_CHAT/);
-  assert.match(noticeFor("owner")(new Error("mcp connector down")), /npm run doctor/);
-  assert.match(noticeFor("owner")(new Error("x")), /Check the logs/);
-  assert.doesNotMatch(noticeFor("friend")(new RunTimeout(60_000)), /\.env|doctor/, "a friend is sent to no terminal");
-  assert.doesNotMatch(noticeFor("group")(new Error("mcp connector down")), /doctor|\.env/);
+  assert.match(noticeFor("owner")(new RunTimeout(60_000))!, /too long.*RUN_MAX_MINUTES_CHAT/);
+  assert.match(noticeFor("owner")(new Error("mcp connector down"))!, /npm run doctor/);
+  assert.match(noticeFor("owner")(new Error("x"))!, /Check the logs/);
+  // a run that merely failed is no fixed text for a friend or a group (the warning reaction and the log say it; the model speaks, code does not)
+  assert.equal(noticeFor("friend")(new RunTimeout(60_000)), undefined);
+  assert.equal(noticeFor("group")(new Error("mcp connector down")), undefined);
+  assert.equal(noticeFor("friend")(new Error("x")), undefined);
 });
 
 test("the budget notice: once a day, in the owner's chat, naming the limit and the setting", () => {
@@ -196,8 +198,8 @@ test("a group and a friend are refused from the one table and throttled the same
     assert.notEqual(refusalOnce(reason, audience, `${id}-other`, {}, DAY.getTime()), undefined, `${audience}: another has its own`);
     assert.notEqual(refusalOnce(reason, audience, id, {}, MORNING.getTime()), undefined, `${audience}: the next day`);
   }
-  assert.doesNotMatch(refusal("owner-budget", "group"), /DAILY_BUDGET|\.env|npm/, "nobody in a group is sent to a terminal");
-  assert.doesNotMatch(refusal("shared-budget", "friend"), /INSTANCE_KEY|\.env|npm/);
+  assert.doesNotMatch(refusal("owner-budget", "group")!, /DAILY_BUDGET|\.env|npm/, "nobody in a group is sent to a terminal");
+  assert.doesNotMatch(refusal("shared-budget", "friend")!, /INSTANCE_KEY|\.env|npm/);
 });
 
 test("the doctor's error window: dates are rebuilt from the file's time, so yesterday's errors do not count", () => {

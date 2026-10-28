@@ -87,6 +87,14 @@ const failed = (key: string) => {
   for (const [k, f] of failures) if (now - f.at >= DONE_WINDOW_MS) failures.delete(k);
   failures.set(key, { n: (failures.get(key)?.n ?? 0) + 1, at: now });
 };
+// A call the person approved WITH an edit: what changed, kept until the call's result is handed to the run (editedNote), so the run says it in its own words. Code never writes that chat text.
+const edited = new Map<string, string>();
+export const editedNote = (conversation: string, tool: string, input: Record<string, unknown>): string | undefined => {
+  const k = scoped(conversation, callKey(tool, input));
+  const what = edited.get(k);
+  edited.delete(k);
+  return what && `${OWNER} approved this call with a change, so it ran with these values: ${what}. They were not told this yet; say it in your reply, in a few words.`;
+};
 // Only for actions that change something: opening a page again is harmless, and refusing it would just get in the way.
 export const doneCount = () => done.size; // tests
 export const failureCount = () => failures.size; // tests
@@ -359,6 +367,10 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     if (d.approved && g?.payment && g.resolve) {
       const f = await final(); // the card is opened only now, after the owner's typed yes
       return "deny" in f ? { behavior: "deny", message: f.deny } : { behavior: "allow", updatedInput: f.input };
+    }
+    if (d.approved && d.updatedInput && d.changes?.length && !g?.input && !g?.redacted) {
+      if (edited.size > 50) edited.delete(edited.keys().next().value!);
+      edited.set(scoped(conversation, callKey(tool, d.updatedInput)), d.changes.map((c) => `${c.field} = ${c.value}`).join(", "));
     }
     if (d.approved) return { behavior: "allow", updatedInput: g?.input ?? (g?.redacted ? input : (d.updatedInput ?? input)) }; // g.input: the call as code must run it (a saved detail typed by code), never the owner's edit
     return {

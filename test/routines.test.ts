@@ -137,7 +137,7 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   assert.equal(f1.text, "", "the first sight starts the record: nothing is owed for a slot already gone");
   assert.ok(S.readRecord(conv, "evening-wrap"));
   const T2 = z("2026-10-23T16:31:00Z"); // Friday: the evening wrap's slot and the weekly's (14:30Z) are both behind it; the brief's (05:30Z) is 11 h gone
-  assert.match(S.routineFacts(conv, all, T2, BERLIN, opts).text, /daily-brief: did not run on 2026-10-23 \(the Mac was asleep past its time\)/, "the brief is past its window: skipped, told once");
+  assert.match(S.routineFacts(conv, all, T2, BERLIN, opts).text, /daily-brief did not run on 2026-10-23 \(the Mac was asleep past its time\) and will not be redone/, "the brief is past its window: skipped, and one line rides along with the routine that is due now");
   const f2c = S.routineFacts(conv, [evening, weekly], T2, BERLIN, { ...opts, approvals: 2 });
   assert.equal(f2c.due?.routine.name, "evening-wrap", "routines are in order; the weekly (2 h late) waits for the next look");
   assert.match(f2c.text, /evening-wrap: due now \(every weekday at 18:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"/);
@@ -165,9 +165,14 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
 
   const asleep = z("2026-10-25T14:00:00Z"); // Sunday afternoon: the weekly (failed once) is past its window
   const f4 = S.routineFacts(conv, [weekly], asleep, BERLIN, opts);
-  assert.match(f4.text, /weekly-review: did not run on 2026-10-23 \(the Mac was asleep past its time\); it will not be redone\. Tell Ben in one line/);
-  S.markTold(conv, f4.told);
-  assert.equal(S.routineFacts(conv, [weekly], new Date(asleep.getTime() + 60_000), BERLIN, opts).text, "", "told once, then quiet");
+  assert.equal(f4.text, "", "nothing is due: a missed routine is no message of its own (the status and the doctor show it)");
+  assert.deepEqual(f4.told, []);
+  const monday = z("2026-10-26T17:45:00Z"); // the evening wrap is due: the missed weekly review rides along as one line, once
+  const f5 = S.routineFacts(conv, [weekly, evening], monday, BERLIN, opts);
+  assert.match(f5.text, /Missed, nothing for Ben to do: weekly-review did not run on 2026-10-23 \(the Mac was asleep past its time\) and will not be redone\. Put it as one short line in the message the expert writes now, if that message is a brief/);
+  assert.deepEqual(f5.told, ["weekly-review"]);
+  S.markTold(conv, f5.told);
+  assert.doesNotMatch(S.routineFacts(conv, [weekly, evening], new Date(monday.getTime() + 60_000), BERLIN, opts).text, /Missed/, "told once, then quiet");
   assert.equal(S.readRecord(conv, "weekly-review")!.status, "skipped");
 });
 

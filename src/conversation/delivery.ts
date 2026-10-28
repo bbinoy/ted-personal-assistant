@@ -171,9 +171,11 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   // Tell the conversation what went wrong (the usage limit, an expired login, "something broke"), at most once per conv.noticeEveryMs
   // (always in the owner's chat, every few minutes in a group). The one place both turns that fail and a gate that cannot decide use.
   async function warn(conv: Conversation, e: unknown, quote?: Quote): Promise<boolean> {
+    const text = conv.notice(e);
+    if (text === undefined) return false; // (a run that merely failed, for a group or a friend: the warning reaction on their message is the notice)
     // (the one throttle, capnotice.ts: kept across restarts, keyed by the conversation's folder name, never a raw group id)
     if (conv.noticeEveryMs > 0 && !takeCapNotice(`warn:${conv.convId}`, now(), conv.noticeEveryMs)) return false;
-    return out.reply(conv.notice(e), { quote: conv.threadAlways ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
+    return out.reply(text, { quote: conv.threadAlways ? quote : undefined, kind: conv.target ? "chat" : undefined, target: conv.target }).then(() => true, () => false);
   }
 
   // An unattended run that may speak while it works (the heartbeat run and its expert): the SAME send tool as a chat turn, delivered by the same function as the final reply, as a

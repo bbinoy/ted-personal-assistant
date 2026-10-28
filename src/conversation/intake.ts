@@ -350,8 +350,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     const say = (text: string) => out.reply(text, { plain: true, target: conv.target });
     reactTo(conv, { approved: "👍", modified: "👍", declined: "👎", feedback: "💬", clarify: "💬" }[outcome], target);
     if (reply) await say(reply); // clarify: the approval stays open and this message was an answer, not a request; approved / declined with a reply: the parts of a multi-answer that are still open
-    // An edited call runs without a second look, so say exactly what changed.
-    if (outcome === "modified" && changes) await say(`Applied your change: ${changes.map((c) => `${c.field} → ${c.value}`).join(", ")}`);
+    // An edited call runs without a second look; its result tells the run what changed (permissions.ts editedNote), and the run says it.
     return true;
   }
 
