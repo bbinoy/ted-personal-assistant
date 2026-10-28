@@ -6,7 +6,7 @@ import { answer, answerReaction, request } from "./approvalrig.ts";
 import { makeApprove, sameArgs } from "../src/approvals/approvalask.ts";
 import { approvalLines } from "../src/approvals/approvalreport.ts";
 import { composeQuestion } from "../src/approvals/approvalmodel.ts";
-import { answerPrompt, parseAnswer, parseWrite, writePrompt, type OpenView } from "../src/approvals/approvalprompt.ts";
+import { APPROVAL_SYSTEM, answerPrompt, parseAnswer, parseWrite, writePrompt, type OpenView } from "../src/approvals/approvalprompt.ts";
 import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 import { runJudge } from "../src/approvals/approvaljudge.ts";
 import { settings } from "../src/core/settings.ts";
@@ -60,7 +60,7 @@ test("prompts: data is JSON-quoted, so a question with a fake instruction stays 
   assert.equal(p.split("\n").length, 3 + 0); // approvals, recent, message: no line of its own for injected text
   assert.match(writePrompt({ tool: "t", args: { a: 1 }, details: "d\nx", recent: [], required: ["a@example.com", "16:00"] }), /REQUIRED strings.*\["a@example.com","16:00"\]/);
   assert.equal(parseWrite({ text: "  Send it to Alice, ok?  " }), "Send it to Alice, ok?");
-  for (const bad of [undefined, {}, { text: 5 }, { text: "short" }, { text: "x".repeat(1300) }]) assert.equal(parseWrite(bad), undefined);
+  for (const bad of [undefined, {}, { text: 5 }, { text: "short" }, { text: "x".repeat(4600) }]) assert.equal(parseWrite(bad), undefined);
 });
 
 test("the judge sees ALL open approvals with their exact text and age, and the answer goes to the one it names", async () => {
@@ -302,16 +302,54 @@ const text = (t: string) => ({ task: "write", text: t });
 
 test("conversational: ONE call; a question that carries every fact is used and nothing else is called", async () => {
   const s = scripted([text(GOOD)]);
-  const c = await composeQuestion(q, {}, 1000, s.run);
+  const k = scripted([FAITHFUL]);
+  const c = await composeQuestion(q, {}, 1000, s.run, k.run);
   assert.equal(c.text, GOOD);
   assert.equal(s.prompts.length, 1);
   assert.match(s.prompts[0]!, /REQUIRED strings/);
+  assert.equal(k.prompts.length, 1); // the judge's check of the question against the details
+});
+
+const FAITHFUL = { task: "check", faithful: true, reason: "ok" };
+const REPLY = "✉️ Send reply now\nTo: a@example.com\nSubject: Re: code\n\nYour code: 482913";
+
+test("the judge's check is in its prompt: every recipient and attachment, the full text verbatim, nothing misdescribed", () => {
+  assert.match(APPROVAL_SYSTEM, /task: check\./);
+  assert.match(APPROVAL_SYSTEM, /every recipient \(To, Cc, Bcc, guests\) and every attachment is named/);
+  assert.match(APPROVAL_SYSTEM, /quoted in full and verbatim/);
+  assert.match(APPROVAL_SYSTEM, /a reply carrying a code is not "a thank-you"/);
+  assert.match(APPROVAL_SYSTEM, /quote the text that will go in full/); // and the writer is told to
+});
+
+test("a misleading question is refused with a reason the run can act on; a faithful one goes; a payment is not reviewed", async () => {
+  const mail = { ...q, args: { messageId: 1 }, details: REPLY };
+  const w = () => scripted([text("Send a short thank-you to a@example.com?")]);
+  const refused = await composeQuestion(mail, {}, 1000, w().run, scripted([{ task: "check", faithful: false, reason: "the text is not shown" }]).run);
+  assert.equal(refused.text, undefined);
+  assert.match(refused.failure!, /did not show the call faithfully \(the text is not shown\); rewrite it showing every recipient, every attachment and the full text verbatim/);
+  const k = scripted([FAITHFUL]);
+  assert.equal((await composeQuestion(mail, {}, 1000, w().run, k.run)).text, "Send a short thank-you to a@example.com?");
+  assert.match(k.prompts[0]!, /Your code: 482913/); // the check sees the details and the question
+  for (const bad of [undefined, { task: "check" }, { task: "check", faithful: "true" }, new Error("boom")]) {
+    assert.equal((await composeQuestion(mail, {}, 1000, w().run, scripted([bad]).run)).text, undefined, "an unusable check is no question");
+  }
+  const pay = scripted([]);
+  assert.notEqual((await composeQuestion({ ...mail, typedYes: true }, {}, 1000, w().run, pay.run)).text, undefined);
+  assert.equal(pay.prompts.length, 0);
+});
+
+test("a refused question is returned to the run as the failure and nothing is asked", async () => {
+  const request = (async () => { throw new Error("asked"); }) as any;
+  const compose = (async () => ({ failure: "the question did not show the call faithfully (x); rewrite it", ms: 1 })) as any;
+  const r = await makeApprove(async () => 1, { scope: "owner", source: "chat", request, compose })("d", { tool: CAL, input: {} }, new AbortController().signal);
+  assert.equal(r.approved, false);
+  assert.match(r.failure!, /did not show the call faithfully/);
 });
 
 test("conversational fails closed and silent: a failed validation, junk or an error is no question (no retry, no code-text card)", async () => {
   for (const steps of [[text("Send it to Alice, ok?")], [text("Send “Offsite agenda” to dave@example.com?")], [new Error("boom")], [undefined], [{ text: "short" }]]) {
     const s = scripted([...steps]);
-    const c = await composeQuestion(q, {}, 1000, s.run);
+    const c = await composeQuestion(q, {}, 1000, s.run, scripted([FAITHFUL]).run);
     assert.equal(c.text, undefined, JSON.stringify(steps));
     assert.equal(s.prompts.length, 1); // never retried
   }

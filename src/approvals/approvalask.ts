@@ -6,10 +6,9 @@ import { recentIn } from "./recentchat.ts";
 import { composeQuestion } from "./approvalmodel.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { argsForAudit } from "./auditargs.ts";
-import { questionFooter } from "./questionfooter.ts";
 
-// Asking the owner: a model writes the question in one call and code validates it against the exact arguments (approvalmodel.ts,
-// questionfacts.ts); if that fails nothing is asked. The ask is audited with the FULL arguments, the exact text sent and, afterwards,
+// Asking the owner: a model writes the question in one call, code validates it against the exact arguments and the judge checks that it shows the call
+// faithfully (approvalmodel.ts, questionfacts.ts); if that fails nothing is asked. The ask is audited with the FULL arguments, the exact text sent and, afterwards,
 // the outcome and whether the call that ran has the arguments the question was written for, so a divergence between intent and
 // behaviour can be investigated.
 
@@ -28,10 +27,9 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     // A card payment is asked in the chat of the person whose card it is only, never in a group.
     if (o?.typedYes && !mayPay) return { approved: false, failure: "a card payment can only be approved in the owner's own chat" };
     // One model call writes it, code validates it. No question means no ask and no card: the agent gets the failure as the tool result.
-    const c = await compose({ tool: call.tool, args: call.input, details: description, recent: recentIn(scope), source });
+    const c = await compose({ tool: call.tool, args: call.input, details: description, recent: recentIn(scope), source, typedYes: o?.typedYes });
     if (c.text === undefined) return { approved: false, failure: `no question could be written that states the exact arguments (${c.failure})` };
-    // The model's words, then a footer code renders from the exact details (questionfooter.ts): recipients, attachments, the start of the text. A card payment keeps its own code-built facts.
-    const question = o?.typedYes ? c.text : c.text + questionFooter(description);
+    const question = c.text; // the model's words, checked against the call by the judge (approvalmodel.ts)
     const asked = structuredClone(call.input);
     row(call.tool, "approval-asked", { args: argsForAudit(asked), question, details: description, writeMs: c.ms, by: c.by });
     const d = await request(send, description, call, abort, { question, scope, source, typedYes: o?.typedYes });

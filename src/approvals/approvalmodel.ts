@@ -3,7 +3,7 @@ import { emitRecord } from "../core/events.ts";
 import { runJudge, withTimeout } from "./approvaljudge.ts";
 import type { JudgeIO } from "./judgespare.ts";
 import { factsOf, validateQuestion } from "./questionfacts.ts";
-import { answerPrompt, parseAnswer, parseWrite, writePrompt, type AnswerJudgement, type OpenView, type Recent } from "./approvalprompt.ts";
+import { answerPrompt, checkPrompt, parseAnswer, parseCheck, parseWrite, writePrompt, type AnswerJudgement, type OpenView, type Recent } from "./approvalprompt.ts";
 
 // The model calls of approvals. Each one fails closed: a thrown error, a timeout, an error result, an
 // answer for the wrong task or one that is not an exact enum value is "no answer" (undefined / inaccurate), never an approval.
@@ -28,24 +28,34 @@ export interface QuestionInput {
   details: string; // the code-rendered text: ground truth for the facts the question must carry; never sent
   recent: readonly Recent[];
   source: Source;
+  typedYes?: boolean; // a card payment: its question is the fixed payment text, not checked here
 }
 export type Composed = { text: string; ms: number; by?: "model" } | { text?: undefined; failure: string; ms: number; by?: undefined };
 
 type Run = (prompt: string) => Promise<unknown>;
-const viaJudge = (io: JudgeIO, ms: number): Run => async (prompt) => (await withTimeout(runJudge("write", prompt, io), ms))?.out;
+const viaJudge = (task: "write" | "check", io: JudgeIO, ms: number): Run => async (prompt) => (await withTimeout(runJudge(task, prompt, io), ms))?.out;
 
 // ONE model call writes the question, always in the owner's language; code checks that every address, URL, id, title, time, date, amount
 // and the words Cc / Bcc from the exact arguments appear in it (questionfacts.ts) and that no address or URL outside the arguments and details does. If anything
-// fails (error, timeout, junk, a missing fact) there is NO question and no retry: the caller does not ask, the action is not
+// fails (error, timeout, junk, a missing fact, a judge check that finds it unfaithful to the call) there is NO question and no retry: the caller does not ask, the action is not
 // approved, and the failure is audited with the full arguments. Never throws.
-export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeoutMs = 15_000, run: Run = viaJudge(io, timeoutMs)): Promise<Composed> {
+export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeoutMs = 15_000, run: Run = viaJudge("write", io, timeoutMs), check: Run = viaJudge("check", io, timeoutMs)): Promise<Composed> {
   const started = Date.now();
   const facts = factsOf(q.args, q.details);
   let failure: string;
   try {
     const text = parseWrite(await run(writePrompt({ ...q, required: facts.must })));
     const wrong = text ? validateQuestion(text, facts) : "no usable question from the writer";
-    if (text && !wrong) return { text, ms: Date.now() - started, by: "model" };
+    if (text && !wrong) {
+      // The judge guards the question: it must show the call faithfully (every recipient, attachment, the full text verbatim). A question it does not pass is not sent
+      // and the run is told why, so it asks again and a new question is written. A card payment keeps its own fixed text.
+      const c = q.typedYes ? { faithful: true, reason: "" } : parseCheck(await check(checkPrompt({ details: q.details, question: text })));
+      if (c.faithful) return { text, ms: Date.now() - started, by: "model" };
+      failure = `the question did not show the call faithfully (${c.reason}); rewrite it showing every recipient, every attachment and the full text verbatim`;
+      emitRecord(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
+      console.log(`question: not asked (${failure})`);
+      return { failure, ms: Date.now() - started };
+    }
     failure = wrong!;
     emitRecord(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
   } catch (e) {

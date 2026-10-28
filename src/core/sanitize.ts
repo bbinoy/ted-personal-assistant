@@ -188,12 +188,25 @@ const INVISIBLE = /[­͏ᅟᅠ᠎​⁠-⁤ㅤ﻿]/g;
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
 
 // An approval must never hide content silently: whatever is cut is announced.
-export function clip(text: string, max: number): string {
-  const flat = text
+const safe = (text: string): string =>
+  text
     .replace(BIDI, "")
     .replace(CONTROL, "")
-    .replace(INVISIBLE, (c) => `⟨U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}⟩`)
-    .replace(/\s+/g, " ")
+    .replace(INVISIBLE, (c) => `⟨U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}⟩`);
+const cut = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max)}… (+${s.length - max} more characters not shown)` : s);
+
+// One line: all whitespace becomes a single space.
+export function clip(text: string, max: number): string {
+  return cut(safe(text).replace(/\s+/g, " ").trim(), max);
+}
+
+// The same sanitising, but line breaks stay (runs of spaces shrink, three or more breaks become one blank line).
+export function clipText(text: string, max: number): string {
+  const kept = safe(text)
+    .replace(/\r\n?|[\u2028\u2029\u0085]/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
-  return flat.length > max ? `${flat.slice(0, max)}… (+${flat.length - max} more characters not shown)` : flat;
+  return cut(kept, max);
 }
