@@ -42,11 +42,14 @@ location - and hand it to `ted-personal-assistant:meeting-prep`, which decides w
 - An external meeting with no agenda / no video link.
 - A day that is wall-to-wall with no break.
 
-## Reschedules (suggest only, never execute)
+## Reschedules (suggest only for other people's events)
 
 If an email asks to move a meeting, or two things clash, propose 2-3
-concrete alternative slots from the owner's actual free time in the brief.
-Do **not** call `update_event` on your own - the owner decides, then asks.
+concrete alternative slots from the owner's actual free time (following the
+owner's `scheduling-` notes) in the brief. For an event with guests or other
+people, do **not** call `update_event` on your own - the owner decides, then asks.
+A clash among the owner's own guest-less events or placeholders may be fixed
+with `update_event`; say so in one line.
 
 ## Bookings -> calendar (the automatic write)
 

@@ -38,4 +38,4 @@ Check the ones that fit; most actions touch two or three.
 
 One line, not a report. In the brief it goes under "Changed by the assistant"; in chat
 one short line ("Added the flight, ticked off 'book London trip', archived the
-confirmation. Want a task for the hotel?").
+confirmation, added a task for the hotel.").
