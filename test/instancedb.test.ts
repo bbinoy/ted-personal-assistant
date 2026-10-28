@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// instance.db: the spend ledger (budget.ts), the notices (capnotice.ts), the heartbeat looks, the intake marks and the kv rows, in the ONE database the agent and the intake page share.
+// instance.db: the spend ledger (budget.ts), the told marks (capnotice.ts), the heartbeat looks, the intake marks and the kv rows, in the ONE database the agent and the intake page share.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "instancedb-"));
 
 const { settings } = await import("../src/core/settings.ts");
@@ -22,17 +22,17 @@ const ANNA = friendConvId("anna-1a2b");
 const BO = friendConvId("bo-3c4d");
 const DAY_MS = 86_400_000;
 const reset = () => {
-  for (const t of ["spend", "notices", "looks", "intake", "kv"]) instanceDb().run(`DELETE FROM ${t}`);
+  for (const t of ["spend", "told", "looks", "intake", "kv"]) instanceDb().run(`DELETE FROM ${t}`);
 };
 
-test("the file is instance/instance.db of the data folder, in WAL mode, schema 4, and the doctor's check reads it", () => {
+test("the file is instance/instance.db of the data folder, in WAL mode, schema 5, and the doctor's check reads it", () => {
   assert.equal(instanceDb().path, instancePaths().db);
   assert.equal(instanceDb().journalMode, "wal");
-  assert.equal(instanceDb().version, 4);
+  assert.equal(instanceDb().version, 5);
   const lines: [unknown, string, string][] = [];
   assert.equal(dbCheck((ok, what, detail) => void lines.push([ok, what, detail ?? ""])), true);
   assert.equal(lines[0]![0], true);
-  assert.match(lines[0]![2], /wal mode, schema 4, integrity_check ok; \d+ spend, \d+ payment, \d+ look row/);
+  assert.match(lines[0]![2], /wal mode, schema 5, integrity_check ok; \d+ spend, \d+ payment, \d+ look row/);
   const broken = mkdtempSync(join(tmpdir(), "instancedb-broken-"));
   const bad: [unknown, string, string][] = [];
   assert.equal(dbCheck((ok, what, detail) => void bad.push([ok, what, detail ?? ""]), join(broken, "nope", "x.db")), true, "a database that does not exist yet is made (a new folder)");
@@ -143,7 +143,7 @@ test("notices: once a day per key or once per interval, forgetting by key, pruni
   assert.equal(N.takeCapNotice("today", now), false);
 });
 
-test("the budget notice is once a day, and OVERBUDGET's first time uses the notices table", () => {
+test("the budget notice is once a day, and OVERBUDGET's first time uses the told table", () => {
   reset();
   const s = settings as unknown as Record<string, number>;
   const was = s.dailyBudgetUsd;
@@ -152,7 +152,7 @@ test("the budget notice is once a day, and OVERBUDGET's first time uses the noti
     B.recordCost(2);
     assert.deepEqual(B.overBudget(), { over: true, firstTime: true, usd: 2 });
     assert.deepEqual(B.overBudget(), { over: true, firstTime: false, usd: 2 });
-    assert.equal(dayIn(new Date(instanceDb().get<{ last_at: number }>("SELECT last_at FROM notices WHERE key = ?", B.OWNER_BUDGET_NOTICE)!.last_at)), dayIn(new Date()));
+    assert.equal(dayIn(new Date(instanceDb().get<{ at: number }>("SELECT at FROM told WHERE key = ?", B.OWNER_BUDGET_NOTICE)!.at)), dayIn(new Date()));
   } finally {
     s.dailyBudgetUsd = was;
   }

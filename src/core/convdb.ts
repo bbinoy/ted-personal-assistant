@@ -18,7 +18,7 @@ import { writeFileAtomic } from "./state.ts";
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   routine_runs     the last period of each routine (a routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
-//   group_remind_noted   which group members were told once that a reminder said in the group is the group's (src/tasks/grouptasks.ts).
+//   told             what was told once, or at most once a day / in a while, about this conversation: `group-reminder:<member>` = a group member told that a reminder said in the group is the group's (core/told.ts, src/tasks/grouptasks.ts).
 //
 // NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
@@ -215,6 +215,19 @@ export const CONV_SCHEMA: readonly Migration[] = [
         told           INTEGER NOT NULL DEFAULT 1,                  -- 0: a skipped period the owner has not been told about yet
         last_delivered INTEGER                                      -- UTC ms of the last successful run (the doctor)
       );
+    `,
+  },
+  {
+    version: 23,
+    name: "one record of what was told (core/told.ts): the group members told once about reminders become `told` rows",
+    up: `
+      CREATE TABLE told (
+        key  TEXT PRIMARY KEY,
+        at   INTEGER NOT NULL,                                      -- epoch ms it was last told
+        once INTEGER NOT NULL DEFAULT 0                             -- 1: told once for good
+      );
+      INSERT INTO told (key, at, once) SELECT 'group-reminder:' || member, at, 1 FROM group_remind_noted;
+      DROP TABLE group_remind_noted;
     `,
   },
 ];

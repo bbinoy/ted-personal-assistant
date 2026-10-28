@@ -14,7 +14,7 @@ import { deleteTenant, OWNER_ID, tenantById } from "./tenants.ts";
 
 // Removing a friend takes EVERYTHING of hers. Her data is ONE folder now (conversations/friend-<id>/: notes, history, session, cost, pending approvals, cloned voices and the index of
 // her voice notes, search index), so most of it goes with deleteTenant (tenants.ts) alongside her registry entry. What is not in her folder is the audio files signal-cli saved for her
-// voice notes (found through her index, which is read BEFORE the folder goes), her marks in the `intake` and `notices` tables of instance.db, her spend rows (unnamed, not deleted),
+// voice notes (found through her index, which is read BEFORE the folder goes), her marks in the `intake` and `told` tables of instance.db, her spend rows (unnamed, not deleted),
 // and her items in the secret store (tenants/<id>/*). Idempotent: run again after a failure (or for a friend whose registry entry is already gone) and it removes what is left.
 // It reports what it removed; it never throws for one step failing, so the rest still happens.
 // Not reached, and said so in docs/SAFETY.md: attachments signal-cli saved for her other messages (the app's log keeps no attachment id for them), the SDK's own

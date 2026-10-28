@@ -10,7 +10,7 @@ import { settings } from "../core/settings.ts";
 // The retention rules for the tables of instance.db (core/retention.ts says how they run; retentionrules.ts has the file-based ones, registerFileRules calls this too).
 //   looks     heartbeat rows older than LOOKS_KEEP_DAYS (the report reads at most a year)
 //   spend     spend rows of days older than SPEND_KEEP_DAYS (the budgets look at today only)
-//   notices   once-a-day marks of past days and interval stamps older than a day (they mean nothing any more)
+//   told      per-day and interval marks older than two days (they mean nothing any more); a `once` mark stays (core/told.ts)
 //   payments  NEVER, unless PAYMENTS_KEEP_YEARS is set (>= 2): settled payments older than that. The default keeps every row for ever.
 // A dry run counts and removes nothing. Rows have no byte size here: freedBytes is 0 (the file does not shrink until a VACUUM; SQLite reuses the pages).
 
@@ -39,10 +39,10 @@ export function registerDbRules(): void {
     },
   });
   registerRetention({
-    name: "db-notices",
+    name: "db-told",
     everyHours: 24,
     run(now, o) {
-      if (o.dryRun) return { removed: instanceDb().num("SELECT COUNT(*) FROM notices WHERE (day IS NULL OR day < ?) AND (last_at IS NULL OR last_at < ?)", dayIn(now), now.getTime() - 86_400_000), freedBytes: 0, notes: "notice marks of past days" };
+      if (o.dryRun) return { removed: instanceDb().num("SELECT COUNT(*) FROM told WHERE once = 0 AND at < ?", now.getTime() - 2 * 86_400_000), freedBytes: 0, notes: "notice marks of past days" };
       return { removed: pruneNotices(now.getTime()), freedBytes: 0, notes: "notice marks of past days" };
     },
   });

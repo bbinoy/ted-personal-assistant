@@ -44,7 +44,7 @@ One data folder (`HARNESS_DATA_DIR`, default the repo folder; owner-only, git-ig
 <data>/
   instance/                process-wide
     layout-version         4 (another layout stops the agent, the CLIs and the intake page)
-    instance.db            SQLite (WAL): spend, notices, looks, payments, intake, kv
+    instance.db            SQLite (WAL): spend, told, looks, payments, intake, kv
     tenants.json  registrations.json  intake/  notion-client.json  card.disabled  retention.json  shore/  browse/
   conversations/<convId>/  ONE folder per conversation, the same shape for everyone
     messages.jsonl         history, size-bounded, append-only
@@ -72,7 +72,8 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `seen_mail` | mail ids the look has worked through (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
 | `routine_runs` | last period of each routine (a routine note), keyed by the note's file name |
-| `items`, `task_events`, `reminders`, `group_remind_noted` | tasks, append-only history, claimed reminders, a group notice mark |
+| `items`, `task_events`, `reminders` | tasks, append-only history, claimed reminders |
+| `told` | what was told once (or once a day, or at most every N) about this conversation, e.g. a group member told that a reminder said in the group is the group's (`core/told.ts`) |
 | `learned_changes`, `learned_batches`, `voice_*`, `friend` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
 
 - **Adding state is one migration:** append a step to `CONV_SCHEMA` (the steps up to version 22 were collapsed into one baseline that creates the current shape; a file older than it is refused with `OlderSchemaError`; `test/schemabaseline.test.ts` pins the baseline to the schema the old steps made), write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound or is keyed by something that can go away. Older code refuses a newer file (`NewerSchemaError`).
@@ -86,7 +87,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 | table | holds |
 |---|---|
 | `spend` | one row per charged run: time, local day, convId, payer (`login` or `key`), kind, dollars; the budgets are sums over it (`src/core/budget.ts`) |
-| `notices` | when each notice was last told, by key: the one "at most once per interval" throttle (`capnotice.ts takeCapNotice`) |
+| `told` | when each notice was last told, by key, and whether it was told once for good: the one record of "told once / once a day / at most every N" (`core/told.ts`; the instance-wide use is `capnotice.ts takeCapNotice`) |
 | `looks` | one counted row per heartbeat look, no words (`looks.ts`) |
 | `payments` | one row per status change of a card payment, never deleted (`modules/browse/payments.ts`) |
 | `intake` | per tenant and purpose: when a form was stored (names and lengths), when a connection stopped working |
@@ -94,7 +95,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 
 - **A ledger is never reset.** A damaged `instance.db` makes the agent start degraded (`ledgerDamage()`): chat works, every budget reads as spent, so background work, browse and friends' runs are refused and no card is opened.
 - **Stays a file:** `tenants.json` (repaired by hand), `registrations.json`, `intake/` (a rename is the single-use guarantee), `card.disabled` (a kill switch that must work when everything else is broken). The pause is a `paused` row in `kv` that fails safe (unreadable = paused).
-- **Retention** (`src/heartbeat/dbretention.ts`): `looks` and `spend` older than 400 days, stale notices; payments only by `PAYMENTS_KEEP_YEARS` (0 = never).
+- **Retention** (`src/heartbeat/dbretention.ts`): `looks` and `spend` older than 400 days, stale `told` marks (never a `once` one); payments only by `PAYMENTS_KEEP_YEARS` (0 = never).
 
 ## The run model
 
@@ -682,7 +683,7 @@ src/core/audit.ts  the audit writer
 src/core/brief.ts  the clock line of unattended prompts
 src/core/budget.ts  spend ledger and daily budget
 src/core/callkey.ts  identity of a tool call
-src/core/capnotice.ts  the one notice throttle (takeCapNotice) and the friends' cap fact
+src/core/capnotice.ts  the instance-wide notice throttle (takeCapNotice, over told.ts) and the friends' cap fact
 src/core/until.ts  the one "until" value of /pause and /quiet: parse, test, words
 src/core/ownerfact.ts  holdFact: a system matter as a fact for the owner's next run
 src/core/contain.ts  `isInside`: path containment
@@ -723,6 +724,7 @@ src/core/state.ts  atomic file access (writeFileAtomic)
 src/core/timezone.ts  a conversation's clock, quiet hours and the one set of time formatters
 src/core/timing.ts  per-turn timing line
 src/core/toolclean.ts  cleans tool results
+src/core/told.ts  told(db, key, once | perDay | everyMs): the one record of what was told
 src/core/warmslot.ts  one warm model process slot
 src/core/welcome.ts  the one-time welcome fact
 ```

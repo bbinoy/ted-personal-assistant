@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// The one throttle ("told at most once per key per interval") is remembered in the notices table of instance.db, so a restart does not repeat a notice; the shared key's problem reaches the owner
+// The one throttle ("told at most once per key per interval") is remembered in the told table of instance.db, so a restart does not repeat a notice; the shared key's problem reaches the owner
 // as a FACT for her next run (never a fixed chat line) once per interval.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "noticepersist-"));
 
@@ -36,7 +36,7 @@ test("the interval and the once-a-day throttle share one table, old marks are dr
   assert.equal(takeCapNotice("group:x", now), true);
   assert.equal(takeCapNotice("group:x", now), false, "once a day when no interval is given");
   assert.equal(takeCapNotice("group:x", now + 25 * 3_600_000), true, "tomorrow it is due again");
-  assert.equal(instanceDb().get("SELECT 1 AS x FROM notices WHERE key = ?", "warn:g1")?.x, 1);
+  assert.equal(instanceDb().get("SELECT 1 AS x FROM told WHERE key = ?", "warn:g1")?.x, 1);
   takeCapNotice("old", now - 3 * 86_400_000);
   assert.ok(pruneNotices(now) >= 1, "a mark of three days ago is pruned");
 });

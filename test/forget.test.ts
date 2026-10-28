@@ -17,7 +17,7 @@ const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modu
 const { recordCost, spentToday } = await import("../src/core/budget.ts");
 const { takeCapNotice } = await import("../src/core/capnotice.ts");
 const { instanceDb } = await import("../src/core/instancedb.ts");
-const marked = (key: string): boolean => !!instanceDb().get("SELECT 1 FROM notices WHERE key = ?", key);
+const marked = (key: string): boolean => !!instanceDb().get("SELECT 1 FROM told WHERE key = ?", key);
 const { convDb: rowDb, peekConvDb: peekRowDb } = await import("../src/core/convdb.ts");
 const { convIdOfKey: rowConv } = await import("../src/core/convpaths.ts");
 // A row of the conversation's own database (a held post): what forgetting must take with it, and leave alone elsewhere.

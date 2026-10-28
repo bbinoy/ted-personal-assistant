@@ -6,7 +6,7 @@ import { Db, LedgerCorruptError, openDb, type Migration } from "./db.ts";
 //
 //   spend      one row per charged run (budget.ts): who paid (the instance's login or the instance key), for which conversation, what kind of run, how many dollars, on which local day.
 //              "Owner today", "the key today", "a group today", "a friend today" are indexed sums of it. A LEDGER: never reset, pruned only by age (retention).
-//   notices    when each notice was last told, by key: the one "at most once per interval" throttle (capnotice.ts)
+//   told       when each notice was last told, by key: once, once a day or once in a while (core/told.ts; the instance-wide use is capnotice.ts)
 //   looks      one row per heartbeat look of any conversation, counts and flags only (core/looks.ts)
 //   payments   the card payment ledger: one row per status change, never deleted (modules/browse/payments.ts). A LEDGER.
 //   intake     what the intake page stored for a friend (names and counts, never a value) and when a connection stopped working, by tenant and purpose (intake/intakelinks.ts)
@@ -88,6 +88,19 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
         value      TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
+    `,
+  },
+  {
+    version: 5,
+    name: "one record of what was told (core/told.ts): the notices table becomes `told`, marks kept as they are",
+    up: `
+      CREATE TABLE told (
+        key  TEXT PRIMARY KEY,
+        at   INTEGER NOT NULL,                                    -- epoch ms it was last told
+        once INTEGER NOT NULL DEFAULT 0                           -- 1: told once for good, never pruned
+      );
+      INSERT INTO told (key, at) SELECT key, last_at FROM notices WHERE last_at IS NOT NULL;
+      DROP TABLE notices;
     `,
   },
 ];

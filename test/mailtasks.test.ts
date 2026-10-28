@@ -149,7 +149,7 @@ test("groups: 'Sam by Friday' sets the assignee; 'remind me' makes a GROUP task 
   assert.match(text(await t.add_task!.handler({ title: "Pack chairs", remind: "2026-10-24T10:00" })), /first reminder here/);
   setAsking(k, undefined);
   assert.equal(peekConvDb(convIdOfKey(k))!.get<{ origin: string }>("SELECT origin FROM items WHERE id = 2")!.origin, "member");
-  assert.equal(peekConvDb(convIdOfKey(k))!.num("SELECT COUNT(*) FROM group_remind_noted"), 2, "persisted, not in memory");
+  assert.equal(peekConvDb(convIdOfKey(k))!.num("SELECT COUNT(*) FROM told WHERE key LIKE 'group-reminder:%'"), 2, "persisted, not in memory");
   // a friend's and the owner's chat never get the group line
   const own = tools("tenant:ida");
   assert.doesNotMatch(text(await own.add_task!.handler({ title: "Mine", remind: "2026-10-24T10:00" })), /first reminder here/);

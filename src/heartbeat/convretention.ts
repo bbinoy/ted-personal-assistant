@@ -18,7 +18,7 @@ import { scheduledIn } from "../modules/tasks/routinelist.ts";
 //   meetings        rows whose meeting started more than 3 days ago (tasks/meetings.ts)
 //   reminders       a claimed / retry mark older than a day whose task is no longer open or snoozed (done, dropped); the marks of an open task stay: they are its at-most-once record
 //   routine_runs    rows of a routine whose note (routine-<name>.md, broken ones too) is gone; one still `started` (not yet stale) stays
-// NEVER touched: the session record, the dream day, /quiet, a friend's bookkeeping. A dry run counts and removes nothing.
+// NEVER touched: the session record, the dream day, /quiet, a friend's bookkeeping, the `told` marks (a once-told mark must outlive everything). A dry run counts and removes nothing.
 // Only conversations that HAVE a database are visited (none is made for the sweep).
 
 const names = (dir: string): string[] => {
