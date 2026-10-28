@@ -20,10 +20,12 @@ holds what is particular to Mailbird.
 - **Archive** is `archive_conversation` (reversible: `npm run restore <id>`). Never
   `trash_conversation` or `delete_conversation_permanently`, never spam or block.
   A conversation id changes when it changes folder: re-list before acting on it.
-- **Reply drafts stay in their thread, as the inline Quick Reply:**
-  `select_conversation` first, then `reply_to_conversation` (or
-  `reply_all_to_conversation` for several recipients) with `showInUi: true` and no
-  `forceNewWindow`. `create_draft` only starts a brand-new mail with no thread.
+- **Reply drafts stay in their thread and are saved quietly:** `reply_to_conversation`
+  (or `reply_all_to_conversation` for several recipients), with no `select_conversation`,
+  no `showInUi` and no `forceNewWindow` (a popup or window steals focus on the desktop).
+  Give the draft's text in chat. `create_draft` only starts a brand-new mail with no
+  thread. The body is HTML with one `<p>` per paragraph, greeting and sign-off included,
+  because plain newlines are flattened when sent. Read the saved draft back before any send.
 - **Sending.** Never `send_message_now` before the owner has seen the draft's text and
   said to send it. `confirm: true` is Mailbird's own safety check, not the owner's
   approval.

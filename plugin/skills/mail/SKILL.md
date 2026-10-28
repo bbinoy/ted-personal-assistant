@@ -17,16 +17,19 @@ tools, their arguments and how to list, read, archive and draft with them. Below
   `☀️` / `🌙` in front) is the assistant's own brief. Never read, reply to or count it
   as mail. Today's daily brief stays in the inbox; every older brief, wrap and review
   is archived.
-- **The triage rules below apply to every look, not only the daily sweep.**
+- **The triage rules below apply to every look, not only the daily sweep.** Archive when you are sure: code judges each archive, and one it is not sure about stays in the inbox without a word. Message only what is worth interrupting for.
 - **Attachments**: never read or open their content unless the provider skill says
   you can. Their name, type and size are enough; if the owner needs the content,
   tell them to open it in the mail client.
 
-## Inbox sweep (the daily brief run)
+## Inbox sweep (the daily brief and the evening wrap)
 
-Run this across every account. The agent's heartbeat run already works through new
-mail all day, so this sweep covers what is still in the inbox, plus the owner-facing
-parts (waiting-on, commitments, radar).
+Run this across every account, in the daily brief and again in the evening wrap. The agent's heartbeat run already works through new
+mail all day, so this sweep re-assesses what is still in the inbox, plus the owner-facing
+parts (waiting-on, commitments, radar). It acts, reversibly: re-judge everything still in the
+inbox; where a reply is overdue from either side, draft a nudge in the thread (drafts need no
+asking; never send); archive what has gone stale; and mention only what is new since it was last
+mentioned (check the chat log and the journal), never the same pile twice.
 
 1. **List the whole inbox, once a day.** The daily brief's sweep does not depend on
    what the heartbeat has already looked at (it does not use `seen_mail`: the
@@ -43,7 +46,7 @@ parts (waiting-on, commitments, radar).
 Reading is a plain read: free, not judged, with no cap. Where the row (sender,
 subject, preview) makes the call certain, classify and archive from the row
 without opening it, **for automated senders only**: newsletters, promos, job-board
-digests, social nudges, receipts, security/login alerts, shipping and
+digests, social nudges, receipts (not one with a date ahead: open it), security/login alerts, shipping and
 portal-document notices, and a batch of near-identical rows that is obviously one
 category. **Mail from a person is opened before it is archived.** **Whenever you are
 not confident, open the full mail before deciding:** an unknown
@@ -85,14 +88,16 @@ your head: take what decides the case and move on.
      insurance, official letters, and requests to sign or verify (DocuSign and the
      like). They are handled once a later mail, the calendar or a task shows it:
      a payment confirmation, "all parties have signed", a closed case.
-   - **Something ahead goes on the calendar before its mail is archived.** A
+   - **Something ahead goes on the calendar before its mail is archived.** A ticket,
+     booking, registration or event mail that carries a date is opened before it is
+     archived, never filed as a receipt from the row. A
      confirmation for something with a date still ahead (a ticket, an event or class
      order, a booking or reservation, an appointment, travel) is not handled until it
      is on the calendar: open it, check the calendar around that date
      (`list_events` / `search_events`), and if it is missing create it on the owner's
      own calendar as the calendar skill's "Bookings -> calendar" says (title, time,
      place, reference; no guests). Then archive, and say in your message what you
-     added. No firm date or time: keep the mail and mention it.
+     added (an upcoming event missing from the calendar is added, own calendar, no guests). No firm date or time: keep the mail and mention it.
    - **A completed task closes its mail.** When a task in the list is done and a mail
      belongs to it (the task's source mail, the same thread, or plainly the same
      matter by sender and subject), that mail is handled.
@@ -100,6 +105,9 @@ your head: take what decides the case and move on.
      or update (a signature reminder sent three times, payment or renewal reminders,
      repeated status updates on one matter): keep the newest while it is still open,
      archive the older ones.
+   - **Automated status notices from a service that notifies the owner itself** (transit
+     changes, delivery tracking) are archived, not alerted, even when they report a
+     problem.
    - *Handled, archive from the row:* receipts and payment confirmations, order
      updates (shipped, dispatched, delivered), booking updates for something already
      on the calendar or already past, a receipt for a booking already confirmed, verification and confirmation codes, account and
@@ -129,7 +137,7 @@ your head: take what decides the case and move on.
    reply from either side and has gone quiet is flagged in the brief ("dormant
    thread with <person> (<subject>, last activity <date>)"). It is not archived
    until it has clearly closed and is older than about 14 days (above).
-3. **Tidy.** Archive the FYI + Noise buckets (never trash, delete or mark spam).
+3. **Tidy.** Archive the FYI + Noise buckets and what has gone stale (never trash, delete or mark spam).
    Track what was archived and the reason.
 4. **Propose actions with drafts ready.** For each "Needs the owner" item that
    wants a reply, draft it now, in the thread (see "Drafting", below). Match the

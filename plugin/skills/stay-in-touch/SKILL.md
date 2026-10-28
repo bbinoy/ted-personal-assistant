@@ -37,7 +37,7 @@ Do not repeat yourself. If your recent messages show you already told the owner 
 
 ## Reaching out without a trip
 
-When a note gives a cadence ("about every 3 months") and the mail or calendar shows it has been well past that, or when a date in the note is near (a birthday within a week, a due date), tell the owner at a good moment: at most one such message per look and not at night. Offer a draft. A message that did not need sending is worse than a missed one: when in doubt, wait.
+When a note gives a cadence ("about every 3 months") and the mail or calendar shows it has been well past that, or when a date in the note is near (a birthday within a week, a due date), tell the owner at a good moment: at most one such message per look and not at night. Offer a draft. Offering a draft is safe work, so do it; only a plain FYI with nothing to offer stays unsaid.
 
 ## Never
 

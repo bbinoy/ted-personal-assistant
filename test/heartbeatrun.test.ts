@@ -125,7 +125,7 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   assert.match(rules, /working late, tell me everything tonight/);
   assert.match(rules, /memory note/);
   assert.match(rules, /seen_mail tool/);
-  assert.match(rules, /Unread is no reason to keep a mail/);
+  assert.match(rules, /load ted-personal-assistant:mail/);
   assert.match(rules, /with the send tool/);
   assert.doesNotMatch(rules + text, /at most 5 mails|never mail you have not read/, "the archive floor is gone");
   assert.match(rules, /\[\[silent\]\]/);

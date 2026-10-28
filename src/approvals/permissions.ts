@@ -142,9 +142,9 @@ export interface JudgeSetup {
 // (the judge's ask, a floor that forces ask, a recent decline, a fix that may not be applied) is declined back to the run with this fixed text, audited `background-skip` with
 // the reason class only. No question, no approval-inbox item, no "waiting" line. Whether a run is unattended is one fact of the run (core/runkind.ts RunKind.attended), the same for
 // the owner's look, a group's and a friend's.
-export const UNATTENDED_SKIP = "Not done: not certain enough to act without asking, and background work never asks. Leave it; do not mention it unless it truly matters, then say it in your message as information, not as a question.";
+export const UNATTENDED_SKIP = "Not done: not certain enough to act without asking, and background work never asks. Do not retry it: turn what needs the owner into what is allowed (a draft, or an add_task item) so the brief lists it; mention it only if it truly matters, as information.";
 // A card payment in an unattended run: refused like a never-allowed call, nobody is asked (only the owner's typed yes in her own chat pays).
-const PAYMENT_UNATTENDED = "A payment is never made by background work, and nobody is asked from here. Leave it; if it matters, say in your message that it needs the owner, as information.";
+const PAYMENT_UNATTENDED = "A payment is never made by background work, and nobody is asked from here. Do not retry it: add_task an item for the owner so the brief lists it.";
 
 // Said to the model when the check itself failed (an error anywhere on the way): the call is not run.
 const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not retry it; tell the owner in your own words what you could not do.";

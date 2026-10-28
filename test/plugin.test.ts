@@ -114,15 +114,11 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   assert.match(mb, /Cold outreach is noise even when a named person wrote it[\s\S]*"important" flag[\s\S]*open the mail \(a plain read, cheap\)\s+before deciding/);
   assert.match(mb, /triage notes win/);
   const hb = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "background.md"), "utf8");
-  assert.match(hb, /default is to archive[\s\S]*next 7 days[\s\S]*Unread is no reason to keep[\s\S]*archive it/);
-  assert.match(hb, /Cold outreach[\s\S]*whatever the provider's "important" flag says/);
-  assert.match(hb, /unknown to \{\{who\}\}[\s\S]*never judge an unknown sender by the subject alone/);
-  assert.match(hb, /whenever you are not confident[\s\S]*open the full mail with the read tool before deciding: reading is free and uncapped[\s\S]*never keep a mail just because you did not read it/);
+  assert.match(hb, /before triaging new mail, load ted-personal-assistant:mail[\s\S]*seen_mail tool/); // the persona points at the skill; the rules live in the skill (asserted above)
   assert.match(mb, /Reading is a plain read: free, not judged, with no cap[\s\S]*not\s+confident, open the full mail[\s\S]*Never keep a mail\s+just because you did not read it/);
   assert.doesNotMatch(mb, /Do NOT open every email|archive newsletters unopened/);
   for (const provider of ["mailbird", "gmail"]) assert.ok(read(provider).split("\n").length < 90 && !/archive unless the mail needs the owner/.test(read(provider)), `${provider}: tools and quirks only, the rules are in the mail skill`);
   assert.match(read("daily-brief"), /whenever the row does not let you decide with confidence/);
-  assert.match(hb, /triage notes beats these defaults/);
 });
 
 test("a long overdue pile: the brief offers a clean-up once (remembered in the status note), the task skill says how", () => {
