@@ -24,7 +24,7 @@ const { recentIn } = await import("../src/approvals/recentchat.ts");
 const { tenantKey } = await import("../src/core/ownerkey.ts");
 
 const on = settings as unknown as Record<string, unknown>;
-on.instanceKeyDailyUsd = 1e9; // these tests spend a friend's day by hand (recordCost): her own ceiling is what they look at; the key's ceiling is test/spendcaps.test.ts (a friend's spend IS the key's in the one ledger)
+on.instanceKeyDailyUsd = 1e9; // these tests spend a friend's day by hand (recordCost): the key's ceiling is test/spendcaps.test.ts (a friend's spend IS the key's in the one ledger)
 const KEY = "instance-key-for-the-payer-tests";
 const owner = { kind: "owner" } as const;
 const group = { kind: "group" } as const;
@@ -67,10 +67,9 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
   assert.deepEqual(mayRun(her(anna), "t", { key: () => undefined }), { refused: "no-key" });
   assert.deepEqual(mayRun(her(bea), "t", { key: () => undefined }), { refused: "no-key" });
   assert.equal(alerts.length, 1);
-  // her budget
-  recordCost(100, T.tenantContext(anna).ledger);
-  assert.deepEqual(mayRun(her(anna), "t", { key: () => KEY }), { refused: "budget", limit: T.tenantContext(anna).dailyBudgetUsd });
-  assert.equal((mayRun(her(bea), "t", { key: () => KEY }) as { kind: string }).kind, "instance", "another friend's day is her own");
+  // her spend is hers in the ledger, and no day of her own stops her
+  recordCost(0.1, T.tenantContext(anna).ledger);
+  assert.equal((mayRun(her(anna), "t", { key: () => KEY }) as { kind: string }).kind, "instance");
   // the key's cooldown
   noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN);
   for (const rec of [anna, bea]) assert.equal((mayRun(her(rec), "t", { key: () => KEY }) as { refused: string }).refused, "cooldown", "the key is cooling down for every friend");
@@ -84,14 +83,15 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
   assert.deepEqual(mayRun(her(bea), "t", { key: () => KEY, chat: true }), { refused: "inactive" });
 });
 
-test("a friend's urgent compaction waits while she is blocked (her day's budget spent): no model call, nothing marked", async () => {
+test("a friend's urgent compaction waits while she is blocked (the key's day spent): no model call, nothing marked", async () => {
   const anna = friend("Anna2");
   const conv = { ...her(anna), convId: T.tenantContext(anna).convId, source: "group", notesDir: T.tenantContext(anna).notesDir } as const;
   const { mkdirSync } = await import("node:fs");
   mkdirSync(T.tenantContext(anna).dir, { recursive: true });
   const stale = { sessionId: "s", costUsd: 0, lastContextTokens: 10_000_000, baseTokens: 1, lastTurnAt: new Date().toISOString() };
   writeSession(conv.convId, stale);
-  recordCost(100, T.tenantContext(anna).ledger); // her day is spent
+  on.instanceKeyDailyUsd = 50; // the key's day is what blocks a friend
+  recordCost(100, T.tenantContext(anna).ledger);
   const err = console.error;
   const log = console.log;
   console.error = console.log = () => {};
@@ -99,6 +99,7 @@ test("a friend's urgent compaction waits while she is blocked (her day's budget 
     await compactConversation(conv, "urgent", { key: () => KEY });
     assert.deepEqual(readSession(conv.convId), stale, "blocked: not even attempted (no failure marker, no model call)");
   } finally {
+    on.instanceKeyDailyUsd = 1e9;
     console.error = err;
     console.log = log;
   }

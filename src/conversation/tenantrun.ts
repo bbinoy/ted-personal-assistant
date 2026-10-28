@@ -43,7 +43,6 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     const payer = may(conv, "chat");
     if (isRefusal(payer)) {
       if (payer.refused === "cooldown") return refuse(ctx, "cooldown", { until: timeIn(new Date(payer.until!)) });
-      if (payer.refused === "budget") return refuse(ctx, "own-budget", { limit: ctx.dailyBudgetUsd });
       if (payer.refused === "instance-budget") return refuse(ctx, "shared-budget"); // all friends' shared day is spent: the owner heard of it in mayRun
       if (payer.refused === "no-key") return refuse(ctx, "no-key"); // (the admin heard of it in mayRun)
       return { text: SILENT }; // suspended or removed

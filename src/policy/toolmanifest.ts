@@ -90,7 +90,7 @@ export function availableFor(tool: string, run: RunKind, mail?: MailProvider): b
   return !e || presentFor(e, run);
 }
 
-// A module's `free`, `untrusted` and `ownerOnly` say "all my rows" (true) or "the rows with these actions".
+// A module's `free` and `untrusted` say "all my rows" (true) or "the rows with these actions".
 const covers = (set: true | readonly string[] | undefined, action: string): boolean => set === true || !!set?.includes(action);
 
 // Free: the call runs without the judge and without a question, because it changes nothing of the owner's and sends nothing out: a read, and the
@@ -116,11 +116,8 @@ export function readsUntrusted(tool: string, mail: MailProvider = settings.mailP
   return f.entry.action === "read" && conversation !== undefined && !!f.module.untrustedWhen?.(f.entry.action, conversation);
 }
 
-// Rows that belong to the owner alone (the connectors, the tenant administration, the browser, opening a page): never in a group's or a tenant's tool set.
-export const isOwnerOnly = (tool: string): boolean => {
-  const f = anyRow(tool);
-  return !!f && (covers(f.module.ownerOnly, f.entry.action) || f.module.connection.kind === "connector");
-};
+// Rows of a claude.ai connector or user-scope server: the owner's own accounts on the instance's login. Such a row needs the `login` capability besides its own (capabilities.ts).
+export const isConnectorTool = (tool: string): boolean => anyRow(tool)?.module.connection.kind === "connector";
 
 // Pure. The tool's call as one view: send, reply, forward or draft, with bcc and attachments always in it, read by the mail module that lists the tool.
 // Undefined for a tool that is not a mail tool of the loaded provider, or a call that cannot be read (a send of a draft nobody read back).

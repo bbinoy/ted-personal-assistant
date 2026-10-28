@@ -2,7 +2,7 @@ import type { Conversation } from "../conversation/conversationmodel.ts";
 import { skillsFor } from "../modules/skills.ts";
 import { capabilitiesOfRecord, resolveCapabilities } from "../tenants/capabilityset.ts";
 import { CAPABILITIES, OWNER_ID, people, tenantById, type Capability } from "../tenants/tenants.ts";
-import { isOwnerOnly, manifest, presentFor } from "./toolmanifest.ts";
+import { isConnectorTool, manifest, presentFor } from "./toolmanifest.ts";
 import type { RunKind } from "../core/runkind.ts";
 
 // ONE answer to "what may this conversation use now": capabilitiesOf(conv), a set of capabilities. Its tools and skills (toolsFor, skillsFor) and the loops that look in on
@@ -36,13 +36,12 @@ export const allows = (conv: Who, capability: Capability): boolean => capabiliti
 export const groupCapabilities = (): ReadonlySet<Capability> => capabilitiesOf({ kind: "group" });
 
 // The tools of a run with these capabilities: every manifest row whose capability is in the set and that is present for the run (toolmanifest.ts presentFor: attended or not, and
-// for whom). The ONE derivation, for the owner's run too: she has every capability, and what only her login has (the connectors, the tenant administration, opening a page: a module
-// says so, `ownerOnly` or a connector) is hers alone. Built-in tools (no "mcp__" prefix) are in the same set; the unknown tool is simply not in it. Skill is there only when there is a
+// for whom). The ONE derivation, for the owner's run too: she has every capability, and what only her login has (the connectors, the tenant administration) needs the
+// `login` capability, or an OWNER_ONLY one, which only her conversation has (a connector row needs `login` besides its own capability; resolveCapabilities takes it from everybody else). Built-in tools (no "mcp__" prefix) are in the same set; the unknown tool is simply not in it. Skill is there only when there is a
 // skill to load.
 export function toolsFor(caps: ReadonlySet<Capability>, run: RunKind = { who: "group", attended: true }): ReadonlySet<string> { // (default: a chat turn of an isolated conversation)
-  const owner = run.who === "owner";
-  const tools = new Set(manifest().filter((e) => caps.has(e.cap) && presentFor(e, run) && (owner || !isOwnerOnly(e.tool))).map((e) => e.tool));
-  if (!skillsFor(caps, owner).length) tools.delete("Skill");
+  const tools = new Set(manifest().filter((e) => caps.has(e.cap) && presentFor(e, run) && (caps.has("login") || !isConnectorTool(e.tool))).map((e) => e.tool));
+  if (!skillsFor(caps).length) tools.delete("Skill");
   return tools;
 }
 

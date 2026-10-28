@@ -186,14 +186,15 @@ test("the budget notice waits for the end of quiet and is not used up meanwhile"
   assert.equal(told.length, 1);
   ownerNotices.sendTo(undefined);
 });
-test("a group and a friend are refused from the one table and throttled the same way: once a day for a ceiling", () => {
+test("a group and a friend are refused from the one table and throttled the same way: once a day for a spent day", () => {
   instanceDb().run("DELETE FROM notices");
   for (const [audience, id] of [["group", groupConvId("g1")], ["friend", "friend-ann"]] as const) {
-    const said = refusalOnce("own-budget", audience, id, { limit: 5 }, DAY.getTime());
-    assert.equal(said, refusal("own-budget", audience, { limit: 5 }), audience);
-    assert.equal(refusalOnce("own-budget", audience, id, { limit: 5 }, DAY.getTime()), undefined, `${audience}: not again today`);
-    assert.notEqual(refusalOnce("own-budget", audience, `${id}-other`, { limit: 5 }, DAY.getTime()), undefined, `${audience}: another has its own`);
-    assert.notEqual(refusalOnce("own-budget", audience, id, { limit: 5 }, MORNING.getTime()), undefined, `${audience}: the next day`);
+    const reason = audience === "group" ? "owner-budget" : "shared-budget";
+    const said = refusalOnce(reason, audience, id, {}, DAY.getTime());
+    assert.equal(said, refusal(reason, audience), audience);
+    assert.equal(refusalOnce(reason, audience, id, {}, DAY.getTime()), undefined, `${audience}: not again today`);
+    assert.notEqual(refusalOnce(reason, audience, `${id}-other`, {}, DAY.getTime()), undefined, `${audience}: another has its own`);
+    assert.notEqual(refusalOnce(reason, audience, id, {}, MORNING.getTime()), undefined, `${audience}: the next day`);
   }
   assert.doesNotMatch(refusal("owner-budget", "group"), /DAILY_BUDGET|\.env|npm/, "nobody in a group is sent to a terminal");
   assert.doesNotMatch(refusal("shared-budget", "friend"), /INSTANCE_KEY|\.env|npm/);

@@ -15,10 +15,9 @@ export const builtinModule: ToolModule = {
     ...builtin("note-file", "Read Write Edit"),
     // A search query is a small channel out, accepted: every run has the tool.
     ...builtin("web-search", "WebSearch"),
-    ...builtin("web-fetch", "WebFetch"), // judged; the plain-address veto is below. Only the owner's runs, attended or not (ownerOnly: an address can carry data out of a conversation that holds no private data of the owner's)
+    ...builtin("web-fetch", "WebFetch"), // judged; the plain-address veto is below. For every conversation, like WebSearch
   ],
   free: ["web-search", "skill", "note-file"],
-  ownerOnly: ["web-fetch"],
   titles: { WebFetch: { icon: "🌐", title: "Open a web page", labels: { url: "Address", prompt: "To find out" } } },
   untrusted: ["web-fetch", "web-search"], // a page and a search result are written by third parties
   floor: { judgeVeto: { "web-fetch": (input) => isPlainWebAddress(input.url) } }, // opening a page is judged only for a plain public https address: an address can carry data out

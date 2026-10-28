@@ -169,8 +169,8 @@ test("web: search is free and opening a page is judged in every place (which run
     assert.equal(classify("WebFetch", { url: "https://example.com" }, kindOf(source)), "ask", `WebFetch (${source})`);
     assert.equal(classify("WebFetch", { url: "file:///etc/passwd" }, kindOf(source)), "deny", `WebFetch file:// (${source})`);
   }
-  // a group never opens a page: its tool set does not hold the tool
-  assert.equal(classify("WebFetch", { url: "https://example.com" }, GROUP_CHAT), "deny");
+  // a group opens a page like everybody: judged, the plain public address only
+  assert.equal(classify("WebFetch", { url: "https://example.com" }, GROUP_CHAT), "ask");
 });
 
 test("data folders: chat may read them (never write), and links cannot lead out", async () => {

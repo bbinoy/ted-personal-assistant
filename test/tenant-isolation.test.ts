@@ -22,7 +22,7 @@ const T = await import("../src/tenants/tenants.ts");
 const { resolveCapabilities, toolsFor: toolsForCaps } = await import("../src/policy/capabilities.ts");
 const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEND_CAPABILITIES, { own: ctx.config }); // (a context not in the registry: the pure step of capabilitiesOf)
 const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
-const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i]; // (written out by hand, apart from the modules' `ownerOnly`)
+const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^Bash/, /card|payment|profile/i]; // (written out by hand, apart from the manifest)
 const { classify, isReadableData, hiddenTools } = await import("../src/policy/policy.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
@@ -217,7 +217,7 @@ test("tenant key: her run's environment carries HER key and none of the instance
   assert.equal(o.strictMcpConfig, true);
   assert.deepEqual(o.settingSources, []);
   assert.equal(o.permissionMode, "default");
-  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch", "Agent"]);
+  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch", "Agent"]);
   assert.deepEqual(Object.keys(o.mcpServers as object).sort(), ["memory", "people", "send", "weather", "draw", "tasks", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort());
   assert.equal((o.settings as { autoMemoryDirectory: string }).autoMemoryDirectory, ann.notesDir);
   // the owner's chat is as it was: the process environment, no key injected, and no tenant tools without TENANTS

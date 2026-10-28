@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { ASSISTANTS_DIR } from "./paths.ts";
 
 // The assistant preset: what makes this harness "Ted, the personal assistant" and not another assistant, as DATA.
-// A preset is a folder (assistants/<name>/): preset.json (the rhythm, the note categories, the profile limits, the assistant's own skills)
+// A preset is a folder (assistants/<name>/): preset.json (the rhythm, the note categories, the run limits, the assistant's own skills)
 // and persona/*.md (the words of every prompt). Code reads it; a different folder is a different personality and rhythm on the same
 // harness (ASSISTANT_PRESET=<name or folder>). What a preset can NOT reach stays in code: policy, approvals, isolation, payments,
 // the capability table, the heartbeat's triage gate. Enforcement never depends on a prompt's wording, so a preset only changes how the
@@ -12,7 +12,7 @@ import { ASSISTANTS_DIR } from "./paths.ts";
 // This file imports nothing of the harness (settings.ts reads it for its defaults), only the file system.
 
 export interface CoreSkill { readonly name: string; readonly required?: boolean }
-export interface ProfileData { readonly maxTurns: number; readonly maxBudgetUsd: number }
+export interface Limits { readonly maxTurns: number; readonly maxBudgetUsd: number }
 export interface Rhythm {
   // everyMinutes: the free tick (no model); dayMinutes: the heartbeat run's default gap between two looks in the day.
   readonly heartbeat: { readonly everyMinutes: number; readonly dayMinutes: number };
@@ -20,13 +20,12 @@ export interface Rhythm {
   // last time, a group once its members wrote `minNewLines.group`; at most `maxGroupsPerNight` groups a night.
   readonly dream: { readonly hour: number; readonly minNewLines: { readonly direct: number; readonly group: number }; readonly maxGroupsPerNight: number };
 }
-export type ProfileKey = "chat" | "group";
 export interface Preset {
   readonly name: string;
   readonly rhythm: Rhythm;
   // categories: every note category; background: the ones a heartbeat look may write itself (facts, never rules); dream: the ones the owner's dream may write; others: the ones the notes (and dreams) of a group and of a friend have.
   readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly others: readonly string[]; readonly background: readonly string[] };
-  readonly profiles: Readonly<Record<ProfileKey, ProfileData>>;
+  readonly limits: Limits; // one set for every conversation's runs: the owner's, each group's and each friend's
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
   readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert every run may delegate to (run/delegation.ts); expert-opus is the same on OPUS_MODEL
   readonly persona: Readonly<Record<PromptKey, Template>>;
@@ -199,12 +198,9 @@ export function loadPreset(dir: string): Preset {
   };
   const notes = { categories, dream: subset("notes.dream", n.dream), others: subset("notes.others", n.others), background: n.background === undefined ? [] : words(at("notes.background"), n.background).filter((c) => categories.includes(c)) }; // (a preset that extends another and changes the categories keeps the ones it still has)
 
-  const p = sec("profiles");
-  const profile = (key: ProfileKey): ProfileData => {
-    const d = obj(at(`profiles.${key}`), p[key]);
-    return { maxTurns: int(at(`profiles.${key}.maxTurns`), d.maxTurns, 1, 1000), maxBudgetUsd: num(at(`profiles.${key}.maxBudgetUsd`), d.maxBudgetUsd, 0.01, 1000) };
-  };
-  const profiles = { chat: profile("chat"), group: profile("group") };
+  if (json.profiles !== undefined) fail(where, '"profiles" is gone: use one "limits": { "maxTurns": ..., "maxBudgetUsd": ... } for every conversation');
+  const l = sec("limits");
+  const limits = { maxTurns: int(at("limits.maxTurns"), l.maxTurns, 1, 1000), maxBudgetUsd: num(at("limits.maxBudgetUsd"), l.maxBudgetUsd, 0.01, 1000) };
 
   const s = sec("skills");
   const coreList = Array.isArray(s.core) ? s.core : fail(at("skills.core"), "must be a list");
@@ -227,7 +223,7 @@ export function loadPreset(dir: string): Preset {
     for (const used of namesIn(t.nodes)) if (!allowed.has(used)) fail(file, `{{${used}}} is not available here (this text may use ${[...allowed].map((a) => `{{${a}}}`).join(", ") || "nothing"})`);
     persona[key] = t;
   }
-  return { name, rhythm, notes, profiles, skills: { core, order }, expert, persona };
+  return { name, rhythm, notes, limits, skills: { core, order }, expert, persona };
 }
 
 // The preset this process runs: ASSISTANT_PRESET is the name of a folder in assistants/ (default "ted") or the path of one.

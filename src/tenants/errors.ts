@@ -42,7 +42,7 @@ export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
 // ---- what a person is told when Ted cannot serve them right now: ONE table, by reason and audience ----
 // Fixed texts, on purpose (CLAUDE.md §4): they go to people for whom no model run is possible at that moment (a refused key, a spent day, a cooldown), or after a run has failed. Short and kind; the
 // owner's own end with the one step (FIXES). A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every 30 minutes (refusalOnce).
-export type Reason = Cause | "owner-budget" | "own-budget" | "shared-budget" | "cooldown" | "no-key";
+export type Reason = Cause | "owner-budget" | "shared-budget" | "cooldown" | "no-key";
 export interface RefusalFacts {
   until?: string; // a cooldown: when it ends, as a clock time
   limit?: number; // a friend's own day: her ceiling
@@ -61,7 +61,6 @@ const REFUSALS: Readonly<Record<Reason, Readonly<Partial<Record<Audience, Say>>>
   reconnect: { owner: `A friend's Notion or Google connection no longer works. ${FIXES.reconnect.fix}` },
   other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}` },
   "owner-budget": { group: `I've used up my budget for today, so I can't answer until tomorrow. ${OWNER} can raise it if it is urgent.` },
-  "own-budget": { group: "I've reached today's limit for this group, back tomorrow.", friend: (o) => `You've reached your daily limit of ${o.limit}, so I'm resting until tomorrow.` },
   "shared-budget": { friend: "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved." },
   cooldown: { friend: (o) => `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${o.until}.` },
   "no-key": { friend: `I'm not set up for friends yet, so I can't reply for now. I've let ${OWNER} know.` },

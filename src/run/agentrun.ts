@@ -19,7 +19,7 @@ import { isNotePath, noteSavedHint, parseNote, STATUS_PREFIX, writeIndex } from 
 import { recordLook } from "../memory/learned.ts";
 import { routineNoteReply } from "../modules/tasks/routinelist.ts";
 import { builtinModule } from "../modules/builtin.ts";
-import { createsOf, isOwnerOnly } from "../policy/toolmanifest.ts";
+import { createsOf } from "../policy/toolmanifest.ts";
 import { callLabel, idsInResult, noteCreated } from "../approvals/created.ts";
 import { serversFor } from "../modules/runtime.ts";
 import type { RunContext } from "../modules/types.ts";
@@ -119,8 +119,8 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
 export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> & { attended?: boolean } = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
 
 // The built-in tools of a run (everything else is an MCP tool): the rows of the builtin module (modules/builtin.ts) that its tool set holds. 
-function builtinTools(tools: ReadonlySet<string>, owner: boolean): string[] {
-  return builtinModule.rows.filter((r) => tools.has(r.tool) && (owner || !isOwnerOnly(r.tool))).map((r) => r.tool); // (opening a page is the owner's alone, whatever a set held)
+function builtinTools(tools: ReadonlySet<string>): string[] {
+  return builtinModule.rows.filter((r) => tools.has(r.tool)).map((r) => r.tool);
 }
 
 export function buildOptions(approve: Approve, opts: RunOptions, resume: string | undefined, signal?: AbortSignal, run: string = randomUUID()): Options { // signal: the run's own abort signal, when the caller has it (its browse child is called off with it)
@@ -190,7 +190,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // The run's tools: its conversation's capabilities, less what attendance removes (capabilities.ts toolsFor), the same derivation for every conversation. The browse worker has its browser's own and web search.
   const tools = opts.tools ?? (browsing ? browseTools() : owner ? toolsFor(capabilitiesOf({ kind: "owner" }), kind) : groupTools(kind));
   const offers = (tool: string) => browsing || tools.has(tool);
-  const skills = tools.has("Skill") ? (opts.skills ?? skillsFor(owner ? capabilitiesOf({ kind: "owner" }) : groupCapabilities(), owner)) : []; // (no Skill tool, no skill to load)
+  const skills = tools.has("Skill") ? (opts.skills ?? skillsFor(owner ? capabilitiesOf({ kind: "owner" }) : groupCapabilities())) : []; // (no Skill tool, no skill to load)
   const plugin = [{ type: "local" as const, path: settings.pluginDir, skipMcpDiscovery: true }];
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
   const groupId = opts.groupId ?? opts.memory?.groupId;
@@ -241,7 +241,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // Built-ins: Skill, and for chat Read / Write / Edit (confined to the notes folder by
     // policy.ts) and WebSearch / WebFetch (search freely, open a page only after approval). No Bash. Everything else the agent can do is an MCP tool (Mailbird,
     // Notion, Calendar...), gated by canUseTool.
-    tools: [...builtinTools(tools, owner), ...(delegation ? ["Agent"] : [])],
+    tools: [...builtinTools(tools), ...(delegation ? ["Agent"] : [])],
     agents: opts.experts?.setup.agents,
     // "user" loads user-scope MCP servers (Mailbird) and CLAUDE.md; the skills offered are
     // limited to the bundled ones below.

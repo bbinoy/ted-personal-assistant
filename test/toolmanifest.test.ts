@@ -149,7 +149,7 @@ test("manifest: every connector tool the model is given by default (a module's `
 test("manifest: the group's rules are not flags and stay as they were", () => {
   const dir = "/nonexistent-group-dir";
   assert.equal(classify("WebSearch", { query: "x" }, GROUP_CHAT), "allow");
-  assert.equal(classify("WebFetch", { url: "https://example.com" }, GROUP_CHAT), "deny");
+  assert.equal(classify("WebFetch", { url: "https://example.com" }, GROUP_CHAT), "ask");
   assert.equal(classify(`${MB}send_message_now`, {}, GROUP_CHAT), "deny");
   assert.equal(classify(`${CAL}create_event`, {}, GROUP_CHAT), "deny");
   assert.equal(classify("Read", { file_path: `${dir}/x.md` }, GROUP_CHAT), "deny");

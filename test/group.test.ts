@@ -34,7 +34,7 @@ test("groups: web search, the memory tools (scoped by their server) and the file
   mkdirSync(NOTES_DIR, { recursive: true });
   assert.equal(classify("WebSearch", { query: "x" }, GROUP_CHAT), "allow");
   for (const t of ["mcp__memory__search_logs", "mcp__memory__forget_note", "mcp__memory__undo_dream"]) assert.equal(classify(t, {}, GROUP_CHAT), "allow", t);
-  for (const t of ["WebFetch", "Bash", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, GROUP_CHAT), "deny", t);
+  for (const t of ["Bash", "mcp__mailbird__get_message", "mcp__claude_ai_Google_Calendar__list_events", "mcp__group__remember_note"]) assert.equal(classify(t, {}, GROUP_CHAT), "deny", t);
   for (const t of ["Read", "Write", "Edit"]) {
     assert.equal(classify(t, { file_path: join(dir, "people-eve.md") }, GROUP_CHAT, dir), "allow", t);
     assert.equal(classify(t, { file_path: join(dir, "anything at all.txt") }, GROUP_CHAT, dir), "allow", `${t}: no file name rules, containment is the only gate`);
@@ -53,7 +53,7 @@ test("groups: a group run is built with its own memory folder, its own session a
   assert.notEqual(conv.notesDir, owner().notesDir);
   assert.equal(runFor(conv, "message").sessionConv, groupConvId("g-build"), "its own session: the session row of its own assistant.db");
   assert.deepEqual([o.settingSources, o.strictMcpConfig, o.plugins, o.skills, Object.keys(o.mcpServers ?? {})], [[], true, [{ type: "local", path: settings.pluginDir, skipMcpDiscovery: true }], skillsFor(groupCapabilities()), ["send", "weather", "draw", "tasks", "voice", "memory", "people", "browse"]]);
-  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch", "Agent"]);
+  assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch", "Agent"]);
   const oo = buildOptions(async () => ({ approved: false }), { kind: OWNER_CHAT, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir: NOTES_DIR } }, undefined);
   assert.deepEqual(oo.settings, { autoMemoryEnabled: true, autoMemoryDirectory: NOTES_DIR }); // the owner's wiring is unchanged
   assert.deepEqual(oo.settingSources, ["user"]);
