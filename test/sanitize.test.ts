@@ -81,9 +81,9 @@ const FINE = [
   "שלום עולם, מה שלומך? 2026",
   "می\u200Cخواهم به خانه بروم",
   "🙂 👍🏽 🇩🇪 🇺🇸 👩\u200D💻 👨\u200D👩\u200D👧\u200D👦 🏳\uFE0F\u200D🌈 ❤\uFE0F ☺\uFE0F 1\uFE0F⃣ #\uFE0F⃣ ✌\uFE0F 🏴󠁧󠁢󠁥󠁮󠁧󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿",
-  "https://example.com/path?q=a%20b&x=1#frag and mailto:ben@example.com",
+  "https://example.com/path?q=a%20b&x=1#frag and mailto:alex@example.com",
   "const x = { a: [1, 2], b: `t` };\n  if (x?.a) { return \"ok\"; }\n\tindented",
-  "> On Mon, Ben wrote:\n> Are you free Thursday?\n>> older\n\nThanks!\n-- \nBen",
+  "> On Mon, Alex wrote:\n> Are you free Thursday?\n>> older\n\nThanks!\n-- \nBen",
   "Line one\n\nLine two\n\n\nLine three (two blank lines)",
   "Prices: €5 £3 ¥100 ½ ² ™ © ® … – — ‘ ’ “ ” « »",
   "----- not a long run -----\n=====\n*****",
@@ -298,7 +298,7 @@ test("html: the number of dropped hidden parts is counted (no content)", () => {
 test("html: plain text is not treated as html", () => {
   assert.equal(looksLikeHtml("if a < b and c > d then 3 <4"), false);
   assert.equal(looksLikeHtml("<div>hi</div>"), true);
-  assert.equal(mailBody("Dear Ben,\n\nSee you at 5 <soon>.\n"), "Dear Ben,\n\nSee you at 5 <soon>.\n");
+  assert.equal(mailBody("Dear Alex,\n\nSee you at 5 <soon>.\n"), "Dear Alex,\n\nSee you at 5 <soon>.\n");
 });
 
 test("html: a huge or deeply nested document does not blow up", () => {

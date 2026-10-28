@@ -38,7 +38,7 @@ const brief = skill("daily-brief", "daily-brief", "every day at 07:30");
 const evening = skill("evening-wrap", "evening-wrap", "every weekday at 18:30");
 const weekly = skill("weekly-review", "weekly-review", "every fri at 16:30");
 const all = [brief, evening, weekly];
-const opts = { catchUpHours: 4, who: "Ben" };
+const opts = { catchUpHours: 4, who: "Alex" };
 const anchor = "2026-10-01";
 
 test("no skill schedules itself (routine notes are the only schedule); the brief, the wrap and the review keep their experts", () => {
@@ -143,7 +143,7 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   assert.match(f2c.text, /evening-wrap: due now \(every weekday at 18:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"/);
   assert.match(f2c.text, /Run the ted-personal-assistant:evening-wrap skill and deliver it as it says/);
   assert.match(f2c.text, /every time it writes is exactly as the clock line gives it/);
-  assert.match(f2c.text, /Code counted 2 open approvals waiting for Ben/);
+  assert.match(f2c.text, /Code counted 2 open approvals waiting for Alex/);
   assert.match(f2c.text, /weekly-review: also due, but one routine per look/);
 
   S.markStarted(conv, "evening-wrap", f2c.due!.plan.slot.date, T2.getTime());
@@ -169,7 +169,7 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   assert.deepEqual(f4.told, []);
   const monday = z("2026-10-26T17:45:00Z"); // the evening wrap is due: the missed weekly review rides along as one line, once
   const f5 = S.routineFacts(conv, [weekly, evening], monday, BERLIN, opts);
-  assert.match(f5.text, /Missed, nothing for Ben to do: weekly-review did not run on 2026-10-23 \(the Mac was asleep past its time\) and will not be redone\. Put it as one short line in the message the expert writes now, if that message is a brief/);
+  assert.match(f5.text, /Missed, nothing for Alex to do: weekly-review did not run on 2026-10-23 \(the Mac was asleep past its time\) and will not be redone\. Put it as one short line in the message the expert writes now, if that message is a brief/);
   assert.deepEqual(f5.told, ["weekly-review"]);
   S.markTold(conv, f5.told);
   assert.doesNotMatch(S.routineFacts(conv, [weekly, evening], new Date(monday.getTime() + 60_000), BERLIN, opts).text, /Missed/, "told once, then quiet");

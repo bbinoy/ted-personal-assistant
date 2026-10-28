@@ -31,13 +31,13 @@ For a trip that starts within about 10 days (or is under way):
 1. Find the people whose "Lives in" is the place (or its country, for a short trip across a region) is where the owner will be. Be generous about the area: a person in Cascais counts for a Lisbon trip. Check the dates: if the owner is there only at the airport for two hours, it does not count.
 2. For each person, find when the owner last was in touch: search the mail for that person's name or address, and the calendar for events with them. Use what you find to say it ("last wrote in March"), never to save it. If you cannot tell, say nothing about it.
 3. Skip anyone a note says is not to be bothered, or whose cadence says they were just seen.
-4. Send ONE short message to the owner, in your voice: where and when, who lives there, how long since you were in touch, and one useful detail from the note (a birthday, a baby, the thing they like). Offer to draft a note to them or to find a time in the calendar. Never contact the person yourself: a draft or an invitation goes through the usual approval.
+4. Send ONE short message to the owner, in your voice: where and when, who lives there, how long since you were in touch, and one useful detail from the note (a birthday, a baby, the thing they like). Write the draft note to them (say "draft ready") and, where a visit fits, a tentative hold on the owner's own calendar. Never contact the person yourself: a draft or an invitation goes through the usual approval.
 
 Do not repeat yourself. If your recent messages show you already told the owner about this trip, say nothing again unless the dates changed or the owner answered.
 
 ## Reaching out without a trip
 
-When a note gives a cadence ("about every 3 months") and the mail or calendar shows it has been well past that, or when a date in the note is near (a birthday within a week, a due date), tell the owner at a good moment: at most one such message per look and not at night. Offer a draft. Offering a draft is safe work, so do it; only a plain FYI with nothing to offer stays unsaid.
+When a note gives a cadence ("about every 3 months") and the mail or calendar shows it has been well past that, or when a date in the note is near (a birthday within a week, a due date), tell the owner at a good moment: at most one such message per look and not at night. Write the draft and say "draft ready"; drafts are free. Only a plain FYI with nothing to draft stays unsaid.
 
 ## Never
 

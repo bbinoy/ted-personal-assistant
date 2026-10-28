@@ -46,7 +46,7 @@ test("a long reply is one message with the quote, and its cut body coming back i
 
 test("voice replies: only a leading [[voice]] marks a spoken reply", async () => {
   const { splitVoice } = await import("../src/conversation/voicereply.ts");
-  assert.deepEqual(splitVoice("[[voice]] Hey Ben, all set."), { voice: "Hey Ben, all set.", text: "Hey Ben, all set." });
+  assert.deepEqual(splitVoice("[[voice]] Hey Alex, all set."), { voice: "Hey Alex, all set.", text: "Hey Alex, all set." });
   assert.deepEqual(splitVoice("  [[VOICE]]\nYes."), { voice: "Yes.", text: "Yes." });
   assert.deepEqual(splitVoice("Sure. [[voice]] not at the start"), { text: "Sure. [[voice]] not at the start" });
   assert.deepEqual(splitVoice("plain reply"), { text: "plain reply" });

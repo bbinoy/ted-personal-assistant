@@ -38,7 +38,7 @@ test("gate: the delay is capped by the setting in code, and the prompt says typi
 });
 
 test("gate prompt: a message that arrived while the last reply was being written is said not to be answered by it", () => {
-  const tail = ["[10-14 09:00] Eve (a member): what do you think, Ted?", "[10-14 09:00] Assistant: Good point, Ben."];
+  const tail = ["[10-14 09:00] Eve (a member): what do you think, Ted?", "[10-14 09:00] Assistant: Good point, Alex."];
   assert.match(gatePrompt({ now: T0, tail, secondsSinceMine: 3, duringLastReply: true }, ""), /arrived while you were writing that last message.*not an answer to it/);
   assert.doesNotMatch(gatePrompt({ now: T0, tail, secondsSinceMine: 3 }, ""), /while you were writing/);
 });

@@ -67,11 +67,10 @@ test("the status notes are ordinary notes the skills write with Write: expiring,
   for (const run of [OWNER_LOOK, OWNER_CHAT]) assert.equal(classify("Write", { file_path: path, content: "x" }, run), "allow", run.who);
 });
 
-test("the daily-brief skill writes status-brief.md and status-overdue-offer.md itself, with an expiry; no tool, no state", () => {
+test("the daily-brief skill writes status-brief.md itself, with an expiry; no tool, no state", () => {
   const skill = readFileSync(join(settings.pluginDir, "skills", "daily-brief", "SKILL.md"), "utf8");
   assert.doesNotMatch(skill, /write_status_note|memory_changes_since_brief/);
   assert.match(skill, /`status-brief\.md`[^\n]*written with `Write`/);
   assert.match(skill, /notes_changed_facts/, "the learned block comes from code in the context");
   assert.match(skill, /expires: <tomorrow, YYYY-MM-DD>/);
-  assert.match(skill, /status-overdue-offer\.md` with `Write` \(front matter `expires:` 30 days/);
 });

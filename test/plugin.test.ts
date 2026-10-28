@@ -121,10 +121,10 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   assert.match(read("daily-brief"), /whenever the row does not let you decide with confidence/);
 });
 
-test("a long overdue pile: the brief offers a clean-up once (remembered in the status note), the task skill says how", () => {
+test("a long overdue pile: the task skill snoozes the stale tail and says so in one line", () => {
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
-  assert.match(read("tasks"), /A long overdue pile[\s\S]*\*\*once\*\*[\s\S]*reschedule, drop or keep[\s\S]*Nothing is dropped without their word/);
-  assert.match(read("daily-brief"), /A long overdue pile[\s\S]*status-overdue-offer[\s\S]*`status-overdue-offer\.md` with `Write`/);
+  assert.match(read("tasks"), /A long overdue pile[\s\S]*snooze_task[\s\S]*reopen[\s\S]*one line/);
+  assert.doesNotMatch(read("daily-brief") + read("tasks"), /status-overdue-offer/);
 });
 
 test("connectors: a run that started without a network records nothing", async () => {

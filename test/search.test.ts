@@ -210,7 +210,7 @@ test("search: a different Ranker can be plugged in (the seam for a local embeddi
 
 test("search: 20k lines, indexed once, then queries and incremental updates are fast", async () => {
   const r = rig("big");
-  const words = "meeting lunch dinner flight train hotel dentist invoice birthday garden kite surf weather mortgage Anna Ben Carla Dmitri Eve Frank trattoria cafe tickets".split(" ");
+  const words = "meeting lunch dinner flight train hotel dentist invoice birthday garden kite surf weather mortgage Anna Alex Carla Dmitri Eve Frank trattoria cafe tickets".split(" ");
   const lines: string[] = [];
   let seed = 7;
   const rnd = (k: number) => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) % k);

@@ -53,7 +53,7 @@ test("a declined create is never auto-approved by the judge: forced ask, audited
   const judge = (async (i: { description: string }): Promise<Verdict> => (judged.push(i.description), { decision: "auto", reason: "his thumbs-up answered the proposed 9:00 time" })) as never;
   const asked: string[] = [];
   const answers = [false, false];
-  const prov = () => ({ kind: "owner" as const, message: "add coffee tomorrow", earlier: ["Ben reacted 👍"] });
+  const prov = () => ({ kind: "owner" as const, message: "add coffee tomorrow", earlier: ["Alex reacted 👍"] });
   const approve = async (description: string) => (asked.push(description), { approved: answers.shift()! });
   // the first create is judged ask and the owner says no
   const canAsk = makeCanUseTool(approve, OWNER_CHAT, undefined, (async () => ({ decision: "ask", reason: "mismatch" })) as never, undefined, undefined, false, { provenance: prov, conversation: conv });
@@ -93,17 +93,17 @@ test("a reaction on a message from before the owner's latest message is marked f
   const s = new TurnScope("owner");
   const t = 10_000_000;
   s.wrote(t - 40 * 60_000);
-  s.say("Ben reacted 👍", "Shall I put coffee at 9:00?", t - 45 * 60_000); // on a message sent 45 min ago, owner wrote 40 min ago
+  s.say("Alex reacted 👍", "Shall I put coffee at 9:00?", t - 45 * 60_000); // on a message sent 45 min ago, owner wrote 40 min ago
   s.wrote(t - 5 * 60_000);
   s.say("add the coffee");
   const p = s.read(t) as unknown as { kind: "owner"; message: string; earlier: string[] };
   assert.equal(p.message, "add the coffee");
-  assert.match(p.earlier[0]!, /^Ben reacted 👍 \[a reaction answers only the message it was on: this one was on a message from 45 min ago, and .* has written since\]$/);
+  assert.match(p.earlier[0]!, /^Alex reacted 👍 \[a reaction answers only the message it was on: this one was on a message from 45 min ago, and .* has written since\]$/);
   const prompt = judgePrompt({ description: "Create event", provenance: { ...p, source: "chat" } });
   assert.match(prompt, /has written since/);
   // a reaction on the newest thing the owner wrote is not marked
   const f = new TurnScope("owner");
   f.wrote(t - 10 * 60_000);
-  f.say("Ben reacted 👍", "ok?", t - 2 * 60_000);
-  assert.equal((f.read(t) as unknown as { message: string }).message, "Ben reacted 👍");
+  f.say("Alex reacted 👍", "ok?", t - 2 * 60_000);
+  assert.equal((f.read(t) as unknown as { message: string }).message, "Alex reacted 👍");
 });

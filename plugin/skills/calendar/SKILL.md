@@ -15,8 +15,7 @@ or `MEMORY.md`). Use exactly those; do not guess calendar ids.
 
 **If there is no `setup-calendars` note:**
 - in chat, load `ted-personal-assistant:setup` and set it up with the owner now;
-- in an unattended run (nobody to ask), skip the calendar parts, and end the brief
-  with one line: "Calendar is not set up yet. Message me 'set up my calendar'."
+- in an unattended run, call `list_calendars` and save the `setup-calendars` note yourself, as the setup skill says, then carry on and say so in one line.
 
 Google Calendar via MCP. Call `list_events` with an explicit start/end range and
 the owner's time zone, for **all of the listed calendars in the same turn** (they
@@ -42,14 +41,14 @@ location - and hand it to `ted-personal-assistant:meeting-prep`, which decides w
 - An external meeting with no agenda / no video link.
 - A day that is wall-to-wall with no break.
 
-## Reschedules (suggest only for other people's events)
+## Reschedules
 
 If an email asks to move a meeting, or two things clash, propose 2-3
 concrete alternative slots from the owner's actual free time (following the
 owner's `scheduling-` notes) in the brief. For an event with guests or other
 people, do **not** call `update_event` on your own - the owner decides, then asks.
-A clash among the owner's own guest-less events or placeholders may be fixed
-with `update_event`; say so in one line.
+A clash among the owner's own guest-less events or placeholders is fixed
+with `update_event`, in any run; say so in one line.
 
 ## Bookings -> calendar (the automatic write)
 
@@ -94,9 +93,11 @@ whole job and ask once:
 
 Never invite other people or change an event that has guests without asking; the "one yes" covers only a new entry on the owner's own calendar.
 
+**In a background run** (a look, the brief) nobody is asked: do steps 1 and 2, save the reply as an in-thread draft, put a tentative hold on the owner's own calendar (no guests, "Hold: <title>"), and `add_task` "send the reply to <name>" so it reaches "Needs you". The owner's later "send" is the only question.
+
 ## The owner's own events, nobody else on them (in chat)
 
-"Put the visit to Uschi in my calendar on Saturday" is a plain request: create it at once on the owner's own
+"Put the visit to Rosa in my calendar on Saturday" is a plain request: create it at once on the owner's own
 calendar, with no guests and no notifications, and do not ask first. When the day or the time is open, pick the most
 likely reading yourself (the coming Saturday; a sensible time for that kind of thing, or an all-day event when no
 time fits) and SAY in your reply which date and time you chose ("Saturday 25 Oct, 10:00-13:30; tell me if it's
@@ -116,11 +117,8 @@ Before you act on an event, look it up by day and title (`list_events` for that 
 
 ## Guardrails
 
-- May: `create_event` for travel bookings as above.
-- May not (in an unattended run): `update_event` or reschedule on its own, `delete_event`
-  ever, create non-travel events, edit other people's events, send or
-  respond to invites. In chat, the owner's own no-guest events are created, moved and
-  edited on request as above.
+- May, in any run: create, move or edit an event on the owner's own calendar with nobody invited and no notifications (bookings, holds, own plans), and mention it.
+- Stays a draft, task or suggestion: anything with guests or notifications, other people's events, invites and responses. Deleting stays a question (and `delete_event` is never unattended).
 - The agent's policy (`src/policy/policy.ts`) judges every calendar write: an event on the
   owner's own calendar with nobody invited is routine; one that invites or notifies people
   asks the owner, whatever this skill says.
