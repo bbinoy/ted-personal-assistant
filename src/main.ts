@@ -11,7 +11,7 @@ import { scopeOf } from "./approvals/turnscope.ts";
 import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./conversation/guards.ts";
-import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
+import { createDreamer, dreamTrigger } from "./conversation/dream.ts";
 import { groupName, ownerInGroup } from "./conversation/group.ts";
 import { groupDir, recordGroup } from "./conversation/groupstore.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
@@ -233,14 +233,9 @@ setInterval(() => prepare(owner(), {}, { refresh: true }), WARM_REFRESH_MS).unre
 // The owner's search index (memory/search.ts) is brought up to date a little after start-up, in small slices that leave the event loop free, so the first real search_logs is quick.
 setTimeout(() => void warmSearchIndex(ownerSearchScope()).catch(() => {}), 20_000).unref();
 
-// One dreamer (dream.ts) for every conversation, in two sittings: the owner's and the groups' notes, and the friends'
-// (each is its own and one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
-const dreamer = createDreamer({ conversations: () => dreamConversations(["owner", "group"]), busy: (conv) => pipeline.busy(conv) });
-const friendsDreamer = createDreamer({ conversations: () => dreamConversations(["tenant"]), busy: (conv) => pipeline.busy(conv) });
-const dream = () => {
-  void friendsDreamer.run().catch(() => {});
-  return dreamer.run().catch(() => {});
-};
+// One dreamer (dream.ts) for every conversation, one after another: the owner, the groups, the friends (one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
+const dreamer = createDreamer({ busy: (conv) => pipeline.busy(conv) });
+const dream = () => dreamer.run().catch(() => {});
 const dreamAtItsHour = dreamTrigger(dream);
 // The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window (rotated audit lines, old signal-cli attachments, expired notes, old snapshots and logs...).
 // Plain file work, no model; it waits for the next tick while the owner's chat is in a turn. RETENTION=off disables it.
