@@ -18,6 +18,7 @@ import { writeFileAtomic } from "./state.ts";
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   routine_runs     the last period of each routine (a routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
+//   lapsed_approvals background approvals nobody answered in time, until a look is told (7 days at most, a retention rule)
 //   told             what was told once, or at most once a day / in a while, about this conversation: `group-reminder:<member>` = a group member told that a reminder said in the group is the group's (core/told.ts, src/tasks/grouptasks.ts).
 //
 // NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
@@ -228,6 +229,18 @@ export const CONV_SCHEMA: readonly Migration[] = [
       );
       INSERT INTO told (key, at, once) SELECT 'group-reminder:' || member, at, 1 FROM group_remind_noted;
       DROP TABLE group_remind_noted;
+    `,
+  },
+  {
+    version: 24,
+    name: "background approvals that lapsed unanswered, until a look has been told (src/approvals/approvals.ts, heartbeat/facts.ts)",
+    up: `
+      CREATE TABLE lapsed_approvals (
+        seq   INTEGER PRIMARY KEY AUTOINCREMENT,
+        at    INTEGER NOT NULL,                                     -- epoch ms it lapsed
+        label TEXT NOT NULL,                                        -- the action, first line of the approval details
+        wait  TEXT NOT NULL                                         -- how long it waited, as text
+      );
     `,
   },
 ];

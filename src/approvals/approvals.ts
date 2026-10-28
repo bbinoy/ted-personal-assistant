@@ -2,6 +2,8 @@ import { discardJudge, prepareJudge } from "./approvaljudge.ts";
 import { applyChanges, isModifiable, type Change } from "../policy/policy.ts";
 import type { Source } from "../core/audit.ts";
 import { emit } from "../core/events.ts";
+import { convDb } from "../core/convdb.ts";
+import { convIdOfKey } from "../core/convpaths.ts";
 import { isTenantKey } from "../core/ownerkey.ts";
 import { judgeAnswer } from "./approvalmodel.ts";
 import type { OpenView, Recent } from "./approvalprompt.ts";
@@ -73,12 +75,21 @@ const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
 const closed = new Map<string, { label: string; expired: boolean }>(); // recently ended approvals (scope and timestamp -> label, and whether nobody answered in time): a quoted reply to one must not land on another
 
-// Background questions nobody answered in time, per conversation (newest last, at most LAPSED_MAX): what the next look is told about (heartbeat/facts.ts lapsedFact). In memory: a restart forgets them.
-export interface Lapsed { at: number; label: string; wait: string }
-const LAPSED_MAX = 10;
-const lapsed = new Map<string, Lapsed[]>();
-export const lapsedIn = (scope: string): readonly Lapsed[] => lapsed.get(scope) ?? [];
-export const forgetLapsed = (scope: string, gone: readonly Lapsed[]): void => void lapsed.set(scope, lapsedIn(scope).filter((l) => !gone.includes(l)));
+// Background questions nobody answered in time, kept in the conversation's database (`lapsed_approvals`, core/convdb.ts; pruned after 7 days, heartbeat/convretention.ts) so a restart keeps them: what the
+// next look is told about (heartbeat/facts.ts lapsedFact).
+export interface Lapsed { seq: number; at: number; label: string; wait: string }
+export const lapsedIn = (scope: string): Lapsed[] => convDb(convIdOfKey(scope)).all<Lapsed>("SELECT seq, at, label, wait FROM lapsed_approvals ORDER BY seq");
+export const forgetLapsed = (scope: string, gone: readonly Lapsed[]): void => {
+  const db = convDb(convIdOfKey(scope));
+  db.tx(() => gone.forEach((l) => db.run("DELETE FROM lapsed_approvals WHERE seq = ?", l.seq)));
+};
+const noteLapsed = (scope: string, label: string, wait: string): void => {
+  try {
+    convDb(convIdOfKey(scope)).run("INSERT INTO lapsed_approvals (at, label, wait) VALUES (?, ?, ?)", Date.now(), label, wait);
+  } catch (e) {
+    console.error("approvals: could not keep a lapsed approval:", (e as Error).message);
+  }
+};
 
 // How many questions are waiting for an answer in this conversation ("/status", conversation/ownercommands.ts).
 export const openCount = (scope: string): number => [...open.values()].filter((o) => o.scope === scope && !o.done).length;
@@ -318,7 +329,7 @@ export function request(
     const timer = setTimeout(() => {
       finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`);
       // Silent in the chat (CLAUDE.md: expiries are system status): the journal says it, so "what happened to X?" has an answer; a chat turn's model is told it was not answered in time.
-      if (background) lapsed.set(opts.scope, [...lapsedIn(opts.scope), { at: Date.now(), label, wait: formatWait(minutes) }].slice(-LAPSED_MAX));
+      if (background) noteLapsed(opts.scope, label, formatWait(minutes));
       if (entry.ts) emit({ type: "expired", tool: call.tool, label, wait: formatWait(minutes), source: opts.source, conv: opts.scope });
     }, minutes * 60_000);
     signal?.addEventListener("abort", onAbort);

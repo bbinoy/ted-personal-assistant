@@ -12,6 +12,7 @@ const { noticeFor, reportReconnect } = await import("../src/tenants/errors.ts");
 const { owner } = await import("../src/conversation/conversationmodel.ts");
 const { heldPosts, resetHeld } = await import("../src/heartbeat/notices.ts");
 const { factsFor } = await import("../src/heartbeat/facts.ts");
+const { closeAllConvDbs } = await import("../src/core/convdb.ts");
 const { request } = await import("./approvalrig.ts");
 
 test("a friend's broken connection says nothing in the owner's chat; it is held once per conversation as a fact with no name", () => {
@@ -36,6 +37,7 @@ test("a background approval that lapsed is told to the next look once, with its 
   const asked = request(async () => 7001, "Create event Dentist\nmore details", call, undefined, { background: true });
   t.mock.timers.tick(15 * 60_000);
   assert.equal((await asked).expired, true);
+  closeAllConvDbs(); // a restart: the entry is in the file
   const now = new Date(Date.now() + 5 * 60_000);
   assert.ok(!factsFor(conv, now, "chat").status.some((s) => /lapsed unanswered/.test(s)));
   const look = factsFor(conv, now, "look");
