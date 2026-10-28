@@ -4,9 +4,7 @@ import type { Conversation } from "../conversation/conversation.ts";
 import { fence } from "../core/fence.ts";
 import { dayAt, dayIn, timeIn } from "../core/timezone.ts";
 import { PLUGIN } from "../core/preset.ts";
-import { settings } from "../core/settings.ts";
 import { takeWelcome } from "../core/welcome.ts";
-import { mailSlot } from "../modules/index.ts";
 import { learnedFact } from "../memory/learned.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
@@ -16,7 +14,7 @@ import { reminderFacts } from "../tasks/remind.ts";
 import { meetingFacts } from "../tasks/meetings.ts";
 import { tasksFacts } from "../tasks/render.ts";
 import { activeItems } from "../tasks/store.ts";
-import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineStatus, settleRoutines, type Routine } from "../tasks/routines.ts";
+import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineStatus, settleRoutines } from "../tasks/routines.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
 import { whereaboutsFact } from "./whereabouts.ts";
 import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
@@ -73,10 +71,6 @@ export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date,
   const lines = held.slice(0, HELD_MAX).map((h) => `Held back and not sent (written ${when(h.at)}): "${oneLine(h.text, HELD_CHARS)}"`);
   return `${fence("held_posts", lines.join("\n"))}\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`;
 }
-
-// How the daily brief reaches the owner, for its fact line: the mail provider's own words, or the chat alone when there is no mail. Any other routine: the chat message alone. (The daily brief is the routine whose note names that skill.)
-export const deliverHow = (r: Routine): string =>
-  r.instruction.includes("daily-brief") ? `How to deliver: ${settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format."}` : "";
 
 // What is pending in a run right now, per conversation (memory only: a restart ends every run, so nothing can be stuck).
 const busy = new Map<string, Set<string>>();
@@ -138,7 +132,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const finished = new Set<string>();
   let selfMailed = 0; // routine emails sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
   const { routines: ownRoutines, broken } = scheduledIn({ notesDir: conv.notesDir, zone, now });
-  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, approvals: openCount(conv.key), deliver: deliverHow }) : undefined;
+  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, approvals: openCount(conv.key), }) : undefined;
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
   for (const n of routineNames) grab(`routine:${n}`);
   const start = (name: string): void => {

@@ -451,7 +451,7 @@ test("a note that runs the daily brief: the expert and the delivery line, one re
   F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false }); // 07:00 Berlin: first sight
   const look = F.factsFor(conv, at("2026-10-22T06:00:00Z"), "look"); // 08:00
   assert.match(look.routines, /routine-daily-brief: due now \(every day at 07:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"[\s\S]*Run the ted-personal-assistant:daily-brief skill/);
-  assert.match(look.routines, /How to deliver:/);
+  assert.doesNotMatch(look.routines, /How to deliver/, "the delivery sentence is the prompt's, not a routine fact");
   look.onDelegate("expert-daily-brief");
   assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, "started");
   look.onTool("Agent", { subagent_type: "expert-daily-brief" }, { content: [{ type: "text", text: "the brief" }] });

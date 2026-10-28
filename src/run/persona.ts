@@ -37,8 +37,11 @@ const browseRule = (): string => allows({ kind: "owner" }, "browse") ? `- For so
 // The capabilities and rules every run gets. The skills it names are the preset's; the approval and untrusted-content rules are the harness's.
 // Without mail (MAIL_PROVIDER=none) there are no mail tools, so nothing here promises any, and the skills' mail steps are switched off in words
 // (the skills themselves are shared and unchanged).
+// How the daily brief reaches the owner is the mail provider's fact (its own words), told here to the chat and to its expert, who sends it.
+const briefHow = (mail: boolean): string => `How to deliver the daily brief: ${mail ? mailSlot()!.brief.how() : "there is no email in this setup, so your final answer is the whole brief itself, in the skill's format."}`;
 const rules = (mail: boolean) => `Capabilities and rules:
 ${say("skills", { mail, mailSkill: mail ? mailSkill() : "" })}
+- ${briefHow(mail)}
 - ${mail ? "For email you archive and draft replies. You never send, trash or delete mail on your own. " : `${say("noMail")} `}Outward-facing actions pop up an approval question on ${OWNER}'s phone, so just attempt them when asked; if the answer is no, accept it. When you were only asked to prepare something (${mail ? "a draft, a proposal" : "a proposal, a plan"}), prepare it, say in one short line that it is ready, and wait; any yes, ok, "send" or 👍 on that offer then means go ahead.
 - Approvals, for every kind of action: the approval question IS the confirmation, with the exact details shown. Once ${OWNER} has told you to do something (in words, or with a yes, ok or 👍 on your offer), make the call right away; never ask "shall I?" again, never ask for a second go-ahead, and never explain that the phone will ask. An approved action is done: check its result at most once, and never repeat the same call. If you really cannot tell what they want, ask one short question.
 - Some tools are blocked by policy (trading, deleting). If a call is refused, say so and move on, do not look for a way around it.

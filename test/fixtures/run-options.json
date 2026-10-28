@@ -5,7 +5,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "8e0b2d242939b9bb"
+        "sha": "8b97efd96ac2aa32"
       },
       "kind": {
         "who": "owner",
@@ -163,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "8e0b2d242939b9bb"
+        "sha": "8b97efd96ac2aa32"
       },
       "snapshot": false
     },
@@ -573,7 +573,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "8e0b2d242939b9bb"
+        "sha": "8b97efd96ac2aa32"
       },
       "kind": {
         "who": "owner",
@@ -731,7 +731,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "8e0b2d242939b9bb"
+        "sha": "8b97efd96ac2aa32"
       },
       "snapshot": false
     },

@@ -169,8 +169,8 @@ export interface RoutineFacts {
   told: string[]; // skipped routines the text mentions
 }
 
-// The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting or done is not mentioned). One routine per look. `deliver`: how a routine's full version reaches the owner by email (the daily brief's).
-export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; approvals?: number; deliver?: (r: Routine) => string }): RoutineFacts {
+// The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting or done is not mentioned). One routine per look.
+export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; approvals?: number }): RoutineFacts {
   const planned = planAll(conv, routines, now, zone, o.catchUpHours);
   const lines: string[] = [];
   let due: RoutineFacts["due"];
@@ -181,9 +181,8 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
     else if (plan.state === "due" && !due) {
       due = p as NonNullable<typeof due>;
       const when = `${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}`;
-      const how = o.deliver?.(r);
       const what = `holds the note's instruction word for word (${clean(r.instruction)}), who it is for and the voice or format it asks for`;
-      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "expert" (or the expert named for a heavy skill the note runs) and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${how ? ` ${how}` : ""}`);
+      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "expert" (or the expert named for a heavy skill the note runs) and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}`);
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look (code makes it due again by itself).`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
