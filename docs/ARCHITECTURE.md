@@ -123,7 +123,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 
 - The owner has all. A friend has all but `OWNER_ONLY` (`profile`, `card`, `admin`, `drive`). A group has the fixed `GROUP_CAPABILITIES`.
 - Every later step only takes away: nothing unless the person is active; less what is not set up (`mail`, `calendar`, `google` need the Google OAuth client, `notion` needs `INTAKE_BASE_URL`); less what the instance switched off (`BROWSE`, `WEATHER`, `DRAW`, `DREAM`, `WAKEUPS`); less the friend's own `tenant.json` switches.
-- Manifest rows name their gating capability (`cap`) and where they exist (`attended`, `who`); `toolsFor(capabilities, kind)` is what exists for the run, the owner's included, and `classify` denies anything outside it. Private skills (brief, mail, calendar, setup, routines) are the owner's alone (`skillsFor(caps, owner)`). `NEVER_FOR_ISOLATED` and each module's `ownerOnly` keep the owner's connectors out of every other conversation.
+- Manifest rows name their gating capability (`cap`) and where they exist (`attended`, `who`); `toolsFor(capabilities, kind)` is what exists for the run, the owner's included, and `classify` denies anything outside it. Private skills (brief, mail, calendar, setup, routines) are the login's alone (`skillsFor(caps)`: whoever holds the `login` capability, which only the owner's conversation can, loads the whole plugin). There is no per-tool owner flag: a tool follows its capability, and every claude.ai connector row also needs `login`, so `NEVER_FOR_ISOLATED` (a hand-written net in the tests) holds without a second mechanism. WebSearch and WebFetch belong to every conversation; the floor and the judge decide a page.
 
 **The preset** (`assistants/<name>/`, default `ted`, `ASSISTANT_PRESET`; `src/core/preset.ts`).
 
@@ -327,7 +327,7 @@ Each conversation has its own task list in its own `assistant.db` (`src/tasks/`,
 
 ## Tool modules and the manifest
 
-A tool is a module: a plain `ToolModule` (`src/modules/types.ts`) in `src/modules/<name>.ts` or `src/modules/<name>/module.ts`. It declares its connection (SDK built-ins, a claude.ai connector, an in-process server or a separate process), manifest rows, `free` calls, `untrusted` reads, `never` or `ownerOnly` flags, floor data that can only restrict, skills and setup questions.
+A tool is a module: a plain `ToolModule` (`src/modules/types.ts`) in `src/modules/<name>.ts` or `src/modules/<name>/module.ts`. It declares its connection (SDK built-ins, a claude.ai connector, an in-process server or a separate process), manifest rows, `free` calls, `untrusted` reads, `never` flags, floor data that can only restrict, skills and setup questions.
 
 - `src/modules/index.ts` lists them; `loaded()` is every module without a slot plus the one `MAIL_PROVIDER` names (`mailbird`, `gmail` or `none`).
 - `src/modules/runtime.ts` binds each module to the code it wraps, so declarations import nothing of the application. To add a tool: write the module, list it, bind a server in `RUNTIME` if needed, add its skill (`test/modules.test.ts`, `test/manifestrows.test.ts`).

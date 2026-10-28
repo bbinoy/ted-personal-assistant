@@ -25,7 +25,7 @@ export function resolveCapabilities(granted: readonly Capability[], o: { login?:
     // (The owner's are her connectors, which need no OAuth client.)
     if (!caps.has("google") || !googleReady()) for (const c of ["google", "mail", "calendar"] as const) caps.delete(c);
     // Notion of a person on the instance key is her own, through the hosted Notion server (modules/notionhosted.ts): only with the `notion` capability and a page to sign in
-    // on (INTAKE_BASE_URL). The owner's Notion is the connector, which no isolated run ever has (ownerOnly: toolmanifest.ts isOwnerOnly).
+    // on (INTAKE_BASE_URL). The owner's Notion is the connector, which no isolated run ever has (the `login` capability: capabilities.ts toolsFor).
     if (baseUrlProblem()) caps.delete("notion");
   }
   for (const [c, on] of SWITCHES) if (!on()) caps.delete(c);

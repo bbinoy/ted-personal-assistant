@@ -103,7 +103,7 @@ export function hiddenTools(seen: readonly string[], cfg: { hiddenConnectors: re
 }
 
 // The web. Pages and search results are untrusted content, like mail, and a fetched URL can carry data out in its query
-// string. A search is free; opening a page is judged, and the address veto is autojudge.ts. A group or a tenant never opens a page.
+// string. A search is free; opening a page is judged, and the address veto is autojudge.ts. Every conversation has the tool alike.
 
 // groupNotesDir: for an isolated run (a group, a tenant), THE one folder its file tools may touch (its own notes). Without it an isolated run gets no file access.
 // tools: the tools that exist for the run, from its conversation's capability set (capabilities.ts toolsFor; the owner's included); a group's own by default. The browse worker and

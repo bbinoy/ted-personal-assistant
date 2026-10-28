@@ -192,7 +192,7 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
     const memory = (o.settings as { autoMemoryDirectory?: string } | undefined)?.autoMemoryDirectory;
     check(`${label} auto-memory directory is her own folder`, !!memory && realpathSync(memory) === folder, String(memory));
     check(`${label} auto-memory directory is not inside the owner's notes`, !!memory && !(realpathSync(memory) + "/").startsWith(realpathSync(NOTES_DIR) + "/"));
-    const allowedBuiltins = new Set(["Skill", "Read", "Write", "Edit", "WebSearch", "Agent"]);
+    const allowedBuiltins = new Set(["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch", "Agent"]);
     const tools = Array.isArray(o.tools) ? (o.tools as string[]) : [];
     check(`${label} built-in tools are a subset of ${[...allowedBuiltins].join("/")}`, Array.isArray(o.tools) && tools.every((t) => allowedBuiltins.has(t)), tools.join(","));
     const servers = Object.keys((o.mcpServers as object | undefined) ?? {}).sort();

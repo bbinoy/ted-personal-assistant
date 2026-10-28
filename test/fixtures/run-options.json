@@ -317,7 +317,7 @@
     "run": {
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "86adc69e35f0052e"
+        "sha": "de1bbb83a81c4920"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -333,6 +333,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -377,7 +378,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "86adc69e35f0052e"
+        "sha": "de1bbb83a81c4920"
       },
       "snapshot": false
     },
@@ -402,6 +403,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],
@@ -434,7 +436,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "7daca83ef8f7d476"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -458,6 +460,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -501,7 +504,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "7daca83ef8f7d476"
       },
       "snapshot": false
     },
@@ -526,6 +529,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],
@@ -875,7 +879,7 @@
     "run": {
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "86adc69e35f0052e"
+        "sha": "de1bbb83a81c4920"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -892,6 +896,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -939,7 +944,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "86adc69e35f0052e"
+        "sha": "de1bbb83a81c4920"
       },
       "snapshot": false
     },
@@ -964,6 +969,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],
@@ -996,7 +1002,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "7daca83ef8f7d476"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -1021,6 +1027,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -1067,7 +1074,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "7daca83ef8f7d476"
       },
       "snapshot": false
     },
@@ -1092,6 +1099,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],

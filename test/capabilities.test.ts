@@ -20,13 +20,13 @@ const MANIFEST = (await import("../src/policy/toolmanifest.ts")).allRows();
 const { buildOptions } = await import("../src/run/agentrun.ts");
 const { ownerSkills } = await import("../src/modules/skills.ts");
 
-// A safety net written out by hand, apart from the modules' own `ownerOnly`: whatever the rows say, none of these is ever a tool of an isolated conversation.
-const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^WebFetch$/, /^Bash/, /card|payment|profile/i];
+// A safety net written out by hand, apart from the manifest: whatever the rows say, none of these is ever a tool of an isolated conversation.
+const NEVER_FOR_ISOLATED: readonly RegExp[] = [/^mcp__mailbird__/, /^mcp__claude_ai_/, /^mcp__tenants__/, /^mcp__browser__/, /^Bash/, /card|payment|profile/i];
 
 const P = (s: string) => `ted-personal-assistant:${s}`;
 const WEATHER = ["get_distance", "get_forecast", "get_marine_forecast", "get_spot_info", "search_places"].map((t) => `mcp__weather__${t}`);
 const TASKS = ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"].map((t) => `mcp__tasks__${t}`);
-const CHAT = ["Edit", "Read", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__people__find_person", "mcp__send__send"];
+const CHAT = ["Edit", "Read", "WebFetch", "WebSearch", "Write", "mcp__memory__forget_note", "mcp__memory__journal", "mcp__memory__search_logs", "mcp__people__find_person", "mcp__send__send"];
 const sorted = (s: Iterable<string>) => [...s].sort();
 const tenant = (...capabilities: Capability[]) => ({ config: {}, capabilities });
 const caps = (...c: Capability[]) => resolveCapabilities(c);
@@ -76,6 +76,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     profile: { tools: [], skills: [] },
     card: { tools: [], skills: [] },
     admin: { tools: [], skills: [] },
+    login: { tools: [], skills: [] }, // the login itself: connector rows need it too, and a record never gives it
   };
   assert.deepEqual(Object.keys(adds).sort(), [...CAPABILITIES].sort(), "every capability is in the table");
   for (const c of CAPABILITIES) {
@@ -163,10 +164,10 @@ test("capabilities: classify follows the set: the same probes for the owner, a g
   const A = "allow";
   const D = "deny";
   assert.deepEqual(row(owner), [A, "ask", A, D, A, A, A, A, A, A, "ask", "ask", D, A, "ask", A, A, A, D, A, D, "ask", "ask", "ask"], "owner");
-  const g = [A, D, A, A, A, A, A, A, A, A, D, "ask", D, D, D, D, D, D, D, D, D, D, D, D]; // (browse is judged in a group like in the owner's chat, with the member's words as provenance)
+  const g = [A, "ask", A, A, A, A, A, A, A, A, D, "ask", D, D, D, D, D, D, D, D, D, D, D, D]; // (browse is judged in a group like in the owner's chat, with the member's words as provenance)
   assert.deepEqual(row(group), g, "group");
   assert.deepEqual(row(friend), g, "friend (the default record)");
-  assert.deepEqual(row(bare), [A, D, D, A, A, D, A, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D], "chat only");
+  assert.deepEqual(row(bare), [A, "ask", D, A, A, D, A, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D], "chat only");
   assert.deepEqual(row(all), g, "every capability at once is still a group's set, not the owner's");
 });
 
@@ -197,4 +198,18 @@ test("capabilities: every manifest row names its capability, and a group never h
     assert.ok(!groupTools().has(e.tool), e.tool);
     assert.equal(classify(e.tool, {}, GROUP_CHAT), "deny", e.tool);
   }
+});
+
+test("capabilities: opening a page is every conversation's (judged by the floor), the owner's connectors and the admin's tools are the login's alone", () => {
+  const friend = toolsFor(resolveCapabilities(["chat", "mail", "calendar", "notion", "drive", "admin", "login"], { own: {} }), FRIEND_CHAT);
+  for (const set of [groupTools(), friend, groupTools(GROUP_LOOK)]) {
+    assert.ok(set.has("WebFetch") && set.has("WebSearch"));
+    assert.ok(![...set].some((t) => t.startsWith("mcp__claude_ai_") || t.startsWith("mcp__mailbird__") || t.startsWith("mcp__tenants__")));
+  }
+  assert.equal(classify("WebFetch", { url: "https://example.com/" }, GROUP_CHAT, undefined, groupTools()), "ask", "a plain address is judged");
+  assert.equal(classify("WebFetch", { url: "file:///etc/passwd" }, GROUP_CHAT, undefined, groupTools()), "deny", "the floor still holds");
+  // the login is what adds the connectors, and nothing else does
+  const withLogin = toolsFor(resolveCapabilities(CAPABILITIES, { login: true }), OWNER_CHAT);
+  assert.ok([...withLogin].some((t) => t.startsWith("mcp__claude_ai_")) && withLogin.has("WebFetch"));
+  assert.ok(skillsFor(resolveCapabilities(CAPABILITIES, { login: true })).length > skillsFor(groupCapabilities()).length);
 });

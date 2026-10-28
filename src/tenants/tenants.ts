@@ -41,12 +41,13 @@ export const ROLES: readonly Role[] = ["admin", "member"];
 // reaches every friend by being added to CAPABILITIES. What narrows that is readiness (a service with no OAuth client or INTAKE_BASE_URL has no tools, no skill, no prompt
 // text), the instance's .env switches and her tenant.json switches (browse, voice): tenants/capabilityset.ts. To stop a friend altogether the admin suspends or removes her.
 // Each tool of the manifest (toolmanifest.ts) and each shared skill (skills.ts) names the capability that gates it; capabilities.ts turns a set of them into tools and skills.
-export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "tasks", "google", "drive", "admin"] as const;
+export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "tasks", "google", "drive", "admin", "login"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 // What needs the instance's own Claude login (its connectors, its card and saved details, the admin's powers, the owner's Google Drive and Docs connectors): only the owner's
 // conversation is on the login, so a friend never has these, and nobody can grant them. (`drive` is the owner's connectors, a capability of its own: a friend's own Google,
-// `google`, never carries it.) The one list of it: everything else is hers.
-export const OWNER_ONLY: readonly Capability[] = ["profile", "card", "admin", "drive"];
+// `google`, never carries it. `login` is the login itself: every claude.ai connector row needs it besides its own capability, and so do the owner's private skills.) The one list
+// of it: everything else is hers.
+export const OWNER_ONLY: readonly Capability[] = ["profile", "card", "admin", "drive", "login"];
 export const FRIEND_CAPABILITIES: readonly Capability[] = CAPABILITIES.filter((c) => !OWNER_ONLY.includes(c));
 
 // Whose model credential her runs use: the instance's Claude login (the owner), or the instance key TENANT_ANTHROPIC_API_KEY (tenants).

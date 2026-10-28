@@ -189,7 +189,6 @@ export interface ToolModule {
   untrustedWhen?: (action: string, conversation: string) => boolean; // a trusted module's read that shows a third party's words only sometimes (a task list holding a task made from a mail): looked at per call, in the run's conversation
   untrustedPrefix?: string; // an unlisted tool with a read verb under this prefix counts as untrusted too
   never?: true; // every tool of the connector (its prefix) is never allowed, for everyone (the trading connector)
-  ownerOnly?: true | readonly string[]; // all rows, or the rows with these actions, belong to the owner alone: never in the tool set of a group or a tenant (capabilities.ts)
   floor?: ModuleFloor;
   titles?: Readonly<Record<string, CallTitle>>; // by tool name
   skills?: readonly ModuleSkill[];
