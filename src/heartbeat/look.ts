@@ -154,7 +154,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const tail = logTail(conv, 40);
-    const facts = factsFor(conv, now, "look"); // the claimed facts are pending until this look ends (facts.ts)
+    const facts = factsFor(conv, now, false); // the claimed facts are pending until this look ends (facts.ts)
     const instruction = lookInstruction(now, st.wake?.looked, looker, facts.routines, due.join(" "));
     const build: TurnBuilder = (since) => {
       const log = logSince(conv, since);

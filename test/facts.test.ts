@@ -45,27 +45,27 @@ const has = (f: { blocks: string[] }, re: RegExp) => f.blocks.some((b) => re.tes
 
 test("a chat turn takes a claimed reminder and, once its reply said something, the look after it is not handed it again", async () => {
   const { conv, it } = await claimed();
-  const chat = F.factsFor(conv, new Date(NOW), "chat");
+  const chat = F.factsFor(conv, new Date(NOW), true);
   assert.ok(has(chat, /Reminders due now[\s\S]*Call Sam/), "the chat turn is told");
   chat.done({ ended: true, said: true });
   assert.equal(state(conv, it.id), "sent");
-  const look = F.factsFor(conv, new Date(NOW + MIN), "look");
+  const look = F.factsFor(conv, new Date(NOW + MIN), false);
   assert.ok(!has(look, /Reminders due now/), "told once");
   look.done({ ended: true, said: false });
 });
 
 test("a run holds what it took: a look in progress keeps a chat turn from the same reminder, and the reverse; a failed run gives it back", async () => {
   const { conv, it } = await claimed();
-  const look = F.factsFor(conv, new Date(NOW), "look");
+  const look = F.factsFor(conv, new Date(NOW), false);
   assert.ok(has(look, /Call Sam/));
-  assert.ok(!has(F.factsFor(conv, new Date(NOW), "chat"), /Reminders due now/), "pending in the look: not given to the chat turn too");
+  assert.ok(!has(F.factsFor(conv, new Date(NOW), true), /Reminders due now/), "pending in the look: not given to the chat turn too");
   look.done({ ended: false, said: false, abandoned: true });
-  const chat = F.factsFor(conv, new Date(NOW), "chat");
+  const chat = F.factsFor(conv, new Date(NOW), true);
   assert.ok(has(chat, /Call Sam/), "the look failed: the next run gets it");
-  assert.ok(!has(F.factsFor(conv, new Date(NOW), "look"), /Reminders due now/), "pending in the chat turn: not given to the look");
+  assert.ok(!has(F.factsFor(conv, new Date(NOW), false), /Reminders due now/), "pending in the chat turn: not given to the look");
   chat.done({ ended: false, said: false, abandoned: true }); // a silent or failed turn
   assert.equal(state(conv, it.id), "claimed", "nothing was told");
-  const again = F.factsFor(conv, new Date(NOW), "look");
+  const again = F.factsFor(conv, new Date(NOW), false);
   assert.ok(has(again, /Call Sam/));
   again.done({ ended: true, said: true });
   assert.equal(state(conv, it.id), "sent");
@@ -73,7 +73,7 @@ test("a run holds what it took: a look in progress keeps a chat turn from the sa
 
 test("a group's chat turn gets the group's facts: its reminders, not the owner's welcome, routines or a friend's learned changes", async () => {
   const { conv } = await claimed("Book the room");
-  const f = F.factsFor(conv, new Date(NOW), "chat");
+  const f = F.factsFor(conv, new Date(NOW), true);
   assert.ok(has(f, /Book the room/));
   assert.ok(!f.blocks.concat(f.status).some((b) => /fresh install|notes_changed|meetings_to_prepare|Routines/.test(b)));
   assert.equal(f.routines, "");
@@ -86,24 +86,24 @@ test("routines: a chat turn sees their status and never starts one; the look is 
   const db = liveConvDb(conv.convId)!;
   db.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-daily-brief', ?)", new Date(2026, 9, 1).getTime());
   const at = new Date(2026, 9, 14, 8, 0);
-  const chat = F.factsFor(conv, at, "chat");
+  const chat = F.factsFor(conv, at, true);
   assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-daily-brief: due now/);
   assert.equal(chat.routines, "", "no instruction to run it");
   assert.ok(!has(chat, /Delegate it now/));
   chat.done({ ended: true, said: true });
   assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, undefined, "the chat turn recorded nothing");
-  const look = F.factsFor(conv, at, "look");
+  const look = F.factsFor(conv, at, false);
   assert.match(look.routines, /routine-daily-brief: due now[\s\S]*Delegate it now: call the Agent tool/);
   look.onDelegate("expert-daily-brief");
   assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, "started");
-  assert.match(F.factsFor(conv, at, "chat").status.join("\n"), /routine-daily-brief: a look started it/, "the chat turn sees it running");
+  assert.match(F.factsFor(conv, at, true).status.join("\n"), /routine-daily-brief: a look started it/, "the chat turn sees it running");
   look.onTool("Agent", { subagent_type: "expert-daily-brief" }, { content: [{ type: "text", text: "the brief" }] });
   look.done({ ended: true, said: true });
-  assert.match(F.factsFor(conv, at, "chat").status.join("\n"), /routine-daily-brief: delivered/, "and then that it went out");
+  assert.match(F.factsFor(conv, at, true).status.join("\n"), /routine-daily-brief: delivered/, "and then that it went out");
 });
 
 test("a chat session is told the facts once and again only when they changed (the claimed ones and the information ones apart)", async () => {
-  turnFactsFrom((c, now) => F.factsFor(c, now, "chat"));
+  turnFactsFrom((c, now) => F.factsFor(c, now, true));
   const { conv } = await claimed("Water the plants");
   forgetShown(conv.convId);
   const prompts: string[] = [];

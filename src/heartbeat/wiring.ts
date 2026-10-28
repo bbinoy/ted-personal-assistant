@@ -23,7 +23,7 @@ export function wire(ctx: AppContext): void {
   wired = true;
   setApprovers(ctx.approvers);
   ownerNotices.sendTo(ctx.notifyOwner);
-  turnFactsFrom((conv, now) => factsFor(conv, now, "chat")); // every chat turn gets the facts a look gets (facts.ts)
+  turnFactsFrom((conv, now) => factsFor(conv, now, true)); // every chat turn gets the facts a look gets (facts.ts)
   tenantHooks.sendFirst = ctx.sendFirst;
   tenantHooks.drop = ctx.dropTenant;
   tenantHooks.remove = removeFriend;

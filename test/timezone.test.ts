@@ -134,7 +134,7 @@ test("the whereabouts fact is only for a conversation with the profile capabilit
   const { noteMacZone } = await import("../src/heartbeat/whereabouts.ts");
   noteMacZone(Date.parse("2026-10-31T18:40:00Z"), "Asia/Tokyo");
   const now = new Date("2026-11-01T10:00:00Z");
-  const has = (c: Parameters<typeof F.factsFor>[0]) => F.factsFor(c, now, "chat").status.some((s) => /probably is/.test(s));
+  const has = (c: Parameters<typeof F.factsFor>[0]) => F.factsFor(c, now, true).status.some((s) => /probably is/.test(s));
   assert.ok(has(owner()), "the owner's conversation");
   assert.ok(!has(group("whereabouts-group")), "not a group");
   assert.ok(!has(tenant(T.addTenant({ aci: "00000000-0000-4000-8000-0000000000bb", name: "Bo" })!.id)), "not a friend");
