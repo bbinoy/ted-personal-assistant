@@ -28,7 +28,7 @@ export interface Conversation {
   readonly notesDir: string; // this conversation's notes (the SDK auto-memory folder; the only place its file tools may write)
   readonly threadAlways: boolean; // an answer to someone who addressed us is always threaded under it
   readonly noticeEveryMs: number; // at most one error notice per this long (0: always)
-  readonly notice: (e: unknown) => string;
+  readonly notice: (e: unknown) => string | undefined; // what a failed turn says in words, if anything (tenants/errors.ts refusal)
 }
 
 const OWNER_CONVERSATION: Conversation = Object.freeze({

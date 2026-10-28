@@ -54,13 +54,13 @@ test("the failing-looks fact carries the cause's what and fix, for the owner onl
 test("the owner's chat failure notices end with the step for their cause; friends and groups are sent to no terminal", () => {
   for (const c of CAUSES) {
     if (c === "timeout") continue; // (a chat turn's own ceiling, below)
-    const text = noticeFor("owner")(SAMPLES[c]);
+    const text = noticeFor("owner")(SAMPLES[c])!;
     if (c === "other") assert.ok(text.endsWith(FIXES.other.fix), text);
     else assert.ok(text.endsWith(FIXES[c].fix), `${c}: ${text}`);
     assert.doesNotMatch(text, SECRETS);
-    for (const a of ["friend", "group"] as const) assert.doesNotMatch(noticeFor(a)(SAMPLES[c]), /npm run|claude auth|\.env|Settings > Connectors/, `${c} for ${a}`);
+    for (const a of ["friend", "group"] as const) assert.doesNotMatch(noticeFor(a)(SAMPLES[c]) ?? "", /npm run|claude auth|\.env|Settings > Connectors/, `${c} for ${a}`);
   }
-  assert.match(noticeFor("owner")(SAMPLES.timeout), /RUN_MAX_MINUTES_CHAT in \.env and restart/);
+  assert.match(noticeFor("owner")(SAMPLES.timeout)!, /RUN_MAX_MINUTES_CHAT in \.env and restart/);
 });
 
 test("the budget notice, the shared cap and the shared-key facts each end with the exact setting", () => {
