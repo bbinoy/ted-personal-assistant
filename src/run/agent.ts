@@ -1,6 +1,6 @@
 import { query, startup } from "@anthropic-ai/claude-agent-sdk";
 import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
-import { pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
+import { capacity, pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
 import { readIndex } from "../memory/notes.ts";
 import { runFor, turnContext, TRIGGERS, type RunInputs, type Trigger } from "./runoptions.ts";
 import { markShown, spoke, turnFacts, unseen, type TurnFacts } from "./turncontext.ts";
@@ -11,7 +11,7 @@ import { userInput, type Picture } from "./image.ts";
 import type { Document } from "../conversation/document.ts";
 import { tenantKey } from "../core/ownerkey.ts";
 import { approveIn, type Approve } from "../approvals/permissions.ts";
-import type { Payer } from "../tenants/payer.ts";
+import { isRefusal, mayRun, type Payer } from "../tenants/payer.ts";
 import type { SeenMail } from "../modules/seenmail/seenmail.ts";
 import { gated } from "../core/rungate.ts";
 import { settings } from "../core/settings.ts";
@@ -113,11 +113,14 @@ export function lookOptions(conv: Conversation, payer: Payer, extra: Partial<Loo
 
 // Keep a process warm for the conversation's next message. `refresh`: only renew one that is in use (a timer; it does not keep an idle one alive).
 // `keep`: not if it holds a fresh one (a message arrived for an active group); otherwise it is rebuilt (the session moved on). WARM=off: nothing.
-export function prepare(conv: Conversation, inputs: RunInputs, opts: { refresh?: boolean; keep?: boolean; start?: typeof startup } = {}): void {
+// The same for every conversation: the kind's room (agentwarm.ts capacity, 0: none), and the payer the next turn would have (a friend's: only while she may run and the key is set).
+export function prepare(conv: Conversation, opts: { refresh?: boolean; keep?: boolean; start?: typeof startup } = {}): void {
   if (opts.refresh && !pool.wants(conv)) return;
-  if (!settings.warm) return;
+  if (!settings.warm || capacity(conv.kind) <= 0) return;
   if (opts.keep && pool.has(conv)) return void pool.touch(conv);
-  warmUp(conv, runFor(conv, "message", inputs), chatResume(conv.convId), opts.start, opts.refresh);
+  const payer = mayRun(conv, "warm", { chat: true });
+  if (isRefusal(payer)) return;
+  warmUp(conv, runFor(conv, "message", lookInputs(payer, new Date())), chatResume(conv.convId), opts.start, opts.refresh);
 }
 
 // A tenant who was suspended or removed: her process is closed.

@@ -90,12 +90,12 @@ test("run wrapper: a warm process that hangs is closed on timeout, and the conve
     const closedQuery: string[] = [];
     const closed: string[] = [];
     const start = (() => Promise.resolve({ query: () => ({ close: () => void closedQuery.push("q"), async *[Symbol.asyncIterator]() { await never(); } }), close: () => void closed.push("w") })) as any;
-    prepare(conv, {}, { start, keep: true });
+    prepare(conv, { start, keep: true });
     await sleep(5);
     const turn = runConversation(conv, {}, build, undefined, { query: (() => ok()) as any });
     await sleep(5);
     // a spare built while the turn runs (the session is the same, so it would fit) is dropped with the aborted run
-    prepare(conv, {}, { start: (() => Promise.resolve({ query: () => ok(), close: () => void closed.push("spare") })) as any });
+    prepare(conv, { start: (() => Promise.resolve({ query: () => ok(), close: () => void closed.push("spare") })) as any });
     await assert.rejects(turn, /timed out/);
     await sleep(5);
     assert.deepEqual(closedQuery, ["q"]); // the query of the warm process was stopped

@@ -85,7 +85,6 @@ wire({
 });
 // `say` is a plain message to the owner (start-up problems; what the assistant says on its own goes through the pipeline as a "notice", which the chat remembers: messages.ts).
 const say = async (text: string) => void (await out.replyPlain(text, "notice"));
-const warmChat = () => prepare(owner(), {});
 
 // Every voice message is transcribed (in a group it may be meant for the assistant), but only a few at a time: a flood waits in line
 // instead of starting that many whisper processes. One line for the owner's chat and every group.
@@ -150,8 +149,8 @@ const pipeline: Pipeline = createPipeline({
   vouch,
   isOwner: fromOwner,
   compact: compactConversation, // every conversation, after the reply is out and only when it grew far past the limit (urgent); the next message waits for it
-  // The owner's chat is kept warm after each turn; the group that spoke last has its own warm process (group.ts).
-  afterTurn: (conv) => void (conv.kind === "owner" ? warmChat() : conv.kind === "tenant" && tenantRunner.warm(conv)),
+  // After each turn the conversation's next process is started, whoever it is (agent.ts prepare: the kind's room, the payer); a group is also warmed on arrival (group.ts).
+  afterTurn: (conv) => prepare(conv),
 });
 
 // The linked device sees ALL of the owner's Signal traffic. Only their own Note to Self is
@@ -219,7 +218,7 @@ for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, () => (stopA
 await messenger.start();
 console.log(`connected to ${messenger.name} (${messenger.summary}); accepting only ${mask(identity.ownerNumber)}; auth: ${settings.credential}`);
 
-warmChat();
+prepare(owner()); // (start-up: the owner's chat is the one conversation that is certainly there)
 if (ledgerDamage()) void say(DAMAGED_NOTICE).catch(() => {}); // degraded mode (core/instancedb.ts): told once per start
 if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); // the owner is served, the friends are paused (tenants.ts)
 welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
@@ -229,7 +228,7 @@ if (settings.tenants) registrar.askOpen(); // requests still open from before th
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a
 // quiet hour is still quick. Local work only, no model call.
-setInterval(() => prepare(owner(), {}, { refresh: true }), WARM_REFRESH_MS).unref();
+setInterval(() => dreamConversations().forEach((conv) => prepare(conv, { refresh: true })), WARM_REFRESH_MS).unref(); // (every conversation that holds a process: it renews only those)
 // Every conversation's search index (memory/search.ts: the owner's, the groups', the friends'; each stays in its own folder) is brought up to date a little after start-up, one after another in small slices that leave the event loop free, so the first real search_logs is quick.
 setTimeout(() => void warmSearchIndexes(dreamConversations().map((c) => searchScope(c.convId))).catch(() => {}), 20_000).unref();
 

@@ -136,7 +136,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     for (const [key, st] of state) if (!st.running && nowMs - (st.at ?? 0) > STATE_IDLE_MS) state.delete(key);
   }
   const warm = cfg.warm ?? (cfg.run ? undefined : (conv: Conversation, afterTurn: boolean) => {
-    prepare(conv, {}, { keep: !afterTurn });
+    if (!afterTurn) prepare(conv, { keep: true }); // (after a turn every conversation is prepared by the pipeline's afterTurn)
     prepareGate(); // the gate's spare belongs to no group, so it is not tied to this one
   });
 
