@@ -14,7 +14,7 @@ const { convPaths, conversationsDir, groupConvId, friendConvId, instancePaths } 
 const { groupDir, recordGroup } = await import("../src/conversation/groupstore.ts");
 const { forgetGroup, forgetFriend, resolveGroup } = await import("../src/conversation/forget.ts");
 const { holdVoiceNote, voiceNotes, resetVoiceNotes } = await import("../src/modules/voice/voicenote.ts");
-const { recordCost, groupSpentToday } = await import("../src/core/budget.ts");
+const { recordCost, spentToday } = await import("../src/core/budget.ts");
 const { takeCapNotice } = await import("../src/core/capnotice.ts");
 const { instanceDb } = await import("../src/core/instancedb.ts");
 const marked = (key: string): boolean => !!instanceDb().get("SELECT 1 FROM notices WHERE key = ?", key);
@@ -43,7 +43,6 @@ function group(id: string, name: string, tag: string) {
   holdVoiceNote(id, { ts: NOW, id: `${tag}.aac`, size: 5, by: "+1", snippet: "hi" }, NOW);
   addRow(id);
   recordCost(1.25, groupConvId(id), "chat");
-  takeCapNotice(`refusal:own-budget:${groupConvId(id)}`);
   takeCapNotice(`refusal:owner-budget:${groupConvId(id)}`);
   takeCapNotice(`warn:${groupConvId(id)}`, Date.now(), 60_000);
   return { id, dir, p };
@@ -60,8 +59,8 @@ test("forget group: its folder, voice-note audio, spend and notice marks go; ano
   assert.equal(existsSync(a.dir), false, "its folder: notes, history, session, pending, voices");
   assert.equal(existsSync(join(attachments, "a.aac")), false, "the audio signal-cli saved for its voice note");
   assert.equal(hasConvDb(groupConvId(GA)), false, "its database (voice-note index, session, approvals) went with the folder, closed first; a read would make a new empty one, so none is made here");
-  assert.equal(groupSpentToday(GA), 0);
-  assert.equal(marked(`refusal:own-budget:${groupConvId(GA)}`), false, "its notice mark is gone");
+  assert.equal(spentToday(groupConvId(GA)), 0);
+  assert.equal(marked(`refusal:owner-budget:${groupConvId(GA)}`), false, "its notice mark is gone");
   assert.equal(marked(`warn:${groupConvId(GA)}`), false);
   for (const w of ["voice-note index", "folder", "voice-note audio", "spend", "notice marks"]) assert.ok(r.removed.some((x) => x.includes(w)), w);
   assert.deepEqual(r.failed, []);
@@ -70,8 +69,8 @@ test("forget group: its folder, voice-note audio, spend and notice marks go; ano
   assert.equal(existsSync(join(b.p.notes, "context-x.md")), true);
   assert.equal(existsSync(join(attachments, "b.aac")), true);
   assert.equal(voiceNotes(GB, NOW).length, 1);
-  assert.equal(groupSpentToday(GB), 1.25);
-  assert.equal(marked(`refusal:own-budget:${groupConvId(GB)}`), true);
+  assert.equal(spentToday(groupConvId(GB)), 1.25);
+  assert.equal(marked(`refusal:owner-budget:${groupConvId(GB)}`), true);
   assert.equal(rowsOf(GB), 1);
   // again, by the folder name: nothing is left and nothing fails
   const again = forgetGroup(groupConvId(GA), { attachmentsDir: attachments });

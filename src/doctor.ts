@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { ROOT } from "./core/paths.ts";
-import { spentToday } from "./core/budget.ts";
+import { keySpentToday, spentToday } from "./core/budget.ts";
 import { lastLookAt, readRows, type HeartbeatRow } from "./core/looks.ts";
 import { HEARTBEAT_KEY } from "./heartbeat/heartbeat.ts";
 import { ZONE_KEY, type ZoneRecord } from "./heartbeat/whereabouts.ts";
@@ -190,7 +190,7 @@ export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
   }
 }
 
-// The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today against her own limit,
+// The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today,
 // and whether she is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
 export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number; broken?: string | undefined } = {}): void {
   const on = o.on ?? settings.tenants;
@@ -203,15 +203,16 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
   const all = listTenants();
   const count = (s: string) => all.filter((t) => t.status === s).length;
   line(true, "tenants", `${all.length} (${count("active")} active, ${count("suspended")} suspended); ${openRequests(now).length} registration request(s) waiting for your answer`);
+  const keySpent = keySpentToday();
+  line(keySpent < settings.instanceKeyDailyUsd, "instance key spend", `$${keySpent.toFixed(2)} of $${settings.instanceKeyDailyUsd} today, all friends together`);
   for (const rec of all) {
     const ctx = tenantContext(rec);
     const spent = spentToday(ctx.ledger);
     const paused = pausedUntil(ctx, now);
     const problems = [
-      spent >= ctx.dailyBudgetUsd ? "today's budget is spent" : "",
       paused ? `paused until ${localTime(new Date(paused).toISOString())}` : "",
     ].filter(Boolean);
-    line(rec.status === "suspended" || problems.length === 0 ? true : "warn", `tenant ${rec.id}`, `${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connectionSummary(rec) ? `; ${connectionSummary(rec)}` : ""}; today $${spent.toFixed(2)} of $${ctx.dailyBudgetUsd}${problems.length ? `; ${problems.join("; ")}` : ""}`);
+    line(rec.status === "suspended" || problems.length === 0 ? true : "warn", `tenant ${rec.id}`, `${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connectionSummary(rec) ? `; ${connectionSummary(rec)}` : ""}; today $${spent.toFixed(2)}${problems.length ? `; ${problems.join("; ")}` : ""}`);
   }
 }
 

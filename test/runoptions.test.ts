@@ -122,14 +122,14 @@ test("run options: the owner's chat, a group and a tenant, for a message and for
 test("run options: what differs between the owner, a group and a tenant, and only that", () => {
   const c = cases();
   if (process.env.RUN_OPTIONS_PRINT) console.log(JSON.stringify({ ownerGroup: differing(c.owner, c.group), groupTenant: differing(c.group, c.tenant), ownerLook: differing(c.owner, c.ownerLook), groupLook: differing(c.group, c.groupLook), tenantLook: differing(c.tenant, c.tenantLook), lookOwnerGroup: differing(c.ownerLook, c.groupLook) }, null, 1));
-  // owner -> group: persona, limits, notes folder and session, the group's isolation (no user settings, no connectors, its capabilities' tools and shared skills (not the owner's), strict MCP)
+  // owner -> group: persona, notes folder and session, the group's isolation (no user settings, no connectors, its capabilities' tools and shared skills (not the owner's), strict MCP)
   assert.deepEqual(differing(c.owner, c.group), [
-    "disallowedTools", "maxBudgetUsd", "maxTurns", "mcpServers", "run.conversation", "run.experts", "run.groupId", "run.kind", "run.maxBudgetUsd", "run.maxTurns", "run.memory",
+    "disallowedTools", "mcpServers", "run.conversation", "run.experts", "run.groupId", "run.kind", "run.memory",
     "run.sessionConv", "run.skills", "run.stopScope", "run.systemPrompt", "run.tools", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append", "tools",
   ]);
-  // group -> tenant: her limits, notes, session and persona, her ledger and key; the instance key reaches her environment and the owner's logins leave it
+  // group -> tenant: notes, session and persona, her ledger and key; the instance key reaches her environment and the owner's logins leave it
   assert.deepEqual(differing(c.group, c.tenant), [
-    "envChanged.ANTHROPIC_API_KEY", "envRemoved", "maxTurns", "run.conversation", "run.groupId", "run.kind", "run.maxTurns", "run.memory", "run.sessionConv", "run.stopScope", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
+    "envChanged.ANTHROPIC_API_KEY", "envRemoved", "run.conversation", "run.groupId", "run.kind", "run.memory", "run.sessionConv", "run.stopScope", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
   ]);
   // the invariants the table above must not hide
   const bg = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" }; // (every run: an expert never runs in the background, delegation.ts)

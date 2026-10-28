@@ -27,7 +27,7 @@ function copyOfTed(change: (dir: string, json: Record<string, any>) => void): st
   return dir;
 }
 
-test("ted's preset loads: the rhythm, the note categories, the profile limits, the skills and a text for every prompt", () => {
+test("ted's preset loads: the rhythm, the note categories, the run limits, the skills and a text for every prompt", () => {
   const p = loadPreset(TED);
   assert.equal(p.name, "ted");
   assert.deepEqual(p.rhythm, {
@@ -35,15 +35,14 @@ test("ted's preset loads: the rhythm, the note categories, the profile limits, t
     dream: { hour: 4, minNewLines: { direct: 1, group: 3 }, maxGroupsPerNight: 5 },
   });
   assert.deepEqual(p.notes.categories, ["triage", "people", "scheduling", "context", "brief", "style", "setup", "voice", "status", "routine"]);
-  assert.deepEqual(Object.keys(p.profiles).sort(), ["chat", "group"]);
-  assert.ok(Object.values(p.profiles).every((x) => !("notes" in x)), "no profile names note categories: the heartbeat run reads all of its conversation's own notes");
+  assert.deepEqual(p.limits, { maxTurns: 40, maxBudgetUsd: 2 });
   assert.deepEqual(Object.keys(p.persona).sort(), Object.keys(PROMPTS).sort());
   assert.deepEqual(p.skills.core.map((s) => s.name), ["daily-brief", "meeting-prep", "follow-through", "stay-in-touch", "evening-wrap", "weekly-review", "setup"]);
   assert.deepEqual(p.expert, { model: "sonnet", maxTurns: 40 });
   assert.strictEqual(presetFor({}), presetFor({ ASSISTANT_PRESET: "ted" }), "ted is the default, loaded once");
 });
 
-test("the code reads the preset: settings defaults, profiles, note categories", () => {
+test("the code reads the preset: settings defaults, note categories", () => {
   const p = presetFor();
   assert.deepEqual([settings.heartbeatDayMinutes, settings.heartbeatMinutes, settings.quietStartHour, settings.quietEndHour],
     [p.rhythm.heartbeat.dayMinutes, p.rhythm.heartbeat.everyMinutes, 22, 7]); // (the quiet hours are not the preset's: they differ per install, QUIET_HOURS)
@@ -77,7 +76,8 @@ test("a malformed preset fails with a message that names the file and the proble
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "a stray {{ brace")), /chat\.md: a stray/);
   assert.throws(broken((_d, j) => { delete j.expert; }), /expert: must be an object/);
   assert.throws(broken((_d, j) => { j.rhythm.heartbeat.dayMinutes = 5; }), /rhythm\.heartbeat\.dayMinutes: must be a whole number from 10 to 120/);
-  assert.throws(broken((_d, j) => { delete j.profiles.group; }), /profiles\.group: must be an object/);
+  assert.throws(broken((_d, j) => { j.profiles = {}; }), /"profiles" is gone: use one "limits"/);
+  assert.throws(broken((_d, j) => { delete j.limits; }), /limits: must be an object/);
   assert.throws(broken((_d, j) => { j.skills.core = "daily-brief"; }), /skills\.core: must be a list/);
   assert.throws(broken((_d, j) => { j.name = "Ted Lasso"; }), /"name" must be a lower-case word/);
   assert.throws(broken((_d, j) => { j.extends = "../../etc"; }), /"extends" must be the name of another preset/);
@@ -94,7 +94,7 @@ test("a second preset changes the persona, the rhythm and the limits without tou
     name: "coach",
     rhythm: { heartbeat: { everyMinutes: 30, dayMinutes: 45 } },
     notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], others: ["people", "style"] },
-    profiles: { group: { maxTurns: 40 } },
+    limits: { maxTurns: 25 },
   }));
   writeFileSync(join(dir, "persona", "personality.md"), "You talk like a calm, no-nonsense running coach: short sentences, one clear next step.\n");
   writeFileSync(join(dir, "persona", "background.md"), "Checking in as {{assistant}}, {{who}}'s coach.\n");
@@ -106,7 +106,7 @@ test("a second preset changes the persona, the rhythm and the limits without tou
     const { CATEGORIES, categoryOf } = await import(${JSON.stringify(src + "memory/notes.ts")});
     const { settings } = await import(${JSON.stringify(src + "core/settings.ts")});
     console.log(JSON.stringify({ chat: chatSystem(new Date("2026-10-12T09:00:00")), personality: PERSONALITY, categories: CATEGORIES,
-      cat: [categoryOf("goals-run.md"), categoryOf("triage-x.md")], groupTurns: preset().profiles.group.maxTurns,
+      cat: [categoryOf("goals-run.md"), categoryOf("triage-x.md")], groupTurns: preset().limits.maxTurns,
       rhythm: [settings.heartbeatMinutes, settings.heartbeatDayMinutes] }));
   `);
   const run = (env: Record<string, string>) => JSON.parse(execFileSync(process.execPath, ["--conditions=workspace-source", probe], {
@@ -118,7 +118,7 @@ test("a second preset changes the persona, the rhythm and the limits without tou
   assert.match(coach.chat, /Checking in as Coach, Alex's coach\./, "the standing instruction for a background check is a persona file too, in every conversation's prompt");
   assert.deepEqual(coach.categories, ["goals", "people", "style"]);
   assert.deepEqual(coach.cat, ["goals", null]); // "triage" is not this assistant's category
-  assert.equal(coach.groupTurns, 40);
+  assert.equal(coach.groupTurns, 25);
   assert.deepEqual(coach.rhythm, [30, 45]);
   // Without the variable it is Ted again, and this process's own prompts are Ted's.
   const ted = run({});
@@ -135,7 +135,7 @@ test("a second preset's note categories reach every run: chat, group, friend, he
     extends: "ted",
     name: "coach2",
     notes: { categories: ["goals", "people", "style"], dream: ["goals", "people"], others: ["goals", "style"] },
-    profiles: { group: { maxTurns: 12, maxBudgetUsd: 0.7 } },
+    limits: { maxTurns: 12, maxBudgetUsd: 0.7 },
   }));
   const probe = join(scratch, "probe2.ts");
   const src = new URL("../src/", import.meta.url).pathname;
@@ -164,7 +164,8 @@ test("a second preset's note categories reach every run: chat, group, friend, he
       friendHeartbeat: runFor(tenant(rec.id), "look", { apiKey: "k" }),
       notes: readIndex(owner().notesDir),
       friendNotes: readIndex(tenant(rec.id).notesDir),
-      profiles: Object.fromEntries(["chat", "group"].map((k) => [k, [preset().profiles[k].maxTurns, preset().profiles[k].maxBudgetUsd]])),
+      limits: [preset().limits.maxTurns, preset().limits.maxBudgetUsd],
+      groupLimits: [runFor(group("g1"), "message", {}).maxTurns, runFor(group("g1"), "message", {}).maxBudgetUsd],
       scopes: Object.fromEntries(["owner", "group", "tenant"].map((k) => [k, dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories])),
       dream: ["owner", "group", "tenant"].map((k) => dreamSystem({ subject: "S", kind: k, categories: dreamScope({ kind: k, groupId: "g1", tenantId: rec.id }).categories })),
       gates: [GATE_DEFAULTS.group],
@@ -178,10 +179,10 @@ test("a second preset's note categories reach every run: chat, group, friend, he
   }).trim().split("\n").at(-1)!);
   assert.match(out.chat, /exactly one category of goals, people, style\./);
   assert.match(out.friend, /exactly one category of goals, style\./);
-  assert.deepEqual(out.profiles.chat, [40, 2]);
-  assert.deepEqual(out.profiles.group, [12, 0.7]);
+  assert.deepEqual(out.limits, [12, 0.7]);
+  assert.deepEqual(out.groupLimits, [12, 0.7], "a group has the same limits as the owner");
   assert.deepEqual(out.scopes, { owner: ["goals", "people"], group: ["goals", "style"], tenant: ["goals", "style"] });
-  assert.deepEqual([out.heartbeat.maxTurns, out.heartbeat.maxBudgetUsd], [40, 2], "a look has the conversation's own limits (the owner's chat profile)");
+  assert.deepEqual([out.heartbeat.maxTurns, out.heartbeat.maxBudgetUsd], [12, 0.7], "a look has the conversation's own limits (the preset's limits)");
   assert.equal(out.heartbeat.systemPrompt, out.chat, "a look has the conversation's one prompt");
   assert.match(out.notes, /half marathon/);
   assert.match(out.notes, /training partner/);

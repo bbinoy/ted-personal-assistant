@@ -23,7 +23,7 @@ const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await impor
 const { failure, InstanceKeyError, RateLimitError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
 const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", ledger: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
-const { recordCost, spentToday, tenantOverBudget } = await import("../src/core/budget.ts");
+const { recordCost, spentToday, instanceKeyOverBudget } = await import("../src/core/budget.ts");
 const { tenant } = await import("../src/conversation/conversationmodel.ts");
 const { looksLikeApiKey } = await import("../src/secrets/secrets.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
@@ -52,14 +52,15 @@ function join_(name = "Anna", aci = fresh()): import("../src/tenants/tenants.ts"
 }
 
 test("config: a tenant.json is checked, never trusted; the old lower-case timezone and connectors settings are unknown now", () => {
-  const ok = T.parseTenantConfig({ language: "German", persona: "short and dry", dailyBudgetUsd: 3, maxTurns: 6, browse: false, timeZone: "Europe/Lisbon" });
+  const ok = T.parseTenantConfig({ language: "German", persona: "short and dry", browse: false, timeZone: "Europe/Lisbon" });
   assert.deepEqual(ok.problems, []);
-  assert.equal(ok.config.dailyBudgetUsd, 3);
+  assert.equal(ok.config.browse, false);
+  assert.equal(T.parseTenantConfig({ dailyBudgetUsd: 3, maxTurns: 6, maxBudgetUsdPerRun: 1 }).problems.length, 3, "her own limits are gone: everyone has the same");
   assert.equal(ok.config.timeZone, "Europe/Lisbon");
   assert.deepEqual(T.parseTenantConfig({ timeZone: "Mars/Olympus" }), { config: {}, problems: ["timeZone must be a time zone like Europe/Lisbon"] });
-  const bad = T.parseTenantConfig({ dailyBudgetUsd: -1, maxTurns: "many", browse: "yes", timezone: "Europe/Berlin", color: "red", connectors: ["gmail"] });
+  const bad = T.parseTenantConfig({ browse: "yes", timezone: "Europe/Berlin", color: "red", connectors: ["gmail"] });
   assert.deepEqual(bad.config, {});
-  assert.equal(bad.problems.length, 6); // three bad values, three unknown names (timezone and connectors were dead and are gone)
+  assert.equal(bad.problems.length, 4); // one bad value, three unknown names (timezone and connectors were dead and are gone)
   assert.deepEqual(T.parseTenantConfig(undefined), { config: {}, problems: [] });
   assert.equal(T.parseTenantConfig([]).problems.length, 1);
 });
@@ -227,22 +228,20 @@ test("cooldown: a limit, 400 or 429 on the shared key pauses every friend (it is
   assert.equal(failure("server_error", "e", PAYER(a.id)) instanceof InstanceKeyError, false);
 });
 
-test("budget: her day is her own ledger against her own limit; the instance's ledger is not touched either way", async () => {
+test("budget: her spend is her own ledger, the instance's is not touched; the key's day, all friends together, is what stops her", async () => {
   const rec = join_("Cy");
   const ctx = T.tenantContext(rec);
   const owner0 = spentToday();
   recordCost(0.5, ctx.ledger);
   assert.equal(spentToday(ctx.ledger), 0.5);
   assert.equal(spentToday(), owner0);
-  assert.equal(tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd), false);
-  recordCost(ctx.dailyBudgetUsd, ctx.ledger);
-  assert.equal(tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd), true);
+  assert.equal(instanceKeyOverBudget(), false);
+  recordCost(settings.instanceKeyDailyUsd, ctx.ledger);
+  assert.equal(instanceKeyOverBudget(), true);
   const { r, asked } = runner({ key: KEY_A });
   const out = await r.run(tenant(rec.id), "hi");
-  assert.match(out.text, /daily limit/);
+  assert.match(out.text, /shared limit/);
   assert.deepEqual(asked, []);
-  writeFileSync(ctx.configFile, JSON.stringify({ dailyBudgetUsd: 1000 }));
-  assert.equal(T.tenantContext(rec).dailyBudgetUsd, 1000, "her tenant.json can raise or lower it");
 });
 
 test("delete: her folder and her registry entry go; the others, the owner's record included, stay", () => {
@@ -262,7 +261,7 @@ test("delete: her folder and her registry entry go; the others, the owner's reco
   assert.equal(T.deleteTenant(gone.id), false);
 });
 
-test("doctor: shows the instance key (set or not, never its value) and each tenant with status, budget and a pause; says nothing when TENANTS is off", async () => {
+test("doctor: shows the instance key (set or not, never its value) and each tenant with status, spend and a pause; says nothing when TENANTS is off", async () => {
   const { tenantCheck } = await import("../src/doctor.ts");
   const lines: string[] = [];
   const line = (ok: boolean | "warn", what: string, detail = "") => void lines.push(`${ok === true ? "ok" : ok === "warn" ? "warn" : "FAIL"} ${what} ${detail}`);
@@ -277,7 +276,7 @@ test("doctor: shows the instance key (set or not, never its value) and each tena
   tenantCheck(line, { on: true, key: KEY_A });
   const mine = lines.find((l) => l.includes(`tenant ${rec.id}`))!;
   assert.match(mine, /^warn /);
-  assert.match(mine, /active; capabilities [^;]+; today \$0\.25 of \$2; paused until [\d-]+ \d\d:\d\d/);
+  assert.match(mine, /active; capabilities [^;]+; today \$0\.25; paused until [\d-]+ \d\d:\d\d/);
   assert.ok(!mine.includes(KEY_A));
   assert.match(lines.find((l) => l.includes("tenant API key"))!, /^ok tenant API key .*separate Console workspace key with a spend limit/);
   assert.ok(!lines.join("\n").includes(KEY_A));

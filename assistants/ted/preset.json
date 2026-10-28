@@ -11,10 +11,7 @@
     "others": ["people", "context", "scheduling", "style"],
     "background": ["people", "context", "scheduling"]
   },
-  "profiles": {
-    "chat": { "maxTurns": 40, "maxBudgetUsd": 2 },
-    "group": { "maxTurns": 8, "maxBudgetUsd": 0.5 }
-  },
+  "limits": { "maxTurns": 40, "maxBudgetUsd": 2 },
   "expert": { "model": "sonnet", "maxTurns": 40 },
   "skills": {
     "core": [

@@ -1,7 +1,7 @@
 import { takeCapNotice } from "./capnotice.ts";
 import { dayIn } from "./timezone.ts";
 import { settings } from "./settings.ts";
-import { groupConvId, isConvId, OWNER_CONV, type ConvId } from "./convpaths.ts";
+import { isConvId, OWNER_CONV, type ConvId } from "./convpaths.ts";
 import { instanceDb } from "./instancedb.ts";
 
 // A runaway guard, not an accounting system. Costs are the SDK's own estimates (notional on a
@@ -10,12 +10,10 @@ import { instanceDb } from "./instancedb.ts";
 // Synchronous on purpose (see state.ts): concurrent recordCost calls can never lose an update (one INSERT each, in instance.db).
 //
 // ONE ledger, the `spend` table of instance.db (core/instancedb.ts): a row per charged run, with the payer, the conversation, the kind of run and the local day. Every ceiling is an
-// indexed sum of it, so the four that used to be four files (the owner's day, the instance key's day, a group's day, a friend's day) cannot drift apart:
-//   owner today        payer 'login', every conversation (the owner's chat, her background work and the groups, which run on her login)   -> DAILY_BUDGET_USD
-//   a group today      payer 'login', that group's convId                                                                                    -> GROUP_DAILY_BUDGET_USD
-//   the key today      payer 'key', every friend                                                                                             -> INSTANCE_KEY_DAILY_USD
-//   a friend today     payer 'key', her convId                                                                                               -> her own ceiling
-// (a group's run counts toward both the group's day and the owner's, as before; a friend's toward both her day and the key's)
+// indexed sum of it, so the two cannot drift apart:
+//   the login today    payer 'login', every conversation (the owner's chat, her background work and the groups, which run on her login)   -> DAILY_BUDGET_USD
+//   the key today      payer 'key', every friend                                                                                       -> INSTANCE_KEY_DAILY_USD
+// A conversation has no ceiling of its own; spentToday(convId) still says what it spent (the reports, `npm run doctor`).
 
 // FAIL CLOSED: when the ledger cannot be read (the degraded mode of a damaged instance.db, a database that stays busy or a full disk) every day's sum is "infinite", so background work, browse and a
 // friend's runs are refused as if the budget were spent, and nothing throws into a run. A charge that cannot be written is logged (once per kind of failure per minute), not raised: the run it paid for is done.
@@ -72,16 +70,11 @@ export function spentToday(ledger?: ConvId, now: Date = new Date()): number {
   }, Number.POSITIVE_INFINITY);
 }
 
-// ---- the two aggregate ceilings ----
-// Per group (a group runs on the owner's login, so a noisy one would otherwise spend the owner's whole day and stop her brief) and across all tenants (each has her own ceiling, but
-// together they spend one key): written by payer.ts charge(), read by payer.ts mayRun() and by group.ts before a group's run. A group is its convId, never its raw id.
-export const groupSpentToday = (groupId: string): number => spentToday(groupConvId(groupId));
-export const groupOverBudget = (groupId: string): boolean => groupSpentToday(groupId) >= settings.groupDailyBudgetUsd;
+// ---- the two payer ceilings ----
+// The day of each payer (the login: DAILY_BUDGET_USD; the instance key, all friends together: INSTANCE_KEY_DAILY_USD) is the only daily ceiling: a conversation has none of its own.
+// Written by payer.ts charge(), read by payer.ts mayRun() and by group.ts before a group's run.
 export const keySpentToday = (now: Date = new Date()): number => closed(() => cents(instanceDb().num("SELECT SUM(usd) FROM spend WHERE payer = 'key' AND day = ?", dayIn(now))), Number.POSITIVE_INFINITY);
 export const instanceKeyOverBudget = (): boolean => keySpentToday() >= settings.instanceKeyDailyUsd;
-
-// A tenant's day: spent so far against her own ceiling (0: no spending allowed at all).
-export const tenantOverBudget = (ledger: ConvId, limitUsd: number): boolean => spentToday(ledger) >= limitUsd;
 
 // `firstTime` is true once per day, so the caller can tell the owner exactly once.
 export function overBudget(): { over: boolean; firstTime: boolean; usd: number } {

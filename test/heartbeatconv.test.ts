@@ -69,7 +69,7 @@ test("a friend with Google: an isolated, fresh run on her key and ledger, with h
   assert.deepEqual(o.provenance?.(), { kind: "standing", task: "THE LOOK" });
   assert.equal(o.conversation, `tenant:${id}`);
   assert.deepEqual([o.tenant?.id, o.tenant?.apiKey, o.tenant?.ledger], [id, KEY, T.tenantContext(T.tenantById(id)!).ledger], "her ledger: what the run costs is hers");
-  assert.ok(o.maxBudgetUsd <= T.tenantContext(T.tenantById(id)!).maxBudgetUsdPerRun, "held to her own per-run ceiling");
+  assert.equal(o.maxBudgetUsd, runFor(owner(), "message", {}).maxBudgetUsd, "the same limits as everyone");
   const tools = [...(o.tools ?? [])];
   assert.ok(tools.includes(GOOGLE_MAIL_TOOL), "her own mail");
   assert.ok(tools.every((t) => !/^mcp__(claude_ai|mailbird)/.test(t)), "none of the owner's connectors");
@@ -146,7 +146,7 @@ test("a friend on an instance without Google has no mail in her instruction; a g
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
   assert.deepEqual([...go.tools!].sort(), [...groupTools(GROUP_LOOK)].sort(), "the group's capability set, less what needs a person waiting");
   assert.deepEqual([go.sessionConv, go.freshSession, go.memory?.dir, go.tenant], [g.convId, true, g.notesDir, undefined]);
-  assert.ok(go.maxBudgetUsd <= 0.5);
+  assert.equal(go.maxBudgetUsd, runFor(owner(), "message", {}).maxBudgetUsd, "a group has the owner's limits");
   assert.match(system(go), /group chat on Signal/);
   assert.equal(system(go), system(runFor(g, "message", {})), "the group's one prompt");
   const gb = buildOptions(async () => ({ approved: false }), go, undefined);
