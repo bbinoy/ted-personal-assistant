@@ -9,7 +9,7 @@ import { OWNER_KEY } from "../core/ownerkey.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
 import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
 import { BROWSE_SCHEMA, browseSystem } from "../modules/browse/browse.ts";
-import { resultText, withText, type BrowseGuard, type BrowseMode } from "../modules/browse/browseguard.ts";
+import { resultText, withText, type BrowseGuard } from "../modules/browse/browseguard.ts";
 import { hiddenBrowserTools } from "../modules/browse/browserules.ts";
 import { onStop, pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
@@ -26,7 +26,7 @@ import type { RunContext } from "../modules/types.ts";
 import { approveIn, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { browseTools, capabilitiesOf, groupCapabilities, groupTools, toolsFor } from "../policy/capabilities.ts";
+import { browseTools, runCapabilities, toolsFor } from "../policy/capabilities.ts";
 import { hiddenTools } from "../policy/policy.ts";
 import { type ChatSession } from "./session.ts";
 import { settings } from "../core/settings.ts";
@@ -185,27 +185,26 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // the skills are the shared ones its capabilities allow.
   const { kind } = opts;
   const browsing = kind.who === "browse"; // the browse sub-run: the browser and web search, nothing of the owner's
-  const owner = kind.who === "owner";
-  const isolated = !owner; // a group, a friend, the browse worker: no connectors, no user settings (the owner's login has them)
+  const caps = runCapabilities(kind); // (a run built by runFor carries its conversation's tools and skills, which come from the same set)
+  const login = caps.has("login"); // the instance's own Claude login (the owner's): its connectors and user settings. A group, a friend and the browse worker have neither
   // The run's tools: its conversation's capabilities, less what attendance removes (capabilities.ts toolsFor), the same derivation for every conversation. The browse worker has its browser's own and web search.
-  const tools = opts.tools ?? (browsing ? browseTools() : owner ? toolsFor(capabilitiesOf({ kind: "owner" }), kind) : groupTools(kind));
+  const tools = opts.tools ?? (browsing ? browseTools() : toolsFor(caps, kind));
   const offers = (tool: string) => browsing || tools.has(tool);
-  const skills = tools.has("Skill") ? (opts.skills ?? skillsFor(owner ? capabilitiesOf({ kind: "owner" }) : groupCapabilities())) : []; // (no Skill tool, no skill to load)
+  const skills = tools.has("Skill") ? (opts.skills ?? skillsFor(caps)) : []; // (no Skill tool, no skill to load)
   const plugin = [{ type: "local" as const, path: settings.pluginDir, skipMcpDiscovery: true }];
   const tenant = browsing ? undefined : opts.tenant; // the browse worker has no tenant tools of its own
   const groupId = opts.groupId ?? opts.memory?.groupId;
-  const mode: BrowseMode = kind.who === "group" || kind.who === "tenant" ? "group" : "owner";
-  const own = opts.conversation ?? tenant?.key ?? groupId ?? (owner ? OWNER_KEY : undefined); // the conversation the run acts for; an isolated run without one is never handed the owner's
+  const own = opts.conversation ?? tenant?.key ?? groupId ?? (login ? OWNER_KEY : undefined); // the conversation the run acts for; a run without the login and without one is never handed the owner's
   const conversation = own ?? OWNER_KEY; // (keys the per-conversation state of permissions.ts)
   const tellKey = browsing ? undefined : own; // (the browse worker has none of its own)
   // Whose words the approval judge reads as the provenance of this run's calls: what the code that started it said (a look: its standing task), else the conversation's own turn when
   // someone is waiting (turnscope.ts); the browse worker: its parent's.
   const provenance = opts.provenance ?? (tellKey && kind.attended ? scopeOf(tellKey).read : undefined);
-  const askedIn = tenant ? approveIn(tenant.key) : mode === "group" && groupId ? approveIn(groupId) : approve; // a tenant's browse run asks HER, in her chat
+  const askedIn = tenant ? approveIn(tenant.key) : !login && groupId ? approveIn(groupId) : approve; // a tenant's browse run asks HER, in her chat
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, memory: opts.memory, seenMail: opts.seenMail, guard: opts.guard, mode, offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv }) };
+  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, memory: opts.memory, seenMail: opts.seenMail, guard: opts.guard, mode: login ? "owner" : "group", offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -235,7 +234,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
       : { type: "custom", prompt: opts.systemPrompt, snapshot: false },
     settings: opts.memory ? { autoMemoryEnabled: true, autoMemoryDirectory: opts.memory.dir } : { autoMemoryEnabled: false },
     mcpServers,
-    strictMcpConfig: isolated || undefined, // nothing private is even loaded
+    strictMcpConfig: !login || undefined, // nothing private is even loaded
     resume,
     persistSession: browsing ? false : undefined, // the browse worker's session is never written to ~/.claude: its tool calls can carry a card typed by code, and nothing resumes a browse run
     // Built-ins: Skill, and for chat Read / Write / Edit (confined to the notes folder by
@@ -246,12 +245,12 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // "user" loads user-scope MCP servers (Mailbird) and CLAUDE.md; the skills offered are
     // limited to the bundled ones below.
     // Not "project": there is no project here.
-    settingSources: isolated ? [] : ["user"],
+    settingSources: login ? ["user"] : [],
     // The bundled skills, loaded from the repo; only these are offered to the model (the owner's
     // other skills would cost context on every call and are none of its business).
     plugins: skills.length ? plugin : undefined,
     skills: skills.length ? [...skills] : undefined,
-    disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : isolated ? undefined : hiddenTools(toolsSeen()), // out of the model's view entirely, see policy.ts
+    disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : login ? hiddenTools(toolsSeen()) : undefined, // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
     canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && conversation === OWNER_KEY, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
@@ -270,7 +269,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
   let lastContext: number | undefined; // the last model call of the main loop shows how big the context is
   for await (const message of stream) {
     observe(payer, message);
-    if (message.type === "system" && message.subtype === "init" && opts.kind.who === "owner") { // only the owner's run has connectors: its tool list says nothing about them
+    if (message.type === "system" && message.subtype === "init" && runCapabilities(opts.kind).has("login")) { // only the owner's run has connectors: its tool list says nothing about them
       recordToolsSeen(message.tools);
       recordConnectors(message.tools, message.mcp_servers);
     }

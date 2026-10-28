@@ -15,7 +15,7 @@ const { parseNote } = await import("../src/memory/notes.ts");
 const { RUNTIME } = await import("../src/modules/runtime.ts");
 const { searchContacts } = await import("../src/modules/google/googlemcp.ts");
 const { classify } = await import("../src/policy/policy.ts");
-const { toolsFor, groupTools } = await import("../src/policy/capabilities.ts");
+const { toolsFor, groupCapabilities } = await import("../src/policy/capabilities.ts");
 const { CAPABILITIES, FRIEND_CAPABILITIES } = await import("../src/tenants/tenants.ts");
 const { readsUntrusted, isFree } = await import("../src/policy/toolmanifest.ts");
 const { recipientsOutside } = await import("../src/approvals/autojudge.ts");
@@ -153,7 +153,7 @@ test("people: a friend's contacts are searched through HER session, with HER add
 
 test("people: the tool is in a group's and a friend's set and the owner's; read-only, free, and what it reads is untrusted text", () => {
   const T = "mcp__people__find_person";
-  assert.ok(groupTools().has(T));
+  assert.ok(toolsFor(groupCapabilities()).has(T));
   assert.ok(toolsFor(new Set(FRIEND_CAPABILITIES), FRIEND_CHAT).has(T));
   assert.ok(toolsFor(new Set(CAPABILITIES)).has(T));
   assert.equal(classify(T, { name: "sam" }, OWNER_CHAT), "allow");
