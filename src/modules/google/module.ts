@@ -53,37 +53,8 @@ const rows = [
 // The tool names a friend's run is shown for her Google when her connection needs her again (googlemcp.ts placeholders): the module's rows, without the prefix.
 export const GOOGLE_TOOLS: readonly string[] = rows.map((r) => r.tool.slice(GOOGLE_PREFIX.length));
 
-// Set by runtime.ts: reads one of her calendar events through her own session, for the approval of a change or delete that names only the event's id.
-let eventReader: ((tenantId: string, eventId: string, calendarId: string | undefined) => Promise<string | undefined>) | undefined;
-export const setEventReader = (fn: typeof eventReader) => void (eventReader = fn);
-
-// Pure: "Title, start" from her server's answer for one event (a "Title:" / "Summary:" line, a "Starts:" line, or JSON with summary and start); undefined when there is no title.
-export function eventLabel(text: string): string | undefined {
-  let title: string | undefined;
-  let start: string | undefined;
-  try {
-    const o = JSON.parse(text) as { summary?: unknown; title?: unknown; start?: unknown };
-    title = [o.summary, o.title].find((v): v is string => typeof v === "string" && !!v.trim());
-    const s = o.start;
-    start = typeof s === "string" ? s : s && typeof s === "object" ? String((s as Record<string, unknown>).dateTime ?? (s as Record<string, unknown>).date ?? "") || undefined : undefined;
-  } catch {
-    title = /^[-*\s]*(?:title|summary):\s*(.+)$/im.exec(text)?.[1];
-    start = /^[-*\s]*start(?:s|_time)?:\s*(.+)$/im.exec(text)?.[1];
-  }
-  title = title?.replace(/\s+/g, " ").trim();
-  return title ? `“${title.slice(0, 120)}”${start ? `, ${start.replace(/\s+/g, " ").trim().slice(0, 40)}` : ""}` : undefined;
-}
-
 export const googleModule: ToolModule = {
   name: "google",
-  // A change or delete of one of her events that names only its id: the event is read back from her own calendar (read-only) so the question names it.
-  describe: async (tool, input, conversation) => {
-    const id = conversation.startsWith("tenant:") ? conversation.slice("tenant:".length) : undefined;
-    const eventId = input.event_id;
-    if (tool !== `${GOOGLE_PREFIX}manage_event` || !id || !eventReader || typeof eventId !== "string" || !eventId || calendarAction(input) === "create") return undefined;
-    const text = await eventReader(id, eventId, typeof input.calendar_id === "string" ? input.calendar_id : undefined).catch(() => undefined);
-    return text ? eventLabel(text) : undefined;
-  },
   // Her server exists for a friend's run whose capability set offers any of its tools; the owner's run never has it (his are the connectors), nor does a group's.
   connection: { kind: "external", name: "google", when: tenantOffered(rows) },
   rows,

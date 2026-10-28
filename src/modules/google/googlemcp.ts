@@ -210,16 +210,6 @@ export async function searchContacts(tenantId: string, query: string, hub: Googl
   }
 }
 
-// One event of HER calendar, read through HER session (read-only, her address put in last): the text her server answers with, for the approval question to name the event.
-export async function readEvent(tenantId: string, eventId: string, calendarId: string | undefined, hub: GoogleHub = googleHub): Promise<string | undefined> {
-  const s = hub.session(tenantId);
-  await s.prepare();
-  if (!s.address) await s.tools();
-  if (!s.address) return undefined;
-  const r = await s.call("get_events", { event_id: eventId, ...(calendarId ? { calendar_id: calendarId } : {}), user_google_email: s.address });
-  return r.isError ? undefined : r.text;
-}
-
 // ---- what the model's run gets: a proxy to her server, no command line, no environment (mcpproxy.ts) ----
 
 // The in-process MCP server of a friend's run. `allowed`: the tools her run is offered (its capability set); anything else is refused here too. Every call is forwarded
