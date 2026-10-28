@@ -2,7 +2,7 @@ import { createServer } from "node:net";
 import type { FrameInfo } from "./paymentrules.ts";
 import { LIMITS } from "../../core/sanitize.ts";
 
-// What is under a point of the page: a lookup owned by CODE, never by the model (the vision-click experiment, BROWSE_VISION=click).
+// What is under a point of the page: a lookup owned by CODE, never by the model (the vision-click experiment, vision click mode).
 // The browser is asked over its own debugging port (loopback, a random port, only while a click-mode run lives; browseserver.ts). The
 // answer comes from the browser's hit test (DOM.getNodeForLocation: the same test a real click goes through, so an overlay on top counts),
 // the browser's own accessible role and name (the accessibility tree) and a fixed function run in an ISOLATED world (a hostile page cannot

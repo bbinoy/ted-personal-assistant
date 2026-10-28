@@ -472,7 +472,7 @@ export class BrowseGuard {
   private payAsk(tool: string, n: Node, input: Record<string, unknown>, target: { merchant: string; psp: string[] }, frame: boolean, stop: (r: string, e?: Record<string, unknown>) => Decision, fix: (r: string, e?: Record<string, unknown>) => Decision): Decision {
     const card = this.card!;
     const max = settings.browseMaxPayments;
-    if (max <= 0) return stop("Card payments are switched off for browse runs (BROWSE_MAX_PAYMENTS).");
+    if (max <= 0) return stop("Card payments are switched off for browse runs (settings.ts).");
     if (this.pay.approved >= max) return stop(`This run already started its ${max} card payment(s).`);
     if (this.pay.asks > max) return stop("The owner was asked about this payment already.");
     if (this.fullUrl !== this.url) return fix("Take a browser_snapshot of this payment page first (a whole page view), then type the card number.");
@@ -790,7 +790,7 @@ export class BrowseGuard {
     }
   }
 
-  // A click at a point (BROWSE_VISION=click). The model's idea of what is there counts for nothing: code asks the browser what the click
+  // A click at a point (vision click mode). The model's idea of what is there counts for nothing: code asks the browser what the click
   // would hit (browsecdp.ts), turns that into a Node and decides it as it decides a ref click. What it cannot resolve goes to the judge;
   // payment and login fields always ask; a link must pass the address check.
   private async clickAt(tool: string, input: Record<string, unknown>): Promise<Decision> {

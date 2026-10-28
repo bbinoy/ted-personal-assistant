@@ -1,7 +1,7 @@
 import { isRef, type Node } from "./browserules.ts";
 import type { PointInfo } from "./browsecdp.ts";
 
-// The pure rules of the vision experiment (BROWSE_VISION, off by default; settings.ts). read: the model may look at a screenshot of the page,
+// The pure rules of the vision experiment (off, no setting turns it on). read: the model may look at a screenshot of the page,
 // clicks stay by ref. click: it may also click at a point; the guard looks up the element under the point itself (browsecdp.ts) and decides
 // the click exactly as it decides a ref click. Nothing here relaxes a rule of browserules.ts / browseguard.ts: it only adds a way in.
 

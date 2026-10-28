@@ -278,7 +278,7 @@ export const BROWSER_PREFIX = "mcp__browser__browser_";
 // pdf, devtools...) is denied outright and hidden from the model.
 export const ALLOWED_BROWSER_TOOLS = ["snapshot", "find", "navigate", "navigate_back", "click", "type", "fill_form", "select_option", "press_key", "hover", "handle_dialog", "wait_for", "tabs"] as const;
 export const HIDDEN_BROWSER_TOOLS = ["close", "resize", "console_messages", "emulate_media", "evaluate", "file_upload", "drop", "network_requests", "network_request", "run_code_unsafe", "take_screenshot", "drag", "install", "pdf_save", "start_tracing", "stop_tracing"].map((n) => BROWSER_PREFIX + n);
-// The vision experiment (browsevision.ts, BROWSE_VISION): off is today's behaviour. read adds the screenshot (the model sees it; clicks stay
+// The vision experiment (browsevision.ts): off is today's behaviour. read adds the screenshot (the model sees it; clicks stay
 // by ref). click adds clicking at a point, hovering at a point and the wheel; press-and-hold, release and drag stay hidden and denied.
 export type VisionMode = "off" | "read" | "click";
 export const VISION_TOOLS: Record<VisionMode, readonly string[]> = { off: [], read: ["take_screenshot"], click: ["take_screenshot", "mouse_click_xy", "mouse_move_xy", "mouse_wheel"] };

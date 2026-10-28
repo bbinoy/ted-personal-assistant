@@ -13,11 +13,10 @@ import { browserServer } from "../src/modules/browse/browseserver.ts";
 import { hiddenBrowserTools, HIDDEN_BROWSER_TOOLS, isAllowedBrowserTool, type VisionMode } from "../src/modules/browse/browserules.ts";
 import { clickProblem, MAX_POINT_CLICKS, MAX_SHOTS, screenshotInput, validPoint } from "../src/modules/browse/browsevision.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { loadSettings } from "../src/core/settings.ts";
 import { cleanToolOutput } from "../src/core/toolclean.ts";
 import { BROWSE_RUN } from "./runkinds.ts";
 
-// The vision experiment (BROWSE_VISION): off changes nothing; read lets a screenshot reach the model; click resolves a point itself.
+// The vision experiment (no setting): off changes nothing; read lets a screenshot reach the model; click resolves a point itself.
 
 const B = "mcp__browser__browser_";
 const opts = { signal: new AbortController().signal } as never;
@@ -37,8 +36,6 @@ const click = { x: 100, y: 200 };
 // ---- off: nothing changes ----
 
 test("vision off is today's behaviour: no screenshot, no point tools, the same hidden list, the same server flags, the same prompt", async () => {
-  assert.equal(loadSettings({}).browseVision, "off");
-  assert.throws(() => loadSettings({ BROWSE_VISION: "on" }), /BROWSE_VISION/);
   assert.equal(isAllowedBrowserTool(`${B}take_screenshot`), false);
   assert.equal(isAllowedBrowserTool(`${B}mouse_click_xy`), false);
   assert.deepEqual(hiddenBrowserTools(), HIDDEN_BROWSER_TOOLS);

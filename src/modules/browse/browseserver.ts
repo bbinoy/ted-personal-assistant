@@ -63,7 +63,7 @@ export function browseStatus(): BrowseStatus {
 export function browserServer(st: Extract<BrowseStatus, { ok: true }>, outDir: string, ua: string | undefined = desktopUserAgent(st.exe), vision: { mode: VisionMode; cdpPort?: number; proxyPort?: number; unproxiedForTest?: true } = { mode: "off" }): McpServerConfig {
   // An ordinary language and the time zone of this machine, so the page sees what a browser on this computer would send.
   const configFile = join(outDir, "browser-config.json");
-  // BROWSE_VISION=click only: the browser also listens on a debugging port on loopback, for the guard's own lookup of what is under a point (browsecdp.ts).
+  // vision click mode only: the browser also listens on a debugging port on loopback, for the guard's own lookup of what is under a point (browsecdp.ts).
   // Every connection of the browser goes through the run's egress proxy (browseproxy.ts: public addresses only, on the ports a page may use). `<-loopback>` takes away
   // Chromium's default bypass for localhost, so a page cannot reach the owner's own machine around the proxy; the debugging port is reached by code, not by the browser.
   // No proxy, no browser: a launch without the egress filter is refused (only a test may say it does without, `unproxiedForTest`).

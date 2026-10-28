@@ -117,7 +117,7 @@ export interface BrowseContext {
 
 // ---- how many runs at once ----
 
-// A small pool instead of one global flag: up to BROWSE_MAX_CONCURRENT runs at once, at most one per conversation, and a run that finds no slot waits (the owner's
+// A small pool instead of one global flag: up to settings.browseMaxConcurrent runs at once, at most one per conversation, and a run that finds no slot waits (the owner's
 // chat ahead of everyone else) up to SLOT_WAIT_MS before it is refused with the old message. Everything else a run holds (folder, screenshots, page views, proxy) is its own.
 export const SLOT_WAIT_MS = 60_000;
 export class Slots {
@@ -253,7 +253,7 @@ export async function browse(ctx: BrowseContext, rawTask: string, o: BrowseOptio
 async function runBrowse(ctx: BrowseContext, task: string, log: (tool: string, decision: string, source: "browse", meta?: Record<string, unknown>) => void, o: BrowseOptions, proxyPort: number | undefined): Promise<string> {
   mkdirSync(instancePaths().browse, { recursive: true });
   const outDir = mkdtempSync(join(instancePaths().browse, "run-"));
-  const vision = o.vision ?? settings.browseVision;
+  const vision = o.vision ?? "off";
   // The owner's payment card goes to the owner's chat run only, like the profile: not a group, not a wake-up. It is a handle (last four, a way to
   // open the card after a typed yes), not the card. A store that cannot be read, a kill switch that is on or a cap of 0 mean no card.
   const card = ownerChat(ctx) ? (o.card === undefined ? await openCardAccess({ onProblem: (reason) => log("browse_run", "card-unavailable", "browse", { reason: reason.slice(0, LIMITS.reason) }) }) : (o.card ?? undefined)) : undefined;
