@@ -33,7 +33,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 ## 4. Ted speaks, code doesn't
 
 - **Messages to people are written by the model**, in Ted's voice and personality, not as hard-coded strings. Code passes context to the run (due tasks, what was archived, what failed); the run decides whether to say anything and how.
-- **Hard-coded chat text is the exception.** It is allowed only where an exact text is a safety requirement: payment confirmation, secret and setup links, the fixed reply to an unknown sender before approval (no model may see a stranger's message), and a fallback when no model run is possible at all.
+- **Hard-coded chat text is the exception.** It is allowed only where an exact text is a safety requirement: secret and setup links, the fixed reply to an unknown sender before approval (no model may see a stranger's message), and a fallback when no model run is possible at all.
 - **System status stays out of the chat.** Look failures, retries, expiries and recoveries go to the log, `npm run doctor` or the daily brief, not to a chat message, unless the user has to do something.
 
 ## 5. Safety invariants (never relax these)
