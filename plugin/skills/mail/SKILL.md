@@ -139,23 +139,22 @@ your head: take what decides the case and move on.
    line of why, suggested next step + draft), then one line summarising
    what was archived.
 
-### Newsletter radar (skim a few before archiving)
+### Newsletter radar
 
-Newsletters are still archived, but a **small, selective** number are
-skimmed first to feed the brief's **Radar** section (`ted-personal-assistant:daily-brief`).
-This is the one case where a newsletter is read before it is archived.
+Newsletters are archived from the row by the looks, unread, as soon as they arrive.
+The daily brief (`ted-personal-assistant:daily-brief`, step "Newsletter radar") reads
+them afterwards: from the newsletters archived since the previous brief (the journal's
+archive list) plus any still in the inbox, it opens the **3** that best match the topics
+in the owner's `brief-radar-topics` note (with no such note, skip the radar). Only the
+brief reads newsletters; a look never does.
 
-- **Which:** newsletters whose sender/subject plausibly covers the topics
-  in the owner's **Brief notes** (see the memory block in your system
-  prompt; with none, skip the radar entirely). Skip retail promos,
-  job-board digests, and anything already covered.
-- **How many:** open at most **4** per daily brief run. Pick the most
-  relevant by sender+subject; archive the rest from the row.
-- **Extract concrete items, not summaries:** announcements, launches,
-  funding rounds, regulatory or policy changes, notable hires/partnerships,
-  and **events** (date, venue, deadline to register). Prefer things that
-  *happened or are coming* over explainers and opinion.
-- **Dedupe:** skip anything the previous brief's Radar already listed.
+- **Opening an archived mail:** Gmail `get_thread` with the journal's id. Mailbird: the
+  conversation id changes when it is archived, so `search_conversations` on subject (and
+  sender), then `get_message` with the hit's `lastMessageId`.
+- **Extract concrete items, not summaries:** announcements, launches, funding rounds,
+  regulatory or policy changes, notable hires, and **events** (date, venue,
+  register-by deadline). Skip retail promos and job-board digests; never repeat the
+  previous brief's Radar.
 - Nothing concrete found -> contribute nothing (never pad).
 
 ### Waiting-on list

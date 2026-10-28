@@ -95,7 +95,7 @@ test("bringing mail back: free in the owner's own chat (Mailbird to inbox, Gmail
 test("the daily brief lists the archived mail from the numbered list, and its chat line says how to bring one back", () => {
   const skill = readFileSync("plugin/skills/daily-brief/SKILL.md", "utf8");
   assert.match(skill, /## 🧹 Archived/);
-  assert.match(skill, /keeping every number and\s+every mail exactly as the list gives it/);
+  assert.match(skill, /One line of counts by kind[\s\S]*journal number[\s\S]*never renumbered[\s\S]*Reply 'archived' for the full numbered list/);
   assert.match(skill, /🧹 Archived N since <since> \(list in the email; reply 'restore N' to bring one back\)/);
   assert.match(skill, /once with `kind` `archive`/);
 });
