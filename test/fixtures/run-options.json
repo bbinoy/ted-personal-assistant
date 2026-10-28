@@ -1,12 +1,12 @@
 {
   "owner": {
     "run": {
+      "maxTurns": 40,
+      "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
         "sha": "4f30c55843f27693"
       },
-      "maxTurns": 40,
-      "maxBudgetUsd": 2,
       "kind": {
         "who": "owner",
         "attended": true
@@ -315,12 +315,12 @@
   },
   "group": {
     "run": {
+      "maxTurns": 40,
+      "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "group.run.systemPrompt",
         "sha": "86adc69e35f0052e"
       },
-      "maxTurns": 8,
-      "maxBudgetUsd": 0.5,
       "kind": {
         "who": "group",
         "attended": true
@@ -418,8 +418,8 @@
       "ted-personal-assistant:draw"
     ],
     "permissionMode": "default",
-    "maxTurns": 8,
-    "maxBudgetUsd": 0.5,
+    "maxTurns": 40,
+    "maxBudgetUsd": 2,
     "envChanged": {
       "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
     },
@@ -432,12 +432,12 @@
   },
   "tenant": {
     "run": {
+      "maxTurns": 12,
+      "maxBudgetUsd": 0.5,
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
         "sha": "9d4abebfd1e29b7f"
       },
-      "maxTurns": 12,
-      "maxBudgetUsd": 0.5,
       "tenant": {
         "id": "<bea>",
         "key": "tenant:<bea>",
@@ -559,12 +559,12 @@
   },
   "ownerLook": {
     "run": {
+      "maxTurns": 40,
+      "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
         "sha": "4f30c55843f27693"
       },
-      "maxTurns": 40,
-      "maxBudgetUsd": 2,
       "kind": {
         "who": "owner",
         "attended": false
@@ -873,12 +873,12 @@
   },
   "groupLook": {
     "run": {
+      "maxTurns": 40,
+      "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
         "sha": "86adc69e35f0052e"
       },
-      "maxTurns": 8,
-      "maxBudgetUsd": 0.5,
       "kind": {
         "who": "group",
         "attended": false
@@ -980,8 +980,8 @@
       "ted-personal-assistant:draw"
     ],
     "permissionMode": "default",
-    "maxTurns": 8,
-    "maxBudgetUsd": 0.5,
+    "maxTurns": 40,
+    "maxBudgetUsd": 2,
     "envChanged": {
       "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
     },
@@ -994,12 +994,12 @@
   },
   "tenantLook": {
     "run": {
+      "maxTurns": 12,
+      "maxBudgetUsd": 0.5,
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
         "sha": "9d4abebfd1e29b7f"
       },
-      "maxTurns": 12,
-      "maxBudgetUsd": 0.5,
       "tenant": {
         "id": "<bea>",
         "key": "tenant:<bea>",

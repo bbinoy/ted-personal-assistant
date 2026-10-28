@@ -65,18 +65,16 @@ export interface RunInputs {
   now?: Date;
 }
 
-type Shape = Pick<RunOptions, "systemPrompt" | "maxTurns" | "maxBudgetUsd" | "tenant"> & { notes: { dir: string; zone: string } };
+type Shape = Pick<RunOptions, "systemPrompt" | "tenant"> & Partial<Pick<RunOptions, "maxTurns" | "maxBudgetUsd">> & { notes: { dir: string; zone: string } };
 
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: chatSystem(i.now), // (only what is stable: what changes between two runs is turnContext below)
   notes: { dir: conv.notesDir, zone: zoneOf(conv) },
-  ...preset().profiles.chat, // (the preset's: a cold prompt cache alone can cost most of a dollar)
 });
 
 const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: groupSystem({ style: i.style, caps: capabilitiesOf(conv), looker: lookerOf(conv) }),
   notes: { dir: conv.notesDir, zone: zoneOf(conv) },
-  ...preset().profiles.group,
 });
 
 // A tenant's run (tenants.ts): an isolated "group" run in a private chat, on the instance key, with her notes, her session, her ledger.
@@ -133,6 +131,7 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
   const { notes, ...rest } = shape;
   writeIndex(notes.dir, now, notes.zone); // (what changed since the last write: a note that expired, one the SDK's own writer or the person edited)
   return {
+    ...preset().limits, // (the preset's, the same for the owner and every group: a cold prompt cache alone can cost most of a dollar; a friend's shape sets her own)
     ...rest,
     kind,
     sessionConv: conv.convId,

@@ -127,7 +127,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 
 **The preset** (`assistants/<name>/`, default `ted`, `ASSISTANT_PRESET`; `src/core/preset.ts`).
 
-- `preset.json` holds the rhythm (tick, day interval, quiet hours, dream), note categories, profile limits, the expert and the core skills.
+- `preset.json` holds the rhythm (tick, day interval, quiet hours, dream), note categories, the run limits (one set for the owner and every group; a friend's are hers, in `tenant.json`), the expert and the core skills.
 - `persona/*.md` holds every prompt as a template filled by `src/run/persona.ts`. The rules every conversation shares (memory, and for other people the injection rule, plain text, `[[silent]]`) are one include, `shared.md`; a group and a friend are one persona, `others.md`, with `group` and `google` flags (`othersSystem`; `groupSystem` and `tenantSystem` are its two callers), and one note list, `notes.others`.
 - A preset changes how Ted talks and when it wakes, never what it may do: policy, the approval path, isolation and payments stay in code.
 

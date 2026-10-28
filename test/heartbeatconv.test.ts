@@ -146,7 +146,7 @@ test("a friend on an instance without Google has no mail in her instruction; a g
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
   assert.deepEqual([...go.tools!].sort(), [...groupTools(GROUP_LOOK)].sort(), "the group's capability set, less what needs a person waiting");
   assert.deepEqual([go.sessionConv, go.freshSession, go.memory?.dir, go.tenant], [g.convId, true, g.notesDir, undefined]);
-  assert.ok(go.maxBudgetUsd <= 0.5);
+  assert.equal(go.maxBudgetUsd, runFor(owner(), "message", {}).maxBudgetUsd, "a group has the owner's limits");
   assert.match(system(go), /group chat on Signal/);
   assert.equal(system(go), system(runFor(g, "message", {})), "the group's one prompt");
   const gb = buildOptions(async () => ({ approved: false }), go, undefined);
