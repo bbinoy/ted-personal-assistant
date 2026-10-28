@@ -25,7 +25,7 @@ export function createApprovers(out: { reply(text: string, opts: { plain: true; 
     if (key === OWNER_KEY) return make(send(), { scope: key, source: "chat", mayPay: true });
     if (isTenantKey(key)) {
       const to = target(key.slice("tenant:".length));
-      return to ? make(send(to), { scope: key, source: "group" }) : DENY_ALL;
+      return to ? make(send(to), { scope: key, source: "tenant" }) : DENY_ALL;
     }
     return make(send(key), { scope: key, source: "group" });
   };

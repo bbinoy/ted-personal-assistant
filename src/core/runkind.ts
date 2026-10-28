@@ -12,4 +12,4 @@ export interface RunKind {
 }
 
 // The audit log's label for who acted (audit.ts Source): a name for the log only, nothing is decided by it.
-export const auditSource = (k: RunKind): Source => (k.who === "browse" ? "browse" : k.who !== "owner" ? "group" : k.attended ? "chat" : "background");
+export const auditSource = (k: RunKind): Source => (k.who !== "owner" ? k.who : k.attended ? "chat" : "background");

@@ -10,7 +10,7 @@ import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
 import { isQuiet } from "../conversation/quiet.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { emit } from "../core/events.ts";
-import { onLogin } from "../core/ownerkey.ts";
+import { auditSource } from "../core/runkind.ts";
 
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Three small, separate mechanisms, all pure planners over a little state:
 //   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat, as a fixed text: over budget no model
@@ -193,7 +193,7 @@ export function dropUnreachable(conv: Conversation): void {
   const n = heldCount(conv);
   if (n === 0) return;
   convDb(conv.convId).run("DELETE FROM held_posts");
-  emit({ type: "notice", state: "dropped", conv: conv.key, text: `Dropped ${n} held message(s): this conversation has no look`, source: onLogin(conv) ? "background" : "group" });
+  emit({ type: "notice", state: "dropped", conv: conv.key, text: `Dropped ${n} held message(s): this conversation has no look`, source: auditSource({ who: conv.kind, attended: false }) });
 }
 
 // ---- the owner's notices ----

@@ -46,7 +46,7 @@ test("a tenant's action asks in HER chat, never in the owner's; a group's in the
   const g = ask(r.approverFor("group-1"), "Post the notes");
   await settle();
   assert.deepEqual(r.sent.map((m) => m.to), ["to:anna-aci", "group-1"]);
-  assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [[ANNA, "group"], ["group-1", "group"]]);
+  assert.deepEqual(r.made.map((m) => [m.scope, m.source]), [[ANNA, "tenant"],["group-1", "group"]]);
   approvals.answerReaction("👎", r.sent[0]!.ts, ANNA);
   approvals.answerReaction("👎", r.sent[1]!.ts, "group-1");
   await Promise.all([t, g]);
