@@ -12,7 +12,7 @@ import { registered } from "../src/modules/index.ts";
 import { applyChanges, classify, hiddenTools, isNeverAllowed } from "../src/policy/policy.ts";
 import { SOURCES } from "../src/core/audit.ts";
 import { allRows, confirmsDelete, entryFor, isFree, neverAllowedTool } from "../src/policy/toolmanifest.ts";
-import { groupTools } from "../src/policy/capabilities.ts";
+import { groupCapabilities, toolsFor } from "../src/policy/capabilities.ts";
 import { SYSTEM } from "../src/approvals/approvaljudge.ts";
 import { BROWSE_RUN, FRIEND_CHAT, GROUP_CHAT, OWNER_CHAT, OWNER_LOOK, kindOf } from "./runkinds.ts";
 
@@ -227,7 +227,7 @@ test("the table: the verdict of each tool for the owner's chat, an unattended ru
     assert.equal(classify(tool, {}, OWNER_LOOK), brief, `${tool} (unattended)`);
     assert.equal(classify(tool, {}, GROUP_CHAT), group, `${tool} (group)`);
   }
-  assert.ok(!groupTools().has(`${MB}get_message`));
+  assert.ok(!toolsFor(groupCapabilities()).has(`${MB}get_message`));
 });
 
 test("guests: every field that names people counts, by token, in any case; removing people does not; the judge is told and never sees such a call", () => {

@@ -35,6 +35,10 @@ export const allows = (conv: Who, capability: Capability): boolean => capabiliti
 
 export const groupCapabilities = (): ReadonlySet<Capability> => capabilitiesOf({ kind: "group" });
 
+// The capability set of a run that was not handed its conversation's (a bare check, a test): the owner's, or a group's (a friend's run is an isolated one too); the browse worker has none
+// of any conversation's (it has its own fixed tool set, browseTools). `login` in it is what a run reads to know it is on the instance's own login: connectors, user settings, the data folders.
+export const runCapabilities = (run: RunKind): ReadonlySet<Capability> => (run.who === "browse" ? new Set() : capabilitiesOf({ kind: run.who === "owner" ? "owner" : "group" }));
+
 // The tools of a run with these capabilities: every manifest row whose capability is in the set and that is present for the run (toolmanifest.ts presentFor: attended or not, and
 // for whom). The ONE derivation, for the owner's run too: she has every capability, and what only her login has (the connectors, the tenant administration) needs the
 // `login` capability, or an OWNER_ONLY one, which only her conversation has (a connector row needs `login` besides its own capability; resolveCapabilities takes it from everybody else). Built-in tools (no "mcp__" prefix) are in the same set; the unknown tool is simply not in it. Skill is there only when there is a
@@ -47,5 +51,3 @@ export function toolsFor(caps: ReadonlySet<Capability>, run: RunKind = { who: "g
 
 // The browse worker's tools: its browser's own and web search, nothing of any conversation's (the worker is built from the rows that name it, `who: ["browse"]`).
 export const browseTools = (): ReadonlySet<string> => new Set([...manifest().filter((e) => e.who?.includes("browse")).map((e) => e.tool), "WebSearch"]);
-
-export const groupTools = (run: RunKind = { who: "group", attended: true }): ReadonlySet<string> => toolsFor(groupCapabilities(), run);

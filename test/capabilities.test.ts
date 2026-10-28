@@ -10,7 +10,7 @@ process.env.INTAKE_BASE_URL = "";
 const { settings } = await import("../src/core/settings.ts");
 const { CAPABILITIES } = await import("../src/tenants/tenants.ts");
 type Capability = (typeof CAPABILITIES)[number];
-const { groupCapabilities, groupTools, resolveCapabilities, toolsFor } = await import("../src/policy/capabilities.ts");
+const { groupCapabilities, resolveCapabilities, toolsFor } = await import("../src/policy/capabilities.ts");
 const tenantTools = (ctx: { config: any; capabilities: readonly any[] }) => toolsFor(resolveCapabilities(ctx.capabilities, { own: ctx.config }), FRIEND_CHAT);
 const { privateSkills, sharedSkills, skillsFor } = await import("../src/modules/skills.ts");
 const PRIVATE_SKILLS = privateSkills();
@@ -34,10 +34,10 @@ const caps = (...c: Capability[]) => resolveCapabilities(c);
 test("capabilities: what a group, a friend and a person with less have, pinned (tools and skills come from the same set)", () => {
   const full = sorted([...CHAT, "mcp__browse__browse", "mcp__draw__draw", "mcp__memory__undo_dream", "mcp__voice__voice", ...WEATHER, ...TASKS]);
   const shared = [P("research-booking"), P("web-research"), P("surf-conditions"), P("draw")];
-  assert.deepEqual(sorted(groupTools()), full);
+  assert.deepEqual(sorted(toolsFor(groupCapabilities())), full);
   assert.deepEqual(skillsFor(groupCapabilities()), shared);
   // its look: the same set (the notes, memory and list tools are every run's)
-  assert.deepEqual(sorted(groupTools(GROUP_LOOK)), full);
+  assert.deepEqual(sorted(toolsFor(groupCapabilities(), GROUP_LOOK)), full);
   // a new friend's record is the same set as a group's
   const friend = caps("chat", "browse", "voice", "heartbeat", "dream", "weather", "draw", "tasks");
   assert.deepEqual(sorted(toolsFor(friend)), full);
@@ -86,7 +86,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     assert.deepEqual(skillsFor(withIt).filter((k) => k !== P("web-research")), adds[c].skills, `${c}: skills`);
   }
   // everything at once is still only the sum of the free ones
-  assert.deepEqual(sorted(toolsFor(caps(...CAPABILITIES))), sorted(groupTools()));
+  assert.deepEqual(sorted(toolsFor(caps(...CAPABILITIES))), sorted(toolsFor(groupCapabilities())));
   assert.deepEqual(skillsFor(caps(...CAPABILITIES)), skillsFor(groupCapabilities()));
 });
 
@@ -99,7 +99,7 @@ test("capabilities: the intake tools need the capability, a purpose and a usable
     assert.deepEqual(has("chat", "intake"), [], "no purpose");
     assert.deepEqual(has("chat", "profile"), [], "no intake capability");
     assert.deepEqual(sorted(tenantTools(tenant("chat", "intake", "profile"))).filter((t) => !t.startsWith("mcp__intake__")), CHAT, "and nothing of the profile itself");
-    assert.deepEqual(groupTools().has("mcp__intake__get_setup_link"), false, "never a group's");
+    assert.deepEqual(toolsFor(groupCapabilities()).has("mcp__intake__get_setup_link"), false, "never a group's");
   } finally {
     (settings.intake as { baseUrl?: string }).baseUrl = was;
   }
@@ -110,14 +110,14 @@ test("capabilities: a feature switched off in .env, or by her own settings, take
   const was = { weather: f.weather, draw: f.draw, browse: f.browse };
   try {
     f.weather = false;
-    assert.ok(![...groupTools()].some((t) => t.startsWith("mcp__weather__")));
+    assert.ok(![...toolsFor(groupCapabilities())].some((t) => t.startsWith("mcp__weather__")));
     assert.ok(!skillsFor(groupCapabilities()).includes(P("surf-conditions")));
     f.weather = was.weather;
     f.draw = false;
-    assert.ok(!groupTools().has("mcp__draw__draw") && !skillsFor(groupCapabilities()).includes(P("draw")));
+    assert.ok(!toolsFor(groupCapabilities()).has("mcp__draw__draw") && !skillsFor(groupCapabilities()).includes(P("draw")));
     f.draw = was.draw;
     f.browse = false;
-    assert.ok(!groupTools().has("mcp__browse__browse") && !skillsFor(groupCapabilities()).includes(P("research-booking")));
+    assert.ok(!toolsFor(groupCapabilities()).has("mcp__browse__browse") && !skillsFor(groupCapabilities()).includes(P("research-booking")));
     assert.equal(classify("mcp__browse__browse", {}, GROUP_CHAT), "deny");
     f.browse = was.browse;
     const mine = { config: { browse: false, voice: false }, capabilities: ["chat", "browse", "voice"] as Capability[] };
@@ -195,19 +195,19 @@ test("capabilities: every manifest row names its capability, and a group never h
   const GROUP_ONLY_CAPS = new Set<string>(groupCapabilities());
   for (const e of MANIFEST.filter((x) => ["mail", "calendar", "notion", "google", "drive", "admin", "profile", "card"].includes(x.cap))) {
     assert.ok(!GROUP_ONLY_CAPS.has(e.cap), e.tool);
-    assert.ok(!groupTools().has(e.tool), e.tool);
+    assert.ok(!toolsFor(groupCapabilities()).has(e.tool), e.tool);
     assert.equal(classify(e.tool, {}, GROUP_CHAT), "deny", e.tool);
   }
 });
 
 test("capabilities: opening a page is every conversation's (judged by the floor), the owner's connectors and the admin's tools are the login's alone", () => {
   const friend = toolsFor(resolveCapabilities(["chat", "mail", "calendar", "notion", "drive", "admin", "login"], { own: {} }), FRIEND_CHAT);
-  for (const set of [groupTools(), friend, groupTools(GROUP_LOOK)]) {
+  for (const set of [toolsFor(groupCapabilities()), friend, toolsFor(groupCapabilities(), GROUP_LOOK)]) {
     assert.ok(set.has("WebFetch") && set.has("WebSearch"));
     assert.ok(![...set].some((t) => t.startsWith("mcp__claude_ai_") || t.startsWith("mcp__mailbird__") || t.startsWith("mcp__tenants__")));
   }
-  assert.equal(classify("WebFetch", { url: "https://example.com/" }, GROUP_CHAT, undefined, groupTools()), "ask", "a plain address is judged");
-  assert.equal(classify("WebFetch", { url: "file:///etc/passwd" }, GROUP_CHAT, undefined, groupTools()), "deny", "the floor still holds");
+  assert.equal(classify("WebFetch", { url: "https://example.com/" }, GROUP_CHAT, undefined, toolsFor(groupCapabilities())), "ask", "a plain address is judged");
+  assert.equal(classify("WebFetch", { url: "file:///etc/passwd" }, GROUP_CHAT, undefined, toolsFor(groupCapabilities())), "deny", "the floor still holds");
   // the login is what adds the connectors, and nothing else does
   const withLogin = toolsFor(resolveCapabilities(CAPABILITIES, { login: true }), OWNER_CHAT);
   assert.ok([...withLogin].some((t) => t.startsWith("mcp__claude_ai_")) && withLogin.has("WebFetch"));

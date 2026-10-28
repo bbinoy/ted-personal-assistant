@@ -13,7 +13,7 @@ const S = await import("../src/tasks/store.ts");
 const { itemLine, tasksText } = await import("../src/tasks/render.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
 const { classify } = await import("../src/policy/policy.ts");
-const { allows, groupCapabilities, groupTools, toolsFor, capabilitiesOf } = await import("../src/policy/capabilities.ts");
+const { allows, groupCapabilities, toolsFor, capabilitiesOf } = await import("../src/policy/capabilities.ts");
 const { buildOptions } = await import("../src/run/agentrun.ts");
 const { commandReply, parseCommand } = await import("../src/conversation/ownercommands.ts");
 const { noteDone } = await import("../src/approvals/journalrender.ts");
@@ -334,17 +334,17 @@ test("tasks: the permission floor: own-data writes are free in chat and in a loo
   const ADD = "mcp__tasks__add_task";
   for (const tool of [READ, ADD, ...MUTATORS]) {
     assert.equal(classify(tool, { id: 1 }, OWNER_CHAT), "allow", `${tool}: no approval for the owner's own list`);
-    assert.equal(classify(tool, { id: 1 }, GROUP_CHAT, undefined, groupTools()), "allow", `${tool}: in a group or a friend's chat too`);
+    assert.equal(classify(tool, { id: 1 }, GROUP_CHAT, undefined, toolsFor(groupCapabilities())), "allow", `${tool}: in a group or a friend's chat too`);
     assert.equal(classify(tool, { id: 1 }, OWNER_LOOK), "allow", `${tool}: a look of the owner's too`);
   }
   // a friend's or a group's own look has the same tools
-  const look = groupTools(GROUP_LOOK);
+  const look = toolsFor(groupCapabilities(), GROUP_LOOK);
   for (const tool of [READ, ADD, ...MUTATORS]) {
     assert.ok(look.has(tool), tool);
     assert.equal(classify(tool, { id: 1 }, GROUP_LOOK, undefined, look), "allow", `${tool}: a look of a friend or a group`);
   }
   // unknown names under the server are denied for isolated runs and not free
-  assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, GROUP_CHAT, undefined, groupTools()), "deny");
+  assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, GROUP_CHAT, undefined, toolsFor(groupCapabilities())), "deny");
   assert.equal(classify("mcp__tasks__tidy_task", { id: 1 }, OWNER_CHAT), "ask", "a name the manifest does not know is never free");
 });
 
@@ -366,7 +366,7 @@ test("tasks: the server is built per run: the owner's chat, a group, a friend an
   assert.equal(toolNames({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).length, 6);
   assert.equal(toolNames({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g" }, groupId: "g" }).length, 6);
   assert.deepEqual(toolNames({ ...base, kind: OWNER_LOOK }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "the owner's look");
-  assert.deepEqual(toolNames({ ...base, kind: GROUP_LOOK, groupId: "g", tools: groupTools(GROUP_LOOK) }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "a group's look has no chat memory");
+  assert.deepEqual(toolNames({ ...base, kind: GROUP_LOOK, groupId: "g", tools: toolsFor(groupCapabilities(), GROUP_LOOK) }).sort(), ["add_task", "complete_task", "drop_task", "list_tasks", "snooze_task", "update_task"], "a group's look has no chat memory");
   assert.equal("tasks" in servers({ ...base, kind: BROWSE_RUN }), false);
   assert.equal("tasks" in servers({ ...base, kind: GROUP_CHAT }), false, "an isolated run with no conversation gets no list (not the owner's)");
 });

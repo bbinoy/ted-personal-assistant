@@ -20,7 +20,6 @@ const { askGateWith } = await import("../src/conversation/gate.ts");
 const { owner, tenant } = await import("../src/conversation/conversation.ts");
 const { allows } = await import("../src/policy/capabilities.ts");
 const { googleReady } = await import("../src/core/settings.ts");
-const { onLogin } = await import("../src/core/ownerkey.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 const { recordCost, spentToday } = await import("../src/core/budget.ts");
 const { noteRateLimit, resetCooldown } = await import("../src/core/cooldown.ts");
@@ -140,8 +139,8 @@ test("with the wake-ups switched off, with TENANTS off, or while not active: no 
   assert.equal(allows({ kind: "tenant", tenantId: susp.id }, "heartbeat"), false);
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "wake"), true);
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "mail"), googleReady(), "her mail is her own Google: there when the instance has the OAuth client, not before");
-  assert.equal(onLogin(tenant(live.id)), false);
-  assert.equal(onLogin(owner()), true);
+  assert.equal(allows(tenant(live.id), "login"), false);
+  assert.equal(allows(owner(), "login"), true);
 });
 
 test("a tenant's suspension, cooldown, budget and a missing instance key each stop her look before any model call", async () => {

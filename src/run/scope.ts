@@ -1,5 +1,4 @@
 import type { Conversation } from "../conversation/conversationmodel.ts";
-import { onLogin } from "../core/ownerkey.ts";
 import { speakerOf, zoneOf } from "../tenants/tenants.ts";
 import { readNotes } from "../memory/notes.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
@@ -26,7 +25,7 @@ const READS = ["mail", "calendar", "notion"] as const;
 
 export function lookerOf(conv: Pick<Conversation, "kind" | "tenantId">, mailOn: boolean = settings.mail): Looker {
   const caps = capabilitiesOf(conv);
-  const own = onLogin(conv);
+  const own = caps.has("login");
   const skills = skillsFor(caps);
   const reads = READS.some((c) => caps.has(c));
   const mail = caps.has("mail") && (!own || mailOn); // (the owner's mail is her mail provider's: none, no mail to read)

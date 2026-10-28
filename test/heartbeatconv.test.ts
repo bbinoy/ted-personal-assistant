@@ -26,7 +26,7 @@ const { runFor } = await import("../src/run/runoptions.ts");
 const { lookInstruction } = await import("../src/heartbeat/look.ts");
 const { NOTES_DIR } = await import("../src/memory/notes.ts");
 const { GOOGLE_MAIL_TOOL } = await import("../src/modules/google/module.ts");
-const { capabilitiesOf, groupTools, toolsFor } = await import("../src/policy/capabilities.ts");
+const { capabilitiesOf, toolsFor, groupCapabilities } = await import("../src/policy/capabilities.ts");
 
 const on = settings as unknown as Record<string, unknown>;
 // Every friend has her own Google once the instance has the OAuth client; one "without Google" is a friend on an instance that has none.
@@ -144,7 +144,7 @@ test("a friend on an instance without Google has no mail in her instruction; a g
   const go = lookOptions(g, LOGIN, {}, NOW);
   assert.deepEqual(go.kind, { who: "group", attended: false });
   assert.equal(go.groupId, g.groupId, "its send and its questions go to the group");
-  assert.deepEqual([...go.tools!].sort(), [...groupTools(GROUP_LOOK)].sort(), "the group's capability set, less what needs a person waiting");
+  assert.deepEqual([...go.tools!].sort(), [...toolsFor(groupCapabilities(), GROUP_LOOK)].sort(), "the group's capability set, less what needs a person waiting");
   assert.deepEqual([go.sessionConv, go.freshSession, go.memory?.dir, go.tenant], [g.convId, true, g.notesDir, undefined]);
   assert.equal(go.maxBudgetUsd, runFor(owner(), "message", {}).maxBudgetUsd, "a group has the owner's limits");
   assert.match(system(go), /group chat on Signal/);

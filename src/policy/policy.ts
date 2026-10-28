@@ -2,10 +2,10 @@ import type { RunKind } from "../core/runkind.ts";
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { isInside, realish } from "../core/contain.ts";
-import { isNotePath, withinCaps } from "../memory/notes.ts";
+import { NOTES_DIR, withinCaps } from "../memory/notes.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, conversationsDir, instancePaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
-import { browseTools, groupTools } from "./capabilities.ts";
+import { browseTools, runCapabilities, toolsFor } from "./capabilities.ts";
 import { loaded, registered } from "../modules/index.ts";
 import type { Denial, HideConfig, ToolModule } from "../modules/types.ts";
 import { confirmedArguments, destinationIsTrashOrSpam, namesLocalFile, neverActionValue } from "./neverallowed.ts";
@@ -116,17 +116,19 @@ export function hiddenTools(seen: readonly string[], cfg: { hiddenConnectors: re
 //   4. every module's floor, the minimum (a friend's Google: no attachments; Gmail: attachment content)
 //   5. the note file tools: only on a path inside the notes (a group's: inside that group's notes folder; the owner's chat: or, for Read, the data folders)
 // What an isolated run holds and the owner does not is the capability set in 1; there is no second rule for it.
-export function classify(tool: string, input: Record<string, unknown>, run: RunKind, groupNotesDir?: string, tools?: ReadonlySet<string>): Verdict {
-  const isolated = run.who !== "owner"; // (a group, a friend, the browse worker: none of the owner's data; the files they may touch are their own notes)
-  const offered = tools ?? (run.who === "browse" ? browseTools() : run.who === "owner" ? undefined : groupTools(run));
-  if (offered && !offered.has(tool) && (isolated || entryFor(tool))) return "deny"; // (a tool the manifest does not know asks the owner, as it always did: a look skips it; an isolated run never has one)
+export function classify(tool: string, input: Record<string, unknown>, run: RunKind, notesDir?: string, tools?: ReadonlySet<string>): Verdict {
+  const caps = runCapabilities(run);
+  const login = caps.has("login"); // (the instance's own login: the owner's. Everyone else, and the browse worker, has none of the owner's data; the files they may touch are their own notes)
+  const offered = tools ?? (run.who === "browse" ? browseTools() : toolsFor(caps, run));
+  if (!offered.has(tool) && (!login || entryFor(tool))) return "deny"; // (a tool the manifest does not know asks the login's owner, as it always did: a look skips it; without the login there is never one)
   if (!availableFor(tool, run)) return "deny";
   if (isNeverAllowed(tool, input) || namesLocalFile(input)) return "deny";
   let verdict: Verdict = !confirmsDelete(tool, input) && isFree(tool, undefined, { input, run }) ? "allow" : "ask"; // a delete the person confirms is never free
   for (const m of registered()) verdict = lower(verdict, m.floor?.verdict?.(tool, input, run)); // every registered module's, loaded or not: they only restrict
   if (NOTE_FILE_TOOLS.has(tool)) {
-    const ok = isolated ? !!groupNotesDir && isInside(input.file_path, groupNotesDir) : isNotePath(input.file_path) || (tool === "Read" && isReadableData(input.file_path));
-    if (!ok || !withinCaps(tool, input, isolated ? groupNotesDir : undefined)) return "deny";
+    const dir = notesDir ?? (login ? NOTES_DIR : undefined); // (the login's notes are the owner's)
+    const ok = (!!dir && isInside(input.file_path, dir)) || (login && tool === "Read" && isReadableData(input.file_path));
+    if (!ok || !withinCaps(tool, input, dir)) return "deny";
   }
   return verdict;
 }
