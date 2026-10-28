@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { questionFooter } from "../src/approvals/questionfooter.ts";
 import { makeApprove } from "../src/approvals/approvalask.ts";
 import { recipientsOutside, type RunProvenance, type Verdict } from "../src/approvals/autojudge.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
@@ -14,31 +13,14 @@ const SEND = "mcp__mailbird__send_message_now";
 const CAL = "mcp__claude_ai_Google_Calendar__create_event";
 const opts = { signal: new AbortController().signal } as never;
 
-// ---- the code-rendered footer on every question (A1) ----
-
-test("questionFooter: a mail shows every recipient, the attachments and the start of the text, whatever the question says", () => {
-  const details = describeCall(SEND, { messageId: 1 }, { to: ["a@example.com"], cc: ["c@example.com"], bcc: ["spy@evil.example"], subject: "Re: hi", body: `Thanks!\n${"your code is 123456 ".repeat(40)}`, hasAttachments: true, attachments: ["id.pdf"] });
-  const f = questionFooter(details);
-  assert.match(f, /^\n\n— exactly what will go —\nTo: a@example\.com\nCc: c@example\.com\nBcc: spy@evil\.example\nAttachments: id\.pdf\nText: “Thanks! your code is 123456/);
-  assert.match(f, /… \(\+\d+ more characters not shown\)”$/); // clipped, and says so
-  assert.ok(f.split("\n").length <= 8, "compact");
-  assert.equal(questionFooter("✉️ Send email now\nTo: a@example.com\nSubject: s\n\nhi\n\n(the quoted original follows below it in the email)").includes("quoted original"), false);
-});
-
-test("questionFooter: an invite shows its guests; a call with nothing to show adds nothing", () => {
-  assert.match(questionFooter(describeCall(CAL, { summary: "Dinner", startTime: "2026-10-20T19:00:00", attendees: [{ email: "x@example.com" }, { email: "y@example.com" }] })), /With: x@example\.com, y@example\.com/);
-  assert.equal(questionFooter(describeCall(CAL, { summary: "Dinner", startTime: "2026-10-20T19:00:00" })), "");
-  assert.equal(questionFooter("Open a page"), "");
-});
-
-test("makeApprove: the sent question is the model's plus the footer; a card payment keeps its own text", async () => {
+test("makeApprove: the sent question is the model's own, unchanged", async () => {
   const seen: { question?: string }[] = [];
   const request = (async (_s: unknown, _d: string, _c: unknown, _a: unknown, o: { question?: string }) => (seen.push(o), { approved: true })) as never;
   const compose = (async () => ({ text: "Send a short thank-you to a@example.com?", ms: 1 })) as never;
   const approve = makeApprove(async () => 1, { scope: "owner", source: "chat", mayPay: true, request, compose });
   const details = describeCall(SEND, { messageId: 1 }, { to: ["a@example.com", "x@evil.example"], cc: [], bcc: [], subject: "s", body: "Your 2FA code: 482913", hasAttachments: false });
   const d = await approve(details, { tool: SEND, input: { messageId: 1 } }, new AbortController().signal);
-  assert.match(seen[0]!.question!, /^Send a short thank-you to a@example\.com\?\n\n— exactly what will go —\nTo: a@example\.com, x@evil\.example\nText: “Your 2FA code: 482913”$/);
+  assert.match(seen[0]!.question!, /^Send a short thank-you to a@example\.com\?$/);
   assert.equal(d.question, seen[0]!.question, "the decision carries the question exactly as shown");
   await approve("Card payment approval\nMerchant: Shop\nTo: nobody@example.com", { tool: "pay", input: {} }, new AbortController().signal, { typedYes: true });
   assert.equal(seen.at(-1)!.question, "Send a short thank-you to a@example.com?");

@@ -3,7 +3,7 @@
 // paraphrases can misrepresent the call it is meant to guard.
 
 import type { MailView } from "../policy/mailview.ts";
-import { clip } from "../core/sanitize.ts";
+import { clip, clipText } from "../core/sanitize.ts";
 import { mailView, titleOf } from "../policy/toolmanifest.ts";
 
 // The titles of tools shown generically are the tool modules' (`titles`, src/modules). (Mail tools are shown from mailView() below, whatever the provider; the
@@ -58,7 +58,7 @@ function show(key: string, value: unknown): string {
     if (typeof id === "string" && Object.keys(o).every((k) => PERSON_KEYS.has(k))) return clip(id, 200);
     return clip(JSON.stringify(value), 300);
   }
-  return clip(String(value), LONG_TEXT.has(key) ? 1200 : 200);
+  return clip(String(value), LONG_TEXT.has(key) ? MAX_SHOWN : 200);
 }
 
 function humanise(tool: string): string {
@@ -77,7 +77,8 @@ const SKIP_VALUES = new Set(["primary"]);
 
 // --- an outgoing mail, the same for every provider (toolmanifest.ts mailView) ---
 
-const MAX_SHOWN = 1200;
+// The most of a text (a mail body, a long field) an approval shows; whatever is beyond is announced. One limit for the details and the footer.
+export const MAX_SHOWN = 3000;
 
 // A reply draft is the new text ABOVE the quoted original ("> ..." lines, or "On <date> <name> wrote:").
 // The owner only needs to read what is new; the whole draft is still what gets sent and checked.
@@ -95,7 +96,7 @@ export function authoredPart(body: string): { text: string; hasQuote: boolean } 
 
 export function cutBody(body: string): string {
   const { text, hasQuote } = authoredPart(body);
-  const cut = text.length > MAX_SHOWN ? `${text.slice(0, MAX_SHOWN)}… (+${text.length - MAX_SHOWN} more characters not shown)` : text;
+  const cut = clipText(text, MAX_SHOWN);
   return hasQuote ? `${cut}\n\n(the quoted original follows below it in the email)` : cut;
 }
 

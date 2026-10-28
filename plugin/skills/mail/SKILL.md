@@ -210,6 +210,8 @@ check them against the calendar and confirm one rather than sending the link bac
 
 When a mail asks about availability or proposes a time, follow "Scheduling emails: think a step ahead" in the calendar skill: check the calendar, draft the confirmation or slots, and ask once; the owner's yes sends it and adds the calendar entry.
 
+**Showing mail.** When the owner asks to see a mail (one received, or a draft), show its text verbatim (the relevant part, without quoted history and signature), not a summary. Summarise only when asked to, or when the mail is very long: then say it is a summary and offer the full text. Never paraphrase a draft. The question that asks to send it names every recipient (To, Cc, Bcc) and attachment and quotes the text that will go, in full and verbatim, then asks; the approval judge refuses a question that hides or reworded any of it.
+
 ## Guardrails (do not skip these for convenience)
 
 - **Sending needs the owner's explicit approval, shown with the real recipients.**

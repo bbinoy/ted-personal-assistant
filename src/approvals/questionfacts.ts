@@ -4,9 +4,8 @@
 // Required, taken from the exact arguments (and the code-rendered details, which for a mail send are read back from the mail client):
 // every email address and URL in a structured field, titles/subjects (what a person recognises a thing by; opaque ids of events, conversations, pages and files are NOT required and are better left out), the time zone, every start and end time (HH:MM) and
 // date (D Mon), amounts, and the words Cc / Bcc when there are such recipients. The question may NOT carry an email address or URL that is in
-// neither the arguments nor the details (anywhere in them, a body included): an invented or swapped one cannot pass for a recipient. The code footer
-// (questionfooter.ts) then shows the recipients and the start of the text whatever the question says. What this CANNOT check: what the question says about the action in words ("replace" vs "add",
-// "send" vs "save a draft"), or whether it repeats a claim from the email body as fact. Those rest on the writer prompt.
+// neither the arguments nor the details (anywhere in them, a body included): an invented or swapped one cannot pass for a recipient. What this CANNOT check: what the question says about the action in words ("replace" vs "add",
+// "send" vs "save a draft"), whether it repeats a claim from the email body as fact, or whether it shows the full text. Those rest on the writer prompt and on the judge's check (approvalprompt.ts, task check).
 
 // Free text (a message body, notes, page content): shown in the question as a summary, not required verbatim.
 const LONG_TEXT = new Set(["body", "description", "message", "text", "content", "markdownBody", "new_str", "note", "prompt", "old_str"]);

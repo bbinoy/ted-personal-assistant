@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { describeCall } from "../src/approvals/format.ts";
 
 test("approval text: a long email body is shown generously and the cut is announced", () => {
-  const body = "Hello. ".repeat(300); // 2100 chars
+  const body = "Hello. ".repeat(600); // 4200 chars
   const text = describeCall("mcp__mailbird__send_message_now", { to: "x@example.com", subject: "Hi", body });
   assert.match(text, /^✉️ Send email now/);
   assert.match(text, /more characters not shown\)/);
-  assert.ok(text.length > 1200);
+  assert.ok(text.length > 3000);
 });
 
 test("approval text: nothing is cut silently", () => {
