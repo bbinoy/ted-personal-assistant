@@ -307,7 +307,6 @@ test("never: every rule, a century on, leaves the current audit file, the kill s
   const keep = [
     put(L.logs.audit, row(ago(900)) + "\n", 900),
     put(L.logs.agent, "log", 900),
-    put(L.instance.paused, "", 900),
     put(L.instance.cardDisabled, "off", 900),
     put(L.instance.db, "the database file: payments are in it", 900),
     put(L.instance.tenants, "{}", 900),

@@ -14,12 +14,11 @@ const S = await import("../src/tasks/store.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
 const { commandReply } = await import("../src/conversation/ownercommands.ts");
 const { settings } = await import("../src/core/settings.ts");
-const { convDb, peekConvDb, CONV_SCHEMA } = await import("../src/core/convdb.ts");
+const { peekConvDb } = await import("../src/core/convdb.ts");
 const { convIdOfKey } = await import("../src/core/convpaths.ts");
 const { setAsking } = await import("../src/modules/voice/voicenote.ts");
 const { readsUntrusted } = await import("../src/policy/toolmanifest.ts");
 const { chatSystem, groupSystem, tenantSystem } = await import("../src/run/persona.ts");
-const { itemLine } = await import("../src/tasks/render.ts");
 const { lookerOf } = await import("../src/run/scope.ts");
 const { groupCapabilities } = await import("../src/policy/capabilities.ts");
 
@@ -122,22 +121,6 @@ test("the look's prompt carries what was added from mail in the last day, fenced
   assert.doesNotMatch(seen[1]!.prompt, /💡|👍 to add/);
 });
 
-test("migration 11: a task still waiting as a suggestion becomes an ordinary open task, its origin and source kept, with a history row; nothing is dropped", () => {
-  const k = fresh();
-  const db = convDb(convIdOfKey(k));
-  db.run("INSERT INTO items (kind, title, status, origin, source_kind, source_ref, created_at, updated_at) VALUES ('task', 'Pay the invoice', 'suggested', 'inferred', 'mail', 'mail-inv-6', 1, 1)");
-  db.run("INSERT INTO items (kind, title, status, origin, source_kind, created_at, updated_at) VALUES ('task', 'Old no', 'dropped', 'inferred', 'mail', 1, 1)");
-  db.exec("CREATE TABLE suggestion_asks (msg_ts INTEGER)"); // (dropped by a later step; step 11 empties it)
-  db.exec(CONV_SCHEMA.find((m) => m.version === 11)!.up as string);
-  const [a, b] = [S.getItem(k, 1)!, S.getItem(k, 2)!];
-  assert.deepEqual([a.status, a.sourceKind, a.sourceRef], ["open", "mail", "mail-inv-6"]);
-  assert.match(itemLine(a, NOW, ZONE), /from mail/, "an old row with origin inferred still renders");
-  assert.equal(b.status, "dropped", "a rejected one stays rejected");
-  assert.deepEqual(S.eventsOf(k, 1).map((e) => [e.action, e.by, e.before, e.after]), [["confirmed", "system (suggestions retired)", { status: "suggested" }, { status: "open" }]]);
-  assert.equal(readsUntrusted(LIST, undefined, k), true, "still a mail's words: untrusted for the judge");
-  assert.match(S.dropItem({ key: k, zone: ZONE, by: "owner", origin: "owner", source: "chat", now: NOW }, 1).line, /^Dropped/, "and can be changed");
-});
-
 test("groups: /tasks lists the group's items, code only (the one command of every conversation: a group has the capability); there is no '/tasks suggestions' any more", async () => {
   const k = fresh();
   await fromMail(k, "Book the hall", "mail-hall-1");
@@ -166,7 +149,7 @@ test("groups: 'Sam by Friday' sets the assignee; 'remind me' makes a GROUP task 
   assert.match(text(await t.add_task!.handler({ title: "Pack chairs", remind: "2026-10-24T10:00" })), /first reminder here/);
   setAsking(k, undefined);
   assert.equal(peekConvDb(convIdOfKey(k))!.get<{ origin: string }>("SELECT origin FROM items WHERE id = 2")!.origin, "member");
-  assert.equal(peekConvDb(convIdOfKey(k))!.num("SELECT COUNT(*) FROM group_remind_noted"), 2, "persisted, not in memory");
+  assert.equal(peekConvDb(convIdOfKey(k))!.num("SELECT COUNT(*) FROM told WHERE key LIKE 'group-reminder:%'"), 2, "persisted, not in memory");
   // a friend's and the owner's chat never get the group line
   const own = tools("tenant:ida");
   assert.doesNotMatch(text(await own.add_task!.handler({ title: "Mine", remind: "2026-10-24T10:00" })), /first reminder here/);

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { dataDirOf } from "./paths.ts";
 
@@ -84,7 +84,6 @@ export interface InstancePaths {
   notionClient: string;
   notionClientLock: string;
   cardDisabled: string;
-  paused: string;
   retention: string; // when each retention rule last ran and what it freed (core/retention.ts)
   shore: string;
   browse: string;
@@ -131,7 +130,6 @@ export function layout(root: string): Layout {
       notionClient: join(inst, "notion-client.json"),
       notionClientLock: join(inst, "notion-client.lock"),
       cardDisabled: join(inst, "card.disabled"),
-      paused: join(inst, "paused"),
       retention: join(inst, "retention.json"),
       shore: join(inst, "shore"),
       browse: join(inst, "browse"),
@@ -188,17 +186,11 @@ export const convDir = (conv: ConvRef): string => here().conv(conv).dir;
 
 // ---- the layout guard (core/requirelayout.ts for the tools, core/agentstart.ts for the agent) ----
 
-const OLDER = "This data folder uses an older layout. Check out the git tag last-migration, run `npm run migrate`, then come back to this version.";
-
-/** The sentence that says why this code must not use the data folder, or null when it may: layout version 4, or a new folder with no stamp yet and nothing of an older layout in it. */
+/** The sentence that says why this code must not use the data folder, or null when it may: a folder stamped with a layout newer than this code's is refused (a new folder, or an older stamp, is used as it is). */
 export function layoutProblem(root: string): string | null {
-  const L = layout(root);
-  const filled = (d: string): boolean => existsSync(d) && readdirSync(d).length > 0;
-  let v: number | undefined;
-  try { v = Number(readFileSync(L.instance.layoutVersion, "utf8").trim()); } catch { /* no stamp */ }
-  if (v === undefined) return filled(L.conversations) || filled(join(L.root, "memory")) || filled(join(L.root, "tenants")) || existsSync(L.instance.tenants) || existsSync(join(L.root, "state", "tenants.json")) ? OLDER : null;
-  if (v > LAYOUT_VERSION) return `This data folder is in a newer layout (version ${v}) than this code understands (${LAYOUT_VERSION}): update the code; it will not touch the data.`;
-  return v === LAYOUT_VERSION ? null : OLDER;
+  let v = 0;
+  try { v = Number(readFileSync(layout(root).instance.layoutVersion, "utf8").trim()); } catch { /* no stamp */ }
+  return v > LAYOUT_VERSION ? `This data folder is in a newer layout (version ${v}) than this code understands (${LAYOUT_VERSION}): update the code; it will not touch the data.` : null;
 }
 
 /** A new, empty data folder gets the current layout version (an already stamped one is left alone). */

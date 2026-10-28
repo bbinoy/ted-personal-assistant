@@ -162,7 +162,7 @@ test("causeOf and the owner's failure messages: login, limit, timeout, connector
 
 test("the budget notice: once a day, in the owner's chat, naming the limit and the setting", () => {
   instanceDb().run("DELETE FROM spend");
-  instanceDb().run("DELETE FROM notices");
+  instanceDb().run("DELETE FROM told");
   resetHeld(owner());
   const told: string[] = [];
   ownerNotices.sendTo((t) => told.push(t));
@@ -176,7 +176,7 @@ test("the budget notice: once a day, in the owner's chat, naming the limit and t
 
 test("the budget notice waits for the end of quiet and is not used up meanwhile", () => {
   instanceDb().run("DELETE FROM spend");
-  instanceDb().run("DELETE FROM notices");
+  instanceDb().run("DELETE FROM told");
   const told: string[] = [];
   ownerNotices.sendTo((t) => told.push(t));
   recordCost(settings.dailyBudgetUsd + 1);
@@ -187,7 +187,7 @@ test("the budget notice waits for the end of quiet and is not used up meanwhile"
   ownerNotices.sendTo(undefined);
 });
 test("a group and a friend are refused from the one table and throttled the same way: once a day for a spent day", () => {
-  instanceDb().run("DELETE FROM notices");
+  instanceDb().run("DELETE FROM told");
   for (const [audience, id] of [["group", groupConvId("g1")], ["friend", "friend-ann"]] as const) {
     const reason = audience === "group" ? "owner-budget" : "shared-budget";
     const said = refusalOnce(reason, audience, id, {}, DAY.getTime());
@@ -248,7 +248,7 @@ test("a system matter for the owner (the shared key, a friend's damaged file) is
 });
 
 test("the friends' daily cap is a fact for the owner's next look, once a day, and no word of any friend", () => {
-  instanceDb().run("DELETE FROM notices");
+  instanceDb().run("DELETE FROM told");
   reset();
   assert.equal(reportInstanceCap(5, NIGHT.getTime()), true);
   assert.equal(reportInstanceCap(5, NIGHT.getTime()), false, "not again today");

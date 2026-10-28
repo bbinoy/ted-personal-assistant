@@ -1,12 +1,9 @@
-import { rmSync } from "node:fs";
-import { dataPath, readText } from "./state.ts";
 import { instanceDb } from "./instancedb.ts";
 import { untilOn, untilWords } from "./until.ts";
-import { instancePaths } from "./convpaths.ts";
 
 // ONE pause switch for everything unattended (heartbeat, triage actions, daily brief, browse, the group gate): a row of instance.db (kv "paused"), an "until" value (until.ts): "" = until /resume,
 // an ISO time = until then (what the chat's "/pause 2h" writes, conversation/ownercommands.ts). It is a KILL SWITCH, so it fails safe: a value nobody can read, or a database that cannot be opened,
-// counts as PAUSED (chat still answers). An old pause file (instance/paused) is honoured once, at the start (importPauseFile), and converted.
+// counts as PAUSED (chat still answers).
 const KEY = "paused";
 export function isPaused(now = new Date()): boolean {
   try {
@@ -33,16 +30,3 @@ export function pauseText(now = new Date(), zone?: string): string | undefined {
 export const setPause = (until: string): void =>
   void instanceDb().run("INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", KEY, JSON.stringify(until), Date.now());
 export const clearPause = (): void => void instanceDb().run("DELETE FROM kv WHERE key = ?", KEY);
-
-// The start (core/agentstart.ts): the old pause FILE, if there is one, becomes the row and is deleted. It held "" (until removed), a local day (YYYY-MM-DD: until that day began) or an ISO time;
-// anything else stays paused until /resume.
-export function importPauseFile(): boolean {
-  const file = instancePaths().paused;
-  const old = readText(file)?.trim();
-  if (old === undefined) return false;
-  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(old);
-  const until = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])).toISOString() : old.includes("T") && Number.isFinite(Date.parse(old)) ? old : "";
-  setPause(until);
-  rmSync(dataPath(file), { force: true });
-  return true;
-}

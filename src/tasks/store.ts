@@ -7,7 +7,7 @@ import type { Db } from "../core/db.ts";
 import { nextDue, nextInstant, parseRepeat } from "./repeat.ts";
 import { isZone, localOf, parseLocal, showInstant, showLocal, todayIn, wallToUtc } from "./when.ts";
 
-// The tasks of ONE conversation: a typed API over the `items` and `task_events` tables of its assistant.db (core/convdb.ts migration 3, docs/ARCHITECTURE.md "Tasks"). Three kinds of item: a
+// The tasks of ONE conversation: a typed API over the `items` and `task_events` tables of its assistant.db (core/convdb.ts, docs/ARCHITECTURE.md "Tasks"). Three kinds of item: a
 // task, a promise the person made (i_owe) and something owed to them (owed_to_me). Every mutation is ONE transaction that changes the item AND appends a task_events row (before/after of the
 // changed fields), then tells the event stream (a `task` event: the audit row and the journal line). Nothing is ever deleted: `dropped` is the end state (the tables have triggers that refuse a
 // DELETE, and this file has no path to one). A conversation can only reach its own file: the key names it, there is no other connection (convdb.ts).
@@ -275,19 +275,17 @@ function duplicateOf(db: Db, title: string, kind: Kind, due: string | undefined,
   return hit && toItem(hit);
 }
 
-// (rows written before the looks had their own name say "assistant (inferred)")
-const LOOKS = [LOOK_BY, "assistant (inferred)"];
-const byLooks = `e.action = 'added' AND e.by IN (${LOOKS.map(() => "?").join(", ")})`;
+const byLooks = "e.action = 'added' AND e.by = ?";
 
 /** How many items looks added in this conversation since the start of today, in its zone. */
 function addedToday(db: Db, zone: string, now: number): number {
   const p = parseLocal(todayIn(now, zone))!;
-  return db.num(`SELECT COUNT(*) FROM task_events e WHERE ${byLooks} AND e.at >= ?`, ...LOOKS, wallToUtc(zone, p.date, "00:00"));
+  return db.num(`SELECT COUNT(*) FROM task_events e WHERE ${byLooks} AND e.at >= ?`, LOOK_BY, wallToUtc(zone, p.date, "00:00"));
 }
 
 /** The items looks added since an instant: the fact a look is told about the list (tasks/render.ts tasksFacts). */
 export function addedByLooks(key: string, since: number): Item[] {
-  return readDb(key)?.all<Row>(`SELECT i.* FROM items i JOIN task_events e ON e.item_id = i.id WHERE ${byLooks} AND e.at >= ? ORDER BY i.id LIMIT 50`, ...LOOKS, since).map(toItem) ?? [];
+  return readDb(key)?.all<Row>(`SELECT i.* FROM items i JOIN task_events e ON e.item_id = i.id WHERE ${byLooks} AND e.at >= ? ORDER BY i.id LIMIT 50`, LOOK_BY, since).map(toItem) ?? [];
 }
 
 export interface Added {

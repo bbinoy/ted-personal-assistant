@@ -32,7 +32,7 @@ const inst = (rec: { id: string }, ledger: string) => ({ kind: "instance", id: r
 beforeEach(() => {
   on.tenants = true;
   resetCooldown();
-  instanceDb().run("DELETE FROM notices");
+  instanceDb().run("DELETE FROM told");
   resetHeld(owner());
 });
 

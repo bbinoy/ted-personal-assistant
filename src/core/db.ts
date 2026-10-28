@@ -8,7 +8,7 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 //   * the pragmas: WAL (readers never block the writer, and the intake page, a separate process, and the agent share a file safely), synchronous=NORMAL (a power cut can lose the
 //     last moments of a commit, never corrupt the file; a ledger asks for FULL on the commits that must survive: tx(fn, { durable: true })), foreign_keys=ON, a busy_timeout so a
 //     second process waits for the writer instead of failing, and an owner-only file (0600; SQLite gives the -wal and -shm files the same mode);
-//   * numbered schema steps, each applied in its own transaction with the version in PRAGMA user_version, so a crash mid-upgrade leaves the old version, and two processes that start
+//   * numbered schema steps (the first, the baseline, creates the whole current shape; a file older than it is refused), each applied in its own transaction with the version in PRAGMA user_version, so a crash mid-upgrade leaves the old version, and two processes that start
 //     at the same moment cannot both apply one (the version is read again after the write lock is taken);
 //   * tx(fn): BEGIN IMMEDIATE (the write lock is taken up front, so a read-then-write inside it can never be upgraded into a deadlock), ROLLBACK when fn throws; nested calls are savepoints;
 //   * a cache of prepared statements (a hot query like the budget check is parsed once);
@@ -20,7 +20,7 @@ export type Param = string | number | bigint | null | Uint8Array;
 export type Row = Record<string, unknown>;
 
 export interface Migration {
-  version: number; // 1, 2, 3 ...: consecutive, never edited once shipped (add a new step)
+  version: number; // consecutive from the first step (the baseline: it creates the whole current shape, and is the oldest version a file may have), never edited once shipped (add a new step)
   name: string;
   up: string | ((db: Db) => void); // SQL (several statements are fine) or code; runs inside the step's transaction
 }
@@ -45,6 +45,13 @@ export class LedgerCorruptError extends Error {
     );
     this.name = "LedgerCorruptError";
     this.path = path;
+  }
+}
+/** The file is older than the baseline: the steps that would bring it up were collapsed into the baseline (there was no such file when that happened). Never touched. */
+export class OlderSchemaError extends Error {
+  constructor(path: string, found: number, oldest: number) {
+    super(`${path} has schema version ${found}, older than the oldest this code upgrades (${oldest}): open it once with an earlier version of the code (the one before the migrations were collapsed) first; this code will not touch the file.`);
+    this.name = "OlderSchemaError";
   }
 }
 /** The file was made by a newer version of the code (its user_version is above the last step known here). Writing to it could break it. */
@@ -217,17 +224,21 @@ function ownerOnly(path: string): void {
 }
 
 function checkMigrations(ms: readonly Migration[]): void {
+  const first = ms[0]?.version ?? 1;
   ms.forEach((m, i) => {
-    if (m.version !== i + 1) throw new Error(`db: migration steps must be numbered 1, 2, 3 ... (step ${i + 1} is numbered ${m.version})`);
+    if (m.version !== first + i) throw new Error(`db: migration steps must be numbered consecutively from the baseline ${first}, ${first + 1}, ... (step ${i + 1} is numbered ${m.version})`);
   });
 }
+/** The version a database has once every step is applied. */
+export const schemaVersion = (ms: readonly Migration[]): number => ms[ms.length - 1]?.version ?? 0;
 
 /** Applies every step above the file's user_version, each in its own transaction (the version is read again under the lock: another process may have just done it). */
 export function migrateDb(db: Db, ms: readonly Migration[]): number {
   checkMigrations(ms);
-  const known = ms.length;
+  const known = schemaVersion(ms);
   const found = db.version;
   if (found > known) throw new NewerSchemaError(db.path, found, known);
+  if (found > 0 && ms[0] && found < ms[0].version) throw new OlderSchemaError(db.path, found, ms[0].version);
   let applied = 0;
   for (const m of ms) {
     if (m.version <= found) continue;

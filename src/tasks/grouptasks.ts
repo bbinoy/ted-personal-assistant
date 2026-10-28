@@ -1,5 +1,6 @@
 import { liveConvDb } from "../core/convdb.ts";
 import { convIdOfKey } from "../core/convpaths.ts";
+import { told } from "../core/told.ts";
 
 // The group-only piece of the task list, in code: whether a member is to be
 // told (by the model, in its words) that a reminder she asks for in the group is the GROUP's task (everyone sees it): once per member, persisted.
@@ -9,6 +10,5 @@ export function groupReminderNote(key: string, member: string, now: number): boo
   const db = liveConvDb(convIdOfKey(key));
   if (!db) return false;
   const name = member.trim().slice(0, 80) || "a member";
-  const r = db.run("INSERT OR IGNORE INTO group_remind_noted (member, at) VALUES (?, ?)", name, now);
-  return r.changes > 0;
+  return told(db, `group-reminder:${name}`, { once: true }, now);
 }

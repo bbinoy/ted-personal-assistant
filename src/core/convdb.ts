@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { conversationsDir, convPaths, isConvId, layout, type ConvId, type ConvPaths, type ConvRef } from "./convpaths.ts";
-import { Db, LedgerCorruptError, moveCorruptAside, openDb, type Migration } from "./db.ts";
+import { Db, LedgerCorruptError, moveCorruptAside, openDb, schemaVersion, type Migration } from "./db.ts";
 import { DatabaseSync } from "node:sqlite";
 import { isInside } from "./contain.ts";
 import { writeFileAtomic } from "./state.ts";
@@ -18,7 +18,7 @@ import { writeFileAtomic } from "./state.ts";
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   routine_runs     the last period of each routine (a routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
-//   group_remind_noted   which group members were told once that a reminder said in the group is the group's (src/tasks/grouptasks.ts).
+//   told             what was told once, or at most once a day / in a while, about this conversation: `group-reminder:<member>` = a group member told that a reminder said in the group is the group's (core/told.ts, src/tasks/grouptasks.ts).
 //
 // NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
@@ -26,13 +26,14 @@ import { writeFileAtomic } from "./state.ts";
 // the heartbeat look, the dream, quiet compaction, approved archives), the owner is told once a day (heartbeat/notices.ts) and the doctor fails with the file's name. A person restores the set-aside file
 // (or `sqlite3 .recover`) and deletes the marker; deleting only the marker accepts the fresh start. The other conversations are not affected: each has its own file.
 //
-// How to add state (version 3, the tasks, is the example): append ONE numbered step to CONV_SCHEMA below (version n+1, `CREATE TABLE ...`). Steps run in order, each in
-// its own transaction, at the first open of each conversation's file; a step is never edited once shipped. Then a small store module over convDb(conv), and, if the table grows, a retention rule (heartbeat/convretention.ts).
+// How to add state: append ONE numbered step to CONV_SCHEMA below (the last version + 1, `CREATE TABLE ...`). Steps run in order, each in
+// its own transaction, at the first open of each conversation's file; a step is never edited once shipped. The first step is the BASELINE (the whole shape when the older steps were collapsed):
+// a file older than it is refused with a message (core/db.ts OlderSchemaError), a fresh file gets the baseline and every step after it. Then a small store module over convDb(conv), and, if the table grows, a retention rule (heartbeat/convretention.ts).
 
 export const CONV_SCHEMA: readonly Migration[] = [
   {
-    version: 1,
-    name: "session, dream, held posts, seen mail, quiet, approval inbox, voice notes, friend bookkeeping",
+    version: 22,
+    name: "baseline: the whole shape of a conversation's database (the 22 steps before it are collapsed; a file older than this is refused)",
     up: `
       CREATE TABLE session (
         id                  INTEGER PRIMARY KEY CHECK (id = 1),
@@ -61,11 +62,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
         seq       INTEGER PRIMARY KEY AUTOINCREMENT,                -- oldest first
         text      TEXT NOT NULL,
         why       TEXT NOT NULL,                                    -- quiet, cap
-        notice    INTEGER,
-        needs_you INTEGER,
-        at        INTEGER,
-        day       TEXT,
-        same_day  INTEGER
+        at        INTEGER
       );
 
       CREATE TABLE seen_mail (
@@ -77,45 +74,6 @@ export const CONV_SCHEMA: readonly Migration[] = [
         id    INTEGER PRIMARY KEY CHECK (id = 1),                   -- a row = /quiet is set
         until TEXT NOT NULL                                         -- '' = until /unquiet, else an ISO time
       );
-
-      CREATE TABLE pending_state (
-        id   INTEGER PRIMARY KEY CHECK (id = 1),
-        next INTEGER NOT NULL                                       -- the next number to hand out: only counts up, never reused
-      );
-      CREATE TABLE pending_items (
-        n            INTEGER PRIMARY KEY,
-        tool         TEXT NOT NULL,
-        input        TEXT NOT NULL,                                 -- JSON: exactly as the run called it
-        label        TEXT NOT NULL,
-        question     TEXT NOT NULL,
-        footer       TEXT NOT NULL,
-        scope        TEXT NOT NULL,                                 -- the conversation key: only an answer there applies
-        source       TEXT NOT NULL,
-        created_at   INTEGER NOT NULL,
-        urgent       INTEGER,
-        details_hash TEXT,
-        deferred     INTEGER,
-        executing_at INTEGER,                                       -- approved and running (a crash in between is noticed: recoverStuck)
-        retry_told   INTEGER,                                       -- NOT NULL = approved but the run gate refused it; 1 = the owner has been told
-        interrupted  INTEGER,
-        sent_at      INTEGER,
-        sent_ts      INTEGER,
-        sent_held    INTEGER
-      );
-      CREATE TABLE pending_expired (
-        seq   INTEGER PRIMARY KEY AUTOINCREMENT,                    -- dropped on expiry and not yet told to the owner
-        n     INTEGER NOT NULL,
-        label TEXT NOT NULL
-      );
-      CREATE TABLE pending_blocked (
-        seq   INTEGER PRIMARY KEY AUTOINCREMENT,                    -- a call that must not be parked again for a while
-        key   TEXT NOT NULL,
-        n     INTEGER NOT NULL,
-        at    INTEGER NOT NULL,
-        until INTEGER NOT NULL,
-        kind  TEXT NOT NULL                                         -- done, expired
-      );
-      CREATE INDEX pending_blocked_key ON pending_blocked (key);
 
       CREATE TABLE voice_notes (
         seq     INTEGER PRIMARY KEY AUTOINCREMENT,                  -- oldest first: the bound keeps the newest
@@ -140,61 +98,12 @@ export const CONV_SCHEMA: readonly Migration[] = [
         paused_until INTEGER,                                       -- her cooldown (for npm run doctor, a separate process)
         disclosed_at TEXT                                           -- when she had her first reply
       );
-      CREATE TABLE friend_notices (
-        kind TEXT PRIMARY KEY,
-        at   TEXT NOT NULL
-      );
 
       CREATE TABLE reset (
         id INTEGER PRIMARY KEY CHECK (id = 1),                      -- a row = this database REPLACED a damaged one: the first look marks every mail in the inbox as seen (never a re-triage)
         at TEXT NOT NULL
       );
-      CREATE TABLE pending_lost (
-        seq   INTEGER PRIMARY KEY AUTOINCREMENT,                    -- approvals that could not be restored: the owner can ask again
-        n     INTEGER NOT NULL,
-        label TEXT NOT NULL,
-        why   TEXT NOT NULL,                                        -- damaged, late-file
-        at    TEXT NOT NULL
-      );
 
-      CREATE TABLE legacy_imports (
-        name        TEXT NOT NULL,                                  -- the layout-3 file, relative to the data folder
-        sha256      TEXT NOT NULL,                                  -- of its bytes: the same name with other bytes is a new file
-        rows        INTEGER NOT NULL,
-        imported_at TEXT NOT NULL,
-        backup      TEXT,                                           -- where the original was copied before it was removed
-        note        TEXT,
-        PRIMARY KEY (name, sha256)
-      );
-    `,
-  },
-  {
-    version: 2,
-    name: "feedback offers and thumbs-up signals (conversation/feedback.ts)",
-    up: `
-      CREATE TABLE feedback_offers (
-        seq         INTEGER PRIMARY KEY AUTOINCREMENT,
-        on_ts       INTEGER NOT NULL,                               -- the unprompted message the feedback was about: it is offered about once
-        offer_ts    INTEGER,                                        -- the offer message we sent (what a 👍 or a quoted yes points at); NULL: no offer went out
-        state       TEXT NOT NULL,                                  -- offered, saved, declined, none (the model had no usable rule: counts for nothing)
-        file        TEXT,
-        description TEXT,
-        body        TEXT,                                           -- the proposed note, exactly as shown
-        at          INTEGER NOT NULL
-      );
-      CREATE INDEX feedback_offers_on ON feedback_offers (on_ts);
-      CREATE INDEX feedback_offers_offer ON feedback_offers (offer_ts);
-      CREATE TABLE feedback_signals (
-        key     TEXT PRIMARY KEY,                                   -- a note file, or cat:<journal category>: what the 👍 was on
-        up      INTEGER NOT NULL,
-        last_at TEXT NOT NULL                                       -- ISO
-      );
-    `,
-  },
-  {
-    version: 3,
-    name: "tasks: items and their append-only history",
-    up: `
       CREATE TABLE items (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,              -- numbered, never reused (AUTOINCREMENT): the number the person and the model say
         kind        TEXT NOT NULL DEFAULT 'task' CHECK (kind IN ('task', 'i_owe', 'owed_to_me')),
@@ -213,7 +122,8 @@ export const CONV_SCHEMA: readonly Migration[] = [
         source_ref  TEXT,                                           -- a message ts, a mail id, a url
         created_at  INTEGER NOT NULL,
         updated_at  INTEGER NOT NULL,
-        done_at     INTEGER
+        done_at     INTEGER,
+        urgent      INTEGER CHECK (urgent IS NULL OR urgent IN (0, 1))  -- 1: the reminder may break quiet hours
       );
       CREATE INDEX items_status ON items (status, due);
       -- Nothing is ever deleted: dropped is the end state. The database says so itself, so no code path can (a test greps for one as well).
@@ -223,7 +133,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
         id      INTEGER PRIMARY KEY AUTOINCREMENT,
         item_id INTEGER NOT NULL REFERENCES items (id),
         at      INTEGER NOT NULL,                                   -- UTC ms
-        by      TEXT NOT NULL,                                      -- owner, a member's or friend's name, assistant (inferred), system
+        by      TEXT NOT NULL,                                      -- owner, a member's or friend's name, assistant (look), system
         action  TEXT NOT NULL CHECK (action IN ('added', 'edited', 'done', 'reopened', 'dropped', 'snoozed', 'suggested', 'confirmed', 'rejected', 'reminded')),
         before  TEXT,                                               -- JSON: the changed fields as they were
         after   TEXT                                                -- JSON: ... and as they are
@@ -231,13 +141,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE INDEX task_events_item ON task_events (item_id, id);
       CREATE TRIGGER task_events_no_update BEFORE UPDATE ON task_events BEGIN SELECT RAISE(ABORT, 'the task history is append-only'); END;
       CREATE TRIGGER task_events_no_delete BEFORE DELETE ON task_events BEGIN SELECT RAISE(ABORT, 'the task history is append-only'); END;
-    `,
-  },
-  {
-    version: 4,
-    name: "reminders: the urgent flag and the ledger of reminders fired (src/tasks/remind.ts)",
-    up: `
-      ALTER TABLE items ADD COLUMN urgent INTEGER CHECK (urgent IS NULL OR urgent IN (0, 1));  -- 1: the reminder may break quiet hours
+
       CREATE TABLE reminders (
         seq     INTEGER PRIMARY KEY AUTOINCREMENT,
         item_id INTEGER NOT NULL REFERENCES items (id),
@@ -251,49 +155,16 @@ export const CONV_SCHEMA: readonly Migration[] = [
         UNIQUE (item_id, key)
       );
       CREATE INDEX reminders_ts ON reminders (ts);
-    `,
-  },
-  {
-    version: 5,
-    name: "task suggestions: which message listed which suggested items; group members told once about reminders",
-    up: `
-      CREATE TABLE suggestion_asks (
-        msg_ts  INTEGER NOT NULL,                                   -- the timestamp of the "💡 ..." message that listed the item (a reply that quotes it, or a 👍 on it, answers for its items)
-        n       INTEGER NOT NULL,                                   -- the number it had in that message (1, 2, ...)
-        item_id INTEGER NOT NULL REFERENCES items (id),
-        at      INTEGER NOT NULL,                                   -- UTC ms
-        PRIMARY KEY (msg_ts, n)
-      );
-      CREATE INDEX suggestion_asks_item ON suggestion_asks (item_id);
+
       CREATE TABLE group_remind_noted (
         member TEXT PRIMARY KEY,                                    -- a group member's name: told once that a reminder said here is the group's, not private
         at     INTEGER NOT NULL
       );
-    `,
-  },
-  {
-    version: 6,
-    name: "tasks: pending imports (a preview waiting for the owner's yes, tasks/import.ts)",
-    up: `
-      CREATE TABLE pending_imports (
-        batch_id  TEXT PRIMARY KEY,
-        source    TEXT NOT NULL,                                    -- where the rows came from, as the owner says it ("Notion")
-        state     TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'committed', 'discarded')),
-        created   INTEGER NOT NULL,                                 -- UTC ms
-        rows      TEXT NOT NULL,                                    -- JSON: the checked rows exactly as the preview showed them
-        summary   TEXT NOT NULL,                                    -- JSON: counts, rejected rows, skipped rows
-        committed INTEGER                                           -- UTC ms; with state committed
-      );
-    `,
-  },
-  {
-    version: 7,
-    name: "what I learned overnight: memory changes made quietly (dream, inferred notes) and which summary listed them (memory/learned.ts)",
-    up: `
+
       CREATE TABLE learned_changes (
         seq     INTEGER PRIMARY KEY AUTOINCREMENT,
         at      INTEGER NOT NULL,                                   -- UTC ms
-        source  TEXT NOT NULL CHECK (source IN ('dream', 'inferred')),
+        source  TEXT NOT NULL CHECK (source IN ('dream', 'look')),
         action  TEXT NOT NULL CHECK (action IN ('add', 'update', 'merge', 'delete', 'undone')),  -- undone: not a change, the note that a whole dream (gist: its day) was undone after its lines were told
         file    TEXT NOT NULL,                                      -- the note's file name
         gist    TEXT NOT NULL,                                      -- its one-line description (or, for a delete, why)
@@ -305,26 +176,10 @@ export const CONV_SCHEMA: readonly Migration[] = [
       CREATE TABLE learned_batches (
         id     INTEGER PRIMARY KEY AUTOINCREMENT,
         at     INTEGER NOT NULL,                                    -- UTC ms
-        delivered INTEGER,                                          -- NULL: the brief's list, made for a brief that has not been sent yet (a status-brief 'delivered' sets it; until then the next brief offers it again); 1: told
         msg_ts INTEGER                                              -- the message that carried the list (a reply that quotes it answers for its numbers); NULL: it went in the brief
       );
       CREATE INDEX learned_batches_ts ON learned_batches (msg_ts);
-      CREATE TABLE learned_asks (
-        batch INTEGER NOT NULL REFERENCES learned_batches (id),
-        n     INTEGER NOT NULL,                                     -- the number it had in that list
-        seq   INTEGER NOT NULL REFERENCES learned_changes (seq),
-        PRIMARY KEY (batch, n)
-      );
-      CREATE TABLE learned_owed (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        at INTEGER NOT NULL                                         -- UTC ms: a friend's list was held (quiet hours) after her dream; the next look sends it
-      );
-    `,
-  },
-  {
-    version: 8,
-    name: "meetings: the upcoming meetings the heartbeat look recorded and the prep sent for each (src/tasks/meetings.ts)",
-    up: `
+
       CREATE TABLE meetings (
         event_id  TEXT NOT NULL,                                    -- the calendar's id for the event, as the calendar tool returned it
         start_ms  INTEGER NOT NULL,                                 -- UTC ms: a moved event is a NEW row (its old pending row goes), so a reschedule gets its own prep
@@ -349,37 +204,7 @@ export const CONV_SCHEMA: readonly Migration[] = [
         at    INTEGER NOT NULL,                                     -- UTC ms: the look's last note_upcoming_meetings call (an empty list too: the doctor tells "the calendar is read" from "nothing ever arrives")
         count INTEGER NOT NULL                                      -- how many meetings that call held
       );
-    `,
-  },
-  {
-    version: 9,
-    name: "the gentle first week: shadow-mode state and the archives a look proposed instead of making (approvals/shadow.ts)",
-    up: `
-      CREATE TABLE shadow_state (
-        id       INTEGER PRIMARY KEY CHECK (id = 1),
-        since    INTEGER NOT NULL,                                  -- UTC ms: where the first week is counted from (the conversation's first message, else its first look)
-        ended_at INTEGER,                                           -- UTC ms: shadow mode ended (never re-entered, however the notes change afterwards)
-        told     INTEGER NOT NULL DEFAULT 0                         -- 1: the one-time "from now on I'll archive these myself" line has been said (or needs no saying: an install that was already past its first week)
-      );
-      CREATE TABLE shadow_proposals (
-        seq     INTEGER PRIMARY KEY AUTOINCREMENT,
-        tool    TEXT NOT NULL,                                      -- the archive call exactly as the look made it, split to ONE mail (the exact-args replay runs it as recorded)
-        input   TEXT NOT NULL,                                      -- JSON
-        mail_id TEXT NOT NULL,                                      -- the conversation / thread / message id the call names
-        line    TEXT NOT NULL,                                      -- the code-rendered line shown to the person ("“Subject” from Sender")
-        at      INTEGER NOT NULL,
-        state   TEXT NOT NULL DEFAULT 'collected' CHECK (state IN ('collected', 'asked', 'archiving', 'archived', 'kept', 'failed', 'expired')),
-        msg_ts  INTEGER,                                            -- the batch message that listed it (a reply that quotes it, or a 👍 on it, answers for its items)
-        n       INTEGER                                             -- its number in that message
-      );
-      CREATE INDEX shadow_proposals_msg ON shadow_proposals (msg_ts, n);
-      CREATE INDEX shadow_proposals_state ON shadow_proposals (state, mail_id);
-    `,
-  },
-  {
-    version: 10,
-    name: "routines: the last period of each scheduled routine (evening wrap, weekly review...), so it runs once per period and a sleeping Mac catches up or skips (tasks/routines.ts)",
-    up: `
+
       CREATE TABLE routine_runs (
         name           TEXT PRIMARY KEY,                            -- the routine ("evening", "weekly"); the brief keeps its own status note
         since          INTEGER NOT NULL,                            -- UTC ms: when the planner first saw it (slots before are nobody's miss)
@@ -393,117 +218,16 @@ export const CONV_SCHEMA: readonly Migration[] = [
     `,
   },
   {
-    version: 11,
-    name: "tasks from mail are added, not suggested: every item still waiting as a suggestion becomes an open task (its origin, source and history kept)",
+    version: 23,
+    name: "one record of what was told (core/told.ts): the group members told once about reminders become `told` rows",
     up: `
-      INSERT INTO task_events (item_id, at, by, action, before, after)
-        SELECT id, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 'system (suggestions retired)', 'confirmed', '{"status":"suggested"}', '{"status":"open"}' FROM items WHERE status = 'suggested';
-      UPDATE items SET status = 'open', updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000 WHERE status = 'suggested';
-      DELETE FROM suggestion_asks;
-    `,
-  },
-  {
-    version: 12,
-    name: "the layout-3 import is retired: its bookkeeping table goes",
-    up: "DROP TABLE legacy_imports;",
-  },
-  {
-    version: 13,
-    name: "retire the first-week proposals (shadow_*) and the numbered replies to the learned list (learned_asks, learned_owed)",
-    up: `
-      DROP TABLE shadow_proposals;
-      DROP TABLE shadow_state;
-      DROP TABLE learned_asks;
-      DROP TABLE learned_owed;
-    `,
-  },
-  {
-    version: 14,
-    name: "held posts are handed to the next look as they are written: the digest's flags (notice, needs_you, day, same_day) are dropped",
-    up: `
-      ALTER TABLE held_posts DROP COLUMN notice;
-      ALTER TABLE held_posts DROP COLUMN needs_you;
-      ALTER TABLE held_posts DROP COLUMN day;
-      ALTER TABLE held_posts DROP COLUMN same_day;
-    `,
-  },
-  {
-    version: 15,
-    name: "a second session per conversation, for its looks: the same record as `session`, resumed by every look (a look is the same agent on another model, and a model's cache is its own)",
-    up: `
-      CREATE TABLE look_session (
-        id                  INTEGER PRIMARY KEY CHECK (id = 1),
-        session_id          TEXT,                                   -- the SDK session the conversation's looks resume
-        cost_usd            REAL NOT NULL DEFAULT 0,
-        last_turn_at        TEXT,                                   -- ISO: when the last look ended
-        last_context_tokens INTEGER,
-        compact_failed_at   TEXT,
-        base_tokens         INTEGER,
-        seen_at             TEXT,                                   -- the newest chat-log line the look session has been shown
-        untrusted_in        TEXT                                    -- the look session has read raw mail or a web page
+      CREATE TABLE told (
+        key  TEXT PRIMARY KEY,
+        at   INTEGER NOT NULL,                                      -- epoch ms it was last told
+        once INTEGER NOT NULL DEFAULT 0                             -- 1: told once for good
       );
-    `,
-  },
-  {
-    version: 16,
-    name: "what I learned overnight: a note a look saved is a learned change of source 'look' (not a mark on the note); older rows of the look kind keep their place",
-    up: `
-      CREATE TABLE learned_changes_new (
-        seq     INTEGER PRIMARY KEY AUTOINCREMENT,
-        at      INTEGER NOT NULL,
-        source  TEXT NOT NULL CHECK (source IN ('dream', 'look')),
-        action  TEXT NOT NULL CHECK (action IN ('add', 'update', 'merge', 'delete', 'undone')),
-        file    TEXT NOT NULL,
-        gist    TEXT NOT NULL,
-        merged  TEXT,
-        batch   INTEGER,
-        outcome TEXT CHECK (outcome IS NULL OR outcome IN ('confirmed', 'undone', 'gone'))
-      );
-      INSERT INTO learned_changes_new (seq, at, source, action, file, gist, merged, batch, outcome)
-        SELECT seq, at, CASE source WHEN 'dream' THEN 'dream' ELSE 'look' END, action, file, gist, merged, batch, outcome FROM learned_changes;
-      DROP TABLE learned_changes;
-      ALTER TABLE learned_changes_new RENAME TO learned_changes;
-      CREATE INDEX learned_changes_batch ON learned_changes (batch, seq);
-    `,
-  },
-  {
-    version: 17,
-    name: "tasks: the one-time Notion import is gone, so its pending previews are too (items keep source_kind 'import')",
-    up: `DROP TABLE IF EXISTS pending_imports;`,
-  },
-  {
-    version: 18,
-    name: "what I learned overnight: every list is told once, the brief's 'delivered' mark is gone",
-    up: `ALTER TABLE learned_batches DROP COLUMN delivered;`,
-  },
-  {
-    version: 19,
-    name: "learning from a 👎 is the general learn rule: the feedback offers and thumbs-up counts are dropped",
-    up: `
-      DROP TABLE feedback_offers;
-      DROP TABLE feedback_signals;
-    `,
-  },
-  {
-    version: 20,
-    name: "a friend's fixed notices are throttled by the one notices table of instance.db (capnotice.ts)",
-    up: `DROP TABLE friend_notices;`,
-  },
-  {
-    version: 21,
-    name: "a look starts a fresh session every time: the second session per conversation (`look_session`, step 15) is gone",
-    up: `DROP TABLE look_session;`,
-  },
-  {
-    version: 22,
-    name: "tables nothing reads or writes any more are dropped: the old approval inbox (pending_*) and the one-tap suggestions (suggestion_asks)",
-    up: `
-      DROP TABLE IF EXISTS pending_state;
-      DROP TABLE IF EXISTS pending_items;
-      DROP TABLE IF EXISTS pending_expired;
-      DROP TABLE IF EXISTS pending_blocked;
-      DROP TABLE IF EXISTS pending_lost;
-      DROP TABLE IF EXISTS suggestion_asks;
+      INSERT INTO told (key, at, once) SELECT 'group-reminder:' || member, at, 1 FROM group_remind_noted;
+      DROP TABLE group_remind_noted;
     `,
   },
 ];
@@ -717,7 +441,7 @@ export function checkConvDbFile(path: string): string {
     const rows = raw.prepare("PRAGMA quick_check").all() as Record<string, unknown>[];
     const verdict = rows.map((r) => String(Object.values(r)[0])).slice(0, 3).join("; ");
     const v = Number(Object.values(raw.prepare("PRAGMA user_version").get() as Record<string, unknown>)[0]);
-    return verdict !== "ok" ? verdict : v > CONV_SCHEMA.length ? `schema version ${v} is newer than this code knows (${CONV_SCHEMA.length})` : "ok";
+    return verdict !== "ok" ? verdict : v > schemaVersion(CONV_SCHEMA) ? `schema version ${v} is newer than this code knows (${schemaVersion(CONV_SCHEMA)})` : v > 0 && v < CONV_SCHEMA[0]!.version ? `schema version ${v} is older than the oldest this code upgrades (${CONV_SCHEMA[0]!.version})` : "ok";
   } catch (e) {
     return (e as Error).message;
   } finally {

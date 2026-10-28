@@ -6,6 +6,6 @@ import { heldPosts, resetHeld } from "../src/heartbeat/notices.ts";
 export const ownerFacts = (): string[] => new Proxy([] as string[], { get: (_t, k) => Reflect.get(heldPosts(owner()).map((h) => h.text), k) });
 // A clean start: no fact waiting and no notice marked as told (so every matter may be raised again).
 export function resetOwnerFacts(): void {
-  instanceDb().run("DELETE FROM notices");
+  instanceDb().run("DELETE FROM told");
   resetHeld(owner());
 }

@@ -371,10 +371,8 @@ export async function doctor() {
   for (const skill of requiredSkills(settings.mail)) {
     line(existsSync(`${settings.pluginDir}/skills/${skill}/SKILL.md`), `skill ${skill} (bundled)`);
   }
-  // On a data folder in another layout doctor still runs (it is what one reaches for when things look wrong): the layout line fails and says what to do, and only the checks that read the new layout are skipped.
-  const legacy = layoutProblem(settings.dataDir);
-  if (!legacy) convDbCheck(line);
-  const dbOk = !legacy && dbCheck(line); // (instance.db: spend, payments, looks, notices, intake marks, connectors; a damaged one skips the checks that read it)
+  convDbCheck(line);
+  const dbOk = dbCheck(line); // (instance.db: spend, payments, looks, notices, intake marks, connectors; a damaged one skips the checks that read it)
   const conn = dbOk ? readConnectors() : undefined;
   if (conn) {
     // Every connector module the owner uses (src/modules: Notion, Calendar, Drive and Docs once unhidden, ...); the mail provider's own is the mail check above.
@@ -384,18 +382,18 @@ export async function doctor() {
       else line(conn[r.key] !== false ? true : "warn", `${r.label} connector`, conn[r.key] !== false ? "" : `not available in the last run (${localTime(conn.at)}): add it in your Claude account (Settings, Connectors); without it: ${r.skipped}`);
     }
   }
-  const gaps = legacy ? [] : missingSetup(readNotes(), disconnected(conn), settings.mail);
-  if (!legacy) line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
+  const gaps = missingSetup(readNotes(), disconnected(conn), settings.mail);
+  line(gaps.length === 0 ? true : "warn", "setup notes", gaps.length ? `not set up yet: ${gaps.join("; ")}. Message the assistant "set up".` : settings.mail ? "calendars, tasks, meetings and writing voice are set up" : "calendars, tasks and meetings are set up");
 
-  if (legacy) line(false, "data layout", `${legacy} Checks that need layout ${LAYOUT_VERSION} are skipped`);
-  else line(true, "data layout", existsSync(layout(dataRoot()).instance.layoutVersion) ? `version ${LAYOUT_VERSION}: instance/, conversations/<id>/, logs/` : "new folder, not stamped yet: the first start does it");
+  const layoutIssue = layoutProblem(settings.dataDir);
+  line(!layoutIssue, "data layout", layoutIssue ?? (existsSync(layout(dataRoot()).instance.layoutVersion) ? `version ${LAYOUT_VERSION}: instance/, conversations/<id>/, logs/` : "new folder, not stamped yet: the first start does it"));
   for (const [name, dir] of [["instance", instancePaths().dir], ["conversations", conversationsDir()], ["logs", logPaths().dir]] as const) {
-    if (legacy || !existsSync(dir)) continue;
+    if (!existsSync(dir)) continue;
     const loose = readdirSync(dir).filter((f) => (statSync(`${dir}/${f}`).mode & 0o077) !== 0 && statSync(`${dir}/${f}`).isFile());
     line((statSync(dir).mode & 0o077) === 0, `${name}/ directory is owner-only`, (statSync(dir).mode & 0o077) === 0 ? "" : `fix: chmod 700 ${dir}`);
     line(loose.length === 0 ? true : "warn", `${name}/ files are owner-only`, loose.length ? `group/world-readable: ${loose.join(", ")}` : "");
   }
-  if (!legacy) line(true, "the owner's notes", `${readNotes().length} active note(s)`); // the count only, never the notes
+  line(true, "the owner's notes", `${readNotes().length} active note(s)`); // the count only, never the notes
 
   const voice = voiceReady(settings.whisperModel);
   line(voice.ok ? true : "warn", "voice messages", voice.ok ? "transcribed locally with whisper.cpp" : `not available, missing: ${voice.missing.join("; ")}`);
@@ -406,21 +404,17 @@ export async function doctor() {
   const where = settings.tts.provider === "elevenlabs" ? "ElevenLabs (spoken text is sent to elevenlabs.io)" : settings.tts.provider === "http" ? `your own server at ${new URL(settings.tts.http.url).host} (spoken text is sent there)` : settings.tts.provider === "qwen" ? (qwen!.ok ? `local cloned voice (Qwen3-TTS ${settings.tts.qwen.model.split("/").pop()}; reference: ${qwenReference(settings.tts.qwen)}); fallback: ${settings.tts.fallback}` : `Qwen voice not ready (${qwen!.missing.join(", ")}); ${tts.ok ? "Kokoro speaks instead" : "no fallback"}`) : `local Kokoro, voice ${settings.tts.kokoro.voice}`;
   line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
 
-  if (!legacy) {
-    // Scheduled items (tasks/routines.ts): every routine note with its schedule, next and last run, from the owner's own record; one that failed, was skipped or cannot run is a warning, not an error.
-    for (const last of scheduleLines(OWNER_CONV, { notesDir: convPaths(OWNER_CONV).notes, zone: systemZone(), now: new Date() })) {
-      const name = /^[^\s:]+/.exec(last)![0];
-      line(/\b(failed|skipped|never runs)\b/.test(last) ? "warn" : true, `routine ${name}`, last.slice(name.length).replace(/^:?\s*/, ""));
-    }
+  // Scheduled items (tasks/routines.ts): every routine note with its schedule, next and last run, from the owner's own record; one that failed, was skipped or cannot run is a warning, not an error.
+  for (const last of scheduleLines(OWNER_CONV, { notesDir: convPaths(OWNER_CONV).notes, zone: systemZone(), now: new Date() })) {
+    const name = /^[^\s:]+/.exec(last)![0];
+    line(/\b(failed|skipped|never runs)\b/.test(last) ? "warn" : true, `routine ${name}`, last.slice(name.length).replace(/^:?\s*/, ""));
   }
 
-  const dream = legacy ? {} : readDream(OWNER_CONV);
-  if (!legacy) line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (the preset); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
+  const dream = readDream(OWNER_CONV);
+  line(true, "nightly dream", settings.dream ? `once a day from ${String(settings.dreamHour).padStart(2, "0")}:00 (the preset); last run ${dream.lastRunAt ? localTime(dream.lastRunAt) : "not yet"}` : "off (DREAM=off)");
 
-  if (!legacy) {
-    const r = retentionSummary(readRetentionState(instancePaths().retention), settings.retention, localTime);
-    line(r.ok, "retention", r.detail);
-  }
+  const r = retentionSummary(readRetentionState(instancePaths().retention), settings.retention, localTime);
+  line(r.ok, "retention", r.detail);
 
   browseCheck(line, settings.browse, browseStatus());
   await openbaoCheck(line);
