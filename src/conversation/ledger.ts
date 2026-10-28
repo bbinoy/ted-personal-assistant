@@ -50,13 +50,8 @@ export function lookState(entries: readonly Sent[]): LookState {
   return st;
 }
 
-// Pure: is this conversation's look due? Yes when the chosen time has come, when somebody wrote since the last look
-// (not in a group set to "tagged": there only a tag matters), or when its notes changed since. No look yet: due.
-export function lookDue(st: LookState, now: Date, o: { notesChangedMs?: number; messagesCount?: boolean } = {}): boolean {
-  return lookWhy(st, now, o) !== undefined;
-}
-
-// Why it is due, as a short fact for the look's message (undefined: not due).
+// Pure: why this conversation's look is due, as a short fact for the look's message (undefined: not due). Due when the chosen time has come, when somebody wrote since
+// the last look (not in a group set to "tagged": there only a tag matters), or when its notes changed since. No look yet: due.
 export function lookWhy(st: LookState, now: Date, o: { notesChangedMs?: number; messagesCount?: boolean } = {}): string | undefined {
   if (!st.wake) return "No check has run yet.";
   if (now.getTime() >= Date.parse(st.wake.next)) return "The time you chose for this check has come.";

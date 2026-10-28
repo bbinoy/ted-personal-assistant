@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { liveConvDb, peekConvDb } from "../core/convdb.ts";
-import { OWNER_CONV, type ConvId } from "../core/convpaths.ts";
+import type { ConvId } from "../core/convpaths.ts";
 import type { Db } from "../core/db.ts";
 import type { Plan } from "./dreamplan.ts";
 
@@ -41,7 +41,6 @@ const changeOf = (r: Row): Change => ({ seq: r.seq, at: r.at, source: r.source, 
 
 // A conversation that is a group (conv ids: group-<hash>): nothing is recorded, nothing summarised.
 export const isGroupConv = (conv: ConvId): boolean => conv.startsWith("group-");
-export const isOwnerConv = (conv: ConvId): boolean => conv === OWNER_CONV;
 
 const oneLineGist = (s: string): string => {
   const t = s.replace(/\s+/g, " ").trim();

@@ -111,10 +111,7 @@ export function groupContext(groupId: string, since?: string, n = 25): { lines: 
 
 // The last few lines of context before a new message, oldest first.
 
-// Search the group's whole log (the oldest part is one summary line). Words must all appear.
-export const searchGroupHistory = (groupId: string, args: { query?: string; sinceHours?: number; limit?: number }): string => searchHistoryFile(groupLogFile(groupId), args);
-
-// The same over any one conversation's history file (a tenant's, tenants.ts): the file is the scope, closed over by the memory server.
+// Search one conversation's history file (the oldest part is one summary line; words must all appear) (a tenant's, tenants.ts): the file is the scope, closed over by the memory server.
 export function searchHistoryFile(file: string, args: { query?: string; sinceHours?: number; limit?: number }): string {
   const hits = matchLines(readText(file) ?? "", { query: args.query, sinceHours: args.sinceHours });
   if (hits.length === 0) return "No matching messages.";
