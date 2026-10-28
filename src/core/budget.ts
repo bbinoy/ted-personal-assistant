@@ -38,7 +38,7 @@ const cents = (x: number): number => Math.round(x * 1e6) / 1e6;
 export type Payer = "login" | "key";
 export interface SpendRow {
   usd: number;
-  conv?: ConvId; // default: the owner's
+  conv: ConvId; // whose day it counts toward
   payer?: Payer; // default: a friend's conversation is paid by the key, anything else by the login
   kind?: string; // chat, look, dream, gate, helper, mail ... (default "run")
   now?: Date;
@@ -47,7 +47,7 @@ const payerOf = (conv: ConvId): Payer => (conv.startsWith("friend-") ? "key" : "
 
 export function recordSpend(r: SpendRow): void {
   if (!(r.usd > 0)) return;
-  const conv = r.conv ?? OWNER_CONV;
+  const { conv } = r;
   const now = r.now ?? new Date();
   try {
     instanceDb().run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, ?, ?)", now.getTime(), dayIn(now), conv, r.payer ?? payerOf(conv), r.kind ?? "run", r.usd);
@@ -56,9 +56,9 @@ export function recordSpend(r: SpendRow): void {
   }
 }
 
-/** `ledger`: a friend's convId (her own day on the key) or a group's (its day on the login); none or "owner": the owner's day, which includes every group's. */
-export function recordCost(usd: number, ledger?: ConvId, kind?: string): void {
-  recordSpend({ usd, ...(ledger ? { conv: ledger } : {}), ...(kind ? { kind } : {}) });
+/** `ledger`: a friend's convId (her own day on the key) or a group's (its day on the login); the default is the login's own day (the owner's, which includes every group's). */
+export function recordCost(usd: number, ledger: ConvId = OWNER_CONV, kind?: string): void {
+  recordSpend({ usd, conv: ledger, ...(kind ? { kind } : {}) });
 }
 
 export function spentToday(ledger?: ConvId, now: Date = new Date()): number {

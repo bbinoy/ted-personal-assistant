@@ -215,21 +215,21 @@ const delegateNote = (look: ReturnType<typeof F.factsFor>, result = true): void 
 
 test("a routine note in a group fires once at its time, is done when the look posted, and is due again the next day", () => {
   const conv = groupWith("every day at 08:00");
-  const seen = F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look"); // 07:00: first sight
+  const seen = F.factsFor(conv, at("2026-10-22T05:00:00Z"), false); // 07:00: first sight
   assert.equal(seen.routines, "");
   seen.done({ ended: true, said: false });
-  const look = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "look"); // 08:05
+  const look = F.factsFor(conv, at("2026-10-22T06:05:00Z"), false); // 08:05
   assert.match(look.routines, /routine-fun-fact: due now \(every day at 08:00\)\. Delegate it now: call the Agent tool with subagent_type "expert" \(or the expert named for a heavy skill the note runs\) and a self-contained brief that holds the note's instruction word for word \(Post a fun fact for the group\.\)/);
   assert.doesNotMatch(look.routines, /yourself/);
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, undefined, "not started until the delegation");
   look.onDelegate("expert");
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "started");
   look.onTool("Agent", { subagent_type: "expert" }, { content: [{ type: "text", text: "the pep talk" }] });
-  assert.equal(F.factsFor(conv, at("2026-10-22T06:06:00Z"), "look").routines, "", "pending in the look that has it: another look is not handed it too");
+  assert.equal(F.factsFor(conv, at("2026-10-22T06:06:00Z"), false).routines, "", "pending in the look that has it: another look is not handed it too");
   look.done({ ended: true, said: true });
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "delivered");
-  assert.equal(F.factsFor(conv, at("2026-10-22T06:40:00Z"), "look").routines, "", "not again today");
-  const next = F.factsFor(conv, at("2026-10-23T06:05:00Z"), "look");
+  assert.equal(F.factsFor(conv, at("2026-10-22T06:40:00Z"), false).routines, "", "not again today");
+  const next = F.factsFor(conv, at("2026-10-23T06:05:00Z"), false);
   assert.match(next.routines, /routine-fun-fact: due now[\s\S]*Post a fun fact/);
   delegateNote(next);
   next.done({ ended: true, said: true });
@@ -237,44 +237,44 @@ test("a routine note in a group fires once at its time, is done when the look po
 
 test("a routine note is done when its expert came back with a result and the look ended well, silent or not; an empty expert or a failed look leaves it for the retry, then it is given up", () => {
   const conv = groupWith("every day at 08:00");
-  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  const quiet = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "look");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  const quiet = F.factsFor(conv, at("2026-10-22T06:05:00Z"), false);
   delegateNote(quiet);
   quiet.done({ ended: true, said: false }); // the expert answered [[silent]]: nothing to say
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, "delivered");
   const e = groupWith("every day at 08:00", "Do e", "routine-e.md");
-  F.factsFor(e, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  const empty = F.factsFor(e, at("2026-10-22T06:05:00Z"), "look");
+  F.factsFor(e, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  const empty = F.factsFor(e, at("2026-10-22T06:05:00Z"), false);
   delegateNote(empty, false); // the expert ran out of turns: no result
   empty.done({ ended: true, said: false });
   assert.equal(readRecord(e.convId, "routine-e")?.status, "failed", "an expert that returned nothing leaves it for the retry");
   const n = groupWith("every day at 08:00", "Do n", "routine-n.md");
-  F.factsFor(n, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  F.factsFor(n, at("2026-10-22T06:05:00Z"), "look").done({ ended: true, said: false }); // never delegated: not started, still due
+  F.factsFor(n, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  F.factsFor(n, at("2026-10-22T06:05:00Z"), false).done({ ended: true, said: false }); // never delegated: not started, still due
   assert.equal(readRecord(n.convId, "routine-n")?.status, undefined);
   const c = groupWith("every day at 08:00", "Do x", "routine-x.md");
-  F.factsFor(c, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  const lx = F.factsFor(c, at("2026-10-22T06:05:00Z"), "look");
+  F.factsFor(c, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  const lx = F.factsFor(c, at("2026-10-22T06:05:00Z"), false);
   delegateNote(lx);
   lx.done({ ended: false, said: false });
   assert.equal(readRecord(c.convId, "routine-x")?.status, "failed");
-  assert.match(F.factsFor(c, at("2026-10-22T06:20:00Z"), "look").routines, /the earlier attempt died/);
+  assert.match(F.factsFor(c, at("2026-10-22T06:20:00Z"), false).routines, /the earlier attempt died/);
   const d = groupWith("every day at 08:00", "Do y", "routine-y.md");
-  F.factsFor(d, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
+  F.factsFor(d, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
   for (const m of [5, 15]) {
-    const l = F.factsFor(d, at(`2026-10-22T06:${String(m).padStart(2, "0")}:00Z`), "look");
+    const l = F.factsFor(d, at(`2026-10-22T06:${String(m).padStart(2, "0")}:00Z`), false);
     delegateNote(l);
     l.done({ ended: false, said: false });
   }
-  assert.match(F.factsFor(d, at("2026-10-22T06:30:00Z"), "look").status.join("\n"), /routine-y: did not run on 2026-10-22 \(two attempts failed\)/);
+  assert.match(F.factsFor(d, at("2026-10-22T06:30:00Z"), false).status.join("\n"), /routine-y: did not run on 2026-10-22 \(two attempts failed\)/);
 });
 
 test("a due routine makes the conversation's look due on the next tick: at its time, until handed over, and not once done", () => {
   const conv = groupWith("every day at 08:00");
-  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false }); // first sight
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false }); // first sight
   assert.equal(F.routinesWaiting(conv, at("2026-10-22T05:59:00Z")), false, "07:59: not yet");
   assert.equal(F.routinesWaiting(conv, at("2026-10-22T06:01:00Z")), true, "08:01: due");
-  const look = F.factsFor(conv, at("2026-10-22T06:02:00Z"), "look");
+  const look = F.factsFor(conv, at("2026-10-22T06:02:00Z"), false);
   delegateNote(look);
   assert.equal(F.routinesWaiting(conv, at("2026-10-22T06:03:00Z")), false, "started: not due");
   look.done({ ended: true, said: true });
@@ -285,23 +285,23 @@ test("a due routine makes the conversation's look due on the next tick: at its t
 
 test("a chat turn sees a routine note's status and never starts or records it; only the look runs it", () => {
   const conv = groupWith("every day at 08:00");
-  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  const chat = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "chat");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  const chat = F.factsFor(conv, at("2026-10-22T06:05:00Z"), true);
   assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-fun-fact: due now/);
   assert.equal(chat.routines, "");
   chat.done({ ended: true, said: true });
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, undefined);
-  const look = F.factsFor(conv, at("2026-10-22T06:06:00Z"), "look");
+  const look = F.factsFor(conv, at("2026-10-22T06:06:00Z"), false);
   assert.match(look.routines, /routine-fun-fact: due now[\s\S]*Post a fun fact/);
   delegateNote(look);
   look.done({ ended: true, said: true });
-  assert.match(F.factsFor(conv, at("2026-10-22T06:30:00Z"), "chat").status.join("\n"), /routine-fun-fact: delivered /);
+  assert.match(F.factsFor(conv, at("2026-10-22T06:30:00Z"), true).status.join("\n"), /routine-fun-fact: delivered /);
 });
 
 test("a look handed a routine is told to do it and nothing else about it: no status line that says it is started, running or not for it to start", () => {
   const conv = groupWith("every day at 08:00");
-  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  const look = F.factsFor(conv, at("2026-10-22T06:06:00Z"), "look");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  const look = F.factsFor(conv, at("2026-10-22T06:06:00Z"), false);
   assert.match(look.routines, /routine-fun-fact: due now[\s\S]*Post a fun fact/);
   const told = [...look.status, look.routines, ...look.blocks].join("\n");
   assert.doesNotMatch(look.status.join("\n"), /routine-fun-fact/, "not in the status block of the run that was handed it");
@@ -316,8 +316,8 @@ test("an unparseable when: is never silent: the status says so, the tool reply s
   const s = scheduledIn(o);
   assert.deepEqual(s.routines, []);
   assert.match(`${s.broken[0]!.file} ${s.broken[0]!.why}`, /routine-fun-fact\.md has a when: line that cannot be read \(Cannot read the repeat rule "whenever you feel like it"/);
-  assert.match(F.factsFor(conv, o.now, "chat").status.join("\n"), /Routine notes that will never run, fix their when: line[\s\S]*routine-fun-fact\.md has a when: line that cannot be read/);
-  assert.match(F.factsFor(conv, o.now, "look").status.join("\n"), /will never run/);
+  assert.match(F.factsFor(conv, o.now, true).status.join("\n"), /Routine notes that will never run, fix their when: line[\s\S]*routine-fun-fact\.md has a when: line that cannot be read/);
+  assert.match(F.factsFor(conv, o.now, false).status.join("\n"), /will never run/);
   assert.match(scheduleLines(conv.convId, o)[0]!, /never runs/);
   const file = join(conv.notesDir, "routine-fun-fact.md");
   const bad = routineNoteReply("Write", { file_path: file }, conv.notesDir, ZONE, o.now)!;
@@ -336,16 +336,16 @@ test("an unparseable when: is never silent: the status says so, the tool reply s
 test("editing a note's when: moves the next occurrence from then on", () => {
   const conv = groupWith("every day at 08:00");
   const o = { notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
-  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
-  const first = F.factsFor(conv, o.now, "look");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false });
+  const first = F.factsFor(conv, o.now, false);
   delegateNote(first);
   first.done({ ended: true, said: true });
   assert.match(scheduleLines(conv.convId, o)[0]!, /^routine-fun-fact: every day at 08:00, next tomorrow 08:00; last \d\d-\d\d \d\d:\d\d/);
   writeFileSync(join(conv.notesDir, "routine-fun-fact.md"), "---\nwhen: every weekday at 18:30\n---\nPost a fun fact for the group.\n");
   assert.match(scheduleLines(conv.convId, o)[0]!, /every weekday at 18:30, next today 18:30/);
-  assert.equal(F.factsFor(conv, at("2026-10-22T06:30:00Z"), "look").routines, "", "nothing is due before the new time");
-  assert.equal(F.factsFor(conv, at("2026-10-22T16:35:00Z"), "look").routines, "", "it already ran today (at the old time): the edit starts with the next occurrence");
-  const next = F.factsFor(conv, at("2026-10-23T16:35:00Z"), "look");
+  assert.equal(F.factsFor(conv, at("2026-10-22T06:30:00Z"), false).routines, "", "nothing is due before the new time");
+  assert.equal(F.factsFor(conv, at("2026-10-22T16:35:00Z"), false).routines, "", "it already ran today (at the old time): the edit starts with the next occurrence");
+  const next = F.factsFor(conv, at("2026-10-23T16:35:00Z"), false);
   assert.match(next.routines, /routine-fun-fact: due now \(every weekday at 18:30\)[\s\S]*Post a fun fact/);
   next.done({ ended: true, said: true });
 });
@@ -445,8 +445,8 @@ const briefIn = (when: string) => groupWith(when, "Run the ted-personal-assistan
 
 test("a note that runs the daily brief: the expert and the delivery line, one record under the note's name, any expert counts; moving its time moves the run; forgetting it ends it", () => {
   const conv = briefIn("every day at 07:30");
-  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false }); // 07:00 Berlin: first sight
-  const look = F.factsFor(conv, at("2026-10-22T06:00:00Z"), "look"); // 08:00
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), false).done({ ended: true, said: false }); // 07:00 Berlin: first sight
+  const look = F.factsFor(conv, at("2026-10-22T06:00:00Z"), false); // 08:00
   assert.match(look.routines, /routine-daily-brief: due now \(every day at 07:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"[\s\S]*Run the ted-personal-assistant:daily-brief skill/);
   assert.doesNotMatch(look.routines, /How to deliver/, "the delivery sentence is the prompt's, not a routine fact");
   look.onDelegate("expert-daily-brief");
@@ -454,7 +454,7 @@ test("a note that runs the daily brief: the expert and the delivery line, one re
   look.onTool("Agent", { subagent_type: "expert-daily-brief" }, { content: [{ type: "text", text: "the brief" }] });
   look.done({ ended: true, said: true });
   assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, "delivered");
-  assert.equal(F.factsFor(conv, at("2026-10-22T07:00:00Z"), "look").routines, "", "not twice the same day");
+  assert.equal(F.factsFor(conv, at("2026-10-22T07:00:00Z"), false).routines, "", "not twice the same day");
   writeFileSync(join(conv.notesDir, "routine-daily-brief.md"), "---\nwhen: every day at 09:00\n---\nRun the ted-personal-assistant:daily-brief skill and deliver the brief as it says.\n");
   assert.match(scheduleLines(conv.convId, { notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T07:10:00Z") })[0]!, /^routine-daily-brief: every day at 09:00, next tomorrow 09:00/);
   rmSync(join(conv.notesDir, "routine-daily-brief.md"));

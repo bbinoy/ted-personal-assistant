@@ -2,6 +2,7 @@ import type { Conversation } from "../conversation/conversationmodel.ts";
 import { speakerOf, zoneOf } from "../tenants/tenants.ts";
 import { readNotes } from "../memory/notes.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
+import { identity } from "../policy/identity.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { skillsFor } from "../modules/skills.ts";
 
@@ -31,10 +32,10 @@ export function lookerOf(conv: Pick<Conversation, "kind" | "tenantId">, mailOn: 
   const mail = caps.has("mail") && (!own || mailOn); // (the owner's mail is her mail provider's: none, no mail to read)
   const parts = [mail && "the inbox (list it with the mail tools and ask seen_mail which mail is new)", caps.has("calendar") && "the calendar for the next 36 hours", caps.has("notion") && "tasks"].filter(Boolean);
   return {
-    who: own ? OWNER : conv.kind === "group" ? "the group" : speakerOf(conv),
+    who: own ? OWNER : identity(conv).group ? "the group" : speakerOf(conv),
     zone: zoneOf(conv),
     own,
-    group: conv.kind === "group",
+    group: identity(conv).group,
     reads,
     mail,
     tasks: caps.has("tasks"),

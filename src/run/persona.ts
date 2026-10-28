@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { allows, capabilitiesOf, groupCapabilities } from "../policy/capabilities.ts";
+import { identity } from "../policy/identity.ts";
+import type { Conversation } from "../conversation/conversationmodel.ts";
 import { fence } from "../core/fence.ts";
 import type { Capability } from "../tenants/tenants.ts";
 import { mailSlot } from "../modules/index.ts";
 import { clockIn, dayIn } from "../core/timezone.ts";
-import { categoriesFor, PLUGIN, preset, render, type PromptKey, type Value } from "../core/preset.ts";
+import { PLUGIN, preset, render, type PromptKey, type Value } from "../core/preset.ts";
 import { ASSISTANT, OWNER, settings } from "../core/settings.ts";
 import { convPaths, logPaths, OWNER_CONV } from "../core/convpaths.ts";
 import { lookerOf, type Looker } from "./scope.ts";
@@ -107,13 +109,13 @@ export function chatSystem(now = new Date(), mail: boolean = settings.mail, look
       personality: PERSONALITY,
       sources: SOURCES_RULE,
       reactions: reactionRules(OWNER),
-      send: `${SEND_RULE}${voiceRule("owner", capabilitiesOf({ kind: "owner" }))}`,
+      send: `${SEND_RULE}${voiceRule(ownerConv, capabilitiesOf(ownerConv))}`,
       channel: settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`,
       mailNote: mail ? mailNote() : "",
       logsDir: logPaths().dir,
       ownerDir: convPaths(OWNER_CONV).dir,
       routine: ROUTINE_NOTE,
-      shared: sharedRules({ own: true, reads: looker.reads, whose: `${OWNER}'s`, asker: OWNER, categories: categoriesFor("owner") }),
+      shared: sharedRules({ own: true, reads: looker.reads, whose: `${OWNER}'s`, asker: OWNER, categories: identity(ownerConv).categories }),
     }),
     rules(mail),
     tasksRule({ own: true, group: false, who: OWNER, reads: looker.reads }, capabilitiesOf({ kind: "owner" })),
@@ -142,7 +144,7 @@ export const FIRST_CONTACT = "This is the first time she talks to you: she wrote
 // Shared by the private chat and groups (not the background presets). Text you write before a tool call stays internal; the send tool (send.ts) is how the person hears something while you work.
 // The voice tool exists only with the cloned voice (TTS_PROVIDER=qwen); the rule is only said then.
 // The sentence comes from the preset (persona/voice.md) with the kind of conversation as flags; the run's own capability set says whether it has the tool.
-const voiceRule = (kind: "owner" | "group" | "tenant", caps: ReadonlySet<Capability>): string => (settings.tts.provider !== "qwen" || !caps.has("voice") ? "" : say("voice", { own: kind === "owner", group: kind === "group" }));
+const voiceRule = (conv: Pick<Conversation, "kind">, caps: ReadonlySet<Capability>): string => (settings.tts.provider !== "qwen" || !caps.has("voice") ? "" : say("voice", { own: identity(conv).own, group: identity(conv).group }));
 const SOURCES_RULE = say("sources");
 
 // The rules every conversation shares (persona/shared.md): how notes are kept, the journal and search_logs, and, for someone else's chat, the prompt-injection rule, plain text, reply language and [[silent]].
@@ -192,8 +194,8 @@ export function othersSystem(who: { group: true } | { group: false; name: string
       routine: (group ? caps.has("heartbeat") && caps.has("wake") : parts.timed) ? ROUTINE_NOTE : "",
       sources: SOURCES_RULE,
       reactions: reactionRules(group ? "the sender" : name),
-      send: `${SEND_RULE}${voiceRule(group ? "group" : "tenant", caps)}`,
-      shared: sharedRules({ own: false, reads: looker.reads, whose: group ? "this group's own" : `${name}'s own`, asker: group ? `someone in the group, ${OWNER} included,` : name, categories: categoriesFor("others") }),
+      send: `${SEND_RULE}${voiceRule({ kind: group ? "group" : "tenant" }, caps)}`,
+      shared: sharedRules({ own: false, reads: looker.reads, whose: group ? "this group's own" : `${name}'s own`, asker: group ? `someone in the group, ${OWNER} included,` : name, categories: identity({ kind: "group" }).categories }),
     }),
     tasksRule({ own: false, group, who: name, reads: looker.reads }, caps),
     background(looker, caps),
@@ -227,7 +229,7 @@ function peopleGuide(): string {
 // JSON. `subject` is whose notes they are (the owner's name, her name, the group chat's), `kind` says which of the three, `categories` the note categories that
 // conversation has (the preset's notes.dream, .tenant or .group).
 export function dreamSystem(d: { subject: string; kind: "owner" | "group" | "tenant"; categories: readonly string[] }): string {
-  return say("dream", { subject: oneLineName(d.subject), own: d.kind === "owner", group: d.kind === "group", categories: d.categories.join(", "), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
+  return say("dream", { subject: oneLineName(d.subject), own: identity(d).own, group: identity(d).group, categories: d.categories.join(", "), peopleGuide: d.categories.includes("people") ? peopleGuide() : "" });
 }
 
 // Whose run an expert works for when it is not the owner's: a friend (her name, her own words about language and tone from tenant.json) or a group. The owner's has none.

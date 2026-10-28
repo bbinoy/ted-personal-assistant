@@ -48,12 +48,12 @@ test("send: manifest and policy: free in a chat turn and in every conversation's
 test("send: every run of a conversation is given the tool server, the browse worker is not (and the old tools are gone)", () => {
   const base = { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1 };
   const servers = (o: Parameters<typeof buildOptions>[1]) => Object.keys(buildOptions(async () => ({ approved: true }), o, undefined).mcpServers ?? {});
-  assert.equal(servers({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes("send"), true);
+  assert.equal(servers({ ...base, conversation: "owner", kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes("send"), true);
   assert.equal(servers({ ...base, kind: GROUP_CHAT, memory: { dir: "/tmp/n", groupId: "g1" } }).includes("send"), true);
-  assert.equal(servers({ ...base, kind: OWNER_LOOK }).includes("send"), true, "the owner's look speaks in her chat");
+  assert.equal(servers({ ...base, conversation: "owner", kind: OWNER_LOOK }).includes("send"), true, "the owner's look speaks in her chat");
   assert.equal(servers({ ...base, kind: GROUP_LOOK, groupId: "g1" }).includes("send"), true);
   assert.equal(servers({ ...base, kind: BROWSE_RUN }).includes("send"), false);
-  for (const old of ["tell", "picture"]) assert.equal(servers({ ...base, kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes(old), false, old);
+  for (const old of ["tell", "picture"]) assert.equal(servers({ ...base, conversation: "owner", kind: OWNER_CHAT, memory: { dir: "/tmp/n" } }).includes(old), false, old);
   assert.equal(classify("mcp__tell__tell_user", { message: "x" }, GROUP_CHAT), "deny");
   assert.equal(classify("mcp__picture__send_picture", { id: "shot1" }, GROUP_CHAT), "deny");
 });

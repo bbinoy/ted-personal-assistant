@@ -588,6 +588,7 @@ What a call may do, from data only.
 
 ```
 src/policy/capabilities.ts  capability set, tools and skills of a conversation
+src/policy/identity.ts  what only a conversation's kind says: own, group, note categories
 src/policy/guests.ts  does a call name people?
 src/policy/mailview.ts  the one view of an outgoing mail
 src/policy/neverallowed.ts  the never-allowed set (pure)

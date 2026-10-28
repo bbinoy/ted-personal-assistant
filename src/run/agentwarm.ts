@@ -22,16 +22,17 @@ import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 // handed to a group or a tenant. Options (system prompt, tools, MCP servers, output schema) are fixed when a process starts, which is why a slot
 // is keyed by them.
 const idleMs = () => WARM_IDLE_MINUTES * 60_000;
-// The owner's warm process is renewed this often (main.ts), so it is still fresh after a quiet hour.
+// Every held warm process is renewed this often (main.ts), so it is still fresh after a quiet hour.
 export const WARM_REFRESH_MS = 25 * 60_000;
 const slotOptions = { maxAgeMs: idleMs(), idleMs }; // fresh while not idle-expired: a process that died meanwhile is detected on use (firstWarm) and replaced
 
 type Kind = Conversation["kind"];
 type Who = Pick<Conversation, "key" | "kind">;
 
-// How many processes of a kind are kept: the owner's one, the GROUP_WARM_SLOTS most recently active groups', the TENANT_WARM_MAX most recently active tenants' (0: none).
-// A conversation of a kind that is full replaces the least recently used one of that kind, which is closed.
-const capacity = (kind: Kind): number => (kind === "tenant" ? settings.tenantWarmMax : kind === "group" ? settings.groupWarmSlots : 1);
+// How many processes of a kind are kept, the ONE row per kind of what is warmed: the owner's one, the GROUP_WARM_SLOTS most recently active groups', the TENANT_WARM_MAX most
+// recently active tenants' (0: none). A conversation of a kind that is full replaces the least recently used one of that kind, which is closed.
+const CAPACITY: Record<Kind, () => number> = { owner: () => 1, group: () => settings.groupWarmSlots, tenant: () => settings.tenantWarmMax };
+export const capacity = (kind: Kind): number => CAPACITY[kind]();
 
 export class WarmPool {
   readonly #slots = new Map<string, { kind: Kind; slot: SpareSlot<WarmQuery> }>(); // least recently used first

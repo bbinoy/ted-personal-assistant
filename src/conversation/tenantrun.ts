@@ -1,4 +1,4 @@
-import { prepare as prepareWarm, runConversation } from "../run/agent.ts";
+import { runConversation } from "../run/agent.ts";
 import { timeIn } from "../core/timezone.ts";
 import { tenant } from "./conversationmodel.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
@@ -22,7 +22,6 @@ const SILENT = "[[silent]]";
 export interface TenantRunnerDeps {
   apiKey?: () => string | undefined; // the instance key tenants run on (default: settings.tenantApiKey)
   ask?: (ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => Promise<{ text: string; costUsd?: number }>;
-  prepare?: (ctx: TenantContext, apiKey: string) => void;
   now?: () => number;
 }
 
@@ -31,7 +30,6 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
   const may = (conv: Conversation, what: string) => mayRun(conv, what, { chat: true, now: now(), key: deps.apiKey }); // she wrote: no pause switch; her cooldown, budget and the key
   // Her turn is a conversation turn like any other (agent.ts): her record decides the options, the instance key is the one thing she brings.
   const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt, pictures, documents }), hooks?.firstOutput));
-  const prepare = deps.prepare ?? ((ctx: TenantContext, apiKey: string) => prepareWarm(tenant(ctx.id), { apiKey }));
 
   // (the one refusal table and the one throttle, tenants/errors.ts: a ceiling is said once a day, a cooldown or a missing key every 30 minutes)
   const refuse = (ctx: TenantContext, reason: Reason, o: { until?: string; limit?: number } = {}) => ({ text: refusalOnce(reason, "friend", ctx.convId, o, now()) ?? SILENT });
@@ -60,12 +58,5 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
     return { text: r.text, costUsd: r.costUsd };
   }
 
-  // After her turn: a warm process for her next message, if she may run and the instance key is set (never a reason to fail anything).
-  function warm(conv: Conversation): void {
-    const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-    const payer = rec ? may(conv, "warm") : undefined;
-    if (rec && payer && !isRefusal(payer) && payer.kind === "instance") prepare(tenantContext(rec), payer.apiKey);
-  }
-
-  return { run, warm };
+  return { run };
 }

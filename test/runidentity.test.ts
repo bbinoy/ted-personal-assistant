@@ -31,7 +31,7 @@ function describeAll() {
   const out: Record<string, unknown> = {};
   for (const [name, kind] of Object.entries(KINDS)) {
     const dir = kind.who === "owner" ? NOTES_DIR : GROUP_NOTES;
-    const built = buildOptions(async () => ({ approved: false }), { kind, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir, zone: "UTC" } }, undefined);
+    const built = buildOptions(async () => ({ approved: false }), { ...(kind.who === "owner" ? { conversation: "owner" } : {}), kind, systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, memory: { dir, zone: "UTC" } }, undefined);
     const verdicts = (tools: ReadonlySet<string> | undefined, notes: string | undefined) => {
       const v: Record<string, string> = {};
       for (const t of toolNames) v[t] = classify(t, t === "WebFetch" ? { url: "https://example.com/" } : {}, kind, notes, tools);

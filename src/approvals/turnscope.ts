@@ -1,6 +1,6 @@
 import type { RunProvenance } from "./autojudge.ts";
 import { LIMITS } from "../core/sanitize.ts";
-import { OWNER_KEY } from "../core/ownerkey.ts";
+import { kindOfKey } from "../core/ownerkey.ts";
 import { agoText } from "../core/timezone.ts";
 
 // What a conversation's turn is known to have been asked, for the approval judge's provenance (autojudge.ts RunProvenance): the person's message that started the
@@ -25,7 +25,7 @@ export class TurnScope {
 
   constructor(key: string) {
     this.key = key;
-    this.member = key !== OWNER_KEY;
+    this.member = kindOfKey(key) !== "owner";
   }
 
   // A person's message starts a turn. `assistantSaid`: for a reaction, the message that was reacted to (what the owner was answering).

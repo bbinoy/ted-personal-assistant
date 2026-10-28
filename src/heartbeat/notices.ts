@@ -228,10 +228,9 @@ export function noticeDamaged(now: Date = new Date()): number {
 
 // 2. Looks that fail. Called by look.ts with each finished look (not one called off or stopped by a sleep); `error` is what the run threw, if it did; `mono`: the monotonic clock now.
 const tracker = createFailureTracker();
-const scopeOf = (conv: Pick<Conversation, "kind">): Scope => (conv.kind === "tenant" ? "tenant" : conv.kind === "group" ? "group" : "owner");
 export function observeLook(conv: Conversation, outcome: "posted" | "silent" | "failed", error: unknown, now: Date, mono: number = performance.now()): void {
   try {
-    tracker.observe(conv.key, scopeOf(conv), outcome === "failed", outcome === "failed" ? causeOf(error) : undefined, now.getTime(), mono);
+    tracker.observe(conv.key, conv.kind, outcome === "failed", outcome === "failed" ? causeOf(error) : undefined, now.getTime(), mono);
   } catch (e) {
     console.error("notices: could not track a look:", (e as Error).message);
   }

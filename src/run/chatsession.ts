@@ -5,7 +5,7 @@ import { withCeiling } from "./ceiling.ts";
 import { failure, isApiRefusal } from "../tenants/errors.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { charge, envFor, isRefusal, LOGIN, mayRun, observe, succeeded, type MayRunOptions, type Payer } from "../tenants/payer.ts";
-import { OWNER_CONV, type ConvId } from "../core/convpaths.ts";
+import { type ConvId } from "../core/convpaths.ts";
 import { readSession, writeSession } from "./sessionstore.ts";
 import type { Source } from "../core/audit.ts";
 import { auditSource, type Who } from "../core/runkind.ts";
@@ -31,7 +31,7 @@ const COMPACT_MAX_MINUTES = 10; // a compaction that takes longer is abandoned (
 const chatPlanOpts = (mode: CompactMode) => ({ compactTokens: COMPACT_TOKENS, compactGrowth: COMPACT_GROWTH_TOKENS, quietMinutes: COMPACT_QUIET_MINUTES, mode });
 
 // A conversation continues its saved session unless session.ts says to start fresh.
-export function chatResume(conv: ConvId = OWNER_CONV): Resume {
+export function chatResume(conv: ConvId): Resume {
   const saved = readSession(conv);
   // A fresh session starts its cost total at zero, so the previous total must not be subtracted.
   if (planSession(saved, new Date(), chatPlanOpts("off")) === "fresh") return { previousCost: 0 };
@@ -57,7 +57,7 @@ export function compactOptions(sessionId: string | undefined, isolated: boolean,
 }
 
 // Is a quiet-time compaction due for this session? A cheap read of the session row, for the heartbeat to ask before it queues anything.
-export function compactDue(conv: ConvId = OWNER_CONV, now: Date = new Date()): boolean {
+export function compactDue(conv: ConvId, now: Date = new Date()): boolean {
   return planSession(readSession(conv), now, chatPlanOpts("quiet")) === "resume then compact";
 }
 
@@ -65,7 +65,7 @@ export function compactDue(conv: ConvId = OWNER_CONV, now: Date = new Date()): b
 // session.ts says so for this `mode`: "urgent" right after a reply that left the context far past the limit (the caller waits),
 // "quiet" from the heartbeat once the conversation has been still for COMPACT_QUIET_MINUTES. Always called from the conversation's
 // serial queue, so a message that arrives meanwhile waits behind it and nothing else touches the record. Never throws.
-export async function compactChatIfNeeded(conv: ConvId = OWNER_CONV, who: Who = "owner", notesDir?: string, mode: "quiet" | "urgent" = "urgent", payer: Payer = LOGIN): Promise<void> {
+export async function compactChatIfNeeded(conv: ConvId, who: Who, notesDir: string | undefined, mode: "quiet" | "urgent", payer: Payer): Promise<void> {
   const source = auditSource({ who, attended: true }); // (the audit label)
   const isolated = who !== "owner";
   try {

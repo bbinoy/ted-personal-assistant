@@ -252,7 +252,7 @@ test("tool: manifest and policy: free without approval wherever the conversation
   assert.equal(classify(TOOL, { action: "list" }, GROUP_CHAT), "allow");
   assert.equal(classify(TOOL, { action: "list" }, GROUP_LOOK), "allow");
   // the default provider is Qwen: every run of a conversation that has the capability is offered the tool, the browse worker is not
-  const servers = (kind: typeof OWNER_CHAT) => Object.keys(buildOptions(async () => ({ approved: true }), { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, kind, ...(kind.who === "group" ? { groupId: "g" } : {}) }, undefined).mcpServers ?? {});
+  const servers = (kind: typeof OWNER_CHAT) => Object.keys(buildOptions(async () => ({ approved: true }), { systemPrompt: "x", maxTurns: 1, maxBudgetUsd: 1, kind, ...(kind.who === "group" ? { groupId: "g" } : { conversation: "owner" }) }, undefined).mcpServers ?? {});
   for (const run of [OWNER_CHAT, OWNER_LOOK, GROUP_CHAT, GROUP_LOOK]) assert.ok(servers(run).includes("voice"), `${run.who} ${run.attended}`);
   assert.ok(!servers(BROWSE_RUN).includes("voice"));
 });

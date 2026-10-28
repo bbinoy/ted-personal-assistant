@@ -89,7 +89,6 @@ export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date,
 const busy = new Map<string, Set<string>>();
 const isBusy = (key: string, id: string): boolean => busy.get(key)?.has(id) ?? false;
 
-export type Kind = "look" | "chat";
 
 /** How the run ended. `ended`: it went well (a look posted or stayed silent; a chat turn replied). `said`: it told the person something. `held`: what it said was held for later. `abandoned`: called off or failed, nothing is settled. `sends`: pieces it sent while it worked. */
 export interface End {
@@ -112,7 +111,7 @@ export interface Facts {
 }
 
 /** The facts of a conversation for one run at `now`. Reuses the per-fact planners and records (notices, remindtick, preptick, memory/learned, tasks/*); this only picks, holds and settles them. */
-export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
+export function factsFor(conv: Conversation, now: Date, attended: boolean): Facts {
   const looker = lookerOf(conv);
   const t = now.getTime();
   const zone = looker.zone;
@@ -134,7 +133,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const learned = !isBusy(conv.key, "learned") ? learnedFact(conv.convId, conv.notesDir, t) : undefined; // notes that changed on their own (memory/learned.ts; a group has none: its notes are shared and nothing is recorded)
   if (learned) grab("learned");
   const tasks = looker.tasks ? tasksFacts(conv.key, t, zone) : { text: "", fromMail: false };
-  const dueFacts = looker.tasks ? reminderFacts(handed, kind === "look" ? activeItems(conv.key) : [], { now: t, zone, group: conv.kind === "group" }) : "";
+  const dueFacts = looker.tasks ? reminderFacts(handed, attended ? [] : activeItems(conv.key), { now: t, zone, group: conv.kind === "group" }) : "";
   const skill = `${PLUGIN}:meeting-prep`;
   const prepFacts = meetingFacts(prepping, { now: t, zone, skill: looker.skills.includes(skill) ? skill : undefined });
 
@@ -145,14 +144,14 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const finished = new Set<string>();
   let selfMailed = 0; // routine emails sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
   const { routines: ownRoutines, broken } = scheduledIn({ notesDir: conv.notesDir, zone, now });
-  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, approvals: openCount(conv.key), }) : undefined;
+  const routines = attended ? undefined : routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, approvals: openCount(conv.key), });
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
   for (const n of routineNames) grab(`routine:${n}`);
   const start = (name: string): void => {
     if (!started.has(name) && routines?.due?.routine.name === name) (started.add(name), markStarted(conv.convId, name, routines.due.plan.slot.date, Date.now())); // (a second delegation of the same routine is not another attempt)
   };
 
-  const lapsedNow = kind === "look" && !isBusy(conv.key, "lapsed") ? lapsedIn(conv.key).slice() : [];
+  const lapsedNow = !attended && !isBusy(conv.key, "lapsed") ? lapsedIn(conv.key).slice() : [];
   const lapsed = lapsedFact(conv.convId, lapsedNow, t);
   if (lapsed) grab("lapsed");
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts, learned ? fence("notes_changed_facts", learned.text) : "" ].filter(Boolean);
@@ -183,8 +182,8 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
         if (due && !end.ended) finished.delete(due); // (a routine's message is the look's answer: a look that failed or was called off leaves it for the retry)
         settleRoutines(conv.convId, started, finished, { calledOff: abandoned, sends }, Date.now());
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
-        if (handed.length && (kind === "look" || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
-        if (prepping.length && (kind === "look" ? !abandoned : end.said)) afterPrep(conv, prepping, end.said, t); // (a look a message overtook leaves them claimed: the next run is handed them)
+        if (handed.length && (!attended || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
+        if (prepping.length && (attended ? end.said : !abandoned)) afterPrep(conv, prepping, end.said, t); // (a look a message overtook leaves them claimed: the next run is handed them)
         if (lapsed && end.ended && !abandoned) {
           for (const l of lapsedNow) told(convDb(conv.convId), lapsedKey(l), { once: true });
           forgetLapsed(conv.key, lapsedNow);

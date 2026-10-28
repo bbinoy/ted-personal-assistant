@@ -81,7 +81,7 @@ test("no run of the instance has Glob, Grep or Bash (they could list and read an
     ["NotebookEdit", { notebook_path: join(ann.notesDir, "x.ipynb") }],
   ];
   // not offered to the model at all (agentrun.ts builtinTools), and a group's or a tenant's classify refuses them outright
-  const ownerOpts = { systemPrompt: "x", sessionConv: OWNER_CONV, maxTurns: 3, maxBudgetUsd: 1 };
+  const ownerOpts = { conversation: "owner", systemPrompt: "x", sessionConv: OWNER_CONV, maxTurns: 3, maxBudgetUsd: 1 };
   const runs = [
     buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, kind: OWNER_CHAT, memory: { dir: NOTES_DIR } }, undefined),
     buildOptions(() => Promise.resolve({ approved: false }), { ...ownerOpts, kind: OWNER_LOOK }, undefined),

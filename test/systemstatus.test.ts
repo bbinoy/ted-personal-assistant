@@ -39,15 +39,15 @@ test("a background approval that lapsed is told to the next look once, with its 
   assert.equal((await asked).expired, true);
   closeAllConvDbs(); // a restart: the entry is in the file
   const now = new Date(Date.now() + 5 * 60_000);
-  assert.ok(!factsFor(conv, now, "chat").status.some((s) => /lapsed unanswered/.test(s)));
-  const look = factsFor(conv, now, "look");
+  assert.ok(!factsFor(conv, now, true).status.some((s) => /lapsed unanswered/.test(s)));
+  const look = factsFor(conv, now, false);
   const line = look.status.find((s) => /lapsed unanswered/.test(s));
   assert.ok(line && /Create event Dentist/.test(line) && /no answer within 15 min/.test(line) && /5 min ago/.test(line), String(line));
   assert.doesNotMatch(line ?? "", /more details|7001/);
-  assert.ok(!factsFor(conv, now, "look").status.some((s) => /lapsed unanswered/.test(s)), "pending while the first look has it");
+  assert.ok(!factsFor(conv, now, false).status.some((s) => /lapsed unanswered/.test(s)), "pending while the first look has it");
   look.done({ ended: false, said: false });
-  const retry = factsFor(conv, now, "look");
+  const retry = factsFor(conv, now, false);
   assert.ok(retry.status.some((s) => /lapsed unanswered/.test(s)), "a failed look leaves it for the next");
   retry.done({ ended: true, said: false });
-  assert.ok(!factsFor(conv, now, "look").status.some((s) => /lapsed unanswered/.test(s)), "told once");
+  assert.ok(!factsFor(conv, now, false).status.some((s) => /lapsed unanswered/.test(s)), "told once");
 });

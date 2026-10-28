@@ -14,7 +14,7 @@ import { archivedBy, restoredBy } from "../modules/archivecap.ts";
 import { tasksNote } from "../modules/tasks/taskfacts.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
-import { OWNER_KEY } from "../core/ownerkey.ts";
+import { UNSCOPED_KEY } from "../core/ownerkey.ts";
 import { callKey } from "../core/callkey.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { journalable, whyOf } from "./journalrender.ts";
@@ -169,7 +169,7 @@ export async function renderCall(conversation: string | undefined, tool: string,
     if (!view || (view.action !== "forward" && view.to.length === 0)) return { unreadable: true };
     description = describeCall(tool, input, view);
   }
-  if (!own?.payment && !own?.description) description += await objectLines(conversation ?? OWNER_KEY, tool, input);
+  if (!own?.payment && !own?.description) description += await objectLines(conversation ?? UNSCOPED_KEY, tool, input);
   return { description, view };
 }
 
@@ -180,7 +180,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     untrusted = true;
     setup.taint?.mark();
   };
-  const conversation = setup.conversation ?? OWNER_KEY;
+  const conversation = setup.conversation ?? UNSCOPED_KEY;
   const source = auditSource(run); // (the audit label)
   const unattended = !run.attended;
   // Every row goes through the event stream (core/events.ts); a tenant's rows carry no words there (the audit log is the admin's). `ev`: on the steps that let a call run, the call and why, which the journal keeps until it succeeds.
