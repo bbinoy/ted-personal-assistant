@@ -4,7 +4,7 @@ import { browseStatus, browserServer } from "./browse/browseserver.ts";
 import { connected, readConnectors } from "./connectors.ts";
 import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "./memory/dreamscope.ts";
-import { googleHub, googleProxy, searchContacts, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
+import { googleHub, googleProxy, readEvent, searchContacts, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
 import { notionHub, notionProxy } from "./notion/notionmcp.ts";
 import { gmailReaders, putBackInInbox } from "./gmail/gmail.ts";
 import { createIntakeServer } from "../intake/intaketools.ts";
@@ -25,7 +25,7 @@ import { createVoiceServer } from "./voice/voicetool.ts";
 import { createWeatherServer } from "./weather/weathertools.ts";
 import { loaded, mailModule } from "./index.ts";
 import { setGmailReaders } from "./gmail/module.ts";
-import { GOOGLE_MAIL_TOOL, GOOGLE_PREFIX, GOOGLE_TOOLS } from "./google/module.ts";
+import { GOOGLE_MAIL_TOOL, GOOGLE_PREFIX, GOOGLE_TOOLS, setEventReader } from "./google/module.ts";
 import { NOTION_FRIEND_PREFIX, NOTION_FRIEND_TOOLS } from "./notion/module.ts";
 import { setDraftReader } from "./mailbird/module.ts";
 import type { DoctorLine, MailRuntime, RunContext, ServerFactory } from "./types.ts";
@@ -98,6 +98,7 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
     server: (ctx) => googleProxy(ctx.tenant!.id, (name) => ctx.offers(GOOGLE_PREFIX + name), undefined, GOOGLE_TOOLS),
     lifecycle: {
       start: () => {
+        setEventReader((id, eventId, calendarId) => readEvent(id, eventId, calendarId));
         const n = sweepStaleCredentialDirs();
         if (n) console.log(`google: removed ${n} credentials folder(s) a stopped process left behind`);
       },

@@ -8,6 +8,7 @@ import { factsOf, validateQuestion } from "../src/approvals/questionfacts.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
 import { resetDeclined } from "../src/approvals/declined.ts";
 import { setDraftReader } from "../src/modules/mailbird/module.ts";
+import { eventLabel, setEventReader } from "../src/modules/google/module.ts";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { OWNER_CHAT } from "./runkinds.ts";
 
@@ -98,4 +99,21 @@ test("questionfacts: a question needs no id, but still the address and the amoun
 
 test("the write prompt tells the writer never to show ids", () => {
   assert.match(APPROVAL_SYSTEM, /Never show ids/);
+});
+
+test("a friend's event named only by its id is read back from her own calendar; a failure is 'unknown', another conversation is never asked", async () => {
+  forgetCreated();
+  forgetSeen();
+  const MANAGE = "mcp__google__manage_event";
+  const calls: string[][] = [];
+  setEventReader(async (tenantId, eventId) => (calls.push([tenantId, eventId]), "Event Details:\n- Title: Piano lesson\n- Starts: 2026-10-29T16:00:00+01:00\n- Ends: 2026-10-29T17:00:00+01:00"));
+  assert.equal(await objectLines("tenant:ann", MANAGE, { action: "delete", event_id: "ev1" }), "\nNamed: “Piano lesson”, 2026-10-29T16:00:00+01:00");
+  assert.deepEqual(calls, [["ann", "ev1"]]);
+  assert.equal(await objectLines("tenant:ann", MANAGE, { action: "create", summary: "x", event_id: "ev2" }), "", "a call that names itself needs no read");
+  assert.match(await objectLines("g-1", MANAGE, { action: "delete", event_id: "ev1" }), /^\nNamed: unknown/, "only a friend's own conversation reads her calendar");
+  assert.equal(calls.length, 1);
+  setEventReader(async () => { throw new Error("down"); });
+  assert.match(await objectLines("tenant:ann", MANAGE, { action: "delete", event_id: "ev3" }), /^\nNamed: unknown/);
+  assert.equal(eventLabel('{"summary":"Dentist","start":{"dateTime":"2026-10-30T09:00:00Z"}}'), "“Dentist”, 2026-10-30T09:00:00Z");
+  assert.equal(eventLabel("nothing useful"), undefined);
 });

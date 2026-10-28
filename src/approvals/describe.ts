@@ -13,7 +13,7 @@ const named = (input: Record<string, unknown>): boolean => Object.entries(input)
 
 const LOOKUP_MS = 3000;
 
-export async function objectLines(conversation: string, tool: string, input: Record<string, unknown>, lookup?: (tool: string, input: Record<string, unknown>) => Promise<string | undefined>): Promise<string> {
+export async function objectLines(conversation: string, tool: string, input: Record<string, unknown>, lookup?: (tool: string, input: Record<string, unknown>, conversation: string) => Promise<string | undefined>): Promise<string> {
   if (named(input) || idsInCall(input).length === 0) return ""; // the call says what it is about itself, or it names no object
   const made = createdLabel(conversation, input);
   if (made) return `\nNamed: ${made} (the assistant created it earlier in this conversation)`;
@@ -23,7 +23,7 @@ export async function objectLines(conversation: string, tool: string, input: Rec
   if (find) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const found = await Promise.race([find(tool, input), new Promise<undefined>((r) => (timer = setTimeout(() => r(undefined), LOOKUP_MS)))]);
+      const found = await Promise.race([find(tool, input, conversation), new Promise<undefined>((r) => (timer = setTimeout(() => r(undefined), LOOKUP_MS)))]);
       if (found?.trim()) return `\nNamed: ${found.trim().slice(0, 200)}`;
     } catch {
       /* quietly: no label */
