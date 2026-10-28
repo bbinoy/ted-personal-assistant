@@ -74,9 +74,8 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `routine_runs` | last period of each routine (a routine note), keyed by the note's file name |
 | `items`, `task_events`, `reminders`, `group_remind_noted` | tasks, append-only history, claimed reminders, a group notice mark |
 | `learned_changes`, `learned_batches`, `voice_*`, `friend` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
-| `pending_*`, `suggestion_asks` | unused; a shipped migration is never edited; `pending_*` is emptied nightly |
 
-- **Adding state is one migration:** append a step to `CONV_SCHEMA`, write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound. Older code refuses a newer file (`NewerSchemaError`).
+- **Adding state is one migration:** append a step to `CONV_SCHEMA`, write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound or is keyed by something that can go away. Older code refuses a newer file (`NewerSchemaError`).
 - **Damage.** Every open runs `integrity_check`. Only the agent reacts: it writes `assistant.db.damaged`, sets the file aside and starts a fresh database. Chat keeps working; that conversation's background work is refused (`mayRun` answers `damaged`) and the owner is told once a day (`noticeDamaged`). `npm run doctor` fails until `npm run convdb -- accept <convId>`.
 - **Stays a file:** `messages.jsonl`, `notes/`, `voices/`, `tenant.json`, `meta.json` (a group's identity must survive a set-aside database) and the `search.sqlite` cache.
 
@@ -385,7 +384,7 @@ Every model call re-sends the whole context, so the levers are what the model se
 - **Connectors are waited for at start-up** (`MCP_CONNECTION_NONBLOCKING=false`), or the first call runs without its tools and the cache is lost. The prompt cache lives an hour; per-turn changes go in the turn's message, not the system prompt (`src/run/turncontext.ts`).
 - Every answered turn logs one `timing` line of durations (`src/core/timing.ts`). The run gate and lease are under "The run model".
 
-**Retention.** `src/core/retention.ts` is a registry of rules plus a tick job that runs the due ones once a day from 03:30; file rules are in `src/heartbeat/retentionrules.ts`, stores register their own. `RETENTION=off` stops it; `npm run retention -- --dry-run|--now`.
+**Retention.** `src/core/retention.ts` is a registry of rules plus a tick job that runs the due ones once a day from 03:30; file rules are in `src/heartbeat/retentionrules.ts`, stores register their own. `RETENTION=off` stops it; `npm run retention -- --dry-run|--now`. The `conv-db` rule trims every conversation's `assistant.db` (seen mail, held posts, voice notes, learned rows, old meetings) and removes state keyed by something that can disappear: a `routine_runs` row whose `routine-<name>.md` note is gone (a broken note still counts as there; a run in progress stays until it is stale), and a `claimed`/`retry` reminder mark older than a day whose task is done, dropped or gone (an open task keeps its marks). Audit, task history and the payments ledger are never pruned this way.
 
 **Text length tiers.** `LIMITS` in `src/core/sanitize.ts` names one constant per purpose (a control name, a subject, a log line, a message, a mail body, a page view, a text file). One tool result is capped by 60,000; `capTotal` in `src/core/toolclean.ts`.
 

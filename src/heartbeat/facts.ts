@@ -8,7 +8,7 @@ import { takeWelcome } from "../core/welcome.ts";
 import { learnedFact } from "../memory/learned.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
-import { scheduledIn } from "../modules/tasks/routinelist.ts";
+import { brokenText, scheduledIn } from "../modules/tasks/routinelist.ts";
 
 import { reminderFacts } from "../tasks/remind.ts";
 import { meetingFacts } from "../tasks/meetings.ts";
@@ -140,7 +140,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   };
 
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts, learned ? fence("notes_changed_facts", learned.text) : "" ].filter(Boolean);
-  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.join("; ")}.` : "", failingLooksFact(conv), capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
+  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
   let settled = false;
   return {
     blocks,

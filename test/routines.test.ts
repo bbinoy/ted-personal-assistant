@@ -310,7 +310,7 @@ test("an unparseable when: is never silent: the status says so, the tool reply s
   const o = { notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
   const s = scheduledIn(o);
   assert.deepEqual(s.routines, []);
-  assert.match(s.broken[0]!, /routine-fun-fact\.md has a when: line that cannot be read \(Cannot read the repeat rule "whenever you feel like it"/);
+  assert.match(`${s.broken[0]!.file} ${s.broken[0]!.why}`, /routine-fun-fact\.md has a when: line that cannot be read \(Cannot read the repeat rule "whenever you feel like it"/);
   assert.match(F.factsFor(conv, o.now, "chat").status.join("\n"), /Routine notes that will never run, fix their when: line[\s\S]*routine-fun-fact\.md has a when: line that cannot be read/);
   assert.match(F.factsFor(conv, o.now, "look").status.join("\n"), /will never run/);
   assert.match(scheduleLines(conv.convId, o)[0]!, /never runs/);
@@ -319,7 +319,7 @@ test("an unparseable when: is never silent: the status says so, the tool reply s
   assert.match(bad, /This routine will NOT run: routine-fun-fact\.md has a when: line that cannot be read/);
   const none = groupWith(undefined);
   assert.match(routineNoteReply("Write", { file_path: join(none.notesDir, "routine-fun-fact.md") }, none.notesDir, ZONE, o.now)!, /has no `when:` line/);
-  assert.match(scheduledIn({ ...o, notesDir: none.notesDir }).broken[0]!, /no `when:` line/);
+  assert.match(scheduledIn({ ...o, notesDir: none.notesDir }).broken[0]!.why, /no `when:` line/);
   writeFileSync(file, "---\nwhen: every mon and thu at 9\n---\nSummarise my week.\n");
   assert.equal(routineNoteReply("Edit", { file_path: file }, conv.notesDir, ZONE, o.now), "Routine saved: every monday, thursday at 09:00, next today 09:00 (Europe/Berlin). Tell the person this schedule and when it runs next, in your own words.");
   assert.equal(routineNoteReply("Write", { file_path: join(conv.notesDir, "people-anna.md") }, conv.notesDir, ZONE, o.now), undefined, "only routine notes");
