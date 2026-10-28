@@ -2,6 +2,7 @@ import { noteRateLimit } from "../core/cooldown.ts";
 import { reportKeyProblem } from "./keynotice.ts";
 import { cooldownKeyOf, LOGIN, type Payer } from "./payer.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
+import { holdFact } from "../core/ownerfact.ts";
 import { OWNER } from "../core/settings.ts";
 
 // The failures that have their own message, instead of "something broke".
@@ -58,7 +59,7 @@ const REFUSALS: Readonly<Record<Reason, Readonly<Partial<Record<Audience, Say>>>
   refused: { owner: `The shared API key was refused, so friends get no answers. ${FIXES.refused.fix}`, friend: `Anthropic refused the request made with the account I run on for friends. ${OWNER} needs to check it; I'll try again later.` },
   timeout: { owner: "That ran too long and I stopped it. Raise RUN_MAX_MINUTES_CHAT in .env and restart, or ask for something smaller.", group: FAILED, friend: FAILED },
   connector: { owner: `A connector I need (Notion, Calendar or Gmail) did not answer. ${FIXES.connector.fix}`, group: FAILED, friend: FAILED },
-  reconnect: { owner: `A friend's Notion or Google connection no longer works. ${FIXES.reconnect.fix}`, group: FAILED, friend: FAILED },
+  reconnect: { group: FAILED, friend: FAILED }, // (the owner is not told in chat: reportReconnect holds a fact for her next look, and `npm run doctor` lists who)
   other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}`, group: FAILED, friend: FAILED },
   "owner-budget": { group: `I've used up my budget for today, so I can't answer until tomorrow. ${OWNER} can raise it if it is urgent.` },
   "shared-budget": { friend: "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved." },
@@ -75,6 +76,12 @@ export function refusalOnce(reason: Reason, audience: Audience, convId: string, 
   const every = reason === "cooldown" || reason === "no-key" ? 30 * 60_000 : undefined;
   const text = refusal(reason, audience, o);
   return text !== undefined && takeCapNotice(`refusal:${reason}:${convId}`, now, every) ? text : undefined;
+}
+// A friend's Notion or Google connection failed: not urgent and not the owner's own turn, so a FACT for her next look (once per conversation per day), no chat text. No name, no link.
+export function reportReconnect(convId: string, now = Date.now()): boolean {
+  if (!takeCapNotice(`reconnect:${convId}`, now)) return false;
+  holdFact(`A friend's ${FIXES.reconnect.what}. ${FIXES.reconnect.fix}`, new Date(now));
+  return true;
 }
 export const noticeFor = (audience: Audience) => (e: unknown): string | undefined => refusal(causeOf(e), audience);
 const CONNECTOR_WORDS = /\bmcp\b|connector|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|server .*(?:failed|not connected|disconnected)/i;

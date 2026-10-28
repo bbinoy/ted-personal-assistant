@@ -54,6 +54,7 @@ test("the failing-looks fact carries the cause's what and fix, for the owner onl
 test("the owner's chat failure notices end with the step for their cause; friends and groups are sent to no terminal", () => {
   for (const c of CAUSES) {
     if (c === "timeout") continue; // (a chat turn's own ceiling, below)
+    if (c === "reconnect") continue; // (a friend's broken connection is a fact for her next look, systemstatus.test.ts)
     const text = noticeFor("owner")(SAMPLES[c])!;
     if (c === "other") assert.ok(text.endsWith(FIXES.other.fix), text);
     else assert.ok(text.endsWith(FIXES[c].fix), `${c}: ${text}`);

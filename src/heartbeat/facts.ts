@@ -1,5 +1,7 @@
 import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
-import { openCount } from "../approvals/approvals.ts";
+import { forgetLapsed, lapsedIn, openCount, type Lapsed } from "../approvals/approvals.ts";
+import { convDb } from "../core/convdb.ts";
+import { told } from "../core/told.ts";
 import type { Conversation } from "../conversation/conversation.ts";
 import { fence } from "../core/fence.ts";
 import { dayAt, dayIn, timeIn } from "../core/timezone.ts";
@@ -55,6 +57,17 @@ export function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string)
   if (posts.length === 0) return "";
   const lines = posts.map((e) => `[${dayIn(new Date(e.at), zone)} ${timeIn(new Date(e.at), zone)}] ${oneLine(e.text, OWN_POST_CHARS)}`);
   return `Your own posts here in the last ${OWN_POSTS_DAYS} days (newest first):\n${fence("own_posts", lines.join("\n"))}\nDo not repeat a fact, joke, quote or idea you posted in the last ${OWN_POSTS_DAYS} days; a recurring post (daily fact, pep talk) must be new each time.`;
+}
+
+// Background approvals that lapsed unanswered (approvals.ts lapsedIn) and were not yet told to a look of this conversation: one line each, with how long ago (the label is the action as the approval details describe it).
+const LAPSED_DAYS = 7;
+const lapsedKey = (l: Lapsed) => `lapsed:${l.at}`;
+export function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): string {
+  const db = convDb(convId);
+  const fresh = entries.filter((l) => now - l.at < LAPSED_DAYS * 86_400_000 && !db.get("SELECT 1 FROM told WHERE key = ?", lapsedKey(l)));
+  if (!fresh.length) return "";
+  const lines = fresh.map((l) => `${oneLine(l.label, 120)} (no answer within ${l.wait}; ${Math.max(1, Math.round((now - l.at) / 60_000))} min ago, nothing was done)`);
+  return `Approvals that lapsed unanswered, nothing was done:\n${fence("lapsed_approvals", lines.join("\n"))}`;
 }
 
 // Everything held back (notices.ts takeHeld, newest first: quiet hours, /quiet or the day's cap) as a fact block written by code: what was written when and that it was not delivered, at most HELD_MAX,
@@ -139,8 +152,11 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
     if (!started.has(name) && routines?.due?.routine.name === name) (started.add(name), markStarted(conv.convId, name, routines.due.plan.slot.date, Date.now())); // (a second delegation of the same routine is not another attempt)
   };
 
+  const lapsedNow = kind === "look" && !isBusy(conv.key, "lapsed") ? lapsedIn(conv.key).slice() : [];
+  const lapsed = lapsedFact(conv.convId, lapsedNow, t);
+  if (lapsed) grab("lapsed");
   const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts, learned ? fence("notes_changed_facts", learned.text) : "" ].filter(Boolean);
-  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
+  const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), lapsed, capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
   let settled = false;
   return {
     blocks,
@@ -169,6 +185,10 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
         if (handed.length && (kind === "look" || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
         if (prepping.length && (kind === "look" ? !abandoned : end.said)) afterPrep(conv, prepping, end.said, t); // (a look a message overtook leaves them claimed: the next run is handed them)
+        if (lapsed && end.ended && !abandoned) {
+          for (const l of lapsedNow) told(convDb(conv.convId), lapsedKey(l), { once: true });
+          forgetLapsed(conv.key, lapsedNow);
+        }
         if (learned && (end.said || end.held)) learned.told();
       } finally {
         for (const id of mine) busy.get(conv.key)?.delete(id);
