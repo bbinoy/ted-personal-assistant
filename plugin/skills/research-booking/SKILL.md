@@ -19,7 +19,7 @@ go on ("assuming 2 adults, Friday to Sunday").
 
 - Look for specifics: exact departures and arrival times, changes, duration, price; for stays the name,
   neighbourhood, room type, total price for the dates, cancellation terms, rating and number of reviews.
-- Start with `WebSearch` to find the right sites; use `WebFetch`, where you have it, for pages that need no interaction.
+- Start with `WebSearch` to find the right sites (search craft and checking dates: the web-research skill); use `WebFetch`, where you have it, for pages that need no interaction.
 - When prices, availability or results sit behind a form or a date picker, use the `browse` tool (give it
   the whole task: site, dates, people, filters, what to read out). Don't stop at a landing page.
 - Trains: get the connections first from the free timetable API, with `WebFetch` on

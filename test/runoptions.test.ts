@@ -138,7 +138,7 @@ test("run options: what differs between the owner, a group and a tenant, and onl
   assert.ok(c.tenant.envRemoved.includes("CLAUDE_CODE_OAUTH_TOKEN"));
   assert.deepEqual([c.owner.run.tenant, c.group.run.tenant], [undefined, undefined]);
   assert.deepEqual(c.group.mcpServers, c.tenant.mcpServers, "a group and a tenant have the same servers (no connectors)");
-  const shared = ["research-booking", "surf-conditions", "draw"].map((s) => `ted-personal-assistant:${s}`); // (never a private skill: no brief, mail, calendar, notion, setup, radar)
+  const shared = ["research-booking", "web-research", "surf-conditions", "draw"].map((s) => `ted-personal-assistant:${s}`); // (never a private skill: no brief, mail, calendar, notion, setup, radar)
   assert.deepEqual([c.group.skills, c.tenant.skills, c.group.settingSources, c.tenant.settingSources], [shared, shared, [], []]);
 });
 

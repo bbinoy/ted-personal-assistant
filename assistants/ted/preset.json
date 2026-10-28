@@ -26,6 +26,6 @@
       { "name": "weekly-review" },
       { "name": "setup", "required": true }
     ],
-    "order": ["daily-brief", "mail", "mailbird", "gmail", "calendar", "tasks", "meeting-prep", "research-booking", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"]
+    "order": ["daily-brief", "mail", "mailbird", "gmail", "calendar", "tasks", "meeting-prep", "research-booking", "web-research", "follow-through", "stay-in-touch", "setup", "surf-conditions", "draw"]
   }
 }

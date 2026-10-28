@@ -3,7 +3,7 @@
     "run": {
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "4f30c55843f27693"
+        "sha": "bfd79e139394915d"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -135,6 +135,7 @@
         "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:web-research",
         "ted-personal-assistant:follow-through",
         "ted-personal-assistant:stay-in-touch",
         "ted-personal-assistant:setup",
@@ -162,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "4f30c55843f27693"
+        "sha": "bfd79e139394915d"
       },
       "snapshot": false
     },
@@ -208,6 +209,7 @@
       "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:web-research",
       "ted-personal-assistant:follow-through",
       "ted-personal-assistant:stay-in-touch",
       "ted-personal-assistant:setup",
@@ -317,7 +319,7 @@
     "run": {
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "86adc69e35f0052e"
+        "sha": "3e8e652706666d78"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -358,6 +360,7 @@
       ],
       "skills": [
         "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:web-research",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
       ],
@@ -377,7 +380,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "86adc69e35f0052e"
+        "sha": "3e8e652706666d78"
       },
       "snapshot": false
     },
@@ -414,6 +417,7 @@
     ],
     "skills": [
       "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:web-research",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],
@@ -434,7 +438,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "1eaadf7c5b45cda7"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -483,6 +487,7 @@
       ],
       "skills": [
         "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:web-research",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
       ],
@@ -501,7 +506,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "1eaadf7c5b45cda7"
       },
       "snapshot": false
     },
@@ -538,6 +543,7 @@
     ],
     "skills": [
       "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:web-research",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],
@@ -561,7 +567,7 @@
     "run": {
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "4f30c55843f27693"
+        "sha": "bfd79e139394915d"
       },
       "maxTurns": 40,
       "maxBudgetUsd": 2,
@@ -690,6 +696,7 @@
         "ted-personal-assistant:tasks",
         "ted-personal-assistant:meeting-prep",
         "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:web-research",
         "ted-personal-assistant:follow-through",
         "ted-personal-assistant:stay-in-touch",
         "ted-personal-assistant:setup",
@@ -720,7 +727,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "4f30c55843f27693"
+        "sha": "bfd79e139394915d"
       },
       "snapshot": false
     },
@@ -766,6 +773,7 @@
       "ted-personal-assistant:tasks",
       "ted-personal-assistant:meeting-prep",
       "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:web-research",
       "ted-personal-assistant:follow-through",
       "ted-personal-assistant:stay-in-touch",
       "ted-personal-assistant:setup",
@@ -875,7 +883,7 @@
     "run": {
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "86adc69e35f0052e"
+        "sha": "3e8e652706666d78"
       },
       "maxTurns": 8,
       "maxBudgetUsd": 0.5,
@@ -917,6 +925,7 @@
       ],
       "skills": [
         "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:web-research",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
       ],
@@ -939,7 +948,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "86adc69e35f0052e"
+        "sha": "3e8e652706666d78"
       },
       "snapshot": false
     },
@@ -976,6 +985,7 @@
     ],
     "skills": [
       "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:web-research",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],
@@ -996,7 +1006,7 @@
     "run": {
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "1eaadf7c5b45cda7"
       },
       "maxTurns": 12,
       "maxBudgetUsd": 0.5,
@@ -1046,6 +1056,7 @@
       ],
       "skills": [
         "ted-personal-assistant:research-booking",
+        "ted-personal-assistant:web-research",
         "ted-personal-assistant:surf-conditions",
         "ted-personal-assistant:draw"
       ],
@@ -1067,7 +1078,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "9d4abebfd1e29b7f"
+        "sha": "1eaadf7c5b45cda7"
       },
       "snapshot": false
     },
@@ -1104,6 +1115,7 @@
     ],
     "skills": [
       "ted-personal-assistant:research-booking",
+      "ted-personal-assistant:web-research",
       "ted-personal-assistant:surf-conditions",
       "ted-personal-assistant:draw"
     ],

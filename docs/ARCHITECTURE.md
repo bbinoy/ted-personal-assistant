@@ -335,7 +335,7 @@ A tool is a module: a plain `ToolModule` (`src/modules/types.ts`) in `src/module
 - Whatever has the action `send` is judged the same way for any provider; `mailView` normalises an outgoing mail so approval text and judge input are identical.
 - `hiddenTools`, `HIDDEN_CONNECTORS` and `<MODULE>_TOOLS` (`NOTION_TOOLS`, `MAILBIRD_TOOLS`, `GMAIL_TOOLS`, `DRIVE_TOOLS`, `DOCS_TOOLS`) only decide what the model sees, not what needs approval.
 
-**Skills** are an SDK plugin in `plugin/`, offered with the `skills` option so nothing from `~/.claude/skills` leaks in. `skillsFor(capabilities, owner)` is the list: the owner's is the whole plugin (`ownerSkills()`); a group's or friend's is the shared skills her capabilities allow.
+**Skills** are an SDK plugin in `plugin/`, offered with the `skills` option so nothing from `~/.claude/skills` leaks in. `skillsFor(capabilities, owner)` is the list: the owner's is the whole plugin (`ownerSkills()`); a group's or friend's is the shared skills her capabilities allow. The shared ones are `web-research` (every conversation with web search: how to search, verify and date a find), `research-booking`, `surf-conditions` and `draw`.
 
 - A skill's frontmatter may say `delegate: sonnet|opus` and `tools: [...]`.
 - The `setup` skill saves calendars, tasks and writing style as `setup-` and `voice-` notes (`missingSetup`).
