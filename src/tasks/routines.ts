@@ -6,7 +6,7 @@ import { addDays, localOf, showInstant } from "./when.ts";
 // ONE schedule mechanism: a routine is something the assistant does at set times, declared as DATA by a repeat rule (repeat.ts, the grammar tasks use): a `when:` line in a `routine-` note of a conversation (a person asked "every morning at 8 send
 // Anna a pep talk", or set up the daily brief, which is a note that says to run that skill: the look hands what the note says to an expert). This file is the PLANNER and the record. Code computes "is it due" and "was it done" from the clock in the conversation's zone and the
 // record (assistant.db routine_runs, one row per routine, keyed by the note's file name); the model only does the work. At most one run per occurrence (the slot's date); a run that
-// died is retried once; if the Mac slept through the time the routine still runs once when it wakes, within `catchUpHours` of its time, else that occurrence is skipped and the next brief says so once.
+// died is retried once; if the Mac slept through the time the routine still runs once when it wakes, within `catchUpHours` of its time, else that occurrence is skipped (no chat message: the log and the doctor show it) and the next brief says so in one line, once.
 // An edited `when:` changes nothing already done: the new rule is read from the next occurrence on (the record is per date, so what ran today does not run again today).
 
 export interface Routine {
@@ -175,6 +175,7 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
   const lines: string[] = [];
   let due: RoutineFacts["due"];
   const told: string[] = [];
+  const missed: { name: string; line: string }[] = [];
   for (const p of planned) {
     const { routine: r, plan } = p;
     if (plan.state === "running") lines.push(`${r.name}: started ${Math.round((now.getTime() - plan.since.getTime()) / 60_000)} min ago, the expert is still working; wait.`);
@@ -186,11 +187,14 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look (code makes it due again by itself).`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
-      if (row && !row.told) {
-        told.push(r.name);
-        lines.push(`${r.name}: did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"}); it will not be redone. Tell ${o.who} in one line, in the brief you delegate or in your own message if no brief is due today.`);
-      }
+      if (row && !row.told) missed.push({ name: r.name, line: `${r.name} did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"}) and will not be redone` });
     }
+  }
+  // A missed routine is system status: the person has nothing to do, so it is no message of its own (the log and the doctor show it, routineStatus). It rides along, as ONE line, with the next routine message
+  // a look delegates; it is counted as told then, and waits for that look while no routine is due.
+  if (due && missed.length) {
+    told.push(...missed.map((m) => m.name));
+    lines.push(`Missed, nothing for ${o.who} to do: ${missed.map((m) => m.line).join("; ")}. Put it as one short line in the message the expert writes now, if that message is a brief (daily brief, evening wrap, weekly review); for any other routine say nothing about it.`);
   }
   return { text: lines.join(" "), ...(due ? { due } : {}), told };
 }
