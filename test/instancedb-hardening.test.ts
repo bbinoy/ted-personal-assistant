@@ -95,7 +95,6 @@ test("a failing database: the heartbeat tick, a look's record, a charge, a notic
     assert.doesNotThrow(() => B.recordCost(1));
     assert.equal(B.budgetSpent(), true, "fail closed: no reading, no background work");
     assert.equal(B.instanceKeyOverBudget(), true);
-    assert.equal(B.tenantOverBudget(friendConvId(BO), 5), true);
     assert.equal(N.takeCapNotice("x"), false, "nobody is told twice or told for nothing");
     assert.deepEqual(I.connectionState(BO, "notion"), { state: "none" });
     assert.doesNotThrow(() => I.markNeedsReconnect(BO, "notion"));

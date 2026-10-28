@@ -82,11 +82,11 @@ test("a friend's time zone lives in her tenant.json; a group and the owner have 
   assert.equal(zoneOf(owner()), Z.systemZone());
   assert.equal(zoneOf(group("g-zone")), Z.systemZone());
 
-  writeFileSync(ctx.configFile, JSON.stringify({ language: "Portuguese", dailyBudgetUsd: 3 }));
+  writeFileSync(ctx.configFile, JSON.stringify({ language: "Portuguese", persona: "dry" }));
   assert.equal(T.setTimeZone(rec.id, "Europe/Lisbon")?.id, rec.id);
   assert.equal(zoneOf(tenant(rec.id)), "Europe/Lisbon");
   const stored = JSON.parse(readFileSync(ctx.configFile, "utf8"));
-  assert.deepEqual(stored, { language: "Portuguese", dailyBudgetUsd: 3, timeZone: "Europe/Lisbon" }, "the other overrides are kept");
+  assert.deepEqual(stored, { language: "Portuguese", persona: "dry", timeZone: "Europe/Lisbon" }, "the other overrides are kept");
   assert.ok(describeTenants().some((l) => l.startsWith(rec.id) && l.includes("time zone Europe/Lisbon")));
 
   assert.throws(() => T.setTimeZone(rec.id, "Mars/Olympus"), /not a time zone/);
@@ -96,7 +96,7 @@ test("a friend's time zone lives in her tenant.json; a group and the owner have 
 
   T.setTimeZone(rec.id, undefined);
   assert.equal(zoneOf(tenant(rec.id)), Z.systemZone());
-  assert.deepEqual(JSON.parse(readFileSync(ctx.configFile, "utf8")), { language: "Portuguese", dailyBudgetUsd: 3 });
+  assert.deepEqual(JSON.parse(readFileSync(ctx.configFile, "utf8")), { language: "Portuguese", persona: "dry" });
 
   writeFileSync(ctx.configFile, JSON.stringify({ timeZone: "Not/AZone" }));
   assert.equal(zoneOf(tenant(rec.id)), Z.systemZone(), "a damaged value falls back to the owner's zone instead of failing the look");

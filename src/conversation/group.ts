@@ -1,5 +1,5 @@
 import { clockLine } from "../core/brief.ts";
-import { budgetSpent, groupOverBudget } from "../core/budget.ts";
+import { budgetSpent } from "../core/budget.ts";
 import { editNote } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { reactionJournal } from "../core/reaction.ts";
@@ -192,11 +192,10 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
       );
     };
     if (isPaused(now)) return;
-    // The owner's day is spent, or this group's own (a noisy group must not spend the owner's): someone addressed us and it turned the answer away, so say so once a day from the one refusal table
+    // The owner's day (the login's, which the groups run on) is spent: someone addressed us and it turned the answer away, so say so once a day from the one refusal table
     // (tenants/errors.ts), never for a message that was not meant for us.
-    const spent = budgetSpent() ? "owner-budget" : groupOverBudget(conv.key) ? "own-budget" : undefined;
-    if (spent) {
-      const line = pending() ? refusalOnce(spent, "group", conv.convId, {}, now.getTime()) : undefined;
+    if (budgetSpent()) {
+      const line = pending() ? refusalOnce("owner-budget", "group", conv.convId, {}, now.getTime()) : undefined;
       if (line) await batch.run(async () => void (await delivery.runTurn(conv, { run: async () => ({ text: line }), background: true, announce: false, kind: "notice" })));
       return;
     }

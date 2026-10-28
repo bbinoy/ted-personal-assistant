@@ -25,7 +25,7 @@ export interface Preset {
   readonly rhythm: Rhythm;
   // categories: every note category; background: the ones a heartbeat look may write itself (facts, never rules); dream: the ones the owner's dream may write; others: the ones the notes (and dreams) of a group and of a friend have.
   readonly notes: { readonly categories: readonly string[]; readonly dream: readonly string[]; readonly others: readonly string[]; readonly background: readonly string[] };
-  readonly limits: Limits; // one set for every conversation's runs (a friend's have their own: tenants.ts)
+  readonly limits: Limits; // one set for every conversation's runs: the owner's, each group's and each friend's
   readonly skills: { readonly core: readonly CoreSkill[]; readonly order: readonly string[] };
   readonly expert: { readonly model: string; readonly maxTurns: number }; // the general expert every run may delegate to (run/delegation.ts); expert-opus is the same on OPUS_MODEL
   readonly persona: Readonly<Record<PromptKey, Template>>;

@@ -127,9 +127,9 @@ test("run options: what differs between the owner, a group and a tenant, and onl
     "disallowedTools", "mcpServers", "run.conversation", "run.experts", "run.groupId", "run.kind", "run.memory",
     "run.sessionConv", "run.skills", "run.stopScope", "run.systemPrompt", "run.tools", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append", "tools",
   ]);
-  // group -> tenant: her limits, notes, session and persona, her ledger and key; the instance key reaches her environment and the owner's logins leave it
+  // group -> tenant: notes, session and persona, her ledger and key; the instance key reaches her environment and the owner's logins leave it
   assert.deepEqual(differing(c.group, c.tenant), [
-    "envChanged.ANTHROPIC_API_KEY", "envRemoved", "maxBudgetUsd", "maxTurns", "run.conversation", "run.groupId", "run.kind", "run.maxBudgetUsd", "run.maxTurns", "run.memory", "run.sessionConv", "run.stopScope", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
+    "envChanged.ANTHROPIC_API_KEY", "envRemoved", "run.conversation", "run.groupId", "run.kind", "run.memory", "run.sessionConv", "run.stopScope", "run.systemPrompt", "run.tenant", "settings.autoMemoryDirectory", "system.append",
   ]);
   // the invariants the table above must not hide
   const bg = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" }; // (every run: an expert never runs in the background, delegation.ts)

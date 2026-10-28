@@ -24,7 +24,7 @@ export interface TenantRun {
   keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after it changed
   ledger: string;
   logFile: string; // her history: what search_logs reads
-  overBudget: () => boolean; // her own ledger against her own ceiling (the browse run asks)
+  overBudget: () => boolean; // the instance key's day is spent (the browse run asks)
 }
 
 export { tenantEnv }; // (payer.ts: the environment of a call on the instance key)
@@ -55,7 +55,7 @@ export function describeTenants(): string[] {
     const ctx = tenantContext(rec);
     const c = cooldownUntil(INSTANCE_KEY_COOLDOWN); // (the key is cooling down: for every friend alike)
     const connections = connectionSummary(rec);
-    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.ledger).toFixed(2)} of ${ctx.dailyBudgetUsd}${c ? `; paused until ${when(c)}` : ""}`);
+    lines.push(`${rec.id} (${rec.name}): ${rec.role}, ${rec.status}; capabilities ${[...capabilitiesOfRecord(rec)].join(", ") || "none"}${connections ? `; connections: ${connections}` : ""}${ctx.config.timeZone ? `; time zone ${ctx.config.timeZone}` : ""}; today ${spentToday(ctx.ledger).toFixed(2)}${c ? `; paused until ${when(c)}` : ""}`);
   }
   return lines;
 }

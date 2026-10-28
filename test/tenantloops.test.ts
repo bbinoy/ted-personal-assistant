@@ -29,7 +29,7 @@ const { InstanceKeyError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
 
 const on = settings as unknown as Record<string, unknown>;
-on.instanceKeyDailyUsd = 1e9; // a friend's day is spent by hand (recordCost): her own ceiling is under test; the key's is test/spendcaps.test.ts (a friend's spend IS the key's in the one ledger)
+on.instanceKeyDailyUsd = 1e9; // a friend's day is spent by hand (recordCost): the key's ceiling is test/spendcaps.test.ts (a friend's spend IS the key's in the one ledger)
 on.briefBackstopHour = 24;
 const KEY = "instance-key-for-the-loop-tests";
 const NOON = new Date(2026, 9, 14, 12, 0, 0);
@@ -156,9 +156,11 @@ test("a tenant's suspension, cooldown, budget and a missing instance key each st
   const cool = rig();
   assert.equal(await cool.wakeups.look(tenant(anna.id), NOON), "cooldown");
   resetCooldown();
+  on.instanceKeyDailyUsd = 50; // the key's day is what stops a friend
   recordCost(100, T.tenantContext(anna).ledger);
   const rich = rig();
   assert.equal(await rich.wakeups.look(tenant(anna.id), NOON), "blocked");
+  on.instanceKeyDailyUsd = 1e9;
   assert.equal(rich.seen.runs.length, 0, "no run");
   // no instance key: no run, one notice for the admin however many tenants and ticks
   const bea = person("Bea");
@@ -325,15 +327,13 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   assert.equal(prompts.length, 0);
 });
 
-test("a tenant's dream: nothing new said, suspended, cooling down, over budget, no key, TENANTS off; and one failing never stops the next", async () => {
+test("a tenant's dream: nothing new said, suspended, cooling down, no key, TENANTS off; and one failing never stops the next", async () => {
   const quiet = person("Pia");
   const sus = person("Quin");
-  const poor = person("Sol");
   const fine = person("Tia");
   const boom = person("Uma");
-  for (const p of [sus, poor, fine, boom]) said(p, `${p.name} says something worth keeping about her plans`);
+  for (const p of [sus, fine, boom]) said(p, `${p.name} says something worth keeping about her plans`);
   T.setStatus(sus.id, "suspended");
-  recordCost(100, T.tenantContext(poor).ledger);
   const ran: string[] = [];
   const alerts = ownerFacts();
   resetOwnerFacts();
@@ -345,7 +345,7 @@ test("a tenant's dream: nothing new said, suspended, cooling down, over budget, 
         if (conv.tenantId === boom.id) throw new Error("model down");
         return { ops: [] };
       },
-      conversations: friends(() => [quiet.id, sus.id, poor.id, boom.id, fine.id]),
+      conversations: friends(() => [quiet.id, sus.id, boom.id, fine.id]),
     });
   };
   await mk(KEY).run(NOON);

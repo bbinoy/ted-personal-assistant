@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { RunOptions } from "./agentrun.ts";
-import { tenantOverBudget } from "../core/budget.ts";
+import { instanceKeyOverBudget } from "../core/budget.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { recentNotices } from "../core/messages.ts";
 import { readIndex, readNotes, writeIndex } from "../memory/notes.ts";
@@ -65,7 +65,7 @@ export interface RunInputs {
   now?: Date;
 }
 
-type Shape = Pick<RunOptions, "systemPrompt" | "tenant"> & Partial<Pick<RunOptions, "maxTurns" | "maxBudgetUsd">> & { notes: { dir: string; zone: string } };
+type Shape = Pick<RunOptions, "systemPrompt" | "tenant"> & { notes: { dir: string; zone: string } };
 
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: chatSystem(i.now), // (only what is stable: what changes between two runs is turnContext below)
@@ -88,8 +88,6 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   return {
     systemPrompt: tenantSystem({ name: ctx.name, caps, looker: lookerOf(conv), timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: toolsFor(caps, { who: "tenant", attended: true }).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
     notes: { dir: ctx.notesDir, zone: zoneOf(conv) },
-    maxTurns: ctx.maxTurns,
-    maxBudgetUsd: ctx.maxBudgetUsdPerRun,
     tenant: {
       id: ctx.id,
       key: conv.key,
@@ -97,7 +95,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
       keyTag: createHash("sha256").update(apiKey).digest("hex").slice(0, 8),
       ledger: ctx.ledger,
       logFile: ctx.logFile,
-      overBudget: () => tenantOverBudget(ctx.ledger, ctx.dailyBudgetUsd),
+      overBudget: instanceKeyOverBudget,
     },
   };
 };
@@ -131,7 +129,7 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
   const { notes, ...rest } = shape;
   writeIndex(notes.dir, now, notes.zone); // (what changed since the last write: a note that expired, one the SDK's own writer or the person edited)
   return {
-    ...preset().limits, // (the preset's, the same for the owner and every group: a cold prompt cache alone can cost most of a dollar; a friend's shape sets her own)
+    ...preset().limits, // (the preset's, the same for every conversation: a cold prompt cache alone can cost most of a dollar)
     ...rest,
     kind,
     sessionConv: conv.convId,

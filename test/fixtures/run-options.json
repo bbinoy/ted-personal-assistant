@@ -432,8 +432,8 @@
   },
   "tenant": {
     "run": {
-      "maxTurns": 12,
-      "maxBudgetUsd": 0.5,
+      "maxTurns": 40,
+      "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
         "sha": "ec35f2aa205125ae"
@@ -542,8 +542,8 @@
       "ted-personal-assistant:draw"
     ],
     "permissionMode": "default",
-    "maxTurns": 12,
-    "maxBudgetUsd": 0.5,
+    "maxTurns": 40,
+    "maxBudgetUsd": 2,
     "envChanged": {
       "ANTHROPIC_API_KEY": "<instance-key>",
       "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
@@ -994,8 +994,8 @@
   },
   "tenantLook": {
     "run": {
-      "maxTurns": 12,
-      "maxBudgetUsd": 0.5,
+      "maxTurns": 40,
+      "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
         "sha": "ec35f2aa205125ae"
@@ -1108,8 +1108,8 @@
       "ted-personal-assistant:draw"
     ],
     "permissionMode": "default",
-    "maxTurns": 12,
-    "maxBudgetUsd": 0.5,
+    "maxTurns": 40,
+    "maxBudgetUsd": 2,
     "envChanged": {
       "ANTHROPIC_API_KEY": "<instance-key>",
       "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"

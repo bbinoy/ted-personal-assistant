@@ -73,15 +73,12 @@ export interface TenantConfig {
   language?: string; // the language she writes in, as a hint ("German")
   persona?: string; // how she would like the assistant to talk, in her words (data for the prompt, never rules)
   timeZone?: string; // her time zone ("Europe/Lisbon"): the clock of her heartbeat run and the day her notes expire on; absent: the owner's, the Mac's (timezone.ts)
-  dailyBudgetUsd?: number; // her own daily ceiling on the instance key
-  maxTurns?: number; // per run
-  maxBudgetUsdPerRun?: number; // per run
   // Her own switches (capabilityset.ts resolveCapabilities; they only ever take away): a tenant.json that says false never offers the tool.
   browse?: boolean; // false switches the browse tool off for her (it can never be switched on beyond BROWSE)
   voice?: boolean; // false switches the voice tool off for her
 }
 
-const KNOWN: readonly string[] = ["language", "persona", "timeZone", "dailyBudgetUsd", "maxTurns", "maxBudgetUsdPerRun", "browse", "voice"];
+const KNOWN: readonly string[] = ["language", "persona", "timeZone", "browse", "voice"];
 
 // Pure. Whatever is in the file, the result is a valid config and `problems` says what was left out. Never throws.
 export function parseTenantConfig(raw: unknown): { config: TenantConfig; problems: string[] } {
@@ -103,14 +100,6 @@ export function parseTenantConfig(raw: unknown): { config: TenantConfig; problem
     if (!isZone(r.timeZone)) problems.push("timeZone must be a time zone like Europe/Lisbon");
     else config.timeZone = (r.timeZone as string).trim();
   }
-  const num = (k: "dailyBudgetUsd" | "maxTurns" | "maxBudgetUsdPerRun", min: number, max: number) => {
-    if (r[k] === undefined) return;
-    if (typeof r[k] !== "number" || !Number.isFinite(r[k]) || (r[k] as number) < min || (r[k] as number) > max) return void problems.push(`${k} must be a number from ${min} to ${max}`);
-    config[k] = r[k] as number;
-  };
-  num("dailyBudgetUsd", 0, 1000);
-  num("maxTurns", 1, 40);
-  num("maxBudgetUsdPerRun", 0.01, 20);
   for (const k of ["browse", "voice"] as const) {
     if (r[k] === undefined) continue;
     if (typeof r[k] !== "boolean") problems.push(`${k} must be true or false`);
@@ -137,9 +126,6 @@ export interface TenantContext {
   role: Role;
   credential: Credential;
   config: TenantConfig;
-  dailyBudgetUsd: number;
-  maxTurns: number;
-  maxBudgetUsdPerRun: number;
   language?: string;
   persona?: string;
 }
@@ -185,9 +171,6 @@ export function tenantContext(rec: TenantRecord): TenantContext {
     role: rec.role,
     credential: rec.credential,
     config,
-    dailyBudgetUsd: config.dailyBudgetUsd ?? settings.tenantDailyBudgetUsd,
-    maxTurns: config.maxTurns ?? 12,
-    maxBudgetUsdPerRun: config.maxBudgetUsdPerRun ?? 0.5,
     language: config.language,
     persona: config.persona,
   };

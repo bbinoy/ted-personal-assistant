@@ -30,7 +30,6 @@ test("a damaged instance.db: the start records it (and leaves the file as it is)
   assert.equal(B.budgetSpent(), true);
   assert.equal(B.spentToday(), Number.POSITIVE_INFINITY);
   assert.equal(B.instanceKeyOverBudget(), true);
-  assert.equal(B.groupOverBudget("any-group"), true);
   assert.doesNotThrow(() => B.recordCost(1));
   assert.deepEqual(B.overBudget().over, true);
   assert.equal(kvGet("anything", "fallback"), "fallback");

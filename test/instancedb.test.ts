@@ -48,26 +48,20 @@ test("spend: the owner's day is every login run (her chat, background work and t
   B.recordSpend({ usd: 0.5, conv: ANNA, payer: "key", kind: "dream" });
   assert.equal(B.spentToday(), 3.5, "owner today: login only");
   assert.equal(B.spentToday("owner"), 3.5);
-  assert.equal(B.groupSpentToday(GROUP), 2);
+  assert.equal(B.spentToday(groupConvId(GROUP)), 2);
   assert.equal(B.spentToday(ANNA), 0.75);
   assert.equal(B.spentToday(BO), 0.75);
   assert.equal(B.keySpentToday(), 1.5, "the key's day: all friends together");
   // the ceilings are those sums against the settings
   const s = settings as unknown as Record<string, number>;
-  const was = [s.dailyBudgetUsd, s.groupDailyBudgetUsd, s.instanceKeyDailyUsd];
+  const was = [s.dailyBudgetUsd, s.instanceKeyDailyUsd];
   try {
     s.dailyBudgetUsd = 3.5;
-    s.groupDailyBudgetUsd = 2.01;
     s.instanceKeyDailyUsd = 1.5;
     assert.equal(B.budgetSpent(), true);
-    assert.equal(B.groupOverBudget(GROUP), false);
     assert.equal(B.instanceKeyOverBudget(), true);
-    assert.equal(B.tenantOverBudget(ANNA, 0.75), true);
-    assert.equal(B.tenantOverBudget(ANNA, 0.76), false);
-    s.groupDailyBudgetUsd = 2;
-    assert.equal(B.groupOverBudget(GROUP), true);
   } finally {
-    [s.dailyBudgetUsd, s.groupDailyBudgetUsd, s.instanceKeyDailyUsd] = was as [number, number, number];
+    [s.dailyBudgetUsd, s.instanceKeyDailyUsd] = was as [number, number];
   }
   // each row says who, which payer, what kind, which local day
   const row = instanceDb().get<{ day: string; conv: string; payer: string; kind: string; at: number }>("SELECT * FROM spend WHERE kind = 'dream'")!;
@@ -97,7 +91,7 @@ test("spend: forgetting a conversation unnames its rows but the owner's and the 
   B.recordSpend({ usd: 1, conv: ANNA, payer: "key" });
   assert.equal(B.forgetSpend(groupConvId(GROUP)), true);
   assert.equal(B.forgetSpend(groupConvId(GROUP)), false, "idempotent");
-  assert.equal(B.groupSpentToday(GROUP), 0);
+  assert.equal(B.spentToday(groupConvId(GROUP)), 0);
   assert.equal(B.spentToday(), 2, "the owner's day still holds what the group cost");
   B.forgetSpend(ANNA);
   assert.equal(B.spentToday(ANNA), 0);
@@ -114,14 +108,12 @@ test("the budget check is fast: well under a millisecond with a year of rows", (
   for (let i = 0; i < 50; i++) db.run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (1, ?, 'owner', 'login', 'chat', 0.01)", day);
   B.budgetSpent(); // (the statements are prepared on the first call)
   B.instanceKeyOverBudget();
-  B.groupOverBudget(GROUP);
-  B.tenantOverBudget(ANNA, 1);
   const N_CALLS = 2000;
   const t0 = process.hrtime.bigint();
   for (let i = 0; i < N_CALLS; i++) B.budgetSpent();
   const owner = Number(process.hrtime.bigint() - t0) / 1e6 / N_CALLS;
   const t1 = process.hrtime.bigint();
-  for (let i = 0; i < N_CALLS; i++) (B.instanceKeyOverBudget(), B.groupOverBudget(GROUP), B.tenantOverBudget(ANNA, 1));
+  for (let i = 0; i < N_CALLS; i++) B.instanceKeyOverBudget();
   const others = Number(process.hrtime.bigint() - t1) / 1e6 / N_CALLS;
   assert.ok(owner < 1, `owner-today check took ${owner.toFixed(3)} ms`);
   assert.ok(others < 1, `key + group + friend checks took ${others.toFixed(3)} ms`);

@@ -317,8 +317,6 @@ export function loadSettings(env: Env) {
     wakeups: oneOf(env, "WAKEUPS", "on", ["on", "off"] as const) === "on",
 
     dailyBudgetUsd: num(env, "DAILY_BUDGET_USD", 20, 0, 10_000),
-    // One group's day on the owner's login (src/core/budget.ts): a noisy group stops itself before it spends the owner's whole day (and with it her brief). Default a quarter of DAILY_BUDGET_USD.
-    groupDailyBudgetUsd: num(env, "GROUP_DAILY_BUDGET_USD", num(env, "DAILY_BUDGET_USD", 20, 0, 10_000) * 0.25, 0, 10_000),
 
     // Several people on one instance (src/tenants/tenants.ts, docs/ARCHITECTURE.md "Tenancy"). Off: nothing changes, an unknown sender is ignored as always.
     // On: an unknown sender gets one fixed line (no model call) and the owner is asked in her chat whether to let her in, and each friend is a tenant with
@@ -329,8 +327,7 @@ export function loadSettings(env: Env) {
     // The key tenants' runs use: a separate Anthropic Console workspace key with a spend limit, never the owner's login or key. It is handed to a tenant's
     // run only, as ANTHROPIC_API_KEY in that run's environment (tenanttools.ts tenantEnv), and dropped from process.env below. Unset: tenants get a plain "not set up".
     tenantApiKey: env.TENANT_ANTHROPIC_API_KEY?.trim() || undefined,
-    tenantDailyBudgetUsd: num(env, "TENANT_DAILY_BUDGET_USD", 2, 0, 10_000), // each tenant's own daily ceiling on the instance key (tenant.json may lower or raise it)
-    instanceKeyDailyUsd: num(env, "INSTANCE_KEY_DAILY_USD", 10, 0, 100_000), // ALL tenants together on the instance key per day (each also has her own ceiling above; tenant.json may raise those, this one it cannot)
+    instanceKeyDailyUsd: num(env, "INSTANCE_KEY_DAILY_USD", 10, 0, 100_000), // ALL tenants together on the instance key per day
     tenantWarmMax: num(env, "TENANT_WARM_MAX", 2, 0, 10), // warm model processes kept for tenants (the most recently active ones); 0: none
 
     // Which chat platform the assistant talks on: the package @ted-assistant/<name> (packages/messenger loads it by name). Only signal exists so far.
