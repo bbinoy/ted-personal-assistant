@@ -13,12 +13,12 @@ import { OWNER_CHAT } from "./runkinds.ts";
 const CAL = "mcp__claude_ai_Google_Calendar__";
 const opts = { signal: new AbortController().signal } as never;
 (settings as unknown as { autoApprove: string }).autoApprove = "auto";
-const UNCLE = { summary: "Visit godmother Uschi", startTime: "2026-10-24T10:00:00+02:00", endTime: "2026-10-24T13:30:00+02:00" };
+const UNCLE = { summary: "Visit godmother Rosa", startTime: "2026-10-24T10:00:00+02:00", endTime: "2026-10-24T13:30:00+02:00" };
 
 function chat(verdict: Verdict["decision"]) {
   const judged: JudgeInput[] = [];
   const asked: string[] = [];
-  const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), OWNER_CHAT, undefined, async (i) => (judged.push(i), { decision: verdict, reason: "test" }), undefined, undefined, false, { conversation: `own-cal-${Math.random()}`, provenance: () => ({ kind: "owner", message: "put the visit to my godmother Uschi on Saturday in my calendar" }) as never });
+  const can = makeCanUseTool(async (d) => (asked.push(d), { approved: false }), OWNER_CHAT, undefined, async (i) => (judged.push(i), { decision: verdict, reason: "test" }), undefined, undefined, false, { conversation: `own-cal-${Math.random()}`, provenance: () => ({ kind: "owner", message: "put the visit to my godmother Rosa on Saturday in my calendar" }) as never });
   return { can, judged, asked };
 }
 
