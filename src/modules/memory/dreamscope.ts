@@ -1,7 +1,7 @@
 import type { Conversation } from "../../conversation/conversationmodel.ts";
 import type { Scope } from "../../memory/dreamplan.ts";
 import { groupDir } from "../../conversation/groupstore.ts";
-import { preset } from "../../core/preset.ts";
+import { identity } from "../../policy/identity.ts";
 import { settings } from "../../core/settings.ts";
 import { convIdOf, convPaths, type ConvId } from "../../core/convpaths.ts";
 import { convDb, peekConvDb } from "../../core/convdb.ts";
@@ -16,7 +16,7 @@ type Who = Pick<Conversation, "kind" | "tenantId" | "groupId">;
 // The same for every conversation: its folder's notes and snapshots (convpaths.ts); only the owner has the preset's longer category list.
 export function dreamScope(conv: Who): Scope {
   const p = convPaths(dreamStateConv(conv));
-  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: conv.kind === "owner" ? preset().notes.dream : preset().notes.others, maxNotes: settings.memoryMaxNotes };
+  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: identity(conv).dreamCategories, maxNotes: settings.memoryMaxNotes };
 }
 
 // The conversation whose assistant.db holds its dream state (the `dream` row): checked first, so a name that is no conversation cannot make one.

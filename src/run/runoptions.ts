@@ -10,6 +10,7 @@ import type { RunKind } from "../core/runkind.ts";
 import { preset } from "../core/preset.ts";
 import { chatContext, chatSystem, expertSystem, FIRST_CONTACT, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, toolsFor } from "../policy/capabilities.ts";
+import { identity } from "../policy/identity.ts";
 import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
 import { skillsFor } from "../modules/skills.ts";
 import { tenantById, tenantContext, wasDisclosed, zoneOf, type TenantContext } from "../tenants/tenants.ts";
@@ -150,7 +151,7 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
 // The expert a run may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem): the index of the notes, which it reads in full with its own tools.
 function expertText(conv: Conversation): string {
   const index = readIndex(conv.notesDir);
-  if (conv.kind === "owner") return expertSystem(index, { missing: missingSetup(readNotes()) });
+  if (identity(conv).own) return expertSystem(index, { missing: missingSetup(readNotes()) });
   const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
   const looker = lookerOf(conv);
   const looked = { name: looker.who, group: looker.group, language: ctx?.language, persona: ctx?.persona };

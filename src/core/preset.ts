@@ -237,5 +237,3 @@ export function presetFor(env: Readonly<Record<string, string | undefined>> = pr
 }
 export const preset = (): Preset => presetFor(process.env);
 
-// The note categories a conversation has: the owner's chat all of them, a group or a friend (someone else) the preset notes.others. Nothing else in the code names a category.
-export const categoriesFor = (kind: "owner" | "others", p: Preset = preset()): readonly string[] => (kind === "owner" ? p.notes.categories : p.notes.others);
