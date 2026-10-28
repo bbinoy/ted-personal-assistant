@@ -147,13 +147,26 @@ export function dreamConversations(kinds: readonly Kind[] = ["owner", "group", "
   return out;
 }
 
-// Whose notes they are, as the prompts say it: the owner's name, a friend's, or the group chat's.
 const NAME_MAX = 40;
-function subjectOf(conv: Conversation): string {
-  if (conv.kind === "group") return `the group chat "${oneLine("group name", (listGroups().find((g) => g.id === conv.groupId)?.name || "a group").replace(/["<>]/g, " "), NAME_MAX)}"`;
-  if (conv.kind === "tenant") return oneLine("name", speakerOf(conv).replace(/["<>]/g, " "), NAME_MAX) || "a friend";
-  return OWNER;
+const named = (what: string, name: string, fallback: string): string => oneLine(what, name.replace(/["<>]/g, " "), NAME_MAX) || fallback;
+
+// What differs between kinds of conversation, in ONE table (nothing else in this file looks at `kind`): whose notes they are as the prompts say it, whose words are
+// evidence, how many new lines make a dream worthwhile and how many dreams a night (the preset's rhythm.dream), whether the words of what it did may be logged
+// (a friend's stay out: the admin cannot read them) and whether it is listed in "what I learned overnight" (a group's notes are shared, nothing is listed).
+interface KindRules {
+  subject: (conv: Conversation) => string;
+  evidence: "owner" | "member";
+  minNewLines: () => number;
+  nightlyCap: () => number; // dreams of this kind per run
+  logWords: boolean;
+  recorded: boolean;
 }
+export const RULES: Record<Kind, KindRules> = {
+  owner: { subject: () => OWNER, evidence: "owner", minNewLines: () => preset().rhythm.dream.minNewLines.direct, nightlyCap: () => Infinity, logWords: true, recorded: true },
+  group: { subject: (c) => `the group chat "${named("group name", listGroups().find((g) => g.id === c.groupId)?.name || "a group", "a group")}"`, evidence: "member", minNewLines: () => preset().rhythm.dream.minNewLines.group, nightlyCap: () => preset().rhythm.dream.maxGroupsPerNight, logWords: true, recorded: false },
+  tenant: { subject: (c) => named("name", speakerOf(c), "a friend"), evidence: "owner", minNewLines: () => preset().rhythm.dream.minNewLines.direct, nightlyCap: () => Infinity, logWords: false, recorded: true },
+};
+const subjectOf = (conv: Conversation): string => RULES[conv.kind].subject(conv);
 
 export interface DreamerDeps {
   conversations?: () => Conversation[]; // default: dreamConversations()
@@ -176,7 +189,7 @@ export function createDreamer(deps: DreamerDeps = {}) {
     }));
   const payerOf = deps.payer ?? ((conv, now) => mayRun(conv, "dream", { key: deps.key, paused: () => isPaused(now) })); // paused, a usage limit, the day's budget, her cooldown or no key: no attempt, the day stays open
 
-  // One conversation. Returns whether it was dreamt (the nightly cap on groups counts these).
+  // One conversation. Returns whether it was dreamt (the nightly cap of its kind counts these).
   async function one(conv: Conversation, now: Date): Promise<boolean> {
     if (!allows(conv, "dream")) return false; // its record: active, with the capability; the instance's DREAM switch
     if (deps.busy?.(conv)) return false; // someone is talking to it: the dream is for the quiet, and does not tidy notes under a turn that is using them
@@ -184,9 +197,9 @@ export function createDreamer(deps: DreamerDeps = {}) {
     const today = dayIn(now);
     const state: DreamState = readDream(stateConv);
     if (state.day === today) return false;
-    const rhythm = preset().rhythm.dream;
-    const said = conversationLines(messagesSince(state.lastRunAt, conv.logFile), subjectOf(conv), conv.kind === "group" ? "member" : "owner");
-    if (said.count < (conv.kind === "group" ? rhythm.minNewLines.group : rhythm.minNewLines.direct)) return false; // next to nothing said since the last time: left alone, without even marking the day
+    const rules = RULES[conv.kind];
+    const said = conversationLines(messagesSince(state.lastRunAt, conv.logFile), subjectOf(conv), rules.evidence);
+    if (said.count < rules.minNewLines()) return false; // next to nothing said since the last time: left alone, without even marking the day
     const payer = payerOf(conv, now);
     if (isRefusal(payer)) return false;
     writeDream(stateConv, { ...state, day: today }); // before the run: a crash must not mean a retry on every tick
@@ -196,12 +209,12 @@ export function createDreamer(deps: DreamerDeps = {}) {
       const { prompt, system } = promptOf(conv, now, readNoteFiles(scope.notesDir), said.lines);
       const { plan, snapshot } = await dreamOver(scope, prompt, system, said.text, now, deps.run?.(payer, conv) ?? runnerFor(payer));
       writeDream(stateConv, { day: today, lastRunAt: now.toISOString() });
-      const label = conv.kind === "owner" ? "dream" : `${conv.kind} dream (${conv.tenantId ?? subjectOf(conv)})`;
-      if (conv.kind !== "tenant") for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
+      const label = `${conv.kind} dream (${conv.tenantId ?? subjectOf(conv)})`;
+      if (rules.logWords) for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
       emit({ type: "dream", result: snapshot ? "changed" : "no-change", source: "dream", conv: conv.key, friend: false, meta: { ...tag, actions: plan.actions.length, rejected: plan.rejected.length }, text: `Tidied my notes in the nightly dream (${plan.actions.length} change${plan.actions.length === 1 ? "" : "s"})` });
       console.log(`${label}: ${plan.actions.length} change(s), ${plan.rejected.length} rejected`);
-      if (snapshot && conv.kind !== "tenant") console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
-      if (snapshot && conv.kind !== "group") recordDream(conv.convId, plan, scope.notesDir, now.getTime()); // not silent to the person: it is listed once in "what I learned overnight" (memory/learned.ts); a group's notes are shared, nothing is listed
+      if (snapshot && rules.logWords) console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
+      if (snapshot && rules.recorded) recordDream(conv.convId, plan, scope.notesDir, now.getTime()); // not silent to the person: it is listed once in "what I learned overnight" (memory/learned.ts); a group's notes are shared, nothing is listed
     } catch (e) {
       console.error(`dream (${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""}): failed:`, (e as Error).message);
       emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: false, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });
@@ -210,11 +223,11 @@ export function createDreamer(deps: DreamerDeps = {}) {
   }
 
   async function once(now: Date): Promise<void> {
-    let groups = 0;
+    const dreamt: Partial<Record<Kind, number>> = {};
     for (const conv of (deps.conversations ?? (() => dreamConversations()))()) {
       try {
-        if (conv.kind === "group" && groups >= preset().rhythm.dream.maxGroupsPerNight) continue;
-        if (await one(conv, now) && conv.kind === "group") groups++;
+        if ((dreamt[conv.kind] ?? 0) >= RULES[conv.kind].nightlyCap()) continue;
+        if (await one(conv, now)) dreamt[conv.kind] = (dreamt[conv.kind] ?? 0) + 1;
       } catch (e) {
         console.error(`dream (${conv.key}): failed:`, (e as Error).message); // one conversation failing never keeps another from being dreamt
       }

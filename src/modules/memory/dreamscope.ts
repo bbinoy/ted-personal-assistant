@@ -1,11 +1,11 @@
 import type { Conversation } from "../../conversation/conversationmodel.ts";
-import { OWNER_SCOPE, type Scope } from "../../memory/dreamplan.ts";
-import { groupDir, groupScope } from "../../conversation/groupstore.ts";
+import type { Scope } from "../../memory/dreamplan.ts";
+import { groupDir } from "../../conversation/groupstore.ts";
 import { preset } from "../../core/preset.ts";
 import { settings } from "../../core/settings.ts";
-import { convIdOf, type ConvId } from "../../core/convpaths.ts";
+import { convIdOf, convPaths, type ConvId } from "../../core/convpaths.ts";
 import { convDb, peekConvDb } from "../../core/convdb.ts";
-import { tenantById, tenantContext } from "../../tenants/tenants.ts";
+import { tenantById } from "../../tenants/tenants.ts";
 
 // WHERE a conversation's dream works (dream.ts): its notes folder, the snapshots beside it, the note categories it has (the preset's notes.dream for the owner,
 // notes.others) and the state of its last run (in its assistant.db), all inside the conversation's own folder. The dream and "undo the dream" (memory-tools.ts) both
@@ -13,13 +13,10 @@ import { tenantById, tenantContext } from "../../tenants/tenants.ts";
 
 type Who = Pick<Conversation, "kind" | "tenantId" | "groupId">;
 
+// The same for every conversation: its folder's notes and snapshots (convpaths.ts); only the owner has the preset's longer category list.
 export function dreamScope(conv: Who): Scope {
-  if (conv.kind === "owner") return OWNER_SCOPE;
-  if (conv.kind === "group") return groupScope(conv.groupId!);
-  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
-  if (!rec) throw new Error("not a tenant");
-  const ctx = tenantContext(rec);
-  return { notesDir: ctx.notesDir, backupsDir: ctx.backupDir, categories: preset().notes.others, maxNotes: settings.memoryMaxNotes };
+  const p = convPaths(dreamStateConv(conv));
+  return { notesDir: p.notes, backupsDir: p.notesBackup, categories: conv.kind === "owner" ? preset().notes.dream : preset().notes.others, maxNotes: settings.memoryMaxNotes };
 }
 
 // The conversation whose assistant.db holds its dream state (the `dream` row): checked first, so a name that is no conversation cannot make one.

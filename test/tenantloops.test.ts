@@ -364,6 +364,59 @@ test("a tenant's dream: nothing new said, suspended, cooling down, no key, TENAN
   assert.equal(alerts.length, 1, "and one notice for the admin");
 });
 
+test("one dreamer over every kind: owner, group and friends in one pass; thresholds from the table, a failure never blocks the next, a friend's words stay out of the log", async () => {
+  const { RULES, dreamConversations } = await import("../src/conversation/dream.ts");
+  const { groupDir, groupLogFile } = await import("../src/conversation/groupstore.ts");
+  const { convDb } = await import("../src/core/convdb.ts");
+  const { OWNER_CONV } = await import("../src/core/convpaths.ts");
+  const { readAudit } = await import("../src/core/audit.ts");
+  const { preset } = await import("../src/core/preset.ts");
+  // the table: one row per kind, the numbers are the preset's
+  const r = preset().rhythm.dream;
+  assert.deepEqual(Object.keys(RULES).sort(), ["group", "owner", "tenant"]);
+  assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.minNewLines()), [r.minNewLines.direct, r.minNewLines.group, r.minNewLines.direct]);
+  assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.nightlyCap()), [Infinity, r.maxGroupsPerNight, Infinity]);
+  assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.logWords), [true, true, false]);
+  assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.recorded), [true, false, true]);
+  convDb(OWNER_CONV).run("DELETE FROM dream");
+  const gid = "R3JvdXBUZW5hbnRMb29wc1Rlc3Q";
+  groupDir(gid, "Chess club");
+  for (let i = 0; i < r.minNewLines.group; i++) recordMessage("member", 900 + i, `Eve (a member): we play on Thursdays ${i} ${"x".repeat(20)}`, new Date("2026-10-13T20:00:00Z"), groupLogFile(gid));
+  recordMessage("owner", 905, "my cousin Zed is allergic to peanuts", new Date("2026-10-13T20:00:00Z"));
+  const anna = person("Mia");
+  const bob = person("Ned");
+  said(anna, "my sister Eve is vegetarian, please remember", new Date("2026-10-13T20:00:00Z"));
+  said(bob, "my brother Kit is a secret agent", new Date("2026-10-13T20:00:00Z"));
+  const ran: string[] = [];
+  const logged: string[] = [];
+  const log = console.log;
+  console.log = (...a: unknown[]) => void logged.push(a.join(" "));
+  try {
+    const all = dreamConversations();
+    assert.deepEqual([...new Set(all.map((c) => c.kind))].sort(), ["group", "owner", "tenant"], "every kind is visited by the one dreamer");
+    await createDreamer({
+      key: () => KEY,
+      busy: () => false,
+      run: (_payer, conv) => async () => {
+        ran.push(conv.kind === "tenant" ? `tenant:${conv.tenantId}` : conv.kind);
+        if (conv.kind === "owner") throw new Error("model down");
+        return conv.tenantId === anna.id ? WRITE("my sister Eve is vegetarian") : { ops: [] };
+      },
+    }).run(NOON);
+  } finally {
+    console.log = log;
+  }
+  assert.ok(ran.includes("owner") && ran.includes("group") && ran.includes(`tenant:${anna.id}`) && ran.includes(`tenant:${bob.id}`), "the failing owner dream did not stop the group or the friends");
+  const text = logged.join("\n");
+  assert.doesNotMatch(text, /vegetarian|secret agent|people-sister/, "a friend's words and notes stay out of the log");
+  assert.match(text, /tenant dream \(.*\): 1 change\(s\)/, "counts only");
+  const rows = readAudit((e) => e.tool === "dream_run").filter((e) => (e.meta as { kind: string }).kind === "tenant");
+  assert.ok(rows.length >= 2);
+  for (const row of rows) assert.ok(Object.keys(row.meta as object).every((k) => ["actions", "error", "kind", "rejected", "tenant"].includes(k)), "ids and counts only (or the error)");
+  assert.doesNotMatch(JSON.stringify(rows), /vegetarian|secret agent|people-sister/);
+  convDb(OWNER_CONV).run("DELETE FROM dream");
+});
+
 test("her prompt says she can act later only when the loops will run for her", async () => {
   const { tenantSystem } = await import("../src/run/persona.ts");
   const { runFor } = await import("../src/run/runoptions.ts");
