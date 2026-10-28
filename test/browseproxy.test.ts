@@ -156,11 +156,11 @@ test("the proxy closes with the run: its port stops answering", async () => {
 test("the browser is started through the proxy with loopback NOT bypassed and no non-proxied UDP", () => {
   const st = { ok: true as const, cli: "/x/cli.js", exe: "/x/chrome" };
   const dir = mkdtempSync(join(tmpdir(), "bproxy-"));
-  const withProxy = browserServer(st, dir, "ua", { mode: "off", proxyPort: 4321, cdpPort: 9222 });
+  const withProxy = browserServer(st, dir, "ua", { proxyPort: 4321, cdpPort: 9222 });
   assert.equal(withProxy.type, "stdio");
   const cfg = JSON.parse(readFileSync(join(dir, "browser-config.json"), "utf8"));
   assert.deepEqual(cfg.browser.launchOptions.args, ["--proxy-server=http://127.0.0.1:4321", "--proxy-bypass-list=<-loopback>", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic", "--remote-debugging-port=9222"]);
-  browserServer(st, dir, "ua", { mode: "off", unproxiedForTest: true });
+  browserServer(st, dir, "ua", { cdpPort: 9222, unproxiedForTest: true });
   assert.equal(JSON.parse(readFileSync(join(dir, "browser-config.json"), "utf8")).browser.launchOptions.args.includes("--proxy-server=http://127.0.0.1:4321"), false);
 });
 
@@ -195,8 +195,7 @@ test("guard: a page that loaded on a name resolving inside is withheld on the ne
 test("fail closed: the browser's launch is refused without a proxy port", () => {
   const st = { ok: true as const, cli: "/x/cli.js", exe: "/x/chrome" };
   const dir = mkdtempSync(join(tmpdir(), "bproxy-"));
-  assert.throws(() => browserServer(st, dir, "ua", { mode: "off" }), /egress proxy is missing/);
-  assert.throws(() => browserServer(st, dir, "ua"), /egress proxy is missing/);
+  assert.throws(() => browserServer(st, dir, "ua", { cdpPort: 9222 }), /egress proxy is missing/);
 });
 
 test("proxy: a keep-alive client that sends two plain http requests one after the other gets both answered (the second on a fresh connection, the first was closed)", async () => {

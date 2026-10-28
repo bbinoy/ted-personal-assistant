@@ -348,7 +348,7 @@ A tool is a module: a plain `ToolModule` (`src/modules/types.ts`) in `src/module
 - **Saved details** (`profile.ts`, `npm run profile`): the owner's non-secret details in OpenBao; the worker types `{{profile:KEY}}` and only the guard turns it into a value, bound to the site's registered domain.
 - **Card** (`card.ts`, `cardcli.ts`, `paymentrules.ts`, `payments.ts`, `browsecard.ts`; `npm run card`): one OpenBao item, the owner's only. The first card detail asks for a typed YES in the owner's own foreground chat; the card is decrypted only after it. Never judged, never in a background run, never for a group or friend. The kill switch is a file (`/card off`).
 
-Screenshots (the vision experiment, off) are kept per turn and delivered only through `send`. Details: SAFETY.md ("Browsing", "Payments").
+Screenshots are kept per turn and delivered only through `send`. Details: SAFETY.md ("Browsing", "Payments").
 
 ## Secrets, OpenBao and the intake page
 
@@ -499,12 +499,12 @@ src/modules/tenants.ts  the owner's tenant administration tools
 src/modules/types.ts  the shape of a tool module
 src/modules/browse/browse.ts  the browse sub-task: prompt, schema, entry tool
 src/modules/browse/browsecard.ts  one payment's state and the owner's question
-src/modules/browse/browsecdp.ts  point-click lookup (vision click mode)
+src/modules/browse/browsecdp.ts  point-click lookup
 src/modules/browse/browseguard.ts  BrowseGuard: decides every browser call
 src/modules/browse/browseproxy.ts  egress proxy checking every host
 src/modules/browse/browserules.ts  pure rules: addresses, commits, payment fields
 src/modules/browse/browseserver.ts  is browsing set up; the server command line
-src/modules/browse/browsevision.ts  pure rules of the vision mode
+src/modules/browse/browsevision.ts  pure rules of the worker's vision (screenshots, point clicks)
 src/modules/browse/card.ts  card item in OpenBao, kill switch, CardAccess
 src/modules/browse/cardcli.ts  `npm run card`
 src/modules/browse/module.ts  browse: the entry tool and browser server

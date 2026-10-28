@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { addressProblem, BROWSER_PREFIX, classifyClick, dnsResolver, findTotal, hostOf, isAllowedBrowserTool, isRef, parseSnapshot, resolvesPublic, sensitiveKind, type Node, type Resolver, type VisionMode } from "./browserules.ts";
+import { addressProblem, BROWSER_PREFIX, classifyClick, dnsResolver, findTotal, hostOf, isAllowedBrowserTool, isRef, parseSnapshot, resolvesPublic, sensitiveKind, type Node, type Resolver } from "./browserules.ts";
 import { hostMatches, registeredDomain } from "../../core/domains.ts";
 import { fieldFitsKey, isSensitive, maskValue, type Profile } from "./profile.ts";
 import { APPROVAL_MINUTES, payDetails, PayRun, secretVariants } from "./browsecard.ts";
@@ -47,11 +47,10 @@ export interface GuardOptions {
   outDir: string;
   maxCommits?: number;
   resolver?: Resolver;
-  vision?: VisionMode; // the vision experiment (browsevision.ts); off: today's behaviour
   probe?: Probe; // click mode: what is under a point of the page, looked up by code (browsecdp.ts)
   cdpPort?: number; // click mode: the browser's debugging port on loopback (browseserver.ts starts the browser with it)
   proxyPort?: number; // the run's egress proxy on loopback (browseproxy.ts): the browser is started with it (browseserver.ts); the guard only carries the number
-  shotsDir?: string; // vision on: where each screenshot is kept as a small jpeg, for the chat to pass on (shots.ts)
+  shotsDir?: string; // where each screenshot is kept as a small jpeg, for the chat to pass on (shots.ts)
   profile?: Profile; // the owner's saved details (profile.ts): the owner's chat run only, a group's guard ignores it
   card?: CardAccess; // the owner's payment card (card.ts): the owner's chat run only, a group's guard ignores it
   frames?: FrameProbe; // the browser's own list of the page's frames (browsecdp.ts); without it a card is never typed into a frame
@@ -93,7 +92,6 @@ export class BrowseGuard {
   steps = 0;
   private readonly maxCommits: number;
   private readonly resolver: Resolver;
-  readonly vision: VisionMode;
   readonly cdpPort?: number;
   readonly proxyPort?: number;
   private readonly probe?: Probe;
@@ -138,7 +136,6 @@ export class BrowseGuard {
     this.outDir = o.outDir;
     this.maxCommits = o.maxCommits ?? settings.browseMaxCommits;
     this.resolver = o.resolver ?? dnsResolver;
-    this.vision = o.vision ?? "off";
     this.probe = o.probe;
     this.cdpPort = o.cdpPort;
     this.proxyPort = o.proxyPort;
@@ -621,7 +618,7 @@ export class BrowseGuard {
     if (this.denied >= MAX_DENIED) return this.deny(toolName, input, "Too many refused calls in this run. Stop now and report what you have.");
     if (toolName === "WebSearch") return { kind: "defer" };
     if (!toolName.startsWith("mcp__browser__")) return this.deny(toolName, input, `${toolName} is not available in a browse run.`);
-    if (!isAllowedBrowserTool(toolName, this.vision)) return this.deny(toolName, input, `${short(toolName)} is not available.`);
+    if (!isAllowedBrowserTool(toolName)) return this.deny(toolName, input, `${short(toolName)} is not available.`);
     const name = short(toolName);
     // The page that loaded is checked again by what its name resolves to (shape starts it, a model step later it has long answered): a redirect onto a name that points inside is withheld. The egress proxy already
     // refuses the connection itself; this stops the run from working on whatever got through some other way.
@@ -790,7 +787,7 @@ export class BrowseGuard {
     }
   }
 
-  // A click at a point (vision click mode). The model's idea of what is there counts for nothing: code asks the browser what the click
+  // A click at a point (browsevision.ts). The model's idea of what is there counts for nothing: code asks the browser what the click
   // would hit (browsecdp.ts), turns that into a Node and decides it as it decides a ref click. What it cannot resolve goes to the judge;
   // payment and login fields always ask; a link must pass the address check.
   private async clickAt(tool: string, input: Record<string, unknown>): Promise<Decision> {

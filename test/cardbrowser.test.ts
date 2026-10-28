@@ -95,7 +95,7 @@ async function start(t: TestContext, o: { ads?: boolean } = {}): Promise<Env | u
   const outDir = join(dir, "out");
   execFileSync("mkdir", ["-p", outDir]);
   const st = { ok: true as const, cli: join(dirname(createRequire(import.meta.url).resolve("@playwright/mcp/package.json")), "cli.js"), exe };
-  const cfg = browserServer(st, outDir, undefined, { mode: "off", cdpPort, unproxiedForTest: true });
+  const cfg = browserServer(st, outDir, undefined, { cdpPort, unproxiedForTest: true });
   assert.ok(cfg.type === "stdio" || cfg.type === undefined);
   const stdio = cfg as { command: string; args: string[]; env: Record<string, string> };
   const configFile = stdio.args[stdio.args.indexOf("--config") + 1]!;

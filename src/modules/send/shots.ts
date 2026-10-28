@@ -107,7 +107,7 @@ export function dropShots(key: string): void {
 // The file of an id of this turn, after checking it again: a plain file (no symlink) inside the turn's folder, jpeg or png bytes, size.
 export function loadShot(key: string, id: string): { shot: Shot } | { problem: string } {
   const t = turns.get(key);
-  if (!t) return { problem: "No screenshot available: none was taken in this conversation (the browser needs vision mode, which is off)." };
+  if (!t) return { problem: "No screenshot available: none was taken in this conversation." };
   const shot = ID.test(id) ? t.shots.get(id) : undefined;
   if (!shot) return { problem: `No screenshot "${id}" in this conversation. The ids are the ones listed in the browse result or returned by the draw tool.` };
   let fd: number | undefined;

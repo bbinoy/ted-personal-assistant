@@ -54,7 +54,7 @@ test("a tenant's browse run: no host, control name, task or error text in the au
   assert.match(text, /"nameChars":\d+/);
   // browse.ts: the failure of a tenant's run
   const before = new Date().toISOString();
-  await browse({ mode: "group", groupId: "g-t", tenant: true, run: async () => Promise.reject(new Error("could not reach clinic-secret.example")) }, "book a root canal for Anneliese", { status: { ok: true, cli: "cli.js", exe: "chrome" }, resolver, vision: "off" });
+  await browse({ mode: "group", groupId: "g-t", tenant: true, run: async () => Promise.reject(new Error("could not reach clinic-secret.example")) }, "book a root canal for Anneliese", { status: { ok: true, cli: "cli.js", exe: "chrome" }, resolver });
   const after = JSON.stringify(readAudit((e) => e.ts >= before));
   assert.ok(!after.includes("clinic-secret"), "the error text is a length");
   assert.match(after, /"errorChars":\d+/);

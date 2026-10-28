@@ -86,7 +86,7 @@ test("no message state is process-global in permissions.ts, and the mail handler
 // ---- the browse sub-run inherits ----
 
 test("the browse sub-run inherits the provenance and the conversation of the run that started it, and its own task is the assistant's", async () => {
-  const guard = { task: "pay Dr Strange's invoice", vision: "off", profileKeys: () => [], cardInfo: () => undefined } as unknown as BrowseGuard;
+  const guard = { task: "pay Dr Strange's invoice", profileKeys: () => [], cardInfo: () => undefined } as unknown as BrowseGuard;
   const parent = { provenance: () => ({ kind: "derived", by: "gate", of: "owner", text: "wake-up task" }) as const, conversation: "owner" };
   const o = browseRunOptions(guard, undefined, parent);
   assert.equal(o.provenance, parent.provenance);

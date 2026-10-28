@@ -10,7 +10,7 @@ import type { TenantRun } from "../tenants/tenanttools.ts";
 import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
 import { BROWSE_SCHEMA, browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard } from "../modules/browse/browseguard.ts";
-import { hiddenBrowserTools } from "../modules/browse/browserules.ts";
+import { HIDDEN_BROWSER_TOOLS } from "../modules/browse/browserules.ts";
 import { onStop, pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { recordConnectors } from "../modules/connectors.ts";
@@ -102,7 +102,7 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
     signal: parent.signal, // called off with its parent (a look overtaken by a message, a ceiling)
     stopScope: parent.stopScope, // and by "/stop" in the parent's conversation
     kind: { who: "browse", attended: parent.attended ?? true }, // the worker of an unattended run asks nobody either
-    systemPrompt: browseSystem(undefined, guard.vision, guard.profileKeys(), guard.cardInfo()),
+    systemPrompt: browseSystem(undefined, guard.profileKeys(), guard.cardInfo()),
     maxTurns: settings.browseMaxTurns,
     maxBudgetUsd: settings.browseMaxUsd,
     maxMinutes: settings.browseMaxMinutes,
@@ -250,7 +250,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     // other skills would cost context on every call and are none of its business).
     plugins: skills.length ? plugin : undefined,
     skills: skills.length ? [...skills] : undefined,
-    disallowedTools: browsing ? hiddenBrowserTools(opts.guard?.vision) : login ? hiddenTools(toolsSeen()) : undefined, // out of the model's view entirely, see policy.ts
+    disallowedTools: browsing ? HIDDEN_BROWSER_TOOLS : login ? hiddenTools(toolsSeen()) : undefined, // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
     canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && conversation === OWNER_KEY, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),

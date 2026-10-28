@@ -457,8 +457,8 @@ test("never offered in a group or a background run: no card in the guard, no car
   assert.match(((await typeNumber(g)).res as Denied).message, /No card is available/);
   assert.equal(g.asked.length, 0);
   // the prompt: no card, no placeholder; with a card, the steps and the last four only
-  assert.ok(!/\{\{card:/.test(browseSystem("Alex", "off", [], undefined)));
-  const prompt = browseSystem("Alex", "off", [], { last4: "4242", label: "Wise", currency: "CHF" });
+  assert.ok(!/\{\{card:/.test(browseSystem("Alex", [], undefined)));
+  const prompt = browseSystem("Alex", [], { last4: "4242", label: "Wise", currency: "CHF" });
   assert.match(prompt, /\{\{card:number\}\}/);
   assert.match(prompt, /Wise ••••4242/);
   assert.ok(![PAN, CVC, EXPIRY].some((v) => prompt.includes(v)));

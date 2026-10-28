@@ -188,7 +188,7 @@ test("manifest rows: browser tools exist only for the browse run; reads run free
 });
 
 test("only the listed browser tools exist; evaluate, run_code, uploads and the rest are hidden and denied", async () => {
-  for (const t of ["evaluate", "run_code_unsafe", "file_upload", "network_requests", "drop", "take_screenshot", "close", "install"]) {
+  for (const t of ["evaluate", "run_code_unsafe", "file_upload", "network_requests", "drop", "mouse_down", "close", "install"]) {
     assert.ok(!isAllowedBrowserTool(B + t), t);
     assert.equal((await guard().decide(B + t, {})).kind, "deny", t);
   }
@@ -540,14 +540,14 @@ test("browser server: a plain desktop Chrome user agent of the same version, an 
   assert.equal(desktopUserAgent("x", () => "no version here"), undefined);
   assert.equal(desktopUserAgent("x", () => { throw new Error("nope"); }), undefined);
   const dir = mkdtempSync(join(tmpdir(), "bs-"));
-  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { mode: "off", unproxiedForTest: true }) as { args: string[] };
+  const cfg = browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, "UA/1", { cdpPort: 9222, unproxiedForTest: true }) as { args: string[] };
   assert.equal(cfg.args[cfg.args.indexOf("--user-agent") + 1], "UA/1");
   for (const f of ["--headless", "--isolated", "--block-service-workers", "--blocked-origins", "--config"]) assert.ok(cfg.args.includes(f), f);
-  assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "omit");
+  assert.equal(cfg.args[cfg.args.indexOf("--image-responses") + 1], "allow");
   const conf = JSON.parse(readFileSync(cfg.args[cfg.args.indexOf("--config") + 1]!, "utf8"));
   assert.equal(conf.browser.contextOptions.locale, settings.browseLocale);
   assert.ok(conf.browser.contextOptions.timezoneId);
-  assert.ok(!(browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, undefined, { mode: "off", unproxiedForTest: true }) as { args: string[] }).args.includes("--user-agent"));
+  assert.ok(!(browserServer({ ok: true, cli: "/c/cli.js", exe: "/e/chrome" }, dir, undefined, { cdpPort: 9222, unproxiedForTest: true }) as { args: string[] }).args.includes("--user-agent"));
 });
 
 // ---- the search form (the case that asked needlessly): judged, not hard-coded ----
