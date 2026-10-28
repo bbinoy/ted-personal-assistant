@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit --noUnusedLocals)",
+      "Bash(npm run lint)",
+      "Bash(npm test)",
+      "Bash(npm run check:secrets)",
+      "Bash(npm run check:isolation)",
+      "Bash(npm run doctor)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree list:*)"
+    ],
+    "deny": [
+      "Read(./conversations/**)",
+      "Read(./instance/**)",
+      "Read(./state/**)",
+      "Read(./logs/**)",
+      "Read(./memory/**)",
+      "Read(./tenants/**)",
+      "Read(./.env)",
+      "Edit(./conversations/**)",
+      "Edit(./instance/**)",
+      "Edit(./state/**)",
+      "Edit(./logs/**)",
+      "Edit(./memory/**)",
+      "Edit(./tenants/**)",
+      "Edit(./.env)",
+      "Write(./conversations/**)",
+      "Write(./instance/**)",
+      "Write(./state/**)",
+      "Write(./logs/**)",
+      "Write(./memory/**)",
+      "Write(./tenants/**)",
+      "Write(./.env)"
+    ]
+  }
+}

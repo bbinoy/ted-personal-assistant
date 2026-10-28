@@ -1,4 +1,6 @@
-.claude/
+.claude/worktrees/
+.claude/settings.local.json
+.claude/*.local.*
 .DS_Store
 .env
 .node-path

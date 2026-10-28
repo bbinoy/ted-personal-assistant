@@ -33,3 +33,7 @@
 
 - `test/boundaries.test.ts` checks the value imports of every file under `src/` against a folder table (each folder may import only the folders below it); a new folder needs a row there, and `test/docs-layout.test.ts` wants a line for every file in `docs/ARCHITECTURE.md`.
 - Adding a tool is a folder `src/modules/<name>/` with `module.ts` (the light declaration) and the code it wraps, one line in `src/modules/index.ts` and one binding in `src/modules/runtime.ts` (`docs/ADAPTING.md`). A tool with no code of its own stays a single file `src/modules/<name>.ts`.
+
+**Claude Code project setup**
+
+`.claude/settings.json` (shared) denies reading or editing the private folders and allows the gates and read-only git. Project skills live in `.claude/skills/` (`ship`: merge, gates, push and restart through launchd; `principles-audit`) and project subagents in `.claude/agents/` (`ted-implementer`, `ted-reviewer`). Personal values such as launchd labels (`LAUNCHD_LABEL`) and local overrides go in `.claude/settings.local.json`, which is not committed.
