@@ -17,7 +17,7 @@ import { writeFileAtomic } from "./state.ts";
 //   pending_*        the old approval inbox: nothing writes it since 26 Oct (unattended runs never ask); the nightly retention empties it (heartbeat/convretention.ts)
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
-//   routine_runs     the last period of each routine (scheduled skill or routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
+//   routine_runs     the last period of each routine (a routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
 //   group_remind_noted   which group members were told once that a reminder said in the group is the group's (src/tasks/grouptasks.ts). (suggestion_asks: the old one-tap suggestions, emptied by step 11.)
 //

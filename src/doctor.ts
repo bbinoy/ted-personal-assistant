@@ -407,8 +407,8 @@ export async function doctor() {
   line(tts.ok && (!qwen || qwen.ok) || !settings.voiceReplies ? true : "warn", "spoken replies", !settings.voiceReplies ? "off (VOICE_REPLIES=off)" : tts.ok ? `${where}${remote ? `; fallback: ${settings.tts.fallback}` : ""}${process.env.SIGNAL_ACCOUNT ? "" : " (needs the assistant's own Signal account)"}` : `not set up, missing: ${tts.missing.join(", ")} (${remote ? "install ffmpeg" : qwen ? "npm run setup:tts-qwen (optionally set TTS_REF_AUDIO and TTS_REF_TEXT for your own voice)" : "run scripts/setup-tts.sh"})`);
 
   if (!legacy) {
-    // Scheduled items (tasks/routines.ts): every scheduled skill and routine note with its schedule, next and last run, from the owner's own record; one that failed, was skipped or cannot run is a warning, not an error.
-    for (const last of scheduleLines(OWNER_CONV, { skills: ownerSkills(), notesDir: convPaths(OWNER_CONV).notes, zone: systemZone(), now: new Date() })) {
+    // Scheduled items (tasks/routines.ts): every routine note with its schedule, next and last run, from the owner's own record; one that failed, was skipped or cannot run is a warning, not an error.
+    for (const last of scheduleLines(OWNER_CONV, { notesDir: convPaths(OWNER_CONV).notes, zone: systemZone(), now: new Date() })) {
       const name = /^[^\s:]+/.exec(last)![0];
       line(/\b(failed|skipped|never runs)\b/.test(last) ? "warn" : true, `routine ${name}`, last.slice(name.length).replace(/^:?\s*/, ""));
     }

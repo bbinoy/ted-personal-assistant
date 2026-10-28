@@ -4,24 +4,19 @@ import type { ConvRef } from "../../core/convpaths.ts";
 import { isNotePath, parseNote, readNotes } from "../../memory/notes.ts";
 import { parseRepeat } from "../../tasks/repeat.ts";
 import { nextText, routineLines, type Routine } from "../../tasks/routines.ts";
-import { scheduledSkills } from "../skills.ts";
 
-// What is scheduled in a conversation, from its two sources (tasks/routines.ts plans them, heartbeat/facts.ts hands the due one to the look): the scheduled skills it has (`schedule:` in
-// SKILL.md; remove the line and the routine is off) and its routine notes (`routine-<slug>.md`: front matter `when:` = a repeat rule, body = what to do). A note whose `when:` cannot be read is not scheduled but
-// listed in `broken`, so it is told to the model instead of silently never firing.
+// What is scheduled in a conversation: its routine notes, and only those (`routine-<slug>.md`: front matter `when:` = a repeat rule, body = what to do; tasks/routines.ts plans them, heartbeat/facts.ts hands the due one
+// to the look). The daily brief, the evening wrap and the weekly review are such notes too (their body says to run the skill). A note whose `when:` cannot be read is not scheduled but listed in `broken`, so it is told
+// to the model instead of silently never firing.
 
 export const MAX_NOTE_ROUTINES = 20; // per conversation: a runaway list of notes must not become a runaway list of runs
 const NO_WHEN = "has no `when:` line in its front matter";
 
 export interface Scheduled { routines: Routine[]; broken: string[] }
 
-export function scheduledIn(o: { skills: readonly string[]; notesDir: string; zone: string; now: Date }): Scheduled {
+export function scheduledIn(o: { notesDir: string; zone: string; now: Date }): Scheduled {
   const routines: Routine[] = [];
   const broken: string[] = [];
-  for (const [skill, schedule] of scheduledSkills(o.skills)) {
-    const p = parseRepeat(schedule);
-    if (p.ok) routines.push({ name: skill, rule: p.rule, skill });
-  }
   for (const n of readNotes(o.now, o.notesDir, o.zone, "routine-").slice(0, MAX_NOTE_ROUTINES)) {
     const p = n.when ? parseRepeat(n.when) : undefined;
     if (p?.ok) routines.push({ name: n.file.replace(/\.md$/, ""), rule: p.rule, instruction: n.text });
@@ -45,10 +40,10 @@ export function routineNoteReply(tool: string, input: Record<string, unknown>, d
   const note = parseNote(file, raw);
   const p = note?.when ? parseRepeat(note.when) : undefined;
   if (!note || !p?.ok) return `This routine will NOT run: ${file} ${!note ? "has no text to do" : p && !p.ok ? `has a when: line that cannot be read (${p.error})` : NO_WHEN}. Fix it (front matter \`when: every weekday at 18:30\`, then the instruction as the body) and tell the person what you set.`;
-  return `Routine saved: ${nextText({ name: file, rule: p.rule }, now, zone)} (${p.rule.zone ?? zone}). Tell the person this schedule and when it runs next, in your own words.`;
+  return `Routine saved: ${nextText({ name: file, rule: p.rule, instruction: note.text }, now, zone)} (${p.rule.zone ?? zone}). Tell the person this schedule and when it runs next, in your own words.`;
 }
 
-// "/status" and the doctor: one line per scheduled item (skill or note) with its schedule, next and last run, and one per note that cannot run.
+// "/status" and the doctor: one line per routine note with its schedule, next and last run, and one per note that cannot run.
 export function scheduleLines(conv: ConvRef, o: Parameters<typeof scheduledIn>[0]): string[] {
   const { routines, broken } = scheduledIn(o);
   return [...routineLines(conv, routines, o.now, o.zone), ...broken.map((b) => `${b}; it never runs`)];

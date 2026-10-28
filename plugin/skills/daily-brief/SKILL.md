@@ -1,8 +1,7 @@
 ---
 name: daily-brief
-description: The owner's daily brief, scheduled every day at 07:30. A heavy skill: the heartbeat run delegates it to its expert (subagent expert-daily-brief) and never runs it itself; in chat it runs as is. Sweeps the inbox, reads the task list, reviews the calendar, preps meetings, then delivers ONE brief that updates the previous one, and keeps its headlines in the `status-brief.md` note for the next one. Orchestrates `ted-personal-assistant:mail`, `ted-personal-assistant:calendar`, `ted-personal-assistant:meeting-prep`; the tasks come from the assistant's own task tools.
+description: The owner's daily brief, run by a routine note (`routine-daily-brief.md`) or on request. A heavy skill: a run delegates it to its expert (subagent expert-daily-brief) and never runs it itself. Sweeps the inbox, reads the task list, reviews the calendar, preps meetings, then delivers ONE brief that updates the previous one, and keeps its headlines in the `status-brief.md` note for the next one. Orchestrates `ted-personal-assistant:mail`, `ted-personal-assistant:calendar`, `ted-personal-assistant:meeting-prep`; the tasks come from the assistant's own task tools.
 delegate: sonnet
-schedule: every day at 07:30
 ---
 
 # Daily brief

@@ -1,21 +1,18 @@
 import { liveConvDb, peekConvDb } from "../core/convdb.ts";
 import type { ConvRef } from "../core/convpaths.ts";
-import { PLUGIN } from "../core/preset.ts";
 import { formatRepeat, nextInstant, type Rule } from "./repeat.ts";
 import { addDays, localOf, showInstant } from "./when.ts";
 
-// ONE schedule mechanism: a routine is something the assistant does at set times, declared as DATA by a repeat rule (repeat.ts, the grammar tasks use): a plugin skill's `schedule:` in its SKILL.md
-// (the daily brief, the evening wrap, the weekly review: the look delegates the skill to its expert) or a `when:` line in a `routine-` note of a conversation (a person asked "every morning at 8 send
-// Anna a pep talk": the look does what the note says). This file is the PLANNER and the record. Code computes "is it due" and "was it done" from the clock in the conversation's zone and the
-// record (assistant.db routine_runs, one row per routine, keyed by the skill name or the note's file name); the model only does the work. At most one run per occurrence (the slot's date); a run that
+// ONE schedule mechanism: a routine is something the assistant does at set times, declared as DATA by a repeat rule (repeat.ts, the grammar tasks use): a `when:` line in a `routine-` note of a conversation (a person asked "every morning at 8 send
+// Anna a pep talk", or set up the daily brief, which is a note that says to run that skill: the look hands what the note says to an expert). This file is the PLANNER and the record. Code computes "is it due" and "was it done" from the clock in the conversation's zone and the
+// record (assistant.db routine_runs, one row per routine, keyed by the note's file name); the model only does the work. At most one run per occurrence (the slot's date); a run that
 // died is retried once; if the Mac slept through the time the routine still runs once when it wakes, within `catchUpHours` of its time, else that occurrence is skipped and the next brief says so once.
 // An edited `when:` changes nothing already done: the new rule is read from the next occurrence on (the record is per date, so what ran today does not run again today).
 
 export interface Routine {
-  readonly name: string; // the skill's name (daily-brief) or the note's file name without .md (routine-pep-talk): the record's key
+  readonly name: string; // the note's file name without .md (routine-pep-talk): the record's key
   readonly rule: Rule;
-  readonly skill?: string; // a scheduled skill: plain plugin skill name
-  readonly instruction?: string; // a routine note: what to do (its body)
+  readonly instruction: string; // what to do (the note's body)
 }
 
 export interface Slot { readonly date: string; readonly at: Date }
@@ -138,7 +135,7 @@ export function planAll(conv: ConvRef, routines: readonly Routine[], now: Date, 
   });
 }
 
-// The run was handed over (a skill to its expert, a note to the look): one more attempt in this period.
+// The run was handed over (a note to its expert): one more attempt in this period.
 export function markStarted(conv: ConvRef, name: string, period: string, now: number): void {
   const db = liveConvDb(conv);
   const rec = readRecord(conv, name);
@@ -166,17 +163,14 @@ export function markTold(conv: ConvRef, names: readonly string[]): void {
   for (const n of names) db?.run("UPDATE routine_runs SET told = 1 WHERE name = ? AND status = 'skipped'", n);
 }
 
-// The expert a delegation names -> the routine it runs, if any: agentOf gives a skill's variant ("expert-<skill>"), or the general expert for a note, which has no skill.
-export const routineOfAgent = (routines: readonly Routine[], agent: string, agentOf: (skill?: string) => string): Routine | undefined => routines.find((r) => agentOf(r.skill) === agent);
-
 export interface RoutineFacts {
   text: string; // for the heartbeat instruction; "" when there is nothing to say
   due?: Planned & { plan: Extract<Plan, { state: "due" }> }; // the one to start now
   told: string[]; // skipped routines the text mentions
 }
 
-// The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting or done is not mentioned). One routine per look. `deliver`: how a skill's full version reaches the owner by email.
-export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; agentOf: (skill?: string) => string; approvals?: number; deliver?: (r: Routine) => string }): RoutineFacts {
+// The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting or done is not mentioned). One routine per look. `deliver`: how a routine's full version reaches the owner by email (the daily brief's).
+export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; approvals?: number; deliver?: (r: Routine) => string }): RoutineFacts {
   const planned = planAll(conv, routines, now, zone, o.catchUpHours);
   const lines: string[] = [];
   let due: RoutineFacts["due"];
@@ -188,8 +182,8 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
       due = p as NonNullable<typeof due>;
       const when = `${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}`;
       const how = o.deliver?.(r);
-      const what = r.skill ? `names the skill ${PLUGIN}:${r.skill}` : `holds the note's instruction word for word (${clean(r.instruction ?? "")}), who it is for and the voice or format it asks for`;
-      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "${o.agentOf(r.skill)}" and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${r.skill && o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${how ? ` ${how}` : ""}`);
+      const what = `holds the note's instruction word for word (${clean(r.instruction)}), who it is for and the voice or format it asks for`;
+      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "expert" (or the expert named for a heavy skill the note runs) and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${how ? ` ${how}` : ""}`);
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look (code makes it due again by itself).`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);

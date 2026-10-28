@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -81,24 +81,25 @@ test("a group's chat turn gets the group's facts: its reminders, not the owner's
 });
 
 test("routines: a chat turn sees their status and never starts one; the look is handed the due routine and runs it", async () => {
-  const conv = owner();
+  const conv = { ...owner(), notesDir: mkdtempSync(join(tmpdir(), "facts-notes-")) };
+  writeFileSync(join(conv.notesDir, "routine-daily-brief.md"), "---\nwhen: every day at 07:30\n---\nRun the ted-personal-assistant:daily-brief skill and deliver the brief as it says.\n");
   const db = liveConvDb(conv.convId)!;
-  db.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('daily-brief', ?)", new Date(2026, 9, 1).getTime());
+  db.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-daily-brief', ?)", new Date(2026, 9, 1).getTime());
   const at = new Date(2026, 9, 14, 8, 0);
   const chat = F.factsFor(conv, at, "chat");
-  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*daily-brief: due now/);
+  assert.match(chat.status.join("\n"), /Routines, status only[\s\S]*routine-daily-brief: due now/);
   assert.equal(chat.routines, "", "no instruction to run it");
   assert.ok(!has(chat, /Delegate it now/));
   chat.done({ ended: true, said: true });
-  assert.equal(readRecord(conv.convId, "daily-brief")?.status, undefined, "the chat turn recorded nothing");
+  assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, undefined, "the chat turn recorded nothing");
   const look = F.factsFor(conv, at, "look");
-  assert.match(look.routines, /daily-brief: due now[\s\S]*Delegate it now: call the Agent tool/);
+  assert.match(look.routines, /routine-daily-brief: due now[\s\S]*Delegate it now: call the Agent tool/);
   look.onDelegate("expert-daily-brief");
-  assert.equal(readRecord(conv.convId, "daily-brief")?.status, "started");
-  assert.match(F.factsFor(conv, at, "chat").status.join("\n"), /daily-brief: a look started it/, "the chat turn sees it running");
+  assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, "started");
+  assert.match(F.factsFor(conv, at, "chat").status.join("\n"), /routine-daily-brief: a look started it/, "the chat turn sees it running");
   look.onTool("Agent", { subagent_type: "expert-daily-brief" }, { content: [{ type: "text", text: "the brief" }] });
   look.done({ ended: true, said: true });
-  assert.match(F.factsFor(conv, at, "chat").status.join("\n"), /daily-brief: delivered/, "and then that it went out");
+  assert.match(F.factsFor(conv, at, "chat").status.join("\n"), /routine-daily-brief: delivered/, "and then that it went out");
 });
 
 test("a chat session is told the facts once and again only when they changed (the claimed ones and the information ones apart)", async () => {
