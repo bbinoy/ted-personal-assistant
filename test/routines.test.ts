@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -14,7 +14,7 @@ const { parseRepeat } = await import("../src/tasks/repeat.ts");
 const { useConvDbAgentMode } = await import("../src/core/convdb.ts");
 useConvDbAgentMode(true);
 const { settings } = await import("../src/core/settings.ts");
-const { ownerSkills, privateSkills, skillsFor, scheduledSkills, PLUGIN } = await import("../src/modules/skills.ts");
+const { ownerSkills, privateSkills, skillsFor, PLUGIN } = await import("../src/modules/skills.ts");
 const { expertSetup } = await import("../src/run/delegation.ts");
 const { lookInstruction } = await import("../src/heartbeat/look.ts");
 const { lookerOf } = await import("../src/run/scope.ts");
@@ -33,23 +33,18 @@ const rule = (text: string) => {
   assert.ok(p.ok, text);
   return p.rule;
 };
-const skill = (name: string, skillName: string, text: string): import("../src/tasks/routines.ts").Routine => ({ name, skill: skillName, rule: rule(text) });
+const skill = (name: string, skillName: string, text: string): import("../src/tasks/routines.ts").Routine => ({ name, instruction: `Run the ${PLUGIN}:${skillName} skill and deliver it as it says.`, rule: rule(text) });
 const brief = skill("daily-brief", "daily-brief", "every day at 07:30");
 const evening = skill("evening-wrap", "evening-wrap", "every weekday at 18:30");
 const weekly = skill("weekly-review", "weekly-review", "every fri at 16:30");
 const all = [brief, evening, weekly];
-const opts = { catchUpHours: 4, who: "Ben", agentOf: (k?: string) => (k ? `expert-${k}` : "expert") };
+const opts = { catchUpHours: 4, who: "Ben" };
 const anchor = "2026-10-01";
 
-test("skills declare their schedule in SKILL.md frontmatter, in the repeat grammar, and every one parses with a time", () => {
+test("no skill schedules itself (routine notes are the only schedule); the brief, the wrap and the review keep their experts", () => {
   const skills = readdirSync(join(settings.pluginDir, "skills")).map((d) => `${PLUGIN}:${d}`);
-  const found = scheduledSkills(skills);
-  assert.deepEqual(found, [["daily-brief", "every day at 07:30"], ["evening-wrap", "every weekday at 18:30"], ["weekly-review", "every fri at 16:30"]]);
-  for (const [name, text] of found) {
-    const p = parseRepeat(text);
-    assert.ok(p.ok && p.rule.time, `${name}: ${text}`);
-    assert.ok(expertSetup(skills, "").agents[`expert-${name}`], `${name}: a scheduled skill has an expert to delegate to`);
-  }
+  for (const d of readdirSync(join(settings.pluginDir, "skills"))) assert.doesNotMatch(readFileSync(join(settings.pluginDir, "skills", d, "SKILL.md"), "utf8").split("\n---")[0]!, /^schedule:/m, `${d}: a skill declares no schedule`);
+  for (const name of ["daily-brief", "evening-wrap", "weekly-review"]) assert.ok(expertSetup(skills, "").agents[`expert-${name}`], `${name}: has an expert to delegate to`);
 });
 
 test("slots: a weekday rule skips the weekend, a weekly one finds its day, and the slot is wall time across both clock changes", () => {
@@ -145,8 +140,8 @@ test("the record: first sight, started, delivered; a retry counts; a skip is not
   assert.match(S.routineFacts(conv, all, T2, BERLIN, opts).text, /daily-brief: did not run on 2026-10-23 \(the Mac was asleep past its time\)/, "the brief is past its window: skipped, told once");
   const f2c = S.routineFacts(conv, [evening, weekly], T2, BERLIN, { ...opts, approvals: 2 });
   assert.equal(f2c.due?.routine.name, "evening-wrap", "routines are in order; the weekly (2 h late) waits for the next look");
-  assert.match(f2c.text, /evening-wrap: due now \(every weekday at 18:30\)\. Delegate it now: call the Agent tool with subagent_type "expert-evening-wrap"/);
-  assert.match(f2c.text, /ted-personal-assistant:evening-wrap/);
+  assert.match(f2c.text, /evening-wrap: due now \(every weekday at 18:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"/);
+  assert.match(f2c.text, /Run the ted-personal-assistant:evening-wrap skill and deliver it as it says/);
   assert.match(f2c.text, /every time it writes is exactly as the clock line gives it/);
   assert.match(f2c.text, /Code counted 2 open approvals waiting for Ben/);
   assert.match(f2c.text, /weekly-review: also due, but one routine per look/);
@@ -219,7 +214,7 @@ test("a routine note in a group fires once at its time, is done when the look po
   assert.equal(seen.routines, "");
   seen.done({ ended: true, said: false });
   const look = F.factsFor(conv, at("2026-10-22T06:05:00Z"), "look"); // 08:05
-  assert.match(look.routines, /routine-fun-fact: due now \(every day at 08:00\)\. Delegate it now: call the Agent tool with subagent_type "expert" and a self-contained brief that holds the note's instruction word for word \(Post a fun fact for the group\.\)/);
+  assert.match(look.routines, /routine-fun-fact: due now \(every day at 08:00\)\. Delegate it now: call the Agent tool with subagent_type "expert" \(or the expert named for a heavy skill the note runs\) and a self-contained brief that holds the note's instruction word for word \(Post a fun fact for the group\.\)/);
   assert.doesNotMatch(look.routines, /yourself/);
   assert.equal(readRecord(conv.convId, "routine-fun-fact")?.status, undefined, "not started until the delegation");
   look.onDelegate("expert");
@@ -312,7 +307,7 @@ test("a look handed a routine is told to do it and nothing else about it: no sta
 
 test("an unparseable when: is never silent: the status says so, the tool reply says so when the note is written, and the doctor line says it never runs", () => {
   const conv = groupWith("whenever you feel like it");
-  const o = { skills: [] as string[], notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
+  const o = { notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
   const s = scheduledIn(o);
   assert.deepEqual(s.routines, []);
   assert.match(s.broken[0]!, /routine-fun-fact\.md has a when: line that cannot be read \(Cannot read the repeat rule "whenever you feel like it"/);
@@ -335,7 +330,7 @@ test("an unparseable when: is never silent: the status says so, the tool reply s
 
 test("editing a note's when: moves the next occurrence from then on", () => {
   const conv = groupWith("every day at 08:00");
-  const o = { skills: [] as string[], notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
+  const o = { notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
   F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false });
   const first = F.factsFor(conv, o.now, "look");
   delegateNote(first);
@@ -350,15 +345,14 @@ test("editing a note's when: moves the next occurrence from then on", () => {
   next.done({ ended: true, said: true });
 });
 
-test("a note routine is for a conversation that has a look; skills are for the owner; the cap and an expired or inferred note", () => {
+test("a note routine: the cap and an expired or inferred note", () => {
   const conv = groupWith("every day at 08:00");
-  assert.equal(lookerOf(conv).skills.some((s) => /daily-brief/.test(s)), false, "a group has no scheduled skill");
-  const o = { skills: lookerOf(owner()).skills, notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
-  assert.deepEqual(scheduledIn(o).routines.map((r) => r.name), ["daily-brief", "evening-wrap", "weekly-review", "routine-fun-fact"]);
+  const o = { notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T06:05:00Z") };
+  assert.deepEqual(scheduledIn(o).routines.map((r) => r.name), ["routine-fun-fact"], "nothing is scheduled but notes");
   writeFileSync(join(conv.notesDir, "routine-old.md"), "---\nwhen: every day at 08:00\nexpires: 2026-10-01\n---\nOld.\n");
   assert.ok(!scheduledIn(o).routines.some((r) => r.name === "routine-old"), "past its expires: day");
   for (let i = 0; i < 25; i++) writeFileSync(join(conv.notesDir, `routine-z${String(i).padStart(2, "0")}.md`), "---\nwhen: every day at 08:00\n---\nz\n");
-  assert.equal(scheduledIn({ ...o, skills: [] }).routines.length, 20);
+  assert.equal(scheduledIn(o).routines.length, 20);
 });
 
 test("the selfTimed text is gone from every prompt; the promise points at the when: note where the conversation has a look", () => {
@@ -426,7 +420,7 @@ test("a rule may end with an IANA zone: it runs on that clock, across the clock 
   assert.equal(zurich.zone, "Europe/Zurich");
   assert.equal((parseRepeat("every day at 08:00 europe/zurich") as { text: string }).text, "every day at 08:00 Europe/Zurich", "canonical text keeps the zone");
   assert.equal((parseRepeat("every weekday at 17:45 Europe/London") as { text: string }).text, "every weekday at 17:45 Europe/London");
-  const r = { name: "routine-x", rule: zurich };
+  const r = { name: "routine-x", rule: zurich, instruction: "x" };
   const LONDON = "Europe/London";
   const rec = { since: z("2026-03-01T00:00:00Z").getTime(), attempts: 0, told: false };
   // before the change to summer time (Sun 29 Mar 2026): 08:00 Zurich is 07:00 UTC; after it 06:00 UTC
@@ -437,7 +431,7 @@ test("a rule may end with an IANA zone: it runs on that clock, across the clock 
   assert.match(S.nextText(r, z("2026-03-30T05:30:00Z"), LONDON), /every day at 08:00 Europe\/Zurich, next today 08:00/);
   assert.match(S.routineStatus(owner().convId, [r], z("2026-03-30T06:30:00Z"), LONDON, 4), /routine-x: /);
   // without a zone: the conversation's clock, as before
-  const plain = { name: "routine-y", rule: rule("every day at 08:00") };
+  const plain = { name: "routine-y", rule: rule("every day at 08:00"), instruction: "y" };
   assert.equal(S.slotsAround(plain, z("2026-03-28T06:00:00Z"), LONDON, "2026-03-01").next!.at.toISOString(), "2026-03-28T08:00:00.000Z");
   assert.equal(rule("every day at 08:00").zone, undefined);
 });
@@ -447,4 +441,25 @@ test("an unknown time zone in a repeat rule is unreadable and says so", () => {
   assert.equal(p.ok, false);
   assert.match((p as { error: string }).error, /time zone that does not exist/);
   assert.equal(parseRepeat("every day at 08:00 Mars/Olympus").ok, false);
+});
+
+// ---- the brief, the wrap and the review are routine notes like any other ----
+const briefIn = (when: string) => groupWith(when, "Run the ted-personal-assistant:daily-brief skill and deliver the brief as it says.", "routine-daily-brief.md");
+
+test("a note that runs the daily brief: the expert and the delivery line, one record under the note's name, any expert counts; moving its time moves the run; forgetting it ends it", () => {
+  const conv = briefIn("every day at 07:30");
+  F.factsFor(conv, at("2026-10-22T05:00:00Z"), "look").done({ ended: true, said: false }); // 07:00 Berlin: first sight
+  const look = F.factsFor(conv, at("2026-10-22T06:00:00Z"), "look"); // 08:00
+  assert.match(look.routines, /routine-daily-brief: due now \(every day at 07:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"[\s\S]*Run the ted-personal-assistant:daily-brief skill/);
+  assert.doesNotMatch(look.routines, /How to deliver/, "the delivery sentence is the prompt's, not a routine fact");
+  look.onDelegate("expert-daily-brief");
+  assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, "started");
+  look.onTool("Agent", { subagent_type: "expert-daily-brief" }, { content: [{ type: "text", text: "the brief" }] });
+  look.done({ ended: true, said: true });
+  assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, "delivered");
+  assert.equal(F.factsFor(conv, at("2026-10-22T07:00:00Z"), "look").routines, "", "not twice the same day");
+  writeFileSync(join(conv.notesDir, "routine-daily-brief.md"), "---\nwhen: every day at 09:00\n---\nRun the ted-personal-assistant:daily-brief skill and deliver the brief as it says.\n");
+  assert.match(scheduleLines(conv.convId, { notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-22T07:10:00Z") })[0]!, /^routine-daily-brief: every day at 09:00, next tomorrow 09:00/);
+  rmSync(join(conv.notesDir, "routine-daily-brief.md"));
+  assert.deepEqual(scheduledIn({ notesDir: conv.notesDir, zone: ZONE, now: at("2026-10-23T08:00:00Z") }).routines, [], "forgotten: nothing runs");
 });

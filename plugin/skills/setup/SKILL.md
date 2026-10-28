@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Use in chat when the owner asks to set up, connect or configure the assistant, or when another skill finds that something it needs (calendars, meeting notes, writing voice) is not in the owner's notes yet. Walks the owner through it in the conversation and saves each answer as a memory note.
+description: Use in chat when the owner asks to set up, connect or configure the assistant, or asks what the assistant can do, or when another skill finds that something it needs (calendars, meeting notes, writing voice) is not in the owner's notes yet. Walks the owner through it in the conversation and saves each answer as a memory note.
 ---
 
 # Setup, through the chat
@@ -118,6 +118,33 @@ Find it yourself first here too.
   brief's radar should follow; save them, or skip.
 - **Quiet preferences:** if they mention things like "no meetings before 10", save
   those as `scheduling-` notes.
+
+### 6. What you can do, and the recurring routines
+
+When the owner sets you up, or asks "what can you do?", explain the main things in a
+few lines (not a manual): the calendar and mail connectors you read, the task list
+(you add what needs doing and remind them), and routines, things you do on your own at
+a set time. Then offer the three recurring ones, one at a time, each with what is in
+it and a time to choose:
+
+- **Daily brief:** "I can send you a daily brief every morning: your mail sorted, the
+  day's calendar, what is open on your list and what to prepare. Want it, and at what
+  time?" (suggest 07:30 every day)
+- **Evening wrap:** "A short wrap at the end of the workday: what got done, what
+  tomorrow holds, what still waits on you. Want it, and when?" (suggest 18:30 on weekdays)
+- **Weekly review:** "A review on Friday afternoon: the week's wins, what slipped,
+  next week's priorities and who to follow up with. Want it, and when?" (suggest
+  Fridays at 16:30)
+
+On a yes, save the routine note with the time they chose (the routine rules say how:
+`routine-daily-brief.md`, `routine-evening-wrap.md`, `routine-weekly-review.md`; the
+`when:` line, and as the body "Run the ted-personal-assistant:daily-brief skill and
+deliver the brief as it says." with the skill's name for the others). The tool reply
+tells you how the schedule was read: tell them in a line. On a no, move on and do not
+ask again. Take edits as they come ("no pep talk", "shorter", "only on weekdays"):
+save a content wish as a `brief-` note as the daily brief skill describes, and a
+change of time as an edit of the routine's note. Other routines they want ("every
+Monday at 9 summarise my week") are routine notes the same way.
 
 ## When you are done
 

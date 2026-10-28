@@ -9,7 +9,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - **Give facts, not decisions.** Where the model is weak (dates, time zones, counts, "is this due", "was this already sent"), code computes the fact and hands it to the run as context. The run decides what to do with it.
 - **General over specific.** If a fix only works for one feature, look for the shared mechanism that fixes the whole class. Abstract and generalise across features instead of adding a case.
 - **Delete, do not keep fallbacks.** Remove the old path when the new one lands. No feature flags for old behaviour, no dead code kept "just in case".
-- **Schedules are data.** Anything that runs at a set time is declared in a skill's `schedule:` or a note's `when:` line. Code computes when it is due and that it runs once; the model does the work.
+- **Schedules are data.** Anything that runs at a set time lives only in a routine note's `when:` line (the brief, the wrap and the review included); skills schedule nothing. Code computes when it is due and that it runs once; the model does the work.
 - **Context is a budget.** Every tool definition and prompt line is paid on every call. Show the model only the tools its skills use, and measure with `/context` before and after a change that adds any.
 
 ## 2. One architecture for everyone

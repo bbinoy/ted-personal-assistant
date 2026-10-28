@@ -4,11 +4,8 @@ import type { Conversation } from "../conversation/conversation.ts";
 import { fence } from "../core/fence.ts";
 import { dayAt, dayIn, timeIn } from "../core/timezone.ts";
 import { PLUGIN } from "../core/preset.ts";
-import { settings } from "../core/settings.ts";
 import { takeWelcome } from "../core/welcome.ts";
-import { mailSlot } from "../modules/index.ts";
 import { learnedFact } from "../memory/learned.ts";
-import { EXPERT, variantOf } from "../run/delegation.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { scheduledIn } from "../modules/tasks/routinelist.ts";
@@ -17,15 +14,14 @@ import { reminderFacts } from "../tasks/remind.ts";
 import { meetingFacts } from "../tasks/meetings.ts";
 import { tasksFacts } from "../tasks/render.ts";
 import { activeItems } from "../tasks/store.ts";
-import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineOfAgent, routineStatus, settleRoutines, type Routine } from "../tasks/routines.ts";
+import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineStatus, settleRoutines } from "../tasks/routines.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
 import { whereaboutsFact } from "./whereabouts.ts";
 import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
 import { afterLook, waitingReminders } from "./remindtick.ts";
 import { afterPrep, waitingMeetings } from "./preptick.ts";
-// A routine (scheduled skill or routine note) the Mac slept through still runs on waking within this many hours of its time, else that period is skipped.
+// A routine (a routine note) the Mac slept through still runs on waking within this many hours of its time, else that period is skipped.
 const ROUTINE_CATCHUP_HOURS = 4;
-const expertOf = (skill?: string): string => (skill ? variantOf(skill) : EXPERT); // who runs a routine: a skill's expert, or the general expert for a note
 
 // THE FACTS CODE HANDS A RUN (CLAUDE.md §2: one agent, whatever started it). The heartbeat look and every chat turn (the owner's, a friend's, a group's) call `factsFor` and get the same
 // facts for their conversation: held posts, reminders due, meetings to prepare, a friend's learned changes, the welcome, a due routine or routine note, and as information the own posts of the last days,
@@ -75,10 +71,6 @@ export function heldBlock(held: readonly Pick<Held, "text" | "at">[], now: Date,
   const lines = held.slice(0, HELD_MAX).map((h) => `Held back and not sent (written ${when(h.at)}): "${oneLine(h.text, HELD_CHARS)}"`);
   return `${fence("held_posts", lines.join("\n"))}\nThese were not delivered. Say again only what is still true and still matters now, in today's words; anything outdated or already resolved (check the journal, the brief status line, the chat log) you drop silently.`;
 }
-
-// How the daily brief reaches the owner, for its fact line: the mail provider's own words, or the chat alone when there is no mail. Any other routine: the chat message alone.
-export const deliverHow = (r: Routine): string =>
-  r.skill === "daily-brief" ? `How to deliver: ${settings.mail ? mailSlot()!.brief.how() : "There is no email in this setup: your final answer is the whole brief itself, in the skill's format."}` : "";
 
 // What is pending in a run right now, per conversation (memory only: a restart ends every run, so nothing can be stuck).
 const busy = new Map<string, Set<string>>();
@@ -139,8 +131,8 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
   const started = new Set<string>();
   const finished = new Set<string>();
   let selfMailed = 0; // routine emails sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
-  const { routines: ownRoutines, broken } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone, now });
-  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, agentOf: expertOf, approvals: openCount(conv.key), deliver: deliverHow }) : undefined;
+  const { routines: ownRoutines, broken } = scheduledIn({ notesDir: conv.notesDir, zone, now });
+  const routines = kind === "look" ? routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, approvals: openCount(conv.key), }) : undefined;
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
   for (const n of routineNames) grab(`routine:${n}`);
   const start = (name: string): void => {
@@ -155,14 +147,13 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
     status,
     routines: routines?.text ?? "",
     untrusted: tasks.fromMail,
-    onDelegate: (agent) => {
-      const r = routines?.due && routineOfAgent([routines.due.routine], agent, expertOf);
-      if (r) start(r.name);
+    onDelegate: () => {
+      if (routines?.due) start(routines.due.routine.name); // (any expert: the general one, or a heavy skill's)
     },
     onTool: (tool, input, response) => {
       const args = (input ?? {}) as { subagent_type?: unknown };
       const due = routines?.due?.routine;
-      if (due && (tool === "Agent" || tool === "Task") && typeof args.subagent_type === "string" && routineOfAgent([due], args.subagent_type, expertOf) && started.has(due.name) && resultText(response).trim()) finished.add(due.name); // the expert came back with a result (a run that ran out of turns has none)
+      if (due && (tool === "Agent" || tool === "Task") && typeof args.subagent_type === "string" && started.has(due.name) && resultText(response).trim()) finished.add(due.name); // the expert came back with a result (a run that ran out of turns has none)
       if (tool === "mcp__claude_ai_Gmail__send_message" || tool === "mcp__mailbird__send_self_briefing") selfMailed++;
     },
     done: (end) => {
@@ -172,8 +163,8 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
       const sends = (end.sends ?? 0) + selfMailed;
       try {
         if (end.ended) held.done(); // (a failed or called-off run leaves the held posts for the next one)
-        const note = routines?.due && !routines.due.routine.skill ? routines.due.routine.name : undefined;
-        if (note && !end.ended) finished.delete(note); // (a note's message is the look's answer: a look that failed or was called off leaves it for the retry; a skill's expert delivers itself)
+        const due = routines?.due?.routine.name;
+        if (due && !end.ended) finished.delete(due); // (a routine's message is the look's answer: a look that failed or was called off leaves it for the retry)
         settleRoutines(conv.convId, started, finished, { calledOff: abandoned, sends }, Date.now());
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
         if (handed.length && (kind === "look" || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);
@@ -189,7 +180,7 @@ export function factsFor(conv: Conversation, now: Date, kind: Kind): Facts {
 // Is a routine due right now (inside its slot and catch-up window, not started)? Then the conversation's look is due at once, like a claimed reminder: the 5-minute tick asks, no timer of its own.
 export function routinesWaiting(conv: Conversation, now: Date): boolean {
   const looker = lookerOf(conv);
-  const { routines } = scheduledIn({ skills: looker.skills, notesDir: conv.notesDir, zone: looker.zone, now });
+  const { routines } = scheduledIn({ notesDir: conv.notesDir, zone: looker.zone, now });
   return routines.some((r) => planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), ROUTINE_CATCHUP_HOURS).state === "due");
 }
 
