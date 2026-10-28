@@ -132,7 +132,7 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   assert.doesNotMatch(rules + text, /idle fingerprint|nextCheckMinutes|"act"/i);
   assert.match(lastLookText(undefined, DAY), /first check/);
   assert.match(lastLookText(new Date(2026, 9, 13, 9, 0).toISOString(), DAY), /an earlier day/);
-  const prompt = lookPrompt(DAY, text, ["[10-14 13:00] Ben: call Eve"]);
+  const prompt = lookPrompt(DAY, text, ["[10-14 13:00] Alex: call Eve"]);
   assert.match(prompt, /CURRENT TIME/);
   assert.match(prompt, /call Eve/);
 });
@@ -194,7 +194,7 @@ test("owner's look: [[silent]] posts nothing, a model's 3 minutes becomes 10, an
 
 test("the incident: a post held at 22:35 is not sent at 07:00; the morning look gets it once as a fact, a second look does not", async () => {
   const EVENING = new Date(2026, 9, 22, 22, 35, 0);
-  const TEXT = "Evening, Ben. Bit of a bump to report: today's morning brief never made it through. Two attempts ran out of steam, so I'm not retrying tonight.";
+  const TEXT = "Evening, Alex. Bit of a bump to report: today's morning brief never made it through. Two attempts ran out of steam, so I'm not retrying tonight.";
   let message = TEXT;
   const { w, conv, seen, at } = rig(() => ({ message, nextCheckMinutes: 120 }));
   at(EVENING);

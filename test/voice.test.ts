@@ -327,9 +327,9 @@ test("clip: for a long file the best stretch has continuous speech, not the star
 
 test("tool: an audio file with speech is a source like a voice note: use it from the asking message, a quoted file or the latest one", async () => {
   const T = NOW - 100_000;
-  fileNote("owner", T, "owner", { byName: "Ben", name: "talk.mp3" });
+  fileNote("owner", T, "owner", { byName: "Alex", name: "talk.mp3" });
   const s = await voiceNow("owner", { action: "sources" }, deps);
-  assert.match(s, /id \d+: audio file "talk.mp3" \(95 s\), from Ben, .*"this is the speech in the file"/);
+  assert.match(s, /id \d+: audio file "talk.mp3" \(95 s\), from Alex, .*"this is the speech in the file"/);
   const r = await asMember("owner", "owner", T, true, () => voiceNow("owner", { action: "use", name: "talk" }, deps));
   assert.match(r, /now using the voice "talk".*from the audio file/);
   const meta = JSON.parse(readFileSync(join(lib("owner"), "talk/meta.json"), "utf8"));

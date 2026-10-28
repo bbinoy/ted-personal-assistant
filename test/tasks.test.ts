@@ -304,10 +304,10 @@ test("tasks: who acted and where it came from: the owner, a friend, a group memb
   const origin = (key: string, id: number) => peekConvDb(convIdOfKey(key))!.get<{ origin: string }>("SELECT origin FROM items WHERE id = ?", id)!.origin;
   assert.equal(origin("owner", S.listItems("owner", {}, NOW, ZONE).find((i) => i.title === "Owner's")!.id), "owner");
   setAsking(k, { owner: false, author: "+49170", authorName: "Mia" });
-  await chat(k).add_task!.handler({ title: "Bring cake", assignee: "Ben" });
+  await chat(k).add_task!.handler({ title: "Bring cake", assignee: "Alex" });
   setAsking(k, undefined);
   assert.equal(askingIn(k), undefined);
-  assert.deepEqual([origin(k, 1), events(k)[0]!.by, S.getItem(k, 1)!.assignee], ["member", "Mia", "Ben"]);
+  assert.deepEqual([origin(k, 1), events(k)[0]!.by, S.getItem(k, 1)!.assignee], ["member", "Mia", "Alex"]);
   await chat(k).complete_task!.handler({ id: 1 }); // any member may finish it
   assert.equal(S.getItem(k, 1)!.status, "done");
   const friendKey = "tenant:ida";

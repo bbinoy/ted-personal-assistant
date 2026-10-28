@@ -44,7 +44,7 @@ const rowsOf = () => M.allMeetings(db());
 const iso = (ms: number) => new Date(ms).toISOString();
 
 type Raw = import("../src/tasks/meetings.ts").RawMeeting;
-const ME = { name: "Ben", email: "ben@acme.com", self: true };
+const ME = { name: "Alex", email: "alex@example.com", self: true };
 const ANNA = { name: "Anna", email: "anna@client.org" };
 const raw = (id: string, startMs: number, o: Partial<Raw> = {}): Raw => ({ eventId: id, start: iso(startMs), title: `Meeting ${id}`, attendees: [ME, ANNA], ...o });
 const record = (list: Raw[], at = NOW) => noteMeetings({ key: "owner", source: "background", now: () => at }, list);
@@ -89,7 +89,7 @@ test("recording: fields are cleaned and bounded: control characters out, titles 
   assert.equal(a!.title.length, 200);
   assert.ok(!a!.title.includes("\u0000") && !a!.title.includes("\n"));
   assert.equal(a!.attendees.length, M.MAX_ATTENDEES - 1, "the invite is bounded (30 taken, the empty entry dropped)");
-  assert.deepEqual(a!.attendees.slice(0, 3), [{ name: "Ben", email: "ben@acme.com", self: true }, { name: "Anna" }, { email: "bob@client.org" }]);
+  assert.deepEqual(a!.attendees.slice(0, 3), [{ name: "Alex", email: "alex@example.com", self: true }, { name: "Anna" }, { email: "bob@client.org" }]);
   assert.equal(a!.link, undefined, "a link that is not https is dropped, the meeting stays");
   assert.equal(b!.link, "https://meet.example.com/abc");
 });
@@ -141,10 +141,10 @@ test("skip rules: declined, all-day, private, nobody else (unless there is a vid
   assert.equal(M.prepSkip(meet({ attendees: [ME] })), "alone");
   assert.equal(M.prepSkip(meet({ attendees: [] })), "alone");
   assert.equal(M.prepSkip(meet({ attendees: [ME], link: "https://meet.example.com/x" })), undefined, "a video link counts as other people");
-  assert.equal(M.prepSkip(meet({ attendees: [ME, { name: "Cy", email: "cy@acme.com" }] })), undefined, "colleagues only: the look judges whether it is worth a word");
-  assert.match(M.meetingFacts([{ ...meet({ attendees: [ME, { name: "Cy", email: "cy@acme.com" }] }), state: "claimed", tries: 0 } as never], { now: NOW, zone: "Europe/Berlin" }), /outside her e-mail domain: no/);
+  assert.equal(M.prepSkip(meet({ attendees: [ME, { name: "Cy", email: "cy@example.com" }] })), undefined, "colleagues only: the look judges whether it is worth a word");
+  assert.match(M.meetingFacts([{ ...meet({ attendees: [ME, { name: "Cy", email: "cy@example.com" }] }), state: "claimed", tries: 0 } as never], { now: NOW, zone: "Europe/Berlin" }), /outside her e-mail domain: no/);
   assert.match(M.meetingFacts([{ ...meet(), state: "claimed", tries: 0 } as never], { now: NOW, zone: "Europe/Berlin" }), /outside her e-mail domain: yes/);
-  assert.equal(M.hasExternal(meet({ attendees: [{ name: "Ben", self: true }, { name: "Eve" }] })), true, "owner's address unknown: everyone counts as outside");
+  assert.equal(M.hasExternal(meet({ attendees: [{ name: "Alex", self: true }, { name: "Eve" }] })), true, "owner's address unknown: everyone counts as outside");
 });
 
 test("due: from PREP_MINUTES before the start until 3 minutes before it, once open; never for a closed row or when prep is off", () => {

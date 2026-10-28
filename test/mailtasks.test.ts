@@ -145,7 +145,7 @@ test("groups: 'Sam by Friday' sets the assignee; 'remind me' makes a GROUP task 
   assert.doesNotMatch(text(r1), /"Saved for the group/, "no sentence for the model to copy: it says it in its words");
   const r2 = await t.add_task!.handler({ title: "Email the band", remind: "2026-10-24T15:00" });
   assert.doesNotMatch(text(r2), /first reminder here/, "once per member");
-  setAsking(k, { owner: false, author: "+492", authorName: "Ben" });
+  setAsking(k, { owner: false, author: "+492", authorName: "Alex" });
   assert.match(text(await t.add_task!.handler({ title: "Pack chairs", remind: "2026-10-24T10:00" })), /first reminder here/);
   setAsking(k, undefined);
   assert.equal(peekConvDb(convIdOfKey(k))!.get<{ origin: string }>("SELECT origin FROM items WHERE id = 2")!.origin, "member");
@@ -176,10 +176,10 @@ test("prompts: the task tools are explained to the owner, a group and a friend; 
   assert.doesNotMatch(grp, /👍 confirms/);
   const friend = tenantSystem({ name: "Ida", caps: new Set(["chat", "tasks"]) as never, looker: lookerOf({ kind: "tenant" }) });
   assert.match(friend, /Tasks: you keep Ida's own to-do list/);
-  const looker = { ...lookerOf({ kind: "owner" }), who: "Ben", reads: true, mail: true, experts: false, sources: "x", tasks: true, group: false };
+  const looker = { ...lookerOf({ kind: "owner" }), who: "Alex", reads: true, mail: true, experts: false, sources: "x", tasks: true, group: false };
   const look = chatSystem(new Date(NOW), true, looker); // (what a background check does is every conversation's prompt)
   assert.match(look, /add it to the list yourself with add_task/);
-  assert.match(look, /then tell Ben in your message, in your own words/);
+  assert.match(look, /then tell Alex in your message, in your own words/);
   assert.match(look, /Do not ask whether to add it/);
   assert.match(look, /source_ref the mail's id/);
   assert.match(look, /promised something in a mail they sent \(kind i_owe/);

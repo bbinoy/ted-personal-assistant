@@ -33,8 +33,8 @@ test("a conversation's scope: the owner's last three messages and what the assis
   o.end();
   assert.equal(o.read()?.kind, "owner", "the owner's recent messages stay across turns");
   // a reaction: the reaction is the message and the reacted-to text is what the assistant said
-  o.say("Ben reacted 👍", "Here is the invoice text from the mail");
-  assert.deepEqual(o.read(), { kind: "owner", message: "Ben reacted 👍", earlier: ["three", "four"], assistantSaid: "Here is the invoice text from the mail" });
+  o.say("Alex reacted 👍", "Here is the invoice text from the mail");
+  assert.deepEqual(o.read(), { kind: "owner", message: "Alex reacted 👍", earlier: ["three", "four"], assistantSaid: "Here is the invoice text from the mail" });
   // a member's
   const g = scopeOf("g-scope");
   g.say("book a table");

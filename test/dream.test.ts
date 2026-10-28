@@ -26,7 +26,7 @@ function seed(notes: NoteFile[]) {
 }
 const scope = dreamScope(owner());
 const ctx = (notes: NoteFile[] = [], extra = {}) => ({ ownerText: OWNER_SAID, notes, today, now, maxNotes: 50, scope, ...extra });
-const write = (o: object) => ({ op: "write", file: "people-anna.md", description: "Anna is Ben's sister", text: "Anna is Ben's sister; birthday 3 March.", ...o });
+const write = (o: object) => ({ op: "write", file: "people-anna.md", description: "Anna is Alex's sister", text: "Anna is Alex's sister; birthday 3 March.", ...o });
 
 test("dream: a new note needs a verbatim quote of the owner's own words", () => {
   seed([]);
@@ -58,10 +58,10 @@ test("dream: setup and voice notes, odd names and bad input are never touched", 
 });
 
 test("dream: a merge may only shorten; it needs no quote, and it removes what it merges", () => {
-  const a = note("people-anna.md", "Anna is Ben's sister and lives in Bern and likes tea.");
+  const a = note("people-anna.md", "Anna is Alex's sister and lives in Bern and likes tea.");
   const b = note("people-anna-birthday.md", "Anna's birthday is 3 March.");
   seed([a, b]);
-  const short = planOps({ ops: [write({ file: "people-anna.md", text: "Anna: Ben's sister, Bern, birthday 3 March.", consolidates: ["people-anna.md", "people-anna-birthday.md"] })] }, ctx([a, b]));
+  const short = planOps({ ops: [write({ file: "people-anna.md", text: "Anna: Alex's sister, Bern, birthday 3 March.", consolidates: ["people-anna.md", "people-anna-birthday.md"] })] }, ctx([a, b]));
   assert.deepEqual(short.actions.map((x) => `${x.kind}:${x.file}`), ["merge:people-anna.md", "delete:people-anna-birthday.md"]);
   // a "merge" that adds information (longer than its sources) is refused
   const longer = planOps({ ops: [write({ file: "people-anna.md", text: "x".repeat(300), consolidates: ["people-anna.md"] })] }, ctx([a, b]));
@@ -87,10 +87,10 @@ test("dream: capped changes per run, and memory has a size limit", () => {
 });
 
 test("dream: applying snapshots first, keeps the index right, and undo puts everything back", () => {
-  const a = note("people-anna.md", "Anna is Ben's sister and lives in Bern.");
+  const a = note("people-anna.md", "Anna is Alex's sister and lives in Bern.");
   const gone = note("context-trip.md", "Trip", "2026-10-01");
   seed([a, gone]);
-  const plan = planOps({ ops: [write({ file: "scheduling-hours.md", text: "Ben prefers meetings in the afternoon, never before 10.", description: "meeting hours", evidence: "I prefer meetings in the afternoon, never before 10" }), { op: "delete", file: "context-trip.md" }] }, ctx([a, gone]));
+  const plan = planOps({ ops: [write({ file: "scheduling-hours.md", text: "Alex prefers meetings in the afternoon, never before 10.", description: "meeting hours", evidence: "I prefer meetings in the afternoon, never before 10" }), { op: "delete", file: "context-trip.md" }] }, ctx([a, gone]));
   assert.equal(plan.actions.length, 2);
   assert.ok(applyPlan(plan, now, scope));
   assert.ok(existsSync(`${NOTES_DIR}/scheduling-hours.md`));
@@ -108,7 +108,7 @@ test("dream: applying snapshots first, keeps the index right, and undo puts ever
 });
 
 test("dream: the note it writes reads back as a normal note, with its expiry", () => {
-  const n = parseNote("context-trip.md", noteContent("context-trip.md", "trip", "Ben travels to Geneva 20-22 Oct.", "2026-10-22", now))!;
+  const n = parseNote("context-trip.md", noteContent("context-trip.md", "trip", "Alex travels to Geneva 20-22 Oct.", "2026-10-22", now))!;
   assert.equal(n.expires, "2026-10-22");
   assert.equal(n.category, "context");
 });
