@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { foldEdits, searchOf, withoutDeleted, type Kind, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
 import { convPaths, type ConvId } from "../core/convpaths.ts";
@@ -330,6 +331,11 @@ export function warmSearchIndex(scope: Scope, zone: string = systemZone()): Prom
     };
     try { await attempt(); } catch { SearchIndex.remove(scope.indexPath); await attempt(); }
   });
+}
+
+/** Warms several conversations' indexes one after another (each in its own folder, in the same small slices); one without a log or a notes folder is skipped, one failing never keeps another from being warmed. */
+export async function warmSearchIndexes(scopes: Scope[], zone: string = systemZone()): Promise<void> {
+  for (const s of scopes) if (existsSync(s.logFile) || existsSync(s.notesDir)) await warmSearchIndex(s, zone).catch(() => {});
 }
 
 /** Any conversation's: its folder's messages.jsonl, notes/ and search.sqlite (the index is built on the first search). */

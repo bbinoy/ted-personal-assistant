@@ -275,3 +275,16 @@ test("search: building the index never holds the event loop for long, and a sear
   assert.match(b, /^\d+ matches/);
   assert.ok(worst < 250, `the event loop was held for ${worst} ms`);
 });
+
+test("warm-up: every conversation's own index is built, one after another; one with no log or notes is skipped", async () => {
+  const { warmSearchIndexes } = await import("../src/memory/search.ts");
+  const { existsSync } = await import("node:fs");
+  const a = rig("wa"), b = rig("wb");
+  a.say("owner", "alpha trattoria");
+  b.say("owner", "beta museum");
+  const empty: Scope = { logFile: join(a.dir, "none.jsonl"), notesDir: join(a.dir, "nonotes"), indexPath: join(a.dir, "empty.sqlite") };
+  await warmSearchIndexes([a.scope, empty, b.scope], "UTC");
+  assert.ok(existsSync(a.scope.indexPath) && existsSync(b.scope.indexPath));
+  assert.ok(!existsSync(empty.indexPath));
+  assert.match(await b.find({ query: "museum" }), /museum/);
+});
