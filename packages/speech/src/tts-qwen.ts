@@ -77,7 +77,8 @@ class QwenServer {
   #child?: ChildProcessWithoutNullStreams;
   #up?: Promise<{ port: number; key: string }>;
   #idle?: NodeJS.Timeout;
-  #busy = 0;
+  #busy = 0; // requests waiting or running, so the idle stop does not fire between queued ones
+  #tail: Promise<void> = Promise.resolve(); // settles when the last queued request is done
   readonly c: QwenConfig;
   constructor(c: QwenConfig) {
     this.c = c;
@@ -145,10 +146,25 @@ class QwenServer {
     this.#touch();
   }
 
+  // The server speaks one text at a time, so replies queue here: a reply's timeout runs from its turn, not while it waits behind another.
   async say(text: string, scope: string = OWNER_SCOPE, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
-    const started = Date.now();
     this.#busy++;
     clearTimeout(this.#idle);
+    const prev = this.#tail;
+    let release!: () => void;
+    this.#tail = new Promise<void>((r) => (release = r));
+    try {
+      await (signal ? raceAbort(prev, signal) : prev); // giving up while waiting leaves the server and the running reply alone
+      return await this.#speak(text, scope, format, signal);
+    } finally {
+      void prev.then(release); // an aborted waiter still hands over only after the one before it, so the order holds
+      this.#busy--;
+      this.#touch();
+    }
+  }
+
+  async #speak(text: string, scope: string, format?: VoiceFormat, signal?: AbortSignal): Promise<string> {
+    const started = Date.now();
     let up = false;
     try {
       const { port, key } = await (signal ? raceAbort(this.ensure(), signal) : this.ensure()); // a cold start is not waited for past the caller's deadline (it goes on, for the next reply)
@@ -164,9 +180,6 @@ class QwenServer {
       // (Not while it is still starting: that start is kept for the next reply.)
       if (!(signal?.aborted && !up)) this.stop();
       throw e;
-    } finally {
-      this.#busy--;
-      this.#touch();
     }
   }
 }

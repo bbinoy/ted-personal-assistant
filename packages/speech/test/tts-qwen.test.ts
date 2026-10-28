@@ -44,6 +44,7 @@ else {
     req.resume();
     req.on("end", () => {
       if (req.headers["x-qwen-key"] !== process.env.QWEN_TTS_NONCE) { res.writeHead(403); return res.end("forbidden"); }
+      if (mode === "pace") return setTimeout(() => { res.writeHead(200, { "content-type": "audio/wav" }); res.end(b); }, 1200);
       if (mode === "slow") return setTimeout(() => { res.writeHead(200, { "content-type": "audio/wav" }); res.end(b); }, 3000);
       if (mode === "bad") { res.writeHead(500); return res.end("RuntimeError: out of memory"); }
       res.writeHead(200, { "content-type": "audio/wav" }); res.end(b);
@@ -106,6 +107,38 @@ test("qwen: a server that never gets ready times out", async () => {
 test("qwen: a slow answer times out, and a server error is named", { skip }, async () => {
   await assert.rejects(synthesizeQwen("Hi.", cfg("slow", { timeoutMs: 1500 })), /timeout after/);
   await assert.rejects(synthesizeQwen("Hi.", cfg("bad")), /HTTP 500.*out of memory/);
+});
+
+// "pace": each text takes 1.2 s, more than half of the 2 s timeout, so a reply that waited its turn on the clock would time out.
+const traced = (log: string[]) => ((u: string, init: RequestInit) => (log.push(`${new URL(u).port}:${JSON.parse(String(init.body)).text}`), fetch(u, init))) as typeof fetch;
+
+test("qwen: concurrent replies are served one at a time, in order, each with its own timeout", { skip }, async () => {
+  const log: string[] = [];
+  const c = cfg("pace", { timeoutMs: 2000, fetchImpl: traced(log) });
+  const [a, b] = await Promise.all([synthesizeQwen("first", c), synthesizeQwen("second", c)]);
+  assert.ok(a.endsWith("voice.m4a") && b.endsWith("voice.m4a"));
+  assert.deepEqual(log.map((x) => x.split(":")[1]), ["first", "second"]);
+  assert.equal(new Set(log.map((x) => x.split(":")[0])).size, 1, "no restart");
+  gone(a);
+  gone(b);
+});
+
+test("qwen: an aborted waiting reply leaves the running one and the next one working, and does not stop the server", { skip }, async () => {
+  const log: string[] = [];
+  const c = cfg("pace", { timeoutMs: 5000, fetchImpl: traced(log) });
+  const ac = new AbortController();
+  const first = synthesizeQwen("first", c);
+  const second = synthesizeQwen("second", c, undefined, undefined, ac.signal);
+  const third = synthesizeQwen("third", c);
+  second.catch(() => {});
+  await new Promise((r) => setTimeout(r, 300));
+  ac.abort(new Error("gave up"));
+  await assert.rejects(second, /gave up/);
+  const [a, t] = await Promise.all([first, third]);
+  assert.deepEqual(log.map((x) => x.split(":")[1]), ["first", "third"]);
+  assert.equal(new Set(log.map((x) => x.split(":")[0])).size, 1, "the server was not stopped");
+  gone(a);
+  gone(t);
 });
 
 test("qwen: an idle server is stopped, the next reply starts a new one", { skip }, async () => {
