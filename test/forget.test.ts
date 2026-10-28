@@ -136,7 +136,7 @@ test("forget friend: her registry entry, folder (voices, pending, history), audi
 
 const run = (args: string[], dataDir: string) => spawnSync(process.execPath, ["--conditions=workspace-source", "scripts/forget.ts", ...args], { cwd: ROOT, env: { ...process.env, HARNESS_DATA_DIR: dataDir, OPENBAO_ADDR: "https://127.0.0.1:1", OPENBAO_TIMEOUT_SECONDS: "1" }, encoding: "utf8", timeout: 60_000 }); // (no secret store here: refused at once)
 
-test("npm run forget: usage, a group by folder name or name, the owner and odd ids refused; idempotent; an old data folder refused", () => {
+test("npm run forget: usage, a group by folder name or name, the owner and odd ids refused; idempotent", () => {
   const dir = mkdtempSync(join(tmpdir(), "forget-cli-"));
   const conv = groupConvId("Zm9yZ2V0LUU=");
   mkdirSync(join(dir, "conversations", conv, "notes"), { recursive: true });
@@ -157,10 +157,4 @@ test("npm run forget: usage, a group by folder name or name, the owner and odd i
   assert.equal(run(["friend", "owner"], dir).status, 1);
   assert.equal(run(["friend", "../x"], dir).status, 1);
   // (a friend by the command waits for the secret store to come up, 30 s when there is none: the flow is tested above with the store handed in)
-  // an old data folder is refused, like every tool
-  const oldDir = mkdtempSync(join(tmpdir(), "forget-old-"));
-  mkdirSync(join(oldDir, "tenants", "zed-1"), { recursive: true });
-  const o = run(["group", conv], oldDir);
-  assert.equal(o.status, 1);
-  assert.match(o.stderr, /older layout/);
 });

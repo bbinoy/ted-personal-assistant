@@ -2,11 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appendRow, type HeartbeatRow } from "../src/core/looks.ts";
 import { commandReply, lastOwnerLook, parseCommand, statusText } from "../src/conversation/ownercommands.ts";
-import { clearPause, importPauseFile, isPaused, pauseText } from "../src/core/pause.ts";
+import { clearPause, isPaused, pauseText } from "../src/core/pause.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { readText, writeText } from "../src/core/state.ts";
 import { RunStopped, stopRuns, withCeiling } from "../src/run/ceiling.ts";
-import { friendConvId, groupConvId, instancePaths, OWNER_CONV } from "../src/core/convpaths.ts";
+import { friendConvId, groupConvId, OWNER_CONV } from "../src/core/convpaths.ts";
 import { addTenant, ensureOwner } from "../src/tenants/tenants.ts";
 
 // A friend is a registered person: what her chat may do comes from her capabilities (policy/capabilities.ts), not from a label on the conversation.
@@ -55,23 +54,6 @@ test("/pause sets the pause switch (a time inside), /resume clears it, and the s
   commandReply(ownerConv, "/pause", { now: () => NOW });
   assert.equal(pauseText(NOW), "paused until you switch it off", "bare /pause: until /resume");
   assert.equal(isPaused(new Date(2030, 0, 1)), true);
-  clear();
-});
-
-test("an existing instance/paused file is honoured once at the start, converted to the row and deleted", () => {
-  for (const [old, check] of [
-    ["", (d: Date) => isPaused(d)],
-    ["2026-10-20", (d: Date) => isPaused(d) === (d < new Date(2026, 9, 20))],
-    [new Date(NOW.getTime() + 3_600_000).toISOString(), (d: Date) => isPaused(d) === (d.getTime() < NOW.getTime() + 3_600_000)],
-    ["garbage", (d: Date) => isPaused(d)],
-  ] as const) {
-    clear();
-    writeText(instancePaths().paused, old);
-    assert.equal(importPauseFile(), true);
-    assert.equal(readText(instancePaths().paused), undefined, "the file is gone");
-    assert.equal(check(NOW) && check(new Date(2026, 9, 14, 20, 0)) && check(new Date(2026, 9, 25)), true, `"${old}"`);
-  }
-  assert.equal(importPauseFile(), false, "nothing to convert the second time");
   clear();
 });
 

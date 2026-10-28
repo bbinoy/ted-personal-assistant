@@ -17,7 +17,7 @@ import { MAX_AGE_MS as VOICE_SOURCE_WINDOW_MS } from "../modules/voice/voicenote
 
 // The file-based retention rules (core/retention.ts says how they run). Each is a factory over a data layout and its window, so a test gives a temp folder and a fake clock; `fileRules()` is the set
 // the application registers, built from the settings. What every rule shares: it only looks at the folder it owns, never follows a link, counts what it removes in files and bytes, and in a dry run
-// removes nothing. What NO rule touches (a test pins each): the current audit file, the kill-switch file (card.disabled; an old instance/paused is converted at start), the payments ledger,
+// removes nothing. What NO rule touches (a test pins each): the current audit file, the kill-switch file (card.disabled), the payments ledger,
 // a conversation's live notes (only the expired ones, and into notes-backup/ first), signal-cli's keys and config.
 
 const DAY = 86_400_000;

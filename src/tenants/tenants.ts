@@ -185,17 +185,15 @@ interface Registry {
 
 const isRecord = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 
-// One stored record, checked and completed: a field a registry written before roles existed lacks gets the safe value (a member), so an old file keeps working and nobody becomes an admin by omission.
-// A `capabilities` list written by an older version is ignored (nothing is stored any more) and is gone with the next write. Undefined: not a usable record.
+// One stored record, checked: a missing role or credential is the least privileged one (a member on the instance key), so nobody becomes an admin or spends the owner's login by omission. Undefined: not a usable record.
 function normalise(x: unknown): TenantRecord | undefined {
   if (!isRecord(x)) return undefined;
   const { id, name, acis, created } = x;
-  const status = x.status === "invited" ? "active" : x.status; // (a registry written when a friend was 'invited' until she confirmed her age: that gate is gone)
+  const status = x.status;
   if (typeof id !== "string" || !TENANT_ID.test(id) || typeof name !== "string" || typeof created !== "string") return undefined;
   if (!Array.isArray(acis) || !acis.every((a) => typeof a === "string" && ACI.test(a)) || !STATUSES.includes(status as TenantStatus)) return undefined;
-  const isOwner = id === OWNER_ID;
-  const role = x.role === undefined ? (isOwner ? "admin" : "member") : x.role;
-  const credential = x.credential === undefined ? (isOwner ? "login" : "instance-key") : x.credential;
+  const role = x.role ?? "member";
+  const credential = x.credential ?? "instance-key";
   if (!ROLES.includes(role as Role) || !CREDENTIALS.includes(credential as Credential)) return undefined;
   if (x.number !== undefined && typeof x.number !== "string") return undefined;
   return { id, name, acis: [...(acis as string[])], ...(typeof x.number === "string" && x.number ? { number: x.number } : {}), role: role as Role, status: status as TenantStatus, credential: credential as Credential, created };

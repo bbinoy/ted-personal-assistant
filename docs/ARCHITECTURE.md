@@ -75,7 +75,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `items`, `task_events`, `reminders`, `group_remind_noted` | tasks, append-only history, claimed reminders, a group notice mark |
 | `learned_changes`, `learned_batches`, `voice_*`, `friend` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
 
-- **Adding state is one migration:** append a step to `CONV_SCHEMA`, write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound or is keyed by something that can go away. Older code refuses a newer file (`NewerSchemaError`).
+- **Adding state is one migration:** append a step to `CONV_SCHEMA` (the steps up to version 22 were collapsed into one baseline that creates the current shape; a file older than it is refused with `OlderSchemaError`; `test/schemabaseline.test.ts` pins the baseline to the schema the old steps made), write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound or is keyed by something that can go away. Older code refuses a newer file (`NewerSchemaError`).
 - **Damage.** Every open runs `integrity_check`. Only the agent reacts: it writes `assistant.db.damaged`, sets the file aside and starts a fresh database. Chat keeps working; that conversation's background work is refused (`mayRun` answers `damaged`) and the owner is told once a day (`noticeDamaged`). `npm run doctor` fails until `npm run convdb -- accept <convId>`.
 - **Stays a file:** `messages.jsonl`, `notes/`, `voices/`, `tenant.json`, `meta.json` (a group's identity must survive a set-aside database) and the `search.sqlite` cache.
 
@@ -93,7 +93,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 | `kv` | last tick, connectors the last run saw, tool names seen, the welcome state |
 
 - **A ledger is never reset.** A damaged `instance.db` makes the agent start degraded (`ledgerDamage()`): chat works, every budget reads as spent, so background work, browse and friends' runs are refused and no card is opened.
-- **Stays a file:** `tenants.json` (repaired by hand), `registrations.json`, `intake/` (a rename is the single-use guarantee), `card.disabled` (a kill switch that must work when everything else is broken). The pause is a `paused` row in `kv` that fails safe (unreadable = paused); an old `paused` file is converted once at start.
+- **Stays a file:** `tenants.json` (repaired by hand), `registrations.json`, `intake/` (a rename is the single-use guarantee), `card.disabled` (a kill switch that must work when everything else is broken). The pause is a `paused` row in `kv` that fails safe (unreadable = paused).
 - **Retention** (`src/heartbeat/dbretention.ts`): `looks` and `spend` older than 400 days, stale notices; payments only by `PAYMENTS_KEEP_YEARS` (0 = never).
 
 ## The run model

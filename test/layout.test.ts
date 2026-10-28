@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LAYOUT_VERSION, layout, layoutProblem, stampLayout } from "../src/core/convpaths.ts";
 
-// The one layout guard (core/convpaths.ts): version 4 or a new folder is usable, anything else is refused with one sentence.
+// The one layout guard (core/convpaths.ts): a newer layout is refused with one sentence, anything else is used.
 
 const folder = (): string => mkdtempSync(join(tmpdir(), "layout-"));
 const stamp = (root: string, v: string): void => (mkdirSync(layout(root).instance.dir, { recursive: true }), writeFileSync(layout(root).instance.layoutVersion, `${v}\n`));
@@ -21,16 +21,7 @@ test("a new, empty folder is usable and gets stamped with the current layout; a 
   assert.equal(readFileSync(layout(root).instance.layoutVersion, "utf8"), "5\n");
 });
 
-test("an older layout (a lower stamp, or the pre-instance/ folders without one) is refused with the tag to check out; a newer one is refused too", () => {
-  for (const v of ["2", "3"]) {
-    const root = folder();
-    stamp(root, v);
-    assert.match(layoutProblem(root)!, /older layout.*git tag last-migration.*npm run migrate/);
-  }
-  const old = folder();
-  mkdirSync(join(old, "memory", "notes"), { recursive: true });
-  writeFileSync(join(old, "memory", "notes", "a.md"), "x");
-  assert.match(layoutProblem(old)!, /older layout/);
+test("a layout stamp newer than this code's is refused with a sentence; the current one (and a folder with older files and no stamp) is used as it is", () => {
   const newer = folder();
   stamp(newer, String(LAYOUT_VERSION + 1));
   assert.match(layoutProblem(newer)!, /newer layout/);
