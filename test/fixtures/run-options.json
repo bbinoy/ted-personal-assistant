@@ -319,7 +319,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "group.run.systemPrompt",
-        "sha": "4d2206bdb3d2e441"
+        "sha": "a039ede53cae93b3"
       },
       "kind": {
         "who": "group",
@@ -333,6 +333,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -377,7 +378,7 @@
       "preset": "claude_code",
       "append": {
         "key": "group.system.append",
-        "sha": "4d2206bdb3d2e441"
+        "sha": "a039ede53cae93b3"
       },
       "snapshot": false
     },
@@ -402,6 +403,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],
@@ -436,7 +438,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenant.run.systemPrompt",
-        "sha": "ec35f2aa205125ae"
+        "sha": "9a83863fc14a93eb"
       },
       "tenant": {
         "id": "<bea>",
@@ -458,6 +460,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -501,7 +504,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenant.system.append",
-        "sha": "ec35f2aa205125ae"
+        "sha": "9a83863fc14a93eb"
       },
       "snapshot": false
     },
@@ -526,6 +529,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],
@@ -877,7 +881,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "groupLook.run.systemPrompt",
-        "sha": "4d2206bdb3d2e441"
+        "sha": "a039ede53cae93b3"
       },
       "kind": {
         "who": "group",
@@ -892,6 +896,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -939,7 +944,7 @@
       "preset": "claude_code",
       "append": {
         "key": "groupLook.system.append",
-        "sha": "4d2206bdb3d2e441"
+        "sha": "a039ede53cae93b3"
       },
       "snapshot": false
     },
@@ -964,6 +969,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],
@@ -998,7 +1004,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "tenantLook.run.systemPrompt",
-        "sha": "ec35f2aa205125ae"
+        "sha": "9a83863fc14a93eb"
       },
       "tenant": {
         "id": "<bea>",
@@ -1021,6 +1027,7 @@
         "Edit",
         "Read",
         "Skill",
+        "WebFetch",
         "WebSearch",
         "Write",
         "mcp__browse__browse",
@@ -1067,7 +1074,7 @@
       "preset": "claude_code",
       "append": {
         "key": "tenantLook.system.append",
-        "sha": "ec35f2aa205125ae"
+        "sha": "9a83863fc14a93eb"
       },
       "snapshot": false
     },
@@ -1092,6 +1099,7 @@
       "Write",
       "Edit",
       "WebSearch",
+      "WebFetch",
       "Agent"
     ],
     "settingSources": [],

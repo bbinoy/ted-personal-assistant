@@ -125,7 +125,7 @@ test("run options: what differs between the owner, a group and a tenant, and onl
   // owner -> group: persona, notes folder and session, the group's isolation (no user settings, no connectors, its capabilities' tools and shared skills (not the owner's), strict MCP)
   assert.deepEqual(differing(c.owner, c.group), [
     "disallowedTools", "mcpServers", "run.conversation", "run.experts", "run.groupId", "run.kind", "run.memory",
-    "run.sessionConv", "run.skills", "run.stopScope", "run.systemPrompt", "run.tools", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append", "tools",
+    "run.sessionConv", "run.skills", "run.stopScope", "run.systemPrompt", "run.tools", "settingSources", "settings.autoMemoryDirectory", "skills", "strictMcpConfig", "system.append",
   ]);
   // group -> tenant: notes, session and persona, her ledger and key; the instance key reaches her environment and the owner's logins leave it
   assert.deepEqual(differing(c.group, c.tenant), [
@@ -163,11 +163,10 @@ test("run options: a look is its conversation's message run but for the trigger 
     assert.deepEqual([c[look]!.run.kind.attended, c[msg]!.run.kind.attended, c[look]!.run.kind.who], [false, true, c[msg]!.run.kind.who]);
   }
   // draw, voice and the web follow the capabilities, in a look as in a chat: the owner's look has them like a group's
-  for (const t of ["mcp__draw__draw", "mcp__voice__voice", "mcp__send__send", "mcp__tasks__add_task", "mcp__weather__get_forecast", "WebSearch"]) {
+  for (const t of ["mcp__draw__draw", "mcp__voice__voice", "mcp__send__send", "mcp__tasks__add_task", "mcp__weather__get_forecast", "WebSearch", "WebFetch"]) {
     assert.ok(new Set<string>(c.ownerLook!.run.tools).has(t) === new Set<string>(c.owner!.run.tools).has(t), t);
     assert.ok(new Set<string>(c.groupLook!.run.tools).has(t) === new Set<string>(c.group!.run.tools).has(t), t);
   }
-  assert.ok(new Set<string>(c.ownerLook!.run.tools).has("WebFetch") && !new Set<string>(c.groupLook!.run.tools).has("WebFetch"), "opening a page is the owner's alone, in a look too");
 });
 
 test("first contact: a friend's first turn carries the hint for Ted to greet her in his own voice (AI, may be wrong, private from users and admin, the honest limit); never again", () => {

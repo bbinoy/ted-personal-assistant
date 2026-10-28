@@ -124,7 +124,7 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
   const kind: RunKind = { who: conv.kind, attended: t.attended };
   const shape = SHAPES[conv.kind](conv, inputs);
   const caps = capabilitiesOf(conv);
-  const skills = skillsFor(caps, conv.kind === "owner");
+  const skills = skillsFor(caps);
   const now = inputs.now ?? new Date();
   const { notes, ...rest } = shape;
   writeIndex(notes.dir, now, notes.zone); // (what changed since the last write: a note that expired, one the SDK's own writer or the person edited)

@@ -9,6 +9,5 @@ export const tenantsModule: ToolModule = {
   connection: { kind: "in-process", name: "tenants", when: (ctx) => settings.tenants && ctx.offers("mcp__tenants__list_tenants") },
   rows: [...tenants("tenants-read", "list_tenants resume_tenant", { attended: true }), ...tenants("tenants-invite", "invite_person", { attended: true }), ...tenants("tenants-stop", "suspend_tenant remove_tenant", { attended: true })],
   free: ["tenants-read"],
-  ownerOnly: true,
   floor: { judgeNever: ["tenants-invite", "tenants-stop"] },
 };

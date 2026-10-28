@@ -27,7 +27,7 @@ const READS = ["mail", "calendar", "notion"] as const;
 export function lookerOf(conv: Pick<Conversation, "kind" | "tenantId">, mailOn: boolean = settings.mail): Looker {
   const caps = capabilitiesOf(conv);
   const own = onLogin(conv);
-  const skills = skillsFor(caps, own);
+  const skills = skillsFor(caps);
   const reads = READS.some((c) => caps.has(c));
   const mail = caps.has("mail") && (!own || mailOn); // (the owner's mail is her mail provider's: none, no mail to read)
   const parts = [mail && "the inbox (list it with the mail tools and ask seen_mail which mail is new)", caps.has("calendar") && "the calendar for the next 36 hours", caps.has("notion") && "tasks"].filter(Boolean);

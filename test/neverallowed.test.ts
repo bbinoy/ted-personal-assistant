@@ -210,7 +210,7 @@ const TABLE: [string, string, string, string][] = [
   [`${N}notion-spawn-session`, "ask", "ask", "deny"],
   ["mcp__claude_ai_Interactive_Brokers_IBKR__get_account_balances", "deny", "deny", "deny"],
   ["WebSearch", "allow", "allow", "allow"],
-  ["WebFetch", "ask", "ask", "deny"],
+  ["WebFetch", "ask", "ask", "ask"],
   ["Skill", "allow", "allow", "allow"],
   ["Bash", "ask", "ask", "deny"],
   ["mcp__browse__browse", "ask", "ask", "ask"],
@@ -295,6 +295,6 @@ test("the built-in tools of a run come from the builtin module's rows: the same 
   assert.deepEqual(tools(OWNER_CHAT, { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"]);
   assert.deepEqual(tools(OWNER_LOOK, { memory: { dir: "/nonexistent-notes" } }), ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch"], "the owner's look: the same notes' file tools");
   assert.deepEqual(tools(BROWSE_RUN), ["WebSearch"]);
-  assert.deepEqual(tools(GROUP_CHAT, { tools: new Set(["WebSearch", "Read", "Skill", "WebFetch"]) }), ["Skill", "Read", "WebSearch"], "never opening a page, even if a set held the name");
+  assert.deepEqual(tools(GROUP_CHAT, { tools: new Set(["WebSearch", "Read", "Skill", "WebFetch"]) }), ["Skill", "Read", "WebSearch", "WebFetch"], "opening a page follows the set, a group's too");
   assert.deepEqual(tools(GROUP_CHAT, { tools: new Set() }), []);
 });
