@@ -1,4 +1,7 @@
 import { test } from "node:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 import assert from "node:assert/strict";
 import { tick } from "./util.ts";
 import { firstWarm, SpareSlot } from "../src/core/warmslot.ts";
@@ -106,10 +109,13 @@ const gid = () => `warm-${++n}-0123456789abcdef`;
 test("group warm: built from that group's own options only, exactly like a normal group run", () => {
   const was = settings.warm;
   (settings as { warm: boolean }).warm = true;
+  const note = join(convPaths(OWNER_CONV).notes, "style-warm-test.md"); // the owner's style notes are what a group's run is told of
+  mkdirSync(convPaths(OWNER_CONV).notes, { recursive: true });
+  writeFileSync(note, "be warm");
   try {
     const rig = startRig();
     const conv = group(gid());
-    prepare(conv, { style: "- be warm" }, { start: rig.start, keep: true });
+    prepare(conv, {}, { start: rig.start, keep: true });
     assert.equal(rig.started.length, 1);
     const o = rig.started[0];
     assert.deepEqual(o.settings, { autoMemoryEnabled: true, autoMemoryDirectory: conv.notesDir });
@@ -118,6 +124,7 @@ test("group warm: built from that group's own options only, exactly like a norma
     assert.deepEqual(o.tools, ["Skill", "Read", "Write", "Edit", "WebSearch", "WebFetch", "Agent"]);
     assert.match(JSON.stringify(o.systemPrompt), /be warm/);
   } finally {
+    rmSync(note, { force: true });
     (settings as { warm: boolean }).warm = was;
   }
 });
@@ -130,20 +137,20 @@ test("group warm: GROUP_WARM_SLOTS (1 here) processes for the latest groups; ano
     const rig = startRig();
     const a = group(gid());
     const b = group(gid());
-    prepare(a, { style: "" }, { start: rig.start, keep: true });
-    prepare(a, { style: "" }, { start: rig.start, keep: true }); // already warm for a: nothing new started
+    prepare(a, {}, { start: rig.start, keep: true });
+    prepare(a, {}, { start: rig.start, keep: true }); // already warm for a: nothing new started
     assert.equal(rig.started.length, 1);
-    prepare(b, { style: "" }, { start: rig.start, keep: true }); // b spoke last
+    prepare(b, {}, { start: rig.start, keep: true }); // b spoke last
     await tick();
     assert.equal(rig.started.length, 2);
     assert.deepEqual(rig.closed, ["warm1"]); // a's was dropped: at most one group process
     // a runs cold (its warm process is gone) and never on b's process
     const log: string[] = [];
-    await runConversation(a, { style: "" }, build, undefined, { query: coldQuery(log) });
+    await runConversation(a, {}, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(log, ["cold"]);
     assert.deepEqual(rig.used, []);
     // b uses its own
-    await runConversation(b, { style: "" }, build, undefined, { query: coldQuery(log) });
+    await runConversation(b, {}, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(rig.used, ["warm2"]);
     assert.deepEqual(log, ["cold"]);
   } finally {
@@ -158,10 +165,10 @@ test("group warm: a process built before the session moved on is not used", asyn
   try {
     const rig = startRig();
     const conv = group(gid());
-    prepare(conv, { style: "" }, { start: rig.start, keep: true });
+    prepare(conv, {}, { start: rig.start, keep: true });
     writeSession(conv.convId, { sessionId: "moved-on", costUsd: 0, lastTurnAt: new Date().toISOString() }); // a turn happened meanwhile
     const log: string[] = [];
-    await runConversation(conv, { style: "" }, build, undefined, { query: coldQuery(log) });
+    await runConversation(conv, {}, build, undefined, { query: coldQuery(log) });
     assert.deepEqual(log, ["cold"]);
     assert.deepEqual(rig.used, []);
     await tick();
@@ -179,8 +186,8 @@ test("warm: WARM=off starts nothing; WARM is validated", async () => {
   (settings as { warm: boolean }).warm = false;
   try {
     const rig = startRig();
-    prepare(group(gid()), { style: "" }, { start: rig.start, keep: true });
-    prepare(group(gid()), { style: "" }, { start: rig.start });
+    prepare(group(gid()), {}, { start: rig.start, keep: true });
+    prepare(group(gid()), {}, { start: rig.start });
     assert.equal(rig.started.length, 0);
   } finally {
     (settings as { warm: boolean }).warm = was;

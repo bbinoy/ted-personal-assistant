@@ -85,10 +85,6 @@ export type Gate = (input: GateInput) => Promise<GateOutput>;
 
 // ---- what the model is shown ----
 
-// The owner's style notes: the personality the assistant takes into groups (and what a group's gate is told of it).
-export const styleLines = (now: Date): string =>
-  readNotes(now).filter((n) => n.category === "style").map((n) => `- ${n.text.replace(/\s*\n\s*/g, " ").slice(0, LIMITS.logLine)}`).join("\n");
-
 // What the gate is told of that personality: it decides whether and when to speak, not how, so a compact one-liner
 // (the first words of each note, a few notes) is enough. The run that writes the reply gets the full styleLines.
 const STYLE_NOTES = 6;

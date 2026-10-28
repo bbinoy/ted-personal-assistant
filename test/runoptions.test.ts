@@ -1,7 +1,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,10 +21,13 @@ const { runFor, turnContext } = await import("../src/run/runoptions.ts");
 const { FIRST_CONTACT } = await import("../src/run/persona.ts");
 const { allRows } = await import("../src/policy/toolmanifest.ts");
 const { group, owner, tenant } = await import("../src/conversation/conversation.ts");
+const { convPaths, OWNER_CONV } = await import("../src/core/convpaths.ts");
 
 const FIXTURE = new URL("./fixtures/run-options.json", import.meta.url);
 const NOW = new Date("2026-10-19T09:00:00.000Z");
-const STYLE = "- be brief";
+const STYLE = "be brief"; // the owner's style note, which a group's run is told of
+mkdirSync(convPaths(OWNER_CONV).notes, { recursive: true });
+writeFileSync(join(convPaths(OWNER_CONV).notes, "style-test.md"), STYLE);
 const noop = async () => ({ approved: false });
 const sha = (s: string) => createHash("sha256").update(s.replaceAll(settings.dataDir, "<data>").replaceAll(process.cwd(), "<repo>")).digest("hex").slice(0, 16); // (a prompt names the notes folder)
 // A prompt in the fixture: its place (case.field) next to its hash, so that a drift says WHICH prompt changed, not just that a hash did.
@@ -38,10 +41,10 @@ type Run = Parameters<typeof buildOptions>[1];
 // ---- the conversations, as they are built, for a message and for a look ----
 const runs = {
   owner: (): Run => runFor(owner(), "message", {}),
-  group: (): Run => runFor(group("g-run-options"), "message", { style: STYLE }),
+  group: (): Run => runFor(group("g-run-options"), "message", {}),
   tenant: (ctx: ReturnType<typeof T.tenantContext>): Run => runFor(tenant(ctx.id), "message", { apiKey: INSTANCE_KEY, now: NOW }),
   ownerLook: (): Run => runFor(owner(), "look", { now: NOW }),
-  groupLook: (): Run => runFor(group("g-run-options"), "look", { style: STYLE, now: NOW }),
+  groupLook: (): Run => runFor(group("g-run-options"), "look", { now: NOW }),
   tenantLook: (ctx: ReturnType<typeof T.tenantContext>): Run => runFor(tenant(ctx.id), "look", { apiKey: INSTANCE_KEY, now: NOW }),
 };
 

@@ -4,7 +4,7 @@ import type { RunOptions } from "./agentrun.ts";
 import { instanceKeyOverBudget } from "../core/budget.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { recentNotices } from "../core/messages.ts";
-import { readIndex, readNotes, writeIndex } from "../memory/notes.ts";
+import { readIndex, readNotes, styleLines, writeIndex } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
 import type { RunKind } from "../core/runkind.ts";
 import { preset } from "../core/preset.ts";
@@ -22,7 +22,7 @@ import { lookerOf } from "./scope.ts";
 // a look (a background check the assistant starts itself). What a run is made of comes from the conversation's record (conversationmodel.ts: kind, notes folder, session file,
 // the group's id) and, for a person with a registry record, that record (tenants.ts: capabilities, credential source, her ledger and limits); its tools and skills from the
 // conversation's capability set (capabilities.ts toolsFor, skills.ts skillsFor), the owner's included: she simply has every capability. The caller adds only what is not in a record:
-// the style lines of a group's chat, the owner's notifier, the instance key a run on it carries, the clock, and a look's callbacks.
+// the owner's notifier, the instance key a run on it carries, the clock, and a look's callbacks.
 //
 //   owner   the preset prompt with the owner's persona, the owner's connectors (agentrun.ts buildOptions: no tenant, no group id)
 //   group   the group's persona and its own notes and session; isolated: no connectors, no user settings
@@ -60,7 +60,6 @@ export const TRIGGERS: Readonly<Record<Trigger, TriggerRow>> = {
 };
 
 export interface RunInputs {
-  style?: string; // a group: the style lines of its chat (group.ts styleLines)
   apiKey?: string; // a run on the instance key (a tenant's): TENANT_ANTHROPIC_API_KEY
   now?: Date;
 }
@@ -73,7 +72,7 @@ const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
 });
 
 const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
-  systemPrompt: groupSystem({ style: i.style, caps: capabilitiesOf(conv), looker: lookerOf(conv) }),
+  systemPrompt: groupSystem({ style: styleLines(i.now ?? new Date()), caps: capabilitiesOf(conv), looker: lookerOf(conv) }), // the owner's style notes are a group's
   notes: { dir: conv.notesDir, zone: zoneOf(conv) },
 });
 
