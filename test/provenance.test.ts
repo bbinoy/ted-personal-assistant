@@ -49,6 +49,24 @@ test("a conversation's scope: the owner's last three messages and what the assis
   assert.equal(g.read(), undefined);
 });
 
+test("assistantSaid is per conversation: a friend's or group's draft reaches only that conversation's judge input", () => {
+  const a = scopeOf("g-said-a");
+  const b = scopeOf("g-said-b");
+  const owner = scopeOf("owner");
+  a.assistantSaid("Draft for A: dinner at eight. Say send.");
+  b.say("hello");
+  owner.say("hi");
+  assert.doesNotMatch(judgePrompt({ description: "d", provenance: b.read()! }), /Draft for A/);
+  assert.doesNotMatch(judgePrompt({ description: "d", provenance: owner.read()! }), /Draft for A/);
+  a.say("yes, send it");
+  const mine = judgePrompt({ description: "d", provenance: a.read()! });
+  assert.match(mine, /Draft for A/);
+  assert.match(mine, /assistant_last_message/);
+  a.end();
+  a.say("again");
+  assert.match(judgePrompt({ description: "d", provenance: a.read()! }), /Draft for A/, "the last thing said survives the turn's end");
+});
+
 test("derivedTurn: the task is derived while the run goes on, gone after it, even when the run fails", async () => {
   const seen: unknown[] = [];
   await derivedTurn("g-derived", "gate", "task text", async () => void seen.push(scopeOf("g-derived").read()));

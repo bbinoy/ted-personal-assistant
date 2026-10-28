@@ -72,7 +72,7 @@ export class TurnScope {
     if (this.#derived) return this.#derived;
     const last = this.#recent.at(-1);
     if (last === undefined) return undefined;
-    return this.member ? { kind: "member", message: last.text } : { kind: "owner", message: this.#shown(last, now), earlier: this.#recent.slice(0, -1).map((m) => this.#shown(m, now)), assistantSaid: this.#said || undefined };
+    return this.member ? { kind: "member", message: last.text, ...(this.#said ? { assistantSaid: this.#said } : {}) } : { kind: "owner", message: this.#shown(last, now), earlier: this.#recent.slice(0, -1).map((m) => this.#shown(m, now)), assistantSaid: this.#said || undefined };
   };
 }
 
