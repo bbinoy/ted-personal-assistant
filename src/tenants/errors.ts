@@ -41,24 +41,25 @@ export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
 
 // ---- what a person is told when Ted cannot serve them right now: ONE table, by reason and audience ----
 // Fixed texts, on purpose (CLAUDE.md §4): only for people for whom no model run is possible at that moment (a refused key or login, a spent day, a cooldown, no key), and the owner's own
-// failure notices, which end with the one step she must take (FIXES). A run that merely failed (timeout, connector, reconnect, other) is no fixed text to a group or a friend: the turn's
-// warning reaction, the log and `npm run doctor` say it, and the next message runs again (they have nothing to do but ask again). Short and kind. A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every 30 minutes (refusalOnce).
+// failure notices, which end with the one step she must take (FIXES). A run that merely failed (timeout, connector, reconnect, other) gets one short line to a group or a friend
+// (FAILED): no model can say it, and they have nothing to do but ask again; the log and `npm run doctor` say the cause. Short and kind. A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every 30 minutes (refusalOnce).
 export type Reason = Cause | "owner-budget" | "shared-budget" | "cooldown" | "no-key";
 export interface RefusalFacts {
   until?: string; // a cooldown: when it ends, as a clock time
   limit?: number; // a friend's own day: her ceiling
 }
 const LIMIT = "I've hit my usage limit for now, so I can't think until it resets. Try me again a bit later.";
+const FAILED = "⚠️ Something went wrong, try again."; // a run that merely failed: they have nothing to do but ask again
 type Say = string | ((o: RefusalFacts) => string);
 const REFUSALS: Readonly<Record<Reason, Readonly<Partial<Record<Audience, Say>>>>> = {
   login: { owner: `My login expired, so I can't think. ${FIXES.login.fix}`, group: `I can't think right now: my login has expired, and ${OWNER} needs to fix it.` },
   limit: { owner: `I've hit my usage limit for now, so I can't think until it resets. ${FIXES.limit.fix}`, group: LIMIT, friend: "The account I run on for friends has hit a usage limit, so I can't think for a while. I'll answer again once the limit has lifted." },
   billing: { owner: `The shared API key has no credit left, so friends get no answers. ${FIXES.billing.fix}`, friend: `The account I run on for friends says there is no credit left (or a billing problem). ${OWNER} needs to look at it; I can answer again once that is fixed.` },
   refused: { owner: `The shared API key was refused, so friends get no answers. ${FIXES.refused.fix}`, friend: `Anthropic refused the request made with the account I run on for friends. ${OWNER} needs to check it; I'll try again later.` },
-  timeout: { owner: "That ran too long and I stopped it. Raise RUN_MAX_MINUTES_CHAT in .env and restart, or ask for something smaller.", },
-  connector: { owner: `A connector I need (Notion, Calendar or Gmail) did not answer. ${FIXES.connector.fix}` },
-  reconnect: { owner: `A friend's Notion or Google connection no longer works. ${FIXES.reconnect.fix}` },
-  other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}` },
+  timeout: { owner: "That ran too long and I stopped it. Raise RUN_MAX_MINUTES_CHAT in .env and restart, or ask for something smaller.", group: FAILED, friend: FAILED },
+  connector: { owner: `A connector I need (Notion, Calendar or Gmail) did not answer. ${FIXES.connector.fix}`, group: FAILED, friend: FAILED },
+  reconnect: { owner: `A friend's Notion or Google connection no longer works. ${FIXES.reconnect.fix}`, group: FAILED, friend: FAILED },
+  other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}`, group: FAILED, friend: FAILED },
   "owner-budget": { group: `I've used up my budget for today, so I can't answer until tomorrow. ${OWNER} can raise it if it is urgent.` },
   "shared-budget": { friend: "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved." },
   cooldown: { friend: (o) => `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${o.until}.` },
