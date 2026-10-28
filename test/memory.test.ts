@@ -6,6 +6,8 @@ import { noteContent, planOps } from "../src/memory/dreamplan.ts";
 import { categoryOf, forgetNote, indexOf, isIndex, isNotePath, NOTES_DIR, parseNote, readIndex, readNotes, writeIndex } from "../src/memory/notes.ts";
 import { fence } from "../src/core/fence.ts";
 import { settings } from "../src/core/settings.ts";
+import { dreamScope } from "../src/modules/memory/dreamscope.ts";
+import { owner } from "../src/conversation/conversationmodel.ts";
 import { chatContext, chatSystem, expertSystem } from "../src/run/persona.ts";
 
 const reset = () => {
@@ -132,7 +134,7 @@ test("the dream: a change to a note from the person's own words needs their quot
   put("people-anna.md", "Anna lives in Lisbon.");
   put("people-rui.md", "Rui is Anna's partner.");
   const notes = ["people-anna.md", "people-rui.md"].map((file) => ({ file, raw: readFileSync(join(NOTES_DIR, file), "utf8") }));
-  const base = { notes, today: "2026-10-21", now };
+  const base = { notes, today: "2026-10-21", now, scope: dreamScope(owner()) };
   const merge = planOps({ ops: [{ op: "write", file: "people-anna-rui.md", description: "Anna and Rui", text: "Anna and Rui, Lisbon.", consolidates: ["people-anna.md", "people-rui.md"] }] }, { ...base, ownerText: "" });
   assert.ok(merge.actions.some((a) => a.kind === "merge"), "a merge needs no quote");
   const refused = planOps({ ops: [{ op: "write", file: "people-anna.md", description: "Anna", text: "Anna lives in Porto.", evidence: "Anna lives in Porto now" }] }, { ...base, ownerText: "we talked about the weather" });

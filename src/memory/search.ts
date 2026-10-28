@@ -1,9 +1,7 @@
 import { foldEdits, searchOf, withoutDeleted, type Kind, type Sent } from "../core/messages.ts";
 import { settings } from "../core/settings.ts";
-import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
-import { FILE } from "../core/messages.ts";
+import { convPaths, type ConvId } from "../core/convpaths.ts";
 import { clockIn, dayIn, systemZone, timeIn } from "../core/timezone.ts";
-import { NOTES_DIR } from "./notes.ts";
 import { authorLabels, orExpr, phraseExpr, SearchIndex, speakerOf, type Doc, type Filters } from "./searchindex.ts";
 import { fold, queryStems, sentences, stem, stems } from "./searchtext.ts";
 
@@ -334,5 +332,8 @@ export function warmSearchIndex(scope: Scope, zone: string = systemZone()): Prom
   });
 }
 
-/** The owner's conversation: its folder's messages.jsonl, notes/ and search.sqlite. */
-export const ownerSearchScope = (): Scope => ({ logFile: FILE, notesDir: NOTES_DIR, indexPath: convPaths(OWNER_CONV).search });
+/** Any conversation's: its folder's messages.jsonl, notes/ and search.sqlite (the index is built on the first search). */
+export const searchScope = (conv: ConvId): Scope => {
+  const p = convPaths(conv);
+  return { logFile: p.messages, notesDir: p.notes, indexPath: p.search };
+};

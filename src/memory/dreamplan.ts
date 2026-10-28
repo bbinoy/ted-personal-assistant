@@ -1,9 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { MAX_NOTE_CHARS, NOTES_DIR, parseNote, type Category } from "./notes.ts";
-import { preset } from "../core/preset.ts";
-import { convPaths, OWNER_CONV } from "../core/convpaths.ts";
-import { settings } from "../core/settings.ts";
+import { MAX_NOTE_CHARS, parseNote, type Category } from "./notes.ts";
 import { LIMITS } from "../core/sanitize.ts";
 
 // The dream's rules, pure: which of the model's proposals may be applied (see dream.ts for the whole picture). Never trusts
@@ -17,8 +14,6 @@ const MIN_EVIDENCE = 12; // characters of the owner's own words a new fact must 
 
 // What the dream may write or delete. setup-* notes are the setup skill's (calendar ids, Notion
 // pages) and voice-* notes come from the owner's sent mail: neither is learned from chat.
-const DREAM_CATEGORIES: readonly Category[] = preset().notes.dream;
-
 // Where a dream works and what it may touch. The owner's own notes are one scope; every group has its own
 // (groupstore.ts), so a group's dream can never read or write anything but that group's notes.
 export interface Scope {
@@ -27,8 +22,6 @@ export interface Scope {
   categories: readonly Category[];
   maxNotes: number;
 }
-
-export const OWNER_SCOPE: Scope = { notesDir: NOTES_DIR, backupsDir: convPaths(OWNER_CONV).notesBackup, categories: DREAM_CATEGORIES, maxNotes: settings.memoryMaxNotes };
 
 interface Op {
   op: "write" | "delete";
@@ -66,8 +59,8 @@ export function noteContent(file: string, description: string, text: string, exp
 }
 
 // Pure: which of the model's proposals may be applied. Never trusts shape or content.
-export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly NoteFile[]; today: string; now: Date; maxNotes?: number; scope?: Scope }): Plan {
-  const scope = ctx.scope ?? OWNER_SCOPE;
+export function planOps(raw: unknown, ctx: { ownerText: string; notes: readonly NoteFile[]; today: string; now: Date; maxNotes?: number; scope: Scope }): Plan {
+  const { scope } = ctx;
   const plan: Plan = { actions: [], rejected: [] };
   const list = (raw as { ops?: unknown } | null | undefined)?.ops;
   if (!Array.isArray(list)) return plan;

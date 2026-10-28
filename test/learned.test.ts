@@ -175,7 +175,8 @@ test("undo_dream's own path (undoLatest) marks the owner's dream lines undone", 
   const ran = async () => ({ ops: [{ op: "write", file: "people-bo.md", description: "Bo is the owner's brother", text: "Bo is the brother.", evidence: "Bo is my brother" }] });
   const { owner } = await import("../src/conversation/conversationmodel.ts");
   await createDreamer({ conversations: () => [owner()], run: () => ran }).run(new Date("2026-10-15T07:00:00"));
-  assert.equal(undoLatest().ok, true);
+  const { dreamScope } = await import("../src/modules/memory/dreamscope.ts");
+  assert.equal(undoLatest(dreamScope(owner())).ok, true);
   assert.equal(told({ convId: OWNER_CONV, notesDir: NOTES_DIR }, Date.parse("2026-10-15T08:00:00")), "", "its lines are never listed");
 });
 

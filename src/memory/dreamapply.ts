@@ -4,10 +4,10 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from
 import { basename, join } from "node:path";
 import { emitRecord } from "../core/events.ts";
 import { writeFileAtomic } from "../core/state.ts";
-import { OWNER_SCOPE, type Plan, type Scope } from "./dreamplan.ts";
-import { forgetNote, NOTES_DIR, STATUS_PREFIX, writeIndex } from "./notes.ts";
+import type { Plan, Scope } from "./dreamplan.ts";
+import { forgetNote, STATUS_PREFIX, writeIndex } from "./notes.ts";
 import { dreamUndone } from "./learned.ts";
-import { convOfPath, OWNER_CONV } from "../core/convpaths.ts";
+import { convOfPath } from "../core/convpaths.ts";
 
 // Applying a plan to the notes folder, with a snapshot first, and undoing the latest one.
 
@@ -38,7 +38,7 @@ function changedSince(base: NoteBase, dir: string, file: string): boolean {
 
 // Applies a plan, after a snapshot. Returns the snapshot's folder (undefined if nothing to do). With `base` (what the dream read), an op whose target note changed since is skipped:
 // a write also protects the notes it merges (they are not deleted when the merged note could not be written).
-export function applyPlan(plan: Plan, now = new Date(), scope: Scope = OWNER_SCOPE, base?: NoteBase): string | undefined {
+export function applyPlan(plan: Plan, now = new Date(), scope: Scope, base?: NoteBase): string | undefined {
   if (plan.actions.length === 0) return undefined;
   mkdirSync(scope.notesDir, { recursive: true, mode: 0o700 });
   const dir = snapshot(now, scope);
@@ -61,7 +61,7 @@ export function applyPlan(plan: Plan, now = new Date(), scope: Scope = OWNER_SCO
 }
 
 // Puts the notes back as they were before the latest dream. The snapshot is used up.
-export function undoLatest(scope: Scope = OWNER_SCOPE): { ok: true; restored: number; from: string } | { ok: false; error: string } {
+export function undoLatest(scope: Scope): { ok: true; restored: number; from: string } | { ok: false; error: string } {
   const snaps = snapshotsOf(scope.backupsDir);
   const latest = snaps.at(-1);
   if (!latest) return { ok: false, error: "there is no dream to undo" };
@@ -75,7 +75,7 @@ export function undoLatest(scope: Scope = OWNER_SCOPE): { ok: true; restored: nu
   rmSync(dir, { recursive: true, force: true });
   writeIndex(scope.notesDir);
   emitRecord("dream_undo", "restored", "chat", { restored });
-  const conv = scope.notesDir === NOTES_DIR ? OWNER_CONV : convOfPath(scope.notesDir);
+  const conv = convOfPath(scope.notesDir);
   if (conv) dreamUndone(conv, Date.now()); // its lines are not listed as news any more ("what I learned overnight", learned.ts)
   return { ok: true, restored, from: latest };
 }

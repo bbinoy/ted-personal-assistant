@@ -1,3 +1,5 @@
+import { dreamScope } from "../src/modules/memory/dreamscope.ts";
+import { owner } from "../src/conversation/conversationmodel.ts";
 import { convDb } from "../src/core/convdb.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +24,8 @@ function seed(notes: NoteFile[]) {
   for (const n of notes) writeFileSync(`${NOTES_DIR}/${n.file}`, n.raw);
   writeFileSync(`${NOTES_DIR}/MEMORY.md`, notes.map((n) => `- [${n.file}](${n.file}) - x`).join("\n") + "\n");
 }
-const ctx = (notes: NoteFile[] = [], extra = {}) => ({ ownerText: OWNER_SAID, notes, today, now, maxNotes: 50, ...extra });
+const scope = dreamScope(owner());
+const ctx = (notes: NoteFile[] = [], extra = {}) => ({ ownerText: OWNER_SAID, notes, today, now, maxNotes: 50, scope, ...extra });
 const write = (o: object) => ({ op: "write", file: "people-anna.md", description: "Anna is Ben's sister", text: "Anna is Ben's sister; birthday 3 March.", ...o });
 
 test("dream: a new note needs a verbatim quote of the owner's own words", () => {
@@ -89,7 +92,7 @@ test("dream: applying snapshots first, keeps the index right, and undo puts ever
   seed([a, gone]);
   const plan = planOps({ ops: [write({ file: "scheduling-hours.md", text: "Ben prefers meetings in the afternoon, never before 10.", description: "meeting hours", evidence: "I prefer meetings in the afternoon, never before 10" }), { op: "delete", file: "context-trip.md" }] }, ctx([a, gone]));
   assert.equal(plan.actions.length, 2);
-  assert.ok(applyPlan(plan, now));
+  assert.ok(applyPlan(plan, now, scope));
   assert.ok(existsSync(`${NOTES_DIR}/scheduling-hours.md`));
   assert.ok(!existsSync(`${NOTES_DIR}/context-trip.md`));
   const written = parseNote("scheduling-hours.md", readFileSync(`${NOTES_DIR}/scheduling-hours.md`, "utf8"))!;
@@ -98,10 +101,10 @@ test("dream: applying snapshots first, keeps the index right, and undo puts ever
   assert.match(index, /\(scheduling-hours\.md\) - meeting hours/);
   assert.doesNotMatch(index, /context-trip/);
   assert.deepEqual(describePlan(plan), ["➕ saved scheduling-hours.md: meeting hours", "➖ forgot context-trip.md (expired)"]);
-  const undone = undoLatest();
+  const undone = undoLatest(scope);
   assert.equal(undone.ok && undone.restored, 2);
   assert.deepEqual(readdirSync(NOTES_DIR).sort(), ["MEMORY.md", "context-trip.md", "people-anna.md"]);
-  assert.equal(undoLatest().ok, false); // the snapshot was used up
+  assert.equal(undoLatest(scope).ok, false); // the snapshot was used up
 });
 
 test("dream: the note it writes reads back as a normal note, with its expiry", () => {
