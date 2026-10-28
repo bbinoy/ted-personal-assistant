@@ -323,8 +323,8 @@ test("the judge's check is in its prompt: every recipient and attachment, the fu
 
 test("a misleading question is refused with a reason the run can act on; a faithful one goes; a payment is not reviewed", async () => {
   const mail = { ...q, args: { messageId: 1 }, details: REPLY };
-  const w = () => scripted([text("Send a short thank-you to a@example.com?")]);
-  const refused = await composeQuestion(mail, {}, 1000, w().run, scripted([{ task: "check", faithful: false, reason: "the text is not shown" }]).run);
+  const w = () => scripted([text("Send a short thank-you to a@example.com?"), text("Send a short thank-you to a@example.com?")]);
+  const refused = await composeQuestion(mail, {}, 1000, w().run, scripted([{ task: "check", faithful: false, reason: "the text is not shown" }, { task: "check", faithful: false, reason: "the text is not shown" }]).run);
   assert.equal(refused.text, undefined);
   assert.match(refused.failure!, /did not show the call faithfully \(the text is not shown\); rewrite it showing every recipient, every attachment and the full text verbatim/);
   const k = scripted([FAITHFUL]);
@@ -333,6 +333,18 @@ test("a misleading question is refused with a reason the run can act on; a faith
   for (const bad of [undefined, { task: "check" }, { task: "check", faithful: "true" }, new Error("boom")]) {
     assert.equal((await composeQuestion(mail, {}, 1000, w().run, scripted([bad]).run)).text, undefined, "an unusable check is no question");
   }
+  // one rewrite after a refusal, with the reason; both refused is a failure; an unusable check never retries
+  const w2 = scripted([text("Send a short thank-you to a@example.com?"), text("Send to a@example.com: “Your code: 482913”?")]);
+  const second = await composeQuestion(mail, {}, 1000, w2.run, scripted([{ task: "check", faithful: false, reason: "text missing" }, FAITHFUL]).run);
+  assert.equal(second.text, "Send to a@example.com: “Your code: 482913”?");
+  assert.match(w2.prompts[1]!, /Your first question was refused by the checker: "text missing"/);
+  assert.doesNotMatch(w2.prompts[0]!, /refused by the checker/);
+  const w3 = scripted([text("Send a short thank-you to a@example.com?"), text("Send a thanks to a@example.com?")]);
+  const both = await composeQuestion(mail, {}, 1000, w3.run, scripted([{ task: "check", faithful: false, reason: "a" }, { task: "check", faithful: false, reason: "b" }]).run);
+  assert.match((both as { failure: string }).failure, /faithfully \(b\)/);
+  const w4 = w();
+  await composeQuestion(mail, {}, 1000, w4.run, scripted([undefined]).run);
+  assert.equal(w4.prompts.length, 1);
   const pay = scripted([]);
   assert.notEqual((await composeQuestion({ ...mail, typedYes: true }, {}, 1000, w().run, pay.run)).text, undefined);
   assert.equal(pay.prompts.length, 0);

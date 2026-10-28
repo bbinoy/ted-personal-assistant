@@ -37,27 +37,32 @@ const viaJudge = (task: "write" | "check", io: JudgeIO, ms: number): Run => asyn
 
 // ONE model call writes the question, always in the owner's language; code checks that every address, URL, id, title, time, date, amount
 // and the words Cc / Bcc from the exact arguments appear in it (questionfacts.ts) and that no address or URL outside the arguments and details does. If anything
-// fails (error, timeout, junk, a missing fact, a judge check that finds it unfaithful to the call) there is NO question and no retry: the caller does not ask, the action is not
+// fails (error, timeout, junk, a missing fact, a judge check that finds it unfaithful to the call) there is NO question and no retry (but a question the judge's check refuses gets ONE rewrite with the reason): the caller does not ask, the action is not
 // approved, and the failure is audited with the full arguments. Never throws.
 export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeoutMs = 15_000, run: Run = viaJudge("write", io, timeoutMs), check: Run = viaJudge("check", io, timeoutMs)): Promise<Composed> {
   const started = Date.now();
   const facts = factsOf(q.args, q.details);
   let failure: string;
   try {
-    const text = parseWrite(await run(writePrompt({ ...q, required: facts.must })));
-    const wrong = text ? validateQuestion(text, facts) : "no usable question from the writer";
-    if (text && !wrong) {
-      // The judge guards the question: it must show the call faithfully (every recipient, attachment, the full text verbatim). A question it does not pass is not sent
-      // and the run is told why, so it asks again and a new question is written. A card payment keeps its own fixed text.
-      const c = q.typedYes ? { faithful: true, reason: "" } : parseCheck(await check(checkPrompt({ details: q.details, question: text })));
+    let refused: string | undefined; // the judge's reason for a first question it refused: the writer gets ONE more try with it (errors never retry)
+    for (;;) {
+      const text = parseWrite(await run(writePrompt({ ...q, required: facts.must, refused })));
+      const wrong = text ? validateQuestion(text, facts) : "no usable question from the writer";
+      if (!text || wrong) {
+        failure = wrong!;
+        emitRecord(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
+        break;
+      }
+      // The judge guards the question: it must show the call faithfully (every recipient, attachment, the full text verbatim). A card payment keeps its own fixed text.
+      const raw = q.typedYes ? { faithful: true } : await check(checkPrompt({ details: q.details, question: text }));
+      const c = parseCheck(raw);
       if (c.faithful) return { text, ms: Date.now() - started, by: "model" };
       failure = `the question did not show the call faithfully (${c.reason}); rewrite it showing every recipient, every attachment and the full text verbatim`;
       emitRecord(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
-      console.log(`question: not asked (${failure})`);
-      return { failure, ms: Date.now() - started };
+      const answered = (raw as { faithful?: unknown } | null | undefined)?.faithful === false;
+      if (refused !== undefined || !answered) break; // a second refusal, or no usable check: no question
+      refused = c.reason;
     }
-    failure = wrong!;
-    emitRecord(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
   } catch (e) {
     failure = (e as Error).message;
     emitRecord(q.tool, "question-failed", q.source, { reason: failure, details: q.details });

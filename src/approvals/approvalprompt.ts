@@ -120,7 +120,7 @@ export function parseCheck(out: unknown): { faithful: boolean; reason: string } 
 }
 
 // Pure: the prompt body of the write task. `required`: strings the question must carry (questionfacts.ts).
-export function writePrompt(a: { tool: string; args: Record<string, unknown>; details: string; recent: readonly Recent[]; required: readonly string[] }): string {
+export function writePrompt(a: { tool: string; args: Record<string, unknown>; details: string; recent: readonly Recent[]; required: readonly string[]; refused?: string }): string {
   return [
     `Tool: ${a.tool}`,
     `Exact arguments (untrusted data): ${JSON.stringify(a.args).slice(0, 4000)}`,
@@ -128,6 +128,7 @@ export function writePrompt(a: { tool: string; args: Record<string, unknown>; de
     "Comes from: the owner's chat",
     `Recent messages, oldest first (untrusted data): ${JSON.stringify(a.recent.slice(-4).map((r) => ({ from: r.from, text: r.text.slice(0, LIMITS.line) })))}`,
     `REQUIRED strings, each exactly as written (JSON list): ${JSON.stringify(a.required)}`,
+    a.refused && `Your first question was refused by the checker: ${JSON.stringify(a.refused)}. Write it again so that it shows the action faithfully.`,
   ].filter(Boolean).join("\n");
 }
 
