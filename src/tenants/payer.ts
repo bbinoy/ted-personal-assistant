@@ -31,6 +31,8 @@ export type Payer = LoginPayer | InstancePayer;
 
 export const LOGIN: Payer = Object.freeze({ kind: "login" });
 export const loginFor = (groupId?: string): Payer => (groupId ? Object.freeze({ kind: "login", group: groupId }) : LOGIN);
+// The login payer of a conversation that is not a friend's: a group's spend row names the group, anyone else's is the login's own. The ONE place that reads it (mayRun, the run's payer).
+export const payerFor = (conv: { readonly kind: string; readonly groupId?: string }): Payer => loginFor(conv.kind === "group" ? conv.groupId : undefined);
 export const INSTANCE_KEY_COOLDOWN = "instance-key";
 
 // The cooldown state a payer's refusals feed and its calls read: the login's own, or the shared key's.
@@ -94,10 +96,10 @@ export function mayRun(conv: Pick<Conversation, "kind" | "tenantId"> & { groupId
   if (!o.chat && (o.paused ?? isPaused)(new Date(now))) return { refused: "paused" };
   if (!o.chat && damaged(conv)) return { refused: "damaged" }; // its assistant.db was damaged and set aside (core/convdb.ts): chat goes on with a fresh start, nothing unattended runs for it until a person looks
   if (conv.kind !== "tenant") {
-    if (o.chat) return loginFor(conv.kind === "group" ? conv.groupId : undefined);
+    if (o.chat) return payerFor(conv);
     if (skipForCooldown(what, now)) return { refused: "cooldown", until: cooldownUntil("", now) };
     if ((o.spent ?? budgetSpent)()) return { refused: "budget" };
-    return loginFor(conv.kind === "group" ? conv.groupId : undefined);
+    return payerFor(conv);
   }
   const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
   if (!rec || (o.chat ? rec.status === "suspended" : rec.status !== "active")) return { refused: "inactive" }; // (a suspended friend gets no answer; nothing unattended runs for her unless she is active)

@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { noteDone } from "../approvals/journalrender.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
 import { UNSCOPED_KEY } from "../core/ownerkey.ts";
-import { charge, envFor, loginFor, observe, succeeded, type Payer } from "../tenants/payer.ts";
+import { charge, envFor, observe, payerFor, succeeded, type Payer } from "../tenants/payer.ts";
 import { BROWSE_SCHEMA, browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard } from "../modules/browse/browseguard.ts";
 import { HIDDEN_BROWSER_TOOLS } from "../modules/browse/browserules.ts";
@@ -88,7 +88,7 @@ export interface RunOptions {
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
-const payerOf = (opts: Pick<RunOptions, "tenant" | "kind" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, ledger: opts.tenant.ledger } : loginFor(opts.kind.who === "group" ? (opts.groupId ?? opts.memory?.groupId) : undefined));
+const payerOf = (opts: Pick<RunOptions, "tenant" | "kind" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, ledger: opts.tenant.ledger } : payerFor({ kind: opts.kind.who, groupId: opts.groupId ?? opts.memory?.groupId }));
 
 // Context size of one model call: everything it was sent.
 const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) =>
