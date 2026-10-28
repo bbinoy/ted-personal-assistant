@@ -47,7 +47,7 @@ test("the owner's look: the judge's ask is a skip with the fixed text and one au
   const r = rig(OWNER_LOOK);
   const res = await r.call(CAL, EVENT);
   assert.deepEqual(res, { behavior: "deny", message: UNATTENDED_SKIP });
-  assert.equal(UNATTENDED_SKIP, "Not done: not certain enough to act without asking, and background work never asks. Leave it; do not mention it unless it truly matters, then say it in your message as information, not as a question.");
+  assert.equal(UNATTENDED_SKIP, "Not done: not certain enough to act without asking, and background work never asks. Do not retry it: turn what needs the owner into what is allowed (a draft, or an add_task item) so the brief lists it; mention it only if it truly matters, as information.");
   assert.deepEqual(r.asked, []);
   const rows = skips(r);
   assert.equal(rows.length, 1);
@@ -117,9 +117,9 @@ test("the never-allowed set is denied in an unattended run; a payment is refused
   assert.equal(pay.rows("deny-payment-unattended").length, 1);
 });
 
-test("the prompt says it for a background check: act when sure, stay silent when not, never ask for approval; the check's message is data only", () => {
+test("the prompt says it for a background check: act when sure, turn what needs the person into a draft or task, never ask for approval; the check's message is data only", () => {
   const text = chatSystem(new Date(2026, 9, 22, 9, 0));
-  assert.match(text, /act when you are sure and stay silent when you are not/i);
+  assert.match(text, /act when you are sure; what you are not sure of becomes a task or a draft, not a question/i);
   assert.match(text, /never ask .*for approval/i);
   const check = lookInstruction(new Date(2026, 9, 22, 9, 0), undefined);
   assert.match(check, /^Background check at /);
