@@ -11,15 +11,14 @@ import { writeFileAtomic } from "./state.ts";
 // A conversation's state is in ITS file and nowhere else: a query cannot reach another conversation's rows because it has no connection to them (test/convdb.test.ts), and forgetting a conversation is
 // still deleting its folder (the connection is closed first: forgetConv / closeConvDb).
 //
-//   session / dream / hold / quiet / friend / pending_state (old)   ONE row each (id = 1): a CHECK keeps it so
+//   session / dream / hold / quiet / friend   ONE row each (id = 1): a CHECK keeps it so
 //   held_posts       the posts quiet hours or the day's cap kept back, oldest first (bounded where they are written)
 //   seen_mail        the mail ids the heartbeat has worked through, oldest first: seq orders them, the bound (2000) is a query (trimSeenMail), also a retention rule
-//   pending_*        the old approval inbox: nothing writes it since 26 Oct (unattended runs never ask); the nightly retention empties it (heartbeat/convretention.ts)
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   routine_runs     the last period of each routine (a routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
 //   items / task_events   the tasks (src/tasks/store.ts): a to-do, a promise either way; nothing is deleted (triggers), every change is a task_events row. User data: no retention.
-//   group_remind_noted   which group members were told once that a reminder said in the group is the group's (src/tasks/grouptasks.ts). (suggestion_asks: the old one-tap suggestions, emptied by step 11.)
+//   group_remind_noted   which group members were told once that a reminder said in the group is the group's (src/tasks/grouptasks.ts).
 //
 // NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
@@ -494,6 +493,18 @@ export const CONV_SCHEMA: readonly Migration[] = [
     version: 21,
     name: "a look starts a fresh session every time: the second session per conversation (`look_session`, step 15) is gone",
     up: `DROP TABLE look_session;`,
+  },
+  {
+    version: 22,
+    name: "tables nothing reads or writes any more are dropped: the old approval inbox (pending_*) and the one-tap suggestions (suggestion_asks)",
+    up: `
+      DROP TABLE IF EXISTS pending_state;
+      DROP TABLE IF EXISTS pending_items;
+      DROP TABLE IF EXISTS pending_expired;
+      DROP TABLE IF EXISTS pending_blocked;
+      DROP TABLE IF EXISTS pending_lost;
+      DROP TABLE IF EXISTS suggestion_asks;
+    `,
   },
 ];
 

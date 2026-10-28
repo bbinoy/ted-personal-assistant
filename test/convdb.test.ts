@@ -289,6 +289,24 @@ test("routine_runs: the rule removes the record of a routine whose note is gone;
   removeConvDir(c.convId);
 });
 
+test("reminders: a claimed or retry mark of a done or dropped task is pruned after a day; an open task keeps its marks, a fresh claim stays", () => {
+  const c = group("reminder-prune");
+  const db = convDb(c.convId);
+  const now = Date.now();
+  const item = (status: string) => Number(db.run("INSERT INTO items (title, status, created_at, updated_at) VALUES ('t', ?, ?, ?)", status, now, now).lastInsertRowid);
+  const [open, done, dropped] = [item("open"), item("done"), item("dropped")];
+  const mark = (id: number, key: string, state: string, at: number) => db.run("INSERT INTO reminders (item_id, key, state, fire_at, at) VALUES (?, ?, ?, ?, ?)", id, key, state, at, at);
+  const old = now - 2 * 86_400_000;
+  mark(open, "a", "claimed", old); mark(done, "a", "claimed", old); mark(dropped, "b", "retry", old); mark(done, "c", "sent", old); mark(done, "d", "claimed", now - 60_000);
+  const keys = () => db.all<{ item_id: number; key: string }>("SELECT item_id, key FROM reminders ORDER BY item_id, key").map((r) => `${r.item_id}${r.key}`);
+  const rule = convDbRule(() => layout(dataRoot()));
+  rule.run(new Date(now), { dryRun: true });
+  assert.equal(keys().length, 5, "a dry run removes nothing");
+  rule.run(new Date(now), { dryRun: false });
+  assert.deepEqual(keys(), [`${open}a`, `${done}c`, `${done}d`]);
+  removeConvDir(c.convId);
+});
+
 test("the rule visits only conversations that have a database, and makes none", () => {
   const root = dataRoot();
   const before = readdirSync(layout(root).conversations).sort();
@@ -337,7 +355,6 @@ test("a reset WITH salvage: the mail ids and the session pointer are copied out 
   const db = convDb(c);
   for (let i = 0; i < 30; i++) db.run("INSERT INTO seen_mail (id) VALUES (?)", `kept-${i}`);
   writeSession(c, { sessionId: "sess-kept", costUsd: 4 });
-  db.run("INSERT INTO pending_items (n, tool, input, label, question, footer, scope, source, created_at) VALUES (7, 'send', '{}', 'Reply to Anna', 'q', 'f', 'tenant:salvage-1', 'background', 1)");
   for (let i = 0; i < 3000; i++) db.run("INSERT INTO held_posts (text, why) VALUES (?, 'quiet')", `post ${i} ${"y".repeat(100)}`); // (a later part of the file: the damaged page is there, the early tables are readable)
   db.checkpoint();
   closeConvDb(c);
@@ -351,7 +368,6 @@ test("a reset WITH salvage: the mail ids and the session pointer are copied out 
   assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail"), 30, "the ids are preserved, in order");
   assert.equal(fresh.get<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq LIMIT 1")?.id, "kept-0");
   assert.equal(readSession(c).sessionId, "sess-kept");
-  assert.equal(fresh.num("SELECT COUNT(*) FROM pending_items"), 0, "old approval rows are never copied out of a damaged file");
   assert.ok(fresh.get("SELECT at FROM reset"), "the reset flag is set");
   // the owner is told once that it was set aside
   resetHeld(owner());

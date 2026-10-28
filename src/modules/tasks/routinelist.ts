@@ -12,15 +12,17 @@ import { nextText, routineLines, type Routine } from "../../tasks/routines.ts";
 export const MAX_NOTE_ROUTINES = 20; // per conversation: a runaway list of notes must not become a runaway list of runs
 const NO_WHEN = "has no `when:` line in its front matter";
 
-export interface Scheduled { routines: Routine[]; broken: string[] }
+export interface Scheduled { routines: Routine[]; broken: { file: string; why: string }[] }
+/** A broken note as one line for the model or the doctor: "routine-x.md has a when: line that cannot be read (...)". */
+export const brokenText = (b: { file: string; why: string }): string => `${b.file} ${b.why}`;
 
 export function scheduledIn(o: { notesDir: string; zone: string; now: Date }): Scheduled {
   const routines: Routine[] = [];
-  const broken: string[] = [];
+  const broken: Scheduled["broken"] = [];
   for (const n of readNotes(o.now, o.notesDir, o.zone, "routine-").slice(0, MAX_NOTE_ROUTINES)) {
     const p = n.when ? parseRepeat(n.when) : undefined;
     if (p?.ok) routines.push({ name: n.file.replace(/\.md$/, ""), rule: p.rule, instruction: n.text });
-    else broken.push(`${n.file} ${p && !p.ok ? `has a when: line that cannot be read (${p.error})` : NO_WHEN}`);
+    else broken.push({ file: n.file, why: p && !p.ok ? `has a when: line that cannot be read (${p.error})` : NO_WHEN });
   }
   return { routines, broken };
 }
@@ -46,5 +48,5 @@ export function routineNoteReply(tool: string, input: Record<string, unknown>, d
 // "/status" and the doctor: one line per routine note with its schedule, next and last run, and one per note that cannot run.
 export function scheduleLines(conv: ConvRef, o: Parameters<typeof scheduledIn>[0]): string[] {
   const { routines, broken } = scheduledIn(o);
-  return [...routineLines(conv, routines, o.now, o.zone), ...broken.map((b) => `${b}; it never runs`)];
+  return [...routineLines(conv, routines, o.now, o.zone), ...broken.map((b) => `${brokenText(b)}; it never runs`)];
 }
