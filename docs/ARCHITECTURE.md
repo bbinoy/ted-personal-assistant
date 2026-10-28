@@ -703,7 +703,6 @@ src/core/logsearch.ts  plain-text search over logs
 src/core/logtrim.ts  trims launchd stderr logs
 src/core/logwindow.ts  dates for agent.log lines
 src/core/looks.ts  the `looks` table
-src/core/mailtext.ts  mail body cleaning
 src/core/messages.ts  the conversation log and its compaction
 src/core/ownerkey.ts  the owner's key; policy source of a key
 src/core/paths.ts  repo root and default data dir

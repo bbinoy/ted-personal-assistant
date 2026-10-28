@@ -135,7 +135,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   async function deliverFinal(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target" | "reaction">): Promise<void> {
     const chosen = splitVoice(replied);
     const { reaction, text } = splitReaction(chosen.text);
-    if (conv.kind === "owner") scopeOf(conv.key).assistantSaid(text); // the owner's own chat (the others are isolated): the judge reads her next "yes" against it
+    scopeOf(conv.key).assistantSaid(text); // each conversation has its own scope: the judge reads the next "yes" there against it
     await d.send({ kind: "text", text, voice: !!chosen.voice }, false);
     if (reaction && t.target) await d.send({ kind: "reaction", emoji: reaction }, false);
     else if (!t.reaction && !d.state.reacted) status(conv, "✅", t.target); // a reaction the model already put on that message stays

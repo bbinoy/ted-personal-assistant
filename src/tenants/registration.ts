@@ -78,7 +78,6 @@ function read(now: number): Store {
 const write = (s: Store): void => writeJson(FILE, s);
 
 export const openRequests = (now = Date.now()): Request[] => read(now).requests;
-export const declinedPeople = (now = Date.now()): Person[] => read(now).declined;
 
 export type Outcome = { kind: "new"; request: Request } | { kind: "held" } | { kind: "drop"; why: string };
 

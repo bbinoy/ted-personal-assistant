@@ -1,17 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractMessageId } from "../src/policy/mailview.ts";
 import { authoredPart, sendApprovalText, viewDraft } from "../src/modules/mailbird/proposals.ts";
 
 const msg = (body: string, to = ["armon@example.com"], cc: string[] = []) => ({ to: to.map((email) => ({ email })), cc: cc.map((email) => ({ email })), subject: "Re: Coffee", body });
-
-test("proposals: the draft id comes from the tool result, in whatever shape it arrives", () => {
-  assert.equal(extractMessageId({ messageId: 4711, status: "draft" }), 4711);
-  assert.equal(extractMessageId('{"messageId": 12}'), 12);
-  assert.equal(extractMessageId([{ type: "text", text: '{"ok":true,"messageId":987}' }]), 987);
-  assert.equal(extractMessageId({ nothing: true }), undefined);
-  assert.equal(extractMessageId(undefined), undefined);
-});
 
 test("proposals: a draft is read back from the mail client's message", () => {
   const d = viewDraft(msg("Hi Armon, Tuesday 15:00 works.", ["Armon@Example.com"], ["x@example.com"]))!;

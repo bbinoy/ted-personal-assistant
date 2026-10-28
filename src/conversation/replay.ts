@@ -53,8 +53,8 @@ const BUILTIN_READS = new Set(["Read", "Glob", "Grep", "WebSearch", "WebFetch", 
 const DID = new Set(["allow", "auto-approved", "ask-approved", "ask-approved-modified", "covered-by-approval"]);
 export const SORRY = "I restarted while working on your last message. Some of it may already be done; tell me if you want me to pick it up again.";
 
-// Pure: did a run of this source act (not just read) since `sinceMs`? The audit rows carry the source (chat: the owner's; group: a group's or a friend's), not the conversation, so for a
-// friend this is "anyone's friend-or-group run", which can only make replay hold back more often. If so, re-running the request could do its side effects twice.
+// Pure: did a run of this source act (not just read) since `sinceMs`? The audit rows carry the source (chat: the owner's; group: a group's; tenant: a friend's), not the conversation, so for a
+// friend this is "anyone's friend run". If so, re-running the request could do its side effects twice.
 export function actedSince(rows: readonly AuditEntry[], source: Source, sinceMs: number): boolean {
   return rows.some((e) => e.source === source && DID.has(e.decision) && Date.parse(e.ts) >= sinceMs && !isReadTool(e.tool) && !BUILTIN_READS.has(e.tool));
 }

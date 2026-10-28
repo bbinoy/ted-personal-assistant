@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 import { group, owner } from "../src/conversation/conversation.ts";
 import { askGateWith, GATE_MAX_DELAY_SECONDS, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleLines, styleSummary, tailLine } from "../src/conversation/gate.ts";
-import { clampCheck, lookDue, lookState, wakeText } from "../src/conversation/ledger.ts";
+import { clampCheck, lookState, lookWhy, wakeText } from "../src/conversation/ledger.ts";
 import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/core/messages.ts";
 import { conversationLines } from "../src/conversation/dream.ts";
 import { groupContext, groupLogFile } from "../src/conversation/groupstore.ts";
@@ -103,6 +103,7 @@ const at = (min: number) => new Date(T0.getTime() + min * 60_000).toISOString();
 const entry = (kind: Kind, min: number, text: string): Sent => ({ ts: min, at: at(min), kind, text });
 const wake = (min: number, nextInMin: number, lookedMin = min) => entry("wake", min, JSON.stringify({ next: at(min + nextInMin), looked: at(lookedMin) }));
 
+const lookDue = (...a: Parameters<typeof lookWhy>) => lookWhy(...a) !== undefined;
 test("ledger: the last wake line is the state; due on time, on news, on a changed note, or never looked", () => {
   const none = lookState([]);
   assert.equal(lookDue(none, T0), true); // never looked

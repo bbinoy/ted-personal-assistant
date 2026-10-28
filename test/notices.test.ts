@@ -4,7 +4,7 @@ import { owner } from "../src/conversation/conversationmodel.ts";
 import { settings } from "../src/core/settings.ts";
 import { recordCost } from "../src/core/budget.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
-import { createFailureTracker, dropUnreachable, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, countPosts, takeHeld } from "../src/heartbeat/notices.ts";
+import { createFailureTracker, dropUnreachable, heldPosts, heldWaiting, resetHeld, noticeBudget, ownerNotices, planFlush, planPost, stillTrue, submitPost, takeHeld } from "../src/heartbeat/notices.ts";
 import { heldBlock, HELD_MAX } from "../src/heartbeat/facts.ts";
 import { group, type Conversation } from "../src/conversation/conversation.ts";
 import { systemZone } from "../src/core/timezone.ts";
@@ -73,17 +73,17 @@ test("held posts: night holds, day posts, the cap holds the rest; at the end of 
   assert.equal(heldWaiting(c, MORNING), false);
   assert.deepEqual(heldPosts(c), []);
 });
-test("the day's cap: the posts past it are held for the next day, urgent ones are exempt, pieces sent while working count", () => {
+test("the day's cap: the posts past it are held for the next day, urgent ones are exempt, every post, also one sent while working, counts", () => {
   reset();
   const c = owner();
-  countPosts(c, 1, DAY);
   assert.equal(submitPost(c, "one", false, DAY), "post");
   assert.equal(submitPost(c, "two", false, DAY), "post");
-  assert.equal(submitPost(c, "three", false, DAY), "held", "3 a day in this test");
+  assert.equal(submitPost(c, "three", false, DAY), "post");
+  assert.equal(submitPost(c, "four", false, DAY), "held", "3 a day in this test");
   assert.equal(submitPost(c, "urgent", true, DAY), "post");
   assert.equal(heldWaiting(c, new Date(2026, 9, 14, 15, 0)), false, "the same day: the cap is still spent");
   assert.deepEqual(takeHeld(c, new Date(2026, 9, 14, 15, 0)).held, []);
-  assert.deepEqual(takeHeld(c, new Date(2026, 9, 15, 9, 0)).held.map((h) => h.text), ["three"], "the next day it goes to the look");
+  assert.deepEqual(takeHeld(c, new Date(2026, 9, 15, 9, 0)).held.map((h) => h.text), ["four"], "the next day it goes to the look");
 });
 test("held posts as facts: written-when wording, capped, trimmed; a conversation without a look drops them with a journal line", () => {
   reset();

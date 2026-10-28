@@ -5,7 +5,7 @@ import { isNonAction, journalable } from "../approvals/journalrender.ts";
 import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
-import { allows } from "../policy/capabilities.ts";
+import { auditSource } from "../core/runkind.ts";
 import { logSince, logTail, styleLines } from "../conversation/gate.ts";
 import { lookWhy, recordWake, type LookState } from "../conversation/ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
@@ -182,7 +182,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
           gateSink(conv.key, (text, urgent) => {
             if (submitPost(conv, text, urgent, now) !== "held") return undefined;
             held = true;
-            emit({ type: "notice", state: "held", conv: conv.key, text, source: allows(conv, "login") ? "background" : "group" });
+            emit({ type: "notice", state: "held", conv: conv.key, text, source: auditSource({ who: conv.kind, attended: false }) });
             return "Not sent now: it is quiet hours or today's limit of unprompted messages is spent, so it is held and will be delivered later with your other messages. Do not send it again.";
           });
           return deps.run(conv, access, build, {
@@ -228,7 +228,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     if (answer?.message && !stale) {
       const message = answer.message;
       // Quiet hours and the day's cap are kept here, in code (notices.ts): an unprompted post inside them is held for one combined message later, unless the run marked it urgent.
-      if (submitPost(conv, message, answer.urgent, now) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: allows(conv, "login") ? "background" : "group" });
+      if (submitPost(conv, message, answer.urgent, now) === "held") (held = true), emit({ type: "notice", state: "held", conv: conv.key, text: message, source: auditSource({ who: conv.kind, attended: false }) });
       else {
         const res = await postNotice(pipeline, conv, message, reply?.costUsd);
         if (res.error) console.error("heartbeat: could not post:", (res.error as Error).message);
@@ -247,7 +247,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     facts.done({ ended: outcome === "posted" || outcome === "silent", said: outcome === "posted", held, abandoned: outcome === "preempted" || interrupted, sends: sent, acted });
     // What the look DID is in the conversation's journal, one line per action as it happened (core/events.ts); the look itself is one audit row and one metrics row, told once.
     const unjournaled = steps > 0 && journaled() === journaledBefore ? steps : 0; // acted, yet no line of its own (browser steps): one short line, so the gate's "you acted without posting" survives
-    emit({ type: "look", conv: conv.key, unjournaled, source: allows(conv, "login") ? "background" : "group", row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
+    emit({ type: "look", conv: conv.key, unjournaled, source: auditSource({ who: conv.kind, attended: false }), row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
     if (interrupted) recordWake(pipeline, conv, 0, now, (m) => Number(m)); // it was cut off, not decided: due again at the next due-check (no 10-minute minimum)
     else recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;

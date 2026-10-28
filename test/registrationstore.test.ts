@@ -64,7 +64,6 @@ test("approving or declining twice does nothing the second time, and a declined 
   assert.deepEqual(late.held, []);
   assert.equal(late.request, undefined);
   assert.equal(Reg.approve("cccccccc", NOW), undefined);
-  assert.deepEqual(Reg.declinedPeople(NOW), []);
   assert.equal(readAudit((e) => e.tool === "tenant_register" && e.decision === "approved").length >= 1, true);
 });
 

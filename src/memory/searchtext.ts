@@ -24,7 +24,6 @@ const STOP = new Set(
     "about after again all also any been before can did do does just more not now only other out over some such than then these those very would " +
     "aber als am auch auf aus bei bin das dass dein der die dir du ein eine einen er es für hat hier ich ihr im ist ja kein mal mit nach nicht noch nur oder sie sind so und uns von war was wir wie wird zu").split(" "),
 );
-export const isStop = (stemmed: string): boolean => STOP.has(stemmed);
 
 const WORD = /[\p{L}\p{N}]+/gu;
 

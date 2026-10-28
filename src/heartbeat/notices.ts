@@ -10,7 +10,7 @@ import { causeOf, FIXES, type Cause } from "../tenants/errors.ts";
 import { isQuiet } from "../conversation/quiet.ts";
 import { zoneOf } from "../tenants/tenants.ts";
 import { emit } from "../core/events.ts";
-import { allows } from "../policy/capabilities.ts";
+import { auditSource } from "../core/runkind.ts";
 
 // What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Three small, separate mechanisms, all pure planners over a little state:
 //   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat, as a fixed text: over budget no model
@@ -156,14 +156,6 @@ export function submitPost(conv: Conversation, text: string, urgent: boolean, no
   return "held";
 }
 
-// Pieces the run sent with the send tool while it worked count toward the day's cap (they are not held: they are out).
-export function countPosts(conv: Conversation, n: number, now: Date): void {
-  if (n <= 0) return;
-  const st = load(conv, now, zoneFor(conv));
-  st.posted += n;
-  save(conv, st);
-}
-
 // Deliver a notice-kind message in the conversation, the way the heartbeat does (look.ts): in its queue, logged as a notice, not a chat turn.
 export const postNotice = (pipeline: Pick<Pipeline, "enqueue" | "runTurn">, conv: Conversation, text: string, costUsd?: number) =>
   pipeline.enqueue(conv, async () => pipeline.runTurn(conv, { run: async () => ({ text, costUsd }), background: true, announce: false, kind: "notice" })).catch((e) => ({ error: e as unknown, spoke: false }));
@@ -193,7 +185,7 @@ export function dropUnreachable(conv: Conversation): void {
   const n = heldCount(conv);
   if (n === 0) return;
   convDb(conv.convId).run("DELETE FROM held_posts");
-  emit({ type: "notice", state: "dropped", conv: conv.key, text: `Dropped ${n} held message(s): this conversation has no look`, source: allows(conv, "login") ? "background" : "group" });
+  emit({ type: "notice", state: "dropped", conv: conv.key, text: `Dropped ${n} held message(s): this conversation has no look`, source: auditSource({ who: conv.kind, attended: false }) });
 }
 
 // ---- the owner's notices ----
