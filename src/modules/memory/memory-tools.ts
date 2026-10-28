@@ -63,10 +63,10 @@ export function createMemoryServer(scope: MemoryScope) {
       tool(
         "forget_note",
         tenantLog
-          ? "Delete one of YOUR notes about this person, and its line in MEMORY.md. Say in your reply what you forgot, in a few words."
+          ? "Delete one of YOUR notes about this person, and its line in MEMORY.md."
           : groupId
-          ? "Delete one of THIS group's memory notes, and its line in MEMORY.md (anyone in the group may ask). Say in your reply what you forgot, in a few words."
-          : "Delete one memory note, and its line in MEMORY.md. Only when the OWNER asked you to forget it. Say in your reply what you forgot, in a few words.",
+          ? "Delete one of THIS group's memory notes, and its line in MEMORY.md (anyone in the group may ask)."
+          : "Delete one memory note, and its line in MEMORY.md. Only when the OWNER asked you to forget it.",
         { file: z.string().describe("The note's file name, like style-no-em-dashes.md") },
         async ({ file }) => {
           const r = forgetNote(file, notesDir);

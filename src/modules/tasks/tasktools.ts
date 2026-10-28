@@ -158,7 +158,7 @@ export function createTasksServer(run: TasksRun) {
       tool(
         "update_task",
         "Change an item: its title, details, due, reminder, repeat, person or assignee, or reopen it. Give only the fields to change; pass null (or an empty string) to clear one. " +
-          `${DATE_RULES} due and remind are ${LOCAL}. To reschedule use due (and remind if it had a reminder). To snooze use snooze_task; to finish use complete_task.`,
+          `Dates as in add_task: due and remind are ${LOCAL}. To reschedule use due (and remind if it had a reminder). To snooze use snooze_task; to finish use complete_task.`,
         {
           id: ID,
           title: z.string().min(1).max(200).optional(),
@@ -199,7 +199,7 @@ export function createTasksServer(run: TasksRun) {
       ),
       tool(
         "snooze_task",
-        `Hide an item until later: it is not open, overdue or reminded until then, and comes back by itself. ${DATE_RULES} until is ${LOCAL} (a bare day means 09:00 that day).`,
+        `Hide an item until later: it is not open, overdue or reminded until then, and comes back by itself. Dates as in add_task: until is ${LOCAL} (a bare day means 09:00 that day).`,
         { id: ID, until: z.string().max(16).describe(`When it comes back, ${LOCAL}`) },
         (a) => act((s) => snoozeItem(s, a.id, instant("until", a.until, s.zone))),
       ),

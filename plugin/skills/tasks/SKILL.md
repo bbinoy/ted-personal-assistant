@@ -14,8 +14,7 @@ over from Notion again, read Notion and use `add_task` for each, like any other 
 ## Read before you add
 
 Call `list_tasks` first (it also tells you today's date and time zone), so you never add a
-duplicate. Dates are the owner's local time; work out "friday" or "in two days" yourself
-from the date in the reply and pass explicit ISO.
+duplicate.
 
 ## Finishing is ticking off, never deleting
 

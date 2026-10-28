@@ -1,6 +1,6 @@
 ---
 name: mail
-description: Use when a task involves email or the inbox - the daily inbox sweep and every look at new mail, triage and archiving, drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
+description: Use when a task involves email or the inbox - the daily inbox sweep and every look at new mail, triage and archiving, restoring archived mail ("restore 3"), drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
 ---
 
 # Mail: the rules for every provider
@@ -187,6 +187,10 @@ While triaging, pull any explicit date-bound ask - payment due, RSVP
 by, sign by, respond by, application deadline - and add it with
 `add_task` (`source_kind` mail, `source_ref` the mail id) as a task with that due date (if no matching
 item exists; unattended it is added and told; see `ted-personal-assistant:tasks`). Every deadline is a task; there is no separate list.
+
+### Restoring archived mail
+
+"Restore 3" (or "restore 2,5") after a brief means item 3 of the journal's archive list for that brief's `since`: call `journal` with `kind` `archive` and the same `since` (the same `since` gives the same numbers), find the item, and put the mail back in the inbox with the provider's tool: Mailbird `move_conversation_to_inbox` (with the conversation id the list gives; the id changes after a move), Gmail `label_thread` with `INBOX`. Say what came back in one line.
 
 Operate the agent with `npm run doctor` (health), `npm run report` (what it
 did) and `npm run restore <id>` (un-archive).
