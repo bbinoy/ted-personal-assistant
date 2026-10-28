@@ -23,8 +23,8 @@ import { claimMeeting, claimedMeetings, giveBack, openMeetings, prepDue, prepSki
 export const NIGHT_FROM = 23; // the deep night, fixed: no prep between these hours (her zone)
 export const NIGHT_TO = 6;
 
-/** Does this conversation have meeting prep at all: switched on, not a group, and a calendar in its capability set (the owner's connector, a friend's own Google). */
-export const prepEnabled = (conv: Conversation): boolean => settings.prepMinutes > 0 && conv.kind !== "group" && allows(conv, "calendar") && allows(conv, "heartbeat");
+/** Does this conversation have meeting prep at all: switched on and a calendar in its capability set (the owner's connector, a friend's own Google). */
+export const prepEnabled = (conv: Conversation): boolean => settings.prepMinutes > 0 && allows(conv, "calendar") && allows(conv, "heartbeat");
 
 /** May a prep be claimed at this moment? Not in the deep night, not while her /quiet is on. */
 export const prepAllowedNow = (conv: Conversation, now: Date): boolean => !inQuietHours(now, NIGHT_FROM, NIGHT_TO, zoneOf(conv)) && !isQuiet(conv, now);
