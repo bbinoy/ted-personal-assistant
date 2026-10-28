@@ -86,9 +86,9 @@ function duePhrase(it: Item, now: number, zone: string): string {
   return `${p.date < today ? "was due" : "due"} ${showLocal(it.due!, today)}`;
 }
 
-/** The fixed line of the fallback (no look said it in time, or the conversation has no look): the one place a reminder is code's words. A group names the assignee. */
-export function fallbackText(it: Item, o: { now: number; zone: string; group: boolean }): string {
-  const who = o.group && it.assignee ? `@${it.assignee}: ` : "";
+/** The fixed line of the fallback (no look said it in time: no model run was possible, or the conversation has no look): the one place a reminder is code's words. The same for every conversation; an item with an assignee names it. */
+export function fallbackText(it: Item, o: { now: number; zone: string }): string {
+  const who = it.assignee ? `@${it.assignee}: ` : "";
   const due = duePhrase(it, o.now, o.zone);
   return `⏰ ${who}${it.title}${due ? ` (${due})` : ""}`;
 }
