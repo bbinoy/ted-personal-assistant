@@ -321,7 +321,7 @@ test("the judge's check is in its prompt: every recipient and attachment, the fu
   assert.match(APPROVAL_SYSTEM, /quote the text that will go in full/); // and the writer is told to
 });
 
-test("a misleading question is refused with a reason the run can act on; a faithful one goes; a payment is not reviewed", async () => {
+test("a misleading question is refused with a reason the run can act on; a faithful one goes", async () => {
   const mail = { ...q, args: { messageId: 1 }, details: REPLY };
   const w = () => scripted([text("Send a short thank-you to a@example.com?"), text("Send a short thank-you to a@example.com?")]);
   const refused = await composeQuestion(mail, {}, 1000, w().run, scripted([{ task: "check", faithful: false, reason: "the text is not shown" }, { task: "check", faithful: false, reason: "the text is not shown" }]).run);
@@ -345,9 +345,24 @@ test("a misleading question is refused with a reason the run can act on; a faith
   const w4 = w();
   await composeQuestion(mail, {}, 1000, w4.run, scripted([undefined]).run);
   assert.equal(w4.prompts.length, 1);
-  const pay = scripted([]);
-  assert.notEqual((await composeQuestion({ ...mail, typedYes: true }, {}, 1000, w().run, pay.run)).text, undefined);
-  assert.equal(pay.prompts.length, 0);
+});
+
+test("a card payment question is checked like any other: a refusal gets one rewrite, then no question; a faithful one is asked", async () => {
+  const details = "Card payment approval\nMerchant: shop.example\nTotal: CHF 12.50";
+  const pay = { ...q, args: {}, details, typedYes: true };
+  const free = text("Free trial at shop.example, pay with YES?");
+  const refusal = { task: "check", faithful: false, reason: "the charge is called a trial" };
+  const w = scripted([free, free]);
+  const refused = await composeQuestion(pay, {}, 1000, w.run, scripted([refusal, refusal]).run);
+  assert.equal(refused.text, undefined);
+  assert.match(refused.failure!, /faithfully \(the charge is called a trial\)/);
+  assert.equal(w.prompts.length, 2);
+  assert.match(w.prompts[1]!, /Your first question was refused by the checker: "the charge is called a trial"/);
+  const k = scripted([FAITHFUL]);
+  const ok = await composeQuestion(pay, {}, 1000, scripted([text("Pay CHF 12.50 at shop.example? Reply YES.")]).run, k.run);
+  assert.equal(ok.text, "Pay CHF 12.50 at shop.example? Reply YES.");
+  assert.match(k.prompts[0]!, /Card payment approval/);
+  assert.match(APPROVAL_SYSTEM, /a card payment is not free, a trial, a refund, a deposit or a verification/);
 });
 
 test("a refused question is returned to the run as the failure and nothing is asked", async () => {

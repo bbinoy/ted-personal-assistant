@@ -28,7 +28,7 @@ export interface QuestionInput {
   details: string; // the code-rendered text: ground truth for the facts the question must carry; never sent
   recent: readonly Recent[];
   source: Source;
-  typedYes?: boolean; // a card payment: its question is the fixed payment text, not checked here
+  typedYes?: boolean; // a card payment: only a typed yes approves it; its question is checked like any other
 }
 export type Composed = { text: string; ms: number; by?: "model" } | { text?: undefined; failure: string; ms: number; by?: undefined };
 
@@ -53,8 +53,8 @@ export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeou
         emitRecord(q.tool, "question-failed", q.source, { reason: failure, question: text, details: q.details });
         break;
       }
-      // The judge guards the question: it must show the call faithfully (every recipient, attachment, the full text verbatim). A card payment keeps its own fixed text.
-      const raw = q.typedYes ? { faithful: true } : await check(checkPrompt({ details: q.details, question: text }));
+      // The judge guards the question: it must show the call faithfully (every recipient, attachment, the full text verbatim).
+      const raw = await check(checkPrompt({ details: q.details, question: text }));
       const c = parseCheck(raw);
       if (c.faithful) return { text, ms: Date.now() - started, by: "model" };
       failure = `the question did not show the call faithfully (${c.reason}); rewrite it showing every recipient, every attachment and the full text verbatim`;
