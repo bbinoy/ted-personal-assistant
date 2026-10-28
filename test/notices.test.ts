@@ -156,10 +156,10 @@ test("causeOf and the owner's failure messages: login, limit, timeout, connector
   assert.match(noticeFor("owner")(new RunTimeout(60_000))!, /too long.*RUN_MAX_MINUTES_CHAT/);
   assert.match(noticeFor("owner")(new Error("mcp connector down"))!, /npm run doctor/);
   assert.match(noticeFor("owner")(new Error("x"))!, /Check the logs/);
-  // a run that merely failed is no fixed text for a friend or a group (the warning reaction and the log say it; the model speaks, code does not)
-  assert.equal(noticeFor("friend")(new RunTimeout(60_000)), undefined);
-  assert.equal(noticeFor("group")(new Error("mcp connector down")), undefined);
-  assert.equal(noticeFor("friend")(new Error("x")), undefined);
+  // a run that merely failed: one short line for a friend or a group, nothing about the cause (the log and doctor say it)
+  assert.equal(noticeFor("friend")(new RunTimeout(60_000)), "⚠️ Something went wrong, try again.");
+  assert.equal(noticeFor("group")(new Error("mcp connector down")), "⚠️ Something went wrong, try again.");
+  assert.equal(noticeFor("friend")(new Error("x")), "⚠️ Something went wrong, try again.");
 });
 
 test("the budget notice: once a day, in the owner's chat, naming the limit and the setting", () => {

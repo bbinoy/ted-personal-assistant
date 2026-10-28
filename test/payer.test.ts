@@ -190,7 +190,7 @@ test("notices: one table by what went wrong and who reads it; a friend is told a
   assert.match(noticeFor("owner")(new AuthError("x"))!, /claude auth login/);
   assert.match(noticeFor("group")(new AuthError("x"))!, /needs to fix it/);
   assert.match(noticeFor("owner")(new Error("x"))!, /Check the logs/);
-  assert.equal(noticeFor("friend")(new Error("x")), undefined, "a run that merely failed: no fixed text for a friend");
+  assert.equal(noticeFor("friend")(new Error("x")), "⚠️ Something went wrong, try again.", "a run that merely failed: one short line, no cause");
 });
 
 test("approval context: a friend's prompt reads her own log, a group none, and nobody reads another's", () => {
