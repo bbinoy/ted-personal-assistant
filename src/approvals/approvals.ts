@@ -73,6 +73,13 @@ const open = new Map<string, Open>();
 let openChat = 0; // open approvals (background ones too): they share the one warm judge
 const closed = new Map<string, { label: string; expired: boolean }>(); // recently ended approvals (scope and timestamp -> label, and whether nobody answered in time): a quoted reply to one must not land on another
 
+// Background questions nobody answered in time, per conversation (newest last, at most LAPSED_MAX): what the next look is told about (heartbeat/facts.ts lapsedFact). In memory: a restart forgets them.
+export interface Lapsed { at: number; label: string; wait: string }
+const LAPSED_MAX = 10;
+const lapsed = new Map<string, Lapsed[]>();
+export const lapsedIn = (scope: string): readonly Lapsed[] => lapsed.get(scope) ?? [];
+export const forgetLapsed = (scope: string, gone: readonly Lapsed[]): void => void lapsed.set(scope, lapsedIn(scope).filter((l) => !gone.includes(l)));
+
 // How many questions are waiting for an answer in this conversation ("/status", conversation/ownercommands.ts).
 export const openCount = (scope: string): number => [...open.values()].filter((o) => o.scope === scope && !o.done).length;
 
@@ -311,6 +318,7 @@ export function request(
     const timer = setTimeout(() => {
       finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`);
       // Silent in the chat (CLAUDE.md: expiries are system status): the journal says it, so "what happened to X?" has an answer; a chat turn's model is told it was not answered in time.
+      if (background) lapsed.set(opts.scope, [...lapsedIn(opts.scope), { at: Date.now(), label, wait: formatWait(minutes) }].slice(-LAPSED_MAX));
       if (entry.ts) emit({ type: "expired", tool: call.tool, label, wait: formatWait(minutes), source: opts.source, conv: opts.scope });
     }, minutes * 60_000);
     signal?.addEventListener("abort", onAbort);
