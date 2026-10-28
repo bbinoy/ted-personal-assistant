@@ -47,11 +47,10 @@ export function createMeetingsServer(run: MeetingsRun) {
   return createSdkMcpServer({
     name: "meetings",
     version: "1.0.0",
-    alwaysLoad: true,
     tools: [
       tool(
         "note_upcoming_meetings",
-        `Tell code which meetings are coming up, so it can have a short prep message written shortly before each one. Call it ONCE per run, after you have read the calendar for the next ${HORIZON_MS / 3_600_000} hours (a few more is fine, up to 36), with EVERY event in that window that is not all-day: this list REPLACES what was recorded for the window, so an event you leave out is forgotten (a cancelled or moved one disappears) and an empty list means "nothing is coming up". Do NOT call it if you could not read the calendar. Pass the facts exactly as the calendar gave them; code decides which meetings get a prep (declined, private, all-day and meetings with nobody else are skipped by code, not by you). Times are full ISO WITH the UTC offset.`,
+        `Record the upcoming meetings so a short prep is written before each: every event of the next ${HORIZON_MS / 3_600_000} hours that is not all-day (up to 36 is fine), as the calendar gave it; the list replaces what was recorded. How to use it: the meeting-prep skill.`,
         {
           meetings: z
             .array(
@@ -77,7 +76,6 @@ export function createMeetingsServer(run: MeetingsRun) {
           const r = noteMeetings(run, meetings);
           return reply(r.text, r.isError);
         },
-        { alwaysLoad: true },
       ),
     ],
   });

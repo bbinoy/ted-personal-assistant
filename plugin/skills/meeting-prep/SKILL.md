@@ -9,6 +9,10 @@ delegate: sonnet
 `ted-personal-assistant:calendar` produces the reviewed event list for the window. This skill
 decides what needs prep, drafts it, and follows up after meetings happen.
 
+## Recording the window (`note_upcoming_meetings`)
+
+Whenever you read the calendar for the next hours (a look or a chat turn), call it **once per run** with **every** event of the next 6 hours that is not all-day (a few more is fine, up to 36), the facts exactly as the calendar gave them, times as full ISO with the UTC offset. The list **replaces** what was recorded for the window: an event you leave out is forgotten (a cancelled or moved one disappears) and an empty list means nothing is coming up. **Do not call it if you could not read the calendar.** You do not decide which meetings get a prep: code skips declined, private and all-day ones and those with nobody else on them, and sends the prep shortly before each.
+
 ## Timely prep, just before a meeting
 
 Part of an ordinary look: code claims a meeting `PREP_MINUTES` (15) before it starts (one that has other people on it) and your prompt lists it under `meetings_to_prepare` (title, time, who, link). Prepare it now, quickly and in your own voice (delegate to the expert if you like), and post it as an urgent message so quiet hours and the day's cap do not hold it. For this prep read **only this section** and skip the rest here: no Notion pages are created, no tasks added, nothing is sent to anyone but the owner, drafted or changed. Stop looking as soon as you have enough; the meeting is minutes away.
