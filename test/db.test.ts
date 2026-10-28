@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LedgerCorruptError, NewerSchemaError, openDb, type Migration } from "../src/core/db.ts";
+import { LedgerCorruptError, NewerSchemaError, OlderSchemaError, openDb, type Migration } from "../src/core/db.ts";
 
 // core/db.ts: the one module every SQLite database of the assistant opens through (pragmas, numbered migrations, tx, corrupt-file handling, several processes).
 
@@ -48,7 +48,26 @@ test("migrations: numbered steps, each applied once in its own transaction, the 
   assert.equal(check.get("SELECT name FROM sqlite_master WHERE name = 'c'"), undefined, "the half-applied step was rolled back");
   check.close();
   // numbering is checked
-  assert.throws(() => openDb(fresh(), { migrations: [{ version: 2, name: "x", up: "" }] }), /numbered 1, 2, 3/);
+  assert.throws(() => openDb(fresh(), { migrations: [{ version: 1, name: "x", up: "" }, { version: 3, name: "y", up: "" }] }), /numbered consecutively/);
+});
+
+test("a baseline: a fresh file gets it, a file at the baseline version is left as it is, a file older than it is refused untouched", () => {
+  const base: Migration = { version: 5, name: "baseline", up: "CREATE TABLE b (id INTEGER PRIMARY KEY);" };
+  const next: Migration = { version: 6, name: "next", up: "CREATE TABLE n (id INTEGER PRIMARY KEY);" };
+  const path = fresh();
+  const db = openDb(path, { migrations: [base] });
+  assert.equal(db.version, 5);
+  db.close();
+  const up = openDb(path, { migrations: [base, next] });
+  assert.deepEqual([up.version, up.all("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map((r) => r.name)], [6, ["b", "n"]], "a later step runs on top of the baseline");
+  up.close();
+  const old = fresh();
+  const o = openDb(old, { migrations: STEPS }); // (version 2)
+  o.close();
+  assert.throws(() => openDb(old, { migrations: [base] }), (e: unknown) => e instanceof OlderSchemaError && /version 2, older than the oldest this code upgrades \(5\)/.test((e as Error).message));
+  const check = openDb(old, { migrations: STEPS });
+  assert.equal(check.version, 2, "the refused file is untouched");
+  check.close();
 });
 
 test("a file from a newer version of the code is refused, untouched", () => {

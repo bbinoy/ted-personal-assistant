@@ -1,7 +1,7 @@
 import { instancePaths } from "./convpaths.ts";
 import { Db, LedgerCorruptError, openDb, type Migration } from "./db.ts";
 
-// instance/instance.db: the process-wide records that used to be one small file each (layout 2) and are now tables of ONE database (layout 3; docs/ARCHITECTURE.md "instance.db"). The agent
+// instance/instance.db: the process-wide records, tables of ONE database (docs/ARCHITECTURE.md "instance.db"). The agent
 // and the intake page (a separate process) both open it; WAL lets them share it. Opened lazily at the first use, once per path, closed at exit (core/db.ts).
 //
 //   spend      one row per charged run (budget.ts): who paid (the instance's login or the instance key), for which conversation, what kind of run, how many dollars, on which local day.
@@ -15,8 +15,8 @@ import { Db, LedgerCorruptError, openDb, type Migration } from "./db.ts";
 
 export const INSTANCE_SCHEMA: readonly Migration[] = [
   {
-    version: 1,
-    name: "spend, notices, looks, payments, intake, kv",
+    version: 4,
+    name: "baseline: the whole shape of the instance database (the 4 steps before it are collapsed; a file older than this is refused)",
     up: `
       CREATE TABLE spend (
         id    INTEGER PRIMARY KEY,
@@ -32,7 +32,6 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
 
       CREATE TABLE notices (
         key     TEXT PRIMARY KEY,
-        day     TEXT,                                             -- once-a-day notices: the local day it was sent
         last_at INTEGER                                           -- interval-throttled notices: epoch ms of the last one
       );
 
@@ -55,7 +54,7 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
       CREATE INDEX looks_at ON looks (at_ms);
 
       CREATE TABLE payments (
-        seq         INTEGER PRIMARY KEY AUTOINCREMENT,            -- append order: a payment's latest row is its highest seq
+        seq         INTEGER PRIMARY KEY AUTOINCREMENT,            -- append order
         id          TEXT NOT NULL,                                -- the approval id
         ts          TEXT NOT NULL,                                -- ISO
         merchant    TEXT NOT NULL,
@@ -63,13 +62,17 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
         currency    TEXT NOT NULL,
         last4       TEXT NOT NULL,
         cart_hash   TEXT NOT NULL,
-        status      TEXT NOT NULL                                 -- approved, clicked, confirmed, failed, unconfirmed, cleared (no CHECK: an import must never refuse a historical row)
+        status      TEXT NOT NULL                                 -- approved, clicked, confirmed, failed, unconfirmed, cleared (no CHECK: a row must never be refused)
       );
       CREATE INDEX payments_id ON payments (id, seq);
       CREATE INDEX payments_cart ON payments (merchant, cart_hash);
       CREATE INDEX payments_ts ON payments (ts);
+      -- a payment's latest row is the newest by (ts, seq)
       CREATE VIEW payments_latest AS
-        SELECT p.*, g.first_seq AS first_seq FROM payments p JOIN (SELECT id, MIN(seq) AS first_seq, MAX(seq) AS last_seq FROM payments GROUP BY id) g ON p.seq = g.last_seq;
+        SELECT p.*, g.first_ts AS first_ts, g.first_seq AS first_seq
+        FROM payments p
+        JOIN (SELECT id, MIN(ts) AS first_ts, MIN(seq) AS first_seq FROM payments GROUP BY id) g ON g.id = p.id
+        WHERE NOT EXISTS (SELECT 1 FROM payments q WHERE q.id = p.id AND (q.ts > p.ts OR (q.ts = p.ts AND q.seq > p.seq)));
 
       CREATE TABLE intake (
         tenant     TEXT NOT NULL,
@@ -85,42 +88,6 @@ export const INSTANCE_SCHEMA: readonly Migration[] = [
         value      TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
-
-      CREATE TABLE legacy_imports (
-        name        TEXT NOT NULL,                                -- the layout-2 file, relative to the data folder
-        sha256      TEXT NOT NULL,                                -- of its bytes: the same name with other bytes is a new file
-
-        rows        INTEGER NOT NULL,                             -- rows written into the tables for it
-        imported_at TEXT NOT NULL,
-        backup      TEXT,                                         -- where the original was copied before it was removed
-        PRIMARY KEY (name, sha256)
-      );
-    `,
-  },
-  {
-    version: 2,
-    name: "a payment's latest row is the newest by (ts, seq), not the last imported",
-    // The archives of layout 2 are named by the year of their FIRST line (payments-2025-2 can hold newer rows than payments-2026), so insertion order says nothing about time for imported rows.
-    up: `
-      DROP VIEW payments_latest;
-      CREATE VIEW payments_latest AS
-        SELECT p.*, g.first_ts AS first_ts, g.first_seq AS first_seq
-        FROM payments p
-        JOIN (SELECT id, MIN(ts) AS first_ts, MIN(seq) AS first_seq FROM payments GROUP BY id) g ON g.id = p.id
-        WHERE NOT EXISTS (SELECT 1 FROM payments q WHERE q.id = p.id AND (q.ts > p.ts OR (q.ts = p.ts AND q.seq > p.seq)));
-    `,
-  },
-  {
-    version: 3,
-    name: "the layout-2 import is retired: its bookkeeping table goes",
-    up: "DROP TABLE legacy_imports;",
-  },
-  {
-    version: 4,
-    name: "one throttle for every notice: a mark is the time it was last told (the once-a-day column is folded into it)",
-    up: `
-      UPDATE notices SET last_at = CAST(strftime('%s', day || ' 12:00:00') AS INTEGER) * 1000 WHERE last_at IS NULL AND day IS NOT NULL;
-      ALTER TABLE notices DROP COLUMN day;
     `,
   },
 ];

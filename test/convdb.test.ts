@@ -7,6 +7,7 @@ import { join } from "node:path";
 // <conversation>/assistant.db (src/core/convdb.ts): one file per conversation, its policy for a damaged file, the closing before a folder is deleted, no reading across conversations, and the stores over it.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "convdb-test-"));
 
+const { schemaVersion } = await import("../src/core/db.ts");
 const { CONV_SCHEMA, checkConvDbFile, clearDamage, closeAllConvDbs, closeConvDb, closeIdleConvDbs, ConvDbDamagedError, convDamage, convDb, damagedConvs, hasConvDb, openConvDbCount, removeConvDir, useConvDbAgentMode } = await import("../src/core/convdb.ts");
 const { convPaths, friendConvId, groupConvId, OWNER_CONV } = await import("../src/core/convpaths.ts");
 useConvDbAgentMode(); // (this test file plays the agent: only the agent applies the damage policy; the observer case is tested below)
@@ -32,7 +33,7 @@ test("one database per conversation, in its folder: WAL, owner-only, the schema'
   const db = convDb(G1);
   assert.equal(db.path, convPaths(G1).db);
   assert.equal(db.journalMode, "wal");
-  assert.equal(db.version, CONV_SCHEMA.length);
+  assert.equal(db.version, schemaVersion(CONV_SCHEMA));
   assert.equal(mode(db.path), 0o600);
   assert.equal(db.check(true), "ok");
   assert.equal(convDb(G1), db, "the same connection while it is in use");
@@ -65,9 +66,9 @@ test("a new table is one migration: a step appended to the list is applied once,
   writeSession(EXT, { sessionId: "two", costUsd: 2 });
   closeConvDb(EXT);
   const path = convPaths(EXT).db;
-  const tasks = { version: CONV_SCHEMA.length + 1, name: "example", up: "CREATE TABLE example_items (id INTEGER PRIMARY KEY, title TEXT NOT NULL); CREATE TABLE example_events (id INTEGER PRIMARY KEY, item INTEGER NOT NULL REFERENCES example_items (id), at INTEGER NOT NULL);" };
+  const tasks = { version: schemaVersion(CONV_SCHEMA) + 1, name: "example", up: "CREATE TABLE example_items (id INTEGER PRIMARY KEY, title TEXT NOT NULL); CREATE TABLE example_events (id INTEGER PRIMARY KEY, item INTEGER NOT NULL REFERENCES example_items (id), at INTEGER NOT NULL);" };
   const db = openDb(path, { migrations: [...CONV_SCHEMA, tasks], rebuildable: false });
-  assert.equal(db.version, CONV_SCHEMA.length + 1);
+  assert.equal(db.version, schemaVersion(CONV_SCHEMA) + 1);
   db.run("INSERT INTO example_items (title) VALUES ('first')");
   assert.equal(db.get<{ session_id: string }>("SELECT session_id FROM session")?.session_id, "two", "the existing rows are untouched");
   db.close();
