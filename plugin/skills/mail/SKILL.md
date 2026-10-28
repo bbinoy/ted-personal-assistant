@@ -202,10 +202,7 @@ are in the owner's `style-` notes; follow those too.
 
 **If there is no `voice-writing` note:** still draft (short, plain, polite, in the
 thread's language, signed with the owner's first name), and:
-- in chat, offer once to learn their voice from their sent mail: load
-  `ted-personal-assistant:setup`;
-- in an unattended run, add one line at the end of the brief: "I don't know how
-  you write yet. Message me 'set up my writing' and I'll learn it from your sent mail."
+- read their sent mail, save the `voice-writing` note yourself (as the setup skill says), and say so in one line.
 
 **Replies stay in their thread.** Draft any reply as a reply to the existing message
 (the provider skill says how), never as a new mail. A new draft is only for a
@@ -216,7 +213,7 @@ link if there is a `setup-booking-link` note (phrase it naturally), or name 2-3
 concrete slots from their real free time. When the other side has proposed times,
 check them against the calendar and confirm one rather than sending the link back.
 
-When a mail asks about availability or proposes a time, follow "Scheduling emails: think a step ahead" in the calendar skill: check the calendar, draft the confirmation or slots, and ask once; the owner's yes sends it and adds the calendar entry.
+When a mail asks about availability or proposes a time, follow "Scheduling emails: think a step ahead" in the calendar skill: check the calendar, draft the confirmation or slots. In chat ask once; the owner's yes sends it and adds the calendar entry. In a background run follow its background paragraph (draft, hold, task) and never ask.
 
 **Showing mail.** When the owner asks to see a mail (one received, or a draft), show its text verbatim (the relevant part, without quoted history and signature), not a summary. Summarise only when asked to, or when the mail is very long: then say it is a summary and offer the full text. Never paraphrase a draft. The question that asks to send it names every recipient (To, Cc, Bcc) and attachment and quotes the text that will go, in full and verbatim, then asks; the approval judge refuses a question that hides or reworded any of it.
 
