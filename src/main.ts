@@ -18,7 +18,7 @@ import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { noteMacZone } from "./heartbeat/whereabouts.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
 import { ensureNotesDir } from "./memory/notes.ts";
-import { ownerSearchScope, warmSearchIndex } from "./memory/search.ts";
+import { searchScope, warmSearchIndex } from "./memory/search.ts";
 import { compactIfNeeded, GROUP_LOG_MAX_BYTES, recordMessage, type Extra, type Kind } from "./core/messages.ts";
 import { summarizeWithHaiku } from "./conversation/summarize.ts";
 import { dropAll, mailRuntime, startAll, stopAll } from "./modules/runtime.ts";
@@ -231,7 +231,7 @@ if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies &
 // quiet hour is still quick. Local work only, no model call.
 setInterval(() => prepare(owner(), {}, { refresh: true }), WARM_REFRESH_MS).unref();
 // The owner's search index (memory/search.ts) is brought up to date a little after start-up, in small slices that leave the event loop free, so the first real search_logs is quick.
-setTimeout(() => void warmSearchIndex(ownerSearchScope()).catch(() => {}), 20_000).unref();
+setTimeout(() => void warmSearchIndex(searchScope(owner().convId)).catch(() => {}), 20_000).unref();
 
 // One dreamer (dream.ts) for every conversation, one after another: the owner, the groups, the friends (one failing never keeps another from being dreamt). Each conversation is dreamt at most once a day, only when it said something new.
 const dreamer = createDreamer({ busy: (conv) => pipeline.busy(conv) });

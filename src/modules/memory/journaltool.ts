@@ -2,7 +2,7 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { emitRecord } from "../../core/events.ts";
 import type { Source } from "../../core/audit.ts";
-import { convOfPath, convPaths, OWNER_CONV } from "../../core/convpaths.ts";
+import { convOfPath, convPaths } from "../../core/convpaths.ts";
 import { fence } from "../../core/fence.ts";
 import { KINDS, readJournal } from "../../memory/journalread.ts";
 
@@ -28,7 +28,7 @@ export const journalShape = {
 export function journalTool(notesDir: string, source: Source, zone?: () => string | undefined) {
   return tool("journal", JOURNAL_DESCRIPTION, journalShape, async (a) => {
     emitRecord("journal", "read", source);
-    const conv = convOfPath(notesDir) ?? (notesDir === convPaths(OWNER_CONV).notes ? OWNER_CONV : undefined); // (found from the notes folder; a folder that is no conversation's is refused, never read as the owner's)
+    const conv = convOfPath(notesDir); // (found from the notes folder; a folder that is no conversation's is refused, never read as the owner's)
     if (!conv) {
       emitRecord("journal", "refused", source);
       return { content: [{ type: "text" as const, text: "The journal is not available here." }], isError: true };

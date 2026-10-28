@@ -30,7 +30,6 @@ export interface LookExtra {
   signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
   expertContext?: string; // the look's facts and chat lines, appended by code to every brief it hands an expert (delegation.ts)
   untrusted?: boolean; // the message itself carries a third party's words (a task made from a mail, look.ts): the judge is told from the first call
-  style?: string; // a group: the style lines of its chat, as for a message (runoptions.ts RunInputs)
   facts: TurnFacts; // the facts of this look, taken by look.ts (it needs them before it writes its message, and settles them itself with what it knows of how the look ended)
 }
 
@@ -98,17 +97,17 @@ export function runConversation(conv: Conversation, inputs: RunInputs, build: Tu
 
 // One look of a conversation: a fresh session every time. `approve` is that conversation's own approver (main.ts); the payer is the conversation's (payer.ts): the login, or the instance key on her ledger.
 export function runLook(conv: Conversation, payer: Payer, build: TurnBuilder, approve: Approve, extra: LookExtra, o: { now?: Date; io?: { query?: typeof query } } = {}): Promise<AgentReply> {
-  return runTurn(conv, "look", build, { approve, inputs: lookInputs(payer, extra, o.now ?? new Date()), facts: extra.facts, extra: (built) => lookExtras(conv, built, extra), io: o.io });
+  return runTurn(conv, "look", build, { approve, inputs: lookInputs(payer, o.now ?? new Date()), facts: extra.facts, extra: (built) => lookExtras(conv, built, extra), io: o.io });
 }
 
 // What a look adds to the builder's options: the callbacks it was given (and what its experts are told). Also how tests build a look's options.
-const lookInputs = (payer: Payer, extra: Pick<LookExtra, "style">, now: Date): RunInputs => ({ ...(payer.kind === "instance" ? { apiKey: payer.apiKey } : {}), ...(extra.style ? { style: extra.style } : {}), now });
+const lookInputs = (payer: Payer, now: Date): RunInputs => ({ ...(payer.kind === "instance" ? { apiKey: payer.apiKey } : {}), now });
 const lookExtras = (conv: Conversation, built: RunOptions, extra: Partial<LookExtra>): Partial<RunOptions> => {
-  const { facts: _facts, onDelegate, expertContext, style: _style, provenance, seenMail, ...callbacks } = extra;
+  const { facts: _facts, onDelegate, expertContext, provenance, seenMail, ...callbacks } = extra;
   return { ...callbacks, ...(provenance ? { provenance: () => provenance } : {}), ...(seenMail && lookerOf(conv).mail ? { seenMail } : {}), experts: { ...built.experts!, onDelegate: (d) => onDelegate?.(d.agent), context: () => expertContext } };
 };
 export function lookOptions(conv: Conversation, payer: Payer, extra: Partial<LookExtra> = {}, now = new Date()): RunOptions {
-  const built = runFor(conv, "look", lookInputs(payer, extra, now));
+  const built = runFor(conv, "look", lookInputs(payer, now));
   return { ...built, ...lookExtras(conv, built, extra) };
 }
 

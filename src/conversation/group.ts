@@ -3,10 +3,10 @@ import { budgetSpent } from "../core/budget.ts";
 import { editNote } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { reactionJournal } from "../core/reaction.ts";
-import { prepare, runConversation } from "../run/agent.ts";
+import { prepare, runConversation, type TurnBuilder } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { AuthError, RateLimitError, refusalOnce } from "../tenants/errors.ts";
-import { askGate, logTail, prepareGate, styleLines } from "./gate.ts";
+import { askGate, logTail, prepareGate } from "./gate.ts";
 import { recordWake } from "./ledger.ts";
 import { groupContext } from "./groupstore.ts";
 import { isPaused } from "../core/pause.ts";
@@ -94,13 +94,11 @@ export async function ownerInGroup(groupId: string, lookup: () => Promise<{ id: 
   return ok;
 }
 
-// Makes the prompt once it is known whether the session resumes: `since` is the newest line it has been shown.
-export type PromptBuilder = (since?: string) => { prompt: string; seenAt?: string; pictures?: Picture[]; documents?: Document[] };
-export type Runner = (build: PromptBuilder, ctx: { conv: Conversation; now: Date; firstOutput?: () => void; apiKey?: string }) => Promise<string>; // apiKey: a tenant's unattended run, on the instance key (tenantrun.ts access)
+export type Runner = (build: TurnBuilder, ctx: { conv: Conversation; now: Date; firstOutput?: () => void; apiKey?: string }) => Promise<string>; // apiKey: a tenant's unattended run, on the instance key (tenantrun.ts access)
 
 // Chat replies and wake-ups both run here; the cost is logged as for an owner run.
-export const realRunner: Runner = async (build, { conv, now, firstOutput, apiKey }) => {
-  const r = await runConversation(conv, { style: conv.groupId ? styleLines(now) : undefined, apiKey }, build, firstOutput); // the owner's style notes are a group's; a tenant has her own
+export const realRunner: Runner = async (build, { conv, firstOutput, apiKey }) => {
+  const r = await runConversation(conv, { apiKey }, build, firstOutput);
   if (r.costUsd !== undefined) console.log(`group run: ${r.text.length} chars, $${r.costUsd.toFixed(4)}`);
   return r.text.trim();
 };
@@ -138,7 +136,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     for (const [key, st] of state) if (!st.running && nowMs - (st.at ?? 0) > STATE_IDLE_MS) state.delete(key);
   }
   const warm = cfg.warm ?? (cfg.run ? undefined : (conv: Conversation, afterTurn: boolean) => {
-    prepare(conv, { style: styleLines(new Date()) }, { keep: !afterTurn });
+    prepare(conv, {}, { keep: !afterTurn });
     prepareGate(); // the gate's spare belongs to no group, so it is not tied to this one
   });
 
@@ -241,7 +239,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     const live = st.gone?.has(last.timestamp) ? undefined : go.asked; // an address whose message was deleted while it waited is not answered
     const addressed = live && { line: live.line, quote: live.incoming, voice: live.voice, edit: live.edit };
     const late = items.some((x) => x.late);
-    const build: PromptBuilder = (since) => {
+    const build: TurnBuilder = (since) => {
       const { lines, seenAt } = (cfg.context ?? groupContext)(conv.key, since);
       // The pictures of this burst plus the addressing one (if it came earlier): any member's, like their words.
       const pictures = [...new Set([live?.picture, ...items.map((x) => x.picture)].filter((p): p is Picture => !!p))].slice(-MAX_PICTURES);

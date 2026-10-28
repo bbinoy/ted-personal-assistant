@@ -3,14 +3,14 @@ import { z } from "zod";
 import { emitRecord } from "../../core/events.ts";
 import { undoLatest } from "../../memory/dreamapply.ts";
 import type { Scope } from "../../memory/dreamplan.ts";
-import { FILE } from "../../core/messages.ts";
-import { convOfPath, convPaths, OWNER_CONV } from "../../core/convpaths.ts";
+import { convOfPath, convPaths } from "../../core/convpaths.ts";
 import { fence } from "../../core/fence.ts";
 import { searchLogs } from "../../core/logsearch.ts";
-import { ownerSearchScope, searchConversation, type Scope as Scope2 } from "../../memory/search.ts";
+import { searchConversation, searchScope } from "../../memory/search.ts";
 import { forgetNote } from "../../memory/notes.ts";
 import type { Source } from "../../core/audit.ts";
 import { journalTool } from "./journaltool.ts";
+import { dreamScope } from "./dreamscope.ts";
 import { settings } from "../../core/settings.ts";
 
 // The SDK's auto-memory lets an agent create and edit notes with ordinary file tools (limited to ONE notes
@@ -82,7 +82,7 @@ export function createMemoryServer(scope: MemoryScope) {
           : "Put the memory notes back as they were before the latest nightly dream (which merges, adds and drops notes). Only when the OWNER asked to undo it. For a group's notes, pass the group's name. Say in your reply what came back.",
         own ? {} : { group: z.string().optional().describe("The group's name, to undo that group's latest dream instead of your own notes") },
         async (args: { group?: string }) => {
-          let target = own; // a group's or a friend's: its own scope, closed over; the owner's: hers, or a group's by name
+          let target = own ?? dreamScope({ kind: "owner" }); // a group's or a friend's: its own scope, closed over; the owner's: hers, or a group's by name
           if (!own && args.group) {
             const { groupScope, listGroups } = await import("../../conversation/groupstore.ts");
             const found = listGroups().find((g) => g.name.toLowerCase() === args.group!.trim().toLowerCase());
@@ -104,12 +104,10 @@ export function createMemoryServer(scope: MemoryScope) {
           if (g) { emitRecord("memory_search", "searched", source); return reply(fence("history", searchHistoryFile(convPaths(g.convId).messages, a), 12_000)); }
           return reply(searchLogs(settings.logsDir, a));
         }
-        const { groupLogFile } = await import("../../conversation/groupstore.ts");
-        const owner = !groupId && (!tenantLog || tenantLog === FILE);
-        const conv = convOfPath(notesDir) ?? OWNER_CONV; // (the notes folder is inside the conversation's own folder)
-        const scope: Scope2 = owner ? { ...ownerSearchScope(), notesDir } : { logFile: tenantLog ?? groupLogFile(groupId!), notesDir, indexPath: convPaths(conv).search };
+        const conv = convOfPath(notesDir); // (the notes folder is inside the conversation's own folder; the log and the index are beside it)
+        if (!conv) return reply("The search is not available here.", true);
         emitRecord("memory_search", "searched", source);
-        return reply(fence("history", await searchConversation(scope, a, { zone: zone?.() }), 12_000));
+        return reply(fence("history", await searchConversation(searchScope(conv), a, { zone: zone?.() }), 12_000));
       }),
     ] as { name: string }[]).filter((t) => !offers || offers(`mcp__memory__${t.name}`)) as never,
   });

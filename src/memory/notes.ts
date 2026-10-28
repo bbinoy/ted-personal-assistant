@@ -89,6 +89,10 @@ export function parseNote(file: string, raw: string): Note | undefined {
 
 const isActive = (n: Note, today: string) => !n.expires || today <= n.expires;
 
+// The owner's style notes: the personality the assistant takes into groups (and what a group's gate is told of it).
+export const styleLines = (now: Date): string =>
+  readNotes(now).filter((n) => n.category === "style").map((n) => `- ${n.text.replace(/\s*\n\s*/g, " ").slice(0, LIMITS.logLine)}`).join("\n");
+
 // `zone`: the conversation's own time zone (timezone.ts), the day an `expires:` is compared with; default the Mac's.
 export function readNotes(now = new Date(), dir: string = NOTES_DIR, zone?: string, prefix = ""): Note[] {
   let files: string[] = [];
