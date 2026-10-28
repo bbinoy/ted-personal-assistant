@@ -155,7 +155,7 @@ export function markFinished(conv: ConvRef, name: string, ok: boolean, now: numb
   else db.run(`UPDATE routine_runs SET status = 'failed', at = ?, attempts = MAX(0, attempts - ?) WHERE name = ? AND status = 'started'`, now, refund ? 1 : 0, name);
 }
 
-// The end of a look that started routines. Delivered only for those that `finished` (a skill's expert came back with a result; a note's look posted, sent or acted); the others are failed, and their
+// The end of a look that started routines. Delivered only for those that `finished` (the expert came back with a result); the others are failed, and their
 // attempt is given back only when the look was called off (a message, the Mac sleeping) AND nothing of it reached the person: once something went out, the next look must not send it again.
 export function settleRoutines(conv: ConvRef, started: ReadonlySet<string>, finished: ReadonlySet<string>, o: { calledOff: boolean; sends: number }, now: number): void {
   for (const name of started) markFinished(conv, name, finished.has(name), now, o.calledOff && o.sends === 0);
@@ -166,8 +166,8 @@ export function markTold(conv: ConvRef, names: readonly string[]): void {
   for (const n of names) db?.run("UPDATE routine_runs SET told = 1 WHERE name = ? AND status = 'skipped'", n);
 }
 
-// The expert a delegation names -> the skill routine it runs, if any (variantOf: "expert-<skill>").
-export const routineOfAgent = (routines: readonly Routine[], agent: string, agentOf: (skill: string) => string): Routine | undefined => routines.find((r) => r.skill && agentOf(r.skill) === agent);
+// The expert a delegation names -> the routine it runs, if any: agentOf gives a skill's variant ("expert-<skill>"), or the general expert for a note, which has no skill.
+export const routineOfAgent = (routines: readonly Routine[], agent: string, agentOf: (skill?: string) => string): Routine | undefined => routines.find((r) => agentOf(r.skill) === agent);
 
 export interface RoutineFacts {
   text: string; // for the heartbeat instruction; "" when there is nothing to say
@@ -176,21 +176,20 @@ export interface RoutineFacts {
 }
 
 // The routines section of one look's instruction: only what needs the run's attention (a routine that is waiting or done is not mentioned). One routine per look. `deliver`: how a skill's full version reaches the owner by email.
-export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; agentOf: (skill: string) => string; approvals?: number; deliver?: (r: Routine) => string }): RoutineFacts {
+export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, o: { catchUpHours: number; who: string; agentOf: (skill?: string) => string; approvals?: number; deliver?: (r: Routine) => string }): RoutineFacts {
   const planned = planAll(conv, routines, now, zone, o.catchUpHours);
   const lines: string[] = [];
   let due: RoutineFacts["due"];
   const told: string[] = [];
   for (const p of planned) {
     const { routine: r, plan } = p;
-    if (plan.state === "running") lines.push(`${r.name}: started ${Math.round((now.getTime() - plan.since.getTime()) / 60_000)} min ago, ${r.skill ? "the expert is still working" : "a look is still doing it"}; wait.`);
+    if (plan.state === "running") lines.push(`${r.name}: started ${Math.round((now.getTime() - plan.since.getTime()) / 60_000)} min ago, the expert is still working; wait.`);
     else if (plan.state === "due" && !due) {
       due = p as NonNullable<typeof due>;
       const when = `${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}`;
       const how = o.deliver?.(r);
-      lines.push(r.skill
-        ? `${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "${o.agentOf(r.skill)}" and a self-contained brief that names the skill ${PLUGIN}:${r.skill}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${how ? ` ${how}` : ""}`
-        : `due now: ${clean(r.instruction ?? "")} (routine ${r.name}, ${when}). Do it now yourself, or delegate it when it needs judgement or careful wording, and post the result for ${o.who}; it counts as done once you posted, sent something or acted.`);
+      const what = r.skill ? `names the skill ${PLUGIN}:${r.skill}` : `holds the note's instruction word for word (${clean(r.instruction ?? "")}), who it is for and the voice or format it asks for`;
+      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "${o.agentOf(r.skill)}" and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${r.skill && o.approvals !== undefined ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}${how ? ` ${how}` : ""}`);
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look (code makes it due again by itself).`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
