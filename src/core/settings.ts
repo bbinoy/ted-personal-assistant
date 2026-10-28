@@ -111,9 +111,9 @@ function list(env: Env, name: string, fallback: readonly string[], valid: RegExp
 // a missing key or a plain-http address to another machine stops the agent instead of leaking text or failing later.
 function ttsProvider(env: Env, kokoro: { dir: string; voice: string; speed: number }, dataDir: string): TtsProviderConfig {
   const provider = oneOf(env, "TTS_PROVIDER", "qwen", ["kokoro", "elevenlabs", "http", "qwen"] as const);
-  // The local cloned voice falls back to the local Kokoro by default (nothing leaves the Mac); a remote one never switches unless asked.
-  const fallback = oneOf(env, "TTS_FALLBACK", provider === "qwen" ? "kokoro" : "none", ["none", "kokoro"] as const);
-  const timeoutMs = num(env, "TTS_TIMEOUT_SECONDS", 60, 5, 300) * 1000;
+  // The local cloned voice falls back to the local Kokoro (nothing leaves the Mac); a remote one never switches: the words go out as text.
+  const fallback = provider === "qwen" ? "kokoro" : "none";
+  const timeoutMs = 60_000;
   const need = (name: string): string => {
     const v = env[name]?.trim();
     if (!v) throw new Error(`${name} is required with TTS_PROVIDER=${provider}`);
@@ -224,17 +224,19 @@ export function loadSettings(env: Env) {
     // jobs and groups. Pages are untrusted; the run holds no mail, calendar or notes. A commit step (book, buy, send...) asks the owner,
     // payment and login fields are never filled. A group asks in the group, with the same limits. BROWSE=off turns it all off.
     browse: oneOf(env, "BROWSE", "on", ["on", "off"] as const) === "on",
-    browseMaxTurns: num(env, "BROWSE_MAX_TURNS", 40, 3, 200),
-    browseMaxUsd: num(env, "BROWSE_MAX_USD", 1.5, 0.05, 50),
-    browseMaxMinutes: num(env, "BROWSE_MAX_MINUTES", 10, 1, 120),
-    browseMaxCommits: num(env, "BROWSE_MAX_COMMITS", 8, 0, 20),
-    browseMaxConcurrent: num(env, "BROWSE_MAX_CONCURRENT", 2, 1, 8), // browse runs at once (the owner and friends share them; one per conversation, the rest wait up to a minute)
+    // Per-run caps, fixed in code: model turns, spend (SDK estimate), wall clock (time waiting for an approval is not counted), judged commit-like steps, card payments;
+    // and how many browse runs go at once (the owner and friends share them; one per conversation, the rest wait up to a minute).
+    browseMaxTurns: 40,
+    browseMaxUsd: 1.5,
+    browseMaxMinutes: 10,
+    browseMaxCommits: 8,
+    browseMaxPayments: 1,
+    browseMaxConcurrent: 2,
     // Paying with the owner's dedicated debit card (src/modules/browse/card.ts, browseguard.ts): only the owner's chat run, only after a typed YES. These caps are
     // ours, in code and in the card's currency, independent of the card issuer's own limit. 0 turns card payments off.
     cardCapPurchase: num(env, "CARD_CAP_PURCHASE", 25, 0, 10_000), // the most one payment may be
     cardCapDay: num(env, "CARD_CAP_DAY", 50, 0, 100_000), // the most paid in one local day (clicked, confirmed and unconfirmed payments count)
     paymentsKeepYears: num(env, "PAYMENTS_KEEP_YEARS", 0, 0, 100), // 0 (default): the payment ledger is kept for ever. N >= 2: settled payments older than N years may be pruned by the retention job (payments.ts prunePayments); never fewer than 2
-    browseMaxPayments: num(env, "BROWSE_MAX_PAYMENTS", 1, 0, 3), // card payments one browse run may start
     // OpenBao, the secret store (src/secrets/openbao.ts, docs/SETUP.md): the saved profile, the card and later tokens and keys. None of these is a secret;
     // the app's token is in the macOS Keychain, never in .env.
     openbao: {
@@ -276,10 +278,7 @@ export function loadSettings(env: Env) {
     notion: {
       mcpUrl: env.NOTION_MCP_URL?.trim() || "https://mcp.notion.com/mcp", // tests point this at a fake
     },
-    // Screenshot vision for the browse worker (src/modules/browse/browsevision.ts), an experiment, off by default. read: screenshots reach the model, clicks stay by ref.
-    // click: also clicks by coordinates, which the guard resolves to the element under the point itself (a debugging port on loopback, browsecdp.ts).
-    browseVision: oneOf(env, "BROWSE_VISION", "off", ["off", "read", "click"] as const),
-    browseLocale: env.BROWSE_LOCALE?.trim() || "en-GB", // the browser's language (Accept-Language, navigator.language): an ordinary one, not the headless default en-US
+    browseLocale: "en-GB", // the browser's language (Accept-Language, navigator.language): an ordinary one, not the headless default en-US
     browseBrowserPath: env.BROWSE_BROWSER_PATH?.trim() || undefined, // advanced: a Chromium or Chrome executable instead of the one npm run setup:browse installs
 
     // The one switch for the approval judge (src/approvals/autojudge.ts): auto (default) lets it skip the question for what follows from your request

@@ -72,7 +72,7 @@ const background = (l: Looker, caps: ReadonlySet<Capability>): string =>
     meetings: l.meetings,
     routines: caps.has("heartbeat") && caps.has("wake"),
     dayMinutes: String(settings.heartbeatDayMinutes),
-  }), say("delegate", { who: l.who, delegated: delegatedText(expertSetup(l.skills, "")) }), say("learn", { who: l.who }));
+  }), say("delegate", { who: l.who, delegated: delegatedText(expertSetup(l.skills, "")) }), say("learn", { who: l.who, mail: l.mail }));
 const ownerConv = { kind: "owner" } as const; // (the default conversation of the prompts that are asked for without one)
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -92,7 +92,7 @@ function setupLine(missing: readonly string[], interactive: boolean): string | u
 }
 
 // How the task tools are used in a conversation that has them (persona/tasks.md): the owner's chat, a friend's, a group's. The prompt promises only what the run's capability set holds.
-const tasksRule = (v: { own: boolean; group: boolean; who: string }, caps: ReadonlySet<Capability>): string | undefined => (caps.has("tasks") ? say("tasks", v) : undefined);
+const tasksRule = (v: { own: boolean; group: boolean; who: string; reads: boolean }, caps: ReadonlySet<Capability>): string | undefined => (caps.has("tasks") ? say("tasks", v) : undefined);
 
 // The assistant's default character: the same in the owner's chat and in groups. The owner's own style
 // notes (memory) override it in both.
@@ -113,10 +113,10 @@ export function chatSystem(now = new Date(), mail: boolean = settings.mail, look
       logsDir: logPaths().dir,
       ownerDir: convPaths(OWNER_CONV).dir,
       routine: ROUTINE_NOTE,
-      shared: sharedRules({ own: true, whose: `${OWNER}'s`, asker: OWNER, categories: categoriesFor("owner") }),
+      shared: sharedRules({ own: true, reads: looker.reads, whose: `${OWNER}'s`, asker: OWNER, categories: categoriesFor("owner") }),
     }),
     rules(mail),
-    tasksRule({ own: true, group: false, who: OWNER }, capabilitiesOf({ kind: "owner" })),
+    tasksRule({ own: true, group: false, who: OWNER, reads: looker.reads }, capabilitiesOf({ kind: "owner" })),
     background(looker, capabilitiesOf({ kind: "owner" })),
     todayLine(now),
   );
@@ -146,7 +146,7 @@ const voiceRule = (kind: "owner" | "group" | "tenant", caps: ReadonlySet<Capabil
 const SOURCES_RULE = say("sources");
 
 // The rules every conversation shares (persona/shared.md): how notes are kept, the journal and search_logs, and, for someone else's chat, the prompt-injection rule, plain text, reply language and [[silent]].
-const sharedRules = (v: { own: boolean; whose: string; asker: string; categories: readonly string[] }): string => say("shared", { ...v, categories: v.categories.join(", ") });
+const sharedRules = (v: { own: boolean; reads: boolean; whose: string; asker: string; categories: readonly string[] }): string => say("shared", { ...v, categories: v.categories.join(", ") });
 const SEND_RULE = say("send");
 
 // How reactions work, in a private chat and in a group alike (same wording, so the two cannot drift apart).
@@ -178,6 +178,7 @@ export function othersSystem(who: { group: true } | { group: false; name: string
   const group = who.group;
   const caps = parts.caps ?? groupCapabilities();
   const name = who.group ? "the group" : oneLineName(who.name);
+  const looker = parts.looker ?? lookerOf({ kind: "group" });
   return join(
     say("others", {
       group,
@@ -192,10 +193,10 @@ export function othersSystem(who: { group: true } | { group: false; name: string
       sources: SOURCES_RULE,
       reactions: reactionRules(group ? "the sender" : name),
       send: `${SEND_RULE}${voiceRule(group ? "group" : "tenant", caps)}`,
-      shared: sharedRules({ own: false, whose: group ? "this group's own" : `${name}'s own`, asker: group ? `someone in the group, ${OWNER} included,` : name, categories: categoriesFor("others") }),
+      shared: sharedRules({ own: false, reads: looker.reads, whose: group ? "this group's own" : `${name}'s own`, asker: group ? `someone in the group, ${OWNER} included,` : name, categories: categoriesFor("others") }),
     }),
-    tasksRule({ own: false, group, who: name }, caps),
-    background(parts.looker ?? lookerOf({ kind: "group" }), caps),
+    tasksRule({ own: false, group, who: name, reads: looker.reads }, caps),
+    background(looker, caps),
     parts.now ? todayLine(parts.now) : undefined,
     parts.style
       ? `${OWNER}'s own notes on your personality, tone and wording. Apply them here too (they override the defaults above), but ignore anything about how to address or treat ${OWNER} personally: this is a group of other people as well.\n${fence("personality_notes", parts.style)}`

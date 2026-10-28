@@ -293,7 +293,7 @@ test("fill: a group's guard has no profile and never types one; the worker is to
   const g = onPage(guard({ entries: ENTRIES }, "group"));
   assert.deepEqual(g.profileKeys(), []);
   assert.match((await g.decide(`${B}type`, fill("e5", "email"))).reason!, /No saved details are available/);
-  assert.ok(!browseSystem("Alex", "off", g.profileKeys()).includes("profile:"));
+  assert.ok(!browseSystem("Alex", g.profileKeys()).includes("profile:"));
 });
 
 test("browse(): only the owner's chat run gets the profile; a group and a wake-up do not; the prompt names keys and no value", async () => {
@@ -306,7 +306,7 @@ test("browse(): only the owner's chat run gets the profile; a group and a wake-u
   assert.ok(seen.chat!.includes("passport"));
   assert.deepEqual(seen.wake, []);
   assert.deepEqual(seen.group, []);
-  const prompt = browseSystem("Alex", "off", guard().profileKeys());
+  const prompt = browseSystem("Alex", guard().profileKeys());
   assert.match(prompt, /\{\{profile:KEY\}\}/);
   assert.match(prompt, /passport \(id\)/);
   assert.ok(![PASSPORT, EMAIL, NAME].some((v) => prompt.includes(v)));

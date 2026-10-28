@@ -24,7 +24,7 @@ const jpegResponse = (b: Buffer) => ({ content: [{ type: "text", text: "### Resu
 
 function shotsFrom(files: Buffer[]) {
   const dir = newShotsDir();
-  const guard = new BrowseGuard({ mode: "owner", task: "t", outDir: dir, shotsDir: dir, vision: "read" });
+  const guard = new BrowseGuard({ mode: "owner", task: "t", outDir: dir, shotsDir: dir });
   for (const f of files) guard.keepShot(jpegResponse(f));
   return guard;
 }
@@ -32,7 +32,7 @@ function shotsFrom(files: Buffer[]) {
 test("send_picture: the guard keeps only real jpeg bytes, under names code chooses", () => {
   const g = shotsFrom([JPEG, Buffer.from("not a picture at all"), JPEG]);
   assert.deepEqual(g.kept.map((k) => k.id), ["shot1", "shot2"]);
-  assert.equal(new BrowseGuard({ mode: "owner", task: "t", outDir: "/tmp" }).keepShot(jpegResponse(JPEG)), undefined); // vision off: nothing kept
+  assert.equal(new BrowseGuard({ mode: "owner", task: "t", outDir: "/tmp" }).keepShot(jpegResponse(JPEG)), undefined); // no shots folder: nothing kept
 });
 
 

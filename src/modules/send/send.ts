@@ -105,7 +105,7 @@ export function createSendServer(key: string) {
     tools: [
       tool(
         "send",
-        "Put one thing in the conversation right now while you keep working: text (a short message, for example \"On it, researching now.\"; add voice: true to speak it as a voice note), picture (the id of a screenshot the browse tool took, like shot1, or of a drawing the draw tool made, like img1, with an optional one-line caption), or react (one emoji on the message you are answering). One thing per call; call it again for more. Use it for a quick note before a long task (always before the browse tool), or a picture, voice note or reaction mid-turn. Not for trivial steps, and not for the result itself: your final reply is sent on its own. Write in the person's language and your usual voice. A screenshot shows page content, so describe it as what the page shows, never as something you checked.",
+        "Put one thing in the conversation right now while you keep working: text (add voice: true to speak it), picture (the id of a browse screenshot like shot1 or a drawing like img1, with an optional caption) or react (one emoji on the message you are answering). One thing per call. When to use it is in your instructions.",
         {
           text: z.string().min(1).max(2000).optional().describe("The message, as you would write it in the chat."),
           voice: z.boolean().optional().describe("With text: speak it as a voice note instead (only the voice languages; otherwise it goes out as text)."),

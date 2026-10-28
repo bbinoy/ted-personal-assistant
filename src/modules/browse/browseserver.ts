@@ -3,7 +3,7 @@ import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
-import { BLOCKED_ORIGINS, type VisionMode } from "./browserules.ts";
+import { BLOCKED_ORIGINS } from "./browserules.ts";
 import { settings } from "../../core/settings.ts";
 import { instancePaths } from "../../core/convpaths.ts";
 
@@ -60,22 +60,22 @@ export function browseStatus(): BrowseStatus {
 // The MCP server of the browser, for the browse run's options only. Isolated (in memory: no cookies, no logins, nothing saved),
 // headless, no service workers, no images to the model, private ranges blocked by name (a best-effort extra) and, the real network veto, the run's egress proxy
 // (the guard's address check on what the worker asks for comes first). Started with a minimal environment, in a folder of its own that is removed afterwards.
-export function browserServer(st: Extract<BrowseStatus, { ok: true }>, outDir: string, ua: string | undefined = desktopUserAgent(st.exe), vision: { mode: VisionMode; cdpPort?: number; proxyPort?: number; unproxiedForTest?: true } = { mode: "off" }): McpServerConfig {
+export function browserServer(st: Extract<BrowseStatus, { ok: true }>, outDir: string, ua: string | undefined = desktopUserAgent(st.exe), o: { cdpPort: number; proxyPort?: number; unproxiedForTest?: true }): McpServerConfig {
   // An ordinary language and the time zone of this machine, so the page sees what a browser on this computer would send.
   const configFile = join(outDir, "browser-config.json");
-  // BROWSE_VISION=click only: the browser also listens on a debugging port on loopback, for the guard's own lookup of what is under a point (browsecdp.ts).
+  // The browser also listens on a debugging port on loopback, for the guard's own lookup of what is under a point (browsecdp.ts).
   // Every connection of the browser goes through the run's egress proxy (browseproxy.ts: public addresses only, on the ports a page may use). `<-loopback>` takes away
   // Chromium's default bypass for localhost, so a page cannot reach the owner's own machine around the proxy; the debugging port is reached by code, not by the browser.
   // No proxy, no browser: a launch without the egress filter is refused (only a test may say it does without, `unproxiedForTest`).
-  if (!vision.proxyPort && !vision.unproxiedForTest) throw new Error("the egress proxy is missing: the browser is not started without it");
+  if (!o.proxyPort && !o.unproxiedForTest) throw new Error("the egress proxy is missing: the browser is not started without it");
   // WebRTC (UDP to LAN addresses, outside any proxy) is limited to proxied traffic and QUIC (UDP) is off, so nothing but TCP through the proxy leaves the browser.
-  const args = [...(vision.proxyPort ? [`--proxy-server=http://127.0.0.1:${vision.proxyPort}`, "--proxy-bypass-list=<-loopback>"] : []), "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic", ...(vision.cdpPort ? [`--remote-debugging-port=${vision.cdpPort}`] : [])];
+  const args = [...(o.proxyPort ? [`--proxy-server=http://127.0.0.1:${o.proxyPort}`, "--proxy-bypass-list=<-loopback>"] : []), "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic", `--remote-debugging-port=${o.cdpPort}`];
   const launchOptions = { launchOptions: { args } };
   writeFileSync(configFile, JSON.stringify({ browser: { ...launchOptions, contextOptions: { locale: settings.browseLocale, timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone } } }));
   return {
     type: "stdio",
     command: process.execPath,
-    args: [st.cli, ...(ua ? ["--user-agent", ua] : []), "--config", configFile, "--headless", "--isolated", "--block-service-workers", ...(vision.mode === "click" ? ["--caps", "vision"] : []), "--image-responses", vision.mode === "off" ? "omit" : "allow", "--file-paths", "absolute", "--timeout-navigation", "30000", "--viewport-size", "1280x800", "--output-dir", outDir, "--executable-path", st.exe, "--blocked-origins", BLOCKED_ORIGINS.join(";")],
+    args: [st.cli, ...(ua ? ["--user-agent", ua] : []), "--config", configFile, "--headless", "--isolated", "--block-service-workers", "--caps", "vision", "--image-responses", "allow", "--file-paths", "absolute", "--timeout-navigation", "30000", "--viewport-size", "1280x800", "--output-dir", outDir, "--executable-path", st.exe, "--blocked-origins", BLOCKED_ORIGINS.join(";")],
     env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", TMPDIR: process.env.TMPDIR ?? "", PLAYWRIGHT_BROWSERS_PATH: BROWSERS() },
   };
 }

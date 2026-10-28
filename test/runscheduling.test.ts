@@ -182,7 +182,7 @@ test("a run parked on an approval gives its place to others meanwhile and takes 
 });
 
 test("the browse child is called off with its parent: the parent's signal and \"/stop\" in the parent's conversation reach it", async () => {
-  const guard = { vision: false, profileKeys: () => [], cardInfo: () => undefined } as never;
+  const guard = { profileKeys: () => [], cardInfo: () => undefined } as never;
   const parent = new AbortController();
   const o = browseRunOptions(guard, undefined, { signal: parent.signal, stopScope: "chat-scope" });
   assert.deepEqual([o.gate, o.signal, o.stopScope], ["helper", parent.signal, "chat-scope"]);

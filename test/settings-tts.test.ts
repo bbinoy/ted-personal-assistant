@@ -21,14 +21,13 @@ test("settings: remote speech needs its keys and a safe address, or the agent do
   const out = execFileSync(process.execPath, ["--conditions=workspace-source", "-e", probe], { encoding: "utf8", env: { PATH: process.env.PATH, TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "key-123456", ELEVENLABS_VOICE_ID: "v", TTS_HTTP_TOKEN: "tok-123456", HARNESS_DATA_DIR: process.env.HARNESS_DATA_DIR } });
   assert.equal(out.trim(), JSON.stringify([null, null, "key-123456"]));
   assert.throws(() => loadSettings({ TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "k" }), /ELEVENLABS_VOICE_ID/);
-  const e = loadSettings({ TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "k", ELEVENLABS_VOICE_ID: "v", TTS_FALLBACK: "kokoro" }).tts;
-  assert.ok(e.provider === "elevenlabs" && e.elevenlabs.modelId === "eleven_multilingual_v2" && e.fallback === "kokoro");
+  const e = loadSettings({ TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "k", ELEVENLABS_VOICE_ID: "v" }).tts;
+  assert.ok(e.provider === "elevenlabs" && e.elevenlabs.modelId === "eleven_multilingual_v2" && e.fallback === "none");
   assert.throws(() => loadSettings({ TTS_PROVIDER: "http" }), /TTS_HTTP_URL/);
   assert.throws(() => loadSettings({ TTS_PROVIDER: "http", TTS_HTTP_URL: "http://example.com/tts" }), /https/);
   const h = loadSettings({ TTS_PROVIDER: "http", TTS_HTTP_URL: "http://localhost:8787/tts", TTS_HTTP_REFERENCE_ID: "r1" }).tts;
   assert.ok(h.provider === "http" && h.http.referenceId === "r1" && h.http.token === undefined);
   assert.throws(() => loadSettings({ TTS_PROVIDER: "other" }), /TTS_PROVIDER/);
-  assert.throws(() => loadSettings({ TTS_FALLBACK: "elevenlabs" }), /TTS_FALLBACK/);
 });
 
 test("settings: the local cloned voice (qwen) takes its reference from paths, falls back to Kokoro by default", () => {
@@ -44,7 +43,6 @@ test("settings: the local cloned voice (qwen) takes its reference from paths, fa
   assert.match(q.qwen.model, /Qwen3-TTS-12Hz-0\.6B-Base-8bit$/);
   const inline = loadSettings({ TTS_PROVIDER: "qwen", TTS_REF_TEXT: "Just these words." }).tts;
   assert.ok(inline.provider === "qwen" && inline.qwen.refText === "Just these words." && inline.qwen.refAudio === "");
-  assert.ok(loadSettings({ TTS_PROVIDER: "qwen", TTS_FALLBACK: "none" }).tts.fallback === "none");
   rmSync(dir, { recursive: true, force: true });
 });
 

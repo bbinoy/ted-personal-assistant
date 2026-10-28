@@ -89,7 +89,7 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
     server: (ctx) => {
       const status = browseStatus();
       if (!status.ok) throw new Error(`browsing is not set up: ${status.reason}`);
-      return browserServer(status, ctx.guard!.outDir, undefined, { mode: ctx.guard!.vision, cdpPort: ctx.guard!.cdpPort, proxyPort: ctx.guard!.proxyPort });
+      return browserServer(status, ctx.guard!.outDir, undefined, { cdpPort: ctx.guard!.cdpPort!, proxyPort: ctx.guard!.proxyPort });
     },
   },
   intake: { server: (ctx) => createIntakeServer(ctx.tenant!) },

@@ -7,8 +7,6 @@ By default Ted speaks with the local Qwen3-TTS voice on your Mac (Kokoro stands 
 | Setting | |
 |---|---|
 | `TTS_PROVIDER` | `qwen` (default; local cloned voice, below), `kokoro`, `elevenlabs` or `http` |
-| `TTS_FALLBACK` | `none` (default): a failed remote request is sent as text with the usual note. `kokoro`: speak the same words locally instead (needs `scripts/setup-tts.sh`). Never switches unless you set it. |
-| `TTS_TIMEOUT_SECONDS` | per request, 5 to 300, default 60 |
 
 Keys and tokens live in `.env` only, are sent only in a request header, and are blanked out of any error message. A wrong setting stops the agent at start-up. `npm run doctor` shows which provider is chosen.
 
@@ -21,7 +19,7 @@ ELEVENLABS_VOICE_ID=...       # a stock voice, or a clone you made there with a 
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 ```
 
-Ted calls `POST https://api.elevenlabs.io/v1/text-to-speech/{voice_id}` with `{text, model_id}` and takes the MP3 it returns. Usage is billed by ElevenLabs by character; a 401, quota or rate-limit answer is a failure like any other (text, or Kokoro if `TTS_FALLBACK=kokoro`).
+Ted calls `POST https://api.elevenlabs.io/v1/text-to-speech/{voice_id}` with `{text, model_id}` and takes the MP3 it returns. Usage is billed by ElevenLabs by character; a 401, quota or rate-limit answer is a failure like any other (the words are sent as text).
 
 ## Your own server (`http`)
 
@@ -79,7 +77,7 @@ Keep your own reference under `state/` (git-ignored) or elsewhere outside the re
 
 How it runs: the model takes about 4 s to load and 3 to 4 GB of memory, so Ted starts one small server (`packages/speech/scripts/qwen-tts-server.py`) at start-up and keeps it loaded, like the warm Claude processes. It listens on 127.0.0.1 on a free port and wants a random key made at each start. It is stopped after 60 minutes (`WARM_IDLE_MINUTES` in `src/core/settings.ts`) without a spoken reply, which frees the memory; the next reply starts it again (a few seconds slower). `WARM=off` skips the start-up launch (it then starts on the first spoken reply). Owner chat and groups use the same code path.
 
-If the server is not set up, not ready, fails or exceeds `TTS_TIMEOUT_SECONDS`, Ted logs it and speaks the same words with Kokoro when that is installed (`TTS_FALLBACK` defaults to `kokoro` for this provider; `none` sends text instead). `TTS_SPEED` does not apply to this voice. `npm run doctor` shows whether the voice is ready. Use Kokoro alone with `TTS_PROVIDER=kokoro`.
+If the server is not set up, not ready, fails or exceeds 60 seconds, Ted logs it and speaks the same words with Kokoro when that is installed (a remote provider never switches: a failed request is sent as text). `TTS_SPEED` does not apply to this voice. `npm run doctor` shows whether the voice is ready. Use Kokoro alone with `TTS_PROVIDER=kokoro`.
 
 Back to the [README](../README.md) · [Safety](SAFETY.md) · [Setup](SETUP.md)
 
