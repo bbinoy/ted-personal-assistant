@@ -161,9 +161,11 @@ test("one spare serves every task: a prepared spare is used by whichever comes f
     assert.equal(r.started(), 1);
     assert.equal((await judge(r.io))?.outcome, "approve");
     assert.deepEqual(r.log, ["warm1"]);
-    assert.equal((await judge(r.io))?.outcome, "approve"); // used up: cold, and an answer does not rebuild
+    assert.equal((await judge(r.io))?.outcome, "approve"); // used up: cold (the rebuild after the first answer has not started yet)
     assert.deepEqual(r.log, ["warm1", "cold"]);
     assert.equal(r.started(), 1);
+    await new Promise((res) => setImmediate(res)); // every task rebuilds the spare after use
+    assert.equal(r.started(), 2); // (one spare, however many calls were waiting to rebuild it)
     discardJudge();
 
     // action first, then the rebuilt spare is there for the next action or for an answer
@@ -180,7 +182,8 @@ test("one spare serves every task: a prepared spare is used by whichever comes f
     // an answer takes the spare the action rebuilt (the answer is for the wrong task here: only the process matters)
     await runJudge("answer", "p", a.io);
     assert.deepEqual(a.log, ["warm1", "warm2", "warm3"]);
-    assert.equal(a.started(), 3); // and an answer does not rebuild
+    await new Promise((res) => setImmediate(res));
+    assert.equal(a.started(), 4); // and an answer rebuilds too
     discardJudge();
   } finally {
     setWarm(was);
