@@ -84,7 +84,7 @@ test("not set up means nothing: no google, mail, calendar, notion or intake capa
     assert.deepEqual(tools.filter((t) => /^mcp__(google|notion|intake)__/.test(t)), [], "no tool, so no connect link either");
     assert.deepEqual(skillsFor(set).filter((s) => /mail|calendar|notion|setup/.test(s)), []);
     const o = runFor(tenant(rec.id), "message", { apiKey });
-    assert.doesNotMatch(o.systemPrompt as string, /Gmail|Google|Notion|setup link/i);
+    assert.doesNotMatch((o.systemPrompt as string).replace(/Google Maps|https:\/\/www\.google\.com\/maps\/\S*/g, ""), /Gmail|Google|Notion|setup link/i); // (the shared map-link rule is no connector)
     assert.ok(!(o.tools as ReadonlySet<string>).has("mcp__intake__get_setup_link"));
     assert.ok(her(rec.id).has("chat") && her(rec.id).has("browse"), "everything else is still hers");
   } finally {
