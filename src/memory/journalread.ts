@@ -38,7 +38,7 @@ const dayWord = (word: string | undefined, now: number, zone: string): string | 
 };
 
 // The journal lines that match, oldest first. `error` for a date that cannot be read.
-export function journalSelect(file: string, a: JournalArgs, now: number, zone: string): { lines: Sent[]; error?: string } {
+function journalSelect(file: string, a: JournalArgs, now: number, zone: string): { lines: Sent[]; error?: string } {
   const from = a.sinceHours && a.sinceHours > 0 ? now - a.sinceHours * 3_600_000 : whenIn(dayWord(a.since, now, zone), false, zone);
   const to = whenIn(dayWord(a.until, now, zone), true, zone);
   if (from === "bad" || to === "bad") return { lines: [], error: "since and until must be dates like 2026-10-21, or today / yesterday." };
@@ -91,7 +91,7 @@ export function archiveItems(lines: readonly Sent[]): ArchiveItem[] {
 
 // The text of `journal` with kind "archive": the count, then the mail grouped by sender, numbered, each with its id, and how to bring one back. `since` is echoed exactly: "restore 3" means
 // item 3 of the list for that same since.
-export function archiveListText(items: readonly ArchiveItem[], window: string, zone: string): string {
+function archiveListText(items: readonly ArchiveItem[], window: string, zone: string): string {
   if (!items.length) return `No mail archived ${window} (times in ${zone}).`;
   const groups = new Map<string, ArchiveItem[]>();
   for (const it of items) {

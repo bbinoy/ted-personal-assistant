@@ -80,7 +80,7 @@ export function tasksText(key: string, now: number, zone: string): string {
 
 // ---- what a look is told about the list (a fact block written by code: heartbeat/look.ts) ----
 
-export const ADDED_WINDOW_MS = 24 * 3_600_000;
+const ADDED_WINDOW_MS = 24 * 3_600_000;
 
 /** The facts about the list a look gets in its prompt: what looks added in the last day, with where it came from. "" when there is nothing.
  *  The titles may carry a mail's words, so it is fenced as data by the caller; `fromMail`: whether any of it came from mail (the run is then told it read untrusted text). */

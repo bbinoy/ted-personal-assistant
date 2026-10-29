@@ -53,7 +53,7 @@ export function parseExpiry(text: string): { expMonth: number; expYear: number }
 export const expiryText = (c: Pick<CardRecord, "expMonth" | "expYear">, long = false): string => `${String(c.expMonth).padStart(2, "0")}/${long ? c.expYear : String(c.expYear % 100).padStart(2, "0")}`;
 
 // What comes out of OpenBao, checked: anything that is not a whole, valid card record is no card.
-export function cardOf(raw: unknown): CardRecord | undefined {
+function cardOf(raw: unknown): CardRecord | undefined {
   const o = raw as Partial<CardRecord> | null | undefined;
   if (!o || typeof o !== "object" || typeof o.pan !== "string" || typeof o.cvc !== "string" || typeof o.currency !== "string") return undefined;
   const c: CardRecord = { pan: o.pan, expMonth: Number(o.expMonth), expYear: Number(o.expYear), cvc: o.cvc, label: typeof o.label === "string" && o.label ? o.label.slice(0, LIMITS.name) : "Card", last4: o.pan.slice(-4), currency: o.currency, ...(typeof o.holder === "string" && o.holder ? { holder: o.holder.slice(0, LIMITS.name) } : {}) };

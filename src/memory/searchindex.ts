@@ -33,7 +33,7 @@ const SEGMENT = 4 << 20;
 const isSearchable = (kind: string) => !!kind && !["none", "marker"].includes(searchOf(kind));
 const MAX_NOTE_BYTES = 20_000;
 
-export const yieldLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+const yieldLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 export interface Doc {
   id: number;

@@ -6,7 +6,7 @@
 const TOKENS = /^(attendees?|guests?|invitees?|recipients?|to|cc|bcc|emails?)$/;
 const REMOVAL = /^(removed?|removing|deleted?)$/;
 
-export const keyTokens = (key: string): string[] => key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+const keyTokens = (key: string): string[] => key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 export const isPeopleKey = (key: string): boolean => {
   const t = keyTokens(key);
   return t.some((x) => TOKENS.test(x)) && !t.some((x) => REMOVAL.test(x));

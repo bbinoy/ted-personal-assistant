@@ -9,7 +9,7 @@ import { findPerson } from "./people.ts";
 // through her own session. A group has its notes only; the owner has her notes (the Google connectors she has expose no contacts tool). The scope is closed over here, never a parameter,
 // so one conversation can never see another's contacts. What it returns is third-party text (a contact's name is whatever its owner typed): fenced as data.
 
-export const FIND_PERSON_DESCRIPTION =
+const FIND_PERSON_DESCRIPTION =
   "Find a person by name (or part of one, or an address) and get their email address and phone number, if known. Use it BEFORE asking the owner for an address, whenever a mail or an invitation names someone (\"invite Sam\", \"write to Anna\"). " +
   "It looks in this conversation's people notes and, where there is one, in Google Contacts, and says which sources it used and which were not available. " +
   "If one person fits, use that address and say whose it is. If none does, look further before asking: past messages (search_logs), and the mail (from or to the name) and calendar guests if you have those tools; then save who you found as a people note, so this finds them next time. " +

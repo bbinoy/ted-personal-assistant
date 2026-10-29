@@ -160,7 +160,7 @@ const PARTICIPATION = say("participation");
 
 // Told to a chat that has a look (the owner's, a group's, a friend's with `heartbeat` and `wake`): it CAN act later and on a schedule, through a routine note with a `when:` line that code plans
 // (tasks/routines.ts). Without this line it assumes it can only speak when someone writes.
-export const ROUTINE_NOTE = say("routine");
+const ROUTINE_NOTE = say("routine");
 
 // What the participation gate (gate.ts) is told by default in a group. The group's notes tweak it
 // ("don't reply so fast", "only reply when tagged"); the owner's style notes too.
@@ -176,7 +176,7 @@ export const summarySystem = (): string => say("summary");
 // its own notes (its auto-memory, loaded by the SDK) and what the run's own capability set holds; the prompt promises nothing else. A friend's own API key pays for her chat, which the prompt says plainly.
 // `language` and `persona` are her own words from tenant.json (data, never rules); `style` is the owner's style notes, for a group.
 export interface OthersParts { style?: string; caps?: ReadonlySet<Capability>; looker?: Looker; timed?: boolean; google?: boolean; language?: string; persona?: string; now?: Date }
-export function othersSystem(who: { group: true } | { group: false; name: string }, parts: OthersParts): string {
+function othersSystem(who: { group: true } | { group: false; name: string }, parts: OthersParts): string {
   const group = who.group;
   const caps = parts.caps ?? groupCapabilities();
   const name = who.group ? "the group" : oneLineName(who.name);

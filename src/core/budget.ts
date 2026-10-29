@@ -35,7 +35,7 @@ const closed = <T>(f: () => T, fallback: T): T => {
 // (a sum of many small float charges is rounded to a millionth of a dollar: 0.30000000000000004 is never shown or compared)
 const cents = (x: number): number => Math.round(x * 1e6) / 1e6;
 
-export type Payer = "login" | "key";
+type Payer = "login" | "key";
 export interface SpendRow {
   usd: number;
   conv: ConvId; // whose day it counts toward

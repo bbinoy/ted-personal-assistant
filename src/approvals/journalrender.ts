@@ -45,7 +45,7 @@ export function journalable(tool: string, input?: Record<string, unknown>): bool
 }
 
 // Pure: the category a line is filed under (the journal tool's `kind`).
-export function categoryOf(tool: string): string {
+function categoryOf(tool: string): string {
   const e = entryFor(tool);
   if (e?.action === "archive" || e?.action === "restore") return "archive";
   switch (e?.provider) {
@@ -88,7 +88,7 @@ const humanServer = (tool: string): string => {
 };
 
 // Pure: "Created event in Google Calendar" from the tool's name or its approval title ("Delete calendar event" -> "Deleted calendar event").
-export function doneVerb(tool: string, input: Record<string, unknown>): string {
+function doneVerb(tool: string, input: Record<string, unknown>): string {
   const title = titleOf(tool, input)?.title;
   const words = (title ?? (tool.split("__").pop() ?? tool).replace(/^notion-/, "").replace(/[_-]+/g, " ")).trim();
   const [first = "", ...rest] = words.split(/\s+/);
@@ -99,7 +99,7 @@ export function doneVerb(tool: string, input: Record<string, unknown>): string {
 
 const list = (xs: readonly string[], more = 3): string => (xs.length <= more ? xs.join(", ") : `${xs.slice(0, more).join(", ")} and ${xs.length - more} more`);
 
-export interface Rendered {
+interface Rendered {
   what: string;
   cat: string;
   undo?: string;
@@ -119,7 +119,7 @@ function renderTask(tool: string, response: unknown, cat: string): Rendered {
   return { what: first || doneVerb(tool, {}), cat, ...(undo ? { undo } : {}) };
 }
 
-export function render(conv: string, tool: string, input: Record<string, unknown>, response?: unknown): Rendered {
+function render(conv: string, tool: string, input: Record<string, unknown>, response?: unknown): Rendered {
   const cat = categoryOf(tool);
   const archived = archivedBy(tool, input);
   if (archived) {
@@ -157,7 +157,7 @@ export function render(conv: string, tool: string, input: Record<string, unknown
 const hhmm = (conv: string, at: number): string => timeIn(new Date(at), isTenantKey(conv) ? zoneOf({ tenantId: conv.slice("tenant:".length) }) : systemZone());
 
 // The structured reason a call itself carries (`reason` or `why` as a string argument): the model's own, so one clean line, never more than a sentence.
-export function ownReasonOf(input: Record<string, unknown>): string | undefined {
+function ownReasonOf(input: Record<string, unknown>): string | undefined {
   const r = input.reason ?? input.why;
   return typeof r === "string" && r.trim() ? clip(r, 160) : undefined;
 }
@@ -174,7 +174,7 @@ export interface WhyInput {
 }
 
 // Pure: "per your notes: triage-linkedin, triage-newsletters and 2 more" from the notes a run had read (at most 3 names); empty when it read none.
-export function notesText(notes: readonly string[] | undefined): string {
+function notesText(notes: readonly string[] | undefined): string {
   if (!notes?.length) return "";
   return `per your notes: ${notes.slice(0, 3).join(", ")}${notes.length > 3 ? ` and ${notes.length - 3} more` : ""}`;
 }

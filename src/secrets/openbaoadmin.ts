@@ -180,7 +180,7 @@ path "sys/storage/raft/snapshot" {
   capabilities = ["read"]
 }
 `;
-export const OPERATOR_ROLE = "ted-operator";
+const OPERATOR_ROLE = "ted-operator";
 
 // The intake page's token: create and update on the items of every kind in a FRIEND's folder (`+` is any one tenant id; secrets.ts ITEM_KINDS). No read, no list, no delete, no metadata,
 // no other kind, and NEVER the owner's folder: the page faces the internet, so a bug in it must not be able to overwrite the owner's card or saved details (an explicit deny beats the

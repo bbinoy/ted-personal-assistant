@@ -107,7 +107,7 @@ export function auditRule(L: () => Layout, days: () => number): RetentionRule {
 // ---- signal-cli's saved attachments ----
 
 /** The attachment file names something still needs: a voice note or audio file in any conversation's assistant.db inside its own look-back. */
-export function neededAttachments(L: Layout, now: number): Set<string> {
+function neededAttachments(L: Layout, now: number): Set<string> {
   const needed = new Set<string>();
   for (const conv of names(L.conversations)) {
     if (!isConvId(conv)) continue;
@@ -149,7 +149,7 @@ export const expiryOf = (raw: string): string | undefined => {
   const m = EXPIRES.exec(raw.replace(/\r\n/g, "\n"));
   return m ? /^\s*expires:\s*["']?(\d{4}-\d{2}-\d{2})["']?\s*$/m.exec(m[1]!)?.[1] : undefined;
 };
-export const EXPIRED_DIR = "expired";
+const EXPIRED_DIR = "expired";
 
 export function expiredNotesRule(L: () => Layout, deleteDays: () => number): RetentionRule {
   return {

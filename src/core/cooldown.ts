@@ -11,7 +11,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 // that friends run on (INSTANCE_KEY_COOLDOWN) has one of its own: its limit, an invalid key or an empty balance is the KEY's, so it pauses every friend and never the owner.
 
 export const BASE_BACKOFF_MS = 15 * 60_000;
-export const MAX_BACKOFF_MS = 2 * 3600_000;
+const MAX_BACKOFF_MS = 2 * 3600_000;
 const MAX_RESET_AHEAD_MS = 12 * 3600_000; // a reset further away than this is not believed
 const RESET_SLACK_MS = 30_000;
 

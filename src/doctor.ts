@@ -216,7 +216,7 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
   }
 }
 
-export function browseCheck(line: Line, on: boolean, status: BrowseStatus): void {
+function browseCheck(line: Line, on: boolean, status: BrowseStatus): void {
   if (!on) return line(true, "browse: off", "BROWSE=off");
   line(status.ok, "browse: browser tool ready", status.ok ? `@playwright/mcp ${PLAYWRIGHT_MCP_VERSION}, headless Chromium; the tool is offered but reports "not set up" until this passes` : `${status.reason}; until then the browse tool tells the user it is not set up`);
 }
@@ -246,8 +246,8 @@ export function sleepCheck(line: Line, pmset: (args: string[]) => string | undef
   line(true, name, disabled ? "on power, sleep switched off (disablesleep 1)" : "on power; closing the lid still sleeps it unless an external display is attached (clamshell mode) or sleep is switched off (docs/SETUP.md \"Keep it running\")");
 }
 
-export const FAILED_LOOKS_WARN = 3; // this many failed or timed-out looks in the window is a warning
-export const FAILED_LOOKS_HOURS = 6;
+const FAILED_LOOKS_WARN = 3; // this many failed or timed-out looks in the window is a warning
+const FAILED_LOOKS_HOURS = 6;
 
 // The heartbeat's own record says the looks are failing: counts from the looks table only, no words. This is where a group's or a friend's failing looks are reported (never in a chat).
 export function failedLooksCheck(line: Line, rows: readonly HeartbeatRow[], now: Date = new Date()): void {

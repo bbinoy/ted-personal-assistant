@@ -17,13 +17,13 @@ import { tenantById, tenantContext } from "./tenants.ts";
 //              an expired key) is the KEY's, so its cooldown is shared by every friend (INSTANCE_KEY_COOLDOWN) and the owner hears of it once (keynotice.ts)
 // A Payer is a value to pass along: it carries the key only into the environment of the call (envFor), never into a log or an audit line.
 
-export interface InstancePayer {
+interface InstancePayer {
   readonly kind: "instance";
   readonly id: string; // the friend it is spent for: her ledger, her budget
   readonly apiKey: string; // only into the environment of a call (envFor); never logged or audited
   readonly ledger: string;
 }
-export interface LoginPayer {
+interface LoginPayer {
   readonly kind: "login";
   readonly group?: string; // a group's run: its spend row names the group (the ledger), though its day is the login's
 }

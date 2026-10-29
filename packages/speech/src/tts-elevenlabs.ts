@@ -14,7 +14,7 @@ export interface ElevenLabsConfig {
   fetchImpl?: Fetch;
 }
 
-export const ELEVENLABS_BASE = "https://api.elevenlabs.io";
+const ELEVENLABS_BASE = "https://api.elevenlabs.io";
 
 export const synthesizeElevenLabs = (text: string, c: ElevenLabsConfig, format?: VoiceFormat, signal?: AbortSignal): Promise<string> =>
   synthesizeRemote(

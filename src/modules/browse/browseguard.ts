@@ -923,7 +923,7 @@ export class BrowseGuard {
 type Block = { type?: string; text?: string; data?: string; source?: { data?: string } };
 const blocksOf = (r: unknown): Block[] | undefined => (Array.isArray(r) ? (r as Block[]) : r && typeof r === "object" && Array.isArray((r as { content?: unknown }).content) ? (r as { content: Block[] }).content : undefined);
 // The bytes of the first image of a tool result (base64 in the block), if any.
-export function imageBytes(r: unknown): Buffer | undefined {
+function imageBytes(r: unknown): Buffer | undefined {
   const img = blocksOf(r)?.find((x) => x?.type === "image");
   const data = img?.source?.data ?? img?.data;
   return typeof data === "string" && data ? Buffer.from(data, "base64") : undefined;

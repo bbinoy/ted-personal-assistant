@@ -15,10 +15,10 @@ export interface GoogleOAuthConfig {
   scopes: readonly string[];
 }
 
-export const settingsConfig = (): GoogleOAuthConfig => ({ clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, authUrl: settings.google.authUrl, tokenUrl: settings.google.tokenUrl, scopes: settings.google.scopes });
+const settingsConfig = (): GoogleOAuthConfig => ({ clientId: settings.google.clientId, clientSecret: settings.google.clientSecret, authUrl: settings.google.authUrl, tokenUrl: settings.google.tokenUrl, scopes: settings.google.scopes });
 
 // Pure: the address in an id_token (the token endpoint's own answer over TLS, so its signature is not the question here). Undefined when there is none.
-export function emailOf(idToken: unknown): string | undefined {
+function emailOf(idToken: unknown): string | undefined {
   if (typeof idToken !== "string") return undefined;
   try {
     const claims = JSON.parse(Buffer.from(idToken.split(".")[1] ?? "", "base64url").toString("utf8")) as { email?: unknown; email_verified?: unknown };

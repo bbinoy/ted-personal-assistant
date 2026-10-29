@@ -160,7 +160,7 @@ const FAILED_CLOSED = "That call could not be checked, so it was not run. Do not
 // The ONE place the code-rendered details of a call are built, for the ask path below (shown to the owner, judged). A mail send is shown as the mail client holds it right now, not as the model says it is sending (a send of a draft), the same view for
 // every provider; if that cannot be read the owner would be approving blind, so there is no view and no details (`unreadable`). A call on an object by its id names the object (describe.ts);
 // a guard-built step and a payment have their own text (`own`) and no object line.
-export async function renderCall(conversation: string | undefined, tool: string, input: Record<string, unknown>, own?: { description?: string; payment?: boolean }): Promise<{ description: string; view?: MailView } | { unreadable: true }> {
+async function renderCall(conversation: string | undefined, tool: string, input: Record<string, unknown>, own?: { description?: string; payment?: boolean }): Promise<{ description: string; view?: MailView } | { unreadable: true }> {
   let description = own?.description ?? describeCall(tool, input);
   let view: MailView | undefined;
   if (MAIL_OUT.has(entryFor(tool)?.view ?? "")) {

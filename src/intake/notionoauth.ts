@@ -44,7 +44,7 @@ export interface ClientRecord {
   token_endpoint: string;
   registered_at: string;
 }
-export const CLIENT_FILE = instancePaths().notionClient;
+const CLIENT_FILE = instancePaths().notionClient;
 const LOCK_DIR = instancePaths().notionClientLock;
 
 const NOT_NOW = "Notion's sign-in could not be set up right now. Nothing was saved; try the same link again in a moment.";
@@ -101,7 +101,7 @@ export async function discover(mcpUrl: string, doFetch: typeof fetch = fetch): P
 }
 
 // Step 2. The remembered client, if it is the one for this redirect address and this server.
-export function readClient(redirectUri: string, mcpUrl: string): ClientRecord | undefined {
+function readClient(redirectUri: string, mcpUrl: string): ClientRecord | undefined {
   const c = readJson<Partial<ClientRecord>>(CLIENT_FILE, {});
   return typeof c.client_id === "string" && c.client_id && c.redirect_uri === redirectUri && c.mcp_url === mcpUrl && typeof c.authorization_endpoint === "string" && typeof c.token_endpoint === "string" ? (c as ClientRecord) : undefined;
 }
@@ -173,7 +173,7 @@ export interface NotionGrant {
   [k: string]: unknown;
 }
 
-export function parseGrant(d: Data | undefined): NotionGrant | undefined {
+function parseGrant(d: Data | undefined): NotionGrant | undefined {
   if (!d) return undefined;
   const { access_token, refresh_token, expires_at, client_id, token_endpoint } = d;
   return typeof access_token === "string" && typeof refresh_token === "string" && refresh_token && typeof expires_at === "number" && typeof client_id === "string" && client_id && typeof token_endpoint === "string" && httpsOnly(token_endpoint) ? (d as NotionGrant) : undefined;
@@ -220,7 +220,7 @@ export interface GrantStore {
 }
 
 // Her grant in her own OpenBao path with the app's token (its policy reads and writes tenants/+/notion/*: openbaoadmin.ts; the write is the rotation).
-export const openbaoGrants = (): GrantStore => ({
+const openbaoGrants = (): GrantStore => ({
   read: (tenant) => new TenantSecrets(appBao(), tenant).get("notion", NOTION_ITEM, { cache: false }),
   write: (tenant, data) => new TenantSecrets(appBao(), tenant).put("notion", NOTION_ITEM, data),
 });

@@ -8,7 +8,7 @@ import type { RunKind } from "../core/runkind.ts";
 // the server "failed" for the rest of that process. So the first message is held back (the prompt is a generator) until every server is connected: a pending one is waited for, a failed
 // one is reconnected (`reconnectMcpServer`), both for at most `ms`. "needs-auth" and "disabled" cannot be mended here. With no network at all (every claude.ai server failed) nothing
 // is retried. A run never fails because of this: after the limit the message goes through as before. The same for every server and every run that has connectors.
-export const CONNECT_WAIT_MS = 6000;
+const CONNECT_WAIT_MS = 6000;
 const POLL_MS = 250;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const BAD = new Set(["pending", "failed"]);

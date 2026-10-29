@@ -8,7 +8,7 @@ const CAL = "mcp__claude_ai_Google_Calendar__";
 // The floor for events: a calendar write that names attendees, guests, invitees or recipients (whatever the field is called: attendees, attendeeEmails,
 // addedAttendees, addedAttendeeEmails, ...; guests.ts namesPeople) is never judged, since it would email people. An EXISTING event may have guests who would be
 // emailed by an update even when the call names nobody, which is why the judge is told so in the Notifies line.
-export { namesNoGuests };
+;
 
 // Pure: for a calendar write, one line for the judge (not the owner) saying whether this call names guests or asks for notifications. It only
 // reads the call's own arguments; whether an existing event has guests is not known here.

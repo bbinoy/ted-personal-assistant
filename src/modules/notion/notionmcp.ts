@@ -18,7 +18,7 @@ export interface NotionConfig {
   fetch?: typeof fetch; // tests
 }
 
-export const notionConfig = (): NotionConfig => ({ url: settings.notion.mcpUrl, idleMs: 10 * 60_000, /* a friend's connection to the hosted server is closed after this long unused */ callMs: 60_000 /* one tool call */ });
+const notionConfig = (): NotionConfig => ({ url: settings.notion.mcpUrl, idleMs: 10 * 60_000, /* a friend's connection to the hosted server is closed after this long unused */ callMs: 60_000 /* one tool call */ });
 
 export class NotionSession extends UpstreamSession {
   protected readonly label = "her Notion connection";
@@ -65,7 +65,7 @@ export const notionHub: NotionHub = new SessionHub((id) => new NotionSession(id)
 export const RECONNECT_TEXT =
   "Notion is not connected for her right now: she never connected it, or her permission expired or was withdrawn. Tell her so in your reply and offer to send her a new link: call get_setup_link with purpose \"notion\" and put the link in your reply. Do not try Notion again until she has connected.";
 
-export const notionUnavailable = (e: unknown): string => (e instanceof NotionReconnect ? RECONNECT_TEXT : e instanceof UpstreamError ? `Notion is not available for her right now: ${e.message}.` : "Notion is not available for her right now.");
+const notionUnavailable = (e: unknown): string => (e instanceof NotionReconnect ? RECONNECT_TEXT : e instanceof UpstreamError ? `Notion is not available for her right now: ${e.message}.` : "Notion is not available for her right now.");
 
 // The in-process MCP server of a friend's run (see the top of this file). `tools`: the names her run may be offered at all (the module's rows): when her connection needs
 // her, the run is still shown these, so that trying one tells the model what to say, instead of the tools silently missing.

@@ -9,7 +9,7 @@ import { instancePaths } from "../../core/convpaths.ts";
 // It knows shapes only: rocks, shipping, shallows and local effects are not in the data.
 const R = 6371000;
 const rad = (d: number) => (d * Math.PI) / 180;
-export type Pt = [number, number]; // lon, lat
+type Pt = [number, number]; // lon, lat
 export type Ring = Pt[];
 
 function destination(lat: number, lon: number, bearingDeg: number, meters: number): Pt {
@@ -39,7 +39,7 @@ export function rings(ways: Ring[]): Ring[] {
 }
 
 // Even-odd inside one water feature (its outer rings and its islands).
-export function inRings(p: Pt, rs: Ring[]): boolean {
+function inRings(p: Pt, rs: Ring[]): boolean {
   let inside = false;
   for (const r of rs) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
     const [xi, yi] = r[i]!, [xj, yj] = r[j]!;

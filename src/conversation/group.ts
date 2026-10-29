@@ -95,7 +95,7 @@ export async function ownerInGroup(groupId: string, lookup: () => Promise<{ id: 
 export type Runner = (build: TurnBuilder, ctx: { conv: Conversation; now: Date; firstOutput?: () => void; apiKey?: string }) => Promise<string>; // apiKey: a tenant's unattended run, on the instance key (tenantrun.ts access)
 
 // Chat replies and wake-ups both run here; the cost is logged as for an owner run.
-export const realRunner: Runner = async (build, { conv, firstOutput, apiKey }) => {
+const realRunner: Runner = async (build, { conv, firstOutput, apiKey }) => {
   const r = await runConversation(conv, { apiKey }, build, firstOutput);
   if (r.costUsd !== undefined) console.log(`group run: ${r.text.length} chars, $${r.costUsd.toFixed(4)}`);
   return r.text.trim();

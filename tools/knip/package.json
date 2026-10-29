@@ -1,0 +1,10 @@
+{
+  "name": "ted-knip",
+  "private": true,
+  "type": "module",
+  "description": "knip (unused files, exports, types and dependencies) in its own folder, like tools/lint: nothing here is part of the app; `npm run check:unused` installs and runs it.",
+  "devDependencies": {
+    "knip": "6.41.0",
+    "typescript": "6.0.3"
+  }
+}

@@ -14,7 +14,7 @@ import { holdingNow, postNotice } from "./notices.ts";
 // look has told it (paused budget, a cooldown, looks failing). Quiet hours and /quiet hold a reminder unless the item is urgent. Repeating items roll here as before.
 const HOUR = 3_600_000;
 const MAX_TRIES = 3;
-export const FALLBACK_MS = 30 * 60_000;
+const FALLBACK_MS = 30 * 60_000;
 const KEEP_MS = 90 * 24 * HOUR;
 
 interface RemRow {

@@ -9,7 +9,7 @@ import { nextText, routineLines, type Routine } from "../../tasks/routines.ts";
 // to the look). The daily brief, the evening wrap and the weekly review are such notes too (their body says to run the skill). A note whose `when:` cannot be read is not scheduled but listed in `broken`, so it is told
 // to the model instead of silently never firing.
 
-export const MAX_NOTE_ROUTINES = 20; // per conversation: a runaway list of notes must not become a runaway list of runs
+const MAX_NOTE_ROUTINES = 20; // per conversation: a runaway list of notes must not become a runaway list of runs
 const NO_WHEN = "has no `when:` line in its front matter";
 
 export interface Scheduled { routines: Routine[]; broken: { file: string; why: string }[] }

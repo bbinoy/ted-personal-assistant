@@ -7,11 +7,11 @@ import { dayAt, timeIn } from "../core/timezone.ts";
 // (modules/meetings); this file keeps that record, preptick.ts claims it and the look says it. The calendar's own words (a title, a name) are stored as data and only ever shown fenced to a run.
 
 export const HORIZON_MS = 6 * 3_600_000; // a call replaces the not-yet-claimed meetings that start within this long from now
-export const MAX_AHEAD_MS = 36 * 3_600_000; // nothing further out is taken (the look reads the next 36 hours)
-export const MIN_LEAD_MS = 3 * 60_000; // a prep that would reach the owner less than this long before the start is not worth sending
+const MAX_AHEAD_MS = 36 * 3_600_000; // nothing further out is taken (the look reads the next 36 hours)
+const MIN_LEAD_MS = 3 * 60_000; // a prep that would reach the owner less than this long before the start is not worth sending
 export const MAX_MEETINGS = 40;
 export const MAX_ATTENDEES = 30;
-export const MAX_TRIES = 2;
+const MAX_TRIES = 2;
 export const KEEP_MS = 3 * 86_400_000; // rows older than this (by start) are swept
 
 export interface Attendee {
@@ -48,7 +48,7 @@ const EMAIL = /^[^\s@<>"]{1,64}@[^\s@<>"]{1,200}$/;
 const ZONED = /(Z|[+-]\d{2}:?\d{2})$/i;
 
 /** An instant with an explicit UTC offset ("2026-10-22T14:00:00+02:00" or "...Z"); a time without one is refused (it would silently be read in the server's zone). */
-export function instantOf(v: unknown): number | undefined {
+function instantOf(v: unknown): number | undefined {
   if (typeof v !== "string" || !ZONED.test(v.trim())) return undefined;
   const t = Date.parse(v.trim());
   return Number.isFinite(t) ? t : undefined;
@@ -190,7 +190,7 @@ const PUBLIC_MAIL = new Set(["gmail.com", "googlemail.com", "outlook.com", "hotm
 const domainOf = (email: string | undefined): string | undefined => email?.split("@")[1]?.toLowerCase();
 
 /** The people other than the owner. */
-export const othersOf = (m: Pick<Meeting, "attendees">): Attendee[] => m.attendees.filter((a) => !a.self);
+const othersOf = (m: Pick<Meeting, "attendees">): Attendee[] => m.attendees.filter((a) => !a.self);
 
 /** Does anyone on the invite sit outside the owner's own e-mail domain? Webmail domains say nothing about who works together, so there every other address counts as outside; with the owner's address unknown, everyone does. */
 export function hasExternal(m: Pick<Meeting, "attendees">): boolean {

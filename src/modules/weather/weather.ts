@@ -18,7 +18,7 @@ export function retryDelayMs(retryAfter: string | null | undefined, attempt: num
 }
 
 const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
-export const compass = (deg: number | null | undefined): string => (deg == null ? "-" : `${COMPASS[Math.round(deg / 22.5) % 16]} ${Math.round(deg)}`);
+const compass = (deg: number | null | undefined): string => (deg == null ? "-" : `${COMPASS[Math.round(deg / 22.5) % 16]} ${Math.round(deg)}`);
 const point = (deg: number) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16]!;
 const num = (v: number | null | undefined, digits = 0): string => (v == null ? "-" : v.toFixed(digits));
 const pad = (s: string, n: number) => s.padEnd(n);

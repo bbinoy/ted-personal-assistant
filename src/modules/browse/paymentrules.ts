@@ -151,7 +151,7 @@ export function frameVerdict(frames: readonly FrameInfo[], pageUrl: string, merc
 // ---- boxes and labels ----
 
 // A ticked box that saves the card, signs up for something or renews: not for a one-off payment.
-export const RISKY_BOX = /save|remember|store (my |the )?card|subscribe|recurring|auto.?renew|future|newsletter|speichern|merken|abo\b|abonn|enregistrer|se souvenir|guardar/i;
+const RISKY_BOX = /save|remember|store (my |the )?card|subscribe|recurring|auto.?renew|future|newsletter|speichern|merken|abo\b|abonn|enregistrer|se souvenir|guardar/i;
 export const riskyBoxes = (nodes: Iterable<{ role: string; name: string; checked?: boolean }>): string[] => [...nodes].filter((n) => /^(checkbox|switch)$/.test(n.role) && n.checked && RISKY_BOX.test(n.name)).map((n) => n.name);
 
 // ---- what the page says after the click ----

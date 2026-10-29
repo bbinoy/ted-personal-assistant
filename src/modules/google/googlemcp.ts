@@ -23,7 +23,7 @@ import { settings } from "../../core/settings.ts";
 // in USER_GOOGLE_EMAIL from <WORKSPACE_MCP_CREDENTIALS_DIR>/<email>.json ({token, refresh_token, token_uri, client_id, client_secret, scopes, expiry}) and refreshes the
 // access token itself with the OAuth client's id and secret. Its "stateless" mode needs OAuth 2.1 over HTTP and does not take a token from the environment.
 
-export class GoogleError extends UpstreamError {}
+class GoogleError extends UpstreamError {}
 // Her connection is not usable until she connects again: never made, or Google no longer accepts her permission (revoked, expired, the grant gone). The proxy tells the run so
 // and offers the setup link, like Notion's NotionReconnect (intake/notionoauth.ts).
 export class GoogleReconnect extends GoogleError {}
@@ -100,7 +100,7 @@ export function sweepStaleCredentialDirs(root: string = tmpdir(), minAgeMs = 5 *
 }
 
 // Her grant, from her own OpenBao path with the app's token (its policy reads tenants/+/google/* and nothing else of hers: openbaoadmin.ts).
-export async function readGrant(tenantId: string): Promise<GoogleGrant | undefined> {
+async function readGrant(tenantId: string): Promise<GoogleGrant | undefined> {
   const item = await new TenantSecrets(appBao(), tenantId).get("google", GOOGLE_ITEM, { cache: false });
   const refreshToken = item?.refresh_token;
   const email = item?.email;
@@ -192,7 +192,7 @@ export const googleHub: GoogleHub = new SessionHub((id) => new GoogleSession(id)
 export const GOOGLE_RECONNECT_TEXT =
   'Google is not connected for her right now: she never connected it, or her permission expired or was withdrawn. Tell her so in your reply and offer to send her a new link: call get_setup_link with purpose "google" and put the link in your reply. Do not try Google again until she has connected.';
 
-export const googleUnavailable = (e: unknown): string => (e instanceof GoogleReconnect ? GOOGLE_RECONNECT_TEXT : e instanceof UpstreamError ? `Google is not available for her right now: ${e.message}.` : "Google is not available for her right now.");
+const googleUnavailable = (e: unknown): string => (e instanceof GoogleReconnect ? GOOGLE_RECONNECT_TEXT : e instanceof UpstreamError ? `Google is not available for her right now: ${e.message}.` : "Google is not available for her right now.");
 
 // find_person's Google Contacts source (modules/people): one search through HER session, with HER address put in last, so it can only ever read her own contacts. It is not a tool of
 // her run (no row): the text goes to find_person, which fences it. A failure is a short plain reason (never a token: the session's errors are fixed sentences), not the model's problem.

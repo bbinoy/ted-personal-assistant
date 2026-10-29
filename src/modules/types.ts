@@ -70,7 +70,7 @@ export interface RunContext {
 // The server runtime.ts builds under `name` when `when` holds for the run: a server made in this process ("in-process": send, draw, memory, ...) or a separate
 // server process or URL ("external": the browser, a friend's Google server, a friend's Notion connection). `forBrowse`: it belongs to the browse sub-run, which has the browser and
 // nothing else; every other server belongs to the other runs.
-export type Connection =
+type Connection =
   | { kind: "builtin" } // the SDK's own tools (Skill, Read, WebSearch, ...); nothing to connect
   | { kind: "connector"; optional?: true; key?: string; label?: string; skipped?: string; server: RegExp; prefix: string } // `label`: its name to the owner ("Google Calendar"); `skipped`: what the owner loses while it is down, in plain words (a connector with both is reported to the prompts, the brief and the doctor when its last run could not see it; connectors.ts);  the owner's claude.ai connector or user-scope MCP server, inherited from the login; `server` and `prefix` say how to see whether it is up, `key` is its name in connectors.ts (absent: not reported)
   | { kind: "in-process" | "external"; name: string; when: (ctx: RunContext) => boolean; forBrowse?: true };
@@ -205,7 +205,7 @@ export interface ToolModule {
 
 // The tools of a module's connector the model sees. `visible`: the default list, the module's own data; the setting <MODULE>_TOOLS (the module's name in capitals) replaces it
 // (settings.ts visibleTools), checked against `valid`. Every other tool of the connector is hidden by name, and the whole connector while the module is not loaded.
-export interface ModuleHide {
+interface ModuleHide {
   prefix: string; // the connector's tool-name prefix: mcp__<server>__
   visible: readonly string[]; // tool names without the prefix
   valid: RegExp; // what a tool name of this connector looks like (the setting is checked against it)

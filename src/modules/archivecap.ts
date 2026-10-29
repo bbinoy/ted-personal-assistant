@@ -10,7 +10,7 @@ const ID_KEYS = /^(conversation|thread|message)_?ids?$/i;
 const asList = (v: unknown): string[] => (Array.isArray(v) ? v : v === undefined || v === null ? [] : [v]).map((x) => String(x).trim()).filter(Boolean);
 
 // Every conversation, thread or message id a call names (a single id or a batch, camelCase or snake_case), so a batch counts each one.
-export function idsNamed(input: Record<string, unknown>): string[] {
+function idsNamed(input: Record<string, unknown>): string[] {
   return Object.entries(input).flatMap(([k, v]) => (ID_KEYS.test(k) ? asList(v) : []));
 }
 
@@ -40,7 +40,7 @@ export function restoredBy(tool: string, input: Record<string, unknown>): string
   return ids.length ? ids : [""];
 }
 
-export const capReached = (cap: number) => `Archive cap reached for this look (${cap} per look): the rest waits for the next one. Do not look for another way to archive; say in your own words what is left.`;
+const capReached = (cap: number) => `Archive cap reached for this look (${cap} per look): the rest waits for the next one. Do not look for another way to archive; say in your own words what is left.`;
 
 // One gate per run: it remembers the ids it let through. A call that would take the run past the cap is refused with a message for the model; an id already archived
 // in this run is not counted twice. It counts the calls it lets through, so an archive the owner then declines still used its place (the cap bounds attempts, not results).

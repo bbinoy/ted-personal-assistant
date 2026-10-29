@@ -8,7 +8,7 @@ import { kindOfKey } from "../core/ownerkey.ts";
 // message being judged (it is already in the log by then).
 const isAssistant = (kind: string) => kindIs(kind, "said") && kind !== "approval";
 
-export function recentChat(current?: string, keep = 5, logFile?: string): Recent[] {
+function recentChat(current?: string, keep = 5, logFile?: string): Recent[] {
   const lines = foldEdits(withoutDeleted(ledgerEntries(logFile)))
     .filter((m) => kindIs(m.kind, "inbound") || isAssistant(m.kind))
     .map((m): Recent => ({ from: kindIs(m.kind, "inbound") ? "owner" : "assistant", text: m.text }));

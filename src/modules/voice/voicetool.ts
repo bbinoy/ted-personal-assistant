@@ -163,7 +163,7 @@ export async function voiceNow(key: string, a: VoiceArgs, d: VoiceDeps): Promise
   ].filter(Boolean).join(" ");
 }
 
-export const realVoiceDeps = (): VoiceDeps => ({
+const realVoiceDeps = (): VoiceDeps => ({
   voiceRoot: settings.tts.provider === "qwen" ? settings.tts.qwen.voiceRoot ?? "" : "",
   problem: () => {
     if (settings.tts.provider !== "qwen") return "Voice cloning needs the Qwen voice (TTS_PROVIDER=qwen); it is not set up here.";

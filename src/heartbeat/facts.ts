@@ -33,14 +33,14 @@ const ROUTINE_CATCHUP_HOURS = 4;
 //   * a failed or called-off run leaves them for the next one. The claims themselves (a reminder, a meeting, a routine's period) are still written by the ticks and the planner in code.
 // A look's own bookkeeping (when its next look is) is not a fact: it is part of the look's answer.
 
-export const OWN_POSTS_DAYS = 7;
-export const OWN_POSTS_MAX = 15;
+const OWN_POSTS_DAYS = 7;
+const OWN_POSTS_MAX = 15;
 const OWN_POST_CHARS = 100;
 export const HELD_MAX = 8;
 const HELD_CHARS = 400;
 
 // Whitespace collapsed, cut at a word boundary: a post quoted in a fact block.
-export function oneLine(text: string, max = 160): string {
+function oneLine(text: string, max = 160): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;
   const cut = t.slice(0, max - 1);
@@ -50,7 +50,7 @@ export function oneLine(text: string, max = 160): string {
 
 // What this conversation's own looks posted in the last OWN_POSTS_DAYS (kind `notice` in its log: the looks' posts, a held post handed on), newest first, at most OWN_POSTS_MAX, each its first
 // ~100 characters: the chat tail of a busy log can be shorter than a week, and a daily fact must not come round again. "" when there is none.
-export function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string): string {
+function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string): string {
   const since = now.getTime() - OWN_POSTS_DAYS * 86_400_000;
   const posts = entries.filter((e) => e.kind === "notice" && Date.parse(e.at) >= since && Date.parse(e.at) <= now.getTime()).slice(-OWN_POSTS_MAX).reverse();
   if (posts.length === 0) return "";
@@ -61,7 +61,7 @@ export function ownPostsBlock(entries: readonly Sent[], now: Date, zone: string)
 // Background approvals that lapsed unanswered (approvals.ts lapsedIn) and were not yet told to a look of this conversation: one line each, with how long ago (the label is the action as the approval details describe it).
 const LAPSED_DAYS = 7;
 const lapsedKey = (l: Lapsed) => `lapsed:${l.at}`;
-export function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): string {
+function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): string {
   const db = convDb(convId);
   const fresh = entries.filter((l) => now - l.at < LAPSED_DAYS * 86_400_000 && !db.get("SELECT 1 FROM told WHERE key = ?", lapsedKey(l)));
   if (!fresh.length) return "";
@@ -90,7 +90,7 @@ const isBusy = (key: string, id: string): boolean => busy.get(key)?.has(id) ?? f
 
 
 /** How the run ended. `ended`: it went well (a look posted or stayed silent; a chat turn replied). `said`: it told the person something. `held`: what it said was held for later. `abandoned`: called off or failed, nothing is settled. `sends`: pieces it sent while it worked. */
-export interface End {
+interface End {
   ended: boolean;
   said: boolean;
   held?: boolean;
@@ -198,6 +198,3 @@ export function routinesWaiting(conv: Conversation, now: Date): boolean {
   const { routines } = scheduledIn({ notesDir: conv.notesDir, zone: looker.zone, now });
   return routines.some((r) => planRoutine(r, now, looker.zone, readRecord(conv.convId, r.name), ROUTINE_CATCHUP_HOURS).state === "due");
 }
-
-// Used by tests: forget every pending claim.
-export const resetFacts = (): void => busy.clear();

@@ -115,7 +115,7 @@ export async function runRetention(now: Date, o: RunOptions): Promise<RunReport>
 
 // ---- the scheduler ----
 
-export const RETENTION_AT_MINUTES = 3 * 60 + 30; // 03:30 on the owner's clock: after the quiet hours begin, before the dream (the preset's dream hour, 4) and the morning
+const RETENTION_AT_MINUTES = 3 * 60 + 30; // 03:30 on the owner's clock: after the quiet hours begin, before the dream (the preset's dream hour, 4) and the morning
 
 /**
  * A tick job like the dream's (conversation/dream.ts dreamTrigger): the first tick at or after 03:30 local runs it, once per local day (the day of the last run is in the state file, so a restart does not

@@ -18,7 +18,7 @@ export interface WelcomeFacts {
 /** Pure: is this a data folder nobody has used? */
 export const isFresh = (f: WelcomeFacts): boolean => f.messages === 0 && f.spend === 0 && f.looks === 0;
 
-export function welcomeFact(o: { owner: string; mail: boolean }): string {
+function welcomeFact(o: { owner: string; mail: boolean }): string {
   const watch = o.mail ? "mail, calendar and tasks" : "calendar and tasks";
   return `This is a fresh install and your first run with ${o.owner}: introduce yourself briefly, in your own voice. Say what you will do (keep an eye on their ${watch}, remind them of what is coming, message only when something needs them)${
     o.mail ? "; that you archive routine mail (newsletters, notifications) on your own as their notes say, that /today lists everything you did and why, and that \"restore 3\" undoes one" : ""

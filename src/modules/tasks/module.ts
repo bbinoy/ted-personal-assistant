@@ -5,7 +5,7 @@ import { hasMailItems } from "../../tasks/store.ts";
 // journal line and a row in the item's history, never an approval. An unattended run (a look, the mail handler) has the same tools: its changes are
 // attributed to "assistant (look)", it adds at most 10 items a day (the store), and each change is journalled and undone with reopen. Nothing here deletes.
 const tasks = rowsOf("mcp__tasks__", "tasks", "tasks");
-export const TASK_WRITES = "update_task complete_task drop_task snooze_task";
+const TASK_WRITES = "update_task complete_task drop_task snooze_task";
 export const tasksModule: ToolModule = {
   name: "tasks",
   connection: {

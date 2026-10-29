@@ -26,7 +26,7 @@
 **Branches**
 
 - Work on a branch and merge it with `git merge --no-ff`, so the branch stays visible as one unit in the history.
-- Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm run lint`, `npm test`, `npm run check:secrets` and `npm run check:isolation` all pass. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
+- Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm run lint`, `npm test`, `npm run check:secrets`, `npm run check:isolation` and `npm run check:unused` all pass. `check:unused` runs knip (pinned in `tools/knip`, config `tools/knip/knip.jsonc`): an export, type, file or dependency nothing uses fails it, so drop the `export` of a symbol used only in its own file and delete dead code. A test counts as a user; a deliberate unused export goes into the config with the reason. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
 - Behaviour that changes on purpose gets its fixture regenerated on purpose (`SNAPSHOT_WRITE=1 npm test`) and the diff reviewed.
 
 **Layout**

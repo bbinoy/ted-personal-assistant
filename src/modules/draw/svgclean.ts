@@ -11,9 +11,9 @@ type El = DefaultTreeAdapterMap["element"];
 
 export const MAX_SVG_CHARS = 60_000;
 export const MAX_ELEMENTS = 2000;
-export const MAX_DEPTH = 32;
+const MAX_DEPTH = 32;
 export const MAX_PATH_CHARS = 20_000;
-export const MAX_TEXT_CHARS = 4000;
+const MAX_TEXT_CHARS = 4000;
 const MAX_COST = 20_000; // elements after following every use / url(#id) reference: bounds the work of a render
 const SVG_NS = "http://www.w3.org/2000/svg";
 

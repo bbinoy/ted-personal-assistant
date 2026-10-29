@@ -65,7 +65,7 @@ export function compactDue(conv: ConvId, now: Date = new Date()): boolean {
 // session.ts says so for this `mode`: "urgent" right after a reply that left the context far past the limit (the caller waits),
 // "quiet" from the heartbeat once the conversation has been still for COMPACT_QUIET_MINUTES. Always called from the conversation's
 // serial queue, so a message that arrives meanwhile waits behind it and nothing else touches the record. Never throws.
-export async function compactChatIfNeeded(conv: ConvId, who: Who, notesDir: string | undefined, mode: "quiet" | "urgent", payer: Payer): Promise<void> {
+async function compactChatIfNeeded(conv: ConvId, who: Who, notesDir: string | undefined, mode: "quiet" | "urgent", payer: Payer): Promise<void> {
   const source = auditSource({ who, attended: true }); // (the audit label)
   const isolated = who !== "owner";
   try {

@@ -93,7 +93,7 @@ export function recordGroup(groupId: string, kind: Kind, ts: number, text: strin
   void compactIfNeeded(summarizeWithHaiku, GROUP_LOG_MAX_BYTES, file).catch((e) => console.error("group log: compaction failed:", (e as Error).message));
 }
 
-export const groupHistorySince = (groupId: string, sinceIso?: string): Sent[] => messagesSince(sinceIso, groupLogFile(groupId));
+const groupHistorySince = (groupId: string, sinceIso?: string): Sent[] => messagesSince(sinceIso, groupLogFile(groupId));
 
 const MAX_UNSEEN = 60;
 const lineOf = (m: Sent) => `[${new Date(m.at).toTimeString().slice(0, 5)}] ${m.kind === "chat" ? `${settings.assistant}: ` : m.kind === "edit" ? "(edited an earlier message, this is its new text) " : ""}${m.text.replace(/\n+/g, " / ").slice(0, LIMITS.logLine)}`;

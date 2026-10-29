@@ -6,7 +6,7 @@ const NOTION = "mcp__claude_ai_Notion__";
 
 // WHAT the tools are, by action (the hosted server's names are the connector's): shared by this module and by a friend's own Notion (modules/notionhosted.ts), which
 // serves the same tools under another prefix and adds nothing to what they are.
-export const NOTION_TOOLS_BY_ACTION: readonly (readonly [action: string, names: string])[] = [
+const NOTION_TOOLS_BY_ACTION: readonly (readonly [action: string, names: string])[] = [
   ["read", "notion-fetch notion-search"],
   ["page-write", "notion-create-pages notion-update-page"],
   ["comment-write", "notion-create-comment"],

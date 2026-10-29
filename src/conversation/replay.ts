@@ -61,7 +61,7 @@ export function actedSince(rows: readonly AuditEntry[], source: Source, sinceMs:
 const auditRows = (source: Source, sinceMs: number): AuditEntry[] => readAudit((e) => e.source === source && Date.parse(e.ts) >= sinceMs);
 
 // Every conversation worth looking at: the owner's, each friend's when TENANTS is on (her own gates still apply in her run) and every group we know.
-export function replayConversations(): Conversation[] {
+function replayConversations(): Conversation[] {
   return [owner(), ...(settings.tenants ? listTenants().map((t) => tenant(t.id)) : []), ...listGroups().map((g) => group(g.id))];
 }
 

@@ -20,7 +20,7 @@ export type Document =
 export const MAX_DOCUMENTS = 3; // per turn, newest first (a PDF is thousands of tokens)
 export const MAX_PDF_PAGES = 100; // what the API accepts in one request
 export const MAX_TEXT_BYTES = LIMITS.textFile; // a longer text file is cut here, with a note
-export const MAX_PDF_TOTAL_BYTES = 22_000_000; // PDFs of one turn together: the API refuses a request over 32 MB, and base64 is a third bigger
+const MAX_PDF_TOTAL_BYTES = 22_000_000; // PDFs of one turn together: the API refuses a request over 32 MB, and base64 is a third bigger
 const AUDIO_EXTENSIONS = ["mp3", "m4a", "wav", "ogg", "oga", "opus", "aac", "flac", "aif", "aiff", "amr", "wma", "weba"];
 const TEXT_EXTENSIONS = ["txt", "md", "csv", "json", "log", "ics", "vcf"];
 
@@ -47,7 +47,7 @@ export function pdfPages(pdf: Uint8Array): number | undefined {
 }
 
 // Pure: strict UTF-8 with no NUL; a cut in the middle of a character at the very end is allowed. Undefined when it is not text.
-export function decodeText(b: Uint8Array, cutAtEnd: boolean): string | undefined {
+function decodeText(b: Uint8Array, cutAtEnd: boolean): string | undefined {
   if (b.includes(0)) return undefined;
   for (let drop = 0; drop <= (cutAtEnd ? 3 : 0); drop++) {
     try {

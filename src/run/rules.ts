@@ -3,9 +3,9 @@ import { settings } from "../core/settings.ts";
 
 // The heartbeat run's pure rules: what its answer looks like, and how its next look is clamped. Code keeps these whatever the model decides.
 
-export const MIN_LOOK_MINUTES = 10;
-export const MAX_LOOK_MINUTES = 120;
-export const SILENT = "[[silent]]";
+const MIN_LOOK_MINUTES = 10;
+const MAX_LOOK_MINUTES = 120;
+const SILENT = "[[silent]]";
 
 export const HEARTBEAT_SCHEMA: Options["outputFormat"] = {
   type: "json_schema",

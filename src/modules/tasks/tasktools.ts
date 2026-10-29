@@ -44,7 +44,7 @@ function instant(label: string, v: string, zone: string): number {
 const clearable = (v: string | null | undefined): string | null | undefined => (v === undefined ? undefined : v === null || v.trim() === "" ? null : v);
 
 // Who acts: the conversation's person kind is the origin of a new row; the history names a look "assistant (look)" and a chat turn the person.
-export function actorOf(run: Pick<TasksRun, "key" | "unattended">): { by: string; origin: Scope["origin"]; unattended?: true } {
+function actorOf(run: Pick<TasksRun, "key" | "unattended">): { by: string; origin: Scope["origin"]; unattended?: true } {
   const origin = run.key === OWNER_KEY ? "owner" : isTenantKey(run.key) ? "friend" : "member";
   if (run.unattended) return { by: LOOK_BY, origin, unattended: true };
   return { by: origin === "member" ? (askingIn(run.key)?.authorName ?? "a member") : origin, origin };

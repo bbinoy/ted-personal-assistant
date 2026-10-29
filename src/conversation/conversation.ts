@@ -1,11 +1,11 @@
 import type { Extra, Kind } from "../core/messages.ts";
-import { cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Incoming, type PipelineDeps } from "./conversationmodel.ts";
+import { cleanIncoming, group, owner, tenant, type Conversation, type Incoming, type PipelineDeps } from "./conversationmodel.ts";
 import { createDelivery } from "./delivery.ts";
 import { createIntake } from "./intake.ts";
 import { createQueue } from "./queue.ts";
 
 // The conversation model lives in conversationmodel.ts; these are re-exported for the modules and tests that import them from here.
-export { cleanIncoming, group, owner, tenant, type Batch, type Conversation, type Incoming };
+export { cleanIncoming, group, owner, tenant,  type Conversation, type Incoming };
 
 // The one pipeline every conversation goes through: the owner's private chat and each group. What differs
 // between them is DATA on a Conversation, and a Conversation is made only by owner(), group(id) and tenant(id), so trust

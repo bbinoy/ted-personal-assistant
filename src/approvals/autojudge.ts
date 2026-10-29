@@ -33,7 +33,7 @@ export interface Verdict {
 // calendar events for the owner alone, a mail nobody can be named for, the plain-address check for a page, sharing, stopping a tenant); this file reads them.
 
 // Opening a web page: only a plain public https address may be judged (webaddress.ts). Re-exported, the tests and the browse rules read it from here.
-export { isPlainWebAddress, REBINDING_HOST } from "../policy/webaddress.ts";
+export { isPlainWebAddress,  } from "../policy/webaddress.ts";
 
 // Pure: is there anything the floor forbids judging? The tool's module says which of its actions are never judged (handing a file to other people, stopping or
 // deleting a tenant) and which need a check on the call itself. `view` is the call as mailView() reads it (permissions.ts reads the draft back for a send).

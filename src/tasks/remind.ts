@@ -15,7 +15,7 @@ import { addDays, localOf, parseLocal, showLocal, todayIn, wallToUtc } from "./w
 const HOUR = 3_600_000;
 export const DROP_AFTER_MS = 48 * HOUR;
 
-export type Kind = "at" | "default" | "snooze";
+type Kind = "at" | "default" | "snooze";
 export interface Planned {
   item: Item;
   kind: Kind;
@@ -63,7 +63,7 @@ function planOne(it: Item, now: number, o: PlanOptions): Planned | undefined {
 export const dueReminders = (items: readonly Item[], now: number, o: PlanOptions): Planned[] => items.flatMap((it) => planOne(it, now, o) ?? []).sort((a, b) => a.fireAt - b.fireAt || a.item.id - b.item.id);
 
 /** The next reminder to go (for /status): the soonest of the items' own reminders, snooze ends and default pings still ahead. */
-export function nextReminder(items: readonly Item[], now: number, o: PlanOptions): { at: number; item: Item } | undefined {
+function nextReminder(items: readonly Item[], now: number, o: PlanOptions): { at: number; item: Item } | undefined {
   let best: { at: number; item: Item } | undefined;
   for (const it of items) {
     const at = it.status === "snoozed" ? it.snoozeUntil : it.status === "open" ? (it.remindAt ?? defaultFireAt(it, o)) : undefined;

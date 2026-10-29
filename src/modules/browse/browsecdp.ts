@@ -173,7 +173,7 @@ export const cdpProbe = (port: number): Probe => async (x, y, pageUrl) => {
 export type FrameProbe = (pageUrl: string) => Promise<FrameInfo[] | string>; // a string: why the frames could not be listed
 
 interface FrameTree { frame?: { url?: string }; childFrames?: FrameTree[] }
-export function flattenFrames(tree: FrameTree | undefined, depth = 0): FrameInfo[] {
+function flattenFrames(tree: FrameTree | undefined, depth = 0): FrameInfo[] {
   if (!tree?.frame || depth > 8) return [];
   return [{ url: String(tree.frame.url ?? "") }, ...(tree.childFrames ?? []).flatMap((c) => flattenFrames(c, depth + 1))];
 }

@@ -12,7 +12,7 @@ import { metricsSink } from "./sinks/metricssink.ts";
 // A new kind of record is a new event type and a line in each sink's projection, not another writer scattered through the code. (Not here: the payments ledger, which is a transactional
 // financial record with its own durability, modules/browse/payments.ts; the payment EVENT below is its journal line.)
 
-export { stepOf, type ToolStep } from "./eventstep.ts";
+;
 
 // Why a call was made, as code worked it out (approvals/journalrender.ts): `text` from the run's provenance, the approval or the judge; `reason` only when a structured field of the call itself
 // carried the model's own, already cleaned.

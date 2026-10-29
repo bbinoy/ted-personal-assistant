@@ -6,7 +6,7 @@ import { readNotes, type Note } from "../../memory/notes.ts";
 // Candidates are ranked, deduped by address and each carries its sources. An address found here is a SUGGESTION: it does not make a send safer or freer (approvals still show the
 // recipients as code reads them from the call, and the recipient floor still asks for an address the owner did not type: docs/SAFETY.md "Finding people").
 
-export type SourceName = "notes" | "contacts";
+type SourceName = "notes" | "contacts";
 
 export interface Candidate {
   name: string;
@@ -15,7 +15,7 @@ export interface Candidate {
   from: { source: SourceName; detail: string }[]; // detail: the note's file, or "Google Contacts"
 }
 
-export interface SourceReport {
+interface SourceReport {
   source: string; // what the person would call it
   used: boolean;
   why?: string; // for an unavailable one: why, in plain words
@@ -121,7 +121,7 @@ export function rank(found: readonly Candidate[], query: string, limit = 8): Can
 const label = (f: Candidate["from"][number]): string => f.detail;
 
 // Pure: the answer as text (the tool fences it): which sources were used, which were not and why, then the candidates, or the reason there are none.
-export function render(query: string, found: readonly Candidate[], reports: readonly SourceReport[]): string {
+function render(query: string, found: readonly Candidate[], reports: readonly SourceReport[]): string {
   const lines: string[] = [];
   const used = reports.filter((r) => r.used).map((r) => r.source);
   lines.push(`Sources used: ${used.length ? used.join(", ") : "none"}.`);

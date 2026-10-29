@@ -25,7 +25,7 @@ const clean = (s: string): string => s.replace(/\s+/g, " ").trim().slice(0, INST
 // The clock a routine runs on: its rule's zone when it names one, else the conversation's.
 const zoneFor = (r: Pick<Routine, "rule">, zone: string): string => r.rule.zone ?? zone;
 
-export const whenText = (r: Pick<Routine, "rule">): string => formatRepeat(r.rule.time ? r.rule : { ...r.rule, time: DEFAULT_TIME });
+const whenText = (r: Pick<Routine, "rule">): string => formatRepeat(r.rule.time ? r.rule : { ...r.rule, time: DEFAULT_TIME });
 
 // An interval ("every 2 weeks") counts from the day the planner first saw the routine.
 const anchorOf = (rec: { since: number } | undefined, now: Date, zone: string): string => localOf(rec?.since ?? now.getTime(), zone).date;
@@ -50,7 +50,7 @@ export function slotsAround(r: Pick<Routine, "rule">, now: Date, conversationZon
 
 // ---- the record of a routine's last period (assistant.db routine_runs) ----
 
-export type RunStatus = "started" | "delivered" | "failed" | "skipped";
+type RunStatus = "started" | "delivered" | "failed" | "skipped";
 export interface RoutineRecord {
   since: number; // UTC ms: when the planner first saw the routine; slots before it are nobody's miss (a note made at 20:00 for 18:30 daily does not owe today's)
   period?: string; // the slot's date the status below is for
@@ -62,7 +62,7 @@ export interface RoutineRecord {
 }
 
 export const STALE_MINUTES = 45; // a run still `started` after this long died
-export const MAX_ATTEMPTS = 2; // starts in one period
+const MAX_ATTEMPTS = 2; // starts in one period
 
 export type Plan =
   | { state: "waiting"; next?: Slot }
@@ -123,10 +123,10 @@ function ensure(conv: ConvRef, name: string, now: number): RoutineRecord | undef
   return recordOf(db.get<Row>("SELECT * FROM routine_runs WHERE name = ?", name)!);
 }
 
-export interface Planned { readonly routine: Routine; readonly plan: Plan }
+interface Planned { readonly routine: Routine; readonly plan: Plan }
 
 // The plan of every routine at `now`. A skip is noted in the record (once), so it can be told once.
-export function planAll(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, catchUpHours: number): Planned[] {
+function planAll(conv: ConvRef, routines: readonly Routine[], now: Date, zone: string, catchUpHours: number): Planned[] {
   return routines.map((routine) => {
     const rec = ensure(conv, routine.name, now.getTime());
     const plan = planRoutine(routine, now, zone, rec, catchUpHours);
@@ -221,7 +221,7 @@ export function routineLines(conv: ConvRef, routines: readonly Routine[], now: D
 }
 
 // "10-22 18:31", "failed (2026-10-22)", "not yet": the last run of a routine, from the record.
-export function lastRun(conv: ConvRef, r: Routine, conversationZone: string): string {
+function lastRun(conv: ConvRef, r: Routine, conversationZone: string): string {
   const zone = zoneFor(r, conversationZone);
   const rec = readRecord(conv, r.name);
   if (rec?.lastDelivered) return `${localOf(rec.lastDelivered, zone).date.slice(5)} ${localOf(rec.lastDelivered, zone).time}${rec.status === "failed" || rec.status === "skipped" ? `, then ${rec.status} (${rec.period})` : ""}`;
