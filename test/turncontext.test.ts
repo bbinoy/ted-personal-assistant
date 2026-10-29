@@ -23,7 +23,9 @@ const inputs = { now: NOW };
 const sessionOf = (id: string) => ({ type: "result", subtype: "success", is_error: false, result: "hi", session_id: id, total_cost_usd: 0.01 });
 function rig(sessionId = "s1") {
   const prompts: string[] = [];
-  const query = ((p: { prompt: string }) => (prompts.push(String(p.prompt)), (async function* () { yield sessionOf(sessionId); })())) as any;
+  // (the owner's prompt reaches the SDK as a message stream, held until the connectors are settled)
+  const textOf = async (p: any): Promise<string> => (typeof p === "string" ? p : String((await p[Symbol.asyncIterator]().next()).value.message.content));
+  const query = ((p: { prompt: unknown }) => (async function* () { prompts.push(await textOf(p.prompt)); yield sessionOf(sessionId); })()) as any;
   return { prompts, ask: (text: string) => runConversation(conv, inputs, () => ({ prompt: text }), undefined, { query }) };
 }
 const warm = settings.warm;
