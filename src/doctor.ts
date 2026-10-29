@@ -15,7 +15,7 @@ import { mailRuntime } from "./modules/runtime.ts";
 import type { DoctorLine, MailRuntime } from "./modules/types.ts";
 import { ownerSkills } from "./modules/skills.ts";
 import { isPaused, pauseText } from "./core/pause.ts";
-import { errorLinesSince } from "./core/logwindow.ts";
+import { errorLinesSince, stampedSince } from "./core/logwindow.ts";
 import { browseStatus, PLAYWRIGHT_MCP_VERSION, type BrowseStatus } from "./modules/browse/browseserver.ts";
 import { killSwitch } from "./modules/browse/card.ts";
 import { macKeychain, type Keychain } from "./secrets/keychain.ts";
@@ -317,6 +317,45 @@ function lateReminders(path: string): number {
 }
 
 
+/** The lines of the log text that contain `needle` within the window (log lines carry no date: logwindow.ts). */
+function logLinesSince(text: string, mtimeMs: number, sinceMs: number, needle: string): string[] {
+  const found: string[] = [];
+  stampedSince(text, mtimeMs, sinceMs, (l) => l.includes(needle) && (found.push(l), true));
+  return found;
+}
+
+/** Tools a run asked for that were not there (agentrun.ts logs `run: tool not available: <tool>`), e.g. a connector that was not connected. Names only. */
+export function toolsMissingCheck(line: Line, text: string, mtimeMs: number, now: number = Date.now()): void {
+  const tag = "run: tool not available: ";
+  const counts = new Map<string, number>();
+  for (const l of logLinesSince(text, mtimeMs, now - 86_400_000, tag)) {
+    const name = l.split(tag)[1]!.trim();
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  line(total === 0 ? true : "warn", "no tool was missing in the last 24 hours", total ? `${total} call(s) to a tool that was not available: ${[...counts].map(([n, c]) => `${n} x${c}`).join(", ")}` : "");
+}
+
+const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) / 2)]!;
+const field = (l: string, k: string): number | undefined => { const m = new RegExp(`\\b${k}=(\\d+)`).exec(l); return m ? Number(m[1]) : undefined; };
+
+/** The last 7 days of `timing` lines: the owner's turns (median and slowest total), the slowest judge task and the share of judge calls that ran cold. Warns only when the median owner turn is over a minute. */
+export function slowestStepsCheck(line: Line, text: string, mtimeMs: number, now: number = Date.now()): void {
+  const since = now - 7 * 86_400_000;
+  const owner = logLinesSince(text, mtimeMs, since, "timing owner ").map((l) => field(l, "total")).filter((n): n is number => n !== undefined);
+  const judge = logLinesSince(text, mtimeMs, since, "timing judge ").flatMap((l) => {
+    const m = /timing judge (\S+) (warm|cold)/.exec(l), ms = field(l, "total");
+    return m && ms !== undefined ? [{ task: m[1]!, cold: m[2] === "cold", ms }] : [];
+  });
+  if (!owner.length && !judge.length) return void line(true, "slowest steps (7 days)", "no timing lines yet");
+  const slow = judge.reduce<{ task: string; ms: number } | undefined>((a, j) => (!a || j.ms > a.ms ? j : a), undefined);
+  const parts = [
+    owner.length ? `owner turns (${owner.length}): median ${median(owner)} ms, slowest ${Math.max(...owner)} ms` : "",
+    slow ? `judge (${judge.length} calls): slowest ${slow.task} ${slow.ms} ms, ${Math.round((100 * judge.filter((j) => j.cold).length) / judge.length)}% cold` : "",
+  ].filter(Boolean);
+  line(owner.length && median(owner) > 60_000 ? "warn" : true, "slowest steps (7 days)", parts.join("; "));
+}
+
 export function dbCheck(line: Line, path: string = instancePaths().db): boolean {
   try {
     const db = openInstanceDbAt(path);
@@ -448,6 +487,11 @@ export async function doctor() {
   const logFile = dataPath(logPaths().agent);
   const recentErrors = existsSync(logFile) ? errorLinesSince(readText(logFile) ?? "", statSync(logFile).mtimeMs, Date.now() - 3600_000) : 0; // (log lines have a time but no date: logwindow.ts)
   line(recentErrors === 0 ? true : "warn", "no errors in the log in the last hour", recentErrors ? `${recentErrors} error line(s) in logs/agent.log; look at them with: grep " ERR " ${logFile} | tail -n 20` : "");
+  if (existsSync(logFile)) {
+    const text = readText(logFile) ?? "", mtime = statSync(logFile).mtimeMs;
+    toolsMissingCheck(line, text, mtime);
+    slowestStepsCheck(line, text, mtime);
+  }
 
   console.log(bad === 0 ? "\nAll required checks passed." : `\n${bad} check(s) failed.`);
   process.exit(bad === 0 ? 0 : 1);
