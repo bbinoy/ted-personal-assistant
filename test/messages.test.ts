@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
-import { compactIfNeeded, findMessage, limitWords, messagesSince, noticeLines, planCompaction, recordMessage, recentNotices, type Sent } from "../src/core/messages.ts";
+import { compactIfNeeded, findMessage, limitWords, messagesSince, planCompaction, recordMessage, type Sent } from "../src/core/messages.ts";
 import { readText, writeText } from "../src/core/state.ts";
 import { dataPath } from "../src/core/state.ts";
 import { reactionPrompt } from "../src/core/reaction.ts";
@@ -9,7 +9,6 @@ import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 import { scratchLog } from "./scratch.ts";
 
 const reset = () => rmSync(dataPath(convPaths(OWNER_CONV).messages), { force: true });
-const sent = (at: string, kind: Sent["kind"], text: string, ts = Date.parse(at)): Sent => ({ at, kind, text, ts });
 
 test("messages: a reaction finds its message by Signal timestamp", () => {
   reset();
@@ -17,24 +16,6 @@ test("messages: a reaction finds its message by Signal timestamp", () => {
   recordMessage("chat", 1760000000456, "Done!");
   assert.equal(findMessage(1760000000123)?.text, "📥 1 email needs you");
   assert.equal(findMessage(999), undefined);
-});
-
-test("messages: notices are the last day of the assistant's own messages, not chat or approvals", () => {
-  const now = new Date("2026-10-12T12:00:00");
-  const lines = noticeLines(
-    [
-      sent("2026-10-10T12:00:00", "notice", "too old"),
-      sent("2026-10-12T09:30:00", "notice", "first\nsecond line"),
-      sent("2026-10-12T10:00:00", "chat", "a chat reply"),
-      sent("2026-10-12T10:30:00", "approval", "Approve?"),
-      sent("2026-10-12T11:00:00", "draft", "later"),
-    ],
-    now,
-  );
-  assert.equal(lines.length, 2);
-  assert.match(lines[0]!, /^\[09:30\] first \/ second line$/);
-  assert.match(lines[1]!, /^\[11:00\] later$/);
-  assert.ok(Array.isArray(recentNotices(now)));
 });
 
 test("messages: compaction plans by size, folds the oldest first and always keeps the newest", () => {
@@ -119,7 +100,6 @@ test("messages: one table of kinds; every reader's set is a lookup into it", asy
   const withFlag = (f: Parameters<typeof kindIs>[1]) => Object.keys(KIND_INFO).filter((k) => kindIs(k, f)).sort();
   assert.deepEqual(withFlag("ledger"), ["action", "journal", "wake"]);
   assert.deepEqual(withFlag("inbound"), ["member", "owner"]);
-  assert.deepEqual(withFlag("proactive"), ["brief", "draft", "notice"]);
   assert.deepEqual(withFlag("answers"), ["chat", "other"]);
   assert.deepEqual(withFlag("asks"), ["approval", "draft"]);
   assert.deepEqual(withFlag("said"), ["approval", "brief", "chat", "draft", "notice", "other"]);

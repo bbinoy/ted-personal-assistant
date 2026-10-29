@@ -4,6 +4,7 @@ import { createPipeline, group, owner, tenant, type Pipeline } from "./conversat
 import type { PipelineDeps } from "./conversation/conversationmodel.ts";
 import { replayUnanswered } from "./conversation/replay.ts";
 import { dropTenantWarm, prepare, runConversation, runLook } from "./run/agent.ts";
+import { chatTurn } from "./run/chattail.ts";
 import { WARM_REFRESH_MS } from "./run/agentwarm.ts";
 import { compactConversation, compactDue } from "./run/chatsession.ts";
 import { approveIn } from "./approvals/permissions.ts";
@@ -129,7 +130,7 @@ const tenantRunner = createTenantRunner({});
 const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
   turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
-  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, {}, () => ({ prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
+  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, {}, chatTurn(conv, { prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
 };
 const pipeline: Pipeline = createPipeline({
   messenger,

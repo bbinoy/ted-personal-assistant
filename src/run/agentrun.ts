@@ -283,17 +283,20 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       if (!message.parent_tool_use_id) lastContext = contextTokens(message.message.usage);
     }
     if (message.type !== "result") continue;
-    if (opts.sessionConv && !opts.freshSession) {
+    const stored = opts.sessionConv && !opts.freshSession ? readSession(opts.sessionConv) : undefined;
+    // total_cost_usd is the session's running total. A session that restarted or compacted has a new id and starts again from zero (so does a total below the last one): that turn cost the total, never a negative.
+    const turnCost = (stored?.sessionId && stored.sessionId !== message.session_id) || message.total_cost_usd < previousCost ? message.total_cost_usd : message.total_cost_usd - previousCost;
+    if (opts.sessionConv && stored) {
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
-      const before = readSession(opts.sessionConv);
+      const before = stored;
       const baseTokens = before.sessionId === message.session_id ? before.baseTokens : lastContext; // a session from before this existed has none: the absolute limit applies until it starts fresh
       const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
       writeSession(opts.sessionConv, next);
     }
-    charge(payer, message.total_cost_usd - previousCost, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
+    charge(payer, turnCost, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
-      return { text: message.result, costUsd: message.total_cost_usd - previousCost, structured: message.structured_output };
+      return { text: message.result, costUsd: turnCost, structured: message.structured_output };
     }
     throw failure(lastError, message.subtype, payer);
   }

@@ -105,7 +105,7 @@ test("a second preset changes the persona, the rhythm and the limits without tou
     const { preset } = await import(${JSON.stringify(src + "core/preset.ts")});
     const { CATEGORIES, categoryOf } = await import(${JSON.stringify(src + "memory/notes.ts")});
     const { settings } = await import(${JSON.stringify(src + "core/settings.ts")});
-    console.log(JSON.stringify({ chat: chatSystem(new Date("2026-10-12T09:00:00")), personality: PERSONALITY, categories: CATEGORIES,
+    console.log(JSON.stringify({ chat: chatSystem(), personality: PERSONALITY, categories: CATEGORIES,
       cat: [categoryOf("goals-run.md"), categoryOf("triage-x.md")], groupTurns: preset().limits.maxTurns,
       rhythm: [settings.heartbeatMinutes, settings.heartbeatDayMinutes] }));
   `);

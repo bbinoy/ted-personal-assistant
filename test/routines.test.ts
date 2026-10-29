@@ -364,7 +364,7 @@ test("the selfTimed text is gone from every prompt; the promise points at the wh
   const OLD = /A check reads the notes every hour or so/;
   const withLook = new Set(GROUP_CAPABILITIES);
   const noLook = new Set([...GROUP_CAPABILITIES].filter((c) => c !== "wake" && c !== "heartbeat"));
-  for (const [name, text] of [["chat", chatSystem(new Date())], ["group", groupSystem({ caps: withLook as never })], ["tenant", tenantSystem({ name: "Eve", caps: withLook as never, timed: true, looker: lookerOf({ kind: "tenant" }) })]] as const) {
+  for (const [name, text] of [["chat", chatSystem()], ["group", groupSystem({ caps: withLook as never })], ["tenant", tenantSystem({ name: "Eve", caps: withLook as never, timed: true, looker: lookerOf({ kind: "tenant" }) })]] as const) {
     assert.doesNotMatch(text, OLD, name);
     assert.match(text, /routine-<short-slug>\.md[\s\S]*`when:`/, `${name}: the when: note`);
   }
@@ -376,7 +376,7 @@ test("the selfTimed text is gone from every prompt; the promise points at the wh
 test("the look: how routines work is the prompt's; the message holds the facts only when there are some", () => {
   const looker = lookerOf(owner());
   const now = new Date(2026, 9, 14, 9, 0, 0);
-  assert.match(chatSystem(now), /Routines are things that happen at a set time[\s\S]*routine notes/);
+  assert.match(chatSystem(), /Routines are things that happen at a set time[\s\S]*routine notes/);
   const plain = lookInstruction(now, undefined, looker);
   assert.doesNotMatch(plain, /Routines are things that happen at a set time|daily-brief: due now/);
   const withFacts = lookInstruction(now, undefined, looker, "daily-brief: due now (every day at 07:30).");

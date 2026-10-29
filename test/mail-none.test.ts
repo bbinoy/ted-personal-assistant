@@ -75,7 +75,7 @@ test("heartbeat tick without mail: the jobs start and the liveness line is writt
 test("the brief's delivery sentence is in the chat's and the expert's prompt: the mail provider's own, or the chat alone without mail", async () => {
   const { chatSystem, expertSystem } = await import("../src/run/persona.ts");
   await withMail(true, () => {
-    assert.match(chatSystem(new Date(), true), /How to deliver the daily brief: .*send_self_briefing/);
+    assert.match(chatSystem(true), /How to deliver the daily brief: .*send_self_briefing/);
     assert.match(expertSystem("", { mail: true }), /How to deliver the daily brief: .*send_self_briefing/, "the expert that sends the brief sees it");
   });
   await withMail(false, () => {
@@ -129,7 +129,7 @@ test("offered skills: without mail the two mail skills are gone, the rest are un
 test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no email here' sentence is there", () => {
   const missing = missingSetup([], [], false);
   const prompts = {
-    chat: chatSystem(new Date("2026-10-12T09:00:00"), false),
+    chat: chatSystem(false),
   };
   const sentence = /There is no email in this setup[^\n]*?mail is off here\./;
   for (const [name, p] of Object.entries(prompts)) {
@@ -140,7 +140,7 @@ test("prompts without mail: no mail skill, tool or reply-draft text; the one 'no
     assert.match(rest, /ted-personal-assistant:daily-brief/, name); // the other skills are still listed
   }
   assert.doesNotMatch(prompts.chat, /how you write|voice \(how/i);
-  const context = chatContext({ missing, pings: ["10:00 an alert"] }, false)!; // what moved out of the chat's system prompt
+  const context = chatContext({ missing }, false)!; // what moved out of the chat's system prompt
   assert.doesNotMatch(context, /mailbird|Reply ready|send_message_now|update_draft|get_message|inbox|by email|email drafts|writes email|handled mail/i);
 });
 

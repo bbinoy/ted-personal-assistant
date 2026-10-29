@@ -118,7 +118,7 @@ test("the never-allowed set is denied in an unattended run; a payment is refused
 });
 
 test("the prompt says it for a background check: act when sure, turn what needs the person into a draft or task, never ask for approval; the check's message is data only", () => {
-  const text = chatSystem(new Date(2026, 9, 22, 9, 0));
+  const text = chatSystem();
   assert.match(text, /act when you are sure; what you are not sure of becomes a task or a draft, not a question/i);
   assert.match(text, /never ask .*for approval/i);
   const check = lookInstruction(new Date(2026, 9, 22, 9, 0), undefined);

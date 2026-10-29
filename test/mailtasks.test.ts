@@ -166,7 +166,7 @@ test("friends: the same tools in their own chat, on their own list; their looks 
 });
 
 test("prompts: the task tools are explained to the owner, a group and a friend; the look is told to ADD and then tell, never to ask", () => {
-  const chat = chatSystem(new Date(NOW));
+  const chat = chatSystem();
   assert.match(chat, /Tasks: you keep .*'s own to-do list/);
   assert.match(chat, /"Remind me to email Sam" never sends an email/);
   assert.match(chat, /Items marked "from mail"/);
@@ -177,14 +177,14 @@ test("prompts: the task tools are explained to the owner, a group and a friend; 
   const friend = tenantSystem({ name: "Ida", caps: new Set(["chat", "tasks"]) as never, looker: lookerOf({ kind: "tenant" }) });
   assert.match(friend, /Tasks: you keep Ida's own to-do list/);
   const looker = { ...lookerOf({ kind: "owner" }), who: "Alex", reads: true, mail: true, experts: false, sources: "x", tasks: true, group: false };
-  const look = chatSystem(new Date(NOW), true, looker); // (what a background check does is every conversation's prompt)
+  const look = chatSystem(true, looker); // (what a background check does is every conversation's prompt)
   assert.match(look, /add it to the list yourself with add_task/);
   assert.match(look, /then tell Alex in your message, in your own words/);
   assert.match(look, /Do not ask whether to add it/);
   assert.match(look, /source_ref the mail's id/);
   assert.match(look, /promised something in a mail they sent \(kind i_owe/);
   assert.doesNotMatch(look, /SUGGEST|one tap|At most \d+ per look/);
-  assert.doesNotMatch(chatSystem(new Date(NOW), true, { ...looker, tasks: false }), /add it to the list yourself with add_task/);
+  assert.doesNotMatch(chatSystem(true, { ...looker, tasks: false }), /add it to the list yourself with add_task/);
   void settings;
   void peekConvDb;
 });

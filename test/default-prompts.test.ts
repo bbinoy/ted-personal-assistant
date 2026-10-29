@@ -11,7 +11,6 @@ import { settings } from "../src/core/settings.ts";
 // failure, never written silently.
 
 const FIXTURE = new URL("./fixtures/default-prompts.json", import.meta.url);
-const NOW = new Date("2026-10-12T09:00:00");
 
 // The data folder differs per run; nothing else in the prompts depends on the machine.
 const portable = (s: string) => s.replaceAll(settings.dataDir, "<data>");
@@ -26,10 +25,9 @@ export function snapshot(): Record<string, unknown> {
       offeredSkills: ownerSkills(settings.mail),
       setupLabels: setupItems().map((i) => i.label),
       hiddenConnectors: settings.hiddenConnectors,
-      chat: portable(chatSystem(NOW)),
-      chatContext: portable(chatContext({ pings: ["10:00 an alert"] }) ?? ""),
+      chat: portable(chatSystem()),
       chatContextSetup: portable(chatContext({ missing }) ?? ""),
-      checkContextSetup: portable(chatContext({ missing }, undefined, false) ?? ""),
+      checkContextSetup: portable(chatContext({ missing }, false) ?? ""),
       expert: portable(expertSystem("MEMORY", { missing })),
       heartbeatInstruction: heartbeatInstruction({ now: "Monday 2026-10-12 09:00", timeZone: "Europe/Berlin", who: settings.owner, lastLook: "Your last check was at 08:30.", quietFrom: "22:00", quietTo: "07:00", due: "The time you chose for this check has come.", sources: "the inbox (list it with the mail tools and ask seen_mail which mail is new), the calendar for the next 36 hours, tasks, and your notes" }),
       group: portable(groupSystem()),

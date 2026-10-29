@@ -47,9 +47,7 @@ const ALLOWED: { match: RegExp; by: By; reason: string }[] = [
   { match: /^answer$/, by: "trigger", reason: "answer format: a look answers in the look's JSON (message, nextCheckMinutes, urgent), a chat turn in a reply" },
   { match: /^session$/, by: "trigger", reason: "session: a chat turn resumes the conversation's session, a look starts a fresh one every time" },
   { match: /^attended$/, by: "trigger", reason: "attended: a message's person is waiting, a look's nobody" },
-  { match: /^expert-brief:look-context$/, by: "trigger", reason: "trigger line / facts: a look appends its facts and chat lines to every brief it hands an expert (look.ts expertContext)" },
   // -- what the capability set and attendance decide --
-  { match: /^block:notices$/, by: "either", reason: "capability + attended: the owner's chat is shown the notices it sent on its own; a look cannot be shown them, a group or a friend has none" },
   { match: /^block:first-contact$/, by: "either", reason: "attended: only a friend's first message turn, after the owner let her in, greets her (runoptions.ts turnContext)" },
   { match: /^block:setup$/, by: "conversation", reason: "capability (setup): what is not connected or set up is the owner's own installation; a group or a friend has no setup to walk through" },
   { match: /^(tools:|mcp:)/, by: "either", reason: "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes" },
@@ -101,15 +99,15 @@ function sectionsOf(text: string): string[] {
 // The blocks of a user turn, by name: a paragraph is classified by what it starts with; one that is none of these is a block of its own, named by its first words, so a new
 // block cannot hide (teach the table here what it is, and regenerate the fixture).
 const BLOCKS: [string, RegExp][] = [
+  ["context", /^The conversation's context, written by code/],
+  ["chat-tail", /^(What was posted in this chat since you last looked|The rec)/],
   ["clock", /^CURRENT TIME:/],
   ["message", /^MSG-MARK/],
   ["setup", /^Not set up yet/],
-  ["notices", /^Messages you sent/],
   ["first-contact", /^This is the first time she talks to you/],
   ["notes", /NOTES-MARK/],
   ["status", /^STATUS-MARK/],
   ["held-posts", /^HELD-MARK/],
-  ["look-context", /^LOOK-CONTEXT/],
 ];
 const blocksOf = (text: string): string[] => text.split("\n\n").map((para) => BLOCKS.find(([, re]) => re.test(para))?.[0] ?? `other(${para.slice(0, 24).replace(/\s+/g, " ")})`);
 
@@ -142,7 +140,7 @@ async function render(name: KindName): Promise<Seen> {
   )) as never;
   forgetShown(k.conv.convId); // (every run is a first one: told everything)
   if (k.trigger === "message") await runConversation(k.conv, inputs, () => ({ prompt: MSG }), undefined, { query });
-  else await runLook(k.conv, k.who === "friend" ? payer : LOGIN, () => ({ prompt: MSG }), noop, { facts: FACTS as never, expertContext: "LOOK-CONTEXT facts and chat lines" }, { now: AT, io: { query } });
+  else await runLook(k.conv, k.who === "friend" ? payer : LOGIN, () => ({ prompt: MSG }), noop, { facts: FACTS as never }, { now: AT, io: { query } });
   // The expert: the brief the run's first delegation hands it (the PreToolUse hook adds the context to the run's own words), and the expert's own system prompt.
   const hook = options.hooks.PreToolUse[0].hooks[0];
   const out = await hook({ hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { subagent_type: "expert", prompt: "BRIEF-MARK" } }, undefined, { signal: new AbortController().signal });

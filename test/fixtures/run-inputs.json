@@ -2,14 +2,14 @@
   "kinds": {
     "owner chat": {
       "system": ["personality", "routine", "sources", "send", "reactions", "skills", "chat", "shared", "background", "delegate", "learn", "tasks"],
-      "blocks": ["setup", "notices", "notes", "status", "held-posts", "clock", "message"],
+      "blocks": ["setup", "notes", "status", "held-posts", "clock", "message"],
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Docs server", "claude_ai_Google_Docs server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "draw server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "meetings server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tenants server", "tenants server", "tenants server", "tenants server", "tenants server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:calendar", "ted-personal-assistant:daily-brief", "ted-personal-assistant:draw", "ted-personal-assistant:evening-wrap", "ted-personal-assistant:follow-through", "ted-personal-assistant:mail", "ted-personal-assistant:mailbird", "ted-personal-assistant:meeting-prep", "ted-personal-assistant:research-booking", "ted-personal-assistant:setup", "ted-personal-assistant:stay-in-touch", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:tasks", "ted-personal-assistant:web-research", "ted-personal-assistant:weekly-review"],
       "mcp": ["browse", "draw", "meetings", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-daily-brief", "expert-evening-wrap", "expert-meeting-prep", "expert-opus", "expert-weekly-review"],
       "expertSystem": ["personality", "skills", "expert"],
-      "expertBrief": ["clock"],
+      "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HARNESS_MODEL",
       "effort": "default",
       "answer": "reply",
@@ -28,7 +28,7 @@
       "mcp": ["browse", "draw", "meetings", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-daily-brief", "expert-evening-wrap", "expert-meeting-prep", "expert-opus", "expert-weekly-review"],
       "expertSystem": ["personality", "skills", "expert"],
-      "expertBrief": ["clock", "look-context"],
+      "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HEARTBEAT_MODEL",
       "effort": "high",
       "answer": "json",
@@ -47,7 +47,7 @@
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
       "expertSystem": ["personality", "expert"],
-      "expertBrief": ["clock"],
+      "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HARNESS_MODEL",
       "effort": "default",
       "answer": "reply",
@@ -66,7 +66,7 @@
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
       "expertSystem": ["personality", "expert"],
-      "expertBrief": ["clock", "look-context"],
+      "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HEARTBEAT_MODEL",
       "effort": "high",
       "answer": "json",
@@ -85,7 +85,7 @@
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
       "expertSystem": ["personality", "expert"],
-      "expertBrief": ["clock"],
+      "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HARNESS_MODEL",
       "effort": "default",
       "answer": "reply",
@@ -104,7 +104,7 @@
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
       "expertSystem": ["personality", "expert"],
-      "expertBrief": ["clock", "look-context"],
+      "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HEARTBEAT_MODEL",
       "effort": "high",
       "answer": "json",
@@ -172,14 +172,6 @@
         "-": ["owner chat", "owner look", "group chat", "group look", "friend look"]
       }
     },
-    "block:notices": {
-      "by": "either",
-      "reason": "capability + attended: the owner's chat is shown the notices it sent on its own; a look cannot be shown them, a group or a friend has none",
-      "values": {
-        "1": ["owner chat"],
-        "-": ["owner look", "group chat", "group look", "friend chat", "friend look"]
-      }
-    },
     "block:setup": {
       "by": "conversation",
       "reason": "capability (setup): what is not connected or set up is the owner's own installation; a group or a friend has no setup to walk through",
@@ -194,14 +186,6 @@
       "values": {
         "default": ["owner chat", "group chat", "friend chat"],
         "high": ["owner look", "group look", "friend look"]
-      }
-    },
-    "expert-brief:look-context": {
-      "by": "trigger",
-      "reason": "trigger line / facts: a look appends its facts and chat lines to every brief it hands an expert (look.ts expertContext)",
-      "values": {
-        "1": ["owner look", "group look", "friend look"],
-        "-": ["owner chat", "group chat", "friend chat"]
       }
     },
     "expert-system:skills": {

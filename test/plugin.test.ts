@@ -48,8 +48,8 @@ test("setup: missing items are listed, in prompts as an offer in chat and a skip
   assert.equal(missingSetup([note("setup-calendars.md")]).length, setupItems().length - 1);
   const missing = missingSetup([]);
   assert.match(chatContext({ missing })!, /ted-personal-assistant:setup skill\. For the meeting notes, find them yourself and save them, and ask .* only if you find nothing or several candidates/);
-  assert.match(chatContext({ missing }, undefined, false)!, /You cannot ask anyone[\s\S]*message "set up"/);
-  assert.ok(!chatSystem(new Date()).includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
+  assert.match(chatContext({ missing }, false)!, /You cannot ask anyone[\s\S]*message "set up"/);
+  assert.ok(!chatSystem().includes("Not set up yet") && !chatContext({ missing: [] })?.includes("Not set up yet"));
 });
 
 test("setup: Notion tasks and meetings are found by the agent, saved, and only asked about when nothing or several are found; background runs never edit an unconfirmed page", () => {
@@ -76,7 +76,7 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   assert.equal(missingSetup([], ["calendar"]).length, base.length - 1);
   assert.equal(missingSetup([], ["notion", "calendar"]).length, base.length - 2);
   // the recorded state never reaches a prompt (it can be stale): the run is told to trust its own tool list
-  for (const p of [chatSystem(new Date()), expertSystem("")]) {
+  for (const p of [chatSystem(), expertSystem("")]) {
     assert.doesNotMatch(p, /Not connected right now/);
     assert.match(p, /not in your tool list, say plainly that it is not connected[\s\S]*never assume a connector is down when its tools are present/);
   }

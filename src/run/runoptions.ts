@@ -3,7 +3,6 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { RunOptions } from "./agentrun.ts";
 import { instanceKeyOverBudget } from "../core/budget.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
-import { recentNotices } from "../core/messages.ts";
 import { readIndex, readNotes, styleLines, writeIndex } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
 import type { RunKind } from "../core/runkind.ts";
@@ -68,7 +67,7 @@ export interface RunInputs {
 type Shape = Pick<RunOptions, "systemPrompt" | "tenant"> & { notes: { dir: string; zone: string } };
 
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
-  systemPrompt: chatSystem(i.now), // (only what is stable: what changes between two runs is turnContext below)
+  systemPrompt: chatSystem(), // (only what is stable: what changes between two runs is turnContext below)
   notes: { dir: conv.notesDir, zone: zoneOf(conv) },
 });
 
@@ -86,7 +85,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
   const caps = capabilitiesOf(conv);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, caps, looker: lookerOf(conv), timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: toolsFor(caps, { who: "tenant", attended: true }).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona, now: i.now ?? new Date() }),
+    systemPrompt: tenantSystem({ name: ctx.name, caps, looker: lookerOf(conv), timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: toolsFor(caps, { who: "tenant", attended: true }).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona }),
     notes: { dir: ctx.notesDir, zone: zoneOf(conv) },
     tenant: {
       id: ctx.id,
@@ -108,7 +107,7 @@ const SHAPES: Record<Conversation["kind"], (conv: Conversation, i: RunInputs) =>
 const CONTEXTS: Record<Conversation["kind"], (conv: Conversation, attended: boolean) => string | undefined> = {
   owner: (_conv, attended) => {
     const notes = readNotes();
-    return chatContext({ missing: missingSetup(notes), pings: recentNotices() }, undefined, attended);
+    return chatContext({ missing: missingSetup(notes) }, attended);
   },
   group: () => undefined,
   // Her first turn after the owner let her in (tenantrun.ts marks it with the first reply): she is new here. Only a message can greet her. (Her mail is read by her look and her tools when she asks: there is no digest to show.)
