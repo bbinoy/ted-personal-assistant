@@ -136,3 +136,13 @@ test("the expert's brief carries the look's context after the look's own words; 
   assert.equal(out.hookSpecificOutput.updatedInput.run_in_background, false);
   assert.deepEqual(briefs, ["do the brief"]);
 });
+
+test("no run is handed learned facts; the record still answers on request (note writes are journal lines)", async () => {
+  const { journalable } = await import("../src/approvals/journalrender.ts");
+  const { readFileSync } = await import("node:fs");
+  const conv = { ...owner(), notesDir: mkdtempSync(join(tmpdir(), "facts-notes-")) };
+  writeFileSync(join(conv.notesDir, "people-di.md"), "---\ndescription: Di moved\n---\nDi moved to Lisbon\n");
+  for (const attended of [true, false]) assert.ok(!F.factsFor(conv, new Date(2026, 9, 14, 8, 0), attended).blocks.some((b) => /notes_changed_facts/.test(b)));
+  assert.equal(journalable("Write", { file_path: join(conv.notesDir, "people-di.md") }), true, "a look's note write is a journal line");
+  assert.doesNotMatch(readFileSync("plugin/skills/daily-brief/SKILL.md", "utf8"), /notes_changed_facts/);
+});

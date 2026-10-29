@@ -74,7 +74,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 | `routine_runs` | last period of each routine (a routine note), keyed by the note's file name |
 | `items`, `task_events`, `reminders` | tasks, append-only history, claimed reminders |
 | `told` | what was told once (or once a day, or at most every N) about this conversation, e.g. a group member told that a reminder said in the group is the group's (`core/told.ts`) |
-| `learned_changes`, `learned_batches`, `voice_*`, `friend` | quiet note changes and the lists that told them; voice notes received; a friend's bookkeeping |
+| `voice_*`, `friend` | voice notes received; a friend's bookkeeping |
 
 - **Adding state is one migration:** append a step to `CONV_SCHEMA` (the steps up to version 22 were collapsed into one baseline that creates the current shape; a file older than it is refused with `OlderSchemaError`; `test/schemabaseline.test.ts` pins the baseline to the schema the old steps made), write a small store over `convDb(conv)`, and add a rule to `src/heartbeat/convretention.ts` if the table can grow without bound or is keyed by something that can go away. Older code refuses a newer file (`NewerSchemaError`).
 - **Damage.** Every open runs `integrity_check`. Only the agent reacts: it writes `assistant.db.damaged`, sets the file aside and starts a fresh database. Chat keeps working; that conversation's background work is refused (`mayRun` answers `damaged`) and the owner is told once a day (`noticeDamaged`). `npm run doctor` fails until `npm run convdb -- accept <convId>`.
@@ -220,10 +220,9 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 | reminders due | `waitingReminders`, `reminderFacts` | claimed by the tick; told when the run said something (a look: or held, unless urgent) |
 | meetings claimed for prep | `waitingMeetings`, `meetingFacts` | `PREP_MINUTES` before the start; told when the run said something |
 | routines, skill or note: status (due, running, delivered with the time, skipped, next); notes whose `when:` cannot be read | `routineStatus`, `scheduledIn` | every run, as information; only the look acts: `routineFacts` puts the due one in its instruction (a skill: it delegates to the expert; a note: it does it or delegates) |
-| notes that changed on their own (the owner's and a friend's; not a group's) | `learnedFact` | after the dream or a look's note; told when the run said something or held it |
 | welcome (`welcomeStart` marks a fresh data folder in `kv`) | `takeWelcome` | the owner's first run, once ever |
 
-- **At most once.** What a run takes is pending in memory while it runs, so a chat turn and a look never get the same reminder, meeting, held post, change or routine. `done` settles it when the run ends: a look as before (held posts when it posted or stayed silent; reminders when it posted, or held and the item is not urgent; learned when it posted or held; a prep only when it posted, a skill routine only when its expert came back, a routine note when the look posted, sent or acted). A chat turn counts as having told when its reply carries words; a `[[silent]]` or reaction-only turn, or a failed one, settles nothing and leaves the facts for the next run (the fallback line for a reminder still comes after 30 minutes).
+- **At most once.** What a run takes is pending in memory while it runs, so a chat turn and a look never get the same reminder, meeting, held post, change or routine. `done` settles it when the run ends: a look as before (held posts when it posted or stayed silent; reminders when it posted, or held and the item is not urgent; a prep only when it posted, a skill routine only when its expert came back, a routine note when the look posted, sent or acted). A chat turn counts as having told when its reply carries words; a `[[silent]]` or reaction-only turn, or a failed one, settles nothing and leaves the facts for the next run (the fallback line for a reminder still comes after 30 minutes).
 - **Routines are the look's.** A chat turn sees their status, notes included (so it can answer "did my brief go out?") and never starts or records one; starting, `routine_runs` and settling stay with the look.
 - **The expert.** What the look is handed (these facts and the chat tail it reads) is appended by code to every brief it gives an expert (`delegationHook`'s `context`, `expertContext` of the look); the approval judge still reads only the look's own brief.
 - **Prompt cache.** The claimed facts and the information facts are each told to a chat session only when their text differs from what it was last told (`src/run/turncontext.ts`); the system prompt stays stable.
@@ -308,7 +307,7 @@ Working memory is the conversation's resumed session. Episodic memory is `logs/a
 - `setup-`, `voice-` and `status-` notes are refused; at most 8 writes and 12 deletes;
 - notes are snapshotted first (7 kept) and `undo_dream` restores them; a note changed while the model ran is skipped.
 
-**What I learned overnight** (`src/memory/learned.ts`). The dream's changes and a look's notes are recorded and told once, to every conversation but a group, as the same `learnedFact` in its next run (the owner's brief expert gets it with the look's context). Groups are off: their notes are shared and nothing is recorded.
+**What the notes learned on their own** is not handed to any run. A look's note writes are journal lines like any action, and the dream's run is a journal line with its change count (its snapshot is what `undo_dream` restores); "what did you learn" is answered from the `journal` tool.
 
 **Corrections** (no code path of their own). A 👎 on something Ted did or sent, an undo, or "don't do that" is learned by the run itself under the general learn rule in the persona (`learn.md`): it works out the rule and saves a note. A reaction turn is given the reacted message (fenced as data) and the journal lines around it with their "why" (`journalAround`). The model writes the note; no code checks it (notes grant nothing; every action is still judged).
 
@@ -385,7 +384,7 @@ Every model call re-sends the whole context, so the levers are what the model se
 - **Connectors are waited for at start-up** (`MCP_CONNECTION_NONBLOCKING=false`), or the first call runs without its tools and the cache is lost. A connector that still failed or is pending when the message is due is waited for or reconnected for a few seconds first (`src/run/connectorwait.ts`); each run's init logs every server's status and a "No such tool available" result logs the tool's name. The prompt cache lives an hour; per-turn changes go in the turn's message, not the system prompt (`src/run/turncontext.ts`).
 - Every answered turn logs one `timing` line of durations (`src/core/timing.ts`). The run gate and lease are under "The run model".
 
-**Retention.** `src/core/retention.ts` is a registry of rules plus a tick job that runs the due ones once a day from 03:30; file rules are in `src/heartbeat/retentionrules.ts`, stores register their own. `RETENTION=off` stops it; `npm run retention -- --dry-run|--now`. The `conv-db` rule trims every conversation's `assistant.db` (seen mail, held posts, voice notes, learned rows, old meetings) and removes state keyed by something that can disappear: a `routine_runs` row whose `routine-<name>.md` note is gone (a broken note still counts as there; a run in progress stays until it is stale), and a `claimed`/`retry` reminder mark older than a day whose task is done, dropped or gone (an open task keeps its marks). Audit, task history and the payments ledger are never pruned this way.
+**Retention.** `src/core/retention.ts` is a registry of rules plus a tick job that runs the due ones once a day from 03:30; file rules are in `src/heartbeat/retentionrules.ts`, stores register their own. `RETENTION=off` stops it; `npm run retention -- --dry-run|--now`. The `conv-db` rule trims every conversation's `assistant.db` (seen mail, held posts, voice notes, old meetings) and removes state keyed by something that can disappear: a `routine_runs` row whose `routine-<name>.md` note is gone (a broken note still counts as there; a run in progress stays until it is stale), and a `claimed`/`retry` reminder mark older than a day whose task is done, dropped or gone (an open task keeps its marks). Audit, task history and the payments ledger are never pruned this way.
 
 **Text length tiers.** `LIMITS` in `src/core/sanitize.ts` names one constant per purpose (a control name, a subject, a log line, a message, a mail body, a page view, a text file). One tool result is capped by 60,000; `capTotal` in `src/core/toolclean.ts`.
 
@@ -642,7 +641,6 @@ Notes, search, the dream's planner, the journal reader.
 src/memory/dreamapply.ts  snapshots, applying a plan, undo
 src/memory/dreamplan.ts  which dream proposals may apply (pure)
 src/memory/journalread.ts  reads journal lines; `/today`; archive list
-src/memory/learned.ts  quiet note changes and the lists that tell them
 src/memory/notes.ts  notes: reading, path guard, forget, the code-made `MEMORY.md`
 src/memory/search.ts  ranked search over log and notes
 src/memory/searchindex.ts  the per-conversation FTS5 index

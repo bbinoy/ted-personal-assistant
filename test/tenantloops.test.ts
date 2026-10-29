@@ -376,7 +376,6 @@ test("one dreamer over every kind: owner, group and friends in one pass; thresho
   assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.minNewLines()), [r.minNewLines.direct, r.minNewLines.group, r.minNewLines.direct]);
   assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.nightlyCap()), [Infinity, r.maxGroupsPerNight, Infinity]);
   assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.logWords), [true, true, false]);
-  assert.deepEqual([RULES.owner, RULES.group, RULES.tenant].map((k) => k.recorded), [true, false, true]);
   convDb(OWNER_CONV).run("DELETE FROM dream");
   const gid = "R3JvdXBUZW5hbnRMb29wc1Rlc3Q";
   groupDir(gid, "Chess club");

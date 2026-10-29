@@ -243,6 +243,14 @@ export const CONV_SCHEMA: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 25,
+    name: "no 'learned overnight' lists: the record is the journal (and the dream's snapshots), so the tables that fed the lists go",
+    up: `
+      DROP TABLE learned_changes;
+      DROP TABLE learned_batches;
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

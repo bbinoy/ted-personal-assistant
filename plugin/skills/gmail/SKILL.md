@@ -27,7 +27,7 @@ The tools you have: `search_threads`, `get_thread`, `get_message`, `get_draft`,
   <threadId>` or label the thread INBOX again). Never trash, delete or mark spam: those
   tools and the labels `TRASH` and `SPAM` (on any label tool) are blocked.
 - **Drafts**: `create_draft` (for a reply pass `replyToMessageId` so it stays in the
-  thread) and `update_draft`. Plain text in `body`, no Markdown; one blank line between paragraphs, and read the saved draft back before any send.
+  thread) and `update_draft`. Plain text in `body`, no Markdown; one blank line between paragraphs, and read the saved draft back before any send. Show it in chat as the mail skill says.
 - **Sends**: `send_message` (a new mail, or a draft by `draftId`), `reply` and `forward`
   ask on the owner's phone or are judged against what they just told you. In `reply`,
   give the text and the `messageId` of the latest message in the thread.

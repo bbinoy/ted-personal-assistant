@@ -3,7 +3,6 @@ import { gated, parked, type RunKind as GateKind } from "../core/rungate.ts";
 import { auditSource, type RunKind } from "../core/runkind.ts";
 import { emitRecord, endRun } from "../core/events.ts";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { noteDone } from "../approvals/journalrender.ts";
 import type { TenantRun } from "../tenants/tenanttools.ts";
 import { UNSCOPED_KEY } from "../core/ownerkey.ts";
@@ -16,8 +15,7 @@ import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./cha
 import { afterConnectors } from "./connectorwait.ts";
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
-import { isNotePath, noteSavedHint, parseNote, STATUS_PREFIX, writeIndex } from "../memory/notes.ts";
-import { recordLook } from "../memory/learned.ts";
+import { isNotePath, noteSavedHint, writeIndex } from "../memory/notes.ts";
 import { routineNoteReply } from "../modules/tasks/routinelist.ts";
 import { builtinModule } from "../modules/builtin.ts";
 import { createsOf } from "../policy/toolmanifest.ts";
@@ -136,13 +134,6 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
       if (tool === "Read" && input.file_path.endsWith(".md") && name !== "MEMORY" && !notesSeen.includes(name)) notesSeen.push(name);
       if (tool === "Write" || tool === "Edit") {
         writeIndex(notes, new Date(), opts.memory?.zone); // a note changed: the index is code's, made again from the notes (whatever the model wrote there is replaced)
-        const file = input.file_path.split("/").pop()!;
-        if (!kind.attended && opts.sessionConv && file !== "MEMORY.md" && !file.startsWith(STATUS_PREFIX)) { // a look changed a note while nobody watched: told in "what I learned overnight" (learned.ts)
-          try {
-            const note = parseNote(file, readFileSync(input.file_path, "utf8"));
-            if (note) recordLook(opts.sessionConv, file, tool === "Write", note.description ?? note.text.split("\n")[0]!, Date.now());
-          } catch { /* the note is gone again: nothing to tell */ }
-        }
       }
     }
     if (createsOf(tool, input)) noteCreated(conversation, idsInResult(response), Date.now(), callLabel(input)); // what the assistant made here, so a later delete of it can be told to the judge (created.ts)
