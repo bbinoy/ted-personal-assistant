@@ -3,6 +3,9 @@ import { emitRecord } from "../core/events.ts";
 import { runJudge, withTimeout } from "./approvaljudge.ts";
 import type { JudgeIO } from "./judgespare.ts";
 import { factsOf, validateQuestion } from "./questionfacts.ts";
+import { judgeContext } from "./judgecontext.ts";
+import { peopleFor } from "./seennames.ts";
+import type { Provenance } from "./autojudge.ts";
 import { answerPrompt, checkPrompt, parseAnswer, parseCheck, parseWrite, writePrompt, type AnswerJudgement, type OpenView, type Recent } from "./approvalprompt.ts";
 
 // The model calls of approvals. Each one fails closed: a thrown error, a timeout, an error result, an
@@ -28,6 +31,9 @@ export interface QuestionInput {
   details: string; // the code-rendered text: ground truth for the facts the question must carry; never sent
   recent: readonly Recent[];
   source: Source;
+  conversation?: string; // the conversation key: the names its reads gave to addresses in the call (seennames.ts)
+  provenance?: Provenance; // whose words led to the call, as the action judge reads it (permissions.ts)
+  untrusted?: boolean;
   typedYes?: boolean; // a card payment: only a typed yes approves it; its question is checked like any other
 }
 export type Composed = { text: string; ms: number; by?: "model" } | { text?: undefined; failure: string; ms: number; by?: undefined };
@@ -42,11 +48,13 @@ const viaJudge = (task: "write" | "check", io: JudgeIO, ms: number): Run => asyn
 export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeoutMs = 15_000, run: Run = viaJudge("write", io, timeoutMs), check: Run = viaJudge("check", io, timeoutMs)): Promise<Composed> {
   const started = Date.now();
   const facts = factsOf(q.args, q.details);
+  // ONE context for the writer and the check (and the action judge before them): the same facts, so the check can accept what the writer was given
+  const context = judgeContext({ details: q.details, provenance: q.provenance, untrusted: q.untrusted, recent: q.recent, names: q.conversation ? peopleFor(q.conversation, `${JSON.stringify(q.args)}\n${q.details}`) : [] });
   let failure: string;
   try {
     let refused: string | undefined; // the judge's reason for a first question it refused: the writer gets ONE more try with it (errors never retry)
     for (;;) {
-      const text = parseWrite(await run(writePrompt({ ...q, required: facts.must, refused })));
+      const text = parseWrite(await run(writePrompt({ tool: q.tool, args: q.args, context, required: facts.must, refused })));
       const wrong = text ? validateQuestion(text, facts) : "no usable question from the writer";
       if (!text || wrong) {
         failure = wrong!;
@@ -54,7 +62,7 @@ export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeou
         break;
       }
       // The judge guards the question: it must show the call faithfully (every recipient, attachment, the full text verbatim).
-      const raw = await check(checkPrompt({ details: q.details, question: text }));
+      const raw = await check(checkPrompt({ context, question: text }));
       const c = parseCheck(raw);
       if (c.faithful) return { text, ms: Date.now() - started, by: "model" };
       failure = `the question did not show the call faithfully (${c.reason}); rewrite it showing every recipient, every attachment and the full text verbatim`;

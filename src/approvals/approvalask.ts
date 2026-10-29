@@ -27,7 +27,7 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     // A card payment is asked in the chat of the person whose card it is only, never in a group.
     if (o?.typedYes && !mayPay) return { approved: false, failure: "a card payment can only be approved in the owner's own chat" };
     // One model call writes it, code validates it. No question means no ask and no card: the agent gets the failure as the tool result.
-    const c = await compose({ tool: call.tool, args: call.input, details: description, recent: recentIn(scope), source, typedYes: o?.typedYes });
+    const c = await compose({ tool: call.tool, args: call.input, details: description, recent: recentIn(scope), source, conversation: scope, provenance: o?.provenance, untrusted: o?.untrusted, typedYes: o?.typedYes });
     if (c.text === undefined) return { approved: false, failure: `no question could be written that states the exact arguments (${c.failure})` };
     const question = c.text; // the model's words, checked against the call by the judge (approvalmodel.ts)
     const asked = structuredClone(call.input);

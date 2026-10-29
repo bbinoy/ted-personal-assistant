@@ -118,7 +118,7 @@ test("the permission layer: a payment ask skips the judge even in broad mode, pa
   assert.equal(r.updatedInput?.text, "RESOLVED");
   assert.deepEqual(order, ["asked", "resolved"], "the call is built after the yes, not before");
   assert.equal(judged, 0, "the judge is never asked about a payment");
-  assert.deepEqual(seen, [[call.input, { typedYes: true }]], "the approver sees the placeholder call and the typed-yes flag");
+  assert.deepEqual(seen, [[call.input, { typedYes: true, provenance: seen.length ? (seen[0] as any[])[1].provenance : undefined, untrusted: false }]], "the approver sees the placeholder call and the typed-yes flag");
   // not approved: nothing is resolved
   order.length = 0;
   const no = makeCanUseTool(async () => (order.push("asked"), { approved: false }), BROWSE_RUN, undefined, judge, guard, undefined, false, { provenance: standing("buy") });

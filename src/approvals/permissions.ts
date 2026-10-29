@@ -2,7 +2,7 @@ import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sd
 import type { Source } from "../core/audit.ts";
 import { auditSource, type RunKind } from "../core/runkind.ts";
 import { emit, type Why } from "../core/events.ts";
-import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type RunProvenance, type Verdict } from "./autojudge.ts";
+import { createdNote, isJudgeable, judgeAction, mayAutoApprove, mayFix, notifyNote, provenanceFor, recipientsOutside, type CarriedApproval, type Provenance, type RunProvenance, type Verdict } from "./autojudge.ts";
 import type { Taint } from "../run/chatsession.ts";
 import type { Decision } from "./approvals.ts";
 import { objectLines, UNNAMED } from "./describe.ts";
@@ -26,7 +26,7 @@ export type Approve = (
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal,
-  o?: { typedYes?: boolean },
+  o?: { typedYes?: boolean; provenance?: Provenance; untrusted?: boolean }, // (the context the judge read, shared with the question: judgecontext.ts)
 ) => Promise<Decision>;
 
 // A conversation nobody can be asked in (not set up, a person who is gone).
@@ -339,7 +339,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
-    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, g?.payment ? { typedYes: true } : undefined);
+    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, { ...(g?.payment ? { typedYes: true } : {}), provenance, untrusted: isUntrusted() });
     if (d.superseded) {
       log(tool, "ask-superseded", source);
       return { behavior: "deny", message: "That question was closed because a newer question about the same action was asked. Nothing was executed; wait for the answer to the newer one." };

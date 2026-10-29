@@ -100,8 +100,8 @@ export function judgeTiming(task: Task, warm: boolean, promptChars: number, at: 
 }
 
 // The one runner: the structured answer of this task on the spare (cold if there is none or it is dead), its cost recorded.
-// Undefined for an error result, no result, or an answer for the wrong task. The action task rebuilds the spare after use
-// (it is judged in runs of several actions); the others do not (approvals.ts prepares one per question and drops it).
+// Undefined for an error result, no result, or an answer for the wrong task. Every task rebuilds the spare after use
+// (the write, the check and the answer of one question come one after the other; approvals.ts drops it when no question is open).
 export async function runJudge(task: Task, prompt: string, io: JudgeIO = {}): Promise<{ out: unknown; warm: boolean; subtype: string } | undefined> {
   let warm = false;
   const t0 = Date.now();
@@ -118,7 +118,7 @@ export async function runJudge(task: Task, prompt: string, io: JudgeIO = {}): Pr
     spare: async (p) => {
       const s = await spare.run(p, io);
       warm = s.warm;
-      if (task === "action") setImmediate(() => spare.prepare(io));
+      setImmediate(() => spare.prepare(io)); // after any task: the next one (write, check, answer, action) runs warm too
       return s.messages;
     },
   }).catch(() => undefined); // a refusal of the API (usage limit, expired login) is no answer: the callers fail closed
