@@ -42,9 +42,9 @@ export function echoLines(it: Item, now: number, zone: string): string {
 
 const SECTION_MAX = 8;
 
-// A line of the phone list: "• #4 Call Sam · Fri 24 Oct · Sam ↻".
+// A line of the phone list: "• Call Sam · Fri 24 Oct · Sam ↻" (no number: people name an item by what it is; the number is the tools').
 function bullet(it: Item, now: number, zone: string, o: { due?: boolean } = {}): string {
-  const bits = [`#${it.id} ${it.title}`];
+  const bits = [it.title];
   const due = o.due === false ? "" : dueText(it, now, zone, true);
   if (due) bits.push(due);
   if (it.person && it.kind !== "task") bits.push(it.person);
