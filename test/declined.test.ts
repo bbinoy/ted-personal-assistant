@@ -107,3 +107,14 @@ test("a reaction on a message from before the owner's latest message is marked f
   f.say("Alex reacted 👍", "ok?", t - 2 * 60_000);
   assert.equal((f.read(t) as unknown as { message: string }).message, "Alex reacted 👍");
 });
+
+test("the draft shown in chat is what the judge reads against the owner's plain 'send'", () => {
+  const s = new TurnScope("owner");
+  const draft = "To: pat@example.com\nSubject: Thanks\n\nThanks for the coffee.\n\nSay send to send it.";
+  s.assistantSaid(draft); // (delivery.ts deliverFinal records the final reply this way)
+  s.say("send");
+  const p = s.read() as unknown as { kind: "owner"; message: string; assistantSaid: string };
+  assert.equal(p.message, "send");
+  assert.equal(p.assistantSaid, draft);
+  assert.match(judgePrompt({ description: "send draft 7", provenance: p as never }), /Thanks for the coffee/);
+});

@@ -23,7 +23,7 @@ holds what is particular to Mailbird.
 - **Reply drafts stay in their thread and are saved quietly:** `reply_to_conversation`
   (or `reply_all_to_conversation` for several recipients), with no `select_conversation`,
   no `showInUi` and no `forceNewWindow` (a popup or window steals focus on the desktop).
-  Give the draft's text in chat. `create_draft` only starts a brand-new mail with no
+  Show the draft in chat as the mail skill says (the owner does not open Mailbird). `create_draft` only starts a brand-new mail with no
   thread. The body is HTML with one `<p>` per paragraph, greeting and sign-off included,
   because plain newlines are flattened when sent. Read the saved draft back before any send.
 - **Sending.** Never `send_message_now` before the owner has seen the draft's text and
