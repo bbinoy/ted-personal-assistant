@@ -60,7 +60,11 @@ export async function startFakeBao(mount = "ted"): Promise<FakeBao> {
       if (f.mode.garbage) return void res.writeHead(200).end("<html>not json</html>");
       res.writeHead(status, { "content-type": "application/json" }).end(json === undefined ? "" : JSON.stringify(json));
     };
-    if (f.mode.delayMs) await new Promise((r) => setTimeout(r, f.mode.delayMs));
+    if (f.mode.delayMs) {
+      const gone = new Promise<void>((r) => req.socket.once("close", () => r()));
+      await Promise.race([new Promise((r) => setTimeout(r, f.mode.delayMs).unref()), gone]); // a client that gave up ends the wait
+      if (req.socket.destroyed) return;
+    }
     if (f.mode.down) return void req.socket.destroy();
     const p = url.pathname.replace(/^\/v1\//, "");
     if (p === "sys/health") return send(200, { initialized: true, sealed: f.mode.sealed, version: "2.7.1-fake" });
