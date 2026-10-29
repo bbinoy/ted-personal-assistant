@@ -1,5 +1,6 @@
 import { query, startup } from "@anthropic-ai/claude-agent-sdk";
 import { buildOptions, runAgent, type AgentReply, type RunOptions } from "./agentrun.ts";
+import { afterConnectors } from "./connectorwait.ts";
 import { capacity, pool, runWarmOrCold, warmUp } from "./agentwarm.ts";
 import { readIndex } from "../memory/notes.ts";
 import { runFor, turnContext, TRIGGERS, type RunInputs, type Trigger } from "./runoptions.ts";
@@ -72,7 +73,10 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   let reply: AgentReply;
   try {
     reply = t.attended
-      ? await runWarmOrCold(conv, o, r, input, (abortController) => (w.io?.query ?? query)({ prompt: input, options: { ...buildOptions(w.approve, o, r.resume, abortController.signal), abortController } })) // on the conversation's warm process when it still fits (agentwarm.ts)
+      ? await runWarmOrCold(conv, o, r, input, (abortController) => {
+        const gate = afterConnectors(input, o.kind);
+        return gate.bind((w.io?.query ?? query)({ prompt: gate.prompt, options: { ...buildOptions(w.approve, o, r.resume, abortController.signal), abortController } }));
+      }) // on the conversation's warm process when it still fits (agentwarm.ts)
       : await runAgent(input, w.approve, o, w.io);
   } catch (e) {
     if (own) facts?.done({ ended: false, said: false, abandoned: true });

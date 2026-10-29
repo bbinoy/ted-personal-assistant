@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { distanceKm, getForecast, getMarineForecast, getSpotInfo, searchPlaces } from "./weather.ts";
 
-// weather: read-only tools for wind, waves and spots (weather.ts), for the owner's chat and wake-ups. They are deferred (found with ToolSearch, as the surf skill says). They only fetch public data and return
+// weather: read-only tools for wind, waves and spots (weather.ts), for the owner's chat and wake-ups. They only fetch public data and return
 // text; nothing is sent anywhere but the coordinates and a place name. The surf-conditions skill says how to use them.
 const reply = (text: string) => ({ content: [{ type: "text" as const, text }] });
 const lat = z.number().min(-90).max(90).describe("latitude, degrees");

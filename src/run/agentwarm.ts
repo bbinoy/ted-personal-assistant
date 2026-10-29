@@ -10,6 +10,7 @@ import { buildOptions, consume, underCeiling, type AgentReply, type RunOptions }
 import { settings, WARM_IDLE_MINUTES } from "../core/settings.ts";
 import { auditSource } from "../core/runkind.ts";
 import { firstWarm, SpareSlot } from "../core/warmslot.ts";
+import { afterConnectors } from "./connectorwait.ts";
 
 // --- warm processes for the next message ---
 // Starting Claude Code (process, config, skills, connectors) takes ~3s before the model is even asked. After a reply the
@@ -108,7 +109,8 @@ export async function runWarmOrCold(conv: Who, o: RunOptions, r: Resume, input: 
       const warm = await slot?.take(conv.key, spareKey(conv.key, o, r))?.catch((e: Error) => console.error(`${label}: warm process unavailable, starting normally:`, e.message));
       // A warm process is stopped through its query: its abort controller was fixed when it started.
       const onWarm = () => {
-        const q = warm!.query(input);
+        const gate = afterConnectors(input, o.kind); // (a connector that failed while the process idled is mended before the model is asked)
+        const q = gate.bind(warm!.query(gate.prompt));
         c.signal.addEventListener("abort", () => q.close(), { once: true });
         return q;
       };

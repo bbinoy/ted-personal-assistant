@@ -22,8 +22,6 @@ Save a note the way you save any other (one fact per note file in the notes fold
 
 ## Tools
 
-The weather tools are not loaded until you ask: before the first call, load them with ToolSearch (query `select:mcp__weather__get_forecast,mcp__weather__get_marine_forecast,mcp__weather__get_spot_info,mcp__weather__search_places,mcp__weather__get_distance`).
-
 - `search_places(name)`: coordinates, elevation and time zone. Use the saved coordinates of a known spot instead of searching.
 - `get_forecast(lat, lon, days, models)`: wind and gusts in knots, direction the wind comes FROM, cloud, rain, temperature, pressure, daylight hours only, local time. Default is one blended model. Ask for `models` to compare several (for example `icon_seamless`, `ecmwf_ifs025`, `gfs_seamless`; in Switzerland also `meteoswiss_icon_ch1` and `icon_d2`).
 - `get_spot_info(lat, lon)`: what is known about a launch point: from a shared seed list of kite spots if it is listed, otherwise which wind directions are onshore, side-on or offshore from map data. It cannot see hazards, and it does not change: ask once per spot and save it.

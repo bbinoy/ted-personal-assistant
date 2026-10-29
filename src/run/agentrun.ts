@@ -13,6 +13,7 @@ import { resultText, withText, type BrowseGuard } from "../modules/browse/browse
 import { HIDDEN_BROWSER_TOOLS } from "../modules/browse/browserules.ts";
 import { onStop, pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
+import { afterConnectors } from "./connectorwait.ts";
 import { recordConnectors } from "../modules/connectors.ts";
 import { failure } from "../tenants/errors.ts";
 import { isNotePath, noteSavedHint, parseNote, STATUS_PREFIX, writeIndex } from "../memory/notes.ts";
@@ -260,6 +261,16 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   };
 }
 
+// Pure. The tools a user message's results say do not exist ("No such tool available: <name>"): names only.
+export function missingTools(content: unknown): string[] {
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((b) => {
+    if (b?.type !== "tool_result" || b.is_error !== true) return [];
+    const text = typeof b.content === "string" ? b.content : Array.isArray(b.content) ? b.content.map((c: { text?: string }) => c.text ?? "").join(" ") : "";
+    return [...text.matchAll(/No such tool available: ([\w.\-]+)/g)].map((m) => m[1]!);
+  });
+}
+
 // The stream yields many message types (system, assistant, tool use...).
 // The one we want is the single "result" message that ends the turn.
 export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOptions, previousCost: number): Promise<AgentReply> {
@@ -272,7 +283,9 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     if (message.type === "system" && message.subtype === "init" && runCapabilities(opts.kind).has("login")) { // only the owner's run has connectors: its tool list says nothing about them
       recordToolsSeen(message.tools);
       recordConnectors(message.tools, message.mcp_servers);
+      console.error(`run: mcp servers: ${message.mcp_servers.map((m) => `${m.name}=${m.status}`).join(", ") || "none"}`); // (names and statuses only)
     }
+    if (message.type === "user") for (const name of missingTools(message.message.content)) console.error(`run: tool not available: ${name}`); // (a connector that was not connected: the call never reached canUseTool)
     if (message.type === "assistant") {
       if (!first && !message.parent_tool_use_id) (first = true), opts.onFirstOutput?.();
       if (message.error) lastError = message.error;
@@ -332,7 +345,8 @@ export async function runAgent(prompt: Parameters<typeof query>[0]["prompt"], ap
       const off = () => c.controller.abort();
       if (wait.signal.aborted) off();
       wait.signal.addEventListener("abort", off, { once: true });
-      return consume((io.query ?? query)({ prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal, run), abortController: c.controller } }), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
+      const gate = afterConnectors(prompt, opts.kind);
+      return consume(gate.bind((io.query ?? query)({ prompt: gate.prompt, options: { ...buildOptions(pausing(c, ((...a: Parameters<Approve>) => parked(() => approve(...a))) as Approve), opts, resume, c.signal, run), abortController: c.controller } })), opts, previousCost).finally(() => wait.signal.removeEventListener("abort", off));
     }, opts.maxMinutes, opts.stopScope ?? opts.sessionConv);
   }, wait.signal).finally(() => (forget(), endRun(run), opts.signal?.removeEventListener("abort", callOff))).catch((e) => {
     if (opts.sessionConv && !opts.freshSession) forgetUnresumable(opts.sessionConv, e, auditSource(opts.kind));

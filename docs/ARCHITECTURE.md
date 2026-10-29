@@ -382,7 +382,7 @@ Every model call re-sends the whole context, so the levers are what the model se
 - **The model sees only the tools it uses:** unused connectors are hidden (`HIDDEN_CONNECTORS`), Notion, Google Drive and Google Docs are cut to the tools the skills use (`NOTION_TOOLS`, `DRIVE_TOOLS`, `DOCS_TOOLS`; Drive create/update/copy/share/download and Docs update were ~7k tokens a call), tools policy always denies are hidden (`hiddenTools`). Keep these in step with the skills.
 - **Warm processes** (`src/core/warmslot.ts`, `src/run/agentwarm.ts`; `WARM=on|off`, 60 minutes idle) for the owner's chat, the most recently active groups (`GROUP_WARM_SLOTS` 2) and friends (`TENANT_WARM_MAX` 2), plus one Haiku spare each for the group gate and the judge.
 - A process is reused only if what it was built from is unchanged, and never for another conversation.
-- **Connectors are waited for at start-up** (`MCP_CONNECTION_NONBLOCKING=false`), or the first call runs without its tools and the cache is lost. The prompt cache lives an hour; per-turn changes go in the turn's message, not the system prompt (`src/run/turncontext.ts`).
+- **Connectors are waited for at start-up** (`MCP_CONNECTION_NONBLOCKING=false`), or the first call runs without its tools and the cache is lost. A connector that still failed or is pending when the message is due is waited for or reconnected for a few seconds first (`src/run/connectorwait.ts`); each run's init logs every server's status and a "No such tool available" result logs the tool's name. The prompt cache lives an hour; per-turn changes go in the turn's message, not the system prompt (`src/run/turncontext.ts`).
 - Every answered turn logs one `timing` line of durations (`src/core/timing.ts`). The run gate and lease are under "The run model".
 
 **Retention.** `src/core/retention.ts` is a registry of rules plus a tick job that runs the due ones once a day from 03:30; file rules are in `src/heartbeat/retentionrules.ts`, stores register their own. `RETENTION=off` stops it; `npm run retention -- --dry-run|--now`. The `conv-db` rule trims every conversation's `assistant.db` (seen mail, held posts, voice notes, learned rows, old meetings) and removes state keyed by something that can disappear: a `routine_runs` row whose `routine-<name>.md` note is gone (a broken note still counts as there; a run in progress stays until it is stale), and a `claimed`/`retry` reminder mark older than a day whose task is done, dropped or gone (an open task keeps its marks). Audit, task history and the payments ledger are never pruned this way.
@@ -466,6 +466,7 @@ What a model run is made of.
 src/run/agent.ts  runConversation, runLook, prepare: one runTurn for every trigger
 src/run/agentrun.ts  RunOptions, buildOptions, runAgent, the stream
 src/run/agentwarm.ts  the keyed pool of warm processes
+src/run/connectorwait.ts  holds the owner's first message until every connector is connected (pending waited for, failed reconnected)
 src/run/ceiling.ts  wall-clock ceiling of a run, `/stop`
 src/run/chatsession.ts  session resume and in-place compaction
 src/run/delegation.ts  experts and the hooks that enforce delegation
