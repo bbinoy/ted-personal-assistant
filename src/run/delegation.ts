@@ -18,12 +18,12 @@ import { skillHint, type SkillHint } from "../modules/skills.ts";
 //     delegated, the brief was never written). So the hook rewrites every accepted call to `run_in_background: false` (updatedInput), each agent is declared
 //     `background: false`, and background tasks are off for every run (agentrun.ts env). The run then waits for its expert (a chat turn too: the reply comes after, typing keeps showing), bounded by the run's ceiling (RUN_MAX_MINUTES_CHAT) and budget (maxBudgetUsd covers subagents).
 
-export const EXPERT = "expert";
-export const OPUS_EXPERT = `${EXPERT}-opus`;
+const EXPERT = "expert";
+const OPUS_EXPERT = `${EXPERT}-opus`;
 export const MAX_DELEGATIONS = 2; // per run
 const AGENT_TOOLS = new Set(["Agent", "Task"]); // (the tool was called Task before the SDK renamed it)
 
-export const variantOf = (skill: string): string => `${EXPERT}-${skill}`;
+const variantOf = (skill: string): string => `${EXPERT}-${skill}`;
 
 // A skill that has a variant: it is heavy (`delegate`) or has a lean tool set (`tools`).
 const hasVariant = (h: SkillHint): boolean => !!h.delegate || !!h.tools;
@@ -68,7 +68,7 @@ export const delegatedText = (setup: ExpertSetup): string => [...setup.delegated
 
 const deny = (reason: string) => ({ hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "deny" as const, permissionDecisionReason: reason } });
 // The accepted Agent call as it must run: in the foreground (the run waits for it), never in a remote or other isolated place (a remote agent always runs in the background).
-export function foreground(args: Record<string, unknown>): Record<string, unknown> {
+function foreground(args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...args, run_in_background: false };
   delete out.isolation;
   delete out.model; // (the agent type picks the model: expert or expert-opus, never a per-call override)

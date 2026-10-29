@@ -31,10 +31,10 @@ export interface SearchArgs {
   maxChars?: number;
 }
 
-export interface Term { w: string; weight: number }
+interface Term { w: string; weight: number }
 export interface Query { terms: Term[]; phrases: string[] } // phrases: folded text that must appear
-export interface RankDoc { tokens: string[]; text: string }
-export interface Corpus { n: number; avgdl: number; df: (w: string) => number }
+interface RankDoc { tokens: string[]; text: string }
+interface Corpus { n: number; avgdl: number; df: (w: string) => number }
 
 /** The seam for a smarter ranker (ARCHITECTURE.md, Memory): relevance of each candidate to the query, 0 for "not about it". The default is BM25. */
 export interface Ranker {
@@ -45,10 +45,10 @@ export interface Ranker {
 const ALSO_WEIGHT = 0.6;
 const CANDIDATES = 500;
 const SNIPPET_CHARS = 280;
-export const DEFAULT_LIMIT = 8;
-export const MAX_LIMIT = 30;
-export const DEFAULT_CHARS = 4000;
-export const MAX_CHARS = 8000;
+const DEFAULT_LIMIT = 8;
+const MAX_LIMIT = 30;
+const DEFAULT_CHARS = 4000;
+const MAX_CHARS = 8000;
 
 export function parseQuery(query: string | undefined, alsoTry: readonly string[] = []): Query {
   const phrases: string[] = [];
@@ -133,14 +133,14 @@ export { when as whenIn }; // (the journal reader takes since / until the same w
 
 // ---- results ----
 
-export interface Hit {
+interface Hit {
   ref: string; // "#<Signal timestamp>" of a message, "note:<file>" of a note
   at: number;
   author: string;
   text: string; // the snippet
   score: number;
 }
-export interface Found { hits: Hit[]; total: number; searched: number; error?: string }
+interface Found { hits: Hit[]; total: number; searched: number; error?: string }
 
 const authorOf = (kind: string, by: string, text: string): { author: string; body: string } => {
   const s = searchOf(kind);
@@ -267,7 +267,7 @@ async function run(idx: SearchIndex, args: SearchArgs, scope: Scope, now: number
 const stamp = (ms: number, zone: string) => `${dayIn(new Date(ms), zone)} ${timeIn(new Date(ms), zone)}`;
 
 /** The answer as text for the model: best first, within `maxChars`, with the number left over. */
-export function renderFound(found: Found, args: SearchArgs, zone: string = systemZone()): string {
+function renderFound(found: Found, args: SearchArgs, zone: string = systemZone()): string {
   if (found.error) return found.error;
   const limit = Math.max(1, Math.min(MAX_LIMIT, Math.floor(args.limit ?? DEFAULT_LIMIT)));
   const cap = Math.max(500, Math.min(MAX_CHARS, Math.floor(args.maxChars ?? DEFAULT_CHARS)));
@@ -320,7 +320,7 @@ export function searchConversation(scope: Scope, args: SearchArgs, opts: { now?:
 }
 
 /** Brings a conversation's index up to date without searching (the owner's, shortly after start-up, so the first real search is quick). */
-export function warmSearchIndex(scope: Scope, zone: string = systemZone()): Promise<void> {
+function warmSearchIndex(scope: Scope, zone: string = systemZone()): Promise<void> {
   return inTurn(scope.indexPath, async () => {
     const attempt = async () => {
       const idx = SearchIndex.open(scope.indexPath);

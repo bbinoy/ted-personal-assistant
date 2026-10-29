@@ -8,7 +8,7 @@ import type { TextStyle } from "@ted-assistant/messenger";
 // its platform's format.
 
 type StyleName = TextStyle["style"];
-export type Style = TextStyle;
+type Style = TextStyle;
 interface Rendered {
   text: string;
   styles: Style[];

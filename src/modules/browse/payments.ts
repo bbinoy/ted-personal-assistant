@@ -22,7 +22,7 @@ export interface PayRow {
   status: PayStatus;
 }
 // A payment that was clicked may have taken money, whatever the page said afterwards.
-export const DUPLICATE_HOURS = 24;
+const DUPLICATE_HOURS = 24;
 const KEEP_MS = 2 * 24 * 3_600_000; // (rows() looks back this far: the local day of the cap and the 24 hours of the duplicate window, with a day to spare for the time zone)
 const SPENT_SQL = "('clicked','confirmed','unconfirmed')";
 

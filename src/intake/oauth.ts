@@ -18,8 +18,8 @@ import type { ItemKind } from "../secrets/secrets.ts";
 
 export class OAuthProblem extends Error {} // a fixed sentence for the person at the page; never holds a token, a code or the server's own words
 
-export const STATE = /^[A-Za-z0-9_-]{43}$/; // 256 random bits as base64url
-export const callbackPath = (provider: string): string => `/oauth/${provider}/callback`;
+const STATE = /^[A-Za-z0-9_-]{43}$/; // 256 random bits as base64url
+const callbackPath = (provider: string): string => `/oauth/${provider}/callback`;
 export const CALLBACK = /^\/oauth\/([a-z][a-z0-9-]{0,19})\/callback$/;
 
 // The cookie that binds a flow to the browser that was shown its link: HttpOnly, SameSite=Lax (sent on the service's redirect back, a top-level GET), only for the

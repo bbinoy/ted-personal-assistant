@@ -41,7 +41,7 @@ const domain = (): string => `gui/${userInfo().uid}`;
 const plistPath = (label: string): string => join(homedir(), "Library/LaunchAgents", `${label}.plist`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export const isLoaded = async (label: string): Promise<boolean> => (await launchctl(["print", `${domain()}/${label}`])).code === 0;
+const isLoaded = async (label: string): Promise<boolean> => (await launchctl(["print", `${domain()}/${label}`])).code === 0;
 
 // Writes the plist and (re)loads the job. Does nothing when the same plist is already loaded (restarting the server would seal it).
 export async function installJob(label: string, plist: string, l: Layout): Promise<"started" | "unchanged"> {

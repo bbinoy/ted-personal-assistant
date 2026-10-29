@@ -19,7 +19,7 @@ export function parseDate(s: unknown): Ymd | undefined {
   const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
   return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month) ? { year, month, day } : undefined;
 }
-export const formatDate = (d: Ymd): string => `${String(d.year).padStart(4, "0")}-${pad(d.month)}-${pad(d.day)}`;
+const formatDate = (d: Ymd): string => `${String(d.year).padStart(4, "0")}-${pad(d.month)}-${pad(d.day)}`;
 export const daysInMonth = (year: number, month: number): number => new Date(Date.UTC(year, month, 0)).getUTCDate();
 
 /** Days since 1970-01-01 of a date (a whole number: no clock, no zone). */
@@ -49,7 +49,7 @@ export function parseLocal(s: unknown): { date: string; time?: string } | undefi
 }
 
 /** The zone's offset from UTC at this instant, in ms (positive east of Greenwich). */
-export function offsetMs(zone: string, ms: number): number {
+function offsetMs(zone: string, ms: number): number {
   const c = clockIn(new Date(ms), zone);
   return Date.UTC(c.year, c.month - 1, c.day, c.hour, c.minute) - Math.floor(ms / 60_000) * 60_000;
 }
@@ -83,8 +83,8 @@ export { isZone };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
-export const weekdayName = (n: number): string => WEEKDAYS[n]!;
-export const monthName = (n: number): string => MONTHS[n - 1]!;
+const weekdayName = (n: number): string => WEEKDAYS[n]!;
+const monthName = (n: number): string => MONTHS[n - 1]!;
 
 /** "Fri 24 Oct" (the year only when it is not the current one), with " 14:30" for a date-time. For what is told to the person and the model: always the conversation's local time. */
 export function showLocal(local: string, today: string): string {

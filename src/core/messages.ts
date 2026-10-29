@@ -284,7 +284,7 @@ export function journalToKeep(dropped: readonly string[], journalDays: number, m
 }
 
 // The log of messages the assistant sent is bounded by size; older messages become one summary of at most SUMMARY_WORDS words.
-export const LOG_MAX_BYTES = 1_000_000; // the owner's chat
+const LOG_MAX_BYTES = 1_000_000; // the owner's chat
 export const GROUP_LOG_MAX_BYTES = 500_000; // per group (and per friend), the same size-bounding
 export const SUMMARY_WORDS = 60;
 const JOURNAL_KEEP_DAYS = 90; // journal lines (what the assistant DID, core/events.ts) survive log compaction verbatim this long; older ones go without a summary

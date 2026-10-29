@@ -36,7 +36,7 @@ export interface RemovalDeps {
   secrets?: readonly ((id: string) => Promise<number>)[];
 }
 
-export const safeAttachment = (id: string): boolean => /^[\w.-]{1,100}$/.test(id) && !id.startsWith(".");
+const safeAttachment = (id: string): boolean => /^[\w.-]{1,100}$/.test(id) && !id.startsWith(".");
 export const adminCommand = (id: string): string => `npm run openbao -- forget-tenant ${id}`;
 
 /** A reporting wrapper: runs one step, notes what it removed, notes (never throws) when it failed. */

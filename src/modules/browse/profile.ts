@@ -20,15 +20,15 @@ export interface Entry {
 export type Entries = Record<string, Entry>;
 
 // Sensitive: only on a domain the owner named, and only masked in the approval question. Everything but name, email, phone, address, nationality.
-export const SENSITIVE_KINDS: ReadonlySet<Kind> = new Set<Kind>(["dob", "id", "other"]);
+const SENSITIVE_KINDS: ReadonlySet<Kind> = new Set<Kind>(["dob", "id", "other"]);
 export const isSensitive = (e: Pick<Entry, "kind">): boolean => SENSITIVE_KINDS.has(e.kind);
 export const KEY_NAME = /^[a-z][a-z0-9._-]{0,39}$/;
-export const MAX_VALUE = 200;
+const MAX_VALUE = 200;
 
 export class ProfileError extends Error {}
 
 // What OpenBao gave for one key, checked: anything that is not a whole entry is no entry.
-export function entryOf(key: string, raw: unknown): Entry | undefined {
+function entryOf(key: string, raw: unknown): Entry | undefined {
   const e = raw as Partial<Entry> | null | undefined;
   if (!KEY_NAME.test(key) || !e || typeof e !== "object" || typeof e.value !== "string" || !KINDS.includes(e.kind as Kind)) return undefined;
   const strings = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);

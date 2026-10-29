@@ -18,7 +18,7 @@ import type { ConvId } from "../../core/convpaths.ts";
 // The tool touches only this log: nothing to judge, nothing to ask.
 
 export const SEEN_MAX = 2000;
-export const MAX_IDS_PER_CALL = 500;
+const MAX_IDS_PER_CALL = 500;
 const MAX_ID_CHARS = 200;
 
 /** The retention query that bounds the log: everything but the newest `max` ids goes. Returns how many went (`dryRun`: how many would). */

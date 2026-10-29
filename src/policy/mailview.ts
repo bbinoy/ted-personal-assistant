@@ -21,7 +21,7 @@ export function addrs(v: unknown): string[] {
 }
 
 // Pure: the attachments of a call or a draft as short names or addresses, whatever shape the provider gives them (strings, or objects with a filename, name, path, uri, url).
-export function attachmentNames(v: unknown): string[] {
+function attachmentNames(v: unknown): string[] {
   return (Array.isArray(v) ? v : []).map((x) => {
     if (typeof x === "string" || typeof x === "number") return String(x);
     const o = (x ?? {}) as Record<string, unknown>;

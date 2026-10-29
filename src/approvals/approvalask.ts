@@ -12,7 +12,7 @@ import { argsForAudit } from "./auditargs.ts";
 // the outcome and whether the call that ran has the arguments the question was written for, so a divergence between intent and
 // behaviour can be investigated.
 
-export { argsForAudit } from "./auditargs.ts";
+;
 
 // Plain equality of two argument sets (key order does not matter).
 export const sameArgs = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => callKey("", a) === callKey("", b);

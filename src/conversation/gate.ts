@@ -70,7 +70,7 @@ export function parseGate(raw: unknown, maxDelay: number = GATE_MAX_DELAY_SECOND
   };
 }
 
-export const NOTHING: GateOutput = { act: false, delaySeconds: 0, nextCheckMinutes: DEFAULT_CHECK_MINUTES };
+const NOTHING: GateOutput = { act: false, delaySeconds: 0, nextCheckMinutes: DEFAULT_CHECK_MINUTES };
 
 interface GateInput {
   conv: Conversation;
@@ -93,7 +93,7 @@ export const styleSummary = (now: Date): string =>
   readNotes(now).filter((n) => n.category === "style").slice(0, STYLE_NOTES).map((n) => n.text.replace(/\s+/g, " ").trim().slice(0, STYLE_CHARS)).join("; ");
 
 // All of the conversation's own notes as data, bounded like every other prompt that includes notes.
-export function notesText(conv: Conversation, now: Date): string {
+function notesText(conv: Conversation, now: Date): string {
   const notes = readNotes(now, conv.notesDir, zoneOf(conv));
   return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
@@ -181,7 +181,7 @@ const gateOptions = (system: string): Options => haikuOptions(system, { ...GATE_
 // everything about one conversation (notes, log, clock) goes in the prompt sent at query time. So the spare belongs to no
 // conversation and any group's look may take it, provided the system prompt is exactly the one it was built with (the key).
 const SPARE_ID = "gate";
-export const gateSpare = new SpareSlot<WarmQuery>({ maxAgeMs: WARM_IDLE_MINUTES * 60_000, idleMs: () => WARM_IDLE_MINUTES * 60_000 });
+const gateSpare = new SpareSlot<WarmQuery>({ maxAgeMs: WARM_IDLE_MINUTES * 60_000, idleMs: () => WARM_IDLE_MINUTES * 60_000 });
 const spareSystem = (now: Date) => gateSystem(styleSummary(now));
 
 export function prepareGate(now: Date = new Date(), start: typeof startup = startup, system: string = spareSystem(now)): void {

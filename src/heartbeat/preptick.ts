@@ -20,14 +20,14 @@ import { claimMeeting, claimedMeetings, giveBack, openMeetings, prepDue, prepSki
 //   * A look that did not tell it gives it back once while there is time; a look that told it marks it sent. Otherwise it is an ordinary look: the same floor, judge and budget as any other.
 //   * Only the conversations with a calendar: the owner's, a friend's whose set has Google calendar; a group never.
 
-export const NIGHT_FROM = 23; // the deep night, fixed: no prep between these hours (her zone)
-export const NIGHT_TO = 6;
+const NIGHT_FROM = 23; // the deep night, fixed: no prep between these hours (her zone)
+const NIGHT_TO = 6;
 
 /** Does this conversation have meeting prep at all: switched on and a calendar in its capability set (the owner's connector, a friend's own Google). */
 export const prepEnabled = (conv: Conversation): boolean => settings.prepMinutes > 0 && allows(conv, "calendar") && allows(conv, "heartbeat");
 
 /** May a prep be claimed at this moment? Not in the deep night, not while her /quiet is on. */
-export const prepAllowedNow = (conv: Conversation, now: Date): boolean => !inQuietHours(now, NIGHT_FROM, NIGHT_TO, zoneOf(conv)) && !isQuiet(conv, now);
+const prepAllowedNow = (conv: Conversation, now: Date): boolean => !inQuietHours(now, NIGHT_FROM, NIGHT_TO, zoneOf(conv)) && !isQuiet(conv, now);
 
 /** One conversation's tick: sweeps what is too late, drops what the rules skip, claims what is due (the look says it). Never throws; never creates a database. Returns how many it claimed. */
 export function claimPreps(conv: Conversation, now: Date): number {

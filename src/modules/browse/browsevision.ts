@@ -4,7 +4,7 @@ import type { PointInfo } from "./browsecdp.ts";
 // The pure rules of the worker's vision: the model may look at a screenshot of the page and click by ref or, when no ref reaches the thing, at a point; the guard looks up the element under the point itself (browsecdp.ts) and decides
 // the click exactly as it decides a ref click. Nothing here relaxes a rule of browserules.ts / browseguard.ts: it only adds a way in.
 
-export const VIEWPORT = { width: 1280, height: 800 }; // browseserver.ts starts the browser at this size
+const VIEWPORT = { width: 1280, height: 800 }; // browseserver.ts starts the browser at this size
 export const MAX_SHOTS = 10; // screenshots per run: each one stays in the context of every later model call
 export const MAX_POINT_CLICKS = 30; // point clicks per run, over and above the commit cap
 

@@ -11,9 +11,9 @@ import { ASSISTANTS_DIR } from "./paths.ts";
 //
 // This file imports nothing of the harness (settings.ts reads it for its defaults), only the file system.
 
-export interface CoreSkill { readonly name: string; readonly required?: boolean }
-export interface Limits { readonly maxTurns: number; readonly maxBudgetUsd: number }
-export interface Rhythm {
+interface CoreSkill { readonly name: string; readonly required?: boolean }
+interface Limits { readonly maxTurns: number; readonly maxBudgetUsd: number }
+interface Rhythm {
   // everyMinutes: the free tick (no model); dayMinutes: the heartbeat run's default gap between two looks in the day.
   readonly heartbeat: { readonly everyMinutes: number; readonly dayMinutes: number };
   // The nightly dream (dream.ts): the same for every conversation. A direct chat (the owner's, a friend's) is dreamt once she wrote `minNewLines.direct` lines since the

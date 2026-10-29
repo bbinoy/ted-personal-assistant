@@ -7,7 +7,7 @@ import { settings } from "./settings.ts";
 //   helper a small bounded call a run waits on (the approval judge, the participation gate, a language check): never queues either, because the look that is waiting on its judge
 //          holds a place itself and would otherwise deadlock when the places are all looks
 //   dream  dream / quiet compaction: waits for a free place. (A look takes its place like a chat turn: the same agent, the same rules. Their startup spacing is the stagger, wake.ts.)
-export const RUN = { chat: { urgent: true }, helper: { urgent: true }, dream: { priority: 5 } } as const;
+const RUN = { chat: { urgent: true }, helper: { urgent: true }, dream: { priority: 5 } } as const;
 export type RunKind = keyof typeof RUN;
 
 export const runGate = new Limiter(() => settings.maxConcurrentRuns);

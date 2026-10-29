@@ -21,7 +21,7 @@ export interface ConfirmDelete {
   actions?: readonly string[];
 }
 
-export const NEVER_NAME = /(^|[_-])(trash|delete|purge|erase|destroy|spam|junk|block(ed)?)([_-]|$)/i;
+const NEVER_NAME = /(^|[_-])(trash|delete|purge|erase|destroy|spam|junk|block(ed)?)([_-]|$)/i;
 
 // By name: the part after the server name ("mcp__x__delete_thing" -> "delete_thing"), matched at word boundaries, so "blockquote" is not a block.
 // Tools the manifest lists never get here: their row says what they are.

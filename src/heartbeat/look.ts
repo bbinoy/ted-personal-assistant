@@ -38,7 +38,7 @@ import { meetingsWaiting } from "./preptick.ts";
 // It answers with a message or [[silent]] and the minutes until its next look.
 // What code keeps whatever the model decides: pause and mayRun, the next look clamped to 10..120 minutes also at night, and one row per look in the looks table of instance.db (counts, never words).
 
-export interface RunExtra {
+interface RunExtra {
   expertContext?: string; // the facts and chat tail the look has, appended by code to every brief it hands an expert (delegation.ts)
   untrusted?: boolean;
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
@@ -61,7 +61,7 @@ export interface HeartbeatDeps {
 }
 
 // A run whose wall time exceeds its monotonic time by more than this spanned a sleep: whatever it ended with (a timeout, a dead connection) is the sleep's, not a failure.
-export const SLEEP_DRIFT_MS = 60_000;
+const SLEEP_DRIFT_MS = 60_000;
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 

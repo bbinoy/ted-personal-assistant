@@ -7,7 +7,7 @@ import { cleanSvg } from "./svgclean.ts";
 // White background (a dark-mode viewer would show a transparent PNG as black), the long side between 800 and 1600 px.
 
 export const MAX_SIDE = 1600;
-export const MIN_SIDE = 800;
+const MIN_SIDE = 800;
 const FONT_FAMILY = process.platform === "darwin" ? "Helvetica" : process.platform === "win32" ? "Arial" : "DejaVu Sans";
 
 export type Rendered = { ok: true; png: Buffer; width: number; height: number; removed: string[] } | { ok: false; message: string };

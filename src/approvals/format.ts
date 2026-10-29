@@ -78,7 +78,7 @@ const SKIP_VALUES = new Set(["primary"]);
 // --- an outgoing mail, the same for every provider (toolmanifest.ts mailView) ---
 
 // The most of a text (a mail body, a long field) an approval shows; whatever is beyond is announced. One limit for the details and the footer.
-export const MAX_SHOWN = 3000;
+const MAX_SHOWN = 3000;
 
 // A reply draft is the new text ABOVE the quoted original ("> ..." lines, or "On <date> <name> wrote:").
 // The owner only needs to read what is new; the whole draft is still what gets sent and checked.
@@ -94,7 +94,7 @@ export function authoredPart(body: string): { text: string; hasQuote: boolean } 
   return { text: [body.slice(0, i).trim(), ...below].filter(Boolean).join("\n"), hasQuote: true };
 }
 
-export function cutBody(body: string): string {
+function cutBody(body: string): string {
   const { text, hasQuote } = authoredPart(body);
   const cut = clipText(text, MAX_SHOWN);
   return hasQuote ? `${cut}\n\n(the quoted original follows below it in the email)` : cut;
@@ -103,7 +103,7 @@ export function cutBody(body: string): string {
 // Recipients and subject come from the mail client or the model (the subject from the sender of the mail being answered): one clean
 // line each, so a line break cannot fake another header and an invisible or right-to-left character cannot disguise an address.
 // Bcc and attachments are always shown when there are any: they are what a send must not hide.
-export function mailHeader(d: Pick<MailView, "to" | "cc" | "bcc" | "subject" | "hasAttachments" | "attachments">): string {
+function mailHeader(d: Pick<MailView, "to" | "cc" | "bcc" | "subject" | "hasAttachments" | "attachments">): string {
   const list = (a: string[]) => a.map((x) => clip(x, 200)).join(", ");
   return [
     `To: ${d.to.length ? list(d.to) : "(nobody yet)"}`,

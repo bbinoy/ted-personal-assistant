@@ -20,7 +20,7 @@ export const MAX_SIDE = 1568; // the model does not look closer at a bigger pict
 const KEEP_BYTES = 1_500_000; // a small enough picture in a supported format goes through untouched
 const MAX_SENT_BYTES = 4_500_000; // the API refuses more than 5 MB per image
 export const MAX_PICTURES = 5; // per turn, newest first
-export const MAX_PIXELS = 150_000_000; // a phone panorama is ~100 MP; a small file can still claim 400 MP and take gigabytes to decode
+const MAX_PIXELS = 150_000_000; // a phone panorama is ~100 MP; a small file can still claim 400 MP and take gigabytes to decode
 
 const run = promisify(execFile);
 

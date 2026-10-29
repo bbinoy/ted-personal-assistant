@@ -54,9 +54,9 @@ export const stillTrue = (held: readonly Held[], now: number): Held[] => held.fi
 // at least LONG_AWAKE_MS of time the Mac was AWAKE. Awake time is the monotonic clock (on macOS it stands still while the Mac sleeps, heartbeat.ts sleptFor), so a night of sleep between
 // two failures adds nothing; a look stopped by a sleep, or cut by its ceiling across one, is not a failure at all (look.ts). The look that then runs reads the fact and decides whether it is
 // worth one line. A look that works ends the streak, with no "back to normal".
-export const LONG_FAILS = 3;
-export const LONG_AWAKE_MS = 2 * 3_600_000;
-export type Scope = "owner" | "group" | "tenant";
+const LONG_FAILS = 3;
+const LONG_AWAKE_MS = 2 * 3_600_000;
+type Scope = "owner" | "group" | "tenant";
 interface Streak {
   n: number;
   since: number; // wall clock (ms) of the first failure: what the fact says
@@ -109,7 +109,7 @@ const heldOf = (r: HeldRow): Held => ({ text: r.text, why: r.why === "cap" ? "ca
 const HELD_SQL = "SELECT text, why, at FROM held_posts ORDER BY seq";
 
 /** How many posts are held (the usual tick: one small query, nothing more). */
-export const heldCount = (conv: Pick<Conversation, "convId">): number => peekConvDb(conv.convId)?.num("SELECT COUNT(*) FROM held_posts") ?? 0; // (a tick asks every conversation: it makes no database)
+const heldCount = (conv: Pick<Conversation, "convId">): number => peekConvDb(conv.convId)?.num("SELECT COUNT(*) FROM held_posts") ?? 0; // (a tick asks every conversation: it makes no database)
 /** The held posts, oldest first (a read for the tests and the doctor). */
 export const heldPosts = (conv: Pick<Conversation, "convId">): Held[] => convDb(conv.convId).all<HeldRow>(HELD_SQL).map(heldOf);
 /** Forget the day's count and everything held (tests). */

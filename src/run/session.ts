@@ -26,7 +26,7 @@ type SessionPlan = "fresh" | "resume" | "resume then compact";
 // chat must not run into the model's context window). "quiet": from the heartbeat, once nobody has written for a while, so
 // nobody waits for it. "off": the caller only wants to know fresh or resume.
 export type CompactMode = "off" | "quiet" | "urgent";
-export const URGENT_FACTOR = 1.5;
+const URGENT_FACTOR = 1.5;
 
 export interface PlanOpts {
   compactTokens: number;

@@ -7,7 +7,7 @@ import { INSTANCE_KEY_COOLDOWN, tenantEnv } from "./payer.ts";
 import { connectionSummary } from "./connections.ts";
 import { capabilitiesOfRecord } from "./capabilityset.ts";
 import { invitePerson } from "./registration.ts";
-import { OWNER_ID, people, setStatus, tenantById, tenantContext, type TenantContext } from "./tenants.ts";
+import { OWNER_ID, people, setStatus, tenantById, tenantContext } from "./tenants.ts";
 import { appBao, deleteTenantItems, TENANT_ID } from "../secrets/secrets.ts";
 import { removeTenant, type RemovalDeps } from "./removal.ts";
 
@@ -122,4 +122,4 @@ export function createTenantAdminServer(deps: AdminDeps = {}) {
   });
 }
 
-export type { TenantContext };
+;

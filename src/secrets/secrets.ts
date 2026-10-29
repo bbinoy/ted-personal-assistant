@@ -89,7 +89,7 @@ export const keychainNames = (prefix: string = settings.openbao.keychainPrefix) 
   share: (n: number) => `${prefix}-unseal-${n}`,
 });
 
-export function caPemOf(path: string): string | undefined {
+function caPemOf(path: string): string | undefined {
   try {
     return readFileSync(path, "utf8");
   } catch {

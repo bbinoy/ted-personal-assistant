@@ -104,7 +104,7 @@ export type Runner = (prompt: string, system?: string) => Promise<unknown>;
 
 // The model that proposes the changes: no tools, one JSON answer, on whoever pays (payer.ts: the login for the owner's and a group's dream, the instance key and her
 // cost file for a friend's). A refusal of the API is thrown (errors.ts), any other failure too.
-export const runnerFor = (payer: Payer = LOGIN): Runner => async (prompt, system = dreamSystem({ subject: OWNER, kind: "owner", categories: preset().notes.dream })) => {
+const runnerFor = (payer: Payer = LOGIN): Runner => async (prompt, system = dreamSystem({ subject: OWNER, kind: "owner", categories: preset().notes.dream })) => {
   const r = await oneShot({ system, prompt, payer, schema: SCHEMA, model: settings.model, gate: "dream", options: { maxTurns: 3, maxBudgetUsd: 0.6 } });
   if (!r.ok) throw r.error ?? new Error("the dream run failed");
   return r.output;
