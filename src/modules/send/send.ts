@@ -101,7 +101,7 @@ export function createSendServer(key: string) {
   return createSdkMcpServer({
     name: "send",
     version: "1.0.0",
-    alwaysLoad: true, // its schema is in the prompt from the first call: a deferred tool is only found by searching for it, and the model never does
+    alwaysLoad: true, // its schema is in the prompt from the first call, and the first turn waits for this server (Ted's runs are never handed ToolSearch, so nothing is deferred anyway)
     tools: [
       tool(
         "send",

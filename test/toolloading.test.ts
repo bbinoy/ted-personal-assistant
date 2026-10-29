@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { serversFor } from "../src/modules/runtime.ts";
 import { OWNER_CHAT } from "./runkinds.ts";
 
-// Context is a budget: every tool an owner run always loads is paid on every call; the rest is found with ToolSearch (its skill or the persona names it). The set of always-loaded
+// Context is a budget: every tool an owner run always loads is paid on every call; the rest is not pinned (Ted's runs have no ToolSearch, so every tool is in the prompt anyway; the pin is the SDK's alwaysLoad flag). The set of always-loaded
 // tools is pinned here, so adding a tool to it is a decision, not a side effect.
 
 interface Registered { _meta?: Record<string, unknown> }
