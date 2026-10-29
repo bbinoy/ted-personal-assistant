@@ -8,7 +8,7 @@ import type { Plan } from "./dreamplan.ts";
 // "What I learned overnight": the notes change without the person being asked (the nightly dream tidies and adds, a background look saves a note), and this makes that VISIBLE
 // without nagging. CODE records each such change where it happens (recordDream, recordLook: a row in the conversation's assistant.db, learned_changes), and later ONE short list is built from
 // the rows not yet told (planBatch / commitBatch): every conversation gets it as a fact in its next run (learnedFact, heartbeat/facts.ts),
-// which says it in its own words (and so keeps quiet hours); the owner's daily brief gets it in its expert's context like any look. A row is told once (its `batch`), so nothing repeats. Taking one back is an ordinary chat turn (forget_note, undo_dream).
+// which says it in its own words (and so keeps quiet hours); a look that carries a routine (the daily brief) is not handed it, so it waits for the next ordinary run. A row is told once (its `batch`), so nothing repeats. Taking one back is an ordinary chat turn (forget_note, undo_dream).
 // Groups are off: their notes are shared, and what they keep stays as it was (nothing is recorded for one).
 
 export const MAX_LISTED = 9; // one list holds at most this many (the rest go in the next one)
@@ -157,7 +157,7 @@ export function learnedFact(conv: ConvId, dir: string, now: number): { text: str
   if (!batch) return undefined;
   if (!batch.items.length && !batch.notes.length) return void commitBatch(conv, batch, now); // (only changes that no longer hold: settled without a word)
   return {
-    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you saved while looking):\n${learnedBody(batch.items, batch.notes)}\nIn this message, tell the person about these changes, briefly and in your own voice: one short line each, or one line for several (in the daily brief, under its 🧠 Learned overnight section). Say how to undo one: "forget <note>", or "undo the dream" for the night's tidy-up. If you say nothing, it stays for the next run.`,
+    text: `Notes of the person's that changed on their own since you last said so (the nightly dream's tidy-up, and what you saved while looking):\n${learnedBody(batch.items, batch.notes)}\nIn this message, tell the person about these changes, briefly and in your own voice: one short line each, or one line for several. Say how to undo one: "forget <note>", or "undo the dream" for the night's tidy-up. If you say nothing, it stays for the next run.`,
     told: () => void commitBatch(conv, batch, now),
   };
 }

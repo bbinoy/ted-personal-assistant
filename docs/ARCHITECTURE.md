@@ -308,7 +308,7 @@ Working memory is the conversation's resumed session. Episodic memory is `logs/a
 - `setup-`, `voice-` and `status-` notes are refused; at most 8 writes and 12 deletes;
 - notes are snapshotted first (7 kept) and `undo_dream` restores them; a note changed while the model ran is skipped.
 
-**What I learned overnight** (`src/memory/learned.ts`). The dream's changes and a look's notes are recorded and told once, to every conversation but a group, as the same `learnedFact` in its next run (the owner's brief expert gets it with the look's context). Groups are off: their notes are shared and nothing is recorded.
+**What I learned overnight** (`src/memory/learned.ts`). The dream's changes and a look's notes are recorded and told once, to every conversation but a group, as the same `learnedFact` in its next run (a run that carries a routine, the brief, is not handed it: the next ordinary run says it). Groups are off: their notes are shared and nothing is recorded.
 
 **Corrections** (no code path of their own). A 👎 on something Ted did or sent, an undo, or "don't do that" is learned by the run itself under the general learn rule in the persona (`learn.md`): it works out the rule and saves a note. A reaction turn is given the reacted message (fenced as data) and the journal lines around it with their "why" (`journalAround`). The model writes the note; no code checks it (notes grant nothing; every action is still judged).
 

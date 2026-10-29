@@ -118,6 +118,16 @@ test("factsFor hands the owner's look the learned block (the brief's expert cont
   assert.match(again.blocks.join("\n"), /people-di/, "nothing was said: still owed, to a chat turn too");
   again.done({ ended: true, said: true } as never);
   assert.doesNotMatch(F.factsFor(owner(), new Date(NOW + 2 * HOUR), false).blocks.join("\n"), /people-di/, "told once");
+  // a look that carries a routine (the brief) is not handed them: it would settle them without saying them
+  saved({ convId: OWNER_CONV, notesDir: NOTES_DIR }, "people-ed.md", "Ed moved");
+  writeFileSync(join(NOTES_DIR, "routine-daily-brief.md"), "---\nwhen: every day at 07:30\n---\nRun the ted-personal-assistant:daily-brief skill.\n");
+  peekConvDb(OWNER_CONV)?.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-daily-brief', ?)", NOW - 5 * 86_400_000);
+  const withRoutine = F.factsFor(owner(), new Date(NOW), false);
+  assert.match(withRoutine.routines, /daily-brief: due now/);
+  assert.doesNotMatch(withRoutine.blocks.join("\n"), /notes_changed_facts/, "left for the next ordinary run");
+  withRoutine.done({ ended: true, said: true } as never);
+  rmSync(join(NOTES_DIR, "routine-daily-brief.md"));
+  assert.match(F.factsFor(owner(), new Date(NOW + HOUR), false).blocks.join("\n"), /people-ed/, "still owed");
   const g = "R3JvdXAxR3JvdXAxR3JvdXAx";
   groupDir(g, "Chess");
   assert.doesNotMatch(F.factsFor(groupConversation(g), new Date(NOW), false).blocks.join("\n"), /notes_changed_facts/);

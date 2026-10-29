@@ -130,8 +130,6 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
   const welcome = looker.own ? takeWelcome() : ""; // (once ever, on the owner's first run, whichever it is)
   const handed = looker.tasks ? waitingReminders(conv).filter((w) => grab(`rem:${w.item.id}|${w.key}`)) : [];
   const prepping = looker.meetings ? waitingMeetings(conv).filter((m) => grab(`prep:${m.eventId}|${m.startMs}`)) : [];
-  const learned = !isBusy(conv.key, "learned") ? learnedFact(conv.convId, conv.notesDir, t) : undefined; // notes that changed on their own (memory/learned.ts; a group has none: its notes are shared and nothing is recorded)
-  if (learned) grab("learned");
   const tasks = looker.tasks ? tasksFacts(conv.key, t, zone) : { text: "", fromMail: false };
   const dueFacts = looker.tasks ? reminderFacts(handed, attended ? [] : activeItems(conv.key), { now: t, zone, group: conv.kind === "group" }) : "";
   const skill = `${PLUGIN}:meeting-prep`;
@@ -151,6 +149,8 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
     if (!started.has(name) && routines?.due?.routine.name === name) (started.add(name), markStarted(conv.convId, name, routines.due.plan.slot.date, Date.now())); // (a second delegation of the same routine is not another attempt)
   };
 
+  const learned = !routines?.due && !isBusy(conv.key, "learned") ? learnedFact(conv.convId, conv.notesDir, t) : undefined; // notes that changed on their own (memory/learned.ts; a group has none). A run that carries a routine (the brief) is not handed them: it would be marked told without saying them, so the next ordinary run does
+  if (learned) grab("learned");
   const lapsedNow = !attended && !isBusy(conv.key, "lapsed") ? lapsedIn(conv.key).slice() : [];
   const lapsed = lapsedFact(conv.convId, lapsedNow, t);
   if (lapsed) grab("lapsed");
