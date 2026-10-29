@@ -27,7 +27,7 @@ export interface ClipTools {
   probe(file: string): Promise<AudioInfo | string>;
 }
 
-export interface BuildOptions {
+interface BuildOptions {
   /** An audio file somebody sent, not a voice message: it must really be audio (not video), and only the first AUDIO_FILE_MAX_SECONDS are searched instead of refusing a long one. */
   file?: boolean;
 }
