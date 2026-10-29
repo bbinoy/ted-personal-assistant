@@ -11,6 +11,10 @@ Notion** (no page edit, no new page, no row for a task): after the
 move the Notion table is an archive nobody updates. If the owner asks to bring tasks
 over from Notion again, read Notion and use `add_task` for each, like any other request.
 
+## Lists are not tasks
+
+Something the owner collects (a book or film recommendation, a restaurant to try, a gift idea) goes on the list they keep for that kind of thing (a Notion page or database, say), with who recommended it and when, not on the task list. A task is only for something to do: a recommendation becomes one only if they ask to be reminded to act on it. Where each list lives is a `setup-lists` note (kind: location); if it has none for this kind, search Notion for the list and save it there, and if no list exists, ask once whether to start one or keep it as a note.
+
 ## Read before you add
 
 Call `list_tasks` first (it also tells you today's date and time zone), so you never add a
