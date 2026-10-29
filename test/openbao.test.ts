@@ -32,12 +32,12 @@ test("client: write, read, list and delete an item; a delete removes it for good
 test("client: it fails closed with a plain message that holds no value, token or server text", async () => {
   const fake = await startFakeBao();
   await fake.bao().write("tenants/owner/profile/x", { value: FAKE });
-  const check = async (mode: Partial<typeof fake.mode>, re: RegExp, o: { token?: string } = {}) => {
+  const check = async (mode: Partial<typeof fake.mode>, re: RegExp, o: { token?: string; timeoutMs?: number } = {}) => {
     Object.assign(fake.mode, { down: false, sealed: false, garbage: false, delayMs: 0 }, mode);
-    await assert.rejects(fake.bao({ timeoutMs: 100, ...o }).read("tenants/owner/profile/x"), (e: Error) => e instanceof BaoError && re.test(e.message) && ![FAKE, fake.token, "permission denied", "Vault is sealed"].some((v) => e.message.includes(v)), JSON.stringify(mode));
+    await assert.rejects(fake.bao(o).read("tenants/owner/profile/x"), (e: Error) => e instanceof BaoError && re.test(e.message) && ![FAKE, fake.token, "permission denied", "Vault is sealed"].some((v) => e.message.includes(v)), JSON.stringify(mode));
   };
   await check({ down: true }, /not reachable/);
-  await check({ delayMs: 600 }, /not reachable/); // a timeout
+  await check({ delayMs: 60_000 }, /not reachable/, { timeoutMs: 100 }); // a timeout (only this case is short: a normal answer on a loaded machine must not hit it)
   await check({ sealed: true }, /sealed/);
   await check({ garbage: true }, /not JSON/);
   await check({}, /refused/, { token: "unknown-token" });
@@ -100,7 +100,7 @@ test("doctor: unsealed and narrow is OK; sealed, unreachable, a broad token and 
   const fake = await startFakeBao();
   const cfg = { ...settings.openbao, addr: fake.url, caCert: "/nonexistent" };
   const withToken = (t: string | undefined): Keychain => ({ get: async () => t, set: async () => {}, remove: async () => true });
-  const mk = (tenant: string) => () => new OpenBao({ addr: fake.url, mount: "ted", token: async () => fake.tokenFor(tenant), timeoutMs: 300 });
+  const mk = (tenant: string) => () => new OpenBao({ addr: fake.url, mount: "ted", token: async () => fake.tokenFor(tenant), timeoutMs: 5000 });
   const base = { cfg, keychain: withToken(fake.token), bao: mk("owner") };
 
   let r = await lines(base);

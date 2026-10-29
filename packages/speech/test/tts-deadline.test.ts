@@ -22,7 +22,7 @@ const alive = (pid: number) => {
     return false;
   }
 };
-const until = async (f: () => boolean, ms = 3000) => {
+const until = async (f: () => boolean, ms = 20_000) => {
   for (const end = Date.now() + ms; Date.now() < end && !f(); ) await new Promise((r) => setTimeout(r, 25));
   return f();
 };

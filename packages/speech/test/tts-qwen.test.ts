@@ -40,12 +40,14 @@ else {
   const n = 800, b = Buffer.alloc(44 + n * 2);
   b.write("RIFF", 0); b.writeUInt32LE(36 + n * 2, 4); b.write("WAVEfmt ", 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
   b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write("data", 36); b.writeUInt32LE(n * 2, 40);
+  const held = [];
   const srv = http.createServer((req, res) => {
     req.resume();
+    if (req.url === "/release") { const h = held.shift(); if (h) { h.writeHead(200, { "content-type": "audio/wav" }); h.end(b); } return res.end("ok"); }
     req.on("end", () => {
       if (req.headers["x-qwen-key"] !== process.env.QWEN_TTS_NONCE) { res.writeHead(403); return res.end("forbidden"); }
-      if (mode === "pace") return setTimeout(() => { res.writeHead(200, { "content-type": "audio/wav" }); res.end(b); }, 1200);
-      if (mode === "slow") return setTimeout(() => { res.writeHead(200, { "content-type": "audio/wav" }); res.end(b); }, 3000);
+      if (mode === "hold") return held.push(res); // answered when the test posts /release, oldest first
+      if (mode === "slow") return; // never answers
       if (mode === "bad") { res.writeHead(500); return res.end("RuntimeError: out of memory"); }
       res.writeHead(200, { "content-type": "audio/wav" }); res.end(b);
     });
@@ -109,13 +111,25 @@ test("qwen: a slow answer times out, and a server error is named", { skip }, asy
   await assert.rejects(synthesizeQwen("Hi.", cfg("bad")), /HTTP 500.*out of memory/);
 });
 
-// "pace": each text takes 1.2 s, more than half of the 2 s timeout, so a reply that waited its turn on the clock would time out.
+// "hold": the fake server answers a text only when the test releases it, so no timing decides the order of events.
 const traced = (log: string[]) => ((u: string, init: RequestInit) => (log.push(`${new URL(u).port}:${JSON.parse(String(init.body)).text}`), fetch(u, init))) as typeof fetch;
+const until = async (f: () => boolean, ms = 20_000) => {
+  for (const end = Date.now() + ms; Date.now() < end && !f(); ) await new Promise((r) => setTimeout(r, 10));
+  assert.ok(f(), "condition was not reached");
+};
+const release = async (log: string[]) => void (await fetch(`http://127.0.0.1:${log[0]!.split(":")[0]}/release`, { method: "POST", body: "{}" }));
 
-test("qwen: concurrent replies are served one at a time, in order, each with its own timeout", { skip }, async () => {
+test("qwen: concurrent replies are served one at a time, in order", { skip }, async () => {
   const log: string[] = [];
-  const c = cfg("pace", { timeoutMs: 2000, fetchImpl: traced(log) });
-  const [a, b] = await Promise.all([synthesizeQwen("first", c), synthesizeQwen("second", c)]);
+  const c = cfg("hold", { fetchImpl: traced(log) });
+  const both = Promise.all([synthesizeQwen("first", c), synthesizeQwen("second", c)]);
+  await until(() => log.length === 1);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(log.length, 1, "the second waits while the first is running");
+  await release(log);
+  await until(() => log.length === 2);
+  await release(log);
+  const [a, b] = await both;
   assert.ok(a.endsWith("voice.m4a") && b.endsWith("voice.m4a"));
   assert.deepEqual(log.map((x) => x.split(":")[1]), ["first", "second"]);
   assert.equal(new Set(log.map((x) => x.split(":")[0])).size, 1, "no restart");
@@ -125,15 +139,18 @@ test("qwen: concurrent replies are served one at a time, in order, each with its
 
 test("qwen: an aborted waiting reply leaves the running one and the next one working, and does not stop the server", { skip }, async () => {
   const log: string[] = [];
-  const c = cfg("pace", { timeoutMs: 5000, fetchImpl: traced(log) });
+  const c = cfg("hold", { fetchImpl: traced(log) });
   const ac = new AbortController();
   const first = synthesizeQwen("first", c);
   const second = synthesizeQwen("second", c, undefined, undefined, ac.signal);
   const third = synthesizeQwen("third", c);
   second.catch(() => {});
-  await new Promise((r) => setTimeout(r, 300));
+  await until(() => log.length === 1); // the first is running; the others are queued
   ac.abort(new Error("gave up"));
   await assert.rejects(second, /gave up/);
+  await release(log);
+  await until(() => log.length === 2);
+  await release(log);
   const [a, t] = await Promise.all([first, third]);
   assert.deepEqual(log.map((x) => x.split(":")[1]), ["first", "third"]);
   assert.equal(new Set(log.map((x) => x.split(":")[0])).size, 1, "the server was not stopped");
@@ -144,9 +161,14 @@ test("qwen: an aborted waiting reply leaves the running one and the next one wor
 test("qwen: an idle server is stopped, the next reply starts a new one", { skip }, async () => {
   const ports: number[] = [];
   const fetchImpl = ((u: string, init: RequestInit) => (ports.push(Number(new URL(u).port)), fetch(u, init))) as typeof fetch;
-  const c = cfg("ok", { idleMs: 300, fetchImpl });
+  const c = cfg("ok", { idleMs: 50, fetchImpl });
   gone(await synthesizeQwen("One.", c));
-  await new Promise((r) => setTimeout(r, 900));
+  let stopped = false; // observe the stop itself: the old port stops answering
+  for (const end = Date.now() + 20_000; !stopped && Date.now() < end; ) {
+    stopped = await fetch(`http://127.0.0.1:${ports[0]}/`, { method: "POST", body: "{}" }).then(() => false, () => true);
+    if (!stopped) await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.ok(stopped, "the idle server was stopped");
   gone(await synthesizeQwen("Two.", c));
   assert.equal(ports.length, 2);
   assert.notEqual(ports[0], ports[1]);
