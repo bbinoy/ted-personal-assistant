@@ -322,12 +322,11 @@ test("a look that did not tell it gives the meeting back once while there is tim
 // ---- the look's side: who records, what the instruction says ----
 
 test("the prompt tells a check to record meetings only where prep exists: the owner with PREP_MINUTES on; not when it is 0, not a group", () => {
-  const at = new Date(NOW);
   assert.equal(lookerOf(conv).meetings, true);
-  assert.match(chatSystem(at, undefined, lookerOf(conv)), /note_upcoming_meetings/);
+  assert.match(chatSystem(undefined, lookerOf(conv)), /note_upcoming_meetings/);
   s.prepMinutes = 0;
   assert.equal(lookerOf(conv).meetings, false);
-  assert.doesNotMatch(chatSystem(at, undefined, lookerOf(conv)), /note_upcoming_meetings/);
+  assert.doesNotMatch(chatSystem(undefined, lookerOf(conv)), /note_upcoming_meetings/);
   s.prepMinutes = 15;
   assert.equal(lookerOf(group("meetingprep-group-2")).meetings, false);
 });

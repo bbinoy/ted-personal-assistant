@@ -200,7 +200,7 @@ test("an expert's tool call goes through the same canUseTool: the floor holds, i
 });
 
 test("the prompt states the principle of delegation in every prompt and names the heavy skills (the prompt of a plugin with none would not)", () => {
-  const text = chatSystem(new Date(2026, 9, 14, 14, 0));
+  const text = chatSystem();
   assert.match(text, /subagent_type "expert" \(Sonnet\) or "expert-opus" \(Opus\)/);
   assert.match(text, /Use expert-opus only for hard reasoning or high-stakes writing/);
   assert.match(text, /at most 2 experts per run/);

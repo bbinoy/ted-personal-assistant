@@ -99,7 +99,7 @@ export type Entry = Held & { line: string; said: string; author?: string; arrive
 
 // What a group's turn is made of beyond the shared pipeline.
 export interface GroupDeps {
-  recent?: (conv: Conversation) => string[]; // the tail of that history, for the gate (default gate.ts logTail)
+  recent?: (conv: Conversation) => string[]; // the tail of that history, for the gate (default chattail.ts logTail)
   context?: (groupId: string, since?: string) => { lines: string[]; seenAt?: string }; // what the run is shown (default: the group's log)
   run?: Runner; // default: the real run (group.ts realRunner)
   gate?: Gate;

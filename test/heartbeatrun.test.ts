@@ -11,8 +11,8 @@ import { heartbeatReport } from "../src/heartbeat/report.ts";
 import { chatSystem } from "../src/run/persona.ts";
 import { readRows, type HeartbeatRow } from "../src/core/looks.ts";
 import { readAudit } from "../src/core/audit.ts";
-import { ledgerEntries, recordMessage, type Kind } from "../src/core/messages.ts";
-import { lookState, parseWake } from "../src/conversation/ledger.ts";
+import { ledgerEntries, parseWake, recordMessage, type Kind } from "../src/core/messages.ts";
+import { lookState } from "../src/conversation/ledger.ts";
 import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
@@ -119,7 +119,7 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   assert.match(text, /Quiet hours \(night\) are 22:00-07:00/);
   assert.match(text, /^Background check at /);
   // what to do in a check is the conversation's prompt (the same for a chat turn): the message holds only the time and the facts
-  const rules = chatSystem(DAY);
+  const rules = chatSystem();
   assert.match(rules, /Code holds what you would post unprompted at night/);
   assert.match(rules, /Set "urgent" to true only for what is truly time-critical/);
   assert.match(rules, /working late, tell me everything tonight/);
@@ -135,6 +135,19 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   const prompt = lookPrompt(text, ["[10-14 13:00] Alex: call Eve"]);
   assert.doesNotMatch(prompt, /CURRENT TIME/, "the clock is the run path's (agent.ts)");
   assert.match(prompt, /call Eve/);
+});
+
+test("a look logs one cost line, like a chat turn's replied line", async () => {
+  const { w, conv } = rig(() => ({ message: "Eve waits." }));
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (...a: unknown[]) => void lines.push(a.join(" "));
+  try {
+    await w.look(conv, DAY);
+  } finally {
+    console.log = log;
+  }
+  assert.equal(lines.filter((l) => /^owner look posted \(\$\d+\.\d{4}, 0 tool call\(s\), 0 delegation\(s\)\)$/.test(l)).length, 1, lines.join("\n"));
 });
 
 test("owner's look: ONE heartbeat run with standing provenance, no gate, the message posted, the next look recorded, one row without words", async () => {

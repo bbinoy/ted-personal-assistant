@@ -5,9 +5,10 @@ import { dirname, join } from "node:path";
 import { convPaths, OWNER_CONV } from "../src/core/convpaths.ts";
 import { styleLines } from "../src/memory/notes.ts";
 import { group, owner } from "../src/conversation/conversation.ts";
-import { askGateWith, GATE_MAX_DELAY_SECONDS, GATE_SCHEMA, gatePrompt, gateSystem, logTail, parseGate, styleSummary, tailLine } from "../src/conversation/gate.ts";
+import { askGateWith, GATE_MAX_DELAY_SECONDS, GATE_SCHEMA, gatePrompt, gateSystem, parseGate, styleSummary } from "../src/conversation/gate.ts";
+import { logTail, tailLine } from "../src/run/chattail.ts";
 import { clampCheck, lookState, lookWhy, wakeText } from "../src/conversation/ledger.ts";
-import { compactIfNeeded, findMessage, messagesSince, noticeLines, recordMessage, type Kind, type Sent } from "../src/core/messages.ts";
+import { compactIfNeeded, findMessage, messagesSince, recordMessage, type Kind, type Sent } from "../src/core/messages.ts";
 import { conversationLines } from "../src/conversation/dream.ts";
 import { groupContext, groupLogFile } from "../src/conversation/groupstore.ts";
 import { AuthError, RateLimitError } from "../src/tenants/errors.ts";
@@ -158,8 +159,7 @@ test("ledger kinds never reach anything that reads the log as conversation", asy
   assert.equal(groupContext(g.groupId!).lines.length, 1);
   assert.equal(groupContext(g.groupId!, undefined, 25).lines.length, 1);
   assert.equal(groupContext(g.groupId!, at(-10)).lines.length, 1);
-  // notices are a separate filter, and compaction does not summarize ledger lines
-  assert.deepEqual(noticeLines(messagesSince(undefined, file), T0), []);
+  // compaction does not summarize ledger lines
   let folded: Sent[] = [];
   for (let i = 0; i < 30; i++) rec(i % 2 ? "wake" : "chat", 100 + i, i % 2 ? JSON.stringify({ next: at(30), looked: at(0) }) : `Ted: line ${i} ${"y".repeat(80)}`, 10 + i);
   assert.equal(await compactIfNeeded(async (_p, old) => ((folded = [...old]), "short"), 1500, file), true);

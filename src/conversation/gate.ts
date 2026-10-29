@@ -4,12 +4,10 @@ import { haikuOptions, oneShot } from "../tenants/haiku.ts";
 import { LOGIN, type Payer } from "../tenants/payer.ts";
 import { fence } from "../core/fence.ts";
 import { groupNotesBlock } from "./groupstore.ts";
-import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES, parseWake } from "./ledger.ts";
-import { ledgerEntries, withoutDeleted, type Sent } from "../core/messages.ts";
+import { clampCheck, DEFAULT_CHECK_MINUTES, MAX_CHECK_MINUTES, MIN_CHECK_MINUTES } from "./ledger.ts";
 import type { Conversation } from "./conversationmodel.ts";
-import { speakerOf, zoneOf } from "../tenants/tenants.ts";
+import { zoneOf } from "../tenants/tenants.ts";
 import { readNotes } from "../memory/notes.ts";
-import { localTime } from "../core/timezone.ts";
 import { isOneEmoji } from "../core/reaction.ts";
 import { GATE_DEFAULTS } from "../run/persona.ts";
 import { OWNER, settings, WARM_IDLE_MINUTES } from "../core/settings.ts";
@@ -98,49 +96,6 @@ export function notesText(conv: Conversation, now: Date): string {
   return groupNotesBlock(notes.slice(0, settings.memoryMaxNotes)) || "";
 }
 
-
-// Pure: one log line as the model reads it. The ledger shows up as what Ted did and planned. `who` is the person in the chat (speakerOf).
-export function tailLine(m: Sent, who: string = OWNER): string {
-  const t = `[${localTime(m.at)}]`;
-  if (m.kind === "wake") {
-    const w = parseWake(m.text);
-    return w ? `${t} (you looked and planned to look again at ${localTime(w.next)})` : `${t} (you looked)`;
-  }
-  const flat = m.text.replace(/\n+/g, " / ").slice(0, LIMITS.line);
-  if (m.kind === "action") return `${t} (you acted without posting: ${flat})`;
-  if (m.kind === "journal") return `${t} (you did: ${flat})`; // one line per action, with why (core/events.ts); the look reads what it already did and does not repeat it
-  if (m.kind === "owner") return `${t} ${who}: ${flat}`;
-  if (m.kind === "member" || m.kind === "reaction" || m.kind === "delete") return `${t} ${flat}`;
-  if (m.kind === "edit") return `${t} (an edit of an earlier message, not a new one) ${flat}`;
-  return `${t} ${settings.assistant}: ${flat}`;
-}
-
-// The tail the gate and the heartbeat look read: the last `n` lines of the CONVERSATION (what people wrote, the assistant's replies, notices and posts, reactions, edits), and beside them
-// only the newest few bookkeeping lines (a look every 30 minutes writes a wake line and journal lines each time: counted in `n` they pushed yesterday's post out within hours), all in
-// time order. What its author took back is not shown.
-const JOURNAL_IN_TAIL = 12; // what Ted did on his own (journal, and the older "acted without posting" lines); the journal tool has the rest
-const WAKES_IN_TAIL = 3; // when he looked and planned to look again
-const BOOKKEEPING: ReadonlySet<Sent["kind"]> = new Set(["wake", "journal", "action"]);
-export const logTail = (conv: Pick<Conversation, "logFile" | "tenantId">, n = 40): string[] => {
-  const who = speakerOf(conv);
-  const all = withoutDeleted(ledgerEntries(conv.logFile));
-  const keep = new Set([
-    ...all.filter((m) => !BOOKKEEPING.has(m.kind)).slice(-n),
-    ...all.filter((m) => m.kind === "wake").slice(-WAKES_IN_TAIL),
-    ...all.filter((m) => m.kind === "journal" || m.kind === "action").slice(-JOURNAL_IN_TAIL),
-  ]);
-  return all.filter((m) => keep.has(m)).map((m) => tailLine(m, who));
-};
-
-// What the chat log holds that a session has not been shown: the lines newer than `since` (the newest line it was shown, an ISO time), without the looks' own wake lines. A session that has seen
-// nothing (`since` absent: a fresh one) gets the tail. `seenAt`: the newest line of the log, what the session is shown up to (stored with it, session.ts seenAt).
-export function logSince(conv: Pick<Conversation, "logFile" | "tenantId">, since?: string, n = 40): { lines: string[]; seenAt?: string } {
-  const all = withoutDeleted(ledgerEntries(conv.logFile));
-  const seenAt = all.at(-1)?.at;
-  if (!since) return { lines: logTail(conv, n), seenAt };
-  const who = speakerOf(conv);
-  return { lines: all.filter((m) => m.at > since && m.kind !== "wake").slice(-2 * n).map((m) => tailLine(m, who)), seenAt };
-}
 
 // "typing…" is already showing while a delay runs, so a long one only makes the answer late; the cap is enforced in parseGate.
 const delayText = (max: number = GATE_MAX_DELAY_SECONDS): string =>

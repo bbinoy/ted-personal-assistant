@@ -1,6 +1,6 @@
 import { readdirSync, statSync } from "node:fs";
 import type { Conversation } from "./conversation.ts";
-import type { Kind, Sent } from "../core/messages.ts";
+import { parseWake, type Kind, type Sent, type Wake } from "../core/messages.ts";
 
 // The wake/action ledger: the conversation's own log (messages.ts) holds kind "wake" lines (the chosen next look, the last
 // one is the state) and kind "action" lines (something done without posting). Everything
@@ -14,19 +14,6 @@ export const clampCheck = (minutes: unknown): number => {
   const n = Number(minutes);
   return Number.isFinite(n) ? Math.max(MIN_CHECK_MINUTES, Math.min(MAX_CHECK_MINUTES, Math.round(n))) : DEFAULT_CHECK_MINUTES;
 };
-
-interface Wake {
-  next: string; // ISO: the next look
-  looked: string; // ISO: when the look that chose it began (anything said after it is news)
-}
-export function parseWake(text: string): Wake | undefined {
-  try {
-    const w = JSON.parse(text) as Partial<Wake>;
-    return typeof w.next === "string" && Number.isFinite(Date.parse(w.next)) && typeof w.looked === "string" && Number.isFinite(Date.parse(w.looked)) ? { next: w.next, looked: w.looked } : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 
 // ---- the ledger ----

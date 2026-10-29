@@ -37,7 +37,7 @@ test("the bundled daily-brief and meeting-prep skills are heavy: the heartbeat r
 });
 
 test("the prompt names the heavy skills and the routines; the routine fact (time, state, how to deliver) is code's line in the check's message", () => {
-  const prompt = chatSystem(new Date(2026, 9, 14, 8, 0));
+  const prompt = chatSystem();
   assert.match(prompt, /These skills are heavy: never load them yourself[^.]*ted-personal-assistant:daily-brief \(subagent_type "expert-daily-brief"\), ted-personal-assistant:meeting-prep/);
   assert.match(prompt, /Routines are things that happen at a set time/);
   const text = lookInstruction(new Date(2026, 9, 14, 8, 0), undefined);

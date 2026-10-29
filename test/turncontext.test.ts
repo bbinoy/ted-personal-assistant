@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratch } from "./scratch.ts";
 
-// What changes between two messages (what is connected, the messages sent on its own) is not in the chat's system prompt but at the start of the
+// What changes between two messages (what is connected; what other runs posted in the chat is the turn's tail, chattail.ts) is not in the chat's system prompt but at the start of the
 // turn's message, and only when the session has not been told it yet. The system prompt, and with it the warm process and the cached session, stays put.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "turncontext-"));
 
 const { runConversation } = await import("../src/run/agent.ts");
 const { owner } = await import("../src/conversation/conversation.ts");
+const { chatTurn } = await import("../src/run/chattail.ts");
 const { runFor } = await import("../src/run/runoptions.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
 const { recordConnectors } = await import("../src/modules/connectors.ts");
@@ -26,7 +27,7 @@ function rig(sessionId = "s1") {
   // (the owner's prompt reaches the SDK as a message stream, held until the connectors are settled)
   const textOf = async (p: any): Promise<string> => (typeof p === "string" ? p : String((await p[Symbol.asyncIterator]().next()).value.message.content));
   const query = ((p: { prompt: unknown }) => (async function* () { prompts.push(await textOf(p.prompt)); yield sessionOf(sessionId); })()) as any;
-  return { prompts, ask: (text: string) => runConversation(conv, inputs, () => ({ prompt: text }), undefined, { query }) };
+  return { prompts, ask: (text: string) => runConversation(conv, inputs, chatTurn(conv, { prompt: text }), undefined, { query }) };
 }
 const warm = settings.warm;
 
@@ -50,12 +51,13 @@ test("turn context: told at the start of the message once, again when it changes
   recordMessage("notice", Date.now() + 1, "Meeting prep: call at 15:00", new Date());
   await r.ask("third");
   assert.match(r.prompts[2]!, /call at 15:00[\s\S]*third$/);
-  assert.match(r.prompts[2]!, /Meeting prep: call at 11:00/, "the whole block again, not only the change");
+  assert.doesNotMatch(r.prompts[2]!, /call at 11:00/, "only the lines the session has not seen");
   await r.ask("fourth");
   assert.match(r.prompts[3]!, /^CURRENT TIME[^\n]*\n\nfourth$/);
-  forgetShown(conv.convId); // a compaction
+  forgetShown(conv.convId); // a compaction: what is set up is told again, the chat's lines are in the session
   await r.ask("fifth");
-  assert.match(r.prompts[4]!, /call at 15:00[\s\S]*fifth$/);
+  assert.match(r.prompts[4]!, /Not set up yet[\s\S]*fifth$/);
+  assert.doesNotMatch(r.prompts[4]!, /call at 15:00/);
 });
 
 test("turn context: a session that is no longer the one told is told again; a fresh one always", () => {

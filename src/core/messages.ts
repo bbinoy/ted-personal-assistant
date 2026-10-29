@@ -36,13 +36,27 @@ const KEEP_AFTER_COMPACTION = 0.7; // compact down to this share of the limit, s
 // F10 search indexes it; compaction keeps it verbatim for JOURNAL_KEEP_DAYS (below) and never folds it into the summary (compactIfNeeded).
 export type Kind = "chat" | "notice" | "approval" | "draft" | "brief" | "other" | "owner" | "reaction" | "member" | "action" | "wake" | "journal" | "edit" | "delete";
 
+// The ledger's "wake" line: the chosen next look, as JSON.
+export interface Wake {
+  next: string; // ISO: the next look
+  looked: string; // ISO: when the look that chose it began (anything said after it is news)
+}
+export function parseWake(text: string): Wake | undefined {
+  try {
+    const w = JSON.parse(text) as Partial<Wake>;
+    return typeof w.next === "string" && Number.isFinite(Date.parse(w.next)) && typeof w.looked === "string" && Number.isFinite(Date.parse(w.looked)) ? { next: w.next, looked: w.looked } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // THE table of kinds: what each one is, in one place. Every reader that sorts lines by kind asks it (kindIs below) and no module keeps a list of its own.
-//   ledger: not conversation (the gate's state, the journal); inbound: a person wrote it (owner, member); said: the assistant said it to the person; proactive: unprompted (the notices a prompt shows);
+//   ledger: not conversation (the gate's state, the journal); inbound: a person wrote it (owner, member); said: the assistant said it to the person; 
 //   answers: the reply (or the failure notice) of a turn, so lines before it are answered; asks: leaves a question open, so the next line is probably its answer;
 //   search: how the F10 index treats it: the role/author it is found under, "marker" (kept so a deleted message is left out, never a hit) or "none" (not indexed).
 // A line of a kind the table does not know (an old log: "suggestions" and "proposals" are never written any more) still parses; it is indexed as an assistant line and is nothing else.
 type Search = "owner" | "member" | "assistant" | "summary" | "marker" | "none";
-interface KindInfo { ledger?: true; inbound?: true; said?: true; proactive?: true; answers?: true; asks?: true; search: Search }
+interface KindInfo { ledger?: true; inbound?: true; said?: true; answers?: true; asks?: true; search: Search }
 export const KIND_INFO: Readonly<Record<Kind | "summary", KindInfo>> = {
   owner: { inbound: true, search: "owner" },
   member: { inbound: true, search: "member" },
@@ -51,9 +65,9 @@ export const KIND_INFO: Readonly<Record<Kind | "summary", KindInfo>> = {
   reaction: { search: "none" },
   chat: { said: true, answers: true, search: "assistant" },
   other: { said: true, answers: true, search: "assistant" },
-  notice: { said: true, proactive: true, search: "assistant" },
-  brief: { said: true, proactive: true, search: "assistant" },
-  draft: { said: true, proactive: true, asks: true, search: "assistant" },
+  notice: { said: true, search: "assistant" },
+  brief: { said: true, search: "assistant" },
+  draft: { said: true, asks: true, search: "assistant" },
   approval: { said: true, asks: true, search: "none" },
   action: { ledger: true, search: "none" },
   wake: { ledger: true, search: "none" },
@@ -231,20 +245,6 @@ export const messagesSince = (sinceIso?: string, file: string = FILE): Sent[] =>
 
 // Every line including the ledger, oldest first: for the gate (gate.ts) alone.
 export const ledgerEntries = (file: string = FILE): readonly Sent[] => readAll(file).sent; // shared with the cache: read-only
-
-const NOTICE_AGE_MS = 24 * 3600_000; // what the assistant sent on its own stays "recent" for the chat this long
-
-// Pure: what the assistant told the owner on its own in the last day, as plain lines for a prompt,
-// oldest first, the last few only. The chat reads it to understand "yes, do that"; the radar, to
-// avoid saying the same thing twice.
-export function noticeLines(sent: readonly Sent[], now: Date, keep = 8): string[] {
-  return sent
-    .filter((m) => kindIs(m.kind, "proactive") && now.getTime() - Date.parse(m.at) < NOTICE_AGE_MS)
-    .slice(-keep)
-    .map((m) => `[${new Date(m.at).toTimeString().slice(0, 5)}] ${m.text.slice(0, LIMITS.logLine).replace(/\s*\n\s*/g, " / ")}`);
-}
-
-export const recentNotices = (now = new Date()) => noticeLines(readAll().sent, now);
 
 // Pure: which of the lines (oldest first, a summary first of all) must go to get under the limit.
 // Returns how many leading lines to fold into the summary, or 0 when the file is small enough.

@@ -103,7 +103,7 @@ Process-wide records are one SQLite file, `instance/instance.db` (`src/core/db.t
 
 **One agent, two facts.** A run is made of two independent facts (`src/core/runkind.ts`), never of a "source": `who` (the owner's conversation, a group's, a friend's `tenant`, or the `browse` worker a run starts; derived from `Conversation.kind`) and `attended` (someone waits in the chat for the answer). Tools, skills, isolation, the code floor and the asking all follow from these two plus the conversation's capability set; nothing asks what started the run or whether it is "the owner". The audit log keeps a label for who acted (`auditSource`: `chat`, `group`, `background`, `browse`), a name for the log only.
 
-**One builder.** `runFor(conversation, trigger, inputs)` (`src/run/runoptions.ts`) builds the `RunOptions` of every run: a chat turn of the owner, a group or a friend (`trigger` `message`), a look of any of them (`look`) and the warm process (`prepare`). Tools come from `toolsFor(capabilitiesOf(conversation), kind)`, skills from `skillsFor`, the persona from the conversation's kind, the limits from the preset (`test/runoptions.test.ts`). `runConversation` and `runLook` (`src/run/agent.ts`) both end in one function, `runTurn`: the conversation's session for the trigger, the options, the context told in front of the message (what is set up, the facts of `factsFor`, each only when that session was not told it already) and the trigger's own message.
+**One builder.** `runFor(conversation, trigger, inputs)` (`src/run/runoptions.ts`) builds the `RunOptions` of every run: a chat turn of the owner, a group or a friend (`trigger` `message`), a look of any of them (`look`) and the warm process (`prepare`). Tools come from `toolsFor(capabilitiesOf(conversation), kind)`, skills from `skillsFor`, the persona from the conversation's kind, the limits from the preset (`test/runoptions.test.ts`). `runConversation` and `runLook` (`src/run/agent.ts`) both end in one function, `runTurn`: the conversation's session for the trigger, the options, the context told in front of the message (what is set up, the facts of `factsFor`, each only when that session was not told it already; for a private chat turn also the lines other runs posted into the chat since the session last saw it, `chatTurn` in `src/run/chattail.ts`) and the trigger's own message.
 
 What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`, and nothing else branches on the trigger (delegation is not a row: both may delegate, below):
 
@@ -468,6 +468,7 @@ src/run/agentwarm.ts  the keyed pool of warm processes
 src/run/connectorwait.ts  holds the owner's first message until every connector is connected (pending waited for, failed reconnected)
 src/run/ceiling.ts  wall-clock ceiling of a run, `/stop`
 src/run/chatsession.ts  session resume and in-place compaction
+src/run/chattail.ts  the conversation log as a run reads it: the tail, the lines a session has not seen
 src/run/delegation.ts  experts and the hooks that enforce delegation
 src/run/image.ts  pictures people send, checked and shrunk
 src/run/persona.ts  system prompts from the preset's templates

@@ -15,7 +15,7 @@ const { runConversation, runLook } = await import("../src/run/agent.ts");
 const { readSession, writeSession } = await import("../src/run/sessionstore.ts");
 const { LOGIN } = await import("../src/tenants/payer.ts");
 const { recordMessage } = await import("../src/core/messages.ts");
-const { logSince } = await import("../src/conversation/gate.ts");
+const { logSince } = await import("../src/run/chattail.ts");
 
 (settings as unknown as { warm: boolean }).warm = false;
 

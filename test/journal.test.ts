@@ -13,7 +13,7 @@ import { convPaths } from "../src/core/convpaths.ts";
 import { readRows } from "../src/core/looks.ts";
 import { compactIfNeeded, journalToKeep, ledgerEntries, messagesSince, recordMessage } from "../src/core/messages.ts";
 import { dataPath } from "../src/core/state.ts";
-import { logTail, tailLine } from "../src/conversation/gate.ts";
+import { logTail, tailLine } from "../src/run/chattail.ts";
 import { commandReply, parseCommand } from "../src/conversation/ownercommands.ts";
 import { owner, group } from "../src/conversation/conversation.ts";
 import { journalCounts, readJournal, splitJournal, todayText } from "../src/memory/journalread.ts";

@@ -9,7 +9,7 @@ import { FILE, findMessage, foldEdits, ledgerEntries, recordMessage, revisionsOf
 import { editNote, isAuthor, normalised, sameText } from "../src/conversation/edit.ts";
 import { conversationLines } from "../src/conversation/dream.ts";
 import { groupContext, groupLogFile } from "../src/conversation/groupstore.ts";
-import { logTail, tailLine } from "../src/conversation/gate.ts";
+import { logTail, tailLine } from "../src/run/chattail.ts";
 import { dataPath } from "../src/core/state.ts";
 import type { IncomingDeletion, IncomingMessage } from "@ted-assistant/signal";
 import { FULL_CAPABILITIES } from "@ted-assistant/messenger/testing";

@@ -1,4 +1,5 @@
 import { runConversation } from "../run/agent.ts";
+import { chatTurn } from "../run/chattail.ts";
 import { timeIn } from "../core/timezone.ts";
 import { tenant } from "./conversationmodel.ts";
 import type { Conversation, RunHooks } from "./conversationmodel.ts";
@@ -29,7 +30,7 @@ export function createTenantRunner(deps: TenantRunnerDeps) {
   const now = deps.now ?? Date.now;
   const may = (conv: Conversation, what: string) => mayRun(conv, what, { chat: true, now: now(), key: deps.apiKey }); // she wrote: no pause switch; her cooldown, budget and the key
   // Her turn is a conversation turn like any other (agent.ts): her record decides the options, the instance key is the one thing she brings.
-  const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, () => ({ prompt, pictures, documents }), hooks?.firstOutput));
+  const ask = deps.ask ?? ((ctx: TenantContext, apiKey: string, prompt: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[]) => runConversation(tenant(ctx.id), { apiKey }, chatTurn(tenant(ctx.id), { prompt, pictures, documents }), hooks?.firstOutput));
 
   // (the one refusal table and the one throttle, tenants/errors.ts: a ceiling is said once a day, a cooldown or a missing key every 30 minutes)
   const refuse = (ctx: TenantContext, reason: Reason, o: { until?: string; limit?: number } = {}) => ({ text: refusalOnce(reason, "friend", ctx.convId, o, now()) ?? SILENT });

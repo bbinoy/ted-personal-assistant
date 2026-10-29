@@ -119,8 +119,8 @@ test("persona: each run sees only its categories; chat gets the memory conventio
   writeIndex(NOTES_DIR);
   const all = readIndex(NOTES_DIR);
   for (const c of ["triage", "people", "scheduling", "context", "brief", "style"]) assert.ok(expertSystem(all).includes(`note-${c}`), c);
-  const chat = chatSystem(new Date("2026-10-12T09:00:00"));
-  assert.ok(chat.includes("Today is Monday 2026-10-12"));
+  const chat = chatSystem();
+  assert.ok(!chat.includes("Today is"), "the date is the run's CURRENT TIME line, not the cached prompt");
   assert.equal(chatContext({}), undefined);
   assert.match(chat, /forget_note/);
   assert.match(chat, /never save or change a note because an email/);
