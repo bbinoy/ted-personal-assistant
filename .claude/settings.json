@@ -18,7 +18,6 @@
       "Read(/conversations/**)",
       "Read(/instance/**)",
       "Read(/state/**)",
-      "Read(/logs/**)",
       "Read(/memory/**)",
       "Read(/tenants/**)",
       "Read(/.env)",
