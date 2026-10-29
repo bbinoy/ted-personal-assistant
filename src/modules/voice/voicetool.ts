@@ -182,7 +182,6 @@ export function createVoiceServer(key: string, deps: () => VoiceDeps = realVoice
   return createSdkMcpServer({
     name: "voice",
     version: "1.0.0",
-    alwaysLoad: true,
     tools: [
       tool(
         "voice",
@@ -196,7 +195,6 @@ export function createVoiceServer(key: string, deps: () => VoiceDeps = realVoice
           group: z.string().max(100).optional().describe("With reset_group: the group's name."),
         },
         async (a) => ({ content: [{ type: "text" as const, text: await voiceNow(key, a, deps()) }] }),
-        { alwaysLoad: true },
       ),
     ],
   });
