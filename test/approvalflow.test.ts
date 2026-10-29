@@ -58,7 +58,7 @@ test("prompts: data is JSON-quoted, so a question with a fake instruction stays 
   assert.match(line, /2 min ago/);
   assert.match(p, /New message from .* \(JSON string\): "hmm"/);
   assert.equal(p.split("\n").length, 3 + 0); // approvals, recent, message: no line of its own for injected text
-  assert.match(writePrompt({ tool: "t", args: { a: 1 }, details: "d\nx", recent: [], required: ["a@example.com", "16:00"] }), /REQUIRED strings.*\["a@example.com","16:00"\]/);
+  assert.match(writePrompt({ tool: "t", args: { a: 1 }, context: "ctx", required: ["a@example.com", "16:00"] }), /REQUIRED strings.*\["a@example.com","16:00"\]/);
   assert.equal(parseWrite({ text: "  Send it to Alice, ok?  " }), "Send it to Alice, ok?");
   for (const bad of [undefined, {}, { text: 5 }, { text: "short" }, { text: "x".repeat(4600) }]) assert.equal(parseWrite(bad), undefined);
 });
