@@ -283,7 +283,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     if (message.type === "system" && message.subtype === "init" && runCapabilities(opts.kind).has("login")) { // only the owner's run has connectors: its tool list says nothing about them
       recordToolsSeen(message.tools);
       recordConnectors(message.tools, message.mcp_servers);
-      console.error(`run: mcp servers: ${message.mcp_servers.map((m) => `${m.name}=${m.status}`).join(", ") || "none"}`); // (names and statuses only)
+      console.log(`run: mcp servers: ${message.mcp_servers.map((m) => `${m.name}=${m.status}`).join(", ") || "none"}`); // (names and statuses only)
     }
     if (message.type === "user") for (const name of missingTools(message.message.content)) console.error(`run: tool not available: ${name}`); // (a connector that was not connected: the call never reached canUseTool)
     if (message.type === "assistant") {
