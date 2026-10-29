@@ -1,6 +1,6 @@
 import { dayAt, systemZone, timeIn } from "./timezone.ts";
 
-// The clock line every unattended prompt starts with. (The daily brief has no code of its own any more: it is a skill the heartbeat run delegates to its expert,
+// The clock line every run is told, whatever started it (agent.ts runTurn). (The daily brief has no code of its own any more: it is a skill the heartbeat run delegates to its expert,
 // plugin/skills/daily-brief, with its state in the status-brief note.)
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

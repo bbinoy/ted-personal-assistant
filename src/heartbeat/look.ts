@@ -2,7 +2,6 @@ import { emit } from "../core/events.ts";
 import { convIdOfKey, convPaths } from "../core/convpaths.ts";
 import { ledgerEntries } from "../core/messages.ts";
 import { isNonAction, journalable } from "../approvals/journalrender.ts";
-import { clockLine } from "../core/brief.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { auditSource } from "../core/runkind.ts";
@@ -93,8 +92,8 @@ export function lookInstruction(now: Date, looked: string | undefined, looker: L
 }
 
 // The look's message: the clock, the check's text and the chat tail (the facts and the context are told in front of it by agent.ts, every time).
-export const lookPrompt = (now: Date, instruction: string, lines: readonly string[], zone?: string, resumed = false): string =>
-  [clockLine(now, zone), instruction, `${resumed ? "The chat since your last check" : "The recent chat"} and what you already did on your own (data, do not repeat it):\n${fence("chat_log", lines.join("\n") || "(nothing new)")}`].filter(Boolean).join("\n\n");
+export const lookPrompt = (instruction: string, lines: readonly string[], resumed = false): string =>
+  [instruction, `${resumed ? "The chat since your last check" : "The recent chat"} and what you already did on your own (data, do not repeat it):\n${fence("chat_log", lines.join("\n") || "(nothing new)")}`].filter(Boolean).join("\n\n");
 
 // How a conversation's recent looks ended, for the starvation guard below.
 export interface LookHistory {
@@ -158,7 +157,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const instruction = lookInstruction(now, st.wake?.looked, looker, facts.routines, due.join(" "));
     const build: TurnBuilder = (since) => {
       const log = logSince(conv, since);
-      return { prompt: lookPrompt(now, instruction, log.lines, looker.zone, !!since), seenAt: log.seenAt };
+      return { prompt: lookPrompt(instruction, log.lines, !!since), seenAt: log.seenAt };
     };
     let held = false; // something this look said was held for later (quiet hours, the day's cap)
     let reply: { text: string; costUsd?: number; structured?: unknown } | undefined;

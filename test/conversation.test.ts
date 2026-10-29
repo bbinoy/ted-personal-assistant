@@ -870,11 +870,11 @@ test("groups: a document is handled like a picture: opened when it will be used,
 
 test("groups: the prompt names the documents members sent, their file names as plain labels, as data", async () => {
   const { groupPrompt } = await import("../src/conversation/group.ts");
-  const p = groupPrompt(new Date("2026-01-01T10:00:00Z"), ["Eve: 📄 look"], { line: "Eve: 📄 look" }, false, undefined, false, 0, [PDF, TXT]);
+  const p = groupPrompt(["Eve: 📄 look"], { line: "Eve: 📄 look" }, false, undefined, false, 0, [PDF, TXT]);
   assert.match(p, /Files members sent are here/);
   assert.match(p, /\[PDF attached, file name "contract.pdf"/);
   assert.match(p, /<file_text>\nmilk\neggs\n<\/file_text>/);
-  assert.ok(!groupPrompt(new Date(), [], undefined).includes("Files members sent"));
+  assert.ok(!groupPrompt([], undefined).includes("Files members sent"));
 });
 
 // ---- long messages: Signal sends the first ~2000 characters as the body and all of it as a text/x-signal-plain attachment ----

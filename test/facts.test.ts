@@ -119,7 +119,7 @@ test("a chat session is told the facts once and again only when they changed (th
   await ask("two");
   assert.match(prompts[1]!, /Morning, the sun is out[\s\S]*Water the plants[\s\S]*two$/, "claimed and information facts");
   await ask("three", NOW + MIN);
-  assert.equal(prompts[2], "three", "told, delivered, and the information unchanged: nothing more in front");
+  assert.match(prompts[2]!, /^CURRENT TIME[^\n]*\n\nthree$/, "told, delivered, and the information unchanged: nothing more in front");
   recordMessage("notice", NOW + 2 * MIN, "Lunch idea: soup", new Date(NOW), conv.logFile);
   await ask("four", NOW + 3 * MIN);
   assert.match(prompts[3]!, /Lunch idea: soup[\s\S]*four$/);

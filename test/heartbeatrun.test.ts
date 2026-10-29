@@ -132,8 +132,8 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   assert.doesNotMatch(rules + text, /idle fingerprint|nextCheckMinutes|"act"/i);
   assert.match(lastLookText(undefined, DAY), /first check/);
   assert.match(lastLookText(new Date(2026, 9, 13, 9, 0).toISOString(), DAY), /an earlier day/);
-  const prompt = lookPrompt(DAY, text, ["[10-14 13:00] Alex: call Eve"]);
-  assert.match(prompt, /CURRENT TIME/);
+  const prompt = lookPrompt(text, ["[10-14 13:00] Alex: call Eve"]);
+  assert.doesNotMatch(prompt, /CURRENT TIME/, "the clock is the run path's (agent.ts)");
   assert.match(prompt, /call Eve/);
 });
 
