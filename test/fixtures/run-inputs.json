@@ -1,0 +1,448 @@
+{
+  "kinds": {
+    "owner chat": {
+      "system": ["personality", "routine", "sources", "send", "reactions", "skills", "chat", "shared", "background", "delegate", "learn", "tasks"],
+      "blocks": ["setup", "notices", "notes", "status", "held-posts", "clock", "message"],
+      "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Docs server", "claude_ai_Google_Docs server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "draw server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "meetings server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tenants server", "tenants server", "tenants server", "tenants server", "tenants server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
+      "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
+      "skills": ["ted-personal-assistant:calendar", "ted-personal-assistant:daily-brief", "ted-personal-assistant:draw", "ted-personal-assistant:evening-wrap", "ted-personal-assistant:follow-through", "ted-personal-assistant:mail", "ted-personal-assistant:mailbird", "ted-personal-assistant:meeting-prep", "ted-personal-assistant:research-booking", "ted-personal-assistant:setup", "ted-personal-assistant:stay-in-touch", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:tasks", "ted-personal-assistant:web-research", "ted-personal-assistant:weekly-review"],
+      "mcp": ["browse", "draw", "meetings", "memory", "people", "send", "tasks", "voice", "weather"],
+      "agents": ["expert", "expert-daily-brief", "expert-evening-wrap", "expert-meeting-prep", "expert-opus", "expert-weekly-review"],
+      "expertSystem": ["personality", "skills", "expert"],
+      "expertBrief": ["clock"],
+      "model": "HARNESS_MODEL",
+      "effort": "default",
+      "answer": "reply",
+      "attended": "true",
+      "session": "conversation's",
+      "settingSources": "[\"user\"]",
+      "strictMcp": "false",
+      "notes": "own folder"
+    },
+    "owner look": {
+      "system": ["personality", "routine", "sources", "send", "reactions", "skills", "chat", "shared", "background", "delegate", "learn", "tasks"],
+      "blocks": ["setup", "notes", "status", "held-posts", "clock", "message"],
+      "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Docs server", "claude_ai_Google_Docs server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "draw server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "meetings server", "memory server", "memory server", "memory server", "memory server", "people server", "seenmail server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
+      "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
+      "skills": ["ted-personal-assistant:calendar", "ted-personal-assistant:daily-brief", "ted-personal-assistant:draw", "ted-personal-assistant:evening-wrap", "ted-personal-assistant:follow-through", "ted-personal-assistant:mail", "ted-personal-assistant:mailbird", "ted-personal-assistant:meeting-prep", "ted-personal-assistant:research-booking", "ted-personal-assistant:setup", "ted-personal-assistant:stay-in-touch", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:tasks", "ted-personal-assistant:web-research", "ted-personal-assistant:weekly-review"],
+      "mcp": ["browse", "draw", "meetings", "memory", "people", "send", "tasks", "voice", "weather"],
+      "agents": ["expert", "expert-daily-brief", "expert-evening-wrap", "expert-meeting-prep", "expert-opus", "expert-weekly-review"],
+      "expertSystem": ["personality", "skills", "expert"],
+      "expertBrief": ["clock", "look-context"],
+      "model": "HEARTBEAT_MODEL",
+      "effort": "high",
+      "answer": "json",
+      "attended": "false",
+      "session": "fresh",
+      "settingSources": "[\"user\"]",
+      "strictMcp": "false",
+      "notes": "own folder"
+    },
+    "group chat": {
+      "system": ["personality", "participation", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "blocks": ["notes", "status", "held-posts", "clock", "message"],
+      "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
+      "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
+      "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
+      "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
+      "agents": ["expert", "expert-opus"],
+      "expertSystem": ["personality", "expert"],
+      "expertBrief": ["clock"],
+      "model": "HARNESS_MODEL",
+      "effort": "default",
+      "answer": "reply",
+      "attended": "true",
+      "session": "conversation's",
+      "settingSources": "[]",
+      "strictMcp": "true",
+      "notes": "own folder"
+    },
+    "group look": {
+      "system": ["personality", "participation", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "blocks": ["notes", "status", "held-posts", "clock", "message"],
+      "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
+      "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
+      "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
+      "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
+      "agents": ["expert", "expert-opus"],
+      "expertSystem": ["personality", "expert"],
+      "expertBrief": ["clock", "look-context"],
+      "model": "HEARTBEAT_MODEL",
+      "effort": "high",
+      "answer": "json",
+      "attended": "false",
+      "session": "fresh",
+      "settingSources": "[]",
+      "strictMcp": "true",
+      "notes": "own folder"
+    },
+    "friend chat": {
+      "system": ["personality", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "blocks": ["first-contact", "notes", "status", "held-posts", "clock", "message"],
+      "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
+      "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
+      "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
+      "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
+      "agents": ["expert", "expert-opus"],
+      "expertSystem": ["personality", "expert"],
+      "expertBrief": ["clock"],
+      "model": "HARNESS_MODEL",
+      "effort": "default",
+      "answer": "reply",
+      "attended": "true",
+      "session": "conversation's",
+      "settingSources": "[]",
+      "strictMcp": "true",
+      "notes": "own folder"
+    },
+    "friend look": {
+      "system": ["personality", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "blocks": ["notes", "status", "held-posts", "clock", "message"],
+      "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
+      "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
+      "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
+      "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
+      "agents": ["expert", "expert-opus"],
+      "expertSystem": ["personality", "expert"],
+      "expertBrief": ["clock", "look-context"],
+      "model": "HEARTBEAT_MODEL",
+      "effort": "high",
+      "answer": "json",
+      "attended": "false",
+      "session": "fresh",
+      "settingSources": "[]",
+      "strictMcp": "true",
+      "notes": "own folder"
+    }
+  },
+  "differences": {
+    "agents:expert-daily-brief": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "agents:expert-evening-wrap": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "agents:expert-meeting-prep": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "agents:expert-weekly-review": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "answer": {
+      "by": "trigger",
+      "reason": "answer format: a look answers in the look's JSON (message, nextCheckMinutes, urgent), a chat turn in a reply",
+      "values": {
+        "reply": ["owner chat", "group chat", "friend chat"],
+        "json": ["owner look", "group look", "friend look"]
+      }
+    },
+    "attended": {
+      "by": "trigger",
+      "reason": "attended: a message's person is waiting, a look's nobody",
+      "values": {
+        "true": ["owner chat", "group chat", "friend chat"],
+        "false": ["owner look", "group look", "friend look"]
+      }
+    },
+    "block:first-contact": {
+      "by": "either",
+      "reason": "attended: only a friend's first message turn, after the owner let her in, greets her (runoptions.ts turnContext)",
+      "values": {
+        "1": ["friend chat"],
+        "-": ["owner chat", "owner look", "group chat", "group look", "friend look"]
+      }
+    },
+    "block:notices": {
+      "by": "either",
+      "reason": "capability + attended: the owner's chat is shown the notices it sent on its own; a look cannot be shown them, a group or a friend has none",
+      "values": {
+        "1": ["owner chat"],
+        "-": ["owner look", "group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "block:setup": {
+      "by": "conversation",
+      "reason": "capability (setup): what is not connected or set up is the owner's own installation; a group or a friend has no setup to walk through",
+      "values": {
+        "1": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "effort": {
+      "by": "trigger",
+      "reason": "model: a look is a cheap model that decides and delegates (HEARTBEAT_MODEL, high effort); a chat turn is HARNESS_MODEL",
+      "values": {
+        "default": ["owner chat", "group chat", "friend chat"],
+        "high": ["owner look", "group look", "friend look"]
+      }
+    },
+    "expert-brief:look-context": {
+      "by": "trigger",
+      "reason": "trigger line / facts: a look appends its facts and chat lines to every brief it hands an expert (look.ts expertContext)",
+      "values": {
+        "1": ["owner look", "group look", "friend look"],
+        "-": ["owner chat", "group chat", "friend chat"]
+      }
+    },
+    "expert-system:skills": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "mcp:meetings": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "model": {
+      "by": "trigger",
+      "reason": "model: a look is a cheap model that decides and delegates (HEARTBEAT_MODEL, high effort); a chat turn is HARNESS_MODEL",
+      "values": {
+        "HARNESS_MODEL": ["owner chat", "group chat", "friend chat"],
+        "HEARTBEAT_MODEL": ["owner look", "group look", "friend look"]
+      }
+    },
+    "session": {
+      "by": "trigger",
+      "reason": "session: a chat turn resumes the conversation's session, a look starts a fresh one every time",
+      "values": {
+        "conversation's": ["owner chat", "group chat", "friend chat"],
+        "fresh": ["owner look", "group look", "friend look"]
+      }
+    },
+    "settingSources": {
+      "by": "conversation",
+      "reason": "privacy (§5): only the owner's run loads her login's connectors and user settings; a group's and a friend's are isolated (strict MCP, no settings sources)",
+      "values": {
+        "[\"user\"]": ["owner chat", "owner look"],
+        "[]": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:calendar": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:daily-brief": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:evening-wrap": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:follow-through": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:mail": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:mailbird": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:meeting-prep": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:setup": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:stay-in-touch": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:tasks": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "skills:ted-personal-assistant:weekly-review": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "strictMcp": {
+      "by": "conversation",
+      "reason": "privacy (§5): only the owner's run loads her login's connectors and user settings; a group's and a friend's are isolated (strict MCP, no settings sources)",
+      "values": {
+        "false": ["owner chat", "owner look"],
+        "true": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "system:chat": {
+      "by": "conversation",
+      "reason": "persona: the owner's chat has its own template, a group's and a friend's the others template; only a group is told when to speak (participation)",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "system:others": {
+      "by": "conversation",
+      "reason": "persona: the owner's chat has its own template, a group's and a friend's the others template; only a group is told when to speak (participation)",
+      "values": {
+        "-": ["owner chat", "owner look"],
+        "on": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "system:participation": {
+      "by": "conversation",
+      "reason": "persona: the owner's chat has its own template, a group's and a friend's the others template; only a group is told when to speak (participation)",
+      "values": {
+        "-": ["owner chat", "owner look", "friend chat", "friend look"],
+        "on": ["group chat", "group look"]
+      }
+    },
+    "system:skills": {
+      "by": "conversation",
+      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
+      "values": {
+        "on": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:claude_ai_Claude_Docs server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "8": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:claude_ai_Google_Calendar server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "9": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:claude_ai_Google_Docs server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "2": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:claude_ai_Google_Drive server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "11": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:claude_ai_Notion server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "19": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:mailbird server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "30": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:meetings server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "1": ["owner chat", "owner look"],
+        "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:seenmail server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "1": ["owner look"],
+        "-": ["owner chat", "group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "tools:tenants server": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "5": ["owner chat"],
+        "-": ["owner look", "group chat", "group look", "friend chat", "friend look"]
+      }
+    }
+  }
+}
