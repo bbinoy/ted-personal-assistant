@@ -28,6 +28,17 @@ the history, dropped). Both are undone with `update_task` and `reopen: true`. No
 ever deleted from the list, and you never remove a task because it is finished: only when
 the owner says plainly to drop or remove that item.
 
+## Reconcile
+
+Tidy the list from what the run has already read (mail, calendar, chat), never by extra fetching beyond `list_tasks`. Only on clear evidence; when unsure, leave it.
+
+- **Complete** a task the sources show is done (the reply was sent, the document arrived, the meeting happened): `complete_task`.
+- **Merge** duplicates: keep the better-worded item, fold the other's details into it with `update_task`, `drop_task` the other.
+- **Move** the due date when a mail or event changed it: `update_task`.
+- **Drop** a moot task (the event it was for is past and nothing is left to do): `drop_task`.
+
+All are reversible with `update_task` and `reopen: true`.
+
 ## Who may change what
 
 - **In chat** you may add, edit, finish, drop and snooze items when the owner asks, and
