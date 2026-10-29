@@ -15,7 +15,8 @@
       "Bash(git worktree list:*)"
     ],
     "deny": [
-      "Read(/conversations/**)",
+      "Read(/conversations/friend-*/**)",
+      "Read(/conversations/group-*/**)",
       "Read(/instance/**)",
       "Read(/state/**)",
       "Read(/memory/**)",
