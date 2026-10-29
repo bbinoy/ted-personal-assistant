@@ -127,6 +127,14 @@ test("a long overdue pile: the task skill snoozes the stale tail and says so in 
   assert.doesNotMatch(read("daily-brief") + read("tasks"), /status-overdue-offer/);
 });
 
+test("task reconcile: defined once in the task skill; the brief and the weekly review point to it; the wrap does not", () => {
+  const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
+  assert.match(read("tasks"), /## Reconcile[\s\S]*complete_task[\s\S]*Merge[\s\S]*Move[\s\S]*Drop[\s\S]*reopen/);
+  for (const s of ["daily-brief", "weekly-review"]) assert.match(read(s), /"Reconcile" section/);
+  assert.doesNotMatch(read("weekly-review"), /finish no task/);
+  assert.doesNotMatch(read("evening-wrap"), /Reconcile/);
+});
+
 test("connectors: a run that started without a network records nothing", async () => {
   const { recordConnectors, readConnectors, offline } = await import("../src/modules/connectors.ts");
   const server = (name: string, status: string) => ({ name, status });
