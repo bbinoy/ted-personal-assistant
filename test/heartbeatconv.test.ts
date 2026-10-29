@@ -135,7 +135,8 @@ test("a friend on an instance without Google has no mail in her instruction; a g
   const text = lookInstruction(NOW, undefined, looker);
   assert.match(text, /Cy's local time/);
   const hers = withoutGoogle(() => runFor(tenant(id), "look", { apiKey: KEY, now: NOW }).systemPrompt);
-  assert.match(hers, /do nothing unprompted/);
+  assert.match(hers, /Safe, reversible work with the tools you have/);
+  assert.doesNotMatch(hers, /do nothing unprompted/, "the same proactivity for everyone, within their capabilities");
   assert.doesNotMatch(text + hers, /calendar for the next 36 hours|status-brief|archive every mail/i);
 
   const g = group("hb-conv-group-0123456789abcd");

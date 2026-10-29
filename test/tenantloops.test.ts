@@ -196,7 +196,7 @@ test("a tenant's night is the instruction's, not a rule in code: her look runs a
   assert.match(r.seen.runs[0]!.prompt, /\(Pacific\/Auckland, /, "the instruction names her zone (the run path adds the clock line in it: runclock.test.ts)");
   assert.match(r.seen.runs[0]!.prompt, /Quiet hours \(night\) are 22:00-07:00\./);
   const { runFor } = await import("../src/run/runoptions.ts");
-  assert.match(runFor(tenant(anna.id), "look", { apiKey: KEY }).systemPrompt, /do nothing unprompted/, "no mail or calendar: she acts only on a note or a promise (her prompt says so)");
+  assert.match(runFor(tenant(anna.id), "look", { apiKey: KEY }).systemPrompt, /Safe, reversible work with the tools you have \(a note, a task\)/, "no mail or calendar: the same proactivity as everyone's, within her tools (her prompt says so)");
 });
 
 test("one tenant's failing look or run does not stop the others or the owner", async () => {

@@ -1,14 +1,14 @@
 {
   "kinds": {
     "owner chat": {
-      "system": ["personality", "routine", "sources", "send", "reactions", "skills", "chat", "shared", "background", "delegate", "learn", "tasks"],
+      "system": ["personality", "routine", "sources", "send", "reactions", "identity", "capabilities", "shared", "tasks", "background", "delegate"],
       "blocks": ["setup", "notes", "status", "held-posts", "clock", "message"],
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Docs server", "claude_ai_Google_Docs server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "draw server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "meetings server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tenants server", "tenants server", "tenants server", "tenants server", "tenants server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:calendar", "ted-personal-assistant:daily-brief", "ted-personal-assistant:draw", "ted-personal-assistant:evening-wrap", "ted-personal-assistant:follow-through", "ted-personal-assistant:mail", "ted-personal-assistant:mailbird", "ted-personal-assistant:meeting-prep", "ted-personal-assistant:research-booking", "ted-personal-assistant:setup", "ted-personal-assistant:stay-in-touch", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:tasks", "ted-personal-assistant:web-research", "ted-personal-assistant:weekly-review"],
       "mcp": ["browse", "draw", "meetings", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-daily-brief", "expert-evening-wrap", "expert-meeting-prep", "expert-opus", "expert-weekly-review"],
-      "expertSystem": ["personality", "skills", "expert"],
+      "expertSystem": ["personality", "capabilities", "expert"],
       "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HARNESS_MODEL",
       "effort": "default",
@@ -20,14 +20,14 @@
       "notes": "own folder"
     },
     "owner look": {
-      "system": ["personality", "routine", "sources", "send", "reactions", "skills", "chat", "shared", "background", "delegate", "learn", "tasks"],
+      "system": ["personality", "routine", "sources", "send", "reactions", "identity", "capabilities", "shared", "tasks", "background", "delegate"],
       "blocks": ["setup", "notes", "status", "held-posts", "clock", "message"],
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Docs server", "claude_ai_Google_Docs server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "draw server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "meetings server", "memory server", "memory server", "memory server", "memory server", "people server", "seenmail server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:calendar", "ted-personal-assistant:daily-brief", "ted-personal-assistant:draw", "ted-personal-assistant:evening-wrap", "ted-personal-assistant:follow-through", "ted-personal-assistant:mail", "ted-personal-assistant:mailbird", "ted-personal-assistant:meeting-prep", "ted-personal-assistant:research-booking", "ted-personal-assistant:setup", "ted-personal-assistant:stay-in-touch", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:tasks", "ted-personal-assistant:web-research", "ted-personal-assistant:weekly-review"],
       "mcp": ["browse", "draw", "meetings", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-daily-brief", "expert-evening-wrap", "expert-meeting-prep", "expert-opus", "expert-weekly-review"],
-      "expertSystem": ["personality", "skills", "expert"],
+      "expertSystem": ["personality", "capabilities", "expert"],
       "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HEARTBEAT_MODEL",
       "effort": "high",
@@ -39,14 +39,14 @@
       "notes": "own folder"
     },
     "group chat": {
-      "system": ["personality", "participation", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "system": ["personality", "participation", "routine", "sources", "send", "reactions", "identity", "capabilities", "shared", "tasks", "background", "delegate"],
       "blocks": ["notes", "status", "held-posts", "clock", "message"],
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
-      "expertSystem": ["personality", "expert"],
+      "expertSystem": ["personality", "capabilities", "expert"],
       "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HARNESS_MODEL",
       "effort": "default",
@@ -58,14 +58,14 @@
       "notes": "own folder"
     },
     "group look": {
-      "system": ["personality", "participation", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "system": ["personality", "participation", "routine", "sources", "send", "reactions", "identity", "capabilities", "shared", "tasks", "background", "delegate"],
       "blocks": ["notes", "status", "held-posts", "clock", "message"],
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
-      "expertSystem": ["personality", "expert"],
+      "expertSystem": ["personality", "capabilities", "expert"],
       "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HEARTBEAT_MODEL",
       "effort": "high",
@@ -77,14 +77,14 @@
       "notes": "own folder"
     },
     "friend chat": {
-      "system": ["personality", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "system": ["personality", "routine", "sources", "send", "reactions", "identity", "capabilities", "shared", "tasks", "background", "delegate"],
       "blocks": ["first-contact", "notes", "status", "held-posts", "clock", "message"],
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
-      "expertSystem": ["personality", "expert"],
+      "expertSystem": ["personality", "capabilities", "expert"],
       "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HARNESS_MODEL",
       "effort": "default",
@@ -96,14 +96,14 @@
       "notes": "own folder"
     },
     "friend look": {
-      "system": ["personality", "routine", "sources", "send", "reactions", "shared", "others", "background", "delegate", "learn", "tasks"],
+      "system": ["personality", "routine", "sources", "send", "reactions", "identity", "capabilities", "shared", "tasks", "background", "delegate"],
       "blocks": ["notes", "status", "held-posts", "clock", "message"],
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "draw server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:draw", "ted-personal-assistant:research-booking", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:web-research"],
       "mcp": ["browse", "draw", "memory", "people", "send", "tasks", "voice", "weather"],
       "agents": ["expert", "expert-opus"],
-      "expertSystem": ["personality", "expert"],
+      "expertSystem": ["personality", "capabilities", "expert"],
       "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
       "model": "HEARTBEAT_MODEL",
       "effort": "high",
@@ -186,14 +186,6 @@
       "values": {
         "default": ["owner chat", "group chat", "friend chat"],
         "high": ["owner look", "group look", "friend look"]
-      }
-    },
-    "expert-system:skills": {
-      "by": "conversation",
-      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
-      "values": {
-        "on": ["owner chat", "owner look"],
-        "-": ["group chat", "group look", "friend chat", "friend look"]
       }
     },
     "mcp:meetings": {
@@ -324,36 +316,12 @@
         "true": ["group chat", "group look", "friend chat", "friend look"]
       }
     },
-    "system:chat": {
-      "by": "conversation",
-      "reason": "persona: the owner's chat has its own template, a group's and a friend's the others template; only a group is told when to speak (participation)",
-      "values": {
-        "on": ["owner chat", "owner look"],
-        "-": ["group chat", "group look", "friend chat", "friend look"]
-      }
-    },
-    "system:others": {
-      "by": "conversation",
-      "reason": "persona: the owner's chat has its own template, a group's and a friend's the others template; only a group is told when to speak (participation)",
-      "values": {
-        "-": ["owner chat", "owner look"],
-        "on": ["group chat", "group look", "friend chat", "friend look"]
-      }
-    },
     "system:participation": {
       "by": "conversation",
-      "reason": "persona: the owner's chat has its own template, a group's and a friend's the others template; only a group is told when to speak (participation)",
+      "reason": "persona: only a group is told when to speak (participation); every conversation's prompt is built from the same templates (identity, capabilities, shared), the owner's, a group's and a friend's alike",
       "values": {
         "-": ["owner chat", "owner look", "friend chat", "friend look"],
         "on": ["group chat", "group look"]
-      }
-    },
-    "system:skills": {
-      "by": "conversation",
-      "reason": "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill",
-      "values": {
-        "on": ["owner chat", "owner look"],
-        "-": ["group chat", "group look", "friend chat", "friend look"]
       }
     },
     "tools:claude_ai_Claude_Docs server": {

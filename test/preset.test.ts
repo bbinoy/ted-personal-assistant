@@ -69,11 +69,11 @@ test("a malformed preset fails with a message that names the file and the proble
   mkdirSync(garbled);
   writeFileSync(join(garbled, "preset.json"), "{ nope");
   assert.throws(() => loadPreset(garbled), /preset\.json is not valid JSON/);
-  assert.throws(broken((d) => rmSync(join(d, "persona", "chat.md"))), /persona\/chat\.md is missing/);
+  assert.throws(broken((d) => rmSync(join(d, "persona", "identity.md"))), /persona\/identity\.md is missing/);
   assert.throws(broken((d) => writeFileSync(join(d, "persona", "personality.md"), "Hello {{mood}}")), /personality\.md: \{\{mood\}\} is not available here/);
-  assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "{{#mail}}never closed")), /chat\.md: \{\{#mail\}\} is never closed/);
-  assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "closes {{/mail}}")), /chat\.md: \{\{\/mail\}\} closes nothing/);
-  assert.throws(broken((d) => writeFileSync(join(d, "persona", "chat.md"), "a stray {{ brace")), /chat\.md: a stray/);
+  assert.throws(broken((d) => writeFileSync(join(d, "persona", "identity.md"), "{{#mail}}never closed")), /identity\.md: \{\{#mail\}\} is never closed/);
+  assert.throws(broken((d) => writeFileSync(join(d, "persona", "identity.md"), "closes {{/mail}}")), /identity\.md: \{\{\/mail\}\} closes nothing/);
+  assert.throws(broken((d) => writeFileSync(join(d, "persona", "identity.md"), "a stray {{ brace")), /identity\.md: a stray/);
   assert.throws(broken((_d, j) => { delete j.expert; }), /expert: must be an object/);
   assert.throws(broken((_d, j) => { j.rhythm.heartbeat.dayMinutes = 5; }), /rhythm\.heartbeat\.dayMinutes: must be a whole number from 10 to 120/);
   assert.throws(broken((_d, j) => { j.profiles = {}; }), /"profiles" is gone: use one "limits"/);

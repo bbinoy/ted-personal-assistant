@@ -23,10 +23,6 @@ const active = () => settings.mailProvider === "gmail";
 
 const gm = rowsOf(GMAIL_PREFIX, "gmail", "mail");
 
-const GMAIL_DRAFTS = (owner: string) => `Mail is Gmail. A reply you (or a background look of yours) draft is a Gmail draft (create_draft with replyToMessageId, or update_draft); say it is ready and wait. When ${owner} answers with "send" or similar, find the draft they mean (its id is the draftId). When ${owner} says to send a draft, call send_message with that draftId, or reply / forward with the exact text; ${owner} is then asked to approve (or it is checked) with the real recipients shown. Archiving is removing the INBOX label (unlabel_thread with labelIds ["INBOX"]); it may be switched to log-only, in which case a refused archive is not an error. Never use trash, spam or label tools for TRASH or SPAM, and never open attachment content.
-
-`;
-
 // How the brief is delivered (the daily-brief skill, step 6): the mail pass uses the gmail skill and the Gmail connector. With BRIEF_EMAIL=on the brief is also emailed to
 // the owner's own address with send_message (the one send a background run may do without asking, gmailrules.ts); otherwise the chat message is the brief.
 const BRIEF_GMAIL = "The mail is Gmail: the mail skill's provider skill is 'ted-personal-assistant:gmail'; use the Gmail tools it names; the mailbird tools do not exist here.";
@@ -37,7 +33,7 @@ const briefHow = (): string =>
 
 const mail: MailSlot = {
   brief: { how: briefHow },
-  chat: { skill: "ted-personal-assistant:gmail", note: GMAIL_DRAFTS },
+  chat: { skill: "ted-personal-assistant:gmail", name: "Gmail", find: "its id is the draftId", send: "send_message with that draftId, or reply / forward with the exact text", edit: "update_draft" },
   readBack: async (kind, input) => {
     if (kind === "gmSend" && typeof input.draftId === "string" && readers) return readers.draft(input.draftId).catch(() => undefined);
     if (kind === "gmReply" && typeof input.messageId === "string" && readers) return readers.original(input.messageId).catch(() => undefined);

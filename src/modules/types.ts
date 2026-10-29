@@ -165,7 +165,7 @@ export interface MailTools {
 export interface MailSlot extends MailTools {
   // How the daily brief reaches the owner with this provider's tools, as a sentence for the heartbeat instruction (the daily-brief skill's delivery step).
   brief: { how: () => string }; // how the daily brief reaches the owner (the provider's own words; BRIEF_EMAIL decides whether it is also mailed)
-  chat: { skill: string; note: (owner: string) => string }; // the chat prompt: the mail skill it names, and what it says about drafts and sending
+  chat: { skill: string; name: string; find: string; send: string; edit: string }; // the chat prompt (capabilities.md): the mail skill it names, and the provider's words for the one draft-and-send sentence (how to find a draft, send it, edit it)
 }
 
 // The code behind a mail slot (runtime.ts): the client, putting a mail back, what to start while the app runs, the doctor check.
