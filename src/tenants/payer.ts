@@ -55,6 +55,7 @@ export const observe = (p: Payer, m: SDKMessage | { type: string }): void => obs
 // One row in the spend ledger (budget.ts) says it all: whose conversation, which payer, what kind of run (chat, look, dream, gate, helper...). A friend's row counts toward her own day and the
 // instance key's, a group's toward its own day and the owner's login, the owner's toward the owner's: the sums are the ceilings.
 export function charge(p: Payer, usd: number, kind = "run"): void { // failures cost money too
+  if (!(usd > 0)) return; // never a negative (or NaN) amount: a spend ledger only grows
   if (p.kind === "instance") recordSpend({ usd, conv: p.ledger, payer: "key", kind });
   else recordSpend({ usd, conv: p.group ? groupConvId(p.group) : OWNER_CONV, payer: "login", kind });
 }
