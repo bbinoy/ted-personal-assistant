@@ -88,13 +88,15 @@ test("warm for every task: write, check, answer and action run on a spare prepar
     let nextTask = "write";
     const stream = () => (async function* () { yield { type: "result", subtype: "success", is_error: false, total_cost_usd: 0, result: "", structured_output: { task: nextTask, faithful: true } }; })();
     const io = { start: (async () => (started++, { query: stream, close() {} })) as never, query: stream as never };
+    const prepared = async (n: number) => { for (let i = 0; i < 100 && started < n; i++) await tick(); }; // the spare starts on a later turn of the event loop: wait for it, not for one tick
     assert.equal((await runJudge("write", "p", io))?.warm, false); // nothing was prepared yet
+    let n = 1;
     for (const task of ["check", "answer", "action"] as const) {
-      await tick();
+      await prepared(n++);
       nextTask = task;
       assert.equal((await runJudge(task, "p", io))?.warm, true, `${task} is warm`);
     }
-    await tick();
+    await prepared(4);
     assert.equal(started, 4, "and one is ready for the next task");
   } finally {
     discardJudge();
