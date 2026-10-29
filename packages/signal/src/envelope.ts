@@ -143,7 +143,7 @@ export function parseQuote(raw: any): Quote | undefined {
 }
 
 /** Pure: the timestamp of the voice note a reply quotes (signal-cli lists the quoted message's attachments), else undefined. */
-export function quotedAudio(raw: any): number | undefined {
+function quotedAudio(raw: any): number | undefined {
   const id = Number(raw?.id);
   const has = Array.isArray(raw?.attachments) && raw.attachments.some((a: any) => String(a?.contentType ?? "").startsWith("audio/"));
   return has && Number.isFinite(id) && id > 0 ? id : undefined;

@@ -13,6 +13,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run check:unused
       - run: npm test
       - run: npm audit --audit-level=high
   # The messenger and signal packages on their own: nothing of the app is installed or run. Proves they compile, test and

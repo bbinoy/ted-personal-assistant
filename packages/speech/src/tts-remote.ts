@@ -41,7 +41,7 @@ export function sniffAudio(contentType: string | null, bytes: Uint8Array): Audio
 
 // The body, but never more than `max` bytes: a server that sends no Content-Length (or lies about it) cannot make us hold an
 // unbounded answer in memory. Returns undefined as soon as the limit is passed.
-export async function readLimited(res: Response, max: number): Promise<Uint8Array | undefined> {
+async function readLimited(res: Response, max: number): Promise<Uint8Array | undefined> {
   const reader = res.body?.getReader();
   if (!reader) return new Uint8Array(0);
   const chunks: Uint8Array[] = [];

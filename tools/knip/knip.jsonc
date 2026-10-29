@@ -1,0 +1,35 @@
+// knip, run from the repository root: `npm run check:unused`. Reports unused files, exports, types and dependencies.
+// Source layout: ES modules in TypeScript, run directly by Node (`--conditions=workspace-source` makes the workspace
+// packages resolve to their src/ files), so there is no build output to map back. Tests are entry points on purpose:
+// an export used only by a test is still used (a test seam); one used by nothing is dead.
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      // src/main.ts, src/cli.ts and test/setup.ts are found from the package.json scripts.
+      "entry": ["scripts/*.ts", "test/*.test.ts"],
+      "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"],
+      "ignoreDependencies": [
+        // Never imported: browseserver.ts and scripts/setup-browse.ts resolve its package.json and spawn its cli.js.
+        "@playwright/mcp"
+      ],
+      // System programs the code or the tests run, not npm packages.
+      "ignoreBinaries": ["mktemp", "ffmpeg", "pmset", "openssl"]
+    },
+    "packages/*": {
+      "entry": ["test/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    // A workspace with its own key does not inherit the pattern above: repeat it. Examples run standalone.
+    "packages/signal": {
+      "entry": ["test/*.test.ts", "examples/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts"],
+      "ignoreBinaries": ["signal-cli"]
+    },
+    "packages/speech": {
+      "entry": ["test/*.test.ts", "examples/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts"],
+      "ignoreBinaries": ["ffmpeg"]
+    }
+  }
+}

@@ -13,7 +13,7 @@ export const OWNER_SCOPE = "owner";
 export const DEFAULT_VOICE = "default";
 export const MAX_VOICES = { owner: 10, group: 5 } as const;
 export const NAME = /^[a-z0-9-]{1,32}$/;
-export const SCOPE = /^[a-z][a-z0-9_-]{0,63}$/; // what the host may call a conversation here (it is a folder name)
+const SCOPE = /^[a-z][a-z0-9_-]{0,63}$/; // what the host may call a conversation here (it is a folder name)
 
 /** Pure: a name the model or a person gave, made into a library name ([a-z0-9-], at most 32 characters). Empty when nothing is left. */
 export function sanitizeVoiceName(raw: string): string {

@@ -12,10 +12,10 @@ import { transcribe } from "./transcribe.ts";
 // speech is refused with a sentence the person can be told. ffmpeg and whisper run here, on this machine; nothing is sent anywhere.
 
 const run = promisify(execFile);
-export const RATE = 24_000;
+const RATE = 24_000;
 export const MIN_SECONDS = 3;
 export const MAX_SECONDS = 15; // measured: a 27 s reference doubled the time of every reply (the clip is part of the prompt) against a 10 s one
-export const HARD_MAX_SECONDS = 300; // longer recordings are refused instead of searched
+const HARD_MAX_SECONDS = 300; // longer recordings are refused instead of searched
 const FRAME = RATE / 10; // 100 ms
 
 export interface ClipTools {
@@ -50,7 +50,7 @@ export function realClipTools(whisperModel: string): ClipTools {
 const db = (rms: number) => 20 * Math.log10(Math.max(rms, 1e-9) / 32768);
 
 /** Pure: loudness of each 100 ms frame in dB below full scale. */
-export function frameLevels(pcm: Int16Array): number[] {
+function frameLevels(pcm: Int16Array): number[] {
   const out: number[] = [];
   for (let i = 0; i + FRAME <= pcm.length; i += FRAME) {
     let s = 0;
@@ -63,7 +63,7 @@ export function frameLevels(pcm: Int16Array): number[] {
 const pct = (sorted: number[], p: number) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))]!;
 
 /** Pure: why a clip cannot be a voice (silence, noise), or undefined when it looks like speech. */
-export function notSpeech(levels: number[]): string | undefined {
+function notSpeech(levels: number[]): string | undefined {
   if (!levels.length) return "That recording is empty.";
   const sorted = [...levels].sort((a, b) => a - b);
   const loud = pct(sorted, 0.9);
@@ -75,7 +75,7 @@ export function notSpeech(levels: number[]): string | undefined {
 }
 
 /** Pure: the best stretch of at most `max` seconds: the one with the most speech, its ends moved to the quietest moment nearby so no word is cut. */
-export function bestWindow(levels: number[], max = MAX_SECONDS): { from: number; to: number } {
+function bestWindow(levels: number[], max = MAX_SECONDS): { from: number; to: number } {
   const w = Math.min(levels.length, (max - 2) * 10); // leave room to move the ends
   if (levels.length <= max * 10) return { from: 0, to: levels.length };
   const sorted = [...levels].sort((a, b) => a - b);
@@ -109,7 +109,7 @@ export function bestWindow(levels: number[], max = MAX_SECONDS): { from: number;
 }
 
 /** Pure: a 16-bit mono wav file. */
-export function wavBytes(pcm: Int16Array, rate = RATE): Buffer {
+function wavBytes(pcm: Int16Array, rate = RATE): Buffer {
   const data = Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength);
   const h = Buffer.alloc(44);
   h.write("RIFF", 0);

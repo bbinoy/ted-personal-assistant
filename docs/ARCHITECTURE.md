@@ -742,6 +742,6 @@ src/core/sinks/metricssink.ts  look to its `looks` row
 
 ## Development
 
-`npm test`, `npm run typecheck`, `npm run lint`, `npm run check:secrets`, `npm run check:isolation`, and `npm run doctor` for a running install. Commit style and gates are in `CONTRIBUTING.md`. The pure modules (`policy`, `markdown`, `guards`) carry the safety-critical logic and are where tests concentrate.
+`npm test`, `npm run typecheck`, `npm run lint`, `npm run check:secrets`, `npm run check:isolation`, `npm run check:unused`, and `npm run doctor` for a running install. Commit style and gates are in `CONTRIBUTING.md`. The pure modules (`policy`, `markdown`, `guards`) carry the safety-critical logic and are where tests concentrate.
 
 Back to the [README](../README.md) · [Setup](SETUP.md) · [Safety](SAFETY.md) · [Adapting](ADAPTING.md)
