@@ -28,13 +28,13 @@ import { writeFileAtomic } from "./state.ts";
 // (or `sqlite3 .recover`) and deletes the marker; deleting only the marker accepts the fresh start. The other conversations are not affected: each has its own file.
 //
 // How to add state: append ONE numbered step to CONV_SCHEMA below (the last version + 1, `CREATE TABLE ...`). Steps run in order, each in
-// its own transaction, at the first open of each conversation's file; a step is never edited once shipped. The first step is the BASELINE (the whole shape when the older steps were collapsed):
-// a file older than it is refused with a message (core/db.ts OlderSchemaError), a fresh file gets the baseline and every step after it. Then a small store module over convDb(conv), and, if the table grows, a retention rule (heartbeat/convretention.ts).
+// its own transaction, at the first open of each conversation's file; a step is never edited once shipped. The first step is the BASELINE (the whole shape; steps before 22 are collapsed into it):
+// a file older than it is refused (core/db.ts OlderSchemaError), a fresh file gets the baseline and every step after it. Then a small store module over convDb(conv), and, if the table grows, a retention rule (heartbeat/convretention.ts).
 
 export const CONV_SCHEMA: readonly Migration[] = [
   {
     version: 22,
-    name: "baseline: the whole shape of a conversation's database (the 22 steps before it are collapsed; a file older than this is refused)",
+    name: "baseline: the whole shape of a conversation's database (steps before 22 are collapsed)",
     up: `
       CREATE TABLE session (
         id                  INTEGER PRIMARY KEY CHECK (id = 1),
