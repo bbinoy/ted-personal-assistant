@@ -694,7 +694,7 @@ test("groups: an edit never answers an approval, a picture caption neither, and 
   void r;
 });
 
-// ---- a reaction to the assistant's own message is addressed to it, in every conversation (the learn rule, persona/learn.md) ----
+// ---- a reaction to the assistant's own message is addressed to it, in every conversation (the learn rule, persona/shared.md) ----
 
 const JOURNAL = "Archived 4 mails from LinkedIn. Why: per your notes: triage-linkedin. Undo: move them back to the inbox.";
 const thumbsDown = (ts: number, over: Partial<IncomingReaction> = {}): Incoming => ({ type: "reaction", r: { from: "+15555550105", emoji: "👎", targetTimestamp: ts, isRemove: false, direct: false, group: { id: GID }, fromName: "Eve", ...over } });
