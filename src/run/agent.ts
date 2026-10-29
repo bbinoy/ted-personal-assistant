@@ -10,6 +10,8 @@ import { lookerOf } from "./scope.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { userInput, type Picture } from "./image.ts";
 import type { Document } from "../conversation/document.ts";
+import { clockLine } from "../core/brief.ts";
+import { zoneOf } from "../tenants/tenants.ts";
 import { tenantKey } from "../core/ownerkey.ts";
 import { approveIn, type Approve } from "../approvals/permissions.ts";
 import { isRefusal, mayRun, type Payer } from "../tenants/payer.ts";
@@ -53,6 +55,10 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
   const { prompt, seenAt, pictures, documents } = build(r.resume ? r.seenAt : undefined);
   const built = runFor(conv, trigger, w.inputs);
   const o: RunOptions = { ...built, ...w.extra?.(built), seenAt, onFirstOutput: w.onFirstOutput };
+  // The clock, the same for every run: the conversation's own zone, taken as the run starts, in the message (not the cached system prompt) and in what each expert is told.
+  const clock = clockLine(now, zoneOf(conv));
+  const expertContext = o.experts?.context;
+  if (o.experts) o.experts = { ...o.experts, context: () => [clock, expertContext?.()].filter(Boolean).join("\n\n") };
   // What the session is told in front of the message: what is set up and the recent notices (turnContext), the claimed facts and the information facts (heartbeat/facts.ts),
   // each only when it differs from what the session was last told. A claimed fact is settled when the run ends: told if the reply said something, else left for the next run.
   const own = !w.facts; // a look settles its facts itself
@@ -69,7 +75,7 @@ async function runTurn(conv: Conversation, trigger: Trigger, build: TurnBuilder,
     return fresh ? [{ key, text: fresh }] : [];
   });
   if (facts?.untrusted && shown.some((s) => s.key.endsWith(":status"))) sessionTaint(t.fresh ? undefined : conv.convId, r.resume).mark(); // (the session now holds a mail's words: the judge is told from here on)
-  const input = userInput(shown.length ? `${shown.map((s) => s.text).join("\n\n")}\n\n${prompt}` : prompt, pictures, documents);
+  const input = userInput([...shown.map((s) => s.text), clock, prompt].join("\n\n"), pictures, documents);
   let reply: AgentReply;
   try {
     reply = t.attended

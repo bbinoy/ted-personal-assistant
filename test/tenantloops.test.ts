@@ -193,7 +193,7 @@ test("a tenant's night is the instruction's, not a rule in code: her look runs a
   const r = rig({ now: night, answer: () => ({}) });
   assert.equal(await r.wakeups.look(tenant(anna.id), night), "silent");
   assert.equal(r.seen.runs.length, 1);
-  assert.match(r.seen.runs[0]!.prompt, /\(Pacific\/Auckland\)/, "the clock line is hers");
+  assert.match(r.seen.runs[0]!.prompt, /\(Pacific\/Auckland, /, "the instruction names her zone (the run path adds the clock line in it: runclock.test.ts)");
   assert.match(r.seen.runs[0]!.prompt, /Quiet hours \(night\) are 22:00-07:00\./);
   const { runFor } = await import("../src/run/runoptions.ts");
   assert.match(runFor(tenant(anna.id), "look", { apiKey: KEY }).systemPrompt, /do nothing unprompted/, "no mail or calendar: she acts only on a note or a promise (her prompt says so)");

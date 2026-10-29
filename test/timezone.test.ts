@@ -61,7 +61,7 @@ test("the clock line and the heartbeat instruction carry the conversation's zone
   const text = lookInstruction(AT, "2026-10-20T20:00:00Z", { ...lookerOf(owner()), zone: "Pacific/Auckland" }); // 09:00 the same day, there
   assert.match(text, /Background check at Wednesday 2026-10-21 12:30 \(Pacific\/Auckland,/);
   assert.match(text, /Your last check was at 09:00\./);
-  assert.match(lookPrompt(AT, text, [], "Pacific/Auckland"), /^CURRENT TIME: it is now Wednesday 2026-10-21 12:30 \(Pacific\/Auckland\)/);
+  assert.doesNotMatch(lookPrompt(text, []), /CURRENT TIME/, "the clock is the run path's (agent.ts), not the prompt's");
   assert.match(lastLookText("2026-10-19T20:00:00Z", AT, "Pacific/Auckland"), /an earlier day/);
   assert.doesNotMatch(lastLookText("2026-10-20T20:00:00Z", AT, "Pacific/Auckland"), /an earlier day/);
 });

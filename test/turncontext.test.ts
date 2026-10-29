@@ -46,13 +46,13 @@ test("turn context: told at the start of the message once, again when it changes
   await r.ask("hello");
   assert.match(r.prompts[0]!, /Meeting prep: call at 11:00[\s\S]*\n\nhello$/);
   await r.ask("second");
-  assert.equal(r.prompts[1], "second", "the session has it: not told again");
+  assert.match(r.prompts[1]!, /^CURRENT TIME[^\n]*\n\nsecond$/, "the session has it: not told again");
   recordMessage("notice", Date.now() + 1, "Meeting prep: call at 15:00", new Date());
   await r.ask("third");
   assert.match(r.prompts[2]!, /call at 15:00[\s\S]*third$/);
   assert.match(r.prompts[2]!, /Meeting prep: call at 11:00/, "the whole block again, not only the change");
   await r.ask("fourth");
-  assert.equal(r.prompts[3], "fourth");
+  assert.match(r.prompts[3]!, /^CURRENT TIME[^\n]*\n\nfourth$/);
   forgetShown(conv.convId); // a compaction
   await r.ask("fifth");
   assert.match(r.prompts[4]!, /call at 15:00[\s\S]*fifth$/);
