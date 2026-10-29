@@ -101,7 +101,6 @@ export function createSendServer(key: string) {
   return createSdkMcpServer({
     name: "send",
     version: "1.0.0",
-    alwaysLoad: true, // its schema is in the prompt from the first call, and the first turn waits for this server (Ted's runs are never handed ToolSearch, so nothing is deferred anyway)
     tools: [
       tool(
         "send",
@@ -115,7 +114,6 @@ export function createSendServer(key: string) {
           urgent: z.boolean().optional().describe("Only in your own periodic look: true if the text is truly time-critical and cannot wait; otherwise at night or past the day's limit it is held and delivered later. Default false."),
         },
         async (a) => ({ content: [{ type: "text" as const, text: await sendNow(key, a) }] }),
-        { alwaysLoad: true },
       ),
     ],
   });

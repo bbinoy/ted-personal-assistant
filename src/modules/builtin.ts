@@ -3,6 +3,7 @@ import { rowsOf, type ToolModule } from "./types.ts";
 
 // The assistant's own tools: web search and page fetch, skills, the notes' file tools. Nothing to connect: they are the SDK's.
 // The rows are also the ONE list of which built-in tools a run is handed (agentrun.ts builtinTools): the rows its tool set holds (the order here is the order the tool list has).
+// ToolSearch is deliberately not offered, so every tool loads upfront (no tool is missing because the model did not search for it).
 const builtin = rowsOf("", "builtin", "chat");
 export const builtinModule: ToolModule = {
   name: "builtin",

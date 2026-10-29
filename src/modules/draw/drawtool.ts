@@ -37,7 +37,6 @@ export function createDrawServer(key: string) {
   return createSdkMcpServer({
     name: "draw",
     version: "1.0.0",
-    alwaysLoad: true,
     tools: [
       tool(
         "draw",
@@ -47,7 +46,6 @@ export function createDrawServer(key: string) {
           caption: z.string().max(300).optional().describe("A short line for the picture, used when you send it."),
         },
         async (a) => drawNow(key, a),
-        { alwaysLoad: true },
       ),
     ],
   });

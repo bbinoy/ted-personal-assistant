@@ -28,7 +28,6 @@ export function createIntakeServer(t: { id: string }, links: LinkStore = new Lin
   return createSdkMcpServer({
     name: "intake",
     version: "1.0.0",
-    alwaysLoad: true,
     tools: [
       tool(
         INTAKE_LINK_TOOL.split("__")[2]!,
@@ -44,7 +43,6 @@ export function createIntakeServer(t: { id: string }, links: LinkStore = new Lin
           emitRecord("intake_link", "minted", "group", { tenant: t.id, purpose });
           return reply(`${linkUrl(settings.intake.baseUrl!, code)}\nSingle use, valid ${LINK_MINUTES} minutes, only for "${purposeOf(purpose)!.title}". Send it to her in your reply as it is.`);
         },
-        { alwaysLoad: true },
       ),
       tool(
         INTAKE_STATUS_TOOL.split("__")[2]!,
@@ -66,7 +64,6 @@ export function createIntakeServer(t: { id: string }, links: LinkStore = new Lin
           if (!done) return reply(open ? "Not yet: her link is still open." : "Nothing saved yet, and no link is open.");
           return reply(`Stored at ${done.at}: ${done.stored.map((s) => `${s.name} (${s.chars} characters)`).join(", ")}.${open ? " A newer link is open." : ""}`);
         },
-        { alwaysLoad: true },
       ),
     ],
   });
