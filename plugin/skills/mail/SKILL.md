@@ -68,7 +68,8 @@ your head: take what decides the case and move on.
      of: their notes, contacts, earlier threads, sent mail, the calendar tell you).
      A real conversation stays, read or unread, however old, until it has clearly
      closed (a thanks or a sign-off, nothing open on either side) **and** is older
-     than about 14 days. **The owner's own mails stay too**: a thread the owner
+     than about 14 days. A personal thread with a friend or family member that may
+     still need an answer stays in the inbox, never archived. **The owner's own mails stay too**: a thread the owner
      started or a mail they sent to themselves (a note, a link, a forward), unless
      it is one of the assistant's own briefs.
    - **Cold outreach is noise even when a named person wrote it**: sales,
@@ -190,7 +191,7 @@ item exists; unattended it is added and told; see `ted-personal-assistant:tasks`
 
 ### Restoring archived mail
 
-"Restore 3" (or "restore 2,5") after a brief means item 3 of the journal's archive list for that brief's `since`: call `journal` with `kind` `archive` and the same `since` (the same `since` gives the same numbers), find the item, and put the mail back in the inbox with the provider's tool: Mailbird `move_conversation_to_inbox` (with the conversation id the list gives; the id changes after a move), Gmail `label_thread` with `INBOX`. Say what came back in one line.
+Restoring works by name: when the owner says which mail ("bring back the one from <sender>", "restore the invoice mail") or gives a number from an archive list you showed, call `journal` with `kind` `archive` and the `since` of the brief (or an earlier `since` when it is older), find the item by sender or subject (or by its number in that list), and put the mail back in the inbox with the provider's tool: Mailbird `move_conversation_to_inbox` (with the conversation id the list gives; the id changes after a move), Gmail `label_thread` with `INBOX`. Say what came back in one line.
 
 Operate the agent with `npm run doctor` (health), `npm run report` (what it
 did) and `npm run restore <id>` (un-archive).

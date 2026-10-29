@@ -25,7 +25,7 @@ A short look back at today and ahead at tomorrow, as one chat message. It first 
 Use the date and weekdays exactly as `CURRENT TIME` gives them. Short lines, `-` bullets, no tables, no `#` headings, at most about 12 lines in all.
 
 1. `Today` - 1 to 4 bullets: what got done (tasks finished, anything notable in the journal). If nothing: "A quiet one." and nothing more.
-2. `Tomorrow` - the first meeting (time, title, who) and a count of the rest ("3 more"); then tasks due tomorrow by name (at most 3, then "and N more").
+2. `Tomorrow at a glance` - the first event (time, title, place with its map link) and a count of the rest ("3 more"); anything to prepare tonight (a prep page, an early start, a booking cutoff); tasks due tomorrow by name (at most 3, then "and N more"). Keep it to 2 or 3 lines.
 3. `Still waiting on you` - open approvals, overdue tasks (count and the oldest one), mail that is new since it was last mentioned. Only what exists.
 4. `Did` - what the tidy-up did, one line each ("snoozed 12 old tasks to Monday; say undo").
 

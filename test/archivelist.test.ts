@@ -92,10 +92,29 @@ test("bringing mail back: free in the owner's own chat (Mailbird to inbox, Gmail
   assert.equal(judged, 1, "outside the owner's chat a restore is judged like any call");
 });
 
-test("the daily brief lists the archived mail from the numbered list, and its chat line says how to bring one back", () => {
+test("the daily brief spells out the uncertain archived mail, counts the rest, has no restore hint, and restoring works by name", () => {
   const skill = readFileSync("plugin/skills/daily-brief/SKILL.md", "utf8");
   assert.match(skill, /## 🧹 Archived/);
-  assert.match(skill, /One line of counts by kind[\s\S]*journal number[\s\S]*never renumbered[\s\S]*Reply 'archived' for the full numbered list/);
-  assert.match(skill, /🧹 Archived N since <since> \(list in the email; reply 'restore N' to bring one back\)/);
+  assert.match(skill, /by sender and subject, every mail you archived that you were not fully sure about[\s\S]*counts by kind/);
+  assert.match(skill, /No hint line about restoring/);
+  assert.doesNotMatch(skill, /reply 'restore N'/);
   assert.match(skill, /once with `kind` `archive`/);
+  assert.match(readFileSync("plugin/skills/mail/SKILL.md", "utf8"), /Restoring works by name[^\n]*sender or subject/);
 });
+
+test("the daily brief has the new skeleton: greeting, Focus today, Everything else today, Radar, Archived; no numbers, no look-ahead, no Learned section", () => {
+  const skill = readFileSync("plugin/skills/daily-brief/SKILL.md", "utf8");
+  const heads = [...skill.matchAll(/^\d\. `(## [^`]+)`/gm)].map((m) => m[1]);
+  assert.deepEqual(heads, ["## 🎯 Focus today", "## 📋 Everything else today", "## 📡 Radar", "## 🧹 Archived"]);
+  assert.doesNotMatch(skill, /Needs you|Learned overnight|Waiting on|## ✅ Tasks|## 📅 Today/);
+  assert.match(skill, /No task numbers anywhere|\*\*No task numbers anywhere\*\*/);
+  assert.match(skill, /1,500 characters/);
+  assert.match(skill, /Today only/);
+  assert.match(skill, /one line saying the full brief \(Radar, Archived\) is in the inbox/);
+});
+
+test("the evening wrap looks at tomorrow and the weekly review at the week ahead", () => {
+  assert.match(readFileSync("plugin/skills/evening-wrap/SKILL.md", "utf8"), /Tomorrow at a glance[^\n]*first event[^\n]*prepare tonight/);
+  assert.match(readFileSync("plugin/skills/weekly-review/SKILL.md", "utf8"), /## Week ahead/);
+});
+
