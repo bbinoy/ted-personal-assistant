@@ -11,7 +11,6 @@ import { dreamScope, dreamStateConv, readDream, writeDream, type DreamState } fr
 import { clockLine } from "../core/brief.ts";
 import { fence } from "../core/fence.ts";
 import { listGroups } from "./groupstore.ts";
-import { recordDream } from "../memory/learned.ts";
 import { foldEdits, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
 import { STATUS_PREFIX } from "../memory/notes.ts";
 import { isPaused } from "../core/pause.ts";
@@ -152,19 +151,18 @@ const named = (what: string, name: string, fallback: string): string => oneLine(
 
 // What differs between kinds of conversation, in ONE table (nothing else in this file looks at `kind`): whose notes they are as the prompts say it, whose words are
 // evidence, how many new lines make a dream worthwhile and how many dreams a night (the preset's rhythm.dream), whether the words of what it did may be logged
-// (a friend's stay out: the admin cannot read them) and whether it is listed in "what I learned overnight" (a group's notes are shared, nothing is listed).
+// (a friend's stay out: the admin cannot read them).
 interface KindRules {
   subject: (conv: Conversation) => string;
   evidence: "owner" | "member";
   minNewLines: () => number;
   nightlyCap: () => number; // dreams of this kind per run
   logWords: boolean;
-  recorded: boolean;
 }
 export const RULES: Record<Kind, KindRules> = {
-  owner: { subject: () => OWNER, evidence: "owner", minNewLines: () => preset().rhythm.dream.minNewLines.direct, nightlyCap: () => Infinity, logWords: true, recorded: true },
-  group: { subject: (c) => `the group chat "${named("group name", listGroups().find((g) => g.id === c.groupId)?.name || "a group", "a group")}"`, evidence: "member", minNewLines: () => preset().rhythm.dream.minNewLines.group, nightlyCap: () => preset().rhythm.dream.maxGroupsPerNight, logWords: true, recorded: false },
-  tenant: { subject: (c) => named("name", speakerOf(c), "a friend"), evidence: "owner", minNewLines: () => preset().rhythm.dream.minNewLines.direct, nightlyCap: () => Infinity, logWords: false, recorded: true },
+  owner: { subject: () => OWNER, evidence: "owner", minNewLines: () => preset().rhythm.dream.minNewLines.direct, nightlyCap: () => Infinity, logWords: true },
+  group: { subject: (c) => `the group chat "${named("group name", listGroups().find((g) => g.id === c.groupId)?.name || "a group", "a group")}"`, evidence: "member", minNewLines: () => preset().rhythm.dream.minNewLines.group, nightlyCap: () => preset().rhythm.dream.maxGroupsPerNight, logWords: true },
+  tenant: { subject: (c) => named("name", speakerOf(c), "a friend"), evidence: "owner", minNewLines: () => preset().rhythm.dream.minNewLines.direct, nightlyCap: () => Infinity, logWords: false },
 };
 const subjectOf = (conv: Conversation): string => RULES[conv.kind].subject(conv);
 
@@ -214,7 +212,6 @@ export function createDreamer(deps: DreamerDeps = {}) {
       emit({ type: "dream", result: snapshot ? "changed" : "no-change", source: "dream", conv: conv.key, friend: false, meta: { ...tag, actions: plan.actions.length, rejected: plan.rejected.length }, text: `Tidied my notes in the nightly dream (${plan.actions.length} change${plan.actions.length === 1 ? "" : "s"})` });
       console.log(`${label}: ${plan.actions.length} change(s), ${plan.rejected.length} rejected`);
       if (snapshot && rules.logWords) console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
-      if (snapshot && rules.recorded) recordDream(conv.convId, plan, scope.notesDir, now.getTime()); // not silent to the person: it is listed once in "what I learned overnight" (memory/learned.ts); a group's notes are shared, nothing is listed
     } catch (e) {
       console.error(`dream (${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""}): failed:`, (e as Error).message);
       emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: false, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });

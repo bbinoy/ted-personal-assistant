@@ -7,7 +7,6 @@ import { fence } from "../core/fence.ts";
 import { dayAt, dayIn, timeIn } from "../core/timezone.ts";
 import { PLUGIN } from "../core/preset.ts";
 import { takeWelcome } from "../core/welcome.ts";
-import { learnedFact } from "../memory/learned.ts";
 import { lookerOf } from "../run/scope.ts";
 import { resultText } from "../modules/browse/browseguard.ts";
 import { brokenText, scheduledIn } from "../modules/tasks/routinelist.ts";
@@ -26,10 +25,10 @@ import { afterPrep, waitingMeetings } from "./preptick.ts";
 const ROUTINE_CATCHUP_HOURS = 4;
 
 // THE FACTS CODE HANDS A RUN (CLAUDE.md §2: one agent, whatever started it). The heartbeat look and every chat turn (the owner's, a friend's, a group's) call `factsFor` and get the same
-// facts for their conversation: held posts, reminders due, meetings to prepare, a friend's learned changes, the welcome, a due routine or routine note, and as information the own posts of the last days,
+// facts for their conversation: held posts, reminders due, meetings to prepare, the welcome, a due routine or routine note, and as information the own posts of the last days,
 // what was added to the list on its own and a long run of failing looks. Whichever run comes first says them; each is delivered AT MOST ONCE:
-//   * the claimed ones (held posts, reminders, meetings, learned, routines) are PENDING while the run that took them is going (`busy`, in memory): another run of the conversation does not get
-//     them. `done` settles them when the run ends: the same rule as before for a look (reminders: posted, or held and not urgent; learned: posted or held; prep: posted only; held posts and a skipped
+//   * the claimed ones (held posts, reminders, meetings, routines) are PENDING while the run that took them is going (`busy`, in memory): another run of the conversation does not get
+//     them. `done` settles them when the run ends: the same rule as before for a look (reminders: posted, or held and not urgent; prep: posted only; held posts and a skipped
 //     routine's mention: the look ended posted or silent), and for a chat turn "said" means the reply carried words (a [[silent]] or reaction-only turn tells nothing and leaves them for the next run).
 //   * a failed or called-off run leaves them for the next one. The claims themselves (a reminder, a meeting, a routine's period) are still written by the ticks and the planner in code.
 // A look's own bookkeeping (when its next look is) is not a fact: it is part of the look's answer.
@@ -110,7 +109,7 @@ export interface Facts {
   done(end: End): void; // settle what the run was handed, once, and release it
 }
 
-/** The facts of a conversation for one run at `now`. Reuses the per-fact planners and records (notices, remindtick, preptick, memory/learned, tasks/*); this only picks, holds and settles them. */
+/** The facts of a conversation for one run at `now`. Reuses the per-fact planners and records (notices, remindtick, preptick, tasks/*); this only picks, holds and settles them. */
 export function factsFor(conv: Conversation, now: Date, attended: boolean): Facts {
   const looker = lookerOf(conv);
   const t = now.getTime();
@@ -149,12 +148,10 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
     if (!started.has(name) && routines?.due?.routine.name === name) (started.add(name), markStarted(conv.convId, name, routines.due.plan.slot.date, Date.now())); // (a second delegation of the same routine is not another attempt)
   };
 
-  const learned = !routines?.due && !isBusy(conv.key, "learned") ? learnedFact(conv.convId, conv.notesDir, t) : undefined; // notes that changed on their own (memory/learned.ts; a group has none). A run that carries a routine (the brief) is not handed them: it would be marked told without saying them, so the next ordinary run does
-  if (learned) grab("learned");
   const lapsedNow = !attended && !isBusy(conv.key, "lapsed") ? lapsedIn(conv.key).slice() : [];
   const lapsed = lapsedFact(conv.convId, lapsedNow, t);
   if (lapsed) grab("lapsed");
-  const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts, learned ? fence("notes_changed_facts", learned.text) : "" ].filter(Boolean);
+  const blocks = [heldBlock(held.held, now, zone), welcome, dueFacts, prepFacts].filter(Boolean);
   const status = [ownPostsBlock(withoutDeleted(ledgerEntries(conv.logFile)), now, zone), tasks.text && fence("task_list_facts", tasks.text), routineStatus(conv.convId, ownRoutines.filter((r) => r.name !== routines?.due?.routine.name), now, zone, ROUTINE_CATCHUP_HOURS), broken.length ? `Routine notes that will never run, fix their when: line (front matter, a repeat rule like "every weekday at 18:30"): ${broken.map(brokenText).join("; ")}.` : "", failingLooksFact(conv), lapsed, capabilitiesOf(conv).has("profile") ? whereaboutsFact(now, zone, looker.who) : ""].filter(Boolean);
   let settled = false;
   return {
@@ -188,7 +185,6 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
           for (const l of lapsedNow) told(convDb(conv.convId), lapsedKey(l), { once: true });
           forgetLapsed(conv.key, lapsedNow);
         }
-        if (learned && (end.said || end.held)) learned.told();
       } finally {
         for (const id of mine) busy.get(conv.key)?.delete(id);
       }
