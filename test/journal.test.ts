@@ -260,3 +260,14 @@ test("the journal tool refuses a notes folder that belongs to no conversation in
   assert.match(r.content[0]!.text, /not available here/);
   assert.ok(readAudit((e) => e.tool === "journal" && e.decision === "refused").length >= 1);
 });
+
+test("readJournal: the per-mail decision log (triage) is shown when asked for, not in the default read or /today", () => {
+  const file = logOf();
+  line(file, "2026-10-21T07:12:00Z", "triage", "Kept “Friday” from Eve. Why: Eve waits for an answer.");
+  line(file, "2026-10-21T07:13:00Z", "archive", "Archived “Digest”. Why: a periodic look. Undo: npm run restore c-1.");
+  const now = Date.parse("2026-10-21T12:00:00Z");
+  assert.match(readJournal(file, { since: "2026-10-21" }, { now }), /^1 journal line /, "hidden by default");
+  assert.match(readJournal(file, { kind: "triage" }, { now }), /^1 journal line [\s\S]*\[triage\] Kept “Friday” from Eve\. Why: Eve waits/);
+  assert.match(readJournal(file, { query: "eve" }, { now }), /^1 journal line [\s\S]*Kept “Friday”/, "a search finds it");
+  assert.doesNotMatch(todayText(file, { now, zone: "UTC" }), /Eve/);
+});

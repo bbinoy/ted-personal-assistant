@@ -103,6 +103,8 @@ export function project(e: Event, why: (conv: string, run: string | undefined, t
       return [{ conv: OWNER_KEY, cat: "removal", text: journalText({ what: e.text, why: { text: "you asked for it" } }) }]; // (the removed conversation's own log goes with it: the record is the owner's)
     case "task":
       return e.conv !== undefined && !e.viaTool ? [{ conv: e.conv, cat: "task", text: journalText({ what: e.text, why: e.why ?? NO_WHY }) }] : []; // (a tool call's line is its `done` event's, which has the run's why)
+    case "triage":
+      return e.conv !== undefined ? [{ conv: e.conv, cat: "triage", text: journalText({ what: e.what, why: { text: e.why } }) }] : [];
     default:
       return [];
   }

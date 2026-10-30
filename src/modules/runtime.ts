@@ -16,7 +16,6 @@ import { createSendServer } from "./send/send.ts";
 import { auditSource } from "../core/runkind.ts";
 import { createPeopleServer } from "./people/peopletool.ts";
 import { createTasksServer } from "./tasks/tasktools.ts";
-import { createSeenMailServer } from "./seenmail/seenmail.ts";
 import { createMeetingsServer } from "./meetings/meetingtools.ts";
 import { settings } from "../core/settings.ts";
 import { createTenantAdminServer } from "../tenants/tenanttools.ts";
@@ -80,7 +79,6 @@ export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
         zone: () => zoneOf({ tenantId: ctx.tenant?.id }),
       }),
   },
-  seenmail: { server: (ctx) => createSeenMailServer(ctx.seenMail!) },
   // note_upcoming_meetings: any run with the calendar, writing that conversation's own meetings table (meetingtools.ts).
   meetings: { server: (ctx) => createMeetingsServer({ key: ctx.key!, source: auditSource(ctx.kind) }) },
   browse: { server: (ctx) => createBrowseServer({ mode: ctx.mode, groupId: ctx.groupId, key: ctx.key, attended: ctx.kind.attended, tenant: !!(ctx.tenant ?? ctx.sponsor), run: ctx.browseRun }) },

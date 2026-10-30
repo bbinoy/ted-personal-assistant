@@ -10,12 +10,12 @@ export interface JournalArgs {
   since?: string; // YYYY-MM-DD, YYYY-MM-DDTHH:MM, "today" or "yesterday", in the conversation's time zone
   until?: string; // a bare date includes that whole day
   sinceHours?: number;
-  kind?: string; // the category: archive, mail, calendar, notion, drive, memory, dream, notice, payment, removal, task, browse, other
+  kind?: string; // the category: archive, mail, calendar, notion, drive, memory, dream, notice, payment, removal, task, browse, triage (why each inbox mail was archived or kept), other
   query?: string; // every word must appear (case-insensitive)
   limit?: number;
 }
 
-export const KINDS = ["archive", "mail", "calendar", "notion", "drive", "memory", "dream", "notice", "payment", "removal", "task", "browse", "other"] as const;
+export const KINDS = ["archive", "mail", "calendar", "notion", "drive", "memory", "dream", "notice", "payment", "removal", "task", "browse", "triage", "other"] as const;
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 const MAX_CHARS = 9000;
@@ -49,7 +49,7 @@ function journalSelect(file: string, a: JournalArgs, now: number, zone: string):
     const t = Date.parse(m.at);
     if (from !== undefined && t < from) return false;
     if (to !== undefined && t > to) return false;
-    if (kind && m.cat !== kind) return false;
+    if (kind ? m.cat !== kind : m.cat === "triage" && !words.length) return false; // (the per-mail decision log is shown when asked for: kind triage, or words to search for)
     const lower = m.text.toLowerCase();
     return words.every((w) => lower.includes(w));
   });

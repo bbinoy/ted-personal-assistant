@@ -49,6 +49,8 @@ export type Event =
   // A task changed (tasks/store.ts, one per mutation): the audit row (id and state) and the journal line (`text`, with its `why` when the change was made outside a tool call). A tool call's journal line is the
   // call's own (the `done` event, which has the run's why), so `viaTool` keeps this one to the audit log.
   | ({ type: "task"; id: string; state: string; text: string; source: Source; why?: Why; viaTool?: boolean } & Where)
+  // The decision log of a look (heartbeat/look.ts): one line per inbox mail it considered, with its reason and, for an archive, the judge's outcome. Journal only, no audit row.
+  | ({ type: "triage"; what: string; why: string; source: Source } & Where)
   // An audit-only record of something the system did that is no permission decision and no journalled action (a refused send, tenant administration, a compacted session).
   | { type: "record"; tool: string; decision: string; source: Source; meta?: Meta };
 

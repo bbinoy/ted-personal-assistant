@@ -17,7 +17,7 @@ import { isReadTool } from "../policy/policy.ts";
 import { entryFor } from "../policy/toolmanifest.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { clampLook, parseHeartbeatAnswer } from "../run/rules.ts";
-import { createSeenMail, type SeenMail } from "../modules/seenmail/seenmail.ts";
+import { createTriage, type Triage } from "../tasks/maildecisions.ts";
 import { hasSomethingToLookAt, lookerOf, type Looker } from "../run/scope.ts";
 import { RunStopped, RunTimeout } from "../run/ceiling.ts";
 import { hasOpen } from "../approvals/approvals.ts";
@@ -43,7 +43,7 @@ interface RunExtra {
   onToolSuccess?: (tool: string, input: unknown, response?: unknown) => void;
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void;
-  seenMail?: SeenMail; // this look's tracker of the inbox mail already worked through
+  triage?: Triage; // this look's decision log of the inbox
   signal?: AbortSignal; // the look is called off (a message overtook it): the run stops, or never starts if it still waits for a place (rungate.ts)
   style?: string; // a group: the style lines of its chat, as for a message
   facts: TurnFacts; // this look's facts: the run tells them (each once per session), look() settles them with how the look ended
@@ -146,10 +146,10 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     const journaled = (): number => ledgerEntries(journalFile).filter((m) => m.kind === "journal").length;
     const journaledBefore = journaled();
     let steps = 0; // calls that could have a journal line (an action, not a read or plumbing)
-    let acted = 0; // tool calls that are not reads (listing the inbox or asking seen_mail is looking, not acting)
+    let acted = 0; // tool calls that are not reads (listing the inbox is looking, not acting)
     let archived = 0;
     let delegations = 0;
-    const seenMail = createSeenMail(conv.convId); // the ids the run is told are new count as seen only if this look ends well
+    const triage = createTriage(conv.convId); // the decision log: written from the run's answer, and the judge's verdict on each archive
     let sent = 0; // pieces the run (or its expert) sent with the send tool while it worked
     const facts = factsFor(conv, now, false); // the claimed facts are pending until this look ends (facts.ts)
     const instruction = lookInstruction(now, st.wake?.looked, looker, facts.routines, due.join(" "));
@@ -186,7 +186,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             facts,
             provenance: { kind: "standing", task: instruction },
             ...(facts.untrusted ? { untrusted: true } : {}), // a task made from a mail carries the mail's words: acting on it is judged like acting on the mail
-            seenMail,
+            triage,
             signal: overtaken.signal,
             onDelegate: (agent) => {
               delegations++;
@@ -195,7 +195,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
             onToolSuccess: (tool, input, response) => {
               toolCalls++;
               facts.onTool(tool, input, response);
-              if (!isReadTool(tool) && !isNonAction(tool) && tool !== "mcp__seenmail__seen_mail") acted++; // (handing in the answer is not acting: a stale post is still dropped)
+              if (!isReadTool(tool) && !isNonAction(tool)) acted++; // (handing in the answer is not acting: a stale post is still dropped)
               if (entryFor(tool)?.action === "archive") archived++;
               if (journalable(tool, input as Record<string, unknown>)) steps++;
             },
@@ -230,13 +230,14 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
         outcome = res.error ? "failed" : res.spoke ? "posted" : "silent";
       }
     }
+    const verdictText = (id: string): string => { const v = triage.verdict(id); return v ? `; safety check: ${v.outcome}${v.reason ? ` (${v.reason})` : ""}` : ""; };
+    if (reply) triage.record(answer?.triage ?? [], Date.now());
+    if (reply) for (const t of answer?.triage ?? []) emit({ type: "triage", conv: conv.key, what: `${{ archive: "Archived", keep: "Kept", task: "Made a task from", draft: "Drafted a reply to" }[t.decision]} “${t.subject || t.id}”${t.from ? ` from ${t.from}` : ""}`, why: `${t.reason || "no reason given"}${t.decision === "archive" ? verdictText(t.id) : ""}`, source: auditSource({ who: conv.kind, attended: false }) });
     if (outcome === "preempted") h.preempted++;
     else (h.preempted = 0, (h.completedAt = now.getTime()));
     const failed = outcome === "failed" || outcome === "timeout";
     const retry = failed ? clampLook(settings.heartbeatMinutes) : undefined; // a failed or timed-out look is due again on the next free ticks (the tick period, within the 10..120 rule), not after the day's 30 minutes
     if (outcome !== "preempted" && !interrupted) observeLook(conv, outcome === "timeout" ? "failed" : outcome, failure, now, clocks.mono()); // (a sleep is neutral: neither a failure nor the end of a streak)
-    if (failed || outcome === "preempted" || (stale && !!answer?.message)) seenMail.discard(); // (a post dropped as stale reported mail nobody heard of: it is raised again at the next look)
-    else seenMail.commit();
     if (sent > 0 && outcome === "silent") outcome = "posted"; // it spoke while it worked, and its final answer had nothing to add
     // What the look was handed is settled by facts.ts: held posts when it ended posted or silent, reminders and learned changes when it posted or held, a prep when it posted, a routine when its expert came back (a look a message overtook settles none of the last two).
     facts.done({ ended: outcome === "posted" || outcome === "silent", said: outcome === "posted", held, abandoned: outcome === "preempted" || interrupted, sends: sent, acted });

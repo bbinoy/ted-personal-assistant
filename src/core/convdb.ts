@@ -13,7 +13,7 @@ import { writeFileAtomic } from "./state.ts";
 //
 //   session / dream / hold / quiet / friend   ONE row each (id = 1): a CHECK keeps it so
 //   held_posts       the posts quiet hours or the day's cap kept back, oldest first (bounded where they are written)
-//   seen_mail        the mail ids the heartbeat has worked through, oldest first: seq orders them, the bound (2000) is a query (trimSeenMail), also a retention rule
+//   mail_decisions   the look's last decision per inbox mail (id, archive/keep/task/draft, reason, sender, subject, when), oldest first: seq orders them, the bound (2000) is a query (trimDecisions), also a retention rule
 //   voice_notes / voice_quotes   the voice notes received in this conversation and the messages that quote them
 //   meetings / meeting_calls   the upcoming meetings the heartbeat look recorded, the prep sent for each, and when the look last reported (tasks/meetings.ts)
 //   routine_runs     the last period of each routine (a routine note): once per occurrence, retries, skips (src/tasks/routines.ts)
@@ -21,7 +21,7 @@ import { writeFileAtomic } from "./state.ts";
 //   lapsed_approvals background approvals nobody answered in time, until a look is told (7 days at most, a retention rule)
 //   told             what was told once, or at most once a day / in a while, about this conversation: `group-reminder:<member>` = a group member told that a reminder said in the group is the group's (core/told.ts, src/tasks/grouptasks.ts).
 //
-// NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing seen_mail re-triages the whole inbox, so a damaged file is never quietly replaced by an empty
+// NOT rebuildable. Losing the tasks or the session pointer is bad (not financial), and losing mail_decisions makes the whole inbox look new once (its decisions are gone), so a damaged file is never quietly replaced by an empty
 // one like a cache would be. What happens instead (the policy, tested): the file is SET ASIDE (assistant.db.corrupt-<time>, its -wal and -shm with it), a marker (assistant.db.damaged) is written,
 // and a fresh empty database starts, so CHAT KEEPS WORKING (a fresh session; the person can still talk to it). While the marker is there that conversation's BACKGROUND work is refused (payer.ts mayRun:
 // the heartbeat look, the dream, quiet compaction, approved archives), the owner is told once a day (heartbeat/notices.ts) and the doctor fails with the file's name. A person restores the set-aside file
@@ -259,6 +259,27 @@ export const CONV_SCHEMA: readonly Migration[] = [
       ALTER TABLE routine_runs ADD COLUMN chat_sent INTEGER NOT NULL DEFAULT 0; -- 1: that run did tell the chat, so the retry must not
     `,
   },
+  {
+    version: 27,
+    name: "no 'reset' flag: every look reviews the whole inbox, so a lost log needs no special skip",
+    up: `DROP TABLE reset;`,
+  },
+  {
+    version: 28,
+    name: "the look's last decision per inbox mail (archive, keep, task, draft, with the reason): `seen_mail` becomes `mail_decisions`, and every run is handed it as a fact",
+    up: `
+      DROP TABLE seen_mail;
+      CREATE TABLE mail_decisions (
+        seq      INTEGER PRIMARY KEY AUTOINCREMENT,                 -- oldest first: the bound drops the lowest (trimDecisions)
+        id       TEXT NOT NULL UNIQUE,                              -- the mail's id as the mail tool returned it
+        decision TEXT NOT NULL,                                     -- archive | keep | task | draft
+        reason   TEXT,
+        sender   TEXT,
+        subject  TEXT,
+        at       INTEGER NOT NULL                                   -- epoch ms of the decision
+      );
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----
@@ -274,7 +295,7 @@ const IDLE_MS = 10 * 60_000;
 export interface Damage {
   at: string; // ISO
   keptAs: string; // the set-aside file
-  salvaged?: { seenMail: number; session: boolean }; // what was copied out of the damaged file into the fresh one
+  salvaged?: { session: boolean }; // what was copied out of the damaged file into the fresh one
 }
 
 const CORRUPT = "assistant.db.corrupt-";
@@ -341,7 +362,7 @@ function attempt(p: ConvPaths, conv: ConvId): Db {
   return openDb(p.db, { migrations: CONV_SCHEMA, rebuildable: false, verify: true, label: `${conv}'s assistant.db` });
 }
 
-/** Copies what can still be read out of the damaged copy into the fresh database, table by table, each in its own try/catch: the mail ids (so the inbox is not triaged again) and the session pointer. */
+/** Copies what can still be read out of the damaged copy into the fresh database, table by table, each in its own try/catch: the session pointer. */
 function salvage(kept: string, fresh: Db, damage: Damage): void {
   let raw: DatabaseSync | undefined;
   try {
@@ -350,16 +371,6 @@ function salvage(kept: string, fresh: Db, damage: Damage): void {
     return; // not even a database
   }
   try {
-    const ids: string[] = [];
-    try {
-      for (const r of raw.prepare("SELECT id FROM seen_mail ORDER BY seq").all() as { id: unknown }[]) if (typeof r.id === "string") ids.push(r.id);
-    } catch {
-      /* this table is not readable */
-    }
-    const keep = ids.slice(-2000);
-    fresh.tx(() => {
-      for (const id of keep) fresh.run("INSERT OR IGNORE INTO seen_mail (id) VALUES (?)", id);
-    });
     let session = false;
     try {
       const r = raw.prepare("SELECT session_id, cost_usd, last_turn_at, last_context_tokens, compact_failed_at, base_tokens, seen_at, untrusted_in FROM session WHERE id = 1").get() as Record<string, string | number | null> | undefined;
@@ -373,7 +384,7 @@ function salvage(kept: string, fresh: Db, damage: Damage): void {
     } catch {
       /* not readable */
     }
-    damage.salvaged = { seenMail: keep.length, session };
+    damage.salvaged = { session };
   } finally {
     try { raw.close(); } catch { /* closed */ }
   }
@@ -400,7 +411,6 @@ function openFor(p: ConvPaths, conv: ConvId): Db {
     moveCorruptAside(p.db, to);
     console.error(`convdb: ${conv}'s assistant.db is damaged (${why}); set aside as ${to}. Chat goes on with a fresh start; its background work is stopped until a person looks (npm run doctor).`);
     db = attempt(p, conv);
-    db.run("INSERT OR REPLACE INTO reset (id, at) VALUES (1, ?)", at); // the first look after this skips every mail in the inbox: a fresh database never means "triage it all again"
     salvage(to, db, damage);
     writeFileAtomic(p.dbDamaged, JSON.stringify(damage));
   }

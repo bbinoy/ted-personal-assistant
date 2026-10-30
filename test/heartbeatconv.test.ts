@@ -164,7 +164,7 @@ test("the owner's run is unchanged by all of it: the login, the background sourc
   assert.ok(o.experts);
   const l = lookerOf(owner());
   assert.deepEqual([l.own, l.reads, l.mail], [true, true, true]);
-  assert.match(l.sources, /^the inbox \(list it with the mail tools and ask seen_mail which mail is new\), the calendar for the next 36 hours, tasks, and your notes$/);
+  assert.match(l.sources, /^the whole inbox, read and unread \(list it with the mail tools; the decisions so far say which mail is new\), the calendar for the next 36 hours, tasks, and your notes$/);
 });
 
 test("something to look at: mail or a calendar (her own Google, once the instance has the OAuth client), or a note; nothing else opens a look", () => {

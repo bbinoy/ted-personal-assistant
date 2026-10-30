@@ -3,7 +3,7 @@ import { convDbAt } from "../core/convdb.ts";
 import { dataRoot, isConvId, layout, type Layout } from "../core/convpaths.ts";
 import { registerRetention, type RetentionRule } from "../core/retention.ts";
 import { pruneVoiceNotes } from "../modules/voice/voicenote.ts";
-import { SEEN_MAX, trimSeenMail } from "../modules/seenmail/seenmail.ts";
+import { MAX_DECISIONS, trimDecisions } from "../tasks/maildecisions.ts";
 import { MAX_HELD } from "../core/ownerfact.ts";
 import { KEEP_MS as MEETING_KEEP_MS } from "../tasks/meetings.ts";
 import { STALE_MINUTES } from "../tasks/routines.ts";
@@ -11,7 +11,7 @@ import { scheduledIn } from "../modules/tasks/routinelist.ts";
 
 // The retention rule for the tables of every conversation's assistant.db (core/convdb.ts; core/retention.ts says how rules run). Each table is bounded where it is written already; this is the
 // nightly guarantee that the bound holds (a changed bound, a crash between a write and its trim) and the sweep of what has only an age:
-//   seen_mail       the newest SEEN_MAX (2000) ids; older ones are forgotten (the mail they name is long past the look-back)
+//   mail_decisions the newest MAX_DECISIONS (2000) rows; older ones are forgotten (the mail they name is long past the look-back)
 //   held_posts      the newest MAX_HELD (30): a handover to the next look, not an archive
 //   voice_notes / voice_quotes   notes outside the 7-day look-back, and the 50 / 100 newest
 //   meetings        rows whose meeting started more than 3 days ago (tasks/meetings.ts)
@@ -61,7 +61,7 @@ export function convDbRule(L: () => Layout): RetentionRule {
       for (const conv of names(l.conversations)) {
         if (!isConvId(conv) || !existsSync(l.conv(conv).db)) continue;
         const db = convDbAt(l.root, conv);
-        parts.seen += trimSeenMail(db, SEEN_MAX, o.dryRun);
+        parts.seen += trimDecisions(db, MAX_DECISIONS, o.dryRun);
         const over = Math.max(0, db.num("SELECT COUNT(*) FROM held_posts") - MAX_HELD);
         parts.held += over;
         if (over > 0 && !o.dryRun) db.run("DELETE FROM held_posts WHERE seq IN (SELECT seq FROM held_posts ORDER BY seq LIMIT ?)", over);
@@ -73,7 +73,7 @@ export function convDbRule(L: () => Layout): RetentionRule {
         parts.routines += pruneRoutineRuns(db, l.conv(conv).notes, now, o.dryRun);
       }
       const removed = parts.seen + parts.held + parts.voice + parts.meetings + parts.routines + parts.reminders + parts.lapsed;
-      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} seen-mail id(s) past ${SEEN_MAX}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.voice} voice row(s) past their window, ${parts.meetings} meeting row(s) older than 3 days, ${parts.routines} record(s) of routines whose note is gone, ${parts.reminders} reminder mark(s) of finished tasks, ${parts.lapsed} lapsed approval(s) older than 7 days` };
+      return { removed, freedBytes: 0, notes: `conversation databases: ${parts.seen} mail decision(s) past ${MAX_DECISIONS}, ${parts.held} held post(s) past ${MAX_HELD}, ${parts.voice} voice row(s) past their window, ${parts.meetings} meeting row(s) older than 3 days, ${parts.routines} record(s) of routines whose note is gone, ${parts.reminders} reminder mark(s) of finished tasks, ${parts.lapsed} lapsed approval(s) older than 7 days` };
     },
   };
 }

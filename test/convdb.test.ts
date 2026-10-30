@@ -17,7 +17,8 @@ const { clearQuiet, isQuiet, quietValue, setQuiet } = await import("../src/conve
 const { mayRun, isRefusal } = await import("../src/tenants/payer.ts");
 const { convDbCheck } = await import("../src/doctor.ts");
 const { owner, group } = await import("../src/conversation/conversationmodel.ts");
-const { createSeenMail, createSeenMailServer, SEEN_MAX, trimSeenMail } = await import("../src/modules/seenmail/seenmail.ts");
+const { createTriage, inboxBlock, MAX_DECISIONS, trimDecisions } = await import("../src/tasks/maildecisions.ts");
+const DECIDE = "INSERT INTO mail_decisions (id, decision, at) VALUES (?, 'keep', 1)";
 const { holdQuote, holdVoiceNote, MAX_AGE_MS, NOTES_PER_CONVERSATION, pruneVoiceNotes, quotedVoiceNote, voiceNotes } = await import("../src/modules/voice/voicenote.ts");
 const { heldPosts, resetHeld, submitPost, noticeDamaged } = await import("../src/heartbeat/notices.ts");
 const { MAX_HELD } = await import("../src/core/ownerfact.ts");
@@ -151,7 +152,7 @@ test("the owner is told once a day while a database stays damaged, and the docto
 test("a database file with a damaged page that opens fine is found by the check on open, not at the first query in a turn", () => {
   const bad = friendConvId("hurt-3");
   const db = convDb(bad);
-  for (let i = 0; i < 2000; i++) db.run("INSERT INTO seen_mail (id) VALUES (?)", `id-${i}-${"x".repeat(60)}`);
+  for (let i = 0; i < 2000; i++) db.run(DECIDE, `id-${i}-${"x".repeat(60)}`);
   db.checkpoint();
   closeConvDb(bad);
   const p = convPaths(bad).db;
@@ -176,14 +177,14 @@ test("a database file with a damaged page that opens fine is found by the check 
 test("forgetting closes the connection FIRST and deletes the folder with the database, its -wal and -shm; a second forget finds nothing", () => {
   const f = friendConvId("forgotten-1");
   const db = convDb(f);
-  db.run("INSERT INTO seen_mail (id) VALUES ('m')");
+  db.run(DECIDE, "m");
   assert.ok(existsSync(`${convPaths(f).db}-wal`) || existsSync(`${convPaths(f).db}-shm`), "open: the side files exist");
   assert.equal(removeConvDir(f), true);
   assert.equal(db.isOpen, false, "closed before the folder went");
   assert.equal(existsSync(convPaths(f).dir), false);
   assert.equal(removeConvDir(f), false, "idempotent");
   const fresh = convDb(f); // (a write after it was forgotten starts an empty database: it is a new conversation)
-  assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail"), 0);
+  assert.equal(fresh.num("SELECT COUNT(*) FROM mail_decisions"), 0);
   removeConvDir(f);
 });
 
@@ -229,16 +230,14 @@ test("/quiet: no row = off; '' = until /unquiet; a time; cleared", () => {
   removeConvDir(c.convId);
 });
 
-test("seen mail: the bound is a retention query, newest kept; a dry run counts only", () => {
+test("mail decisions: the bound is a retention query, newest kept; a dry run counts only", () => {
   const c = groupConvId("parity-seen");
   const db = convDb(c);
-  for (let i = 0; i < SEEN_MAX + 25; i++) db.run("INSERT INTO seen_mail (id) VALUES (?)", `m${i}`);
-  assert.equal(trimSeenMail(db, SEEN_MAX, true), 25);
-  assert.equal(db.num("SELECT COUNT(*) FROM seen_mail"), SEEN_MAX + 25);
-  assert.equal(trimSeenMail(db), 25);
-  assert.equal(db.get<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq LIMIT 1")?.id, "m25");
-  const s = createSeenMail(c);
-  assert.deepEqual(s.unseen(["m0", "m30", "brand-new"]), ["m0", "brand-new"], "an id that fell off the bound is new again");
+  for (let i = 0; i < MAX_DECISIONS + 25; i++) db.run(DECIDE, `m${i}`);
+  assert.equal(trimDecisions(db, MAX_DECISIONS, true), 25);
+  assert.equal(db.num("SELECT COUNT(*) FROM mail_decisions"), MAX_DECISIONS + 25);
+  assert.equal(trimDecisions(db), 25);
+  assert.equal(db.get<{ id: string }>("SELECT id FROM mail_decisions ORDER BY seq LIMIT 1")?.id, "m25");
   removeConvDir(c);
 });
 
@@ -333,28 +332,23 @@ const quiet = async <T>(f: () => T): Promise<T> => {
   }
 };
 
-test("damage found MID-LOOK (the idle connection was closed during a long look): the look's ids are NOT committed into the fresh database", async () => {
+test("damage found MID-LOOK (the idle connection was closed during a long look): the look's decisions are NOT written into the fresh database", async () => {
   const c = friendConvId("midlook-1");
-  const first = createSeenMail(c);
-  first.unseen(["old-1"]);
-  first.commit();
-  const running = createSeenMail(c); // a look that started before
-  assert.deepEqual(running.unseen(["old-1", "new-1", "new-2"]), ["new-1", "new-2"]);
+  const running = createTriage(c); // a look that started before
+  convDb(c);
   closeIdleConvDbs(Date.now() + 3_600_000, 60_000); // the tick closed the idle connection while the look was parked
   const p = convPaths(c).db;
   writeFileSync(p, "garbage ".repeat(2000)); // damaged meanwhile
-  await quiet(() => running.commit()); // the reopen finds the damage
+  await quiet(() => running.record([{ id: "new-1", from: "", subject: "", decision: "keep", reason: "r" }], Date.now())); // the reopen finds the damage
   assert.ok(convDamage(c), "marked");
   const fresh = convDb(c);
-  assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail WHERE id IN ('new-1','new-2')"), 0, "nothing of the look was written into the replacement");
-  assert.equal(running.pending(), 0);
+  assert.equal(fresh.num("SELECT COUNT(*) FROM mail_decisions"), 0, "nothing of the look was written into the replacement");
   clearDamage(c);
 });
 
-test("a reset WITH salvage: the mail ids and the session pointer are copied out of the damaged copy, nothing else; the flag is set", async () => {
+test("a reset WITH salvage: the session pointer is copied out of the damaged copy, nothing else", async () => {
   const c = friendConvId("salvage-1");
   const db = convDb(c);
-  for (let i = 0; i < 30; i++) db.run("INSERT INTO seen_mail (id) VALUES (?)", `kept-${i}`);
   writeSession(c, { sessionId: "sess-kept", costUsd: 4 });
   for (let i = 0; i < 3000; i++) db.run("INSERT INTO held_posts (text, why) VALUES (?, 'quiet')", `post ${i} ${"y".repeat(100)}`); // (a later part of the file: the damaged page is there, the early tables are readable)
   db.checkpoint();
@@ -364,12 +358,8 @@ test("a reset WITH salvage: the mail ids and the session pointer are copied out 
   await quiet(() => convDb(c));
   const d = convDamage(c)!;
   assert.ok(d, "marked");
-  assert.deepEqual(d.salvaged, { seenMail: 30, session: true });
-  const fresh = convDb(c);
-  assert.equal(fresh.num("SELECT COUNT(*) FROM seen_mail"), 30, "the ids are preserved, in order");
-  assert.equal(fresh.get<{ id: string }>("SELECT id FROM seen_mail ORDER BY seq LIMIT 1")?.id, "kept-0");
+  assert.deepEqual(d.salvaged, { session: true });
   assert.equal(readSession(c).sessionId, "sess-kept");
-  assert.ok(fresh.get("SELECT at FROM reset"), "the reset flag is set");
   // the owner is told once that it was set aside
   resetHeld(owner());
   noticeDamaged(new Date(2026, 9, 21, 14, 0, 0));
@@ -379,40 +369,15 @@ test("a reset WITH salvage: the mail ids and the session pointer are copied out 
   clearDamage(c);
 });
 
-test("a reset WITHOUT salvage: the first look marks EVERY listed id as seen, dates given or not, and never says 'first look'; the flag is spent when that look ends well", async () => {
+test("a reset WITHOUT salvage: the fresh database has no decisions, so every inbox mail is new once; nothing is skipped", async () => {
   const c = friendConvId("reset-1");
   writeSession(c, { sessionId: "x", costUsd: 0 });
   closeConvDb(c);
   writeFileSync(convPaths(c).db, Buffer.alloc(9000, 3)); // nothing readable
   await quiet(() => convDb(c));
-  assert.equal(convDb(c).num("SELECT COUNT(*) FROM seen_mail"), 0);
-  assert.ok(convDb(c).get("SELECT at FROM reset"));
+  assert.equal(convDb(c).num("SELECT COUNT(*) FROM mail_decisions"), 0);
   clearDamage(c); // a person looked: background work may run again
-  const seen = createSeenMail(c);
-  assert.equal(seen.reset(), true);
-  assert.deepEqual(seen.unseen(["a", "b", "c"]), [], "no dates were given: all of them are still skipped");
-  assert.deepEqual(seen.unseen(["a", "d"], { d: new Date().toISOString() }), [], "a recent date does not make one new either");
-  assert.equal(seen.aged(), 4);
-  const server = createSeenMailServer(seen) as unknown as { instance: { _registeredTools: Record<string, { handler: (a: unknown) => Promise<{ content: { text: string }[] }> }> } };
-  const out = await server.instance._registeredTools.seen_mail!.handler({ ids: ["a", "e"] });
-  const text = out.content[0]!.text;
-  assert.match(text, /I lost track of which mail I'd already handled, so I skipped what's in your inbox now; new mail from here on is handled as usual/);
-  assert.doesNotMatch(text, /first look/);
-  assert.match(text, /Nothing new/);
-  seen.commit();
-  assert.equal(convDb(c).get("SELECT at FROM reset"), undefined, "spent");
-  assert.equal(convDb(c).num("SELECT COUNT(*) FROM seen_mail"), 5);
-  const next = createSeenMail(c);
-  assert.equal(next.reset(), false);
-  assert.deepEqual(next.unseen(["a", "brand-new"]), ["brand-new"], "from here on mail is handled as usual");
-  // a look that ended badly keeps the flag
-  const c2 = friendConvId("reset-2");
-  await quiet(() => (writeSession(c2, { costUsd: 0 }), closeConvDb(c2), writeFileSync(convPaths(c2).db, Buffer.alloc(9000, 3)), convDb(c2)));
-  clearDamage(c2);
-  const bad = createSeenMail(c2);
-  bad.unseen(["z"]);
-  bad.discard();
-  assert.ok(convDb(c2).get("SELECT at FROM reset"), "the flag stays until a look that ended well");
+  assert.equal(inboxBlock(c, Date.now()), "", "no decisions: every mail is new");
 });
 
 test("only the AGENT applies the damage policy: any other process gets an error and the file stays exactly where it is", async () => {
@@ -464,7 +429,7 @@ test("reads make nothing: a tick over a conversation that has no database (or wa
   assert.deepEqual(readSession(ghost), { costUsd: 0 });
   assert.equal(quietValue({ kind: "tenant", convId: ghost }), undefined);
   assert.equal(voiceNotes(`tenant:ghost-1`).length, 0);
-  assert.equal(createSeenMail(ghost).unseen(["a"]).length, 1);
+  assert.equal(inboxBlock(ghost, Date.now()), "");
   assert.equal(hasConvDb(ghost), false);
   assert.equal(existsSync(dir), false, "no folder was made by any read");
 });
