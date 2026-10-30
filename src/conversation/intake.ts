@@ -131,7 +131,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   //   the answer        a private chat always answers; a group answers when addressed (`forUs`: tagged or quoted, then sticky until answered) or when the participation gate says act
   //                     (`mayAnswer`, `decide`, group.ts). A paused or over-budget group answers nothing, and says so once to someone who addressed it.
   //   who is heard      `everyone`: every sender gets a read receipt and the reason for a voice message or picture that could not be used; otherwise only someone who spoke to us.
-  //                     `vouch`: the owner's membership is checked first (a stranger cannot add us to a group and use it). `optionalPictures`: a picture is opened only when it
+  //                     `vouch`: the group's sponsor (the owner, or an active friend who may add us to her groups; group.ts sponsorInGroup) must be a member (a stranger cannot add us to a group and use it). `optionalPictures`: a picture is opened only when it
   //                     can be answered, and an unusable one is dropped (the caption stays); otherwise it is required.
   //   history           `recorded`/`say`/`sayReaction`: how a line reads in the log (a group's lines name their speaker).
   //   the turn          `turn`: how the burst is shown to the model (a private chat: the messages; a group: its recent log, fenced) and delivered (threading and target are the

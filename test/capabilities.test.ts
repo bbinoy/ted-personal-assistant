@@ -73,6 +73,7 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     notion: { tools: [], skills: [] },
     google: { tools: [], skills: [] },
     drive: { tools: [], skills: [] }, // the owner's Drive and Docs connectors, a capability of their own (not a friend's Google)
+    groups: { tools: [], skills: [] }, // lets a friend sponsor a group: no tool of its own
     profile: { tools: [], skills: [] },
     card: { tools: [], skills: [] },
     admin: { tools: [], skills: [] },

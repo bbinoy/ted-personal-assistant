@@ -62,8 +62,8 @@ const REFUSALS: Readonly<Record<Reason, Readonly<Partial<Record<Audience, Say>>>
   reconnect: { group: FAILED, friend: FAILED }, // (the owner is not told in chat: reportReconnect holds a fact for her next look, and `npm run doctor` lists who)
   other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}`, group: FAILED, friend: FAILED },
   "owner-budget": { group: `I've used up my budget for today, so I can't answer until tomorrow. ${OWNER} can raise it if it is urgent.` },
-  "shared-budget": { friend: "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved." },
-  cooldown: { friend: (o) => `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${o.until}.` },
+  "shared-budget": { friend: "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved.", group: "I've hit today's limit for this group, so I'm resting until tomorrow." }, // (a group a friend sponsors, billed to her)
+  cooldown: { group: (o) => `I'm paused for a while. I'll try again around ${o.until}.`, friend: (o) => `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${o.until}.` },
   "no-key": { friend: `I'm not set up for friends yet, so I can't reply for now. I've let ${OWNER} know.` },
 };
 /** The fixed text for this reason and audience, or undefined: nothing is said in words (the turn's warning reaction and the log say it). */

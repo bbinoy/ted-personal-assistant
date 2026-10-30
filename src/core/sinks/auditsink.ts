@@ -1,5 +1,5 @@
 import { wordless, writeAuditRow, type Source } from "../audit.ts";
-import { isTenantKey } from "../ownerkey.ts";
+import { isFriendKey } from "../ownerkey.ts";
 import type { Event, Sink } from "../events.ts";
 
 // The audit sink: the admin's log of decisions and system actions, in exactly the row shapes `npm run report`, replay.ts (actedSince) and search_logs file=audit read:
@@ -12,7 +12,7 @@ export interface AuditRow {
   meta?: Record<string, unknown>;
 }
 
-const isFriend = (e: { conv?: string; friend?: boolean }): boolean => e.friend ?? (e.conv !== undefined && isTenantKey(e.conv));
+const isFriend = (e: { conv?: string; friend?: boolean }): boolean => e.friend ?? (e.conv !== undefined && isFriendKey(e.conv));
 const row = (tool: string, decision: string, source: Source, meta: Record<string, unknown> | undefined, friend: boolean): AuditRow => ({ tool, decision, source, ...(meta ? { meta: friend ? wordless(meta) : meta } : {}) });
 
 // Pure: the audit rows an event stands for (none for a success, a notice or a payment: the decision rows already say what ran, and the payments ledger is its own record).

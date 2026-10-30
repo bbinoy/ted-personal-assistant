@@ -5,6 +5,11 @@ export const OWNER_KEY = "owner"; // a group's key is its group id, a tenant's i
 export const UNSCOPED_KEY = "unscoped"; // the state key of a bare run that names no conversation (a test, never production: runFor always names one): never the owner's
 export const tenantKey = (id: string): string => `tenant:${id}`;
 export const isTenantKey = (key: string): boolean => key.startsWith("tenant:");
+// A group a friend sponsors (groupstore.ts sponsorOf) is that friend's data like her own chat: the keys of such groups, filled as their sponsors become known (and at start, from the groups' records).
+const sponsoredKeys = new Set<string>();
+export const noteSponsored = (groupId: string, friend: boolean): void => void (friend ? sponsoredKeys.add(groupId) : sponsoredKeys.delete(groupId));
+/** The conversation's words belong to a friend: her own chat, or a group she sponsors (audit rows are wordless, only ids and counts reach the admin's views). */
+export const isFriendKey = (key: string): boolean => isTenantKey(key) || sponsoredKeys.has(key);
 
 // The kind of conversation a key names, from the key alone (the tools that are built per key: send, draw, voice), and its audit label (runkind.ts auditSource: the owner's chat
 // is "chat", a group's "group", a friend's "tenant"). A name for the log only; nothing is decided by it.

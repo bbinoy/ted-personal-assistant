@@ -16,15 +16,20 @@ export { capabilitiesOfRecord, resolveCapabilities }; // (the derivation lives i
 // What a group has: no record, a fixed set. Nothing of the owner's (no mail, calendar, notion, profile, card), and no secrets to set up (no intake).
 export const GROUP_CAPABILITIES: readonly Capability[] = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "weather", "draw", "tasks"];
 
-type Who = Pick<Conversation, "kind" | "tenantId">;
+type Who = Pick<Conversation, "kind" | "tenantId" | "sponsor">;
 
 // Her record: the owner's (seeded by ensureOwner, absent before that), a tenant's, none for a group.
 const recordOf = (conv: Who) => (conv.kind === "owner" ? people().find((r) => r.id === OWNER_ID) : conv.tenantId ? tenantById(conv.tenantId) : undefined);
 
-// The set: a group has the fixed one; the owner and a tenant have their person's (capabilitiesOfRecord), and only while she is active (not suspended or removed). The owner
+// The set: a group has the fixed one (a friend's group: less what its sponsor lacks); the owner and a tenant have their person's (capabilitiesOfRecord), and only while she is active (not suspended or removed). The owner
 // before her record is seeded has everything, as ever.
 export function capabilitiesOf(conv: Who): ReadonlySet<Capability> {
-  if (conv.kind === "group") return resolveCapabilities(GROUP_CAPABILITIES);
+  if (conv.kind === "group") {
+    const set = resolveCapabilities(GROUP_CAPABILITIES);
+    if (!conv.sponsor) return set;
+    const hers = capabilitiesOf({ kind: "tenant", tenantId: conv.sponsor }); // a friend's group has no more than she has (none while she is suspended)
+    return new Set([...set].filter((c) => hers.has(c)));
+  }
   const rec = recordOf(conv);
   if (!rec) return conv.kind === "owner" ? resolveCapabilities(CAPABILITIES, { login: true }) : new Set();
   return rec.status === "active" ? capabilitiesOfRecord(rec) : new Set();

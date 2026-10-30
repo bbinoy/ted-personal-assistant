@@ -41,7 +41,7 @@ export const ROLES: readonly Role[] = ["admin", "member"];
 // reaches every friend by being added to CAPABILITIES. What narrows that is readiness (a service with no OAuth client or INTAKE_BASE_URL has no tools, no skill, no prompt
 // text), the instance's .env switches and her tenant.json switches (browse, voice): tenants/capabilityset.ts. To stop a friend altogether the admin suspends or removes her.
 // Each tool of the manifest (toolmanifest.ts) and each shared skill (skills.ts) names the capability that gates it; capabilities.ts turns a set of them into tools and skills.
-export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "tasks", "google", "drive", "admin", "login"] as const;
+export const CAPABILITIES = ["chat", "browse", "voice", "heartbeat", "dream", "wake", "mail", "calendar", "notion", "profile", "card", "notes", "intake", "weather", "draw", "tasks", "google", "drive", "groups", "admin", "login"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 // What needs the instance's own Claude login (its connectors, its card and saved details, the admin's powers, the owner's Google Drive and Docs connectors): only the owner's
 // conversation is on the login, so a friend never has these, and nobody can grant them. (`drive` is the owner's connectors, a capability of its own: a friend's own Google,
@@ -77,9 +77,10 @@ export interface TenantConfig {
   // Her own switches (capabilityset.ts resolveCapabilities; they only ever take away): a tenant.json that says false never offers the tool.
   browse?: boolean; // false switches the browse tool off for her (it can never be switched on beyond BROWSE)
   voice?: boolean; // false switches the voice tool off for her
+  groups?: boolean; // false: Ted may not be added to her groups (the `groups` capability: a group she is in is answered, billed to her, when she is its sponsor)
 }
 
-const KNOWN: readonly string[] = ["language", "persona", "timeZone", "browse", "voice"];
+const KNOWN: readonly string[] = ["language", "persona", "timeZone", "browse", "voice", "groups"];
 
 // Pure. Whatever is in the file, the result is a valid config and `problems` says what was left out. Never throws.
 export function parseTenantConfig(raw: unknown): { config: TenantConfig; problems: string[] } {
@@ -101,7 +102,7 @@ export function parseTenantConfig(raw: unknown): { config: TenantConfig; problem
     if (!isZone(r.timeZone)) problems.push("timeZone must be a time zone like Europe/Lisbon");
     else config.timeZone = (r.timeZone as string).trim();
   }
-  for (const k of ["browse", "voice"] as const) {
+  for (const k of ["browse", "voice", "groups"] as const) {
     if (r[k] === undefined) continue;
     if (typeof r[k] !== "boolean") problems.push(`${k} must be true or false`);
     else config[k] = r[k] as boolean;

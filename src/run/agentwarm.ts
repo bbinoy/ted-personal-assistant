@@ -82,7 +82,7 @@ const memoryIndex = (dir: string) => {
     return "";
   }
 };
-const spareKey = (id: string, o: RunOptions, r: Resume) => JSON.stringify([id, r.resume ?? "", o.systemPrompt, o.memory?.dir ?? "", memoryIndex(o.memory?.dir ?? NOTES_DIR), ...(o.tenant ? [o.tenant.keyTag] : [])]); // a tenant's process is also tied to her key (changed: not reused)
+const spareKey = (id: string, o: RunOptions, r: Resume) => JSON.stringify([id, r.resume ?? "", o.systemPrompt, o.memory?.dir ?? "", memoryIndex(o.memory?.dir ?? NOTES_DIR), ...((o.tenant ?? o.sponsor) ? [(o.tenant ?? o.sponsor)!.keyTag] : [])]); // a tenant's (or her group's) process is also tied to her key (changed: not reused)
 const labelOf = (conv: Who) => (conv.kind === "owner" ? "chat" : conv.kind); // (for the log lines)
 
 // Starts the next process for a conversation and keeps it as its spare (replacing, and closing, the previous one).

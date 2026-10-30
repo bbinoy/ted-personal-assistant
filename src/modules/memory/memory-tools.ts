@@ -84,9 +84,9 @@ export function createMemoryServer(scope: MemoryScope) {
         async (args: { group?: string }) => {
           let target = own ?? dreamScope({ kind: "owner" }); // a group's or a friend's: its own scope, closed over; the owner's: hers, or a group's by name
           if (!own && args.group) {
-            const { groupScope, listGroups } = await import("../../conversation/groupstore.ts");
-            const found = listGroups().find((g) => g.name.toLowerCase() === args.group!.trim().toLowerCase());
-            if (!found) return reply(`no group named ${args.group}. Known: ${listGroups().map((g) => g.name).join(", ") || "none"}`, true);
+            const { groupScope, listOwnerGroups } = await import("../../conversation/groupstore.ts");
+            const found = listOwnerGroups().find((g) => g.name.toLowerCase() === args.group!.trim().toLowerCase());
+            if (!found) return reply(`no group named ${args.group}. Known: ${listOwnerGroups().map((g) => g.name).join(", ") || "none"}`, true);
             target = groupScope(found.id);
           }
           const r = undoLatest(target);
@@ -99,8 +99,8 @@ export function createMemoryServer(scope: MemoryScope) {
         const file = (a as { file?: string }).file?.trim();
         if (!groupId && !tenantLog && file && !/^messages?(\.jsonl)?$/i.test(file)) {
           // A group's history by its name (or its folder name): the plain all-words match over that group's messages. Any other name is a log in logs/ (audit, agent...).
-          const { listGroups, searchHistoryFile } = await import("../../conversation/groupstore.ts");
-          const g = listGroups().find((x) => x.name.toLowerCase() === file.toLowerCase() || x.convId === file.toLowerCase());
+          const { listOwnerGroups, searchHistoryFile } = await import("../../conversation/groupstore.ts");
+          const g = listOwnerGroups().find((x) => x.name.toLowerCase() === file.toLowerCase() || x.convId === file.toLowerCase());
           if (g) { emitRecord("memory_search", "searched", source); return reply(fence("history", searchHistoryFile(convPaths(g.convId).messages, a), 12_000)); }
           return reply(searchLogs(settings.logsDir, a));
         }

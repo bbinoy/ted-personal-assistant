@@ -59,6 +59,7 @@ export interface RunContext {
   key?: string; // the conversation the run is for (the owner's chat, a group id, "tenant:<id>"); none for the browse worker
   groupId?: string;
   tenant?: TenantRun; // a tenant's run (her key, her ledger)
+  sponsor?: RunOptions["sponsor"]; // a run of a group a friend sponsors: paid for by her, its words hers
   memory?: RunOptions["memory"];
   seenMail?: SeenMail; // a heartbeat run of a conversation with mail: its tracker of the inbox mail already worked through (seenmail.ts)
   guard?: BrowseGuard; // the browse run's guard

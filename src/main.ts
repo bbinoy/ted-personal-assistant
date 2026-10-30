@@ -13,8 +13,8 @@ import * as approvals from "./approvals/approvals.ts";
 import { createApprovers } from "./approvals/approvers.ts";
 import { acceptOwner } from "./conversation/guards.ts";
 import { createDreamer, dreamConversations, dreamTrigger } from "./conversation/dream.ts";
-import { groupName, ownerInGroup } from "./conversation/group.ts";
-import { groupDir, recordGroup } from "./conversation/groupstore.ts";
+import { groupName, sponsorInGroup, sponsorOfMember } from "./conversation/group.ts";
+import { groupDir, loadSponsors, recordGroup } from "./conversation/groupstore.ts";
 import { createWakeups, startupStagger } from "./heartbeat/wake.ts";
 import { noteMacZone } from "./heartbeat/whereabouts.ts";
 import { startHeartbeat, startJobs } from "./heartbeat/heartbeat.ts";
@@ -117,7 +117,8 @@ const audioTools: AudioTools = {
 // into that group's own history; the brain decides when the assistant speaks. No access to anything private.
 const isOwnerAccount = (who: { number?: string; uuid?: string }) => resolveSender({ number: who.number, aci: who.uuid })?.role === "admin";
 const fromOwner = (w: { from: string; fromUuid?: string }) => isOwnerAccount({ number: w.from || undefined, uuid: w.fromUuid });
-const vouch = (groupId: string) => ownerInGroup(groupId, () => messenger.groups(), isOwnerAccount); // is the owner in this group?
+const vouch = (groupId: string) => sponsorInGroup(groupId, () => messenger.groups(), sponsorOfMember); // is this group's sponsor in it?
+loadSponsors(); // (groups that friends sponsor are known as theirs from the first event)
 
 // Both kinds of conversation run through one pipeline (src/conversation/conversation.ts). Spoken replies need the
 // assistant's own chat (in Note to Self our own voice message would echo back as if the owner had sent

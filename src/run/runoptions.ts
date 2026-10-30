@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { friendConvId } from "../core/convpaths.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { RunOptions } from "./agentrun.ts";
 import { instanceKeyOverBudget } from "../core/budget.ts";
@@ -63,17 +64,22 @@ export interface RunInputs {
   now?: Date;
 }
 
-type Shape = Pick<RunOptions, "systemPrompt" | "tenant"> & { notes: { dir: string; zone: string } };
+type Shape = Pick<RunOptions, "systemPrompt" | "tenant" | "sponsor"> & { notes: { dir: string; zone: string } };
 
 const ownerShape = (conv: Conversation, i: RunInputs): Shape => ({
   systemPrompt: chatSystem(), // (only what is stable: what changes between two runs is turnContext below)
   notes: { dir: conv.notesDir, zone: zoneOf(conv) },
 });
 
-const groupShape = (conv: Conversation, i: RunInputs): Shape => ({
-  systemPrompt: groupSystem({ style: styleLines(i.now ?? new Date()), caps: capabilitiesOf(conv), looker: lookerOf(conv) }), // the owner's style notes are a group's
-  notes: { dir: conv.notesDir, zone: zoneOf(conv) },
-});
+// A group a friend sponsors is on her key and her ledger, or it does not run (never the owner's login in her place), and its persona is the owner's style notes as for any group.
+const groupShape = (conv: Conversation, i: RunInputs): Shape => {
+  if (conv.sponsor && !i.apiKey) throw new Error("a friend's group run needs the instance API key");
+  return {
+    systemPrompt: groupSystem({ style: conv.sponsor ? undefined : styleLines(i.now ?? new Date()), caps: capabilitiesOf(conv), looker: lookerOf(conv) }), // the owner's style notes are a group's
+    notes: { dir: conv.notesDir, zone: zoneOf(conv) },
+    ...(conv.sponsor ? { sponsor: { id: conv.sponsor, apiKey: i.apiKey!, keyTag: createHash("sha256").update(i.apiKey!).digest("hex").slice(0, 8), ledger: friendConvId(conv.sponsor) } } : {}),
+  };
+};
 
 // A tenant's run (tenants.ts): an isolated "group" run in a private chat, on the instance key, with her notes, her session, her ledger.
 const tenantShape = (conv: Conversation, i: RunInputs): Shape => {

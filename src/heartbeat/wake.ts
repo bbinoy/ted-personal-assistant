@@ -35,7 +35,7 @@ interface WakeDeps {
   stagger?: (conv: Conversation) => number; // ms a conversation waits before its FIRST look since the process started, so a restart that finds every one due does not start them all at once (default none; main.ts startupStagger)
   sleep?: (ms: number) => Promise<void>; // (tests)
   awaitingApproval?: HeartbeatDeps["awaitingApproval"]; // (tests) default: a question of the conversation open in the chat (approvals.ts)
-  vouch: (groupId: string) => Promise<boolean>; // is the owner in this group? (a group we cannot vouch for is never woken)
+  vouch: (groupId: string) => Promise<boolean>; // is this group's sponsor in it? (a group we cannot vouch for is never woken)
   run: HeartbeatDeps["run"]; // a conversation's heartbeat run (agent.ts runLook, with that conversation's approver)
   compact?: { due: (conv: Conversation) => boolean; run: (conv: Conversation) => Promise<void> }; // quiet-time compaction (chatsession.ts): `due` is a cheap look at the session file, `run` re-checks inside the queue
   groups?: () => string[]; // known group ids

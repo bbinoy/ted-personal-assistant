@@ -5,7 +5,7 @@ import { defer, tick } from "./util.ts";
 import { scopeOf } from "../src/approvals/turnscope.ts";
 import { createPipeline, group, type Pipeline } from "../src/conversation/conversation.ts";
 import { createOutbound } from "../src/conversation/outbound.ts";
-import { groupName, groupPrompt, ownerInGroup, speaker } from "../src/conversation/group.ts";
+import { groupName, groupPrompt, sponsorInGroup, speaker } from "../src/conversation/group.ts";
 import { readLongText } from "@ted-assistant/signal";
 import { groupCapabilities } from "../src/policy/capabilities.ts";
 import { skillsFor } from "../src/modules/skills.ts";
@@ -334,17 +334,17 @@ test("groups: unvouched groups get no logging and no answers; the verdict parser
 });
 
 test("groups: membership comes from the member list, is remembered, and fails closed", async () => {
-  const isOwner = (w: { number?: string; uuid?: string }) => w.number === OWNER;
+  const isOwner = (w: { number?: string; uuid?: string }) => (w.number === OWNER ? { id: "owner", since: "" } : undefined);
   let calls = 0;
   const lookup = async () => (calls++, [{ id: "g-in", name: "Football", members: [{ number: OWNER }, { number: "+15555550105" }] }, { id: "g-out", members: [{ number: "+15555550105" }] }]);
   const t = Date.now();
-  assert.equal(await ownerInGroup("g-in", lookup, isOwner, t), true);
-  assert.equal(await ownerInGroup("g-in", lookup, isOwner, t + 1000), true);
+  assert.equal(await sponsorInGroup("g-in", lookup, isOwner, t), true);
+  assert.equal(await sponsorInGroup("g-in", lookup, isOwner, t + 1000), true);
   assert.equal(calls, 1); // remembered
   assert.equal(groupName("g-in"), "Football");
-  assert.equal(await ownerInGroup("g-out", lookup, isOwner, t), false);
-  assert.equal(await ownerInGroup("g-unknown", lookup, isOwner, t), false);
-  assert.equal(await ownerInGroup("g-fail", async () => { throw new Error("rpc down"); }, isOwner, t), false);
+  assert.equal(await sponsorInGroup("g-out", lookup, isOwner, t), false);
+  assert.equal(await sponsorInGroup("g-unknown", lookup, isOwner, t), false);
+  assert.equal(await sponsorInGroup("g-fail", async () => { throw new Error("rpc down"); }, isOwner, t), false);
 });
 
 // ---- the group's own notes and history (groupstore.ts) ----

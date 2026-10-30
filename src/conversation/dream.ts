@@ -207,14 +207,14 @@ export function createDreamer(deps: DreamerDeps = {}) {
       const { prompt, system } = promptOf(conv, now, readNoteFiles(scope.notesDir), said.lines);
       const { plan, snapshot } = await dreamOver(scope, prompt, system, said.text, now, deps.run?.(payer, conv) ?? runnerFor(payer));
       writeDream(stateConv, { day: today, lastRunAt: now.toISOString() });
-      const label = `${conv.kind} dream (${conv.tenantId ?? subjectOf(conv)})`;
-      if (rules.logWords) for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
+      const label = `${conv.kind} dream (${conv.tenantId ?? (conv.sponsor ? conv.convId : subjectOf(conv))})`; // (a friend's group is named by its folder: its title is hers)
+      if (rules.logWords && !conv.sponsor) for (const r of plan.rejected) console.log(`${label}: rejected ${r.file || "(no file)"}: ${r.why}`);
       emit({ type: "dream", result: snapshot ? "changed" : "no-change", source: "dream", conv: conv.key, friend: false, meta: { ...tag, actions: plan.actions.length, rejected: plan.rejected.length }, text: `Tidied my notes in the nightly dream (${plan.actions.length} change${plan.actions.length === 1 ? "" : "s"})` });
       console.log(`${label}: ${plan.actions.length} change(s), ${plan.rejected.length} rejected`);
-      if (snapshot && rules.logWords) console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
+      if (snapshot && rules.logWords && !conv.sponsor) console.log(`${label}: ${describePlan(plan).join("; ")}`); // silent: logged here and in audit.jsonl, undoable from chat; a friend's notes' words stay out of the log
     } catch (e) {
       console.error(`dream (${conv.kind}${conv.tenantId ? ` ${conv.tenantId}` : ""}): failed:`, (e as Error).message);
-      emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: false, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });
+      emit({ type: "dream", result: "failed", source: "dream", conv: conv.key, friend: !!conv.sponsor, meta: { ...tag, error: (e as Error).message.slice(0, LIMITS.preview) } });
     }
     return true;
   }

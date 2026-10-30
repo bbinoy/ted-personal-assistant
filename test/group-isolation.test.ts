@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { memberCacheSize, ownerInGroup } from "../src/conversation/group.ts";
+import { memberCacheSize, sponsorInGroup } from "../src/conversation/group.ts";
 import { groupDir, groupNotesDir } from "../src/conversation/groupstore.ts";
 import { convPaths, groupConvId } from "../src/core/convpaths.ts";
 
@@ -21,11 +21,11 @@ test("groups: each group id has its own folder, and a different id that hashes t
 
 test("groups: the membership cache stays small however many groups talk to us", async () => {
   const lookup = async () => [];
-  for (let i = 0; i < 700; i++) await ownerInGroup(`stranger-${i}`, lookup, () => false, 1_000_000 + i);
+  for (let i = 0; i < 700; i++) await sponsorInGroup(`stranger-${i}`, lookup, () => undefined, 1_000_000 + i);
   assert.ok(memberCacheSize() <= 200, `${memberCacheSize()} entries`);
   // the newest are kept (a group in use stays cached)
   let calls = 0;
   const counting = async () => (calls++, []);
-  await ownerInGroup("stranger-699", counting, () => false, 1_000_700);
+  await sponsorInGroup("stranger-699", counting, () => undefined, 1_000_700);
   assert.equal(calls, 0);
 });
