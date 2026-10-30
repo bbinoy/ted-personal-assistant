@@ -19,7 +19,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - **One builder.** Every run (chat turn, look, expert) is built by the same functions from the conversation's capabilities, the owner included: the owner is just the conversation with every capability.
 - **One intake.** Every inbound message of every conversation goes through the same chain; private and group differ only in one table (who may do what, whether to answer, where the reply goes). A feature is added to the chain, never to one kind. A group belongs to its sponsor: the owner or an approved friend who is a member; a group with no sponsor is ignored.
 - **A closed list of differences.** A chat turn and a look differ only in model, session, trigger line, whether someone is attended, and answer format. Nothing else branches on the trigger or on "is owner"; a new difference needs the owner's approval.
-- **Same context, same powers.** Every run sees the same shared context and may delegate to a stronger model (Sonnet or Opus) when the work needs judgement.
+- **Same context, same powers.** What a run is handed (the clock, the conversation's facts, its inbox and task state, the journal, the recent chat) is built once per conversation by the same functions, whatever triggered the run: a chat turn, a look, a routine or an expert, in the owner's chat, a group or a friend's. It differs only by capabilities and the closed list above. `test/runinputs.test.ts` enforces this: a new difference needs a reason there and the owner's approval. Every run may delegate to a stronger model (Sonnet or Opus) when the work needs judgement.
 
 ## 3. Act, don't ask
 
