@@ -230,7 +230,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 **New mail.** The run lists the inbox and passes the ids to `seen_mail`, which returns those this conversation has not worked through; they are committed only when the look ends well.
 
 - The default is to archive unless the mail needs the owner; the owner's triage notes win.
-- `ARCHIVE_MAX_PER_RUN` (25) caps archives per run (`src/modules/archivecap.ts`). Archives are journaled with the mail's id and reversible (`npm run restore <id>`, or "restore 3" in chat).
+- `ARCHIVE_MAX_PER_RUN` (25) caps archives per run (`src/modules/archivecap.ts`). Archives are journaled with the mail's id and reversible (`npm run restore <id>`, or ask Ted in chat to bring it back).
 
 **Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (6) is held (`submitPost`) unless the run marked it `urgent`.
 
@@ -290,7 +290,7 @@ Everything the assistant does or decides is told once as a typed event (`src/cor
 
 - **Audit** (`logs/audit.jsonl`): `{ ts, source, tool, decision, meta? }`, arguments clipped, secrets redacted. A friend's rows have every word-bearing field replaced by its length: the admin never reads what a friend said.
 - **Journal**: one readable line per action (never a read), in the log of the conversation it happened in: `What. Why: ... Undo: ...`. The what is code-rendered (`src/approvals/journalrender.ts`); the why comes from code first. It is written when the call SUCCEEDS (`noteDone`; `test/journalconsistency.test.ts`).
-- **Readers.** The `journal` tool (`src/modules/memory/journaltool.ts`) answers "what did you do today" and "why did you archive X" and returns a numbered list for "restore N"; `/today` is the code-only summary; a look sees the newest twelve lines as `(you did: ...)`. Journal lines survive log compaction for 90.
+- **Readers.** The `journal` tool (`src/modules/memory/journaltool.ts`) answers "what did you do today" and "why did you archive X" and returns the archived mail with each id, so Ted can bring one back when asked; `/today` is the code-only summary; a look sees the newest twelve lines as `(you did: ...)`. Journal lines survive log compaction for 90.
 
 ## Memory
 

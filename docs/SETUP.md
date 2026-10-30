@@ -35,7 +35,7 @@ npm run doctor
 npm run install:launchd               # installs a launchd job; the agent starts now and at login
 ```
 
-On its first start (an empty data folder) the assistant introduces itself in your chat, in its own words; say "set up" to walk through connecting your calendars and how you write. It archives routine mail from the first look, as your notes say; every archive is listed in `/today` and the brief, and "restore 3" brings one back.
+On its first start (an empty data folder) the assistant introduces itself in your chat, in its own words; say "set up" to walk through connecting your calendars and how you write. It archives routine mail from the first look, as your notes say; every archive is listed in `/today` and the brief, and asking Ted brings one back.
 
 Send yourself a message on Signal. The first heartbeat look works through the inbox the assistant has not looked at yet (the `seen_mail` log is empty at first; a big inbox is worked off over successive looks). So that the first look does not triage a whole backlog, mail older than 7 is marked as seen without being sorted, and the assistant tells you so once in its first message; it is a constant in `seenmail.ts`. The first daily brief is started by the heartbeat run around 07:30 (its rules are in `assistants/ted/persona/heartbeat.md`).
 
