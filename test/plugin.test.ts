@@ -87,17 +87,28 @@ test("connectors: detected from the tools a run saw; a missing one is reported a
   for (const s of ["calendar", "meeting-prep"]) assert.match(read(s), /🔌/, `${s} reports a missing connector`);
 });
 
-test("daily-brief skill: one archive list read after the sweep, no archiving of its own briefs, no model-written delivery time", () => {
+test("daily-brief skill: one archive list read from the journal, no inbox sweep, no archiving of its own briefs, no model-written delivery time", () => {
   const s = readFileSync(join(skillsDir, "daily-brief", "SKILL.md"), "utf8");
   assert.match(s, /keep only today's daily brief in the inbox and archive the older ones/);
   assert.match(s, /"Daily brief", "Evening wrap" or "Weekly review", with or without/); // matched by subject, not by emoji
   assert.doesNotMatch(s, /never archive the assistant's own brief emails/);
-  assert.match(s, /the daily sweep[\s\S]*WHOLE inbox[\s\S]*do \*\*not\*\* use `seen_mail` here/);
-  assert.match(s, /Triage follows the mail skill's rules exactly/); // one source of truth for triage: the mail skill
-  assert.match(s, /triage notes[\s\S]*win over these defaults/);
-  assert.match(s, /cold outreach is noise even from a named person/);
-  assert.match(s, /after the email sweep, just before you write the brief\*\*, so the list includes what this very run archived/);
+  const read = (n: string) => readFileSync(join(skillsDir, n, "SKILL.md"), "utf8");
+  assert.match(s, /use what the looks did[\s\S]*do \*\*not\*\* list or re-sweep the inbox/); // the looks are the only triage of new mail
+  assert.doesNotMatch(s, /WHOLE inbox|archive_conversation/);
+  assert.match(s, /triage notes win/);
+  assert.match(s, /call the `journal` tool \*\*once, early\*\*/);
+  assert.match(s, /Tidied tasks: closed/); // one line of what the looks tidied, from the journal
+  assert.doesNotMatch(s, /Reconcile tasks|"Reconcile" section/);
+  assert.doesNotMatch(s, /prep pages for meetings that need them/); // prep pages come from the timely prep only
+  assert.match(read("evening-wrap"), /no inbox sweep/);
+  assert.doesNotMatch(read("evening-wrap"), /snooze|Inbox sweep/);
   assert.match(s, /written: <now, exactly as the CURRENT TIME line gives it>/); // the time comes from the clock line, never computed
+});
+
+test("the weekly review owns the whole-inbox sweep, oldest first", () => {
+  const read = (n: string) => readFileSync(join(skillsDir, n, "SKILL.md"), "utf8");
+  assert.match(read("weekly-review"), /The inbox sweep[\s\S]*Inbox sweep[\s\S]*oldest first/);
+  assert.match(read("mail"), /## Inbox sweep \(the weekly review only\)[\s\S]*does not depend on[\s\S]*`seen_mail`/);
 });
 
 test("mail skills and the look: archive unless the mail needs the owner, cold outreach archived, notes win, only today's brief kept", async () => {
@@ -118,7 +129,6 @@ test("mail skills and the look: archive unless the mail needs the owner, cold ou
   assert.match(mb, /Reading is a plain read: free, not judged, with no cap[\s\S]*not\s+confident, open the full mail[\s\S]*Never keep a mail\s+just because you did not read it/);
   assert.doesNotMatch(mb, /Do NOT open every email|archive newsletters unopened/);
   for (const provider of ["mailbird", "gmail"]) assert.ok(read(provider).split("\n").length < 90 && !/archive unless the mail needs the owner/.test(read(provider)), `${provider}: tools and quirks only, the rules are in the mail skill`);
-  assert.match(read("daily-brief"), /whenever the row does not let you decide with confidence/);
 });
 
 test("a long overdue pile: the task skill snoozes the stale tail and says so in one line", () => {
@@ -130,7 +140,9 @@ test("a long overdue pile: the task skill snoozes the stale tail and says so in 
 test("task reconcile: defined once in the task skill; the brief and the weekly review point to it; the wrap does not", () => {
   const read = (s: string) => readFileSync(join(skillsDir, s, "SKILL.md"), "utf8");
   assert.match(read("tasks"), /## Reconcile[\s\S]*complete_task[\s\S]*Merge[\s\S]*Move[\s\S]*Drop[\s\S]*reopen/);
-  for (const s of ["daily-brief", "weekly-review"]) assert.match(read(s), /"Reconcile" section/);
+  assert.match(read("weekly-review"), /"Reconcile" section/);
+  const bg = readFileSync(join(import.meta.dirname, "..", "assistants", "ted", "persona", "background.md"), "utf8");
+  assert.match(bg, /continuously: apply the tasks skill's "Reconcile" section/); // the looks reconcile
   assert.doesNotMatch(read("weekly-review"), /finish no task/);
   assert.doesNotMatch(read("evening-wrap"), /Reconcile/);
 });
