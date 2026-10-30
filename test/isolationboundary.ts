@@ -22,11 +22,12 @@ export interface Check {
   detail?: string;
 }
 
-export type Scenario = "group" | "tenant";
+export type Scenario = "group" | "tenant" | "friendGroup"; // friendGroup: a group a friend sponsors (billed to her, her data: she is Ann here)
 
 export interface World {
   dataDir: string;
   canary: string;
+  annCanary: string; // in Ann's own chat note and log only
   word: string; // appears in the canary lines and in no prompt that carries the canary; the search term for search_logs
   ownerDir: string;
   ownerNote: string;
@@ -36,6 +37,9 @@ export interface World {
   beaNote: string;
   beaLog: string;
   beaDir: string;
+  annNote: string; // Ann's own private chat note: a group Ann sponsors must not reach it
+  annLog: string;
+  annDir: string;
   tenantsDir: string;
   openbaoDir: string;
   outsideFile: string;
@@ -66,6 +70,7 @@ export async function buildWorld(): Promise<World> {
   const dataDir = realpathSync(settings.dataDir);
   const canary = `CANARY-${Math.random().toString(36).slice(2)}-${Date.now()}`;
   const word = "zanzibar";
+  const annCanary = `ANNSECRET-${Math.random().toString(36).slice(2)}`; // Ann's own, not a substring of the owner's canary: her own tenant run may legitimately see it
   const ownerDir = NOTES_DIR;
   mkdirSync(ownerDir, { recursive: true });
   mkdirSync(settings.logsDir, { recursive: true });
@@ -91,19 +96,29 @@ export async function buildWorld(): Promise<World> {
   writeFileSync(beaNote, `Bea's ${word} is ${canary}-BEA\n`);
   writeFileSync(join(bea.notesDir, "MEMORY.md"), `- [bea](context-bea-secret.md) ${word}\n`);
   writeFileSync(bea.logFile, `{"ts":1,"at":"2026-10-17T10:00:00.000Z","kind":"owner","text":"${word} ${canary}-BEA"}\n`);
-  writeFileSync(ann.logFile, `{"ts":2,"at":"2026-10-17T10:00:00.000Z","kind":"owner","text":"Ann likes tea"}\n`);
+  const annNote = join(ann.notesDir, "context-ann-secret.md");
+  writeFileSync(annNote, `Ann's annsecret is ${annCanary}\n`);
+  writeFileSync(ann.logFile, `{"ts":2,"at":"2026-10-17T10:00:00.000Z","kind":"owner","text":"Ann likes tea"}\n{"ts":4,"at":"2026-10-17T10:00:00.000Z","kind":"owner","text":"annsecret ${annCanary}"}\n`);
 
-  const { groupLogFile } = await import("../src/conversation/groupstore.ts");
+  const { groupLogFile, setSponsor } = await import("../src/conversation/groupstore.ts");
   const gconv = group("g1");
   mkdirSync(gconv.notesDir, { recursive: true });
   writeFileSync(groupLogFile("g1"), `{"ts":3,"at":"2026-10-17T10:00:00.000Z","kind":"user","text":"the group likes tea"}\n`);
-  const folder = { group: realpathSync(gconv.notesDir), tenant: realpathSync(ann.notesDir) };
+  // A group Ann sponsors (groupstore.ts setSponsor): her group, with its own notes and history, nothing of her private chat's, Bea's or the owner's.
+  setSponsor("g2", ann.id, "Ann's group");
+  const fconv = group("g2");
+  if (fconv.sponsor !== ann.id) throw new Error("the group's sponsor was not recorded");
+  mkdirSync(fconv.notesDir, { recursive: true });
+  writeFileSync(groupLogFile("g2"), `{"ts":3,"at":"2026-10-17T10:00:00.000Z","kind":"user","text":"the group likes tea"}\n`);
+  const folder = { group: realpathSync(gconv.notesDir), tenant: realpathSync(ann.notesDir), friendGroup: realpathSync(fconv.notesDir) };
   for (const f of Object.values(folder)) {
     writeFileSync(join(f, "context-pizza.md"), `---\nname: pizza\n---\n\nLikes pineapple pizza on Fridays.\n`);
     writeFileSync(join(f, "MEMORY.md"), `- [pizza](context-pizza.md) likes pineapple pizza\n`);
     symlinkSync(ownerDir, join(f, "sneaky")); // a symlink inside the folder pointing at the owner's notes
   }
   symlinkSync(bea.notesDir, join(folder.tenant, "to-bea"));
+  symlinkSync(bea.notesDir, join(folder.friendGroup, "to-bea"));
+  symlinkSync(ann.notesDir, join(folder.friendGroup, "to-ann")); // out of Ann's group into Ann's own chat
 
   const instanceKey = "sk-" + "ant-api03-ISOLATIONISOLATIONISOLATION";
   const noop = async () => ({ approved: false });
@@ -116,7 +131,9 @@ export async function buildWorld(): Promise<World> {
     try {
       return s === "group"
         ? buildOptions(noop, { ...runFor(gconv, "message"), systemPrompt: SYSTEM }, undefined)
-        : buildOptions(noop, { ...runFor(tenant(ann.id), "message", { apiKey: instanceKey }), systemPrompt: SYSTEM }, undefined);
+        : s === "friendGroup"
+          ? buildOptions(noop, { ...runFor(fconv, "message", { apiKey: instanceKey }), systemPrompt: SYSTEM }, undefined)
+          : buildOptions(noop, { ...runFor(tenant(ann.id), "message", { apiKey: instanceKey }), systemPrompt: SYSTEM }, undefined);
     } finally {
       for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k];
       else process.env[k] = v;
@@ -126,6 +143,7 @@ export async function buildWorld(): Promise<World> {
   return {
     dataDir,
     canary,
+    annCanary,
     word,
     ownerDir,
     ownerNote,
@@ -135,13 +153,16 @@ export async function buildWorld(): Promise<World> {
     beaNote,
     beaLog: bea.logFile,
     beaDir: bea.notesDir,
+    annNote,
+    annLog: ann.logFile,
+    annDir: ann.notesDir,
     tenantsDir: conversationsDir(),
     openbaoDir: instancePaths().openbao,
     outsideFile: join(dataDir, "outside-file.md"),
     instanceKey,
     folder,
-    elsewhere: { group: [ownerNote], tenant: [ownerNote, beaNote] },
-    canaries: { group: [canary], tenant: [canary, `${canary}-BEA`] },
+    elsewhere: { group: [ownerNote], tenant: [ownerNote, beaNote], friendGroup: [ownerNote, beaNote, annNote] },
+    canaries: { group: [canary], tenant: [canary, `${canary}-BEA`], friendGroup: [canary, `${canary}-BEA`, `${annCanary}`] },
     options,
   };
 }
@@ -180,8 +201,9 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
   const checks: Check[] = [];
   const check = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, ...(ok || !detail ? {} : { detail }) });
 
-  for (const s of ["group", "tenant"] as const) {
+  for (const s of ["group", "tenant", "friendGroup"] as const) {
     const o = w.options(s);
+    const watched = s === "friendGroup" ? [w.ownerDir, w.beaDir, w.annDir] : [w.ownerDir, w.beaDir]; // (a friend's group must also leave her own chat's notes alone)
     const folder = w.folder[s];
     const label = `${s}:`;
 
@@ -199,7 +221,7 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
     const expected = ["draw", "memory", "people", "send", "tasks", "weather", ...(settings.browse ? ["browse"] : []), ...(settings.tts.provider === "qwen" ? ["voice"] : [])].sort();
     check(`${label} MCP servers are exactly the set's (${expected.join(",")})`, JSON.stringify(servers) === JSON.stringify(expected), servers.join(","));
     const env = o.env ?? {};
-    if (s === "tenant") {
+    if (s !== "group") {
       check(`${label} env has her instance key`, env.ANTHROPIC_API_KEY === w.instanceKey);
       check(`${label} env has no owner login`, !("CLAUDE_CODE_OAUTH_TOKEN" in env) && !("ANTHROPIC_AUTH_TOKEN" in env) && !("ANTHROPIC_BASE_URL" in env));
     } else {
@@ -219,7 +241,8 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
       ["a .. path", `${folder}/../../../conversations/owner/notes/context-owner-secret.md`],
       ["an outside file", w.outsideFile],
     ];
-    if (s === "tenant") paths.push(["Bea's note", w.beaNote], ["Bea's log", w.beaLog], ["a symlink to Bea", join(folder, "to-bea", "context-bea-secret.md")]);
+    if (s !== "group") paths.push(["Bea's note", w.beaNote], ["Bea's log", w.beaLog], ["a symlink to Bea", join(folder, "to-bea", "context-bea-secret.md")]);
+    if (s === "friendGroup") paths.push(["Ann's own chat note", w.annNote], ["Ann's own chat log", w.annLog], ["a symlink to Ann's own chat", join(folder, "to-ann", "context-ann-secret.md")]);
     for (const tool of ["Read", "Write", "Edit"]) for (const [what, p] of paths) denied.push([`${tool} ${what}`, tool, { file_path: p }]);
     denied.push(
       ["Bash", "Bash", { command: "ls /" }],
@@ -249,16 +272,20 @@ export async function boundaryChecks(w: World, hooks: Hooks = {}): Promise<Check
     await server.connect(b);
     await client.connect(a);
     try {
-      const before = snapshot([w.ownerDir, w.beaDir]);
+      const before = snapshot(watched);
       const search = textOf(await client.callTool({ name: "search_logs", arguments: { query: w.word } }));
       check(`${label} search_logs for a word only the owner's and Bea's lines have returns nothing of theirs`, !w.canaries[s].some((c) => search.includes(c)) && search.includes("No matching messages"), search.slice(0, 200));
+      if (s === "friendGroup") {
+        const hers = textOf(await client.callTool({ name: "search_logs", arguments: { query: "annsecret" } }));
+        check(`${label} search_logs for a word only Ann's own chat has returns nothing`, !hers.includes(`${w.annCanary}`) && hers.includes("No matching messages"), hers.slice(0, 200));
+      }
       const own = textOf(await client.callTool({ name: "search_logs", arguments: { query: "tea" } }));
       check(`${label} search_logs finds her own history (the control)`, /likes tea/.test(own), own.slice(0, 200));
-      for (const file of ["context-owner-secret.md", "../../../conversations/owner/notes/context-owner-secret.md", s === "tenant" ? "context-bea-secret.md" : "context-nothing.md"]) {
+      for (const file of ["context-owner-secret.md", "../../../conversations/owner/notes/context-owner-secret.md", s !== "group" ? "context-bea-secret.md" : "context-nothing.md", ...(s === "friendGroup" ? ["context-ann-secret.md"] : [])]) {
         const r = (await client.callTool({ name: "forget_note", arguments: { file } })) as { isError?: boolean };
         check(`${label} forget_note ${file} is an error`, r.isError === true);
       }
-      check(`${label} the owner's and Bea's notes are still there`, existsSync(w.ownerNote) && existsSync(w.beaNote) && changedPaths(before, snapshot([w.ownerDir, w.beaDir])).length === 0);
+      check(`${label} the owner's and Bea's notes are still there`, existsSync(w.ownerNote) && existsSync(w.beaNote) && (s !== "friendGroup" || existsSync(w.annNote)) && changedPaths(before, snapshot(watched)).length === 0);
     } finally {
       await client.close();
     }

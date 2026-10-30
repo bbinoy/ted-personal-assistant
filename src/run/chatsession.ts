@@ -108,7 +108,7 @@ async function compactChatIfNeeded(conv: ConvId, who: Who, notesDir: string | un
 // Compaction of a conversation's sessions (the urgent one after a reply, the quiet one from the tick): like any call it asks payer.ts mayRun first, so a friend's runs on
 // the instance key and is billed to her, and waits while she is blocked (the key in a cooldown, her day's budget spent), urgent or quiet. The owner's and a group's urgent
 // one is never held back (somebody's next message waits for it); their quiet one stops with the pause switch, the cooldown and the budget.
-export async function compactConversation(conv: Pick<Conversation, "kind" | "tenantId" | "convId" | "notesDir">, mode: "quiet" | "urgent", o: MayRunOptions = {}): Promise<void> {
+export async function compactConversation(conv: Pick<Conversation, "kind" | "tenantId" | "sponsor" | "convId" | "notesDir">, mode: "quiet" | "urgent", o: MayRunOptions = {}): Promise<void> {
   const payer = mayRun(conv, "compaction", { chat: mode === "urgent", ...o });
   if (isRefusal(payer)) return;
   await compactChatIfNeeded(conv.convId, conv.kind, conv.notesDir, mode, payer);

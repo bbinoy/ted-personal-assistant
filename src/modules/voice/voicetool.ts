@@ -13,7 +13,7 @@ import { askingIn, quotedVoiceNote, voiceNote, voiceNotes, type VoiceNote } from
 import { oneLine } from "../../core/sanitize.ts";
 import { settings } from "../../core/settings.ts";
 import { OWNER_KEY, sourceOfKey } from "../../core/ownerkey.ts";
-import { listGroups } from "../../conversation/groupstore.ts";
+import { listOwnerGroups } from "../../conversation/groupstore.ts";
 import { convIdOfKey, groupConvId } from "../../core/convpaths.ts";
 
 // The voice tool: the cloned voice of a conversation (Qwen only). Each conversation has its own library and active voice (voices.ts):
@@ -173,7 +173,7 @@ const realVoiceDeps = (): VoiceDeps => ({
   },
   clip: realClipTools(settings.whisperModel),
   audioFile: (id) => messenger().attachmentFile({ id }),
-  groups: () => listGroups().map((g) => ({ id: g.id, name: g.name })),
+  groups: () => listOwnerGroups().map((g) => ({ id: g.id, name: g.name })),
   now: Date.now,
 });
 

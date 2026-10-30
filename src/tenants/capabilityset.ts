@@ -16,7 +16,7 @@ const SWITCHES: ReadonlyArray<readonly [Capability, () => boolean]> = [
 
 // The pure part: what is available to the person (the owner: everything; a friend: everything but OWNER_ONLY; a group: its fixed set), less what the credential cannot give, what is not set up yet, what the instance has switched off and what the person turned off
 // for herself. Every step only takes away. `login`: the owner's conversation, on the instance's own login.
-export function resolveCapabilities(granted: readonly Capability[], o: { login?: boolean; own?: { browse?: boolean; voice?: boolean } } = {}): ReadonlySet<Capability> {
+export function resolveCapabilities(granted: readonly Capability[], o: { login?: boolean; own?: { browse?: boolean; voice?: boolean; groups?: boolean } } = {}): ReadonlySet<Capability> {
   const caps = new Set(granted);
   if (!intakeToolsFor(granted).length) caps.delete("intake"); // its tools need INTAKE_BASE_URL, a purpose and the capability for it (read before the login-only ones go)
   if (!o.login) {
@@ -31,6 +31,7 @@ export function resolveCapabilities(granted: readonly Capability[], o: { login?:
   for (const [c, on] of SWITCHES) if (!on()) caps.delete(c);
   if (o.own?.browse === false) caps.delete("browse");
   if (o.own?.voice === false) caps.delete("voice");
+  if (o.own?.groups === false) caps.delete("groups");
   return caps;
 }
 

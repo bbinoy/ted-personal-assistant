@@ -81,13 +81,16 @@ export interface RunOptions {
   // A tenant's run (tenants.ts): an isolated "group" run on HER OWN Anthropic API key, with her own cost ledger and cooldown. Never absent for a run
   // made for a tenant, and never given the instance's login: without a key the run does not start.
   tenant?: TenantRun;
+  // A group a friend sponsors (groupstore.ts sponsorOf): a group run that is PAID for by her (her key, her ledger, payer.ts) and whose words are hers (audit rows wordless). Nothing else of a tenant's run:
+  // the group keeps its own tools, notes, questions and log.
+  sponsor?: Pick<TenantRun, "id" | "apiKey" | "keyTag" | "ledger">;
   // The experts every run may delegate heavy work to (run/delegation.ts, set by the builder). Gives the run the Agent tool, the SDK `agents` and the PreToolUse hook that
   // allows only these agents, at most two per run and no nesting, and keeps a `delegate:` skill out of the run's own hands. `onDelegate` is told each accepted delegation.
   experts?: { setup: ExpertSetup; onDelegate?: (d: Delegation) => void; context?: () => string | undefined }; // context: code-written, appended to every brief (a look's facts and recent chat)
 }
 
 // Who pays for a run (payer.ts): a friend's run is on the instance key and her ledger, any other on the login.
-const payerOf = (opts: Pick<RunOptions, "tenant" | "kind" | "groupId" | "memory">): Payer => (opts.tenant ? { kind: "instance", id: opts.tenant.id, apiKey: opts.tenant.apiKey, ledger: opts.tenant.ledger } : payerFor({ kind: opts.kind.who, groupId: opts.groupId ?? opts.memory?.groupId }));
+const payerOf = (opts: Pick<RunOptions, "tenant" | "sponsor" | "kind" | "groupId" | "memory">): Payer => (opts.tenant ?? opts.sponsor ? { kind: "instance", id: (opts.tenant ?? opts.sponsor)!.id, apiKey: (opts.tenant ?? opts.sponsor)!.apiKey, ledger: (opts.tenant ?? opts.sponsor)!.ledger } : payerFor({ kind: opts.kind.who, groupId: opts.groupId ?? opts.memory?.groupId }));
 
 // Context size of one model call: everything it was sent.
 const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) =>
@@ -95,7 +98,7 @@ const contextTokens = (u: { input_tokens?: number; cache_read_input_tokens?: num
 
 // The browse sub-run (browse.ts calls this through the entry tool): a fresh run with the browser, under the guard. A group's run is the same
 // as the owner's; only `approve` differs (the group's own approver).
-export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> & { attended?: boolean } = {}): RunOptions {
+export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope" | "sponsor"> & { attended?: boolean } = {}): RunOptions {
   return {
     gate: "helper", // (a child of a run that holds a place: queuing for a second one could deadlock the looks that browse, and make a chat turn wait behind them)
     signal: parent.signal, // called off with its parent (a look overtaken by a message, a ceiling)
@@ -111,11 +114,12 @@ export function browseRunOptions(guard: BrowseGuard, tenant?: TenantRun, parent:
     untrusted: true, // it reads hostile pages
     guard,
     tenant, // the browse worker of a tenant's run is hers too: her key, her ledger (it would otherwise be billed to the instance's login)
+    sponsor: parent.sponsor, // and that of a friend's group
   };
 }
 
 // The `run` of a browse entry tool (browse.ts BrowseContext): the browse run under its guard, asking `approve` for commit steps.
-export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope"> & { attended?: boolean } = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
+export const browseRunner = (approve: Approve, tenant?: TenantRun, parent: Pick<RunOptions, "provenance" | "conversation" | "signal" | "stopScope" | "sponsor"> & { attended?: boolean } = {}) => (prompt: string, guard: BrowseGuard): Promise<AgentReply> => runAgent(prompt, approve, browseRunOptions(guard, tenant, parent));
 
 // The built-in tools of a run (everything else is an MCP tool): the rows of the builtin module (modules/builtin.ts) that its tool set holds. 
 function builtinTools(tools: ReadonlySet<string>): string[] {
@@ -196,7 +200,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, memory: opts.memory, seenMail: opts.seenMail, guard: opts.guard, mode: login ? "owner" : "group", offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv }) };
+  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, sponsor: opts.sponsor, memory: opts.memory, seenMail: opts.seenMail, guard: opts.guard, mode: login ? "owner" : "group", offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv, sponsor: opts.sponsor }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -245,7 +249,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? HIDDEN_BROWSER_TOOLS : login ? hiddenTools(toolsSeen()) : undefined, // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!opts.tenant, { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && login, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!(opts.tenant ?? opts.sponsor), { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && login, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

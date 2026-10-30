@@ -159,7 +159,7 @@ export interface GateIO {
 //   api        the model time the SDK itself reports
 export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<GateOutput> {
   const prompt = gatePrompt(input, input.notes ?? notesText(input.conv, input.now));
-  const system = gateSystem(styleSummary(input.now));
+  const system = gateSystem(input.conv.sponsor ? "" : styleSummary(input.now)); // (the owner's style notes are not shown in a friend's group)
   const t0 = Date.now();
   const at: Record<string, number> = {};
   const mark = (k: string) => void (k in at || (at[k] = Date.now() - t0));
@@ -181,7 +181,7 @@ export async function askGateWith(input: GateInput, io: GateIO = {}): Promise<Ga
         if (m.type === "result") (mark("result"), (api = m.duration_api_ms), (cost = m.total_cost_usd));
       },
       spare:
-        input.conv.kind === "group" // (only a group's look is the one the spare was built for)
+        input.conv.kind === "group" && !input.conv.sponsor // (only a group's look on the login is the one the spare was built for: it holds the login's environment and the owner's style notes, a friend's group has neither)
           ? async (p, cold, track) => {
               const w = await gateSpare.take(SPARE_ID, system)?.catch((e: Error) => console.error("gate: warm process unavailable, starting normally:", e.message));
               setImmediate(() => prepareGate(input.now, io.start, system)); // a spare serves one look: the next is already on its way

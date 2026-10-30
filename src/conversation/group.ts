@@ -4,11 +4,15 @@ import { fence } from "../core/fence.ts";
 import { reactionJournal } from "../core/reaction.ts";
 import { prepare, runConversation, type TurnBuilder } from "../run/agent.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
-import { AuthError, RateLimitError, refusalOnce } from "../tenants/errors.ts";
+import { AuthError, RateLimitError, refusalOnce, type Reason } from "../tenants/errors.ts";
+import { isRefusal, mayRun, type Payer } from "../tenants/payer.ts";
+import { timeIn } from "../core/timezone.ts";
+import { resolveSender } from "../tenants/tenants.ts";
+import { capabilitiesOfRecord } from "../tenants/capabilityset.ts";
 import { askGate, prepareGate } from "./gate.ts";
 import { logTail } from "../run/chattail.ts";
 import { recordWake } from "./ledger.ts";
-import { groupContext } from "./groupstore.ts";
+import { groupContext, setSponsor, sponsorOf } from "./groupstore.ts";
 import { isPaused } from "../core/pause.ts";
 import { MAX_PICTURES, PICTURE_NOTE, type Picture } from "../run/image.ts";
 import { documentNote, takeDocuments, type Document } from "./document.ts";
@@ -23,8 +27,8 @@ import { OWNER, settings } from "../core/settings.ts";
 
 // Group chats. In its own Signal account the assistant can be added to a group. There it is a friendly
 // participant: every message is judged (cheaply, see gate below) and it speaks when it makes sense, always
-// when @mentioned or replied to, in a group the OWNER IS A MEMBER OF (so a stranger cannot add it to a group and use it), and the run it gets has NO private data: no mail, calendar
-// or notes of the owner, only web search and its own group's memory. What the owner shares with groups is
+// when @mentioned or replied to, in a group whose SPONSOR IS A MEMBER (the owner, or a friend who may add us to her groups; so a stranger cannot add it to a group and use it), and the run it gets has NO private data: no mail, calendar
+// or notes of the owner, only web search and its own group's memory. A friend's group is billed to her and private to her like her own chat. What the owner shares with groups is
 // its personality (their style notes), nothing else. Other people's messages are data it responds to, never
 // instructions.
 //
@@ -62,10 +66,10 @@ export function groupPrompt(lines: readonly string[], addressed?: { line: string
   ].filter(Boolean).join("\n\n");
 }
 
-// Is the owner in this group? Looked up from the messenger's member list, remembered for a few minutes.
+// Is this group's sponsor in it? Looked up from the messenger's member list, remembered for a few minutes.
 // Anything that goes wrong means no: a group we cannot vouch for gets no answers and no logging.
 const MAX_CACHED_GROUPS = 200;
-const MEMBER_CACHE_MS = 5 * 60_000; // how long "the owner is in this group" is remembered
+const MEMBER_CACHE_MS = 5 * 60_000; // how long "the sponsor is in this group" is remembered
 const memberCache = new Map<string, { at: number; ok: boolean; name: string }>();
 // Every group that ever sends a message gets an entry (strangers' groups we were added to as well): the map stays bounded.
 function trimMemberCache(now: number): void {
@@ -75,14 +79,28 @@ function trimMemberCache(now: number): void {
 }
 export const groupName = (groupId: string): string => oneLine("group name", (memberCache.get(groupId)?.name ?? "").replace(/["<>]/g, " "), 40) || "a group";
 export const memberCacheSize = () => memberCache.size; // tests
-export async function ownerInGroup(groupId: string, lookup: () => Promise<{ id: string; name?: string; members: { number?: string; uuid?: string }[] }[]>, isOwner: (who: { number?: string; uuid?: string }) => boolean, now = Date.now()): Promise<boolean> {
+// Who may sponsor a group, as a member sees it: "owner" (the owner), or an active friend whose capabilities allow groups (`since`: when she was approved). Anyone else: undefined.
+export type SponsorOf = (who: { number?: string; uuid?: string }) => { id: string; since: string } | undefined;
+// Who may sponsor a group: the owner, or an active friend whose capabilities allow groups (a friend owns her Ted, so the group is hers: billed to her, private to her; docs/SAFETY.md "Groups").
+export const sponsorOfMember: SponsorOf = (who) => {
+  const r = resolveSender({ number: who.number, aci: who.uuid });
+  if (!r) return undefined;
+  if (r.role === "admin") return { id: "owner", since: "" };
+  return r.status === "active" && capabilitiesOfRecord(r).has("groups") ? { id: r.id, since: r.created } : undefined;
+};
+// The sponsor decides (groupstore.ts sponsorOf): the one recorded when the group was first accepted, and it must still be a member and still eligible, else the group is ignored (it is
+// never handed to another member, who would pay without having agreed). A group with no sponsor yet gets one now: the owner if she is a member (as ever), else the earliest-approved eligible friend.
+export async function sponsorInGroup(groupId: string, lookup: () => Promise<{ id: string; name?: string; members: { number?: string; uuid?: string }[] }[]>, sponsorOfMember: SponsorOf, now = Date.now()): Promise<boolean> {
   const hit = memberCache.get(groupId);
   if (hit && now - hit.at < MEMBER_CACHE_MS) return hit.ok;
   let ok = false;
   let name = "";
   try {
     const found = (await lookup()).find((g) => g.id === groupId);
-    ok = found?.members.some(isOwner) ?? false;
+    const eligible = (found?.members ?? []).flatMap((m) => sponsorOfMember(m) ?? []).sort((a, b) => a.since.localeCompare(b.since) || a.id.localeCompare(b.id));
+    const recorded = sponsorOf(groupId);
+    if (recorded) ok = eligible.some((s) => s.id === recorded);
+    else if (eligible[0]) (setSponsor(groupId, eligible[0].id, found?.name), (ok = true));
     name = found?.name ?? "";
   } catch {
     return false; // not cached: try again next time
@@ -95,9 +113,28 @@ export async function ownerInGroup(groupId: string, lookup: () => Promise<{ id: 
 
 export type Runner = (build: TurnBuilder, ctx: { conv: Conversation; now: Date; firstOutput?: () => void; apiKey?: string }) => Promise<string>; // apiKey: a tenant's unattended run, on the instance key (tenantrun.ts access)
 
-// Chat replies and wake-ups both run here; the cost is logged as for an owner run.
+// Why this group cannot be answered now, from its payer (payer.ts): a group on the owner's login waits for her day's budget; a group a friend sponsors has her gates (the key, its cooldown, her day).
+// `reason` is what a member who addressed us is told (errors.ts refusals: nothing for a reason without a text). undefined: it may run.
+function held(conv: Conversation, now: number): { reason?: Reason; until?: string } | undefined {
+  if (!conv.sponsor) return budgetSpent() ? { reason: "owner-budget" } : undefined;
+  const p = mayRun(conv, "chat", { chat: true, now });
+  if (!isRefusal(p)) return undefined;
+  return p.refused === "instance-budget" ? { reason: "shared-budget" } : p.refused === "cooldown" ? { reason: "cooldown", until: timeIn(new Date(p.until!)) } : {};
+}
+
+// The payer of a friend's group (undefined: the login's, the gate's default). Never the login in her place: a refusal here fails the call.
+function sponsorPayer(conv: Conversation): Payer | undefined {
+  if (!conv.sponsor) return undefined;
+  const p = mayRun(conv, "gate", { chat: true });
+  if (isRefusal(p)) throw new Error(`a friend's group cannot run now (${p.refused})`);
+  return p;
+}
+
+// Chat replies and wake-ups both run here; the cost is logged as for an owner run. A friend's group runs on her key (the payer decides, as for her own chat).
 const realRunner: Runner = async (build, { conv, firstOutput, apiKey }) => {
-  const r = await runConversation(conv, { apiKey }, build, firstOutput);
+  const payer = conv.sponsor ? mayRun(conv, "chat", { chat: true }) : undefined;
+  if (payer && isRefusal(payer)) return "[[silent]]";
+  const r = await runConversation(conv, { apiKey: payer?.kind === "instance" ? payer.apiKey : apiKey }, build, firstOutput);
   if (r.costUsd !== undefined) console.log(`group run: ${r.text.length} chars, $${r.costUsd.toFixed(4)}`);
   return r.text.trim();
 };
@@ -152,7 +189,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     // every message of every busy group made two active groups evict each other's process for nothing. Not while its own turn runs
     // (the session is about to change; the end of that turn prepares it), nor when nothing will be answered.
     if (!e.addressedToMe) return;
-    if (!st.running && !isPaused(now) && !budgetSpent()) warm?.(conv, false);
+    if (!st.running && !isPaused(now) && !held(conv, now.getTime())) warm?.(conv, false);
     // The message that addressed us goes to the model whole (a long message too); the 600-character line is for the log and the gate's view.
     const asked = e.reaction ? e.line + reactionJournal(e.reaction.journal) : e.said;
     const said = e.reaction ? e.said : asked; // (what the member said, for the approval judge: a reaction is not the text of the message it is on)
@@ -183,7 +220,7 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     const judge = () => {
       const looked = new Date();
       const gate = cfg.gate ?? askGate;
-      return (async () => gate({ conv, now, tail: (cfg.recent ?? logTail)(conv), secondsSinceMine: st.lastSpoke ? Math.round((Date.now() - st.lastSpoke) / 1000) : undefined, duringLastReply: st.runStart !== undefined && e.timestamp > st.runStart && (st.running || e.timestamp <= (st.runEnd ?? 0)) }))().then(
+      return (async () => gate({ conv, now, payer: sponsorPayer(conv), tail: (cfg.recent ?? logTail)(conv), secondsSinceMine: st.lastSpoke ? Math.round((Date.now() - st.lastSpoke) / 1000) : undefined, duringLastReply: st.runStart !== undefined && e.timestamp > st.runStart && (st.running || e.timestamp <= (st.runEnd ?? 0)) }))().then(
         (v) => ({ ok: true as const, v, looked, ms: Date.now() - looked.getTime() }),
         (err: unknown) => ({ ok: false as const, e: err }),
       );
@@ -191,8 +228,9 @@ export function createGroupAnswering(deps: Pick<PipelineDeps, "group" | "record"
     if (isPaused(now)) return;
     // The owner's day (the login's, which the groups run on) is spent: someone addressed us and it turned the answer away, so say so once a day from the one refusal table
     // (tenants/errors.ts), never for a message that was not meant for us.
-    if (budgetSpent()) {
-      const line = pending() ? refusalOnce("owner-budget", "group", conv.convId, {}, now.getTime()) : undefined;
+    const stop = held(conv, now.getTime());
+    if (stop) {
+      const line = pending() && stop.reason ? refusalOnce(stop.reason, "group", conv.convId, { until: stop.until }, now.getTime()) : undefined;
       if (line) await batch.run(async () => void (await delivery.runTurn(conv, { run: async () => ({ text: line }), background: true, announce: false, kind: "notice" })));
       return;
     }

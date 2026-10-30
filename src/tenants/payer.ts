@@ -81,10 +81,10 @@ export interface MayRunOptions {
 }
 
 // The one gate for work on a model: who would pay, and may it run now? A conversation is a Payer or a refusal, never half of each.
-//   owner, group   login; unattended work stops with the pause switch, the shared cooldown of the usage limit (logged once per episode) and the instance's day budget (a chat turn is not asked; a group's chat turn is held at the same day by group.ts)
-//   friend         she must be active (a chat turn: not suspended); the instance key must be set (else the owner hears of it once); the key must not be in a cooldown; the instance key's day across all tenants must not be spent (INSTANCE_KEY_DAILY_USD)
+//   owner, group   login (a group a friend sponsors is hers: the next row); unattended work stops with the pause switch, the shared cooldown of the usage limit (logged once per episode) and the instance's day budget (a chat turn is not asked; a group's chat turn is held at the same day by group.ts)
+//   friend         (her own chat, and any group she sponsors) she must be active (a chat turn: not suspended); the instance key must be set (else the owner hears of it once); the key must not be in a cooldown; the instance key's day across all tenants must not be spent (INSTANCE_KEY_DAILY_USD)
 // (a conversation the caller only half names, as some callers and tests do, is not one whose database can be damaged)
-const damaged = (conv: Pick<Conversation, "kind" | "tenantId"> & { groupId?: string }): boolean => {
+const damaged = (conv: Pick<Conversation, "kind" | "tenantId" | "sponsor"> & { groupId?: string }): boolean => {
   try {
     return convDamage(convIdOf(conv)) !== undefined;
   } catch {
@@ -92,17 +92,18 @@ const damaged = (conv: Pick<Conversation, "kind" | "tenantId"> & { groupId?: str
   }
 };
 
-export function mayRun(conv: Pick<Conversation, "kind" | "tenantId"> & { groupId?: string }, what: string, o: MayRunOptions = {}): Payer | Refusal {
+export function mayRun(conv: Pick<Conversation, "kind" | "tenantId" | "sponsor"> & { groupId?: string }, what: string, o: MayRunOptions = {}): Payer | Refusal {
   const now = o.now ?? Date.now();
   if (!o.chat && (o.paused ?? isPaused)(new Date(now))) return { refused: "paused" };
   if (!o.chat && damaged(conv)) return { refused: "damaged" }; // its assistant.db was damaged and set aside (core/convdb.ts): chat goes on with a fresh start, nothing unattended runs for it until a person looks
-  if (conv.kind !== "tenant") {
+  const friend = conv.tenantId ?? conv.sponsor; // whose key and day it is: a friend's own chat, or a group she sponsors (never the login in her place)
+  if (!friend) {
     if (o.chat) return payerFor(conv);
     if (skipForCooldown(what, now)) return { refused: "cooldown", until: cooldownUntil("", now) };
     if ((o.spent ?? budgetSpent)()) return { refused: "budget" };
     return payerFor(conv);
   }
-  const rec = conv.tenantId ? tenantById(conv.tenantId) : undefined;
+  const rec = tenantById(friend);
   if (!rec || (o.chat ? rec.status === "suspended" : rec.status !== "active")) return { refused: "inactive" }; // (a suspended friend gets no answer; nothing unattended runs for her unless she is active)
   const ctx = tenantContext(rec);
   const apiKey = o.key ? o.key() : settings.tenantApiKey;

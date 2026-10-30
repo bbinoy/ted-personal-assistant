@@ -2,6 +2,7 @@ import { noticeFor } from "../tenants/errors.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import type { Gate } from "./gate.ts";
 import type { Runner } from "./group.ts";
+import { friendSponsorOf } from "./groupstore.ts";
 import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
 import { NOTES_DIR } from "../memory/notes.ts";
 import { type Picture } from "../run/image.ts";
@@ -22,6 +23,7 @@ export interface Conversation {
   readonly convId: ConvId; // its folder: conversations/<convId>/ (core/convpaths.ts); for a group not its id
   readonly groupId?: string; // the group; unset: the owner's chat or a tenant's
   readonly tenantId?: string; // a tenant's chat (tenants.ts): her id
+  readonly sponsor?: string; // a group a friend sponsors (groupstore.ts sponsorOf): her tenant id. It is billed to her, limited to her capabilities and private to her like her own chat; unset: the owner's (or any other conversation)
   readonly target?: Target; // where this conversation's messages go (the messenger's opaque target): the group id, directTarget(account id) for a tenant; unset: the owner's chat
   readonly direct: boolean; // a private one-to-one chat (the owner's or a tenant's): one person, always answered, her messages are her own
   readonly logFile: string; // this conversation's message log
@@ -54,6 +56,9 @@ export const group = (groupId: string): Conversation => {
     key: groupId,
     convId,
     groupId,
+    get sponsor() {
+      return friendSponsorOf(groupId); // (read at use: the first message of a group is routed before its sponsor is recorded)
+    },
     target: groupId,
     direct: false,
     logFile: p.messages,
@@ -145,7 +150,7 @@ export interface PipelineDeps {
   transcript: (m: IncomingMessage) => Promise<string>; // throws a sentence the sender can be told
   speech: { ready: () => boolean; synth: (words: string, conversation: string, limits?: SynthLimits) => Promise<string>; foreign: (words: string, conversation: string) => Promise<string | undefined>; timeoutMs?: number; deadline?: (ms: number) => Deadline }; // spoken replies: local TTS, a file
   approvals: { answer: (text: string, working: () => void, quote: { timestamp: number } | undefined, deps: undefined, ctx: { scope: string; by?: string; voice?: boolean }) => Promise<{ outcome: "none" | "approved" | "modified" | "declined" | "feedback" | "clarify"; changes?: { field: string; value: unknown }[]; reply?: string }>; answerReaction: (emoji: string, ts: number, scope: string, by?: string) => string };
-  vouch: (groupId: string) => Promise<boolean>; // is the owner in this group?
+  vouch: (groupId: string) => Promise<boolean>; // is this group's sponsor (the owner, or a friend who may add us to her groups) in it?
   isOwner: (who: { from: string; fromUuid?: string }) => boolean;
   group?: GroupDeps; // what a group's answer decision and turn are made of (group.ts); the defaults are the real ones, a test supplies its own
   compact?: (conv: Conversation, mode: "urgent") => Promise<void>; // after an answer is out, only if the conversation grew far past the limit; the next message waits for it. Every conversation (quiet-time compaction is the heartbeat's, wake.ts)

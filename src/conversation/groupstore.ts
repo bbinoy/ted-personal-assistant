@@ -9,6 +9,8 @@ import { convPaths, conversationsDir, groupConvId, isConvId } from "../core/conv
 import { moveAside, readText, writeFileAtomic } from "../core/state.ts";
 import { summarizeWithHaiku } from "./summarize.ts";
 import { LIMITS } from "../core/sanitize.ts";
+import { noteSponsored } from "../core/ownerkey.ts";
+import { plainSummary } from "../tenants/tenants.ts";
 
 // Everything a group has: its own notes (what members asked the assistant to remember there) and its own
 // message history, in the same formats as the owner's, but in a conversation folder that nothing private reads
@@ -25,7 +27,7 @@ const GROUP_CATEGORIES = preset().notes.others;
 export const groupLogFile = (groupId: string): string => convPaths(groupConvId(groupId)).messages;
 
 // meta.json of a group; one that does not parse is moved aside (state.ts) and the group goes on with defaults, instead of throwing on every message of that group.
-function readMeta(meta: string): { id?: string; name?: string } | undefined {
+function readMeta(meta: string): { id?: string; name?: string; sponsor?: string } | undefined {
   if (!existsSync(meta)) return undefined;
   try {
     const m = JSON.parse(readFileSync(meta, "utf8"));
@@ -50,13 +52,41 @@ export function groupDir(groupId: string, name?: string): string {
   // share the first group's notes, history and session: refuse it instead.
   if (known?.id !== undefined && known.id !== groupId) throw new Error(`group folder ${groupConvId(groupId)} belongs to another group; refusing to share it`);
   const final = name || known?.name || "";
-  if (!known || known.name !== final) writeFileAtomic(meta, JSON.stringify({ id: groupId, name: final }));
+  if (!known || known.name !== final) writeFileAtomic(meta, JSON.stringify({ id: groupId, name: final, ...(known?.sponsor ? { sponsor: known.sponsor } : {}) }));
   named.set(groupId, final);
   return dir;
 }
 
-/** A forgotten group: what is remembered in memory of its name (its folder is the caller's to delete). */
-export const forgetGroupCache = (groupId: string): void => void named.delete(groupId);
+/** A forgotten group: what is remembered in memory of its name and sponsor (its folder is the caller's to delete). */
+export const forgetGroupCache = (groupId: string): void => (named.delete(groupId), sponsors.delete(groupId), noteSponsored(groupId, false));
+
+// The SPONSOR of a group: whose membership lets us answer there, who pays for it, and whose data it is. "owner", or the id of an active friend whose capabilities allow groups. Decided once, when the group is first
+// accepted (group.ts sponsorInGroup), and recorded in meta.json: a group stays with its sponsor, and nobody else takes it over silently (when the sponsor leaves, it is ignored until it is forgotten).
+const OWNER_SPONSOR = "owner";
+const sponsors = new Map<string, string>();
+export function sponsorOf(groupId: string): string | undefined {
+  let s = sponsors.get(groupId);
+  if (s === undefined) {
+    const v = readMeta(convPaths(groupConvId(groupId)).meta)?.sponsor;
+    if (typeof v !== "string" || !/^(?:owner|[a-z][a-z0-9_-]{0,31})$/.test(v)) return undefined;
+    sponsors.set(groupId, (s = v));
+    noteSponsored(groupId, v !== OWNER_SPONSOR);
+  }
+  return s;
+}
+/** The friend who sponsors the group (the one that pays and whose data it is); undefined: the owner (or nobody yet). */
+export const friendSponsorOf = (groupId: string): string | undefined => {
+  const s = sponsorOf(groupId);
+  return s === OWNER_SPONSOR ? undefined : s;
+};
+export function setSponsor(groupId: string, sponsor: string, name?: string): void {
+  groupDir(groupId, name);
+  const p = convPaths(groupConvId(groupId));
+  writeFileAtomic(p.meta, JSON.stringify({ id: groupId, name: readMeta(p.meta)?.name ?? name ?? "", sponsor }));
+  sponsors.set(groupId, sponsor);
+  noteSponsored(groupId, sponsor !== OWNER_SPONSOR);
+  console.log(`groups: ${groupConvId(groupId)} is sponsored by ${sponsor}`);
+}
 
 export const groupScope = (groupId: string): Scope => {
   groupDir(groupId); // (the folder is made first)
@@ -67,6 +97,7 @@ export const groupScope = (groupId: string): Scope => {
 interface KnownGroup {
   id: string;
   name: string;
+  sponsor?: string;
   dir: string;
   convId: string;
 }
@@ -87,10 +118,11 @@ export function listGroups(): KnownGroup[] {
 
 // A line in the group's log. What members wrote is kind "member" (text starts with who wrote it); the
 // assistant's own replies are kind "chat". An edit is kind "edit" (the new text of an earlier line) and a deletion kind "delete" (a marker).
+// A friend's group is summarised by no model (that call would run on the owner's login, with her words): its log is cut by size, like her own chat's (tenants.ts plainSummary).
 export function recordGroup(groupId: string, kind: Kind, ts: number, text: string, extra?: Extra): void {
   const file = groupLogFile(groupId);
   recordMessage(kind, ts, text, new Date(), file, extra);
-  void compactIfNeeded(summarizeWithHaiku, GROUP_LOG_MAX_BYTES, file).catch((e) => console.error("group log: compaction failed:", (e as Error).message));
+  void compactIfNeeded(friendSponsorOf(groupId) ? plainSummary : summarizeWithHaiku, GROUP_LOG_MAX_BYTES, file).catch((e) => console.error("group log: compaction failed:", (e as Error).message));
 }
 
 const groupHistorySince = (groupId: string, sinceIso?: string): Sent[] => messagesSince(sinceIso, groupLogFile(groupId));
@@ -133,3 +165,9 @@ export function groupNotesBlock(notes: readonly Note[]): string {
   return lines.length ? lines.join("\n") : "";
 }
 
+
+/** At start: the groups that friends sponsor are known as such before the first event (audit rows of such a group are wordless from the start). */
+export const loadSponsors = (): void => void listGroups().forEach((g) => sponsorOf(g.id));
+
+/** The groups the OWNER may see and search: not those a friend sponsors (their words and names are the friend's, like her own chat: docs/SAFETY.md). */
+export const listOwnerGroups = (): KnownGroup[] => listGroups().filter((g) => !g.sponsor || g.sponsor === OWNER_SPONSOR);
