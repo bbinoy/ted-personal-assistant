@@ -136,7 +136,7 @@ export interface JudgeSetup {
   taint?: Taint;
   conversation?: string;
   run?: string; // this run's id: the journal pairs a call's why with its success within the run only (agentrun.ts)
-  seenMail?: { forget: (ids: readonly string[]) => void }; // the look's seen-mail tracker: mail an archive the run cap refused named is not worked through, so it is not marked seen
+  triage?: { judged: (ids: readonly string[], outcome: string, reason?: string) => void }; // the look's decision log: what the code floor and the judge said about an archive of these mail ids, shown next to the look's own reason
   notesSeen?: () => readonly string[]; // the notes this run has read so far, in order, for the journal's "per your notes: ..."
   // A run with experts (heartbeat/delegation.ts): the briefs the run wrote for them so far (read at every call: the judge reads them next to the provenance when the call is a
   // subagent's), and the type of a subagent by its id (for the audit log).
@@ -218,7 +218,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     // A limit about the run, not the call (the archive cap): a module's gate may refuse a call the manifest would let through.
     if (base !== "deny") {
       const limit = runGates.map((gate) => gate(tool, input)).find((m) => m !== undefined);
-      if (limit !== undefined) setup.seenMail?.forget(archivedBy(tool, input) ?? []); // (the cap refused these: the next look takes them)
+      if (limit !== undefined) setup.triage?.judged(archivedBy(tool, input) ?? [], "refused", "the run's archive cap"); // (the cap refused these: they stay in the inbox with that verdict in the decision log)
       if (limit !== undefined) {
         log(tool, "deny-run-cap", source, idsOf(input));
         return { behavior: "deny", message: limit };
@@ -313,6 +313,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       } else log(tool, `judge-${judged.decision}`, source, { reason: judged.reason, mode: settings.autoApprove, ...g?.facts, ...(g?.carried ? { carried: g.carried.id } : {}) });
       if (judged.decision === "ask") skipWhy = declinedMs !== undefined ? "redeclined" : skipWhy === "fix" ? "fix" : "judge";
       if (mayAutoApprove(settings.autoApprove, judged)) {
+        setup.triage?.judged(archivedBy(tool, input) ?? [], "allowed", judged.reason);
         log(tool, "auto-approved", source, { reason: judged.reason }, !journalable(tool, input) ? undefined : { call: { input, ...(g?.input ? { final: g.input } : {}) }, why: whyOf({ conv: conversation, step: "auto-approved", notes: setup.notesSeen?.(), input, provenance, judge: judged.reason }) }); // silent on purpose: logged, never announced (npm run report shows them)
         if (g?.carried) log(tool, "covered-by-approval", source, { approval: g.carried.id, approvedAt: new Date(g.carried.at).toISOString(), host: g.carried.host, approvedStep: g.carried.step, approvedControl: g.carried.label });
         if (onceOnly) remember(memo);
@@ -332,6 +333,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
         return { behavior: "deny", message: PAYMENT_UNATTENDED };
       }
       log(tool, "background-skip", source, { skip: skipWhy ?? (declinedMs !== undefined ? "redeclined" : floorWhy()) });
+      setup.triage?.judged(archivedBy(tool, input) ?? [], "skipped", judged?.reason ?? skipWhy ?? floorWhy());
       return { behavior: "deny", message: UNATTENDED_SKIP };
     }
     if ((failures.get(memo)?.n ?? 0) >= MAX_FAILED_ASKS) {

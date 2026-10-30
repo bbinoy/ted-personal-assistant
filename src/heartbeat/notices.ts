@@ -193,7 +193,7 @@ export function noticeDamaged(now: Date = new Date()): number {
   for (const d of damagedConvs()) {
     if (!takeCapNotice(`convdb:${d.conv}`, now.getTime())) continue;
     const where = d.conv === "owner" ? "your chat" : d.conv.startsWith("friend-") ? `a friend's chat (${d.conv})` : `a group (${d.conv})`;
-    holdFact(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged ? ` (I kept the mail I had already handled${d.salvaged.session ? " and the chat session" : ""})` : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now);
+    holdFact(`The saved state of ${where} was damaged, so I set the file aside (it is not deleted) and started it fresh${d.salvaged?.session ? " (I kept the chat session)" : ""}. Chatting there still works, but my background work for it (looks, the dream) is stopped until you check: run npm run doctor on the Mac.`, now);
     n++;
   }
   return n;

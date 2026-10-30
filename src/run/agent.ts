@@ -17,7 +17,7 @@ import { zoneOf } from "../tenants/tenants.ts";
 import { tenantKey } from "../core/ownerkey.ts";
 import { approveIn, type Approve } from "../approvals/permissions.ts";
 import { isRefusal, mayRun, type Payer } from "../tenants/payer.ts";
-import type { SeenMail } from "../modules/seenmail/seenmail.ts";
+import type { Triage } from "../tasks/maildecisions.ts";
 import { gated } from "../core/rungate.ts";
 import { settings } from "../core/settings.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
@@ -31,7 +31,7 @@ export interface LookExtra {
   onToolSuccess?: RunOptions["onToolSuccess"];
   provenance?: RunProvenance;
   onDelegate?: (agent: string) => void; // told each accepted delegation to an expert
-  seenMail?: SeenMail; // the look's tracker of the inbox mail already worked through (seenmail.ts)
+  triage?: Triage; // the look's decision log of the inbox (tasks/maildecisions.ts)
   signal?: AbortSignal; // the look is called off (a chat message overtook it, look.ts)
   untrusted?: boolean; // the message itself carries a third party's words (a task made from a mail, look.ts): the judge is told from the first call
   facts: TurnFacts; // the facts of this look, taken by look.ts (it needs them before it writes its message, and settles them itself with what it knows of how the look ended)
@@ -114,8 +114,8 @@ export function runLook(conv: Conversation, payer: Payer, build: TurnBuilder, ap
 // What a look adds to the builder's options: the callbacks it was given (and what its experts are told). Also how tests build a look's options.
 const lookInputs = (payer: Payer, now: Date): RunInputs => ({ ...(payer.kind === "instance" ? { apiKey: payer.apiKey } : {}), now });
 const lookExtras = (conv: Conversation, built: RunOptions, extra: Partial<LookExtra>): Partial<RunOptions> => {
-  const { facts: _facts, onDelegate, provenance, seenMail, ...callbacks } = extra;
-  return { ...callbacks, ...(provenance ? { provenance: () => provenance } : {}), ...(seenMail && lookerOf(conv).mail ? { seenMail } : {}), experts: { ...built.experts!, onDelegate: (d) => onDelegate?.(d.agent) } };
+  const { facts: _facts, onDelegate, provenance, triage, ...callbacks } = extra;
+  return { ...callbacks, ...(provenance ? { provenance: () => provenance } : {}), ...(triage && lookerOf(conv).mail ? { triage } : {}), experts: { ...built.experts!, onDelegate: (d) => onDelegate?.(d.agent) } };
 };
 export function lookOptions(conv: Conversation, payer: Payer, extra: Partial<LookExtra> = {}, now = new Date()): RunOptions {
   const built = runFor(conv, "look", lookInputs(payer, now));

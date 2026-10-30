@@ -1,7 +1,6 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentReply, RunOptions } from "../run/agentrun.ts";
 import type { RunKind, Who } from "../core/runkind.ts";
-import type { SeenMail } from "./seenmail/seenmail.ts";
 import type { BrowseGuard } from "./browse/browseguard.ts";
 import type { DraftView } from "./mailbird/proposals.ts";
 import type { Capability } from "../tenants/tenants.ts";
@@ -61,7 +60,6 @@ export interface RunContext {
   tenant?: TenantRun; // a tenant's run (her key, her ledger)
   sponsor?: RunOptions["sponsor"]; // a run of a group a friend sponsors: paid for by her, its words hers
   memory?: RunOptions["memory"];
-  seenMail?: SeenMail; // a heartbeat run of a conversation with mail: its tracker of the inbox mail already worked through (seenmail.ts)
   guard?: BrowseGuard; // the browse run's guard
   mode: "owner" | "group";
   offers: (tool: string) => boolean; // an isolated conversation: is this tool in the run's tool set? (its capabilities, less what attendance removes: capabilities.ts toolsFor; the browse worker: always)

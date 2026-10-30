@@ -1,6 +1,6 @@
 ---
 name: mail
-description: Use when a task involves email or the inbox - every look at new mail, the weekly inbox sweep, triage and archiving, restoring archived mail ("bring back the one from <sender>"), drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
+description: Use when a task involves email or the inbox - every look at the inbox, triage and archiving, restoring archived mail ("bring back the one from <sender>"), drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
 ---
 
 # Mail: the rules for every provider
@@ -17,30 +17,44 @@ tools, their arguments and how to list, read, archive and draft with them. Below
   `☀️` / `🌙` in front) is the assistant's own brief. Never read, reply to or count it
   as mail. Today's daily brief stays in the inbox; every older brief, wrap and review
   is archived.
-- **The triage rules below apply to every look and to the weekly sweep.** Archive when you are sure: code judges each archive, and one it is not sure about stays in the inbox without a word. Message only what is worth interrupting for.
+- **The triage rules below apply to every run that handles the inbox** (a look, a chat turn, a routine, an expert). Archive when you are sure: code judges each archive, and one it is not sure about stays in the inbox without a word. Message only what is worth interrupting for.
 - **Attachments**: never read or open their content unless the provider skill says
   you can. Their name, type and size are enough; if the owner needs the content,
   tell them to open it in the mail client.
 
-## Inbox sweep (the weekly review only)
+## Keeping the whole inbox
 
-The looks are the only triage of new mail, all day; the daily brief and the evening wrap
-re-list nothing (they use the journal, open drafts and the waiting-on list). Once a week
-the weekly review re-assesses everything still in the inbox, across every account. It acts,
-reversibly: re-judge everything; where a reply is overdue from either side, draft a nudge in
-the thread (drafts need no asking; never send); archive what has gone stale; and mention only
-what is new since it was last mentioned (check the chat log and the journal), never the same
-pile twice.
+The background looks own the inbox all day, and any run that handles mail works the same
+way. List the WHOLE inbox (read and unread, old and new, per account; the provider skill
+says how and with what limit) and re-judge every conversation still there, like an assistant
+who looks at it several times a day and keeps track of what needs doing. The owner keeps the
+inbox to about 10-20 mails; anything beyond that is probably handled mail nobody archived.
+The "Inbox decisions so far" in your facts say what the last look decided about each mail it
+considered, with its age: start from that decision, and a mail not listed there is new. It
+is a fact, not a filter: nothing is hidden from you.
 
-1. **List the whole inbox, oldest first.** The sweep does not depend on what the looks
-   have already seen (it does not use `seen_mail`: that memory hides everything a look kept
-   once, and the backlog from before it started). Per account, list the Inbox itself, all of
-   it, oldest included (the provider skill says how to page or batch), and classify every
-   row, read or unread, new or years old. Work through a big inbox in batches of about 50
-   rows, all the archive calls of a batch in one turn (not one per turn). A run may archive
-   only so many mails (the tool refuses past the cap): when it does, stop archiving, say
-   nothing about it, and the next week's sweep continues.
-   **Keep only today's brief email** (see "For every run that handles mail").
+- **Per conversation**: archive what is handled or stale; where a reply is overdue from
+  either side, draft a nudge in the thread (drafts need no asking; never send); reconcile
+  the tasks (`ted-personal-assistant:tasks`, "Reconcile") with what the rows and the mails you
+  open show; prepare meetings the mail points at.
+- **Cost**: list all, open selectively. Open a mail only when the row is not enough to decide:
+  it is new, a date or deadline is coming up, a reply arrived, or the thread changed. Never
+  open a mail again just to re-read it when nothing changed since the last look.
+- **Say only what is new or changed** since it was last mentioned (check the chat log and the
+  journal), never the same pile twice.
+- **A big inbox** is worked in batches of about 50 rows, all the archive calls of a batch in
+  one turn. A run may archive only so many mails (the tool refuses past the cap): when it
+  does, stop archiving, say nothing about it, and the next look continues.
+- **Keep only today's brief email** (see "For every run that handles mail").
+- **Change a decision only when something changed** (a reply arrived, a date passed, a task
+  or the calendar now covers it, the owner acted), and then say what changed. Do not open a
+  kept mail again when nothing changed.
+- **The decision log** (a background look): for every inbox mail it newly decided or whose
+  decision changed, one row in the "triage" part of its final answer: id as listed, sender,
+  subject, `archive`, `keep`, `task` or `draft`, and a short reason (for a keep: what it needs
+  from the owner, e.g. "Eve waits for an answer"). Code writes it into the journal (category
+  "triage") and hands it to every later run; it is not a message. A mail left in the inbox
+  without a reason that needs the owner is a mistake: archive it.
 
 **Decide per mail whether the row is enough, and read when it is not.**
 Reading is a plain read: free, not judged, with no cap. Where the row (sender,
@@ -59,7 +73,14 @@ your head: take what decides the case and move on.
 
 2. **Triage: archive unless the mail needs the owner.** The default is
    *archive*. Everything the owner does not have to act on goes, and goes
-   whether it is unread, new or old.
+   whether it is unread, new or old. **Anything automated** (notices, security and
+   login alerts, receipts, order and shipping updates, newsletters, promos, the
+   assistant's own older briefs) is archived, from the row when it is clear. Keep only
+   what needs the owner: a person waiting for them, a date or deadline ahead that is
+   not yet on the calendar or a task, something to decide; and say why in the decision
+   log. When a mail needs action, create the task or the draft and archive the mail if
+   the task fully captures it. A look that leaves obvious noise in the inbox is failing
+   its job.
    - *Needs the owner* (keep): a reply or a decision is expected from them; a
      payment is open or a document waits for their signature; an event or
      deadline falls in the next 7 days; or **a real conversation**: a thread in
@@ -148,7 +169,7 @@ your head: take what decides the case and move on.
 
 ### Newsletter radar
 
-Newsletters are archived from the row by the looks, unread, as soon as they arrive.
+Newsletters are archived from the row by the looks, unread, as soon as they are seen.
 The daily brief (`ted-personal-assistant:daily-brief`, step "Newsletter radar") reads
 them afterwards: from the newsletters archived since the previous brief (the journal's
 archive list) plus any still in the inbox, it opens up to **3** that best match the topics

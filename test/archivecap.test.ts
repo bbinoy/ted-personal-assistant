@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import type { Verdict } from "../src/approvals/autojudge.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { makeCanUseTool } from "../src/approvals/permissions.ts";
-import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
+import { createTriage } from "../src/tasks/maildecisions.ts";
 import { archiveGate, archivedBy } from "../src/modules/archivecap.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
+import { convDb } from "../src/core/convdb.ts";
 import { FRIEND_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The archive cap: at most ARCHIVE_MAX_PER_RUN archives per run, for every mail provider, each message of a batch counted.
@@ -97,15 +98,17 @@ test("a friend's Google: removing INBOX with modify_gmail_message_labels counts 
   });
 });
 
-test("seen mail: ids an archive the run cap refused named are forgotten, so the next look raises them again; the others commit", async () => {
-  const file = groupConvId(`seen-forget-${Math.random().toString(36).slice(2)}`); // (a conversation of its own: its seen-mail log is a table of its assistant.db)
+test("decision log: the archive the run cap refused is a verdict on those ids; the allowed one is archived (its row goes)", async () => {
+  const file = groupConvId(`seen-forget-${Math.random().toString(36).slice(2)}`); // (a conversation of its own: its decisions are a table of its assistant.db)
   await withCap(1, {}, async () => {
-    const seen = createSeenMail(file);
-    assert.deepEqual(seen.unseen(["a", "b", "c"]), ["a", "b", "c"]);
-    const can = makeCanUseTool(async () => ({ approved: true }), OWNER_LOOK, undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never, seenMail: seen });
+    const triage = createTriage(file);
+    const can = makeCanUseTool(async () => ({ approved: true }), OWNER_LOOK, undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never, triage });
     assert.equal(((await can(`${MB}archive_conversation`, { conversationId: "a" }, opts)) as Out).behavior, "allow");
     assert.equal(((await can(`${MB}archive_conversation`, { conversationIds: ["b", "c"] }, opts)) as Out).behavior, "deny", "past the cap");
-    seen.commit();
-    assert.deepEqual(createSeenMail(file).unseen(["a", "b", "c"]), ["b", "c"], "the refused ones come back");
+    assert.equal(triage.verdict("a")?.outcome, "allowed");
+    assert.deepEqual([triage.verdict("b")?.outcome, triage.verdict("c")?.outcome], ["refused", "refused"]);
+    const rows = ["a", "b", "c"].map((id) => ({ id, from: "", subject: "", decision: "archive" as const, reason: "promo" }));
+    triage.record(rows, Date.now());
+    assert.deepEqual(convDb(file).all<{ id: string }>("SELECT id FROM mail_decisions ORDER BY id").map((r) => r.id), ["b", "c"], "a left the inbox; b and c are still there");
   });
 });

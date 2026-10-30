@@ -13,7 +13,6 @@ import { readRows, type HeartbeatRow } from "../src/core/looks.ts";
 import { readAudit } from "../src/core/audit.ts";
 import { ledgerEntries, parseWake, recordMessage, type Kind } from "../src/core/messages.ts";
 import { lookState } from "../src/conversation/ledger.ts";
-import { createSeenMail } from "../src/modules/seenmail/seenmail.ts";
 import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
@@ -33,7 +32,7 @@ const min = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 const row = (at: Date, over: Partial<HeartbeatRow> = {}): HeartbeatRow => ({ at: at.toISOString(), kind: "owner", night: false, message: false, nextCheckMinutes: 30, costUsd: 0.01, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent", ...over });
 const reset = () => (instanceDb().run("DELETE FROM looks"), resetHeld(owner())); // (the rows, and what quiet hours held)
 
-interface Answer { mail?: string[]; hold?: Promise<unknown>; hang?: boolean; timeout?: boolean; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; agents?: string[]; results?: Record<string, string>; mailed?: boolean; during?: () => void }
+interface Answer { triage?: unknown[]; judged?: [string, string, string]; hold?: Promise<unknown>; hang?: boolean; timeout?: boolean; urgent?: boolean; sends?: number; message?: string; nextCheckMinutes?: number; throws?: boolean; calls?: string[]; delegates?: number; agents?: string[]; results?: Record<string, string>; mailed?: boolean; during?: () => void }
 function rig(answer: () => Answer, o: { clocks?: { wall: () => number; mono: () => number }; paused?: boolean; spent?: boolean; groups?: string[]; busy?: () => boolean; pipeline?: object; awaitingApproval?: () => boolean; stagger?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "hb-"));
@@ -74,8 +73,8 @@ function rig(answer: () => Answer, o: { clocks?: { wall: () => number; mono: () 
       if (a.timeout) throw new RunTimeout(10 * 60_000);
       if (a.throws) throw new Error("boom");
       for (const t of a.calls ?? []) extra.onToolSuccess?.(t, {});
-      if (a.mail) extra.seenMail?.unseen(a.mail);
-      return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30, ...(a.urgent ? { urgent: true } : {}) } };
+      if (a.judged) extra.triage?.judged([a.judged[0]], a.judged[1], a.judged[2]);
+      return { text: "", costUsd: 0.02, structured: { message: a.message ?? "[[silent]]", nextCheckMinutes: a.nextCheckMinutes ?? 30, ...(a.triage ? { triage: a.triage } : {}), ...(a.urgent ? { urgent: true } : {}) } };
     },
     notesChangedAt: () => 0,
     now: () => now,
@@ -104,8 +103,8 @@ test("the next look is clamped to 10..120 minutes, whatever the model says, and 
 });
 
 test("the answer: a message or [[silent]]; anything that does not follow the format is silent", () => {
-  assert.deepEqual(parseHeartbeatAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15, urgent: false });
-  assert.deepEqual(parseHeartbeatAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 120, urgent: false });
+  assert.deepEqual(parseHeartbeatAnswer({ message: " Eve is waiting ", nextCheckMinutes: 15 }, ""), { message: "Eve is waiting", nextCheckMinutes: 15, urgent: false, triage: [] });
+  assert.deepEqual(parseHeartbeatAnswer(undefined, JSON.stringify({ message: "hi", nextCheckMinutes: 600 })), { message: "hi", nextCheckMinutes: 120, urgent: false, triage: [] });
   for (const m of ["[[silent]]", "[[SILENT]]", "", "   ", "[[silent]] nothing to say"]) assert.equal(parseHeartbeatAnswer({ message: m, nextCheckMinutes: 30 }, "").message, undefined, m);
   assert.equal(parseHeartbeatAnswer({ message: null, nextCheckMinutes: 30 }, "").message, undefined);
   assert.equal(parseHeartbeatAnswer(undefined, "I looked at the mail and thought about it").message, undefined, "free text is never posted");
@@ -125,8 +124,7 @@ test("the instruction: the clock, the zone, the last look, the quiet window and 
   assert.match(rules, /Set "urgent" to true only for what is truly time-critical/);
   assert.match(rules, /working late, tell me everything tonight/);
   assert.match(rules, /memory note/);
-  assert.match(rules, /seen_mail tool/);
-  assert.match(rules, /load ted-personal-assistant:mail/);
+  assert.match(rules, /Decision log: in the "triage" part/);
   assert.match(rules, /with the send tool/);
   assert.doesNotMatch(rules + text, /at most 5 mails|never mail you have not read/, "the archive floor is gone");
   assert.match(rules, /\[\[silent\]\]/);
@@ -551,7 +549,7 @@ test("a look is called off when a message overtakes it: no post, no run left, th
 });
 
 test("a look that has only read, when news came meanwhile, drops its message-only post as stale; one that acted still posts", async () => {
-  for (const [calls, outcome, posted] of [[[], "silent", 0], [["mcp__mailbird__list_conversations", "mcp__seenmail__seen_mail"], "silent", 0], [["mcp__mailbird__archive_conversation"], "posted", 1]] as const) {
+  for (const [calls, outcome, posted] of [[[], "silent", 0], [["mcp__mailbird__list_conversations"], "silent", 0], [["mcp__mailbird__archive_conversation"], "posted", 1]] as const) {
     const l = leaseRig();
     const { w, conv, seen } = rig(() => ({ message: "Eve is waiting.", calls: [...calls] }), { pipeline: { lease: (c: unknown, a: () => void, p: () => boolean) => ((l.lease.news = true), l.pipeline.lease(c, a, p)) } });
     assert.equal(await w.look(conv, DAY), outcome);
@@ -669,15 +667,6 @@ test("a group's and a friend's failing looks never reach the owner's chat, and n
   assert.ok(seen.prompts.filter((_, i) => seen.runs[i] === "group").every((p) => !/background looks have failed/.test(p)));
 });
 
-test("a post dropped as stale does not mark the mail it reported as seen: the next look raises it again", async () => {
-  const l = leaseRig();
-  const id = `stale-${Math.random().toString(36).slice(2)}`;
-  const { w, conv, seen } = rig(() => ({ message: "Eve is waiting.", mail: [id], calls: ["mcp__seenmail__seen_mail"] }), { pipeline: { lease: (c: unknown, a: () => void, p: () => boolean) => ((l.lease.news = true), l.pipeline.lease(c, a, p)) } });
-  assert.equal(await w.look(conv, DAY), "silent");
-  assert.deepEqual(seen.posted, []);
-  assert.deepEqual(createSeenMail(conv.convId).unseen([id]), [id], "not committed");
-});
-
 test("owner's look: browser steps leave no line of their own, so the look writes one short journal line; a look that only read writes none", async () => {
   const { w, conv } = rig(() => ({ calls: ["mcp__browser__browser_click", "mcp__browser__browser_navigate"] }));
   const before = ledgerEntries().filter((e) => e.kind === "journal").length;
@@ -714,4 +703,32 @@ test("routines: an expert that came back with nothing (it ran out of turns) is a
   assert.equal(none.rec.attempts, 1);
   const blank = await eveningLook({ agents: ["expert-evening-wrap"], results: { "expert-evening-wrap": "  " } }, 16);
   assert.equal(blank.rec.status, "failed");
+});
+
+test("the decision log: a look's per-mail decisions become triage journal lines, an archive with the safety check's outcome; they stay out of the default journal read and the chat", async () => {
+  const { w, conv, seen } = rig(() => ({
+    judged: ["m1", "allowed", "routine alert"],
+    triage: [
+      { id: "m1", from: "Acme Alerts", subject: "Security alert", decision: "archive", reason: "automated notice, nothing open" },
+      { id: "m2", from: "Eve", subject: "Friday", decision: "keep", reason: "Eve waits for an answer" },
+      { id: "m3", from: "Shop", subject: "Order shipped", decision: "task", reason: "delivery on Friday" },
+      { id: "", decision: "keep", reason: "no id: dropped" },
+      { id: "m4", decision: "bogus", reason: "unknown decision: dropped" },
+    ],
+  }));
+  const before = ledgerEntries().filter((e) => e.kind === "journal").length;
+  await w.look(conv, DAY);
+  const lines = ledgerEntries().filter((e) => e.kind === "journal" && e.cat === "triage").slice(-3).map((e) => e.text);
+  assert.equal(ledgerEntries().filter((e) => e.kind === "journal").length - before, 3, "one line per well-formed row");
+  assert.match(lines[0]!, /^Archived “Security alert” from Acme Alerts\. Why: automated notice, nothing open; safety check: allowed \(routine alert\)\./);
+  assert.match(lines[1]!, /^Kept “Friday” from Eve\. Why: Eve waits for an answer\.$/);
+  assert.match(lines[2]!, /^Made a task from “Order shipped” from Shop\. Why: delivery on Friday\.$/);
+  assert.deepEqual(seen.posted, [], "nothing in the chat");
+});
+
+test("the answer's decision log is read leniently: bad rows are dropped, never the look", () => {
+  const a = parseHeartbeatAnswer({ message: "[[silent]]", nextCheckMinutes: 30, triage: [{ id: " x ", from: "A", subject: "S", decision: "keep", reason: "r" }, null, { id: "y", decision: "nope" }, "text"] }, "");
+  assert.deepEqual(a.triage, [{ id: "x", from: "A", subject: "S", decision: "keep", reason: "r" }]);
+  assert.deepEqual(parseHeartbeatAnswer({ message: "x", nextCheckMinutes: 30, triage: "garbage" }, "").triage, []);
+  assert.deepEqual(parseHeartbeatAnswer(undefined, "free text").triage, []);
 });

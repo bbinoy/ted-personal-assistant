@@ -35,7 +35,7 @@ import { readSession, writeSession } from "./sessionstore.ts";
 import type { ConvId } from "../core/convpaths.ts";
 import { skillsFor } from "../modules/skills.ts";
 import { recordToolsSeen, toolsSeen } from "../policy/toolsseen.ts";
-import type { SeenMail } from "../modules/seenmail/seenmail.ts";
+import type { Triage } from "../tasks/maildecisions.ts";
 import { delegationHook, type Delegation, type ExpertSetup } from "./delegation.ts";
 
 // The core of every agent run: its options (RunOptions, buildOptions), the stream consumer, the ceiling every run passes, runAgent, and the
@@ -55,7 +55,7 @@ export interface RunOptions {
   conversation?: string; // the conversation the run acts for (its key; runFor always says; else the tenant's or group's of this run, none for a bare isolated run). Keys the per-conversation anti-repeat state (permissions.ts)
   // The SDK's auto-memory, for every run of a conversation: notes in `dir`, the only place the file tools may write (policy.ts); its MEMORY.md is code's (notes.ts writeIndex).
   memory?: { dir: string; zone?: string; groupId?: string };
-  seenMail?: SeenMail; // a heartbeat run of a conversation with mail: the tracker behind the seen_mail tool (seenmail.ts)
+  triage?: Triage; // a heartbeat run of a conversation with mail: its decision log, which also keeps the judge's verdict on each archive (tasks/maildecisions.ts)
   groupId?: string; // a group's run: its send, its browse approvals and its questions go there
   seenAt?: string; // groups: stored with the session, see ChatSession.seenAt
   skills?: readonly string[]; // the skills offered: skillsFor(capabilities) (skills.ts); the owner's are the whole plugin
@@ -201,7 +201,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
   // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
-  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, sponsor: opts.sponsor, memory: opts.memory, seenMail: opts.seenMail, guard: opts.guard, mode: login ? "owner" : "group", offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv, sponsor: opts.sponsor }) };
+  const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, sponsor: opts.sponsor, memory: opts.memory, guard: opts.guard, mode: login ? "owner" : "group", offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv, sponsor: opts.sponsor }) };
   const servers = serversFor(ctx);
   const mcpServers: Options["mcpServers"] = browsing && opts.guard
     ? servers
@@ -250,7 +250,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
     disallowedTools: browsing ? HIDDEN_BROWSER_TOOLS : login ? hiddenTools(toolsSeen()) : undefined, // out of the model's view entirely, see policy.ts
     permissionMode: "default", // never the ambient mode (user settings or an auto mode could skip canUseTool, and with it every guard and approval)
     // (a browse run is her tenant's too, for the audit log: opts.tenant, not the `tenant` that has no tools of its own there)
-    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!(opts.tenant ?? opts.sponsor), { provenance, conversation, run, seenMail: opts.seenMail, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && login, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
+    canUseTool: makeCanUseTool(approve, kind, opts.memory?.dir, undefined, opts.guard, tools, !!(opts.tenant ?? opts.sponsor), { provenance, conversation, run, triage: opts.triage, notesSeen: () => notesSeen, browseTask: browsing ? opts.guard?.task : undefined, untrusted: opts.untrusted, restoreFree: kind.attended && login, taint: sessionTaint(opts.freshSession ? undefined : opts.sessionConv, resume), expertBriefs: delegation && (() => delegation.delegations.map((d) => d.brief)), agentTypeOf: delegation?.agentTypeOf }),
     hooks,
     maxTurns: opts.maxTurns,
     maxBudgetUsd: opts.maxBudgetUsd,

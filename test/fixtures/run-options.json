@@ -5,7 +5,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "owner.run.systemPrompt",
-        "sha": "5f8b1086ef99c713"
+        "sha": "578bde2b8f5920f2"
       },
       "kind": {
         "who": "owner",
@@ -163,7 +163,7 @@
       "preset": "claude_code",
       "append": {
         "key": "owner.system.append",
-        "sha": "5f8b1086ef99c713"
+        "sha": "578bde2b8f5920f2"
       },
       "snapshot": false
     },
@@ -572,7 +572,7 @@
       "maxBudgetUsd": 2,
       "systemPrompt": {
         "key": "ownerLook.run.systemPrompt",
-        "sha": "5f8b1086ef99c713"
+        "sha": "578bde2b8f5920f2"
       },
       "kind": {
         "who": "owner",
@@ -676,7 +676,6 @@
         "mcp__memory__search_logs",
         "mcp__memory__undo_dream",
         "mcp__people__find_person",
-        "mcp__seenmail__seen_mail",
         "mcp__send__send",
         "mcp__tasks__add_task",
         "mcp__tasks__complete_task",
@@ -730,7 +729,7 @@
       "preset": "claude_code",
       "append": {
         "key": "ownerLook.system.append",
-        "sha": "5f8b1086ef99c713"
+        "sha": "578bde2b8f5920f2"
       },
       "snapshot": false
     },

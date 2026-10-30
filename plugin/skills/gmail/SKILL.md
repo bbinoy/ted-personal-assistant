@@ -17,8 +17,8 @@ The tools you have: `search_threads`, `get_thread`, `get_message`, `get_draft`,
 (`threadId`, `messageId`, `labelIds`, `messageFormat`).
 
 - **Listing and reading.** `search_threads` with Gmail search syntax: `in:inbox`,
-  `is:unread`, `newer_than:2d`, `from:`, `subject:`. The sweep lists the whole inbox
-  (`in:inbox`, paging with the page token until it ends, oldest included). Sent mail:
+  `is:unread`, `newer_than:2d`, `from:`, `subject:`. A look lists the whole inbox, read and unread
+  (`in:inbox`, not `is:unread`, paging with the page token until it ends, oldest included). Sent mail:
   `in:sent newer_than:7d`. Rows carry sender, subject, snippet and date. Open with
   `get_thread` and `messageFormat: "PLAIN_TEXT"` (never `RAW`).
 - **Attachments**: never read or open their content; if the owner needs it, tell them
