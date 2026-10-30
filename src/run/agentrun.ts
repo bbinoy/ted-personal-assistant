@@ -11,6 +11,7 @@ import { BROWSE_SCHEMA, browseSystem } from "../modules/browse/browse.ts";
 import { resultText, withText, type BrowseGuard } from "../modules/browse/browseguard.ts";
 import { HIDDEN_BROWSER_TOOLS } from "../modules/browse/browserules.ts";
 import { onStop, pausing, RunTimeout, withCeiling, type Ceiling } from "./ceiling.ts";
+import { QueryUsage, turnCost } from "./turncost.ts";
 import { carriedTaint, chatResume, forgetUnresumable, sessionTaint } from "./chatsession.ts";
 import { afterConnectors } from "./connectorwait.ts";
 import { recordConnectors } from "../modules/connectors.ts";
@@ -273,6 +274,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
   const payer = payerOf(opts);
   let lastError: string | undefined;
   let first = false;
+  const usage = new QueryUsage();
   let lastContext: number | undefined; // the last model call of the main loop shows how big the context is
   for await (const message of stream) {
     observe(payer, message);
@@ -285,6 +287,7 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     if (message.type === "assistant") {
       if (!first && !message.parent_tool_use_id) (first = true), opts.onFirstOutput?.();
       if (message.error) lastError = message.error;
+      usage.add(message.message);
       if (!message.parent_tool_use_id) lastContext = contextTokens(message.message.usage);
       // TRIAL (capability `stream`): an attended chat turn delivers each top-level text block as it arrives; the conversation's turn registered the delivery (a turn without the capability registered none).
       if (!message.parent_tool_use_id && opts.kind.attended && opts.conversation) {
@@ -293,8 +296,13 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
     }
     if (message.type !== "result") continue;
     const stored = opts.sessionConv && !opts.freshSession ? readSession(opts.sessionConv) : undefined;
-    // total_cost_usd is the session's running total. A session that restarted or compacted has a new id and starts again from zero (so does a total below the last one): that turn cost the total, never a negative.
-    const turnCost = (stored?.sessionId && stored.sessionId !== message.session_id) || message.total_cost_usd < previousCost ? message.total_cost_usd : message.total_cost_usd - previousCost;
+    // total_cost_usd is the session's running total and may carry a resumed session's whole history: turncost.ts trusts the delta only when plausible, else prices this query's own usage.
+    const cost = turnCost(message.total_cost_usd, previousCost, opts.maxBudgetUsd, usage, message.modelUsage);
+    const turnCostUsd = cost.usd;
+    if (cost.capped) {
+      console.warn(`run: cost figure out of range (total ${message.total_cost_usd}, previous ${previousCost}, delta ${cost.raw}); charged ${turnCostUsd.toFixed(4)} instead`);
+      emitRecord("run", "cost-capped", auditSource(opts.kind), { delta: Math.round(cost.raw * 100) / 100, charged: Math.round(turnCostUsd * 100) / 100 });
+    }
     if (opts.sessionConv && stored) {
       // The first turn of a session shows what tools, skills and prompts alone cost; later turns keep that baseline (a compaction keeps it too).
       const before = stored;
@@ -302,10 +310,10 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       const next: ChatSession = { sessionId: message.session_id, costUsd: message.total_cost_usd, lastTurnAt: new Date().toISOString(), lastContextTokens: lastContext, ...(baseTokens !== undefined ? { baseTokens } : {}), ...(opts.seenAt ? { seenAt: opts.seenAt } : {}), ...carriedTaint(before, message.session_id) };
       writeSession(opts.sessionConv, next);
     }
-    charge(payer, turnCost, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
+    charge(payer, turnCostUsd, auditSource(opts.kind)); // failures cost money too (a friend's goes to her own ledger)
     if (message.subtype === "success" && !message.is_error) {
       succeeded(payer);
-      return { text: message.result, costUsd: turnCost, structured: message.structured_output };
+      return { text: message.result, costUsd: turnCostUsd, structured: message.structured_output };
     }
     throw failure(lastError, message.subtype, payer);
   }

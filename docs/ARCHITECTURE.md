@@ -468,6 +468,7 @@ src/run/agentwarm.ts  the keyed pool of warm processes
 src/run/connectorwait.ts  holds the owner's first message until every connector is connected (pending waited for, failed reconnected)
 src/run/ceiling.ts  wall-clock ceiling of a run, `/stop`
 src/run/chatsession.ts  session resume and in-place compaction
+src/run/turncost.ts  what one query cost: the delta when plausible, else its own usage priced, always within the run's cap
 src/run/chattail.ts  the conversation log as a run reads it: the tail, the lines a session has not seen
 src/run/delegation.ts  experts and the hooks that enforce delegation
 src/run/image.ts  pictures people send, checked and shrunk
