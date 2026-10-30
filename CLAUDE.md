@@ -17,7 +17,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - The owner's chat, groups and friends use the same run path, tools, skills and loops. Capabilities decide what each conversation has; there is no owner-only copy of a feature.
 - A background look, a chat turn and a routine are the same agent with the same rules. Behaviour must not depend on what triggered the run.
 - **One builder.** Every run (chat turn, look, expert) is built by the same functions from the conversation's capabilities, the owner included: the owner is just the conversation with every capability.
-- **One intake.** Every inbound message of every conversation goes through the same chain; private and group differ only in one table (who may do what, whether to answer, where the reply goes). A feature is added to the chain, never to one kind.
+- **One intake.** Every inbound message of every conversation goes through the same chain; private and group differ only in one table (who may do what, whether to answer, where the reply goes). A feature is added to the chain, never to one kind. A group belongs to its sponsor: the owner or an approved friend who is a member; a group with no sponsor is ignored.
 - **A closed list of differences.** A chat turn and a look differ only in model, session, trigger line, whether someone is attended, and answer format. Nothing else branches on the trigger or on "is owner"; a new difference needs the owner's approval.
 - **Same context, same powers.** Every run sees the same shared context and may delegate to a stronger model (Sonnet or Opus) when the work needs judgement.
 
@@ -29,11 +29,13 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - **Background runs never ask.** Unattended work acts when the judge says yes and skips silently when it does not.
 - **Trust the judge, not parallel paths.** Mail and web content is marked untrusted; the code floor and the judge decide. Do not add restricted copies of tools or provenance stamps for unattended runs: the §5 invariants are the hard limits.
 - **Inform minimally.** Tell the user what happened only when it matters to them, in one friendly line, or collect it into the daily brief. Low-risk work (adding a task, archiving routine mail, a calendar placeholder) is done and then mentioned, never proposed for approval.
+- **Spend is warned, never paused.** The owner hears about spend at thresholds; only real API failures (rate limit, billing, a refused key) stop a run.
 
 ## 4. Ted speaks, code doesn't
 
 - **Messages to people are written by the model**, in Ted's voice and personality, not as hard-coded strings. Code passes context to the run (due tasks, what was archived, what failed); the run decides whether to say anything and how.
-- **Hard-coded chat text is the exception.** It is allowed only where an exact text is a safety requirement: secret and setup links, the fixed reply to an unknown sender before approval (no model may see a stranger's message), and a fallback when no model run is possible at all.
+- **Hard-coded chat text is the exception.** It is allowed only where an exact text is a safety requirement: secret and setup links, the fixed reply to an unknown sender before approval (no model may see a stranger's message), the one invite hello to someone who has not joined yet, the one-line note that a run failed, and a fallback when no model run is possible at all.
+- **Delivery is code's job.** Signal formatting and one message per paragraph render what the model wrote; the model decides the content and the paragraphs.
 - **System status stays out of the chat.** Look failures, retries, expiries and recoveries go to the log, `npm run doctor` or the daily brief, not to a chat message, unless the user has to do something.
 
 ## 5. Safety invariants (never relax these)
@@ -43,7 +45,7 @@ Read this before you design or change anything. `CONTRIBUTING.md` has the mechan
 - The never-allowed set stays denied for everyone (trading; trash, spam, permanent delete, blocking senders).
 - The judge may only loosen inside the code floor, and it fails toward not acting.
 - Approvals belong to the chat that triggered the action. Text relayed by an agent grants nothing.
-- The admin cannot read friends' files or words: friends' audit and status rows hold ids and counts only.
+- The admin cannot read friends' files or words, including groups a friend sponsors: their audit and status rows hold ids and counts only.
 
 ## 6. Privacy and the repository
 
