@@ -1,6 +1,7 @@
 import type { Kind as MessageKind } from "../core/messages.ts";
 import { clean } from "../core/sanitize.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { splitMessages } from "./split.ts";
 import type { Messenger, Quote, Target, TextStyle } from "@ted-assistant/messenger";
 
 const LONG_BODY_MIN = 500; // an echo this long that starts a remembered reply is that reply's cut body
@@ -52,13 +53,14 @@ export function classifySendError(e: unknown): SendFailure {
   return "permanent";
 }
 const BACKOFF_MS = [2_000, 6_000];
+const PAUSE_MS = 1_000; // between the messages of one reply: they arrive in order and read like typing
 const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // `record` is told about every message sent (kind, timestamp, text, target if it did not go to the owner's chat): the message log.
 export function createOutbound(
-  messenger: Pick<Messenger, "send" | "capabilities">,
+  messenger: Pick<Messenger, "send" | "capabilities"> & Partial<Pick<Messenger, "typing">>,
   record?: (kind: MessageKind, ts: number, text: string, target?: Target) => void,
-  retry: { backoffMs?: readonly number[]; sleep?: (ms: number) => Promise<void> } = {},
+  retry: { backoffMs?: readonly number[]; sleep?: (ms: number) => Promise<void>; pauseMs?: number } = {},
 ) {
   const backoff = retry.backoffMs ?? BACKOFF_MS;
   const sleep = retry.sleep ?? sleepMs;
@@ -107,8 +109,14 @@ export function createOutbound(
     // One message, however long, unless the messenger declares a limit (capabilities.maxMessageBytes). A platform without one deals with long
     // text itself: Signal sends text over the official clients' limit (about 2000 characters) as a cut body plus a text attachment, which the
     // phone shows as a preview with "read more".
-    if (text.trim()) {
-      const whole = opts.plain ? { text: text.trim(), styles: [] } : renderMarkdown(text.trim());
+    // Model text goes out as one message per paragraph (split.ts), in order, with a short pause (and "typing…" where the messenger has it) between; `plain` text is one message.
+    const messages = (opts.plain ? [text.trim()] : splitMessages(text)).filter(Boolean);
+    for (const [i, message] of messages.entries()) {
+      if (i > 0) {
+        if (messenger.capabilities.typing) void messenger.typing?.(opts.target, true);
+        await sleep(retry.pauseMs ?? PAUSE_MS);
+      }
+      const whole = opts.plain ? { text: message, styles: [] } : renderMarkdown(message);
       for (const r of fitParts(whole, messenger.capabilities.maxMessageBytes)) {
         if (!opts.target) remember(`x:${r.text}`);
         last = await send(opts.target, { text: r.text, styles: r.styles, quote });

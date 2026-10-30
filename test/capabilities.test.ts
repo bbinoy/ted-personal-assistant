@@ -77,7 +77,6 @@ test("capabilities: adding one capability to a record changes exactly its tools 
     profile: { tools: [], skills: [] },
     card: { tools: [], skills: [] },
     admin: { tools: [], skills: [] },
-    stream: { tools: [], skills: [] },
     login: { tools: [], skills: [] }, // the login itself: connector rows need it too, and a record never gives it
   };
   assert.deepEqual(Object.keys(adds).sort(), [...CAPABILITIES].sort(), "every capability is in the table");
