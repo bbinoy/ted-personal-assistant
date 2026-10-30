@@ -63,9 +63,9 @@ export function journalCounts(lines: readonly Sent[]): [string, number][] {
   return [...n].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
 }
 
-// ---- the archived mail, numbered, for the brief and for "restore 3" ----
+// ---- the archived mail, for the brief and for putting one back ----
 
-// One archive line of the journal as an item: who sent it (when the run had read it), its subject, and every id it archived (the undo names them, journalrender.ts), so "restore N" can put it back.
+// One archive line of the journal as an item: who sent it (when the run had read it), its subject, and every id it archived (the undo names them, journalrender.ts), so a restore can put it back.
 export interface ArchiveItem {
   n: number; // 1.. in the order they were archived, within the window asked for (the same window gives the same numbers: later archives only add at the end)
   at: string;
@@ -89,8 +89,7 @@ export function archiveItems(lines: readonly Sent[]): ArchiveItem[] {
     });
 }
 
-// The text of `journal` with kind "archive": the count, then the mail grouped by sender, numbered, each with its id, and how to bring one back. `since` is echoed exactly: "restore 3" means
-// item 3 of the list for that same since.
+// The text of `journal` with kind "archive": the count, then the mail grouped by sender, numbered, each with its id (what a restore needs).
 function archiveListText(items: readonly ArchiveItem[], window: string, zone: string): string {
   if (!items.length) return `No mail archived ${window} (times in ${zone}).`;
   const groups = new Map<string, ArchiveItem[]>();
@@ -100,7 +99,7 @@ function archiveListText(items: readonly ArchiveItem[], window: string, zone: st
   }
   const line = (it: ArchiveItem) => `${it.n}. ${it.subject ? `“${it.subject}”` : it.what} (${dayIn(new Date(it.at), zone).slice(5)} ${timeIn(new Date(it.at), zone)}${it.ids.length ? `, id ${it.ids.join(" ")}` : ""})`;
   const body = [...groups].sort((x, y) => y[1].length - x[1].length || x[0].localeCompare(y[0])).map(([from, list]) => `${from} (${list.length}): ${list.map(line).join("; ")}`);
-  return [`${items.length} mail${items.length === 1 ? "" : "s"} archived ${window} (times in ${zone}), by sender:`, ...body, `To bring one back: reply 'restore N' (or 'restore 2,5') with the numbers of this list, or run npm run restore <id>.`].join("\n");
+  return [`${items.length} mail${items.length === 1 ? "" : "s"} archived ${window} (times in ${zone}), by sender:`, ...body].join("\n");
 }
 
 // The text the `journal` tool returns: the newest `limit` lines, oldest first, grouped by day, each with its time in the conversation's zone. With kind "archive": the numbered archive list.
