@@ -13,6 +13,7 @@ export interface CloseInfo {
   error?: Error;
 }
 
+const ATTACHMENT_TIMEOUT_FACTOR = 4;
 type Pending = { resolve: (v: any) => void; reject: (e: Error) => void };
 
 const DEFAULT_MAX_LINE_CHARS = 16 * 1024 * 1024; // a group list with hundreds of groups is a few MB; an envelope is a few KB
@@ -281,7 +282,7 @@ export class SignalClient {
     else if (message) this.handler?.(message);
   }
 
-  private call<T = any>(method: string, params: object): Promise<T> {
+  private call<T = any>(method: string, params: object, timeoutMs = this.rpcTimeoutMs): Promise<T> {
     if (!this.socket || this.closed) return Promise.reject(new Error(this.socket ? "SignalClient is closed" : "SignalClient is not connected: call connect() first"));
     const socket = this.socket;
     const id = this.nextId++;
@@ -289,8 +290,8 @@ export class SignalClient {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`signal ${method} timed out after ${this.rpcTimeoutMs / 1000}s`));
-      }, this.rpcTimeoutMs);
+        reject(new Error(`signal ${method} timed out after ${timeoutMs / 1000}s`));
+      }, timeoutMs);
       this.pending.set(id, {
         resolve: (v) => (clearTimeout(timer), resolve(v)),
         reject: (e) => (clearTimeout(timer), reject(e)),
@@ -326,6 +327,8 @@ export class SignalClient {
    */
   async send(text: string, opts: SendOptions = {}): Promise<number> {
     const { style: textStyle = [], quote } = opts;
+    // An upload (voice note, picture, document) takes longer than text: it gets ATTACHMENT_TIMEOUT_FACTOR times the plain timeout.
+    const timeoutMs = opts.attachments?.length ? this.rpcTimeoutMs * ATTACHMENT_TIMEOUT_FACTOR : this.rpcTimeoutMs;
     const result = await this.call<{ timestamp: number }>("send", {
       ...addressOf(opts.groupId, () => this.to()),
       ...(text ? { message: text } : {}),
@@ -333,7 +336,7 @@ export class SignalClient {
       ...(opts.voiceNote ? { voiceNote: true } : {}),
       ...(textStyle.length ? { textStyle } : {}),
       ...(quote ? { quoteTimestamp: quote.timestamp, quoteAuthor: quote.author, quoteMessage: quote.text } : {}),
-    });
+    }, timeoutMs);
     return result.timestamp;
   }
 

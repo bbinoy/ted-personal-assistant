@@ -265,6 +265,15 @@ test("client: a request that gets no answer times out after rpcTimeoutMs", async
   c.close();
 });
 
+test("client: a send with an attachment waits longer than a plain text send", async () => {
+  const d = await FakeSignalDaemon.start(() => undefined);
+  open.push(d);
+  const c = new SignalClient({ host: d.host, port: d.port, account: ME, rpcTimeoutMs: 50 });
+  await c.connect();
+  await assert.rejects(c.send("x", { attachments: ["/none.ogg"] }), /timed out after 0.2s/);
+  c.close();
+});
+
 test("client: a line that never ends is not buffered without limit; the connection is closed instead", async () => {
   const d = await FakeSignalDaemon.start();
   open.push(d);

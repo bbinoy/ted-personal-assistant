@@ -171,7 +171,7 @@ test("outbound: a send that was refused is retried twice (2 s, 6 s) and then suc
   assert.equal(m.sent.length, 1);
 });
 
-test("outbound: a timeout is ambiguous, so it is retried once only (a rare duplicate is accepted)", async () => {
+test("outbound: a timeout is ambiguous, so it is never retried (at-most-once)", async () => {
   waited = [];
   const m = fake();
   let calls = 0;
@@ -183,8 +183,8 @@ test("outbound: a timeout is ambiguous, so it is retried once only (a rare dupli
   } finally {
     console.error = silence;
   }
-  assert.equal(calls, 2);
-  assert.deepEqual(waited, [2000]);
+  assert.equal(calls, 1);
+  assert.deepEqual(waited, []);
 });
 
 test("outbound: a permanent refusal is not retried", async () => {
