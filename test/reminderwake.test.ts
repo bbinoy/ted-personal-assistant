@@ -46,14 +46,14 @@ test("with WAKEUPS off (no look to say them) the wake tick sends the fallback li
     run: async () => (looks++, { text: "" }),
     notesChangedAt: () => 0,
     now: () => new Date(NOW),
-    guards: { paused: () => false, budgetSpent: () => false },
+    guards: { paused: () => false },
   });
   await w.tick(new Date(NOW));
   assert.deepEqual(sent.map((x) => x.text).sort(), ["⏰ @Anna: ferry tickets", "⏰ Call Sam"]);
   assert.equal(looks, 0, "no heartbeat run: WAKEUPS is off");
   // the pause switch still stops them
   S.addItem(scope(o.key, NOW - 3_600_000), { title: "Paused one", remindAt: NOW - 60_000 });
-  const p = createWakeups({ pipeline: pipeline as never, groupChats: false, vouch: async () => true, run: async () => ({ text: "" }), notesChangedAt: () => 0, now: () => new Date(NOW), guards: { paused: () => true, budgetSpent: () => false } });
+  const p = createWakeups({ pipeline: pipeline as never, groupChats: false, vouch: async () => true, run: async () => ({ text: "" }), notesChangedAt: () => 0, now: () => new Date(NOW), guards: { paused: () => true } });
   await p.tick(new Date(NOW));
   assert.equal(sent.length, 2);
 });

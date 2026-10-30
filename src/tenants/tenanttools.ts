@@ -24,7 +24,6 @@ export interface TenantRun {
   keyTag: string; // a short fingerprint of that key, so a warm process built on an old key is not reused after it changed
   ledger: string;
   logFile: string; // her history: what search_logs reads
-  overBudget: () => boolean; // the instance key's day is spent (the browse run asks)
 }
 
 export { tenantEnv }; // (payer.ts: the environment of a call on the instance key)

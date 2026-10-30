@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { friendConvId } from "../core/convpaths.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { RunOptions } from "./agentrun.ts";
-import { instanceKeyOverBudget } from "../core/budget.ts";
 import type { Conversation } from "../conversation/conversationmodel.ts";
 import { readIndex, readNotes, styleLines, writeIndex } from "../memory/notes.ts";
 import { missingSetup } from "../modules/index.ts";
@@ -99,7 +98,6 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
       keyTag: createHash("sha256").update(apiKey).digest("hex").slice(0, 8),
       ledger: ctx.ledger,
       logFile: ctx.logFile,
-      overBudget: instanceKeyOverBudget,
     },
   };
 };

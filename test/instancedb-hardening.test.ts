@@ -93,8 +93,7 @@ test("a failing database: the heartbeat tick, a look's record, a charge, a notic
     assert.equal(kvGet("heartbeat", "fallback"), "fallback");
     assert.doesNotThrow(() => R.appendRow({ at: new Date().toISOString(), night: false, message: false, nextCheckMinutes: 30, costUsd: 0, toolCalls: 0, archived: 0, delegations: 0, outcome: "silent" }));
     assert.doesNotThrow(() => B.recordCost(1));
-    assert.equal(B.budgetSpent(), true, "fail closed: no reading, no background work");
-    assert.equal(B.instanceKeyOverBudget(), true);
+    assert.equal(B.spentToday(), Number.POSITIVE_INFINITY, "fail closed: no reading");
     assert.equal(N.takeCapNotice("x"), false, "nobody is told twice or told for nothing");
     assert.deepEqual(I.connectionState(BO, "notion"), { state: "none" });
     assert.doesNotThrow(() => I.markNeedsReconnect(BO, "notion"));

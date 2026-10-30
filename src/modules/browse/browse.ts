@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { emit } from "../../core/events.ts";
-import { budgetSpent } from "../../core/budget.ts";
 import { addressProblem, type Resolver } from "./browserules.ts";
 import { BrowseGuard, type BrowseMode } from "./browseguard.ts";
 import { startEgressProxy, type EgressProxy } from "./browseproxy.ts";
@@ -108,7 +107,6 @@ export interface BrowseContext {
   mode: BrowseMode;
   groupId?: string;
   tenant?: boolean; // a tenant's run: its audit rows carry no words (audit.ts wordless), and so do those of its guard and of the sub-run
-  spent?: () => boolean; // a tenant's run: her own ledger against her own ceiling, instead of the instance's daily guard (what she spends on the instance key is counted in her own ledger)
   key?: string; // the conversation the run is for: its screenshots are kept for that turn only
   attended?: boolean; // someone waits in the chat for this run (a message turn): only then does the owner's chat have her saved details and her card; an unattended run (a look) never does
   // Runs the browse profile under this guard and gives back its structured output and cost. (agent.ts passes the run; no import cycle.)
@@ -171,12 +169,11 @@ export class Slots {
 const slots = new Slots();
 let wakeSeq = 0;
 
-// Why a browse run may not start now, or undefined. Code only: pause, the daily spend limit, set-up (a free slot is the pool above, awaited by browse()).
-export function startRefusal(ctx: Pick<BrowseContext, "mode" | "spent">, now = Date.now(), status: BrowseStatus = browseStatus()): string | undefined {
+// Why a browse run may not start now, or undefined. Code only: pause, set-up (a free slot is the pool above, awaited by browse()).
+export function startRefusal(ctx: Pick<BrowseContext, "mode">, now = Date.now(), status: BrowseStatus = browseStatus()): string | undefined {
   if (!settings.browse) return "Browsing is switched off (BROWSE=off).";
   if (!status.ok) return `Browsing is not set up: ${status.reason}.`;
   if (isPaused(new Date(now))) return "Paused: no browsing now.";
-  if ((ctx.spent ?? budgetSpent)()) return "The daily spend limit is reached: no browsing until tomorrow.";
   return undefined;
 }
 

@@ -450,8 +450,7 @@
         "apiKey": "<instance-key>",
         "keyTag": "f8707298",
         "ledger": "friend-<bea>",
-        "logFile": "<data>/conversations/friend-<bea>/messages.jsonl",
-        "overBudget": "[fn]"
+        "logFile": "<data>/conversations/friend-<bea>/messages.jsonl"
       },
       "kind": {
         "who": "tenant",
@@ -1022,8 +1021,7 @@
         "apiKey": "<instance-key>",
         "keyTag": "f8707298",
         "ledger": "friend-<bea>",
-        "logFile": "<data>/conversations/friend-<bea>/messages.jsonl",
-        "overBudget": "[fn]"
+        "logFile": "<data>/conversations/friend-<bea>/messages.jsonl"
       },
       "kind": {
         "who": "tenant",

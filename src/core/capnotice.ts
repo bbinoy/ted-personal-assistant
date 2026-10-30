@@ -1,8 +1,7 @@
 import { pruneTold, told } from "./told.ts";
-import { holdFact } from "./ownerfact.ts";
 import { instanceDb } from "./instancedb.ts";
 
-// "Told at most once per key per interval", the ONE throttle for every notice: the owner's daily budget line (budget.ts), the shared key's problems and the friends' daily cap (below, as facts for the
+// "Told at most once per key per interval", the ONE throttle for every notice: the spend warnings (budget.ts), the shared key's problems (as facts for the
 // owner's next run: ownerfact.ts), a damaged database, the line to a person Ted cannot serve right now (tenants/errors.ts refusal), a failed run's notice (conversation/delivery.ts). The time of the
 // last notice per key is kept in the told table of instance.db (core/told.ts), so a restart does not repeat it. A key is a name of the matter and, where it is about one conversation, its convId (never a raw group id).
 
@@ -36,11 +35,3 @@ export const forgetNoticesOf = (convId: string): number => forgetNotices((k) => 
 
 /** Retention: a mark older than two days means nothing any more (see core/told.ts). Returns how many went. */
 export const pruneNotices = (now = Date.now()): number => pruneTold(instanceDb(), now);
-
-// The owner's one notice a day that the friends' shared ceiling (budget.ts INSTANCE_KEY_DAILY_USD) was hit, whichever job ran into it: a fact for her next run, with no word of any friend.
-export const instanceCapFact = (limitUsd: number): string => `Friends' shared daily limit of $${limitUsd} is reached, so they are paused until midnight. To lift it today: raise INSTANCE_KEY_DAILY_USD in .env and restart.`;
-export function reportInstanceCap(limitUsd: number, now = Date.now()): boolean {
-  if (!takeCapNotice("owner:instance", now)) return false;
-  holdFact(instanceCapFact(limitUsd), new Date(now));
-  return true;
-}

@@ -7,7 +7,6 @@ import { join } from "node:path";
 // instance.db: the spend ledger (budget.ts), the told marks (capnotice.ts), the heartbeat looks, the intake marks and the kv rows, in the ONE database the agent and the intake page share.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "instancedb-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const { groupConvId, friendConvId, instancePaths } = await import("../src/core/convpaths.ts");
 const { instanceDb, kvGet, kvSet, kvDelete, openInstanceDbAt } = await import("../src/core/instancedb.ts");
 const B = await import("../src/core/budget.ts");
@@ -53,17 +52,6 @@ test("spend: the owner's day is every login run (her chat, background work and t
   assert.equal(B.spentToday(ANNA), 0.75);
   assert.equal(B.spentToday(BO), 0.75);
   assert.equal(B.keySpentToday(), 1.5, "the key's day: all friends together");
-  // the ceilings are those sums against the settings
-  const s = settings as unknown as Record<string, number>;
-  const was = [s.dailyBudgetUsd, s.instanceKeyDailyUsd];
-  try {
-    s.dailyBudgetUsd = 3.5;
-    s.instanceKeyDailyUsd = 1.5;
-    assert.equal(B.budgetSpent(), true);
-    assert.equal(B.instanceKeyOverBudget(), true);
-  } finally {
-    [s.dailyBudgetUsd, s.instanceKeyDailyUsd] = was as [number, number];
-  }
   // each row says who, which payer, what kind, which local day
   const row = instanceDb().get<{ day: string; conv: string; payer: string; kind: string; at: number }>("SELECT * FROM spend WHERE kind = 'dream'")!;
   assert.deepEqual([row.day, row.conv, row.payer, row.kind], [dayIn(at), ANNA, "key", "dream"]);
@@ -107,15 +95,15 @@ test("the budget check uses the covering indexes (smoke bound on speed) with a y
     for (let d = 0; d < 365; d++) for (let i = 0; i < 60; i++) db.run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, 'chat', 0.01)", 1, `2025-${String(1 + (d % 12)).padStart(2, "0")}-${String(1 + (d % 28)).padStart(2, "0")}`, i % 5 === 0 ? ANNA : "owner", i % 5 === 0 ? "key" : "login");
   });
   for (let i = 0; i < 50; i++) db.run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (1, ?, 'owner', 'login', 'chat', 0.01)", day);
-  B.budgetSpent(); // (the statements are prepared on the first call)
-  B.instanceKeyOverBudget();
+  B.spentToday(); // (the statements are prepared on the first call)
+  B.keySpentToday();
   // the bounds are smoke checks only; the plan check below guards the shape
   const N_CALLS = 2000;
   const t0 = process.hrtime.bigint();
-  for (let i = 0; i < N_CALLS; i++) B.budgetSpent();
+  for (let i = 0; i < N_CALLS; i++) B.spentToday();
   const owner = Number(process.hrtime.bigint() - t0) / 1e6 / N_CALLS;
   const t1 = process.hrtime.bigint();
-  for (let i = 0; i < N_CALLS; i++) B.instanceKeyOverBudget();
+  for (let i = 0; i < N_CALLS; i++) B.keySpentToday();
   const others = Number(process.hrtime.bigint() - t1) / 1e6 / N_CALLS;
   assert.ok(owner < 25, `owner-today check took ${owner.toFixed(3)} ms`);
   assert.ok(others < 25, `key + group + friend checks took ${others.toFixed(3)} ms`);
@@ -145,20 +133,7 @@ test("notices: once a day per key or once per interval, forgetting by key, pruni
   assert.equal(N.takeCapNotice("today", now), false);
 });
 
-test("the budget notice is once a day, and OVERBUDGET's first time uses the told table", () => {
-  reset();
-  const s = settings as unknown as Record<string, number>;
-  const was = s.dailyBudgetUsd;
-  try {
-    s.dailyBudgetUsd = 1;
-    B.recordCost(2);
-    assert.deepEqual(B.overBudget(), { over: true, firstTime: true, usd: 2 });
-    assert.deepEqual(B.overBudget(), { over: true, firstTime: false, usd: 2 });
-    assert.equal(dayIn(new Date(instanceDb().get<{ at: number }>("SELECT at FROM told WHERE key = ?", B.OWNER_BUDGET_NOTICE)!.at)), dayIn(new Date()));
-  } finally {
-    s.dailyBudgetUsd = was;
-  }
-});
+
 
 test("looks: appended with the same fields, read oldest first, no words; kv rows hold the tick, the connectors and the tools seen", () => {
   reset();

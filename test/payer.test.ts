@@ -44,15 +44,14 @@ beforeEach(() => {
   resetOwnerFacts();
 });
 
-test("mayRun: the owner and a group run on the login, held back (unattended) by the pause switch, the shared cooldown and the instance's day budget", () => {
+test("mayRun: the owner and a group run on the login, held back (unattended) by the pause switch and the shared cooldown only", () => {
   for (const conv of [owner, group]) {
     assert.deepEqual(mayRun(conv, "t"), LOGIN);
     assert.deepEqual(mayRun(conv, "t", { paused: () => true }), { refused: "paused" });
-    assert.deepEqual(mayRun(conv, "t", { spent: () => true }), { refused: "budget" });
     noteRateLimit();
     const cooling = mayRun(conv, "t");
     assert.ok(isRefusal(cooling) && cooling.refused === "cooldown" && cooling.until! > Date.now());
-    assert.deepEqual(mayRun(conv, "t", { chat: true, paused: () => true, spent: () => true }), LOGIN, "somebody waiting for an answer is never held back by them");
+    assert.deepEqual(mayRun(conv, "t", { chat: true, paused: () => true }), LOGIN, "somebody waiting for an answer is never held back by them");
     resetCooldown();
   }
 });
@@ -83,15 +82,14 @@ test("mayRun: a friend runs on the instance key and her own ledger; the key's co
   assert.deepEqual(mayRun(her(bea), "t", { key: () => KEY, chat: true }), { refused: "inactive" });
 });
 
-test("a friend's urgent compaction waits while she is blocked (the key's day spent): no model call, nothing marked", async () => {
+test("a friend's urgent compaction waits while she is blocked (the key is cooling down): no model call, nothing marked", async () => {
   const anna = friend("Anna2");
   const conv = { ...her(anna), convId: T.tenantContext(anna).convId, source: "group", notesDir: T.tenantContext(anna).notesDir } as const;
   const { mkdirSync } = await import("node:fs");
   mkdirSync(T.tenantContext(anna).dir, { recursive: true });
   const stale = { sessionId: "s", costUsd: 0, lastContextTokens: 10_000_000, baseTokens: 1, lastTurnAt: new Date().toISOString() };
   writeSession(conv.convId, stale);
-  on.instanceKeyDailyUsd = 50; // the key's day is what blocks a friend
-  recordCost(100, T.tenantContext(anna).ledger);
+  noteRateLimit(Date.now(), INSTANCE_KEY_COOLDOWN); // the key's cooldown is what blocks a friend
   const err = console.error;
   const log = console.log;
   console.error = console.log = () => {};
@@ -99,7 +97,7 @@ test("a friend's urgent compaction waits while she is blocked (the key's day spe
     await compactConversation(conv, "urgent", { key: () => KEY });
     assert.deepEqual(readSession(conv.convId), stale, "blocked: not even attempted (no failure marker, no model call)");
   } finally {
-    on.instanceKeyDailyUsd = 1e9;
+    resetCooldown();
     console.error = err;
     console.log = log;
   }

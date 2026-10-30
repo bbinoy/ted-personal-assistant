@@ -1,4 +1,3 @@
-import { budgetSpent } from "../core/budget.ts";
 import { lookState, notesChangedAt, type LookState } from "../conversation/ledger.ts";
 import { createHeartbeatLook, type HeartbeatDeps } from "./look.ts";
 import { listGroups } from "../conversation/groupstore.ts";
@@ -11,7 +10,7 @@ import { isPaused } from "../core/pause.ts";
 import { listTenants } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
 import { runGate } from "../core/rungate.ts";
-import { dropUnreachable, noticeBudget, noticeDamaged } from "./notices.ts";
+import { dropUnreachable, noticeDamaged } from "./notices.ts";
 import { closeIdleConvDbs } from "../core/convdb.ts";
 import { fireReminders } from "./remindtick.ts";
 import { claimPreps } from "./preptick.ts";
@@ -23,11 +22,9 @@ import { claimPreps } from "./preptick.ts";
 // skills it has, whether it may call the expert and whether there is anything to look at at all is the conversation's capability set (capabilities.ts), not its kind.
 //   a tenant  is looked in on only with the capabilities `heartbeat` and `wake` (a friend has both, unless the instance switches one off), while she is active, the key is out of a cooldown and
 //             she is within her day's budget; the run is on the instance key, billed to her, her approvals go to her chat and the answer to her chat only
-// Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown, the day's budget; for a friend her own budget and the shared
-// key) and runs on the Payer it returns: no per-conversation branches here.
-// The model decides; THESE are the guards, in code: pause, the daily budget (budgetSpent: asking never uses up the owner's once-a-day notice; a tenant's own day is her access,
-// tenantrun.ts), the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
-// an unprompted post and the tick delivers what was held as one message); the owner hears of a spent budget once a day; looks that keep failing are the log's and the doctor's (the owner's own, after a long awake stretch, a fact for her next look: notices.ts).
+// Every model call of a look, a wake-up and a compaction asks payer.ts mayRun first (paused, the usage-limit cooldown; for a friend the shared key) and runs on the Payer it returns: no per-conversation branches here.
+// The model decides; THESE are the guards, in code: pause, the next look clamped to 10..120 minutes, and a failed run is logged and silent. Quiet hours and the day's cap are code too, in the look's post (notices.ts holds
+// an unprompted post and the tick delivers what was held as one message); looks that keep failing are the log's and the doctor's (the owner's own, after a long awake stretch, a fact for her next look: notices.ts).
 
 interface WakeDeps {
   groupChats: boolean; // the messenger takes part in groups (capabilities.groups). Groups are woken only then: on Signal's Note to Self every message would go out as the owner
@@ -43,7 +40,7 @@ interface WakeDeps {
   tenantIds?: () => string[]; // active tenants (default: the registry)
   notesChangedAt?: (dir: string) => number;
   now?: () => Date;
-  guards?: { paused: (now: Date) => boolean; budgetSpent: () => boolean }; // tests; default: the real pause switch and daily budget
+  guards?: { paused: (now: Date) => boolean }; // tests; default: the real pause switch
   clocks?: HeartbeatDeps["clocks"]; // tests; default: Date.now and performance.now (look.ts: a run that spanned a sleep)
 }
 
@@ -55,10 +52,9 @@ export function createWakeups(deps: WakeDeps) {
   const { pipeline } = deps;
   const clock = deps.now ?? (() => new Date());
   const paused = deps.guards?.paused ?? isPaused;
-  const spent = deps.guards?.budgetSpent ?? budgetSpent;
   const changed = deps.notesChangedAt ?? notesChangedAt;
-  // May this conversation's unattended work run now, and on whom? (payer.ts: the pause switch, the usage-limit cooldown, the day's budget, a friend's own budget and the key.)
-  const may = (conv: Conversation, what: string): Payer | Refusal => mayRun(conv, what, { key: deps.key, paused: () => paused(clock()), spent });
+  // May this conversation's unattended work run now, and on whom? (payer.ts: the pause switch, the usage-limit cooldown, a friend's key.)
+  const may = (conv: Conversation, what: string): Payer | Refusal => mayRun(conv, what, { key: deps.key, paused: () => paused(clock()) });
   const why = (r: Refusal): string => (r.refused === "cooldown" ? "cooldown" : r.refused === "paused" ? "guarded" : "blocked");
 
   // Background jobs of the clock side (a conversation's quiet compaction): one per key at a time; `idle()` lets a test (or a shutdown) wait for them.
@@ -67,7 +63,7 @@ export function createWakeups(deps: WakeDeps) {
 
   // A grown conversation that has gone quiet is compacted here, in the background, so the next message does not wait for it.
   // It takes its place in the conversation's queue (a message that arrives meanwhile waits behind it, and no two runs touch the
-  // session file); the tick does not wait for it, and the tick's guards (paused, over budget) have already passed.
+  // session file); the tick does not wait for it, and the tick's guards (paused) have already passed.
   function quietCompact(conv: Conversation): void {
     const key = `compact:${conv.key}`;
     if (!deps.compact || running.has(key) || !deps.compact.due(conv)) return;
@@ -109,10 +105,9 @@ export function createWakeups(deps: WakeDeps) {
   const nap = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref()));
   async function tick(now = clock()): Promise<void> {
     if (paused(now)) return;
-    if (spent()) noticeBudget(now); // the owner's one notice of the day: background work stops until midnight (budget.ts overBudget says whether it is the first)
     noticeDamaged(now); // a conversation whose assistant.db was set aside: the owner is told once a day until a person looks (core/convdb.ts)
     closeIdleConvDbs(now.getTime()); // connections nobody used for a while (a store reopens one at its next use)
-    const convs: Conversation[] = [owner()]; // (each conversation asks mayRun: the instance's day budget is the owner's and the groups', a friend's is her own)
+    const convs: Conversation[] = [owner()]; // (each conversation asks mayRun)
     const remind: Conversation[] = [convs[0]!]; // who has reminders: every conversation with tasks and a database, whatever its heartbeat or WAKEUPS say (they cost no model); the pause switch above still stops them
     const wake = settings.wakeups && deps.groupChats;
     if (deps.groupChats) {
