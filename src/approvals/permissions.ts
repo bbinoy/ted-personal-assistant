@@ -224,7 +224,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
         return { behavior: "deny", message: limit };
       }
     }
-    // Bringing mail back ("restore 3", "bring back the Digitec mail") in the owner's own chat: the reverse of an archive, so no judge and no question; audited and journaled like an allow.
+    // Bringing mail back ("bring back the Digitec mail") in the owner's own chat: the reverse of an archive, so no judge and no question; audited and journaled like an allow.
     if (base === "ask" && !g && setup.restoreFree && restoredBy(tool, input)) {
       log(tool, "allow", source, { ...idsOf(input), free: "restore" }, journalable(tool, input) ? { call: { input }, why: whyOf({ conv: conversation, step: "allow", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) } : undefined);
       return { behavior: "allow", updatedInput: input };

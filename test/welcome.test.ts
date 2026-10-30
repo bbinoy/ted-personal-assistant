@@ -18,7 +18,7 @@ test("welcome: a fresh data folder hands the owner's first run ONE fact (name-fr
   assert.match(fact, /fresh install/);
   for (const c of ["/status", "/pause 2h", "/today"]) assert.ok(fact.includes(c), c);
   assert.match(fact, /set up/);
-  assert.match(fact, /restore 3/);
+  assert.doesNotMatch(fact, /restore 3/); // no hard-coded restore instructions
   assert.equal(W.takeWelcome(), "", "handed over once");
   W.welcomeStart(() => fresh);
   assert.equal(kvGet<{ state: string }>(W.WELCOME_KEY, { state: "" }).state, "told", "a later start does not bring it back");

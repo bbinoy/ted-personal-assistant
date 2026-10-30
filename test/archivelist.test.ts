@@ -14,7 +14,7 @@ import { restoredBy } from "../src/modules/archivecap.ts";
 import { OWNER_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // Archiving in an unattended run (the owner, 22 Oct): judged like every call; the judge's auto archives and the journal names the mail (subject, sender, id), so the next brief lists it
-// numbered and "restore 3" brings it back; the judge's ask leaves the mail in the inbox, silently. In the owner's chat, putting mail back in the inbox needs no judge.
+// numbered by sender, each with its id (what a restore needs); the judge's ask leaves the mail in the inbox, silently. In the owner's chat, putting mail back in the inbox needs no judge.
 
 const MB = "mcp__mailbird__";
 const GM = "mcp__claude_ai_Gmail__";
@@ -28,7 +28,7 @@ const journal = (key: string) => ledgerEntries(convPaths(convIdOfKey(key)).messa
 const look = (key: string, decision: Verdict["decision"], asked: string[]) =>
   makeCanUseTool(async (d) => (asked.push(d), { approved: true }), OWNER_LOOK, undefined, says(decision), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "the look" }), conversation: key, run: `run-${++n}` });
 
-test("an unattended look archives what the judge is sure about: run, journaled with subject, sender and id; the brief's list numbers it by sender with the restore hint", async () => {
+test("an unattended look archives what the judge is sure about: run, journaled with subject, sender and id; the brief's list numbers it by sender, with no restore hint", async () => {
   forgetArmed();
   forgetSeen();
   const key = owner();
@@ -56,7 +56,7 @@ test("an unattended look archives what the judge is sure about: run, journaled w
   assert.match(text, new RegExp(`^3 mails archived since ${since} \\(times in .+\\), by sender:\\n`));
   assert.match(text, /\nDigitec \(2\): 1\. “Your order shipped” \(\d\d-\d\d \d\d:\d\d, id a-1\); 3\. “Delivered” \(.*id a-3\)\n/, "grouped by sender, numbered in the order archived");
   assert.match(text, /\nLinkedIn \(1\): 2\. “Weekly digest”/);
-  assert.match(text, /To bring one back: reply 'restore N' \(or 'restore 2,5'\) with the numbers of this list, or run npm run restore <id>\.$/);
+  assert.doesNotMatch(text, /restore N|To bring one back/); // no hard-coded instructions: Ted says how when asked
 });
 
 test("an archive of several mails at once keeps every id, so one number restores them all", async () => {
