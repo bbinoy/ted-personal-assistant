@@ -59,6 +59,8 @@ export interface RoutineRecord {
   attempts: number; // starts in this period
   told: boolean; // a skip has been mentioned to the owner
   lastDelivered?: number; // UTC ms of the last successful run, any period (the doctor)
+  owes?: string; // the channel the last run of this period was meant to deliver and did not ("email"): the retry owes only that, and the doctor says so
+  chatSent?: true; // that run did tell the chat, so the retry must not
 }
 
 export const STALE_MINUTES = 45; // a run still `started` after this long died
@@ -101,6 +103,8 @@ interface Row {
   name: string;
   since: number;
   period: string | null;
+  owes: string | null;
+  chat_sent: number;
   status: RunStatus | null;
   at: number | null;
   attempts: number;
@@ -108,7 +112,7 @@ interface Row {
   last_delivered: number | null;
 }
 
-const recordOf = (r: Row): RoutineRecord => ({ since: r.since, ...(r.period ? { period: r.period } : {}), ...(r.status ? { status: r.status } : {}), ...(r.at != null ? { at: r.at } : {}), attempts: r.attempts, told: r.told !== 0, ...(r.last_delivered != null ? { lastDelivered: r.last_delivered } : {}) });
+const recordOf = (r: Row): RoutineRecord => ({ since: r.since, ...(r.period ? { period: r.period } : {}), ...(r.status ? { status: r.status } : {}), ...(r.at != null ? { at: r.at } : {}), attempts: r.attempts, told: r.told !== 0, ...(r.owes ? { owes: r.owes } : {}), ...(r.chat_sent ? { chatSent: true as const } : {}), ...(r.last_delivered != null ? { lastDelivered: r.last_delivered } : {}) });
 
 export function readRecord(conv: ConvRef, name: string): RoutineRecord | undefined {
   const row = peekConvDb(conv)?.get<Row>("SELECT * FROM routine_runs WHERE name = ?", name);
@@ -141,15 +145,21 @@ export function markStarted(conv: ConvRef, name: string, period: string, now: nu
   const rec = readRecord(conv, name);
   if (!db || !rec) return;
   const attempts = rec.period === period ? rec.attempts + 1 : 1;
-  db.run("UPDATE routine_runs SET period = ?, status = 'started', at = ?, attempts = ?, told = 1 WHERE name = ?", period, now, attempts, name);
+  db.run(`UPDATE routine_runs SET period = ?, status = 'started', at = ?, attempts = ?, told = 1${rec.period === period ? "" : ", owes = NULL, chat_sent = 0"} WHERE name = ?`, period, now, attempts, name);
 }
 
 // The look ended: the routine it started is delivered, or failed (`refund`: the look was only called off by a message, which is no attempt of the routine's).
 export function markFinished(conv: ConvRef, name: string, ok: boolean, now: number, refund = false): void {
   const db = liveConvDb(conv);
   if (!db) return;
-  if (ok) db.run("UPDATE routine_runs SET status = 'delivered', at = ?, last_delivered = ? WHERE name = ? AND status = 'started'", now, now, name);
+  if (ok) db.run("UPDATE routine_runs SET status = 'delivered', owes = NULL, chat_sent = 0, at = ?, last_delivered = ? WHERE name = ? AND status = 'started'", now, now, name);
   else db.run(`UPDATE routine_runs SET status = 'failed', at = ?, attempts = MAX(0, attempts - ?) WHERE name = ? AND status = 'started'`, now, refund ? 1 : 0, name);
+}
+
+// A routine that must deliver by a channel (the brief's email) ended without it: it is not complete (the caller marks it failed, so the retry path runs it again), and the record keeps what is owed
+// and whether the chat was already told, so the retry is given only the missing channel as a fact and does not send the rest twice.
+export function markOwed(conv: ConvRef, name: string, channel: string, chatSent: boolean): void {
+  liveConvDb(conv)?.run("UPDATE routine_runs SET owes = ?, chat_sent = ? WHERE name = ? AND status = 'started'", channel, chatSent ? 1 : 0, name);
 }
 
 // The end of a look that started routines. Delivered only for those that `finished` (the expert came back with a result); the others are failed, and their
@@ -181,9 +191,11 @@ export function routineFacts(conv: ConvRef, routines: readonly Routine[], now: D
     if (plan.state === "running") lines.push(`${r.name}: started ${Math.round((now.getTime() - plan.since.getTime()) / 60_000)} min ago, the expert is still working; wait.`);
     else if (plan.state === "due" && !due) {
       due = p as NonNullable<typeof due>;
-      const when = `${whenText(r)}${plan.retry ? ", the earlier attempt died" : ""}`;
+      const rec = plan.retry ? readRecord(conv, r.name) : undefined;
+      const when = `${whenText(r)}${plan.retry ? (rec?.owes ? `, the earlier attempt finished without its ${rec.owes}` : ", the earlier attempt died") : ""}`;
+      const owed = rec?.owes ? ` Code saw no ${rec.owes} sent by the earlier attempt, and the ${rec.owes} is a required part of this routine, not an option: ${rec.chatSent ? `the chat message has already gone to ${o.who}, so ONLY the ${rec.owes} is owed: deliver it as your brief says and send nothing else; the final answer is [[silent]]` : `deliver the ${rec.owes} as your brief says; it is not complete without it`}.` : "";
       const what = `holds the note's instruction word for word (${clean(r.instruction)}), who it is for and the voice or format it asks for`;
-      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "expert" (or the expert named for a heavy skill the note runs) and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${o.approvals ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}`);
+      lines.push(`${r.name}: due now (${when}). Delegate it now: call the Agent tool with subagent_type "expert" (or the expert named for a heavy skill the note runs) and a self-contained brief that ${what}, today's date and that every time it writes is exactly as the clock line gives it (that zone, no conversion). Its final answer is the message for ${o.who} (or [[silent]]); pass it on unchanged.${owed}${o.approvals ? ` Code counted ${o.approvals} open approval${o.approvals === 1 ? "" : "s"} waiting for ${o.who}.` : ""}`);
     } else if (plan.state === "due") lines.push(`${r.name}: also due, but one routine per look: leave it for the next look (code makes it due again by itself).`);
     else if (plan.state === "skipped") {
       const row = readRecord(conv, r.name);
@@ -209,7 +221,7 @@ export function routineStatus(conv: ConvRef, routines: readonly Routine[], now: 
     };
     const rec = readRecord(conv, r.name);
     const plan = planRoutine(r, now, zone, rec, catchUpHours);
-    const what = plan.state === "due" ? `due now${plan.retry ? " (the earlier attempt died)" : ""}` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : "two attempts failed"})` : `next: ${nextText(r, now, zone, rec)}`;
+    const what = plan.state === "due" ? `due now${plan.retry ? (rec?.owes ? ` (the earlier attempt sent no ${rec.owes})` : " (the earlier attempt died)") : ""}` : plan.state === "running" ? `a look started it at ${at(plan.since)} and it is being produced` : plan.state === "done" ? `delivered ${at(plan.at)}` : plan.state === "skipped" ? `did not run on ${plan.slot.date} (${plan.why === "asleep" ? "the Mac was asleep past its time" : `two attempts failed${rec?.owes ? `, the ${rec.owes} was never sent` : ""}`})` : `next: ${nextText(r, now, zone, rec)}`;
     return `${r.name}: ${what}`;
   });
   return lines.length ? `Routines, status only (code schedules them; use this to answer "did my brief go out?" or to avoid repeating what one is about to say):\n${lines.join("\n")}` : "";
@@ -224,6 +236,6 @@ export function routineLines(conv: ConvRef, routines: readonly Routine[], now: D
 function lastRun(conv: ConvRef, r: Routine, conversationZone: string): string {
   const zone = zoneFor(r, conversationZone);
   const rec = readRecord(conv, r.name);
-  if (rec?.lastDelivered) return `${localOf(rec.lastDelivered, zone).date.slice(5)} ${localOf(rec.lastDelivered, zone).time}${rec.status === "failed" || rec.status === "skipped" ? `, then ${rec.status} (${rec.period})` : ""}`;
-  return rec?.status ? `${rec.status} (${rec.period})` : "not yet";
+  if (rec?.lastDelivered) return `${localOf(rec.lastDelivered, zone).date.slice(5)} ${localOf(rec.lastDelivered, zone).time}${rec.status === "failed" || rec.status === "skipped" ? `, then ${rec.status} (${rec.period}${rec.owes ? `, ${rec.owes} not sent` : ""})` : ""}`;
+  return rec?.status ? `${rec.status} (${rec.period}${rec.owes ? `, ${rec.owes} not sent` : ""})` : "not yet";
 }

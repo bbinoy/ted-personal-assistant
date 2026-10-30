@@ -251,6 +251,14 @@ export const CONV_SCHEMA: readonly Migration[] = [
       DROP TABLE learned_batches;
     `,
   },
+  {
+    version: 26,
+    name: "a routine owes a channel its run did not deliver (the brief's email): the retry is told only that is owed",
+    up: `
+      ALTER TABLE routine_runs ADD COLUMN owes TEXT;                -- the channel the last run of this period did not deliver ("email"); NULL: nothing owed
+      ALTER TABLE routine_runs ADD COLUMN chat_sent INTEGER NOT NULL DEFAULT 0; -- 1: that run did tell the chat, so the retry must not
+    `,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

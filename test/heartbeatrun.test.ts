@@ -18,6 +18,7 @@ import { settings } from "../src/core/settings.ts";
 import { instanceDb } from "../src/core/instancedb.ts";
 import { createWakeups } from "../src/heartbeat/wake.ts";
 import { readRecord } from "../src/tasks/routines.ts";
+import { scheduleLines } from "../src/modules/tasks/routinelist.ts";
 import { liveConvDb } from "../src/core/convdb.ts";
 import { RunTimeout } from "../src/run/ceiling.ts";
 import { heldPosts, resetHeld, ownerNotices } from "../src/heartbeat/notices.ts";
@@ -394,11 +395,12 @@ test("the daily brief is a routine like the others: the look is handed it as a f
   const err = console.error;
   console.error = () => {};
   const BRIEF = "expert-daily-brief";
+  const MAIL = "mcp__mailbird__send_self_briefing";
   const record = () => readRecord(owner().convId, "routine-daily-brief");
   const arm = () => liveConvDb(owner().convId)!.run("INSERT OR REPLACE INTO routine_runs (name, since) VALUES ('routine-daily-brief', ?)", new Date(2026, 9, 1).getTime());
   try {
     arm();
-    const ok = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, message: "Morning." }));
+    const ok = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, calls: [MAIL], message: "Morning." }));
     ok.at(new Date(2026, 9, 14, 8, 0));
     await ok.w.look(ok.conv, new Date(2026, 9, 14, 8, 0));
     assert.match(ok.seen.prompts[0]!, /routine-daily-brief: due now \(every day at 07:30\)\. Delegate it now: call the Agent tool with subagent_type "expert"/);
@@ -420,6 +422,37 @@ test("the daily brief is a routine like the others: the look is handed it as a f
     assert.equal(record()!.status, undefined, "nothing was delegated: no attempt is recorded");
   } finally {
     liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"); // (the record is the conversation's, shared by the tests)
+    console.error = err;
+  }
+});
+
+test("a routine that must deliver by email is not complete without it: it fails, the retry is told only the email is owed (the chat already went out), and sending it completes it", async () => {
+  const err = console.error;
+  console.error = () => {};
+  const BRIEF = "expert-daily-brief";
+  const MAIL = "mcp__mailbird__send_self_briefing";
+  const record = () => readRecord(owner().convId, "routine-daily-brief");
+  const arm = () => (liveConvDb(owner().convId)!.run("DELETE FROM routine_runs"), liveConvDb(owner().convId)!.run("INSERT INTO routine_runs (name, since) VALUES ('routine-daily-brief', ?)", new Date(2026, 9, 1).getTime()));
+  try {
+    arm();
+    const first = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, message: "Morning." })); // (the expert answered and the chat message went out, but no email)
+    await first.w.look(first.conv, new Date(2026, 9, 14, 8, 0));
+    assert.deepEqual([record()!.status, record()!.owes, record()!.chatSent, record()!.attempts], ["failed", "email", true, 1], "no email send: not complete, and the chat message is on record");
+    const retry = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "mailed" }, calls: [MAIL], message: "[[silent]]" }));
+    await retry.w.look(retry.conv, new Date(2026, 9, 14, 8, 10));
+    assert.match(retry.seen.prompts[0]!, /routine-daily-brief: due now \(every day at 07:30, the earlier attempt finished without its email\)[\s\S]*ONLY the email is owed[\s\S]*the final answer is \[\[silent\]\]/);
+    assert.deepEqual([record()!.status, record()!.owes, record()!.attempts], ["delivered", undefined, 2], "the email went out: complete, nothing owed");
+    arm(); // two attempts without the email: given up, and the doctor line says what never went out
+    let last = first;
+    for (const m of [0, 10]) {
+      last = rig(() => ({ agents: [BRIEF], results: { [BRIEF]: "the brief" }, message: "Morning." }));
+      await last.w.look(last.conv, new Date(2026, 9, 14, 8, m));
+    }
+    assert.deepEqual([record()!.status, record()!.attempts, record()!.owes], ["failed", 2, "email"]);
+    const now = new Date(2026, 9, 14, 9, 0);
+    assert.match(scheduleLines(owner().convId, { notesDir: last.conv.notesDir, zone: "Europe/Berlin", now }).join("\n"), /failed \(2026-10-14, email not sent\)/);
+  } finally {
+    liveConvDb(owner().convId)!.run("DELETE FROM routine_runs");
     console.error = err;
   }
 });
