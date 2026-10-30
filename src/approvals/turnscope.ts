@@ -52,6 +52,11 @@ export class TurnScope {
     this.#said = text.slice(0, LIMITS.quote);
   }
 
+  // A streamed turn (the `stream` trial): each text block said in this turn adds to what the assistant last told the owner; the newest part is kept when it grows past the bound.
+  assistantAdded(text: string): void {
+    if (text.trim()) this.#said = `${this.#said}\n${text}`.trim().slice(-LIMITS.quote);
+  }
+
   // The turn is over.
   end(): void {
     this.#derived = undefined;

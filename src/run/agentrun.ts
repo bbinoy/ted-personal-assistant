@@ -25,6 +25,7 @@ import type { RunContext } from "../modules/types.ts";
 import { approveIn, editedNote, makeCanUseTool, type Approve } from "../approvals/permissions.ts";
 import type { RunProvenance } from "../approvals/autojudge.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
+import { streamText } from "../modules/send/send.ts";
 import { browseTools, runCapabilities, toolsFor } from "../policy/capabilities.ts";
 import { hiddenTools } from "../policy/policy.ts";
 import { type ChatSession } from "./session.ts";
@@ -285,6 +286,10 @@ export async function consume(stream: AsyncIterable<SDKMessage>, opts: RunOption
       if (!first && !message.parent_tool_use_id) (first = true), opts.onFirstOutput?.();
       if (message.error) lastError = message.error;
       if (!message.parent_tool_use_id) lastContext = contextTokens(message.message.usage);
+      // TRIAL (capability `stream`): an attended chat turn delivers each top-level text block as it arrives; the conversation's turn registered the delivery (a turn without the capability registered none).
+      if (!message.parent_tool_use_id && opts.kind.attended && opts.conversation) {
+        for (const b of Array.isArray(message.message.content) ? message.message.content : []) if (b.type === "text") await streamText(opts.conversation, b.text);
+      }
     }
     if (message.type !== "result") continue;
     const stored = opts.sessionConv && !opts.freshSession ? readSession(opts.sessionConv) : undefined;
