@@ -69,7 +69,7 @@ A conversation's small mutable state is one SQLite file opened through `src/core
 |---|---|
 | `session`, `dream`, `quiet`, `reset` | the resumed SDK chat session, cost, untrusted taint, what it was shown; the dream's day; `/quiet`; the mark after a damaged file was replaced |
 | `hold`, `held_posts` | day's count of unprompted posts; posts held for quiet hours or the cap (newest 30) |
-| `seen_mail` | mail ids the look has worked through (newest 2000) |
+| `mail_decisions` | the looks' last decision per inbox mail: archive, keep, task or draft, with the reason (newest 2000) |
 | `meetings`, `meeting_calls` | upcoming meetings the look recorded, prep state |
 | `routine_runs` | last period of each routine (a routine note), keyed by the note's file name |
 | `items`, `task_events`, `reminders` | tasks, append-only history, claimed reminders |
@@ -116,7 +116,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 | answer | a reply | the look JSON (`message`, `nextCheckMinutes`, `urgent`) |
 
 - `RunOptions` (`src/run/agentrun.ts`) carries `kind` (who and attended), the prompt, the session (`freshSession` for a look), the notes' way in, skills, tools, model, caps, `provenance`, `untrusted` and experts.
-- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled); for a look, `seen_mail`. `note_upcoming_meetings` is not attended-gated: any run whose capability set has the calendar has it. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
+- **What `attended` changes** is a field of the manifest row (`attended: true | false`, `src/policy/toolmanifest.ts presentFor`), pinned in `test/fixtures/manifest-rows.json`: reads are never removed (a look has `find_person` and `search_logs`). For a message: tenant administration (a look has the task edits like a chat: they are free of the judge and journalled). `note_upcoming_meetings` is not attended-gated: any run whose capability set has the calendar has it. Every other tool, `draw`, `voice`, `send`, weather, browse, the connectors, `WebFetch` (owner only), follows the capability set in both. An unattended run never asks, never pays, and the browse worker of a look is unattended too.
 - A conversation has one session, its chat: it resumes between runs and is compacted in the background after 5 of quiet (`src/run/chatsession.ts`). A look resumes and saves none, and marks nothing in the chat session.
 
 **Capabilities** decide tools, skills and loops. `capabilitiesOf(conversation)` (`src/policy/capabilities.ts`, derived in `src/tenants/capabilityset.ts`) is a set of `CAPABILITIES` (`src/tenants/tenants.ts`) and is never stored.
@@ -227,7 +227,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 - **The expert.** What the look is handed (these facts and the chat tail it reads) is appended by code to every brief it gives an expert (`delegationHook`'s `context`, `expertContext` of the look); the approval judge still reads only the look's own brief.
 - **Prompt cache.** The claimed facts and the information facts are each told to a chat session only when their text differs from what it was last told (`src/run/turncontext.ts`); the system prompt stays stable.
 
-**New mail.** The run lists the inbox and passes the ids to `seen_mail`, which returns those this conversation has not worked through; they are committed only when the look ends well.
+**The inbox.** Every run of a conversation with mail is handed the same fact (`factsFor`, a status block): the last decision of a look for each mail it considered, with its age and reason; a mail not listed is new. The run lists the whole inbox with its own mail tool (read and unread) and re-judges every conversation in it, starting from that decision. A look reports one decision per mail it newly decided or changed in the "triage" part of its answer; code writes them to the journal (category `triage`, with the judge's outcome for an archive: `triage.judged` from `permissions.ts`) and into `mail_decisions` (`src/tasks/maildecisions.ts`); an archive that was allowed removes the row.
 
 - The default is to archive unless the mail needs the owner; the owner's triage notes win.
 - `ARCHIVE_MAX_PER_RUN` (25) caps archives per run (`src/modules/archivecap.ts`). Archives are journaled with the mail's id and reversible (`npm run restore <id>`, or ask Ted in chat to bring it back).
@@ -538,8 +538,6 @@ src/modules/notion/notionmcp.ts  the hosted Notion MCP connection
 src/modules/people/module.ts  `find_person` declaration
 src/modules/people/people.ts  notes and contacts as candidates, ranking
 src/modules/people/peopletool.ts  the `find_person` tool
-src/modules/seenmail/module.ts  `seen_mail` declaration
-src/modules/seenmail/seenmail.ts  inbox mail a look has worked through
 src/modules/send/module.ts  send
 src/modules/send/send.ts  the send tool: speak mid-turn
 src/modules/send/shots.ts  pictures of a turn, delivered via send
@@ -660,6 +658,7 @@ src/tasks/meetings.ts  recorded meetings and prep rules
 src/tasks/remind.ts  reminder planner and facts (pure)
 src/tasks/render.ts  items as lines, `/tasks`, task facts
 src/tasks/repeat.ts  repeat rules (pure, DST-safe)
+src/tasks/maildecisions.ts  the looks' last decision per inbox mail, and the fact block every run with mail is handed
 src/tasks/routines.ts  the one planner and record of routine notes, and the look's routine facts
 src/tasks/store.ts  items and task_events: all mutations
 src/tasks/when.ts  local dates and wall times

@@ -37,7 +37,7 @@ npm run install:launchd               # installs a launchd job; the agent starts
 
 On its first start (an empty data folder) the assistant introduces itself in your chat, in its own words; say "set up" to walk through connecting your calendars and how you write. It archives routine mail from the first look, as your notes say; every archive is listed in `/today` and the brief, and asking Ted brings one back.
 
-Send yourself a message on Signal. The first heartbeat look works through the inbox the assistant has not looked at yet (the `seen_mail` log is empty at first; a big inbox is worked off over successive looks). So that the first look does not triage a whole backlog, mail older than 7 is marked as seen without being sorted, and the assistant tells you so once in its first message; it is a constant in `seenmail.ts`. The first daily brief is started by the heartbeat run around 07:30 (its rules are in `assistants/ted/persona/heartbeat.md`).
+Send yourself a message on Signal. Every heartbeat look reviews the whole inbox, read and unread (its last decision per mail is handed to every run, so a mail not listed there is new), so the first look already tidies a big inbox, a batch at a time. The first daily brief is started by the heartbeat run around 07:30 (its rules are in `assistants/ted/persona/heartbeat.md`).
 
 ### Choosing a messenger
 
@@ -66,7 +66,7 @@ MAIL_SELF_ADDRESS=you@example.com
 
 What works:
 
-- **The heartbeat run on Gmail.** It lists the inbox with the Gmail connector like any other tool and keeps its own memory of which threads it has looked at (`seen_mail`). The few calls code makes without an agent loop (reading a draft back for an approval, `npm run restore`) go through a small relay run.
+- **The heartbeat run on Gmail.** It lists the inbox with the Gmail connector like any other tool and keeps its own memory of what it decided about each thread (`mail_decisions`). The few calls code makes without an agent loop (reading a draft back for an approval, `npm run restore`) go through a small relay run.
 - **Archiving is always live.** An archive is removing the INBOX label (reversible). `npm run restore <threadId>` puts an archived thread back in the inbox.
 - **Drafts and sends.** Drafts (new or in-thread) are made freely. `send_message`, `reply` and `forward` always go through the approval flow, shown with the real recipients (including cc, bcc and attachments); a send of a draft is shown from the draft as read back from Gmail. The approval judge (`AUTO_APPROVE`) may skip the question for a send you asked for in so many words, or one that a standing task of yours explicitly covers; a send decided on the strength of a mail always asks.
 - **Never allowed**, whoever asks: trash, spam, delete, the labels `TRASH` and `SPAM` on any label tool, reading attachment content, deleting or renaming labels.
