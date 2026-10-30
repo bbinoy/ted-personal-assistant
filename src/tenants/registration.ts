@@ -183,7 +183,7 @@ export const helloText = (): string => `Hi, I'm ${ASSISTANT}, an AI assistant th
 // Owner-initiated (CLI `invite`, or the owner's chat tool, which asks her first): send the hello, then remember the person so that her reply makes her a friend with no question.
 // She is remembered by the account id the messenger reports (or her number); a username the messenger could not resolve leaves her to the ordinary request.
 export async function invitePerson(recipient: string, send: (recipient: string, text: string) => Promise<{ timestamp: number; accountId?: string }>, now = Date.now()): Promise<{ preapproved: boolean }> {
-  const to = recipient.trim();
+  const to = /^\+?[\d\s().-]+$/.test(recipient.trim()) ? recipient.replace(/[\s().-]/g, "") : recipient.trim(); // a number as people write it ("+44 7891 563044", "+1 (555) 555-0114"): only digits and the plus count
   if (!isRecipient(to)) throw new Error("a recipient is a phone number like +15555550114 or a username like name.42");
   const sent = await send(to, helloText());
   const aci = sent.accountId && ACI.test(sent.accountId) ? sent.accountId : undefined;

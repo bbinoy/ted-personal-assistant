@@ -67,3 +67,9 @@ test("the owner's chat tool exists only as part of the admin server and takes th
   assert.ok(createTenantAdminServer({ sendFirst: async () => ({ timestamp: 1 }) }));
   assert.equal(tenantHooks.sendFirst, undefined, "set by main.ts only");
 });
+
+test("invite: a number written with spaces, dashes or brackets is sent as digits and the plus", async () => {
+  const m = new FakeMessenger();
+  await Reg.invitePerson("+1 (555) 555-0114", (to, text) => m.sendFirst(to, text));
+  assert.deepEqual(m.firsts.map((f) => f.recipient), ["+15555550114"]);
+});
