@@ -1,6 +1,6 @@
 ---
 name: mail
-description: Use when a task involves email or the inbox - the daily inbox sweep and every look at new mail, triage and archiving, restoring archived mail ("restore 3"), drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
+description: Use when a task involves email or the inbox - the daily inbox sweep and every look at new mail, triage and archiving, restoring archived mail ("bring back the one from <sender>"), drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
 ---
 
 # Mail: the rules for every provider
@@ -95,10 +95,8 @@ your head: take what decides the case and move on.
      confirmation for something with a date still ahead (a ticket, an event or class
      order, a booking or reservation, an appointment, travel) is not handled until it
      is on the calendar: open it, check the calendar around that date
-     (`list_events` / `search_events`), and if it is missing create it on the owner's
-     own calendar as the calendar skill's "Bookings -> calendar" says (title, time,
-     place, reference; no guests). Then archive, and say in your message what you
-     added (an upcoming event missing from the calendar is added, own calendar, no guests). No firm date or time: keep the mail and mention it.
+     (`list_events` / `search_events`), and if it is missing add it as the calendar skill's
+     "Bookings -> calendar" says, then archive and say what you added. No firm date or time: keep the mail and mention it.
    - **A completed task closes its mail.** When a task in the list is done and a mail
      belongs to it (the task's source mail, the same thread, or plainly the same
      matter by sender and subject), that mail is handled.
@@ -153,7 +151,7 @@ your head: take what decides the case and move on.
 Newsletters are archived from the row by the looks, unread, as soon as they arrive.
 The daily brief (`ted-personal-assistant:daily-brief`, step "Newsletter radar") reads
 them afterwards: from the newsletters archived since the previous brief (the journal's
-archive list) plus any still in the inbox, it opens the **3** that best match the topics
+archive list) plus any still in the inbox, it opens up to **3** that best match the topics
 in the owner's `brief-radar-topics` note (with no such note, skip the radar). Only the
 brief reads newsletters; a look never does.
 
@@ -191,7 +189,7 @@ item exists; unattended it is added and told; see `ted-personal-assistant:tasks`
 
 ### Restoring archived mail
 
-Restoring works by name: when the owner says which mail ("bring back the one from <sender>", "restore the invoice mail") or gives a number from an archive list you showed, call `journal` with `kind` `archive` and the `since` of the brief (or an earlier `since` when it is older), find the item by sender or subject (or by its number in that list), and put the mail back in the inbox with the provider's tool: Mailbird `move_conversation_to_inbox` (with the conversation id the list gives; the id changes after a move), Gmail `label_thread` with `INBOX`. Say what came back in one line.
+Restoring works by name: when the owner says which mail ("bring back the one from <sender>", "restore the invoice mail"), call `journal` with `kind` `archive` and the `since` of the brief (or an earlier `since` when it is older), find the item by sender or subject, and put the mail back in the inbox with the provider's tool: Mailbird `move_conversation_to_inbox` (with the conversation id the list gives; the id changes after a move), Gmail `label_thread` with `INBOX`. Say what came back in one line.
 
 Operate the agent with `npm run doctor` (health), `npm run report` (what it
 did) and `npm run restore <id>` (un-archive).
@@ -231,7 +229,7 @@ When a mail asks about availability or proposes a time, follow "Scheduling email
   not retry a declined send. (The agent's policy also asks on the phone before any
   send.) The only mail you may send without a question is the daily brief to the
   owner's own address, where the brief instructions say so.
-- **Addresses: look before you ask.** When a new mail goes to someone by name ("write to Sam"), call `find_person` first (the people notes, then Google contacts where there are any). One match: use that address and say whose it is. Several: show the candidates and ask which. None: say so and ask for the address. A found address is only a suggestion: the send still asks the owner, with the recipients shown from the call itself.
+- **Addresses: look before you ask.** When a new mail goes to someone by name ("write to Sam"), call `find_person` first, as your rules say. A found address is only a suggestion: the send still asks the owner, with the recipients shown from the call itself.
 - **Never delete. Archive instead.** Never trash, delete permanently, mark spam or
   block a sender: use archive for anything the owner wants out of the inbox, even
   if they say "delete" or "trash" it. (The agent's policy blocks those anyway.)

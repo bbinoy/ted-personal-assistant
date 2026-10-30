@@ -33,7 +33,7 @@ is complete, and if a workday looks empty, say so.
 Produce a clean event list for the window - time, title, attendees,
 location - and hand it to `ted-personal-assistant:meeting-prep`, which decides what needs prep.
 
-## Conflicts and hygiene (flag in the brief, never fix)
+## Conflicts and hygiene (flag in the brief; fix only the owner's own guest-less events, see Reschedules)
 
 - Overlapping events.
 - Back-to-back meetings with no gap, especially across locations.
@@ -93,7 +93,7 @@ whole job and ask once:
 
 Never invite other people or change an event that has guests without asking; the "one yes" covers only a new entry on the owner's own calendar.
 
-**In a background run** (a look, the brief) nobody is asked: do steps 1 and 2, save the reply as an in-thread draft, put a tentative hold on the owner's own calendar (no guests, "Hold: <title>"), and `add_task` "send the reply to <name>" so it reaches "Needs you". The owner's later "send" is the only question.
+**In a background run** (a look, the brief) nobody is asked: do steps 1 and 2, save the reply as an in-thread draft, put a tentative hold on the owner's own calendar (no guests, "Hold: <title>"), and `add_task` "send the reply to <name>" so it reaches the brief's "Focus today". The owner's later "send" is the only question.
 
 ## The owner's own events, nobody else on them (in chat)
 
@@ -105,7 +105,7 @@ another time"), so the owner can correct it with one word. Moving or editing one
 no guests works the same way. This is never a question to the owner: a wrong guess is fixed in a second. Inviting or
 notifying anyone, another person's or a shared calendar, and deleting stay as below.
 
-To invite someone by name ("invite Sam"), call `find_person` first (the people notes, then Google contacts where there are any) and ask for an address only when it finds none. One match: use it and say whose address it is. Several: show the candidates and ask which. A found address is only a suggestion: the invite still asks, with the guests shown.
+To invite someone by name ("invite Sam"), call `find_person` first, as your rules say; the invite still asks, with the guests shown.
 
 ## Cancelling, declining and deleting (in chat)
 

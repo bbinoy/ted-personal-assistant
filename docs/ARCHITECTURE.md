@@ -128,7 +128,7 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 **The preset** (`assistants/<name>/`, default `ted`, `ASSISTANT_PRESET`; `src/core/preset.ts`).
 
 - `preset.json` holds the rhythm (tick, day interval, quiet hours, dream), note categories, the run limits (one set for every conversation: the owner, each group and each friend), the expert and the core skills.
-- `persona/*.md` holds every prompt as a template filled by `src/run/persona.ts`. The rules every conversation shares (memory, and for other people the injection rule, plain text, `[[silent]]`) are one include, `shared.md`; a group and a friend are one persona, `others.md`, with `group` and `google` flags (`othersSystem`; `groupSystem` and `tenantSystem` are its two callers), and one note list, `notes.others`.
+- `persona/*.md` holds every prompt as a template filled by `src/run/persona.ts`. One builder (`systemFor`) renders the same templates for the owner, a group and a friend, and an expert gets the same capability rules: `identity.md` (who, style, and the privacy lines of someone else's chat), `capabilities.md` (skills, approvals, honesty, the untrusted-content rule once), `shared.md` (memory, learning from corrections, looking things up), `routine.md`, `tasks.md`, `background.md` and `delegate.md`. A conversation differs only by data: its capabilities, who it is, and the closed list of differences. The mail provider's words for drafting and sending are data on its module (`MailSlot.chat`), filled into one sentence.
 - A preset changes how Ted talks and when it wakes, never what it may do: policy, the approval path, isolation and payments stay in code.
 
 **Who pays and may it run** (`src/tenants/payer.ts`). `mayRun(conversation, what)` answers a `Payer` or a refusal (`paused`, `inactive`, `no-key`, `cooldown`, `budget`, `damaged`) for every model call.
@@ -309,7 +309,7 @@ Working memory is the conversation's resumed session. Episodic memory is `logs/a
 
 **What the notes learned on their own** is not handed to any run. A look's note writes are journal lines like any action, and the dream's run is a journal line with its change count (its snapshot is what `undo_dream` restores); "what did you learn" is answered from the `journal` tool.
 
-**Corrections** (no code path of their own). A 👎 on something Ted did or sent, an undo, or "don't do that" is learned by the run itself under the general learn rule in the persona (`learn.md`): it works out the rule and saves a note. A reaction turn is given the reacted message (fenced as data) and the journal lines around it with their "why" (`journalAround`). The model writes the note; no code checks it (notes grant nothing; every action is still judged).
+**Corrections** (no code path of their own). A 👎 on something Ted did or sent, an undo, or "don't do that" is learned by the run itself under the general learning rule in the persona (`shared.md`): it works out the rule and saves a note. A reaction turn is given the reacted message (fenced as data) and the journal lines around it with their "why" (`journalAround`). The model writes the note; no code checks it (notes grant nothing; every action is still judged).
 
 Safety rules and operational settings (quiet hours, limits, model, names) are never memory.
 

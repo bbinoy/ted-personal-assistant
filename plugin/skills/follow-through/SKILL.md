@@ -29,7 +29,7 @@ Check the ones that fit; most actions touch two or three.
   matching task, add the obvious follow-up task, a draft).
 - **Touches other people or money** (it moves other people's plans, it costs money) and
   the match is uncertain: in chat, ask once, in one line, with your suggestion. A
-  background run never asks: it does what the judge allows, and what it cannot do becomes a draft or an `add_task` item, so it reaches the brief's "Needs you".
+  background run never asks: it does what the judge allows, and what it cannot do becomes a draft or an `add_task` item, so it reaches the brief's "Focus today" (as an open draft or a "send the reply to X" task).
 - **Rights stay exactly as they are.** Nothing here grants a permission. A step that
   needs approval still goes through the usual flow.
 - Do not invent work. If nothing follows, say nothing.

@@ -51,14 +51,14 @@ const ALLOWED: { match: RegExp; by: By; reason: string }[] = [
   { match: /^block:first-contact$/, by: "either", reason: "attended: only a friend's first message turn, after the owner let her in, greets her (runoptions.ts turnContext)" },
   { match: /^block:setup$/, by: "conversation", reason: "capability (setup): what is not connected or set up is the owner's own installation; a group or a friend has no setup to walk through" },
   { match: /^(tools:|mcp:)/, by: "either", reason: "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes" },
-  { match: /^(skills:|agents:expert-|system:skills$|expert-system:skills$)/, by: "conversation", reason: "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill" },
+  { match: /^(skills:|agents:expert-)/, by: "conversation", reason: "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill" },
   // -- privacy (§5) and persona --
   { match: /^(settingSources|strictMcp)$/, by: "conversation", reason: "privacy (§5): only the owner's run loads her login's connectors and user settings; a group's and a friend's are isolated (strict MCP, no settings sources)" },
-  { match: /^system:(chat|others|participation)$/, by: "conversation", reason: "persona: the owner's chat has its own template, a group's and a friend's the others template; only a group is told when to speak (participation)" },
+  { match: /^system:participation$/, by: "conversation", reason: "persona: only a group is told when to speak (participation); every conversation's prompt is built from the same templates (identity, capabilities, shared), the owner's, a group's and a friend's alike" },
 ];
 
 // What every run must have, whatever its kind: `feature=value`.
-const REQUIRED = ["block:clock=1", "block:message=1", "expert-brief:clock=1", "system:personality=on", "system:shared=on", "system:background=on", "system:delegate=on", "system:learn=on", "expert-system:expert=on"];
+const REQUIRED = ["block:clock=1", "block:message=1", "expert-brief:clock=1", "system:personality=on", "system:identity=on", "system:capabilities=on", "system:shared=on", "system:background=on", "system:delegate=on", "expert-system:expert=on"];
 
 // ---- the kinds ------------------------------------------------------------------------------------------------------------------------------------------------
 const rec = T.addTenant({ aci: "00000000-0000-4000-8000-0000000000cc", name: "Bea" })!;

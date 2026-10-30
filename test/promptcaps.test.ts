@@ -32,8 +32,8 @@ test("a friend whose tenant.json turns browsing off is not told she can browse; 
   const withBrowse = friend("Ada");
   const without = friend("Bo", { browse: false });
   assert.equal(capabilitiesOf({ kind: "tenant", tenantId: without.id }).has("browse"), false);
-  assert.match(promptOf(withBrowse.id), /use the browse tool for things behind a web form/);
-  assert.doesNotMatch(promptOf(without.id), /use the browse tool|browse tool for things/);
+  assert.match(promptOf(withBrowse.id), /call the browse tool with the task/);
+  assert.doesNotMatch(promptOf(without.id), /call the browse tool with the task/);
   for (const id of [withBrowse.id, without.id]) {
     assert.match(promptOf(id), /weather tools/);
     assert.match(promptOf(id), /draw tool/);
@@ -53,7 +53,7 @@ test("a group's prompt follows its capability set too", () => {
   assert.match(groupSystem({ caps }), /draw tool/);
   const less = new Set([...caps].filter((c) => c !== "weather" && c !== "browse" && c !== "draw"));
   const text = groupSystem({ caps: less });
-  assert.doesNotMatch(text, /weather tools|use the browse tool|simple picture with the draw tool/);
+  assert.doesNotMatch(text, /weather tools|call the browse tool with the task|simple picture with the draw tool/);
   assert.equal(runFor(group("g-caps"), "message", {}).systemPrompt, groupSystem({ caps }), "the run builds it from the same set");
 });
 

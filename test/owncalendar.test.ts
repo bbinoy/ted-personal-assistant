@@ -58,6 +58,6 @@ test("the calendar skill and the chat persona say: create it, pick the likely da
   const skill = readFileSync("plugin/skills/calendar/SKILL.md", "utf8");
   assert.match(skill, /## The owner's own events, nobody else on them \(in chat\)/);
   assert.match(skill, /SAY in your reply which date and time you chose/);
-  const chatMd = readFileSync("assistants/ted/persona/chat.md", "utf8");
-  assert.match(chatMd, /pick the most likely one and say in your reply which date and time you chose/);
+  const caps = readFileSync("assistants/ted/persona/capabilities.md", "utf8");
+  assert.match(caps, /own calendar with nobody else on it[^\n]*at once, never after a question; say which date and time you chose/);
 });

@@ -10,7 +10,6 @@ import { preset } from "../core/preset.ts";
 import { chatContext, chatSystem, expertSystem, FIRST_CONTACT, groupSystem, tenantSystem } from "./persona.ts";
 import { allows, capabilitiesOf, toolsFor } from "../policy/capabilities.ts";
 import { identity } from "../policy/identity.ts";
-import { GOOGLE_MAIL_TOOL } from "../modules/google/module.ts";
 import { skillsFor } from "../modules/skills.ts";
 import { tenantById, tenantContext, wasDisclosed, zoneOf, type TenantContext } from "../tenants/tenants.ts";
 import { settings } from "../core/settings.ts";
@@ -85,7 +84,7 @@ const tenantShape = (conv: Conversation, i: RunInputs): Shape => {
   if (!apiKey) throw new Error("a tenant's run needs the instance API key"); // never a quiet fall back to the owner's login
   const caps = capabilitiesOf(conv);
   return {
-    systemPrompt: tenantSystem({ name: ctx.name, caps, looker: lookerOf(conv), timed: allows(conv, "heartbeat") && allows(conv, "wake"), google: toolsFor(caps, { who: "tenant", attended: true }).has(GOOGLE_MAIL_TOOL), language: ctx.language, persona: ctx.persona }),
+    systemPrompt: tenantSystem({ name: ctx.name, caps, looker: lookerOf(conv), timed: allows(conv, "heartbeat") && allows(conv, "wake"), language: ctx.language, persona: ctx.persona }),
     notes: { dir: ctx.notesDir, zone: zoneOf(conv) },
     tenant: {
       id: ctx.id,
@@ -147,12 +146,8 @@ export function runFor(conv: Conversation, trigger: Trigger, inputs: RunInputs =
   };
 }
 
-// The expert a run may delegate to is told the same persona and notes as the run it works for (persona.ts expertSystem): the index of the notes, which it reads in full with its own tools.
+// The expert a run may delegate to is told the same persona, rules and notes as the run it works for (persona.ts expertSystem): the index of the notes, which it reads in full with its own tools.
 function expertText(conv: Conversation): string {
   const index = readIndex(conv.notesDir);
-  if (identity(conv).own) return expertSystem(index, { missing: missingSetup(readNotes()) });
-  const ctx = conv.tenantId ? tenantContext(tenantById(conv.tenantId)!) : undefined;
-  const looker = lookerOf(conv);
-  const looked = { name: looker.who, group: looker.group, language: ctx?.language, persona: ctx?.persona };
-  return expertSystem(index, { looked });
+  return expertSystem(index, { missing: identity(conv).own ? missingSetup(readNotes()) : undefined, for: { caps: capabilitiesOf(conv), looker: lookerOf(conv) } });
 }

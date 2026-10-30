@@ -16,12 +16,7 @@ export const setDraftReader = (fn: typeof draftReader) => void (draftReader = fn
 
 const mail: MailSlot = {
   brief: { how: () => "Deliver the full brief by email with the Mailbird send_self_briefing tool, exactly once, with the subject the skill names (never its default subject)." },
-  chat: {
-    skill: "ted-personal-assistant:mailbird",
-    note: (owner) => `Reply drafts: a reply you (or a background look of yours) saved is a Mailbird draft, and you tell ${owner} it is ready. When ${owner} answers with "send" or similar, find the draft they mean (get_message with its id if you know it, else look in the drafts) to be sure which one it is, then send_message_now with messageId and confirm true; ${owner} is then asked to approve, with the draft shown exactly as Mailbird holds it. If they ask for a change, edit the draft (update_draft) and say so; do not send. If it is unclear which draft they mean, ask. Never send anything ${owner} has not told you to send; a plain yes, ok or 👍 to your offer to send counts.
-
-`,
-  },
+  chat: { skill: "ted-personal-assistant:mailbird", name: "Mailbird", find: "get_message with its id if you know it, else look in the drafts", send: "send_message_now with messageId and confirm true", edit: "update_draft" },
   readBack: async (kind, input) => {
     const id = Number(input.messageId);
     // An unreadable draft refuses the send (permissions.ts), so the reason is logged here: the owner sees "could not be read back", the log says why.
