@@ -45,7 +45,7 @@ function rig(o: { synth: (limits: SynthLimits | undefined, file: () => string) =
   };
   const pipeline = createPipeline({
     messenger,
-    out: createOutbound(messenger, () => {}),
+    out: createOutbound(messenger, () => {}, { pauseMs: 0 }),
     record: () => {},
     run: async () => ({ text: "" }),
     picture: async () => assert.fail("no picture"),
@@ -103,7 +103,7 @@ test("voice deadline: when it runs out the engine is aborted, the words go out a
   const logged = await turn;
   assert.equal(limits!.signal!.aborted, true);
   assert.deepEqual(r.voices, []);
-  assert.deepEqual(r.sent, [`Good morning, you have two meetings today.\n\n${VOICE_FAILED_NOTE}`]);
+  assert.deepEqual(r.sent, ["Good morning, you have two meetings today.", VOICE_FAILED_NOTE]); // (the note is its own message)
   assert.deepEqual(logged.filter((l) => l.startsWith("voice")), ["voice skipped: took longer than 75 s, sending text"]);
 });
 
@@ -117,7 +117,7 @@ test("voice deadline: a file that arrives after the deadline is never sent, and 
   });
   const logged = await say(r);
   assert.deepEqual(r.voices, [], "the stale file is not handed to the messenger");
-  assert.equal(r.sent.length, 1);
+  assert.equal(r.sent.length, 2); // the words and the note
   assert.match(r.sent[0]!, /Good morning/);
   assert.equal(existsSync(dirname(file)), false);
   assert.deepEqual(logged.filter((l) => l.startsWith("voice")), ["voice skipped: took longer than 75 s, sending text"]);
@@ -130,10 +130,10 @@ test("voice deadline: a slow upload is covered too, and an engine error that is 
   slow.clock.advance(76_000);
   slow.clock.tick!();
   assert.deepEqual((await turn).filter((l) => l.startsWith("voice")), ["voice skipped: took longer than 75 s, sending text"]);
-  assert.equal(slow.sent.length, 1);
+  assert.equal(slow.sent.length, 2);
   const broken = rig({ synth: async () => { throw new Error("no tts"); } });
   assert.deepEqual(await say(broken), ["voice reply failed, sending text: no tts"]);
-  assert.match(broken.sent[0]!, /voice didn't work/);
+  assert.match(broken.sent[1]!, /voice didn't work/);
 });
 
 // The language check runs under the same deadline, and a check that fails does not cost the voice.
@@ -151,7 +151,7 @@ test("voice language: a detection that fails still speaks (the voice's language 
   hang.clock.advance(76_000);
   hang.clock.tick!();
   assert.deepEqual((await turn).filter((l) => l.startsWith("voice")), ["voice skipped: took longer than 75 s, sending text"]);
-  assert.deepEqual(hang.sent, [`Good morning, you have two meetings today.\n\n${VOICE_FAILED_NOTE}`]);
+  assert.deepEqual(hang.sent, ["Good morning, you have two meetings today.", VOICE_FAILED_NOTE]);
   const german = rig({ synth: async () => assert.fail("not reached"), foreign: async () => "de" });
   assert.deepEqual(await say(german), ["voice skipped: reply looks de, the voice speaks en; sending text"]);
   assert.deepEqual(german.sent, ["Good morning, you have two meetings today."], "a foreign language is plain text, no note");
@@ -196,7 +196,7 @@ test("voice sleep: a file that finishes in the moment of the wake-up is stale an
   up.clock.t += 18 * 60_000;
   up.clock.tick!();
   assert.deepEqual((await turn).filter((l) => l.startsWith("voice")), ["voice skipped: the Mac slept, sending text"]);
-  assert.equal(up.sent.length, 1);
+  assert.equal(up.sent.length, 2);
 });
 
 test("voice sleep: the shared signal of the tick aborts a synthesis in flight; one that starts after the wake-up is unaffected", async () => {

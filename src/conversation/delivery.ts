@@ -7,6 +7,7 @@ import { RunStopped } from "../run/ceiling.ts";
 import { withSend, type Content, type SendSink } from "../modules/send/send.ts";
 import { splitReaction } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
+import { stripWhole } from "./split.ts";
 import { splitVoice, VOICE_FAILED_NOTE } from "./voicereply.ts";
 import { settings } from "../core/settings.ts";
 import { LIMITS } from "../core/sanitize.ts";
@@ -104,11 +105,11 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
         console.log(`${conv.kind} picture sent (${c.id}, ${c.size} bytes)`);
         told = `Sent ${c.id} as a picture.`;
       } else {
-        const words = SILENT.test(c.text) ? "" : c.text.trim();
+        const words = SILENT.test(c.text) ? "" : c.text.trim(); // (a text goes out as one message per paragraph, outbound.ts reply; a voice note speaks the whole)
         let spoken = false;
         let speechFailed = false;
         if (c.voice && !!words && canSpeak() && words.length <= MAX_SPOKEN_CHARS) {
-          const result = await speak(conv, words);
+          const result = await speak(conv, stripWhole(words));
           spoken = result === "spoken";
           speechFailed = result === "failed";
         }
@@ -136,7 +137,7 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
   async function deliverFinal(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target" | "reaction">): Promise<void> {
     const chosen = splitVoice(replied);
     const { reaction, text } = splitReaction(chosen.text);
-    scopeOf(conv.key).assistantSaid(text); // each conversation has its own scope: the judge reads the next "yes" there against it
+    scopeOf(conv.key).assistantSaid(stripWhole(text)); // the whole reply, however many messages it goes out as; each conversation has its own scope: the judge reads the next "yes" there against it
     await d.send({ kind: "text", text, voice: !!chosen.voice }, false);
     if (reaction && t.target) await d.send({ kind: "reaction", emoji: reaction }, false);
     else if (!t.reaction && !d.state.reacted) status(conv, "✅", t.target); // a reaction the model already put on that message stays

@@ -34,7 +34,7 @@ test("a long reply is one message with the quote, and its cut body coming back i
   const messenger = { capabilities: FULL_CAPABILITIES, send: async (_target: unknown, m: { text: string; quote?: unknown }) => (calls.push({ text: m.text, quote: m.quote }), 5000 + calls.length) };
   const out = createOutbound(messenger);
   const q = { text: "the question", author: "+1", timestamp: 42 };
-  await out.reply(`${"para one. ".repeat(120)}\n\n${"para two. ".repeat(120)}`, { quote: q });
+  await out.reply(`${"para one. ".repeat(120)}${"para two. ".repeat(120)}`, { quote: q });
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0]!.quote, q);
   assert.ok(calls[0]!.text.length > 2000);

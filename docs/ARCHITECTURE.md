@@ -445,7 +445,7 @@ src/conversation/lang.ts  the voice reply's language check
 src/conversation/ledger.ts  wake/action ledger in the log: when a look is due
 src/conversation/markdown.ts  Markdown to Signal text styles
 src/conversation/messenger.ts  the app's meeting point with the chat platform
-src/conversation/outbound.ts  sending, echo guard, retry of a failed send
+src/conversation/outbound.ts  sending, echo guard, retry of a failed send, one message per paragraph
 src/conversation/ownercommands.ts  /stop /pause /resume /status /today /quiet /tasks
 src/conversation/queue.ts  bursts, one turn at a time per conversation
 src/conversation/quiet.ts  a conversation's `/quiet` switch
@@ -454,6 +454,7 @@ src/conversation/replay.ts  at start: finds what a restart lost, in every conver
 src/conversation/summarize.ts  the small model that summarises old log lines
 src/conversation/tenantremoval.ts  removeFriend with her voice-note index
 src/conversation/tenantrun.ts  a friend's turn: gates that need no model
+src/conversation/split.ts  a reply split at its blank lines: lead-in, list and the [[whole]] copy marker kept together
 src/conversation/voicereply.ts  the [[voice]] marker and voice option
 ```
 
