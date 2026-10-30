@@ -29,8 +29,8 @@ const registryFile = T.REGISTRY;
 const her = (id: string) => capabilitiesOf({ kind: "tenant", tenantId: id });
 const ownerOnly = new Set<string>(T.OWNER_ONLY);
 
-test("owner-only is exactly what the login alone gives: admin, profile, card, drive, login, stream", () => {
-  assert.deepEqual([...T.OWNER_ONLY].sort(), ["admin", "card", "drive", "login", "profile", "stream"]);
+test("owner-only is exactly what the login alone gives: admin, profile, card, drive, login", () => {
+  assert.deepEqual([...T.OWNER_ONLY].sort(), ["admin", "card", "drive", "login", "profile"]);
   assert.ok(T.OWNER_ONLY.every((c) => T.CAPABILITIES.includes(c)));
   assert.deepEqual(T.FRIEND_CAPABILITIES, T.CAPABILITIES.filter((c) => !ownerOnly.has(c)));
 });

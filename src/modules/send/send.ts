@@ -25,12 +25,6 @@ export type SendSink = (c: Content) => Promise<string>;
 
 const sinks = new Map<string, SendSink>();
 
-// TRIAL (capability `stream`, to be given to everyone and then deleted with the final-reply-only path): a chat turn that streams takes every top-level text block the model writes,
-// as it is written (agentrun.ts consume). Found by the conversation's key like the sink; only a turn that has the capability registers one.
-export type TextStream = (text: string) => Promise<void>;
-const streams = new Map<string, TextStream>();
-export const streamText = (key: string, text: string): Promise<void> => streams.get(key)?.(text) ?? Promise.resolve();
-
 // An unattended run's sink may have a GATE (heartbeat/look.ts): asked with each text before it is delivered, it returns what the model is told when the text is HELD instead (quiet hours,
 // the day's cap: heartbeat/notices.ts), or undefined to let it go. Tied to the run's own sink, so a chat turn of the same conversation (another sink) is never held.
 export type SendGate = (text: string, urgent: boolean) => string | undefined;
@@ -43,17 +37,14 @@ export function gateSink(key: string, gate: SendGate): void {
 // Around a conversation's turn: the sink is found by key while it runs (a warm process is built before its turn exists); afterwards the
 // turn's screenshots are removed.
 // A run that starts while another is under way (a heartbeat run during a chat turn) takes the sink over and gives it back when it ends.
-export async function withSend<T>(key: string, sink: SendSink | undefined, run: () => Promise<T>, asking?: Asking, stream?: TextStream): Promise<T> {
+export async function withSend<T>(key: string, sink: SendSink | undefined, run: () => Promise<T>, asking?: Asking): Promise<T> {
   const before = sinks.get(key);
-  const streamBefore = streams.get(key);
   if (sink) sinks.set(key, sink);
-  if (stream) streams.set(key, stream);
   if (asking) setAsking(key, asking); // who is asking in this turn (the voice tool records the requester)
   try {
     return await run();
   } finally {
     if (sink && sinks.get(key) === sink) (before ? sinks.set(key, before) : sinks.delete(key));
-    if (stream && streams.get(key) === stream) (streamBefore ? streams.set(key, streamBefore) : streams.delete(key));
     dropShots(key);
     if (asking) setAsking(key, undefined);
   }

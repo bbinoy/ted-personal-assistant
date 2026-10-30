@@ -52,7 +52,6 @@ const ALLOWED: { match: RegExp; by: By; reason: string }[] = [
   { match: /^block:setup$/, by: "conversation", reason: "capability (setup): what is not connected or set up is the owner's own installation; a group or a friend has no setup to walk through" },
   { match: /^(tools:|mcp:)/, by: "either", reason: "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes" },
   { match: /^(skills:|agents:expert-)/, by: "conversation", reason: "capability (the owner's whole plugin: mail, calendar, briefs, setup): a group or a friend gets the shared skills only, and an expert variant exists per skill" },
-  { match: /^(system:send|stream)$/, by: "conversation", reason: "trial, owner only; remove at rollout (capability stream: the send persona text says everything written is sent as it is written)" },
   // -- privacy (§5) and persona --
   { match: /^(settingSources|strictMcp)$/, by: "conversation", reason: "privacy (§5): only the owner's run loads her login's connectors and user settings; a group's and a friend's are isolated (strict MCP, no settings sources)" },
   { match: /^system:participation$/, by: "conversation", reason: "persona: only a group is told when to speak (participation); every conversation's prompt is built from the same templates (identity, capabilities, shared), the owner's, a group's and a friend's alike" },

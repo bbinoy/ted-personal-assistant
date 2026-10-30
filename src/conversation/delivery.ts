@@ -4,7 +4,7 @@ import { emitRecord } from "../core/events.ts";
 import type { Conversation, PipelineDeps, Turn, TurnResult } from "./conversationmodel.ts";
 import { shouldThread } from "./quote.ts";
 import { RunStopped } from "../run/ceiling.ts";
-import { withSend, type Content, type SendSink, type TextStream } from "../modules/send/send.ts";
+import { withSend, type Content, type SendSink } from "../modules/send/send.ts";
 import { splitReaction } from "../core/reaction.ts";
 import { scopeOf } from "../approvals/turnscope.ts";
 import { splitVoice, VOICE_FAILED_NOTE } from "./voicereply.ts";
@@ -15,7 +15,6 @@ import type { Quote } from "@ted-assistant/messenger";
 import { MAX_SPOKEN_CHARS, VoiceAbort } from "@ted-assistant/speech/tts";
 import { startDeadline } from "../core/deadline.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
-import { allows } from "../policy/capabilities.ts";
 import { causeOf, reportReconnect } from "../tenants/errors.ts";
 
 const VOICE_TIMEOUT_SECONDS = 75; // ONE deadline for a whole voice reply, from the start of the synthesis to the hand-over to the messenger; over it the reply goes out as text
@@ -133,26 +132,14 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
     return { state, send };
   }
 
-  // A reply or one text block of a streamed turn, by its markers: [[voice]] words, [[react: 👍]] with or without words, [[silent]] or nothing. `append`: a streamed turn's later
-  // parts add to what the judge is told the assistant said (the first replaces what an earlier turn said). Returns whether it reacted.
-  async function deliverText(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target">, more: boolean, append: boolean): Promise<boolean> {
+  // The final reply of a run, by its markers: [[voice]] words, [[react: 👍]] with or without words, [[silent]] or nothing.
+  async function deliverFinal(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target" | "reaction">): Promise<void> {
     const chosen = splitVoice(replied);
     const { reaction, text } = splitReaction(chosen.text);
-    const scope = scopeOf(conv.key); // each conversation has its own scope: the judge reads the next "yes" there against it
-    if (append) scope.assistantAdded(text);
-    else scope.assistantSaid(text);
-    await d.send({ kind: "text", text, voice: !!chosen.voice }, more);
-    if (!reaction || !t.target) return false;
-    await d.send({ kind: "reaction", emoji: reaction }, more);
-    return true;
-  }
-
-  // The final reply of a run. In a streamed turn the last text block was already delivered as it was written (`streamed`): it is not sent again.
-  async function deliverFinal(conv: Conversation, d: ReturnType<typeof delivery>, replied: string, t: Pick<Turn, "target" | "reaction">, streamed: readonly string[]): Promise<void> {
-    const flat = (s: string) => s.replace(/\s+/g, " ").trim();
-    const sentAlready = streamed.length > 0 && (!flat(replied) || flat(streamed.join(" ")).endsWith(flat(replied)));
-    const reacted = !sentAlready && (await deliverText(conv, d, replied, t, false, streamed.length > 0));
-    if (!reacted && !t.reaction && !d.state.reacted) status(conv, "✅", t.target); // a reaction the model already put on that message stays
+    scopeOf(conv.key).assistantSaid(text); // each conversation has its own scope: the judge reads the next "yes" there against it
+    await d.send({ kind: "text", text, voice: !!chosen.voice }, false);
+    if (reaction && t.target) await d.send({ kind: "reaction", emoji: reaction }, false);
+    else if (!t.reaction && !d.state.reacted) status(conv, "✅", t.target); // a reaction the model already put on that message stays
   }
 
   // "typing…" for a conversation, from the moment it is decided to answer (not when the model starts) until the reply is out.
@@ -215,20 +202,13 @@ export function createDelivery(deps: Pick<PipelineDeps, "messenger" | "out" | "n
     const d = delivery(conv, { ...turn, started }); // one for the whole turn: the tool sends and the final reply share its state
     // The `send` tool (send.ts): the same delivery as the final reply; none for a reaction or a wake-up. Its screenshots go when the turn ends.
     const sink: SendSink | undefined = background ? undefined : (c) => d.send(c, true);
-    // TRIAL (capability `stream`): every text block the model writes is delivered as it is written, by the same delivery as the final reply (agentrun.ts consume hands them over).
-    const streamed: string[] = [];
-    const stream: TextStream | undefined = background || !allows(conv, "stream") ? undefined : async (raw) => {
-      if (!raw.trim()) return;
-      streamed.push(raw);
-      await deliverText(conv, d, raw, turn, true, streamed.length > 1).catch((e) => console.error(`${conv.kind}: streamed text failed:`, (e as Error).message)); // (a failed send must not end the run)
-    };
     try {
       const by = turn.target?.author;
       const asking = { author: by, timestamp: turn.target?.timestamp, owner: conv.kind === "owner" || (!!by && deps.isOwner({ from: by, fromUuid: by })) };
-      const { text, costUsd } = await withSend(conv.key, sink, () => turn.run({ firstOutput: () => turn.timing?.mark("first") }), asking, stream);
+      const { text, costUsd } = await withSend(conv.key, sink, () => turn.run({ firstOutput: () => turn.timing?.mark("first") }), asking);
       turn.timing?.set("run", now() - started);
       console.log(`${conv.kind} replied (${text.length} chars${costUsd === undefined ? "" : `, $${costUsd.toFixed(4)}`})`);
-      await deliverFinal(conv, d, text, turn, streamed);
+      await deliverFinal(conv, d, text, turn);
       const sent = d.state;
       turn.timing?.mark("total");
       turn.timing?.report(); // before compaction: that runs after the reply and is not part of the wait
