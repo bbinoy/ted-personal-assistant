@@ -6,6 +6,8 @@
       "Bash(npm test)",
       "Bash(npm run check:secrets)",
       "Bash(npm run check:isolation)",
+      "Bash(npm run check:unused)",
+      "Bash(npm run gates)",
       "Bash(npm run doctor)",
       "Bash(git status:*)",
       "Bash(git diff:*)",

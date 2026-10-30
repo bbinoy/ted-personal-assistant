@@ -2,7 +2,7 @@
 
 ## Git hygiene
 
-**Commit messages** (checked by a `commit-msg` hook; a `pre-commit` hook runs `npm run check:secrets`; enable both once per clone with `npm run setup:hooks`):
+**Commit messages** (checked by a `commit-msg` hook; a `pre-commit` hook runs `npm run check:secrets`; a `pre-push` hook runs every gate, `npm run gates`; enable them once per clone with `npm run setup:hooks`):
 
 ```
 <type>(<optional scope>): <summary in the imperative, lower case, no full stop>
@@ -26,7 +26,7 @@
 **Branches**
 
 - Work on a branch and merge it with `git merge --no-ff`, so the branch stays visible as one unit in the history.
-- Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm run lint`, `npm test`, `npm run check:secrets`, `npm run check:isolation` and `npm run check:unused` all pass. `check:unused` runs knip (pinned in `tools/knip`, config `tools/knip/knip.jsonc`): an export, type, file or dependency nothing uses fails it, so drop the `export` of a symbol used only in its own file and delete dead code. A test counts as a user; a deliberate unused export goes into the config with the reason. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
+- Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm run lint`, `npm test`, `npm run check:secrets`, `npm run check:isolation` and `npm run check:unused` all pass (`npm run gates` runs them in order; the pre-push hook runs it). `check:unused` runs knip (pinned in `tools/knip`, config `tools/knip/knip.jsonc`): an export, type, file or dependency nothing uses fails it, so drop the `export` of a symbol used only in its own file and delete dead code. A test counts as a user; a deliberate unused export goes into the config with the reason. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
 - Behaviour that changes on purpose gets its fixture regenerated on purpose (`SNAPSHOT_WRITE=1 npm test`) and the diff reviewed.
 
 **Layout**

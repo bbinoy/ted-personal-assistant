@@ -8,6 +8,7 @@
     "typecheck": "tsc",
     "lint": "npm ci --prefix tools/lint --no-audit --no-fund --silent && node tools/lint/node_modules/eslint/bin/eslint.js -c tools/lint/eslint.config.js .",
     "check:unused": "npm ci --prefix tools/knip --no-audit --no-fund --silent && node tools/knip/node_modules/knip/bin/knip.js -c tools/knip/knip.jsonc",
+    "gates": "npx tsc --noEmit --noUnusedLocals && npm run lint && npm test && npm run check:secrets && npm run check:isolation && npm run check:unused",
     "test":"HARNESS_DATA_DIR=$(mktemp -d) node --conditions=workspace-source --import ./test/setup.ts --test test/*.test.ts packages/*/test/*.test.ts",
     "report": "node --conditions=workspace-source --env-file-if-exists=.env src/cli.ts report",
     "restore": "node --conditions=workspace-source --env-file-if-exists=.env src/cli.ts restore",

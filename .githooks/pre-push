@@ -1,0 +1,5 @@
+#!/bin/sh
+# Refuses a push unless every gate passes (npm run gates: typecheck, lint, tests, secrets, isolation, unused code; CONTRIBUTING.md).
+# It checks the working tree, so commit or stash what you do not mean to push. Enable once per clone: npm run setup:hooks
+cd "$(dirname "$0")/.." || exit 1
+exec npm run --silent gates
