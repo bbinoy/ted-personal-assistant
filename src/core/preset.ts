@@ -95,7 +95,7 @@ export const PROMPTS = {
   unprompted: [],
   routine: [],
   sources: [],
-  send: [],
+  send: ["stream"],
   reactions: ["who"],
   voice: ["own", "group"],
   summary: [],

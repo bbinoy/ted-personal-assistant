@@ -128,7 +128,7 @@ function systemFor(conv: Pick<Conversation, "kind">, caps: ReadonlySet<Capabilit
       participation: group ? PARTICIPATION : "",
       sources: say("sources"),
       reactions: say("reactions", { who: own ? OWNER : group ? "the sender" : who }),
-      send: `${say("send")}${voiceRule(conv, caps)}`,
+      send: `${say("send", { stream: caps.has("stream") })}${voiceRule(conv, caps)}`,
       writes: own || caps.has("google"),
       channel: own ? (settings.signalOwnAccount && settings.signalOwnAccount !== settings.signalOwnerNumber ? `you talk to ${OWNER} in your own Signal chat` : `you talk to ${OWNER} in Signal's Note to Self (it is their own account's chat with themselves)`) : "",
     }),
