@@ -15,7 +15,8 @@ import { reminderFacts } from "../tasks/remind.ts";
 import { meetingFacts } from "../tasks/meetings.ts";
 import { tasksFacts } from "../tasks/render.ts";
 import { activeItems } from "../tasks/store.ts";
-import { markStarted, markTold, planRoutine, readRecord, routineFacts, routineStatus, settleRoutines } from "../tasks/routines.ts";
+import { mailSlot } from "../modules/index.ts";
+import { markOwed, markStarted, markTold, planRoutine, readRecord, routineFacts, routineStatus, settleRoutines } from "../tasks/routines.ts";
 import { capabilitiesOf } from "../policy/capabilities.ts";
 import { whereaboutsFact } from "./whereabouts.ts";
 import { failingLooksFact, takeHeld, type Held } from "./notices.ts";
@@ -139,7 +140,11 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
   // (`busy`), and the record says started, so no second look runs it.
   const started = new Set<string>();
   const finished = new Set<string>();
-  let selfMailed = 0; // routine emails sent to the owner (Gmail send_message, Mailbird's self briefing): like a send, they cannot be taken back
+  // A routine whose delivery REQUIRES a channel is complete only when that channel went out: the brief's email, by the mail provider's send-to-self tool (modules MailSlot.brief.tool; the skill's delivery line tells the run to use it).
+  // Code looks at the run's successful tool calls (an expert's too); a routine that ended without it is failed and owes the email, so the retry path runs it again (routines.ts markOwed).
+  const emailTool = looker.own && looker.mail ? mailSlot()?.brief.tool() : undefined;
+  const emailed = (r: { instruction: string }): boolean => !!emailTool && /daily-brief/.test(r.instruction);
+  let selfMailed = 0; // routine emails sent to the owner: like a send, they cannot be taken back
   const { routines: ownRoutines, broken } = scheduledIn({ notesDir: conv.notesDir, zone, now });
   const routines = attended ? undefined : routineFacts(conv.convId, ownRoutines.filter((r) => !isBusy(conv.key, `routine:${r.name}`)), now, zone, { catchUpHours: ROUTINE_CATCHUP_HOURS, who: looker.who, approvals: openCount(conv.key), });
   const routineNames = [...(routines?.due ? [routines.due.routine.name] : []), ...(routines?.told ?? [])];
@@ -166,7 +171,7 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
       const args = (input ?? {}) as { subagent_type?: unknown };
       const due = routines?.due?.routine;
       if (due && (tool === "Agent" || tool === "Task") && typeof args.subagent_type === "string" && started.has(due.name) && resultText(response).trim()) finished.add(due.name); // the expert came back with a result (a run that ran out of turns has none)
-      if (tool === "mcp__claude_ai_Gmail__send_message" || tool === "mcp__mailbird__send_self_briefing") selfMailed++;
+      if (emailTool && tool === emailTool) selfMailed++;
     },
     done: (end) => {
       if (settled) return;
@@ -177,6 +182,8 @@ export function factsFor(conv: Conversation, now: Date, attended: boolean): Fact
         if (end.ended) held.done(); // (a failed or called-off run leaves the held posts for the next one)
         const due = routines?.due?.routine.name;
         if (due && !end.ended) finished.delete(due); // (a routine's message is the look's answer: a look that failed or was called off leaves it for the retry)
+        const owing = routines?.due && emailed(routines.due.routine) && started.has(routines.due.routine.name) && !selfMailed ? routines.due.routine.name : undefined;
+        if (owing) (finished.delete(owing), markOwed(conv.convId, owing, "email", end.said || (end.sends ?? 0) > 0)); // (the chat may have gone out already: the retry owes only the email)
         settleRoutines(conv.convId, started, finished, { calledOff: abandoned, sends }, Date.now());
         if (routines?.told.length && end.ended && !abandoned) markTold(conv.convId, routines.told);
         if (handed.length && (!attended || end.said)) afterLook(conv, handed, { posted: end.said, held: !!end.held }, Date.now(), zone);

@@ -15,7 +15,7 @@ let draftReader: ((messageId: number) => Promise<DraftView | undefined>) | undef
 export const setDraftReader = (fn: typeof draftReader) => void (draftReader = fn);
 
 const mail: MailSlot = {
-  brief: { how: () => "Deliver the full brief by email with the Mailbird send_self_briefing tool, exactly once, with the subject the skill names (never its default subject)." },
+  brief: { tool: () => `${MB}send_self_briefing`, how: () => "Deliver the full brief by email with the Mailbird send_self_briefing tool, exactly once, with the subject the skill names (never its default subject)." },
   chat: { skill: "ted-personal-assistant:mailbird", name: "Mailbird", find: "get_message with its id if you know it, else look in the drafts", send: "send_message_now with messageId and confirm true", edit: "update_draft" },
   readBack: async (kind, input) => {
     const id = Number(input.messageId);

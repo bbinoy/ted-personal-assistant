@@ -32,7 +32,7 @@ const briefHow = (): string =>
     : `${BRIEF_GMAIL} Do not deliver by email: your final answer is the whole brief itself, in the skill's format.`;
 
 const mail: MailSlot = {
-  brief: { how: briefHow },
+  brief: { how: briefHow, tool: () => (settings.briefEmail && settings.mailSelfAddress ? `${GMAIL_PREFIX}send_message` : undefined) },
   chat: { skill: "ted-personal-assistant:gmail", name: "Gmail", find: "its id is the draftId", send: "send_message with that draftId, or reply / forward with the exact text", edit: "update_draft" },
   readBack: async (kind, input) => {
     if (kind === "gmSend" && typeof input.draftId === "string" && readers) return readers.draft(input.draftId).catch(() => undefined);

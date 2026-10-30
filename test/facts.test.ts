@@ -97,6 +97,7 @@ test("routines: a chat turn sees their status and never starts one; the look is 
   look.onDelegate("expert-daily-brief");
   assert.equal(readRecord(conv.convId, "routine-daily-brief")?.status, "started");
   assert.match(F.factsFor(conv, at, true).status.join("\n"), /routine-daily-brief: a look started it/, "the chat turn sees it running");
+  look.onTool("mcp__mailbird__send_self_briefing", {}); // (the brief's email: a required part of the routine)
   look.onTool("Agent", { subagent_type: "expert-daily-brief" }, { content: [{ type: "text", text: "the brief" }] });
   look.done({ ended: true, said: true });
   assert.match(F.factsFor(conv, at, true).status.join("\n"), /routine-daily-brief: delivered/, "and then that it went out");
