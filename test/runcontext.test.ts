@@ -31,6 +31,27 @@ test("a turn's cost: the delta inside one session, the whole total when the sess
   assert.equal((await consume(stream(result("B", 0.25)), opts, 0.75)).costUsd, 0.25, "a total below the last one: the total");
 });
 
+const asst = (id: string, usage: object, model = "m1") => ({ type: "assistant", message: { id, model, content: [], usage } });
+const withUsage = (total: number, session = "H") => ({ ...result(session, total), modelUsage: { m1: { inputTokens: 0, outputTokens: 100, cacheReadInputTokens: 1_000_000, cacheCreationInputTokens: 0, costUSD: total } } });
+
+test("a resumed session whose total carries its history (new id, stored total lost): the turn's own usage is priced, not the total", async () => {
+  writeSession(conv.convId, { sessionId: "A", costUsd: 0 });
+  // history: 1M cache-read + 100 output = 100500 weighted; this query: 100k cache-read = 10000 weighted, twice in one message id (counted once)
+  const spentBefore = spentToday();
+  const turn = asst("a1", { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 100_000 });
+  const r = await consume(stream(turn, turn, withUsage(82.5)), { ...opts, maxBudgetUsd: 10 }, 0);
+  assert.ok(r.costUsd > 7 && r.costUsd < 9, `about a tenth of the total, got ${r.costUsd}`);
+  assert.ok(Math.abs(spentToday() - spentBefore - r.costUsd) < 1e-5, "charge() and the returned cost agree");
+});
+
+test("an out-of-range figure with no usage to price is capped, logged and audited", async () => {
+  writeSession(conv.convId, { sessionId: "A", costUsd: 0 });
+  const before = spentToday();
+  const r = await consume(stream(result("A", 82.5)), opts, 0);
+  assert.equal(r.costUsd, 1, "the run's budget cap");
+  assert.equal(spentToday() - before, 1);
+});
+
 test("charge: a negative or empty amount is never recorded", () => {
   const before = spentToday();
   charge(LOGIN, -0.7368);

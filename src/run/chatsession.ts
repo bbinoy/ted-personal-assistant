@@ -11,6 +11,7 @@ import type { Source } from "../core/audit.ts";
 import { auditSource, type Who } from "../core/runkind.ts";
 import { planSession, type ChatSession, type CompactMode } from "./session.ts";
 import { settings } from "../core/settings.ts";
+import { turnCost } from "./turncost.ts";
 import { forgetShown } from "./turncontext.ts";
 
 // Every conversation (the owner's chat, each group, each friend) persists across restarts, with the hygiene rules in
@@ -27,6 +28,7 @@ export interface Resume {
 const COMPACT_GROWTH_TOKENS = 100_000; // the conversation itself (context minus tools, skills and prompts) this big: compact afterwards, owner and groups alike
 const COMPACT_TOKENS = 150_000; // fallback for a session saved before the baseline was recorded: a turn this big: compact afterwards (tools and skills alone are ~50k)
 const COMPACT_QUIET_MINUTES = 5; // a grown conversation is compacted in the background once its last turn is this old
+const COMPACT_MAX_USD = 1; // a compaction never costs more than this (turncost.ts)
 const COMPACT_MAX_MINUTES = 10; // a compaction that takes longer is abandoned (the failure backoff in session.ts applies)
 const chatPlanOpts = (mode: CompactMode) => ({ compactTokens: COMPACT_TOKENS, compactGrowth: COMPACT_GROWTH_TOKENS, quietMinutes: COMPACT_QUIET_MINUTES, mode });
 
@@ -82,7 +84,7 @@ async function compactChatIfNeeded(conv: ConvId, who: Who, notesDir: string | un
         observe(payer, message);
         if (message.type === "assistant" && message.error) lastError = message.error;
         if (message.type !== "result") continue;
-        charge(payer, message.total_cost_usd - saved.costUsd, "compact");
+        charge(payer, turnCost(message.total_cost_usd, saved.costUsd, COMPACT_MAX_USD).usd, "compact"); // (the same sanity bounds as a turn)
         if (!boundary) {
           // A compaction that failed is reported like any other call on its payer (errors.ts failure: the cooldown, the owner's one notice about a refused instance key).
           const refused = failure(lastError, message.subtype, payer);
