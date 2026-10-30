@@ -170,7 +170,7 @@ The only per-kind differences are the rows of `WAYS` next to the chain in `intak
 |---|---|---|
 | who may do what | commands by capability: the owner has all, a friend all but `admin`/`card` | the group's capabilities: `/stop`, `/quiet`, `/tasks`, no owner commands |
 | the answer (`forUs`, `mayAnswer`, `decide`) | always | when addressed (tagged or quoted, then sticky for 30 minutes), else when the gate says act; not while paused or over the day's budget |
-| who is heard (`everyone`, `vouch`, `optionalPictures`) | every sender gets a read receipt and a reason for an unusable voice message or picture | only someone who spoke to us; the owner must be a member; a picture is opened only when it can be answered |
+| who is heard (`everyone`, `vouch`, `optionalPictures`) | every sender gets a read receipt and a reason for an unusable voice message or picture | only someone who spoke to us; the group's sponsor (the owner, or an active friend whose capabilities allow groups, recorded on the group) must be a member; a picture is opened only when it can be answered |
 | history (`recorded`, `say`) | `owner`, the words as written | `member`, each line starts with its speaker |
 | the turn (`turn`) | the burst's messages as one prompt; a reaction is a quiet turn of its own | the group's recent log, fenced, with the addressed message named; a reaction is chatter like any other |
 | delivery (on the `Conversation`) | `target` none or the friend, no forced thread | `target` the group, `threadAlways` |
