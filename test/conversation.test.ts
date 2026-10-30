@@ -1024,7 +1024,7 @@ test("owner chat: /stop aborts the running turn at once, says Stopped. and no 's
   assert.equal(r.sent.at(-1)!.text, "Resumed.");
   assert.equal(isPaused(), false);
   await pipeline.handleIncoming(owner(), msg({ text: "/status", timestamp: 304 }));
-  assert.match(r.sent.at(-1)!.text, /^Running \(not paused\)\.\nBudget today: \$/);
+  assert.match(r.sent.at(-1)!.text, /^Running \(not paused\)\.\nSpend today: \$/);
   assert.equal(prompts, 1);
 });
 

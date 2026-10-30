@@ -1,8 +1,6 @@
-import { overBudget } from "../core/budget.ts";
 import { takeCapNotice } from "../core/capnotice.ts";
 import { MAX_HELD, holdFact } from "../core/ownerfact.ts";
 import type { Conversation, Pipeline } from "../conversation/conversation.ts";
-import { owner } from "../conversation/conversationmodel.ts";
 import { OWNER, settings } from "../core/settings.ts";
 import { convDb, damagedConvs, peekConvDb } from "../core/convdb.ts";
 import { dayIn, inQuietHours, timeIn } from "../core/timezone.ts";
@@ -12,10 +10,8 @@ import { zoneOf } from "../tenants/tenants.ts";
 import { emit } from "../core/events.ts";
 import { auditSource } from "../core/runkind.ts";
 
-// What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Three small, separate mechanisms, all pure planners over a little state:
-//   1. the budget notice: the day's budget is spent and background work stops until midnight. Said ONCE a day (budget.ts overBudget), in the owner's chat, as a fixed text: over budget no model
-//      run is possible (CLAUDE.md allows exactly this). It waits for the end of quiet. It is the ONE fixed text to the owner: every other system matter (the damaged database (1b), the shared key,
-//      the friends' daily cap) is a FACT for her next run (core/ownerfact.ts holdFact), which says it in its own words.
+// What the owner is TOLD when things go wrong or go quiet, and what code keeps back from her at night. Small, separate mechanisms, all pure planners over a little state:
+//   1. system matters (the damaged database (1b), the shared key, spend warnings) are a FACT for her next run (core/ownerfact.ts holdFact), which says it in its own words; there is no fixed text to her.
 //   2. looks that fail: no message at all. A group's or a friend's go to the log and the doctor; the owner's own become a FACT for her next look after a long awake stretch (below).
 //   3. quiet hours, /quiet and the day's cap, in code: an unprompted heartbeat post inside the quiet window (or while the conversation's own /quiet is on), or past MAX_UNPROMPTED_PER_DAY, is HELD
 //      (state, per conversation). Code never words it again: when quiet is over (and the cap has room) the conversation's next look is due at once and gets everything held as facts (takeHeld, look.ts),
@@ -188,30 +184,7 @@ export function dropUnreachable(conv: Conversation): void {
   emit({ type: "notice", state: "dropped", conv: conv.key, text: `Dropped ${n} held message(s): this conversation has no look`, source: auditSource({ who: conv.kind, attended: false }) });
 }
 
-// ---- the owner's notices ----
-
-let send: ((text: string) => void) | undefined;
-export const ownerNotices = {
-  sendTo: (fn: ((text: string) => void) | undefined): void => void (send = fn), // main.ts: the owner's chat
-};
-
-// A fixed text to the owner's chat now. Never throws.
-function noticeOwner(text: string): void {
-  try {
-    send?.(text);
-  } catch (e) {
-    console.error("notices: could not tell the owner:", (e as Error).message);
-  }
-}
-
-// 1. The budget: once a day, from the tick (wake.ts), when the day's spend has reached the ceiling.
-export const budgetText = (): string => `Daily budget of $${settings.dailyBudgetUsd} reached, background work paused until midnight. To lift it today, raise DAILY_BUDGET_USD in .env and restart.`;
-export function noticeBudget(now: Date = new Date()): boolean {
-  if (holdingNow(owner(), now)) return false; // (not asked, so the day's one notice is not used up: it comes when quiet is over)
-  const b = overBudget(); // (the only caller: asking elsewhere never uses up the day's one notice)
-  if (b.firstTime) noticeOwner(budgetText());
-  return b.firstTime;
-}
+// ---- the owner's notices (all facts for her next run, never a fixed text) ----
 
 // 1b. A conversation's database (assistant.db, core/convdb.ts) was damaged and set aside: once a day, until a person looks (npm run doctor says which file and what to do), as a fact for the owner's next run.
 // Chat in it goes on with a fresh start; its background work is stopped (payer.ts mayRun). Returns how many facts it made.

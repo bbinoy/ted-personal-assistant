@@ -91,7 +91,7 @@ function rig(o: { key?: string | undefined; answer?: (c: Conv) => { message?: st
     tenantIds: () => o.ids ?? created,
     notesChangedAt: () => 0,
     now: () => now,
-    guards: { paused: () => false, budgetSpent: () => false },
+    guards: { paused: () => false },
   });
   return { wakeups, seen, alerts };
 }
@@ -143,7 +143,7 @@ test("with the wake-ups switched off, with TENANTS off, or while not active: no 
   assert.equal(allows(owner(), "login"), true);
 });
 
-test("a tenant's suspension, cooldown, budget and a missing instance key each stop her look before any model call", async () => {
+test("a tenant's suspension, cooldown and a missing instance key each stop her look before any model call", async () => {
   const anna = person("Anna2");
   note(anna);
   const sus = rig();
@@ -155,12 +155,11 @@ test("a tenant's suspension, cooldown, budget and a missing instance key each st
   const cool = rig();
   assert.equal(await cool.wakeups.look(tenant(anna.id), NOON), "cooldown");
   resetCooldown();
-  on.instanceKeyDailyUsd = 50; // the key's day is what stops a friend
+  on.instanceKeyDailyUsd = 50; // the key's day only warns the owner: a friend over it still gets her look
   recordCost(100, T.tenantContext(anna).ledger);
   const rich = rig();
-  assert.equal(await rich.wakeups.look(tenant(anna.id), NOON), "blocked");
+  assert.notEqual(await rich.wakeups.look(tenant(anna.id), NOON), "blocked");
   on.instanceKeyDailyUsd = 1e9;
-  assert.equal(rich.seen.runs.length, 0, "no run");
   // no instance key: no run, one notice for the admin however many tenants and ticks
   const bea = person("Bea");
   note(bea);
@@ -235,7 +234,7 @@ test("quiet-time compaction of a tenant needs her to be active and her access; i
       compact: { due: () => true, run: async (c) => void ran.push(c.tenantId ?? c.kind) },
       notesChangedAt: () => 0,
       now: () => NOON,
-      guards: { paused: () => false, budgetSpent: () => false },
+      guards: { paused: () => false },
     });
     return w;
   };

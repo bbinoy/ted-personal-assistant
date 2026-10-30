@@ -196,8 +196,7 @@ test("tenant browse: the worker gets no saved profile and no card, whatever is o
   assert.ok(guard);
   assert.equal(guard.cardInfo(), undefined);
   assert.deepEqual(guard.profileKeys(), []);
-  assert.match(startRefusal({ mode: "group", spent: () => true }, Date.now(), { ok: true, cli: "cli.js", exe: "chrome" })!, /daily spend limit/);
-  assert.equal(startRefusal({ mode: "group", spent: () => false }, Date.now(), { ok: true, cli: "cli.js", exe: "chrome" }), undefined, "her ledger decides, not the instance's");
+  assert.equal(startRefusal({ mode: "group" }, Date.now(), { ok: true, cli: "cli.js", exe: "chrome" }), undefined, "no spend limit stops a browse run");
   const run = tenantRunOptions(ann, KEY).tenant!;
   assert.equal(browseRunOptions(new BrowseGuard({ mode: "group", task: "x", outDir }), run).tenant, run, "her browse worker runs on her key too");
   assert.equal(browseRunOptions(new BrowseGuard({ mode: "owner", task: "x", outDir })).tenant, undefined);

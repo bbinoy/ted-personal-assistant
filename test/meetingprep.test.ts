@@ -377,7 +377,7 @@ test("the owner's look is handed the claimed meeting as a fact and says it: a po
     run: async (_c: unknown, _p: unknown, build: (s?: string) => { prompt: string }, extra: { facts?: { status: string[]; blocks: string[] } }) => (prompts.push(told(build, extra)), { text: answer, structured: { message: answer, nextCheckMinutes: 60, urgent: true } }),
     notesChangedAt: () => 0,
     now: () => new Date(NOW),
-    guards: { paused: () => false, budgetSpent: () => false },
+    guards: { paused: () => false },
   });
   reset();
   record([raw("m1", NOW + 15 * MIN)]);

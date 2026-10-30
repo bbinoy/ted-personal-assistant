@@ -86,7 +86,7 @@ export function statusText(f: StatusFacts): string {
   return [
     f.pause ? `Paused: ${f.pause}.` : "Running (not paused).",
     ...(f.quiet ? [`Quiet: ${f.quiet} (held items are looked at again when it ends).`] : []),
-    f.damaged ? "Ledger damaged (instance/instance.db): background work and payments are off, chat works. See `npm run doctor`." : `Budget today: $${f.spentUsd.toFixed(2)} of $${f.limitUsd}${f.spentUsd >= f.limitUsd ? " (reached, background work is paused)" : ""}.`,
+    f.damaged ? "Ledger damaged (instance/instance.db): background work and payments are off, chat works. See `npm run doctor`." : `Spend today: $${f.spentUsd.toFixed(2)} (first warning at $${f.limitUsd}).`,
     f.lastLook ? `Last look: ${timeIn(f.lastLook.at, f.zone)} (${f.lastLook.outcome}).` : "Last look: none yet.",
     `Open approvals: ${f.approvals}.`,
     ...(f.nextReminder !== undefined ? [`Next reminder: ${f.nextReminder || "none"}.`] : []),

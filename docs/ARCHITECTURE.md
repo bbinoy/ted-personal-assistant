@@ -131,9 +131,9 @@ What a message and a look differ in is one table, `TRIGGERS` in `runoptions.ts`,
 - `persona/*.md` holds every prompt as a template filled by `src/run/persona.ts`. One builder (`systemFor`) renders the same templates for the owner, a group and a friend, and an expert gets the same capability rules: `identity.md` (who, style, and the privacy lines of someone else's chat), `capabilities.md` (skills, approvals, honesty, the untrusted-content rule once), `shared.md` (memory, learning from corrections, looking things up), `routine.md`, `tasks.md`, `background.md` and `delegate.md`. A conversation differs only by data: its capabilities, who it is, and the closed list of differences. The mail provider's words for drafting and sending are data on its module (`MailSlot.chat`), filled into one sentence.
 - A preset changes how Ted talks and when it wakes, never what it may do: policy, the approval path, isolation and payments stay in code.
 
-**Who pays and may it run** (`src/tenants/payer.ts`). `mayRun(conversation, what)` answers a `Payer` or a refusal (`paused`, `inactive`, `no-key`, `cooldown`, `budget`, `damaged`) for every model call.
+**Who pays and may it run** (`src/tenants/payer.ts`). `mayRun(conversation, what)` answers a `Payer` or a refusal (`paused`, `inactive`, `no-key`, `cooldown`, `damaged`; never for money) for every model call.
 
-- The owner and groups pay with the login (`DAILY_BUDGET_USD`); a friend with the instance key `TENANT_ANTHROPIC_API_KEY` and her own spend rows; the judge always with the login.
+- The owner and groups pay with the login; a friend with the instance key `TENANT_ANTHROPIC_API_KEY` and her own spend rows; the judge always with the login. Spend only warns the owner (`DAILY_BUDGET_USD` and `INSTANCE_KEY_DAILY_USD` are the first warning levels, then every $5 more; `warnSpend` in `src/core/budget.ts`), it never pauses or refuses.
 - After a usage-limit refusal `src/core/cooldown.ts` pauses that payer's background calls; chat turns never wait.
 
 **Run gate and lease.**
@@ -169,7 +169,7 @@ The only per-kind differences are the rows of `WAYS` next to the chain in `intak
 | row | private chat | group |
 |---|---|---|
 | who may do what | commands by capability: the owner has all, a friend all but `admin`/`card` | the group's capabilities: `/stop`, `/quiet`, `/tasks`, no owner commands |
-| the answer (`forUs`, `mayAnswer`, `decide`) | always | when addressed (tagged or quoted, then sticky for 30 minutes), else when the gate says act; not while paused or over the day's budget |
+| the answer (`forUs`, `mayAnswer`, `decide`) | always | when addressed (tagged or quoted, then sticky for 30 minutes), else when the gate says act; not while paused |
 | who is heard (`everyone`, `vouch`, `optionalPictures`) | every sender gets a read receipt and a reason for an unusable voice message or picture | only someone who spoke to us; the group's sponsor (the owner, or an active friend whose capabilities allow groups, recorded on the group) must be a member; a picture is opened only when it can be answered |
 | history (`recorded`, `say`) | `owner`, the words as written | `member`, each line starts with its speaker |
 | the turn (`turn`) | the burst's messages as one prompt; a reaction is a quiet turn of its own | the group's recent log, fenced, with the addressed message named; a reaction is chatter like any other |
@@ -191,7 +191,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **The tick** (`src/heartbeat/heartbeat.ts`). Every `rhythm.heartbeat.everyMinutes` (preset) a free timer starts independent jobs, each in its own try/catch: `wake`, `dream` (`dreamTrigger`) and `retention` (`retentionTrigger`, once a day from 03:30). It writes the `heartbeat` row of `kv` for `npm run doctor`. Each `wake` tick, for the owner, every vouched group and every active friend:
 
-1. Budget and damage notices (`noticeBudget`, `noticeDamaged`); idle databases are closed.
+1. Damage notices (`noticeDamaged`); idle databases are closed.
 2. Reminders (`fireReminders`): every conversation with tasks and a database, whatever its look switches say.
 3. Held posts of a conversation with no look are dropped (`dropUnreachable`).
 4. Quiet compaction of a grown, quiet session; meeting claims (`claimPreps`).
@@ -234,7 +234,7 @@ A look is a conversation's only proactive path (`src/heartbeat/look.ts`, started
 
 **Quiet hours and the cap** (`src/heartbeat/notices.ts`). A post inside the quiet window (`QUIET_HOURS`, 22:00-07:00 by default, in the conversation's zone), during `/quiet`, or past `MAX_UNPROMPTED_PER_DAY` (6) is held (`submitPost`) unless the run marked it `urgent`.
 
-- Code never rewrites a held post. The one fixed text to the owner is the daily budget notice (once a day, not during quiet: over budget no run is possible). Every other system matter (the shared key, the friends' daily cap, a damaged database) is a fact for her next run (`holdFact`, `src/core/ownerfact.ts`): the model says it in its own words, and `takeCapNotice` throttles how often it is raised.
+- Code never rewrites a held post. There is no fixed text to the owner. Every system matter (the shared key, the spend warnings, a damaged database) is a fact for her next run (`holdFact`, `src/core/ownerfact.ts`): the model says it in its own words, and `takeCapNotice` throttles how often it is raised.
 - People Ted cannot run a model for right now (a spent day, a cooldown, no key) get a short fixed line from ONE table, `refusal(reason, audience)` in `src/tenants/errors.ts`, the same for a group and a friend and throttled by the same `takeCapNotice` (`refusalOnce`: a ceiling once a day, a cooldown or a missing key every `TENANT_NOTICE_MINUTES`). A run that merely failed (timeout, connector, other) gets one line for a group or a friend, "⚠️ Something went wrong, try again." (no cause: the log and `npm run doctor` say it); the owner's own failure notices keep their text because they end with the one step she must take.
 
 **Routines** (`src/tasks/routines.ts`, `src/modules/tasks/routinelist.ts`). One mechanism for everything the assistant does at set times: a routine is a name, a repeat rule (`src/tasks/repeat.ts`, the grammar tasks use) and what to do. Code computes "is it due" and "was it done"; the model does the work. There is one source, the routine note; no skill schedules itself.
@@ -684,7 +684,7 @@ The bottom: settings, state, events, databases, gate, leaves.
 src/core/agentstart.ts  start guard: layout, instance.db
 src/core/audit.ts  the audit writer
 src/core/brief.ts  the clock line of unattended prompts
-src/core/budget.ts  spend ledger and daily budget
+src/core/budget.ts  spend ledger and spend warnings
 src/core/callkey.ts  identity of a tool call
 src/core/capnotice.ts  the instance-wide notice throttle (takeCapNotice, over told.ts) and the friends' cap fact
 src/core/until.ts  the one "until" value of /pause and /quiet: parse, test, words

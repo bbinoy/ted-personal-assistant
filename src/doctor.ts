@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { ROOT } from "./core/paths.ts";
-import { keySpentToday, spentToday } from "./core/budget.ts";
+import { keySpentToday, nextWarning, spentToday } from "./core/budget.ts";
 import { lastLookAt, readRows, type HeartbeatRow } from "./core/looks.ts";
 import { HEARTBEAT_KEY } from "./heartbeat/heartbeat.ts";
 import { ZONE_KEY, type ZoneRecord } from "./heartbeat/whereabouts.ts";
@@ -204,7 +204,7 @@ export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefi
   const count = (s: string) => all.filter((t) => t.status === s).length;
   line(true, "tenants", `${all.length} (${count("active")} active, ${count("suspended")} suspended); ${openRequests(now).length} registration request(s) waiting for your answer`);
   const keySpent = keySpentToday();
-  line(keySpent < settings.instanceKeyDailyUsd, "instance key spend", `$${keySpent.toFixed(2)} of $${settings.instanceKeyDailyUsd} today, all friends together`);
+  line(true, "instance key spend", `$${keySpent.toFixed(2)} today, all friends together; nothing is paused, the next warning is at $${nextWarning(keySpent, settings.instanceKeyDailyUsd)} (INSTANCE_KEY_DAILY_USD is the first level)`);
   for (const rec of all) {
     const ctx = tenantContext(rec);
     const spent = spentToday(ctx.ledger);
@@ -478,7 +478,7 @@ export async function doctor() {
   line(true, "heartbeat run", `every conversation's look (owner, groups, friends with wake) at its chat and what it can read, on ${settings.heartbeatModel}, about every ${settings.heartbeatDayMinutes} min in the day (npm run heartbeat-report)`);
 
   const spent = spentToday();
-  line(spent < settings.dailyBudgetUsd, "daily spend guard", `$${spent.toFixed(2)} of $${settings.dailyBudgetUsd} today (notional)${spent < settings.dailyBudgetUsd ? "" : `: background work is paused until midnight; to change it set DAILY_BUDGET_USD in .env and restart`}`);
+  line(true, "daily spend", `$${spent.toFixed(2)} today on the login (notional); nothing is paused, the next warning is at $${nextWarning(spent, settings.dailyBudgetUsd)} (DAILY_BUDGET_USD is the first level)`);
   line(isPaused() ? "warn" : true, "not paused", isPaused() ? `${pauseText() ?? "paused"}; to resume say /resume in your chat` : "");
   const cardOff = killSwitch.off();
   const unconfirmed = new Ledger().rows().filter((r) => r.status === "unconfirmed").length;

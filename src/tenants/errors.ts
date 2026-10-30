@@ -44,7 +44,7 @@ export const FIXES: Readonly<Record<Cause, { what: string; fix: string }>> = {
 // Fixed texts, on purpose (CLAUDE.md §4): only for people for whom no model run is possible at that moment (a refused key or login, a spent day, a cooldown, no key), and the owner's own
 // failure notices, which end with the one step she must take (FIXES). A run that merely failed (timeout, connector, reconnect, other) gets one short line to a group or a friend
 // (FAILED): no model can say it, and they have nothing to do but ask again; the log and `npm run doctor` say the cause. Short and kind. A day's ceiling (the owner's budget or the shared key's, a group's or a friend's own) is said once a day, the others every 30 minutes (refusalOnce).
-export type Reason = Cause | "owner-budget" | "shared-budget" | "cooldown" | "no-key";
+export type Reason = Cause | "cooldown" | "no-key";
 export interface RefusalFacts {
   until?: string; // a cooldown: when it ends, as a clock time
   limit?: number; // a friend's own day: her ceiling
@@ -61,8 +61,6 @@ const REFUSALS: Readonly<Record<Reason, Readonly<Partial<Record<Audience, Say>>>
   connector: { owner: `A connector I need (Notion, Calendar or Gmail) did not answer. ${FIXES.connector.fix}`, group: FAILED, friend: FAILED },
   reconnect: { group: FAILED, friend: FAILED }, // (the owner is not told in chat: reportReconnect holds a fact for her next look, and `npm run doctor` lists who)
   other: { owner: `Something broke on my end and I don't know the cause. Check the logs: ${FIXES.other.fix}`, group: FAILED, friend: FAILED },
-  "owner-budget": { group: `I've used up my budget for today, so I can't answer until tomorrow. ${OWNER} can raise it if it is urgent.` },
-  "shared-budget": { friend: "I've hit today's shared limit, so I'm resting until tomorrow. Your message is saved.", group: "I've hit today's limit for this group, so I'm resting until tomorrow." }, // (a group a friend sponsors, billed to her)
   cooldown: { group: (o) => `I'm paused for a while. I'll try again around ${o.until}.`, friend: (o) => `I'm paused for a while (a usage limit, a billing problem or a refused request on the account I run on). I'll try again around ${o.until}.` },
   "no-key": { friend: `I'm not set up for friends yet, so I can't reply for now. I've let ${OWNER} know.` },
 };

@@ -1,4 +1,3 @@
-import { budgetSpent } from "../core/budget.ts";
 import { editNote } from "./edit.ts";
 import { fence } from "../core/fence.ts";
 import { reactionJournal } from "../core/reaction.ts";
@@ -116,10 +115,10 @@ export type Runner = (build: TurnBuilder, ctx: { conv: Conversation; now: Date; 
 // Why this group cannot be answered now, from its payer (payer.ts): a group on the owner's login waits for her day's budget; a group a friend sponsors has her gates (the key, its cooldown, her day).
 // `reason` is what a member who addressed us is told (errors.ts refusals: nothing for a reason without a text). undefined: it may run.
 function held(conv: Conversation, now: number): { reason?: Reason; until?: string } | undefined {
-  if (!conv.sponsor) return budgetSpent() ? { reason: "owner-budget" } : undefined;
+  if (!conv.sponsor) return undefined;
   const p = mayRun(conv, "chat", { chat: true, now });
   if (!isRefusal(p)) return undefined;
-  return p.refused === "instance-budget" ? { reason: "shared-budget" } : p.refused === "cooldown" ? { reason: "cooldown", until: timeIn(new Date(p.until!)) } : {};
+  return p.refused === "cooldown" ? { reason: "cooldown", until: timeIn(new Date(p.until!)) } : {};
 }
 
 // The payer of a friend's group (undefined: the login's, the gate's default). Never the login in her place: a refusal here fails the call.

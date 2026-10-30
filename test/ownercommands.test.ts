@@ -101,10 +101,10 @@ test("/stop aborts the conversation's running turn at once, with RunStopped; oth
 
 test("/status: a phone-sized summary", () => {
   const text = statusText({ pause: "paused until 16:30", spentUsd: 3.456, limitUsd: 20, lastLook: { at: new Date(2026, 9, 14, 14, 2), outcome: "silent" }, approvals: 2, down: ["Notion"] });
-  assert.equal(text, "Paused: paused until 16:30.\nBudget today: $3.46 of $20.\nLast look: 14:02 (silent).\nOpen approvals: 2.\nConnectors down: Notion. See `npm run doctor`.");
-  assert.match(statusText({ spentUsd: 21, limitUsd: 20, approvals: 0, down: [] }), /Running \(not paused\)\.\nBudget today: \$21\.00 of \$20 \(reached.*\nLast look: none yet\.\nOpen approvals: 0\.\nConnectors: none down\./);
+  assert.equal(text, "Paused: paused until 16:30.\nSpend today: $3.46 (first warning at $20).\nLast look: 14:02 (silent).\nOpen approvals: 2.\nConnectors down: Notion. See `npm run doctor`.");
+  assert.match(statusText({ spentUsd: 21, limitUsd: 20, approvals: 0, down: [] }), /Running \(not paused\)\.\nSpend today: \$21\.00 \(first warning at \$20\)\.\nLast look: none yet\.\nOpen approvals: 0\.\nConnectors: none down\./);
   const real = commandReply(ownerConv, "/status");
-  assert.match(real!, /Budget today/);
+  assert.match(real!, /Spend today/);
 });
 
 test("the last look comes from the heartbeat's own rows (the owner's), newest first", () => {

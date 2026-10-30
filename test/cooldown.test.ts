@@ -93,7 +93,7 @@ function rig() {
     run: async () => (runs++, { text: "", structured: { message: "[[silent]]", nextCheckMinutes: 15 } }),
     notesChangedAt: () => 0,
     now: () => now,
-    guards: { paused: () => false, budgetSpent: () => false },
+    guards: { paused: () => false },
   });
   return { w, conv, runs: () => runs, at: (d: Date) => void (now = d) };
 }

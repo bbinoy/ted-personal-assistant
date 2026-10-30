@@ -15,7 +15,6 @@ const tenantCapabilities = (ctx: { config: any }) => resolveCapabilities(T.FRIEN
 const tenantTools = (ctx: { config: any }) => toolsForCaps(tenantCapabilities(ctx));
 const R = await import("../src/tenants/tenantroute.ts");
 const { reportKeyProblem } = await import("../src/tenants/keynotice.ts");
-const { ownerNotices } = await import("../src/heartbeat/notices.ts");
 const { refusal } = await import("../src/tenants/errors.ts");
 const { createTenantRunner } = await import("../src/conversation/tenantrun.ts");
 const { ownerFacts, resetOwnerFacts } = await import("./ownerfacts.ts");
@@ -23,7 +22,7 @@ const { coolingDown, cooldownUntil, noteRateLimit, resetCooldown } = await impor
 const { failure, InstanceKeyError, RateLimitError } = await import("../src/tenants/errors.ts");
 const { INSTANCE_KEY_COOLDOWN } = await import("../src/tenants/payer.ts");
 const PAYER = (id: string) => ({ kind: "instance" as const, id, apiKey: "instance-key-not-real", ledger: "unused.json" }); // (who a call is for: its failure feeds the key's cooldown)
-const { recordCost, spentToday, instanceKeyOverBudget } = await import("../src/core/budget.ts");
+const { recordCost, spentToday } = await import("../src/core/budget.ts");
 const { tenant } = await import("../src/conversation/conversationmodel.ts");
 const { looksLikeApiKey } = await import("../src/secrets/secrets.ts");
 const { describeTenants } = await import("../src/tenants/tenanttools.ts");
@@ -157,10 +156,8 @@ test("turn: a refused instance key tells the owner's chat once, not once per ten
   assert.deepEqual(busy.alerts, [], "an overloaded API is not the key's fault");
 });
 
-test("key notice: a refused or missing shared key is a fact for the owner's next run, once per problem per interval, and never a fixed chat line", () => {
+test("key notice: a refused or missing shared key is a fact for the owner's next run, once per problem per interval", () => {
   resetOwnerFacts();
-  const chat: string[] = [];
-  ownerNotices.sendTo((t) => void chat.push(t)); // (the one fixed-text channel to the owner: the daily budget only)
   const facts = ownerFacts();
   const every = 3 * 3600_000; // the key notice interval, three hours
   assert.equal(reportKeyProblem("refused", 1000), true);
@@ -169,8 +166,6 @@ test("key notice: a refused or missing shared key is a fact for the owner's next
   assert.equal(reportKeyProblem("refused", 1000 + every), true, "and again after the interval");
   assert.equal(facts.length, 2, "the same fact still waiting is held once");
   assert.match(facts[0]!, /^System status for .*in your own words/);
-  assert.deepEqual(chat, [], "the chat never gets a code-written line about it");
-  ownerNotices.sendTo(undefined);
   assert.doesNotThrow(() => reportKeyProblem("missing", 1000 + 9 * 3600_000));
 });
 
@@ -228,20 +223,18 @@ test("cooldown: a limit, 400 or 429 on the shared key pauses every friend (it is
   assert.equal(failure("server_error", "e", PAYER(a.id)) instanceof InstanceKeyError, false);
 });
 
-test("budget: her spend is her own ledger, the instance's is not touched; the key's day, all friends together, is what stops her", async () => {
+test("budget: her spend is her own ledger, the instance's is not touched; past the key's level she still runs (the owner is warned, nothing is refused)", async () => {
   const rec = join_("Cy");
   const ctx = T.tenantContext(rec);
   const owner0 = spentToday();
   recordCost(0.5, ctx.ledger);
   assert.equal(spentToday(ctx.ledger), 0.5);
   assert.equal(spentToday(), owner0);
-  assert.equal(instanceKeyOverBudget(), false);
-  recordCost(settings.instanceKeyDailyUsd, ctx.ledger);
-  assert.equal(instanceKeyOverBudget(), true);
+  recordCost(settings.instanceKeyDailyUsd + 1, ctx.ledger);
   const { r, asked } = runner({ key: KEY_A });
   const out = await r.run(tenant(rec.id), "hi");
-  assert.match(out.text, /shared limit/);
-  assert.deepEqual(asked, []);
+  assert.equal(out.text, "hello there", "over the level: she is neither warned nor refused");
+  assert.equal(asked.length, 1);
 });
 
 test("delete: her folder and her registry entry go; the others, the owner's record included, stay", () => {

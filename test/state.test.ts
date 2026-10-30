@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, statSync } from "node:fs";
-import { overBudget, recordCost, spentToday } from "../src/core/budget.ts";
+import { recordCost, spentToday } from "../src/core/budget.ts";
 import { loadSettings, settings, signalIdentity } from "../src/core/settings.ts";
 import { checkHideSettings, registered } from "../src/modules/index.ts";
 import { appendLine, dataPath, readJson, readText, secureDataDirs, writeJson, writeText } from "../src/core/state.ts";
@@ -61,14 +61,12 @@ test("state: a missing or corrupt file falls back to the default", () => {
   assert.deepEqual(readJson(bad, { d: true }), { d: true });
 });
 
-test("budget: costs accumulate and the over-budget notice fires once", () => {
+test("budget: costs accumulate", () => {
   const start = spentToday();
   recordCost(1.25);
   recordCost(0.75);
   recordCost(-5); // ignored
   assert.equal(spentToday(), start + 2);
-  recordCost(settings.dailyBudgetUsd);
-  assert.deepEqual([overBudget().over, overBudget().firstTime], [true, false]); // first call consumed the notice
 });
 
 test("settings: defaults, and typos fail loudly instead of becoming NaN", () => {

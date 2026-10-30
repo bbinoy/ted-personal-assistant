@@ -1,27 +1,27 @@
 import { takeCapNotice } from "./capnotice.ts";
+import { holdFact } from "./ownerfact.ts";
+import { told } from "./told.ts";
 import { dayIn } from "./timezone.ts";
 import { settings } from "./settings.ts";
 import { isConvId, OWNER_CONV, type ConvId } from "./convpaths.ts";
 import { instanceDb } from "./instancedb.ts";
 
 // A runaway guard, not an accounting system. Costs are the SDK's own estimates (notional on a
-// subscription). Once the day's total passes the ceiling, BACKGROUND work (brief, mail handler)
-// stops until tomorrow. Chat stays available: you are in control of that.
+// subscription). No ceiling pauses anything: crossing a level only warns the owner (warnSpend below).
 // Synchronous on purpose (see state.ts): concurrent recordCost calls can never lose an update (one INSERT each, in instance.db).
 //
 // ONE ledger, the `spend` table of instance.db (core/instancedb.ts): a row per charged run, with the payer, the conversation, the kind of run and the local day. Every ceiling is an
 // indexed sum of it, so the two cannot drift apart:
-//   the login today    payer 'login', every conversation (the owner's chat, her background work and the groups, which run on her login)   -> DAILY_BUDGET_USD
-//   the key today      payer 'key', every friend                                                                                       -> INSTANCE_KEY_DAILY_USD
-// A conversation has no ceiling of its own; spentToday(convId) still says what it spent (the reports, `npm run doctor`).
+//   the login today    payer 'login', every conversation (the owner's chat, her background work and the groups, which run on her login)   -> DAILY_BUDGET_USD (first warning level)
+//   the key today      payer 'key', every friend                                                                                       -> INSTANCE_KEY_DAILY_USD (first warning level)
+// There are no ceilings; spentToday(convId) still says what it spent (the reports, `npm run doctor`).
 
-// FAIL CLOSED: when the ledger cannot be read (the degraded mode of a damaged instance.db, a database that stays busy or a full disk) every day's sum is "infinite", so background work, browse and a
-// friend's runs are refused as if the budget were spent, and nothing throws into a run. A charge that cannot be written is logged (once per kind of failure per minute), not raised: the run it paid for is done.
+// FAIL CLOSED: when the ledger cannot be read (the degraded mode of a damaged instance.db, a database that stays busy or a full disk) every day's sum is "infinite", so nothing is warned about and nothing throws into a run. A charge that cannot be written is logged (once per kind of failure per minute), not raised: the run it paid for is done.
 let lastLogged = 0;
 const logFailure = (what: string, e: unknown): void => {
   if (Date.now() - lastLogged < 60_000) return;
   lastLogged = Date.now();
-  console.error(`budget: ${what} failed (${(e as Error).message}); background work and payments stay refused until the ledger works`);
+  console.error(`budget: ${what} failed (${(e as Error).message}); warnings and payments stay off until the ledger works`);
 };
 const closed = <T>(f: () => T, fallback: T): T => {
   try {
@@ -53,7 +53,9 @@ export function recordSpend(r: SpendRow): void {
     instanceDb().run("INSERT INTO spend (at, day, conv, payer, kind, usd) VALUES (?, ?, ?, ?, ?, ?)", now.getTime(), dayIn(now), conv, r.payer ?? payerOf(conv), r.kind ?? "run", r.usd);
   } catch (e) {
     logFailure(`recording $${r.usd.toFixed(4)} for ${conv}`, e);
+    return;
   }
+  closed(() => warnSpend(now), undefined);
 }
 
 /** `ledger`: a friend's convId (her own day on the key) or a group's (its day on the login); the default is the login's own day (the owner's, which includes every group's). */
@@ -70,23 +72,32 @@ export function spentToday(ledger?: ConvId, now: Date = new Date()): number {
   }, Number.POSITIVE_INFINITY);
 }
 
-// ---- the two payer ceilings ----
-// The day of each payer (the login: DAILY_BUDGET_USD; the instance key, all friends together: INSTANCE_KEY_DAILY_USD) is the only daily ceiling: a conversation has none of its own.
-// Written by payer.ts charge(), read by payer.ts mayRun() and by group.ts before a group's run.
+// ---- warnings, not ceilings ----
+// Nothing is ever paused for money. The owner pays both payers, so she hears of a big day as a FACT for her next run (ownerfact.ts), which says it in its own words, once per threshold per day
+// (told.ts, through takeCapNotice): the login's day past DAILY_BUDGET_USD and every WARN_STEP_USD more, the instance key's day (all friends together) past INSTANCE_KEY_DAILY_USD and every
+// step more, and one friend's own day past that same first level and every step more. The fact names a friend by id and gives the amount only, never anything she said. Checked on every charge
+// (recordSpend), so the ledger is the only trigger. The first check after a deploy records what is already crossed without telling (WARN_SEEDED), so an old, inflated day does not fire at once.
+const WARN_STEP_USD = 5;
+const WARN_SEEDED = "budget:warn-seeded";
 export const keySpentToday = (now: Date = new Date()): number => closed(() => cents(instanceDb().num("SELECT SUM(usd) FROM spend WHERE payer = 'key' AND day = ?", dayIn(now))), Number.POSITIVE_INFINITY);
-export const instanceKeyOverBudget = (): boolean => keySpentToday() >= settings.instanceKeyDailyUsd;
+/** The next warning level above `usd`, for a subject whose first level is `first` (`npm run doctor`). */
+export const nextWarning = (usd: number, first: number): number => first + (usd < first ? 0 : (Math.floor((usd - first) / WARN_STEP_USD) + 1) * WARN_STEP_USD);
+const crossed = (usd: number, first: number): number | undefined => (Number.isFinite(usd) && usd >= first ? first + Math.floor((usd - first) / WARN_STEP_USD) * WARN_STEP_USD : undefined); // the highest level passed
 
-// `firstTime` is true once per day, so the caller can tell the owner exactly once.
-export function overBudget(): { over: boolean; firstTime: boolean; usd: number } {
-  const usd = spentToday();
-  const over = usd >= settings.dailyBudgetUsd;
-  return { over, firstTime: over && closed(() => takeCapNotice(OWNER_BUDGET_NOTICE), false), usd };
+function warn(subject: string, usd: number, first: number, what: (level: number) => string, seed: boolean, now: Date): void {
+  const level = crossed(usd, first);
+  if (level === undefined || !takeCapNotice(`budget:warn:${level}:${subject}`, now.getTime())) return;
+  if (!seed) holdFact(`She asked to be told when spend passes each warning level, so say it in one friendly line. ${what(level)} Nothing is paused; the next warning comes at $${level + WARN_STEP_USD}.`, now);
 }
-export const OWNER_BUDGET_NOTICE = "budget:owner"; // (the notices row that says the owner was told today)
-
-// Just the question, without the once-a-day "tell the owner" side effect of overBudget (only the code that
-// can tell the owner should use that one, or a group message could use up the notice).
-export const budgetSpent = (): boolean => spentToday() >= settings.dailyBudgetUsd;
+function warnSpend(now: Date): void {
+  const day = dayIn(now);
+  const seed = closed(() => told(instanceDb(), WARN_SEEDED, { once: true }, now.getTime()), false); // true once, ever: the first check after a deploy
+  warn("login", spentToday(OWNER_CONV, now), settings.dailyBudgetUsd, (l) => `Today's spend on your login has passed $${l} (notional).`, seed, now);
+  warn("key", keySpentToday(now), settings.instanceKeyDailyUsd, (l) => `The friends' shared key has spent over $${l} today, all friends together.`, seed, now);
+  for (const r of instanceDb().all<{ conv: string; usd: number }>("SELECT conv, SUM(usd) AS usd FROM spend WHERE payer = 'key' AND day = ? AND conv LIKE 'friend-%' GROUP BY conv", day)) {
+    warn(r.conv, cents(r.usd), settings.instanceKeyDailyUsd, (l) => `One friend (${r.conv}) has spent over $${l} today on the shared key.`, seed, now);
+  }
+}
 
 // A forgotten conversation (a group, a removed friend): its rows no longer name it. They stay in the ledger, unnamed (conv ''), so the owner's and the key's day do not shrink
 // when somebody is forgotten; her own day and a group's are gone because nothing names them. True when it had a row today.

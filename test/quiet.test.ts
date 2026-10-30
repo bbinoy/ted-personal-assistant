@@ -99,7 +99,7 @@ test("the switch is a file per conversation: set, read, expire, clear; /status s
   assert.equal(isQuiet(ownerConv, NOW), true);
   assert.equal(isQuiet(ownerConv, new Date(NOW.getTime() + 2 * 3_600_000 + 60_000)), false, "the time has come");
   assert.equal(quietText(ownerConv, NOW, Z), "quiet until 16:30");
-  assert.match(statusText({ quiet: "quiet until 16:30", spentUsd: 0, limitUsd: 20, approvals: 0, down: [] }), /Running \(not paused\)\.\nQuiet: quiet until 16:30 \(held items are looked at again when it ends\)\.\nBudget/);
+  assert.match(statusText({ quiet: "quiet until 16:30", spentUsd: 0, limitUsd: 20, approvals: 0, down: [] }), /Running \(not paused\)\.\nQuiet: quiet until 16:30 \(held items are looked at again when it ends\)\.\nSpend/);
   assert.doesNotMatch(statusText({ spentUsd: 0, limitUsd: 20, approvals: 0, down: [] }), /Quiet/);
   commandReply(ownerConv, "/quiet", { now: () => NOW });
   assert.equal(quietValue(ownerConv), "");
