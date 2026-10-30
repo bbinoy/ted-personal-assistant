@@ -39,11 +39,11 @@ export function fitParts(r: { text: string; styles: TextStyle[] }, max: number |
   return parts;
 }
 
-// A failed send is retried, by what the error says about whether the message left:
-//   - "refused": it certainly was not accepted (the connection was not up, nothing was written): retried twice, after 2 s and 6 s;
-//   - "unsure": a timeout or a connection lost with the request in flight: the messenger may have sent it. Retried ONCE, after 2 s, and a rare duplicate is accepted over a paid-for reply that
-//     never arrives (the retry is echo-registered like the first try, so neither comes back as the owner's message);
-//   - anything else (signal-cli refused it: bad attachment, unknown group, a user error): not retried, the error reaches the caller as before.
+// A failed send is retried only when the error proves nothing went out (at-most-once: a rare missing message beats regular duplicates):
+//   - "refused": the connection was not up, nothing was written: retried twice, after 2 s and 6 s;
+//   - "unsure": a timeout or a connection lost with the request in flight: the messenger may well have sent it. Never retried; one log line, the error reaches the caller;
+//   - anything else (signal-cli refused it: bad attachment, unknown group, a user error): not retried, the error reaches the caller.
+// signal-cli's JSON-RPC has no call to ask afterwards whether a timed-out send went out (only a later sync of our own message, not reliably matchable), so none is built.
 export type SendFailure = "refused" | "unsure" | "permanent";
 export function classifySendError(e: unknown): SendFailure {
   const m = e instanceof Error ? e.message : String(e);
@@ -69,9 +69,9 @@ export function createOutbound(
         return await messenger.send(target, message);
       } catch (e) {
         const kind = classifySendError(e);
-        const allowed = kind === "refused" ? backoff.length : kind === "unsure" ? Math.min(1, backoff.length) : 0;
-        if (attempt >= allowed) throw e;
-        console.error(`outbound: send failed (${(e as Error).message}); retrying in ${backoff[attempt]! / 1000}s${kind === "unsure" ? " (it may have gone out: a duplicate is possible)" : ""}`);
+        if (kind === "unsure") console.error(`outbound: send outcome unknown (${(e as Error).message}); not retried, it may have gone out`);
+        if (kind !== "refused" || attempt >= backoff.length) throw e;
+        console.error(`outbound: send failed (${(e as Error).message}); retrying in ${backoff[attempt]! / 1000}s`);
         await sleep(backoff[attempt]!);
       }
     }
