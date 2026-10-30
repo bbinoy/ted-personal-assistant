@@ -1,6 +1,6 @@
 ---
 name: mail
-description: Use when a task involves email or the inbox - the daily inbox sweep and every look at new mail, triage and archiving, restoring archived mail ("bring back the one from <sender>"), drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
+description: Use when a task involves email or the inbox - every look at new mail, the weekly inbox sweep, triage and archiving, restoring archived mail ("bring back the one from <sender>"), drafting and sending replies, the newsletter radar, waiting-on threads, promises and deadlines found in mail, the owner's writing voice. The rules for every mail provider; the tool names are in the provider skill (`ted-personal-assistant:mailbird` or `ted-personal-assistant:gmail`, whichever your tool list has).
 ---
 
 # Mail: the rules for every provider
@@ -17,29 +17,29 @@ tools, their arguments and how to list, read, archive and draft with them. Below
   `☀️` / `🌙` in front) is the assistant's own brief. Never read, reply to or count it
   as mail. Today's daily brief stays in the inbox; every older brief, wrap and review
   is archived.
-- **The triage rules below apply to every look, not only the daily sweep.** Archive when you are sure: code judges each archive, and one it is not sure about stays in the inbox without a word. Message only what is worth interrupting for.
+- **The triage rules below apply to every look and to the weekly sweep.** Archive when you are sure: code judges each archive, and one it is not sure about stays in the inbox without a word. Message only what is worth interrupting for.
 - **Attachments**: never read or open their content unless the provider skill says
   you can. Their name, type and size are enough; if the owner needs the content,
   tell them to open it in the mail client.
 
-## Inbox sweep (the daily brief and the evening wrap)
+## Inbox sweep (the weekly review only)
 
-Run this across every account, in the daily brief and again in the evening wrap. The agent's heartbeat run already works through new
-mail all day, so this sweep re-assesses what is still in the inbox, plus the owner-facing
-parts (waiting-on, commitments, radar). It acts, reversibly: re-judge everything still in the
-inbox; where a reply is overdue from either side, draft a nudge in the thread (drafts need no
-asking; never send); archive what has gone stale; and mention only what is new since it was last
-mentioned (check the chat log and the journal), never the same pile twice.
+The looks are the only triage of new mail, all day; the daily brief and the evening wrap
+re-list nothing (they use the journal, open drafts and the waiting-on list). Once a week
+the weekly review re-assesses everything still in the inbox, across every account. It acts,
+reversibly: re-judge everything; where a reply is overdue from either side, draft a nudge in
+the thread (drafts need no asking; never send); archive what has gone stale; and mention only
+what is new since it was last mentioned (check the chat log and the journal), never the same
+pile twice.
 
-1. **List the whole inbox, once a day.** The daily brief's sweep does not depend on
-   what the heartbeat has already looked at (it does not use `seen_mail`: the
-   heartbeat's memory hides everything it kept once, and the backlog from before
-   it started). Per account, list the Inbox itself, all of it, oldest included
-   (the provider skill says how to page or batch), and classify every row, read or
-   unread, new or years old. Work through a big inbox in batches of about 50 rows,
-   all the archive calls of a batch in one turn (not one per turn). A run may archive
-   only so many mails (the tool refuses past the cap): when it does, stop archiving,
-   say nothing about it, and the next day's sweep continues.
+1. **List the whole inbox, oldest first.** The sweep does not depend on what the looks
+   have already seen (it does not use `seen_mail`: that memory hides everything a look kept
+   once, and the backlog from before it started). Per account, list the Inbox itself, all of
+   it, oldest included (the provider skill says how to page or batch), and classify every
+   row, read or unread, new or years old. Work through a big inbox in batches of about 50
+   rows, all the archive calls of a batch in one turn (not one per turn). A run may archive
+   only so many mails (the tool refuses past the cap): when it does, stop archiving, say
+   nothing about it, and the next week's sweep continues.
    **Keep only today's brief email** (see "For every run that handles mail").
 
 **Decide per mail whether the row is enough, and read when it is not.**
