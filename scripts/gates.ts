@@ -7,6 +7,10 @@
 import { spawn } from "node:child_process";
 import { setPriority } from "node:os";
 import { acquire } from "./gates-lock.ts";
+import { alreadyPassed, cleanTree, recordPassed } from "./gates-passed.ts";
+
+// `--passed`: exit 0 when a full run already passed on this exact clean tree (the pre-push hook asks this before running the gates).
+if (process.argv[2] === "--passed") process.exit(alreadyPassed(cleanTree()) ? 0 : 1);
 
 const quick = process.argv[2] === "--quick";
 const alwaysRun = [
@@ -27,6 +31,7 @@ const all: { name: string; cmd: string[]; nice: boolean }[] = [
 
 const checks = quick ? all.filter((c) => ["typecheck", "lint", "test"].includes(c.name)) : all;
 
+const treeBefore = quick ? undefined : cleanTree();
 const hhmm = (t: number) => new Date(t).toTimeString().slice(0, 5);
 await acquire({ onWait: (h) => console.log(`waiting for another gates run (pid ${h?.pid}, started ${h ? hhmm(h.started) : "?"})`) });
 
@@ -58,4 +63,6 @@ const results = await Promise.all(
 
 for (const r of results.filter((r) => !r.ok)) console.log(`\n===== ${r.name} output =====\n${r.out.trimEnd()}\n`);
 for (const r of results) console.log(`${r.ok ? "pass" : "FAIL"}  ${r.name.padEnd(10)} ${r.secs.toFixed(1)}s`);
-process.exit(results.every((r) => r.ok) ? 0 : 1);
+const ok = results.every((r) => r.ok);
+if (ok && treeBefore && cleanTree() === treeBefore) recordPassed(treeBefore);
+process.exit(ok ? 0 : 1);
