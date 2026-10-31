@@ -83,6 +83,16 @@ const notes = (files: Record<string, string>): string => {
 };
 const ANNA = { "people-anna-clements.md": "Anna Clements. anna.clements@example.com" };
 
+test("recipientsOutside: an address in the assistant message the person answers counts; others and older ones do not; a standing task has none", () => {
+  const v = { action: "send" as const, to: ["philip@example.com"], cc: [], bcc: [] };
+  const draft = "Draft: To: philip@example.com, Subject: Lunch, body: see you at one. Send it?";
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "owner", message: "Send", assistantSaid: draft }), []);
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "member", message: "Send", assistantSaid: draft }), []);
+  assert.deepEqual(recipientsOutside({ ...v, to: ["spy@evil.example"] }, {}, { kind: "owner", message: "Send", assistantSaid: draft }), ["spy@evil.example"]);
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "owner", message: "Send", assistantSaid: "Anything else?" }), ["philip@example.com"], "only the last assistant message counts");
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "standing", task: draft }), ["philip@example.com"]);
+});
+
 test("recipientsOutside: an address is the person's when verbatim in their words, or a known person's whose first name they said; a word in an address proves nothing", () => {
   const v = { action: "send" as const, to: ["anna.clements@example.com", "anna@evil.example"], cc: [], bcc: [] };
   const known = knownPeople(notes(ANNA));
