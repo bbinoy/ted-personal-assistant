@@ -130,7 +130,8 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   //   who may do what   code-only commands are checked against the conversation's capabilities (ownercommands.ts: /card needs "card", /pause "admin", /tasks "tasks", ...), not its kind.
   //   the answer        a private chat always answers; a group answers when addressed (`forUs`: tagged or quoted, then sticky until answered) or when the participation gate says act
   //                     (`mayAnswer`, `decide`, group.ts). A paused or over-budget group answers nothing, and says so once to someone who addressed it.
-  //   who is heard      `everyone`: every sender gets a read receipt and the reason for a voice message or picture that could not be used; otherwise only someone who spoke to us.
+  //   who is heard      `everyone`: every sender gets the reason for a voice message or picture that could not be used; otherwise only someone who spoke to us. (A read receipt goes to
+  //                     every sender in both: a vouched group's messages are all read and logged, and the "seen" mark is how its members can tell the assistant is online.)
   //                     `vouch`: the group's sponsor (the owner, or an active friend who may add us to her groups; group.ts sponsorInGroup) must be a member (a stranger cannot add us to a group and use it). `optionalPictures`: a picture is opened only when it
   //                     can be answered, and an unusable one is dropped (the caption stays); otherwise it is required.
   //   history           `recorded`/`say`/`sayReaction`: how a line reads in the log (a group's lines name their speaker).
@@ -241,7 +242,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
     const author = original.from || original.fromUuid;
     if (caps.readReceipts) {
       if (w.everyone) void messenger.markRead(conv.target, { timestamp: original.timestamp, author: conv.kind === "tenant" ? author : undefined }); // the owner sees it was read, as soon as we have it (a tenant: the receipt goes to her)
-      else if (original.addressedToMe && author) void messenger.markRead(conv.target, { timestamp: original.timestamp, author }); // only those who spoke to us see "seen"
+      else if (author) void messenger.markRead(conv.target, { timestamp: original.timestamp, author }); // a group: to whoever wrote it, addressed or not (every message is read)
     }
     rememberSender(conv.key, author, original.fromName && oneLine("sender name", original.fromName, 40)); // (memory only, whatever the voice provider: the voice tool and the task tools both name who is asking)
     if (settings.tts.provider === "qwen") {

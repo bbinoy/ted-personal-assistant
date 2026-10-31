@@ -479,11 +479,11 @@ const gmsg = (over: Partial<IncomingMessage> = {}): Incoming => ({ type: "messag
 test("groups: a message goes through the shared steps and is recorded under its speaker, with the transcript and whether it was addressed", async () => {
   const { r, pipeline } = rig({ transcript: async () => "bring the ball" });
   await pipeline.handleIncoming(group(GID), gmsg());
-  assert.deepEqual(r.reads, [{ ts: 9, from: "+15555550105" }]); // a read receipt to the author, when addressed
+  assert.deepEqual(r.reads, [{ ts: 9, from: "+15555550105" }]); // a read receipt to the author
   assert.deepEqual(said(r).map((x) => [x.groupId, x.kind, x.text, x.extra]), [[GID, "member", "Eve (a member): @Ted hi", { by: "+15555550105", addressed: true }]]);
   await pipeline.handleIncoming(group(GID), gmsg({ text: "", audio: { id: "a.aac", size: 3 }, addressedToMe: false, timestamp: 10 }));
   assert.deepEqual([said(r)[1]!.text, said(r)[1]!.extra], ["Eve (a member): 🎙️ bring the ball", { by: "+15555550105" }]); // (not addressed: the log says so by leaving the mark out)
-  assert.equal(r.reads.length, 1); // not addressed: no "seen" mark
+  assert.deepEqual(r.reads[1], { ts: 10, from: "+15555550105" }); // not addressed: still marked read (every message of a vouched group is read)
   await pipeline.handleIncoming(group(GID), gmsg({ from: OWNER }));
   assert.match(said(r)[2]!.text, /\(the owner\): @Ted hi$/);
 });
