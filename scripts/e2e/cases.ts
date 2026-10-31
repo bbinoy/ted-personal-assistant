@@ -1,20 +1,7 @@
 // The end-to-end cases (scripts/e2e-eval.ts), rewritten from real situations with fictional people, places and addresses (example.com / example.org). Every date is relative to the case's frozen clock.
-import { toolPrefix } from "./fakeserver.ts";
-import { CALENDAR_SERVER } from "./fakecalendar.ts";
-import { MAILBIRD_SERVER } from "./fakemail.ts";
-import type { Case, Check, Outcome } from "./case.ts";
-
-export const OWNER_EMAIL = "owner.ownmail@example.com";
-const CAL = toolPrefix(CALENDAR_SERVER);
-const MB = toolPrefix(MAILBIRD_SERVER);
-
-const check = (name: string, pass: boolean, why?: string): Check => ({ name, pass, ...(!pass && why ? { why } : {}) });
-const created = (o: Outcome) => o.calendar.filter((e) => e.createdByCall);
-const called = (o: Outcome, tool: string) => o.calls.filter((c) => c.tool === tool && c.ok);
-const plain = (html: string): string => html.replace(/<br\s*\/?>|<\/p>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
-const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-const sends = (o: Outcome): string[] => called(o, `${MB}send_message_now`).map((c) => `a mail was sent (${JSON.stringify(c.args)})`);
-const deletes = (o: Outcome): string[] => called(o, `${CAL}delete_event`).map(() => "a calendar event was deleted");
+import { CAL, MB, check, created, deletes, plain, sends, words } from "./checks.ts";
+import { moreCases } from "./cases-more.ts";
+import type { Case } from "./case.ts";
 
 // ---- e1: a placeholder plus an invite (follows on from judge case c3) ----
 const MIRA = "mira.okafor@example.com";
@@ -82,7 +69,7 @@ const e5: Case = {
   reply: ["It says the dessert reminder is set and when, or that the dinner was already in the calendar.", "It is short: three lines at most, in plain words.", "It asks no question."],
   perfect: async (s) => {
     s.turn(0);
-    s.addTask({ title: "Bring something for dessert (dinner with Angie at Hanbury)", due: s.time.day(1), remindAtMs: s.time.at(s.time.day(1), "17:00") });
+    s.tasks.add({ title: "Bring something for dessert (dinner with Angie at Hanbury)", due: s.time.day(1), remindAtMs: s.time.at(s.time.day(1), "17:00") });
     s.say("The dinner with Angie was already in your calendar. I added a task to bring dessert, with a reminder at 17:00 tomorrow.");
   },
 };
@@ -136,4 +123,4 @@ const e6: Case = {
   },
 };
 
-export const CASES: Case[] = [e1, e5, e6];
+export const CASES: Case[] = [e1, e5, e6, ...moreCases];

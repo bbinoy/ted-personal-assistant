@@ -23,7 +23,8 @@ const { FakeCalendar, CALENDAR_SERVER } = await import("../scripts/e2e/fakecalen
 const { FakeMail, MAILBIRD_SERVER } = await import("../scripts/e2e/fakemail.ts");
 const { assertHermetic, blockRealMailbird, guardedQuery, initProblems, isAnswered, newGuardState } = await import("../scripts/e2e/guard.ts");
 const { makeTime } = await import("../scripts/e2e/time.ts");
-const { CASES, OWNER_EMAIL } = await import("../scripts/e2e/cases.ts");
+const { CASES } = await import("../scripts/e2e/cases.ts");
+const { OWNER_EMAIL } = await import("../scripts/e2e/checks.ts");
 const { play } = await import("../scripts/e2e/play.ts");
 
 (settings as unknown as { warm: boolean }).warm = false;
@@ -135,12 +136,12 @@ test("the fake calendar and mail behave like the real ones in shape and in effec
   assert.ok(m.folderOf("Hello").includes("archive"));
 });
 
-test("a scripted perfect run passes every case, with no question, nothing unsafe and no real client", async () => {
+test("a scripted perfect run passes every case, with no needless question, nothing unsafe and no real client", async () => {
   for (const c of CASES) {
     const r = await play(c, { now: NOW, zone: ZONE, perfect: true });
     assert.deepEqual(r.checks.filter((k) => !k.pass), [], `${c.id}: every check passes`);
     assert.deepEqual([...r.never, ...r.guard.violations], [], `${c.id}: nothing unsafe`);
-    assert.equal(r.asks.length, 0);
+    assert.ok(r.asks.length <= c.maxQuestions, `${c.id}: no needless question`);
     assert.equal(r.guard.realClientCalls, 0);
   }
 });
@@ -154,7 +155,7 @@ test("the grading fails what is wrong: a second dinner, an event without the gue
     const cc = new FakeCalendar(r, ZONE, OWNER_EMAIL, w.calendar, () => NOW.getTime());
     const mm = new FakeMail(r, { email: OWNER_EMAIL }, w.mail);
     await act(cc, mm);
-    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
+    return { c, o: { time: t, calendar: cc.final(), mail: mm, tasks: [], notion: [], asks: [], web: { fetched: [], submissions: [], payments: [], payClicks: [], ledger: [] }, calls: r.calls.map((x) => ({ tool: x.tool, turn: x.turn, args: x.args, ok: x.ok })), turns: [{ message: "", messages: [], sent: mm.sent, drafts: [] }, { message: "", messages: [], sent: mm.sent, drafts: [] }] } };
   };
   const e1 = await outcome("e1", async (c) => {
     for (let i = 0; i < 2; i++) await c.service.call("create_event", { summary: "Lunch", startTime: t.local(t.nextWeekday(4), "12:00"), endTime: t.local(t.nextWeekday(4), "13:00") });
@@ -171,4 +172,41 @@ test("the grading fails what is wrong: a second dinner, an event without the gue
   assert.equal(e6.c.never(e6.o).length, 1, "a send that is already in the first turn's state is unsafe");
   const failed6 = e6.c.state(e6.o).filter((k) => !k.pass).map((k) => k.name);
   assert.ok(failed6.includes("with HTML line breaks (<p> or <br>)"), failed6.join());
+});
+
+test("the fake web serves only the case's pages over its own certificate; a page fetch the case does not have is refused", async () => {
+  const { startFakeWeb } = await import("../scripts/e2e/fakeweb.ts");
+  const { request } = await import("node:https");
+  const { readFileSync } = await import("node:fs");
+  const web = await startFakeWeb({ "https://events.example.com/e/one": "<h1>One</h1>" });
+  try {
+    const local = web.rewrite("https://events.example.com/e/one#top");
+    assert.match(local!, /^https:\/\/127\.0\.0\.1:\d+\/p0$/);
+    assert.equal(web.rewrite("https://events.example.com/e/two"), undefined);
+    const body = await new Promise<string>((resolve, reject) => request(local!, { ca: readFileSync(web.certFile) }, (res) => { let s = ""; res.on("data", (d) => (s += d)); res.on("end", () => resolve(s)); }).on("error", reject).end());
+    assert.equal(body, "<h1>One</h1>");
+    assert.deepEqual(web.hits, ["https://events.example.com/e/one"]);
+    const seen: { options?: Record<string, any> } = {};
+    const state = newGuardState();
+    const q = guardedQuery(standIn(["tasks", ...Object.keys(fakes)], seen), fakes, fakeTools, state, web);
+    await runConversation(owner(), { now: NOW }, chatTurn(owner(), { prompt: "hi" }), undefined, { query: q });
+    assert.equal(seen.options!.env.NODE_EXTRA_CA_CERTS, web.certFile, "the run trusts the fake web's certificate");
+    const ask = seen.options!.canUseTool as (tool: string, input: Record<string, unknown>, o: unknown) => Promise<{ behavior: string }>;
+    assert.equal((await ask("WebFetch", { url: "https://www.example.org/real", prompt: "x" }, { signal: new AbortController().signal })).behavior, "deny");
+    assert.ok(state.violations.some((v) => v.startsWith("un-faked page fetch")));
+  } finally {
+    await web.close();
+  }
+});
+
+test("the fake Notion creates rows in a data source and refuses an unknown one", async () => {
+  const { FakeNotion } = await import("../scripts/e2e/fakenotion.ts");
+  const n = new FakeNotion(new Recorder(), [{ id: "db1", title: "Media", dataSourceId: "ds1", schema: { Name: { type: "title" } } }]);
+  const found = JSON.parse((await n.service.call("notion-search", { query: "media" })).text);
+  assert.equal(found.results[0].id, "db1");
+  assert.match(JSON.parse((await n.service.call("notion-fetch", { id: "db1" })).text).text, /collection:\/\/ds1/);
+  await n.service.call("notion-create-pages", { parent: { type: "data_source_id", data_source_id: "ds1" }, pages: [{ properties: { Name: "A book" } }] });
+  assert.equal(n.final()[0]!.title, "A book");
+  assert.equal(n.final()[0]!.dataSourceId, "ds1");
+  assert.equal((await n.service.call("notion-create-pages", { parent: { data_source_id: "nope" }, pages: [{ properties: {} }] })).isError, true);
 });

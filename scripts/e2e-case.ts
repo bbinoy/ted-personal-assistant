@@ -4,16 +4,17 @@
 // Environment: HARNESS_DATA_DIR (the eval's temporary folder; refused otherwise), EVAL_FAKE=perfect (no model: a scripted run that tests the grading), EVAL_NOW (an ISO time to freeze the clock at; default: now, to the minute).
 import { writeFileSync } from "node:fs";
 
-process.env.TZ = "Europe/London"; // (before anything is loaded: the owner's conversation takes its zone from it)
 process.env.ENABLE_CLAUDEAI_MCP_SERVERS = "false"; // the owner's claude.ai connectors (Gmail, Calendar, Notion, Drive) stay off; the SDK's start-up message is checked as well (e2e/guard.ts)
 
 const [id, out] = process.argv.slice(2);
 if (!id || !out) throw new Error("usage: e2e-case.ts <case id> <result file>");
-const { CASES } = await import("./e2e/cases.ts");
-const { play } = await import("./e2e/play.ts");
+const { CASES } = await import("./e2e/cases.ts"); // (the cases load none of the application: the zone is set before play.ts loads it)
 const c = CASES.find((x) => x.id === id);
 if (!c) throw new Error(`no case ${id}`);
+const zone = c.zone ?? "Europe/London";
+process.env.TZ = zone; // (before the application is loaded: the owner's conversation takes its zone from it)
+const { play } = await import("./e2e/play.ts");
 const now = process.env.EVAL_NOW ? new Date(process.env.EVAL_NOW) : new Date(Math.floor(Date.now() / 60_000) * 60_000);
-const result = await play(c, { now, zone: "Europe/London", perfect: process.env.EVAL_FAKE === "perfect" });
+const result = await play(c, { now, zone, perfect: process.env.EVAL_FAKE === "perfect" });
 writeFileSync(out, JSON.stringify({ ...result, now: now.toISOString() }, null, 1));
 process.exit(0);

@@ -6,6 +6,9 @@
 //      a real client was used is invalid, and the draft reader is the fake's.
 import type { CanUseTool, Options, query as sdkQuery, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { normalizeServerName, toolPrefix } from "./fakeserver.ts";
+import type { FakeWeb } from "./fakeweb.ts";
+
+type WebPages = Pick<FakeWeb, "rewrite" | "certFile">;
 
 // Ted's own servers that only touch the conversation's own files in the temp data folder. Every other own server (browse, voice, draw, weather, files, intake, tenants, google, notionhosted) reaches
 // out (network, a device, the real mail client) and is refused: a case that needs one gets a fake first.
@@ -39,8 +42,19 @@ export function isAnswered(tool: string, fakeTools: ReadonlySet<string>): boolea
 }
 
 // Wraps the run's own canUseTool: a call nobody answers is refused, counted, and ends the run.
-function guardedCanUseTool(inner: CanUseTool, fakeTools: ReadonlySet<string>, state: GuardState, abort: () => void): CanUseTool {
+function guardedCanUseTool(inner: CanUseTool, fakeTools: ReadonlySet<string>, state: GuardState, abort: () => void, web?: WebPages): CanUseTool {
   return async (tool, input, opts) => {
+    // A page fetch: the run's own rules (the floor, the judge, the owner) decide on the address the model gave; if they allow it and the case has that page, the real tool is pointed at the fake server.
+    if (tool === "WebFetch" && web) {
+      const local = web.rewrite(String(input.url ?? ""));
+      if (!local) {
+        state.violations.push(`un-faked page fetch: ${String(input.url).slice(0, 100)}`);
+        abort();
+        return { behavior: "deny", message: "This page is not available in this environment." };
+      }
+      const r = await inner(tool, input, opts);
+      return r?.behavior === "allow" ? { ...r, updatedInput: { ...(r.updatedInput ?? input), url: local } } : r;
+    }
     if (!isAnswered(tool, fakeTools)) {
       state.violations.push(`un-faked tool call: ${tool}`);
       abort();
@@ -51,20 +65,20 @@ function guardedCanUseTool(inner: CanUseTool, fakeTools: ReadonlySet<string>, st
 }
 
 // Makes the run's options hermetic: only the given servers (Ted's own and the fakes), no user or project settings, no claude.ai connectors, and the guards above.
-function hermetic(options: Options, fakes: Record<string, NonNullable<Options["mcpServers"]>[string]>, fakeTools: ReadonlySet<string>, state: GuardState, abort: () => void): Options {
+function hermetic(options: Options, fakes: Record<string, NonNullable<Options["mcpServers"]>[string]>, fakeTools: ReadonlySet<string>, state: GuardState, abort: () => void, web?: WebPages): Options {
   return {
     ...options,
     mcpServers: { ...(options.mcpServers ?? {}), ...fakes },
     strictMcpConfig: true,
     settingSources: [],
-    env: { ...(options.env ?? process.env), ENABLE_CLAUDEAI_MCP_SERVERS: "false" },
-    canUseTool: guardedCanUseTool(options.canUseTool!, fakeTools, state, abort),
+    env: { ...(options.env ?? process.env), ENABLE_CLAUDEAI_MCP_SERVERS: "false", ...(web ? { NODE_EXTRA_CA_CERTS: web.certFile } : {}) },
+    canUseTool: guardedCanUseTool(options.canUseTool!, fakeTools, state, abort, web),
   };
 }
 
 // The `query` the run is given: the SDK's own, over hermetic options, with the start-up message checked as it passes. A start-up message with anything unexpected in it is never read past:
 // the run is aborted at once (before the held first message is answered by a model), the problem is kept, and the stream ends with an error.
-export function guardedQuery(real: typeof sdkQuery, fakes: Record<string, NonNullable<Options["mcpServers"]>[string]>, fakeTools: ReadonlySet<string>, state: GuardState): typeof sdkQuery {
+export function guardedQuery(real: typeof sdkQuery, fakes: Record<string, NonNullable<Options["mcpServers"]>[string]>, fakeTools: ReadonlySet<string>, state: GuardState, web?: WebPages): typeof sdkQuery {
   return ((args: Parameters<typeof sdkQuery>[0]) => {
     const own = Object.keys(args.options?.mcpServers ?? {});
     const allowed = [...own, ...Object.keys(fakes)]; // (all of Ted's own servers may start: those that reach out are refused when called, isAnswered)
@@ -73,7 +87,7 @@ export function guardedQuery(real: typeof sdkQuery, fakes: Record<string, NonNul
       state.aborted = true;
       controller.abort();
     };
-    const q = real({ ...args, options: { ...hermetic(args.options ?? {}, fakes, fakeTools, state, abort), abortController: controller } });
+    const q = real({ ...args, options: { ...hermetic(args.options ?? {}, fakes, fakeTools, state, abort, web), abortController: controller } });
     const source = q[Symbol.asyncIterator].bind(q);
     return new Proxy(q, {
       get: (target, key) =>

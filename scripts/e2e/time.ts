@@ -13,6 +13,7 @@ export function makeTime(now: Date, zone: string): Time {
     zone,
     today,
     day: (offset) => plus(today, offset),
+    plus,
     nextWeekday: (weekday, includeToday = false) => {
       for (let i = includeToday ? 0 : 1; i < 8; i++) if (new Date(`${plus(today, i)}T12:00:00Z`).getUTCDay() === weekday) return plus(today, i);
       throw new Error("no such weekday");
