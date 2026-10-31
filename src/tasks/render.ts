@@ -1,4 +1,4 @@
-import { addedByLooks, counts, dueClass, effectiveStatus, listItems, type Item } from "./store.ts";
+import { addedByLooks, counts, dueClass, effectiveStatus, isFocus, listItems, type Item } from "./store.ts";
 import { addDays, parseLocal, showInstant, showLocal, todayIn } from "./when.ts";
 
 // How tasks are SHOWN, always in the conversation's own clock: one item as a compact line (the tool replies and lists), and the phone-sized /tasks answer. Pure over the store's reads.
@@ -23,6 +23,7 @@ export function itemLine(it: Item, now: number, zone: string): string {
   if (it.assignee) parts.push(`for ${it.assignee}`);
   if (it.remindAt !== undefined) parts.push(`remind ${showInstant(it.remindAt, zone, now)}`);
   if (it.repeat) parts.push(`repeats ${it.repeat}`);
+  if (isFocus(it, todayIn(now, zone))) parts.push("focus today");
   const status = effectiveStatus(it, now);
   if (status === "snoozed" && it.snoozeUntil !== undefined) parts.push(`snoozed until ${showInstant(it.snoozeUntil, zone, now)}`);
   else if (status !== "open") parts.push(status);
@@ -45,8 +46,9 @@ const PEEK = 3; // titles shown on a collapsed bucket's line
 const PEEK_CHARS = 20;
 const WEEK = 7; // "this week" = up to 7 days after today
 
-export type Bucket = "Today" | "This week" | "Later" | "No date";
-export const BUCKETS: readonly Bucket[] = ["Today", "This week", "Later", "No date"];
+export const FOCUS = "🎯 Focus today";
+export type Bucket = typeof FOCUS | "Today" | "This week" | "Later" | "No date";
+export const BUCKETS: readonly Bucket[] = [FOCUS, "Today", "This week", "Later", "No date"];
 
 function bucketOf(it: Item, now: number, zone: string): Bucket {
   const c = dueClass(it, now, zone);
@@ -55,11 +57,12 @@ function bucketOf(it: Item, now: number, zone: string): Bucket {
   return parseLocal(it.due)!.date <= addDays(todayIn(now, zone), WEEK) ? "This week" : "Later";
 }
 
-/** THE grouping of open items, shared by the task page and /tasks: Today (overdue first, then due today), This week (up to 7 days on), Later, No date. */
+/** THE grouping of open items, shared by the task page and /tasks: Focus today (the items marked for today's date in the conversation's zone, in the order given, i.e. time order; in no other group), Today (overdue first, then due today), This week (up to 7 days on), Later, No date. */
 export function groupOpen(open: readonly Item[], now: number, zone: string): Record<Bucket, Item[]> {
   const late = (i: Item): boolean => dueClass(i, now, zone) === "overdue";
-  const out: Record<Bucket, Item[]> = { Today: [], "This week": [], Later: [], "No date": [] };
-  for (const i of open) out[bucketOf(i, now, zone)].push(i);
+  const day = todayIn(now, zone);
+  const out: Record<Bucket, Item[]> = { [FOCUS]: [], Today: [], "This week": [], Later: [], "No date": [] };
+  for (const i of open) out[isFocus(i, day) ? FOCUS : bucketOf(i, now, zone)].push(i);
   out.Today = [...out.Today.filter(late), ...out.Today.filter((i) => !late(i))];
   return out;
 }
@@ -83,7 +86,6 @@ export function tasksText(key: string, now: number, zone: string, o: { link?: st
   const c = counts(key, now, zone);
   if (!open.length) return ["Nothing open.", ...(c.snoozed ? [`${c.snoozed} snoozed.`] : []), "Tell me what to add."].join("\n");
   const g = groupOpen(open, now, zone);
-  const today = g.Today;
   const peek = (b: Bucket): string[] => {
     const xs = g[b];
     if (!xs.length) return [];
@@ -93,7 +95,7 @@ export function tasksText(key: string, now: number, zone: string, o: { link?: st
   const rest = (["This week", "Later", "No date"] as const).flatMap(peek);
   return [
     `Tasks: ${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""}`,
-    ...(today.length ? ["", `Today (${today.length})`, ...today.slice(0, SECTION_MAX).map((i) => bullet(i, now, zone)), ...(today.length > SECTION_MAX ? [`… and ${today.length - SECTION_MAX} more`] : [])] : []),
+    ...([FOCUS, "Today"] as const).flatMap((b) => (g[b].length ? ["", `${b} (${g[b].length})`, ...g[b].slice(0, SECTION_MAX).map((i) => bullet(i, now, zone)), ...(g[b].length > SECTION_MAX ? [`… and ${g[b].length - SECTION_MAX} more`] : [])] : [])),
     ...(rest.length ? ["", ...rest] : []),
     ...(c.snoozed ? ["", `${c.snoozed} snoozed.`] : []),
     ...(o.link ? ["", `Task page: ${o.link}`] : []),

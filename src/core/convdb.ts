@@ -307,6 +307,11 @@ export const CONV_SCHEMA: readonly Migration[] = [
       ALTER TABLE lapsed_approvals ADD COLUMN outcome TEXT NOT NULL DEFAULT 'lapsed'; -- lapsed (nobody answered) | declined
     `,
   },
+  {
+    version: 30,
+    name: "focus today: a task can carry the local day it is a focus item for (it lapses by itself when the day is over)",
+    up: `ALTER TABLE items ADD COLUMN focus_on TEXT CHECK (focus_on IS NULL OR focus_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'); -- the local day (YYYY-MM-DD); focus today iff it is today`,
+  },
 ];
 
 // ---- the connections: one per conversation, opened at first use, closed when idle, when the conversation is forgotten, and at exit ----

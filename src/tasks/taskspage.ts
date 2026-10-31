@@ -4,7 +4,7 @@ import { OWNER_KEY } from "../core/ownerkey.ts";
 import { systemZone } from "../core/timezone.ts";
 import { completeItem, counts, dueClass, effectiveStatus, getItem, listItems, type Item } from "./store.ts";
 import { localOf, showLocal, todayIn } from "./when.ts";
-import { BUCKETS, groupOpen } from "./render.ts";
+import { BUCKETS, FOCUS, groupOpen } from "./render.ts";
 
 // The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except one action: a tick-off button per open row. It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
 // ONLY the owner's conversation is read or changed, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
@@ -23,7 +23,7 @@ function row(it: Item, now: number, zone: string, token?: string): string {
 }
 
 const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string): string =>
-  items.length ? `<details${open ? " open" : ""}><summary>${esc(title)} (${items.length})</summary><ul>${items.map((i) => row(i, now, zone, token)).join("")}</ul></details>` : "";
+  items.length ? `<details${open ? " open" : ""}${title === FOCUS ? ' class="focus"' : ""}><summary>${esc(title)} (${items.length})</summary><ul>${items.map((i) => row(i, now, zone, token)).join("")}</ul></details>` : "";
 
 /**
  * The one inline script (allowed by the response's CSP nonce, nothing else may run): a tick-off posts in the background and the row fades out (without script the form posts and the server redirects back),
@@ -59,9 +59,10 @@ li{display:flex;gap:.6rem;align-items:center;padding:.45rem 0 .45rem .5rem;borde
 li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li.late .d{color:var(--red);font-weight:600}li.urgent .m{color:var(--amber);font-weight:600}
 .b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit;cursor:pointer;transition:background-color .15s,border-color .15s}
 button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}button:active{background:#2e7d6b4d}button:focus-visible{outline:2px solid #2e7d6b;outline-offset:2px}
+details.focus{background:#2e7d6b1f;border-left:4px solid #2e7d6b;border-radius:6px;padding:0 .6rem .3rem .6rem;margin-bottom:.5rem}details.focus li:first-child{border-top-color:transparent}
 .gone{opacity:0;transition:opacity .3s}.err{display:block;color:var(--red);font-size:.85rem}.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 </style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
-${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today", token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
+${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
 ${block("Done in the last 7 days", done, now, zone, false)}${nonce ? `<script nonce="${nonce}">${SCRIPT}</script>` : ""}</body></html>`;
 }
 
