@@ -548,6 +548,18 @@ test("a look is called off when a message overtakes it: no post, no run left, th
   assert.equal(readRows().at(-1)?.outcome, "preempted");
 });
 
+test("a look called off books a quiet-time retry in the conversation's log", async () => {
+  const l = leaseRig();
+  const never = new Promise(() => {});
+  const { w, conv, seen } = rig(() => ({ hold: never, message: "never said" }), { pipeline: l.pipeline });
+  const done = w.look(conv, DAY);
+  await new Promise((r) => setTimeout(r, 10));
+  l.lease.abort!();
+  assert.equal(await done, "preempted");
+  const wakes = seen.recorded.filter(([k]) => k === "wake").map(([, t]) => JSON.parse(t));
+  assert.equal(wakes.at(-1).quiet, true, "not the day's 30 minutes: due once the chat is quiet (lookWhy)");
+});
+
 test("a look that has only read, when news came meanwhile, drops its message-only post as stale; one that acted still posts", async () => {
   for (const [calls, outcome, posted] of [[[], "silent", 0], [["mcp__mailbird__list_conversations"], "silent", 0], [["mcp__mailbird__archive_conversation"], "posted", 1]] as const) {
     const l = leaseRig();

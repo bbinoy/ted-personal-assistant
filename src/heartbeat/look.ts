@@ -6,7 +6,7 @@ import type { Conversation, Pipeline } from "../conversation/conversation.ts";
 import { owner } from "../conversation/conversationmodel.ts";
 import { auditSource } from "../core/runkind.ts";
 import { logSince } from "../run/chattail.ts";
-import { lookWhy, recordWake, type LookState } from "../conversation/ledger.ts";
+import { lookWhy, recordCalledOff, recordWake, type LookState } from "../conversation/ledger.ts";
 import { isRefusal, type Payer, type Refusal } from "../tenants/payer.ts";
 import { heartbeatInstruction } from "../run/persona.ts";
 import type { TurnBuilder } from "../run/agent.ts";
@@ -103,6 +103,7 @@ export interface LookHistory {
 // May a message call the running look off? Not if that would starve it: a conversation that chats steadily would otherwise preempt every look, and triage (the mail, the brief) would
 // never finish while each aborted look still costs money. So a look is preemptible only while (a) fewer than 2 looks in a row ended preempted and (b) the last look that was not
 // preempted is younger than 2x the look interval (30 minutes at least). Otherwise it runs to completion (the message is still news: a read-only look's post is dropped as stale).
+// A look that was called off is not forgotten: it is booked to run again as soon as the conversation has been quiet for QUIET_MINUTES (recordCalledOff), the same for every conversation.
 export function preemptible(h: LookHistory, nowMs: number, intervalMinutes: number): boolean {
   if (h.preempted >= 2) return false;
   return h.completedAt === undefined || nowMs - h.completedAt < Math.max(2 * intervalMinutes, 30) * 60_000;
@@ -246,6 +247,7 @@ export function createHeartbeatLook(deps: HeartbeatDeps) {
     console.log(`${conv.kind} look ${outcome} ($${(reply?.costUsd ?? 0).toFixed(4)}, ${toolCalls} tool call(s), ${delegations} delegation(s))`); // the cost line a chat turn has ("replied"), for doctor and the heartbeat report
     emit({ type: "look", conv: conv.key, unjournaled, source: auditSource({ who: conv.kind, attended: false }), row: { at: now.toISOString(), kind: conv.kind, night, message: outcome === "posted", sent, nextCheckMinutes: retry ?? answer?.nextCheckMinutes ?? clampLook(undefined), costUsd: reply?.costUsd ?? 0, toolCalls, archived, delegations, outcome } });
     if (interrupted) recordWake(pipeline, conv, 0, now, (m) => Number(m)); // it was cut off, not decided: due again at the next due-check (no 10-minute minimum)
+    else if (outcome === "preempted") recordCalledOff(pipeline, conv, now); // a message overtook it: due again once the conversation is quiet (ledger.ts lookWhy), not at the day's 30 minutes
     else recordWake(pipeline, conv, retry ?? answer?.nextCheckMinutes ?? settings.heartbeatDayMinutes, now, clampLook); // after the act: notes it wrote are not news
     return outcome;
   }
