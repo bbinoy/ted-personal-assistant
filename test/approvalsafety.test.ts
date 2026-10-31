@@ -72,6 +72,29 @@ test("a send in an untrusted run to someone the owner did not name is never judg
   assert.deepEqual({ judged, asked }, { judged: 2, asked: 1 }, "the owner wrote the address: judged");
 });
 
+test("recipientsOutside: a name the person said covers the address it is in; anyone else stays outside", () => {
+  const v = { action: "send" as const, to: ["anna.clements@example.com", "billing@evil.example"], cc: [], bcc: [] };
+  assert.deepEqual(recipientsOutside(v, {}, owner("I booked, update the calendar and invite Anna")), ["billing@evil.example"]);
+  assert.deepEqual(recipientsOutside(v, {}, owner("invite her")), ["anna.clements@example.com", "billing@evil.example"], "no name, no match");
+  assert.deepEqual(recipientsOutside({ ...v, to: ["al@example.com"] }, {}, owner("call al")), ["al@example.com"], "names under three letters never match");
+});
+
+test("an event with guests is judged; in an untrusted run only when the person named every guest", async () => {
+  let judged = 0;
+  let asked = 0;
+  const judge = async (): Promise<Verdict> => (judged++, { decision: "auto", reason: "fine" });
+  const run = (untrusted: boolean) => makeCanUseTool(async () => (asked++, { approved: true }), OWNER_CHAT, undefined, judge as never, undefined, undefined, false, { provenance: scopeOf("guests").read, conversation: "guests", untrusted });
+  let day = 4;
+  const event = (guest: string) => (day++, { summary: "Dinner", startTime: `2026-11-0${day}T19:00:00`, endTime: `2026-11-0${day}T21:00:00`, attendees: [{ email: guest }] });
+  scopeOf("guests").say("dinner tomorrow at 7, invite Anna");
+  assert.equal((await run(false)(CAL, event("anna.clements@example.com"), opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 1, asked: 0 }, "a trusted run: the judge decides about the guest");
+  assert.equal((await run(true)(CAL, event("anna.clements@example.com"), opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 2, asked: 0 }, "untrusted, but the owner named Anna: judged");
+  assert.equal((await run(true)(CAL, event("billing@evil.example"), opts))!.behavior, "allow");
+  assert.deepEqual({ judged, asked }, { judged: 2, asked: 1 }, "untrusted and nobody named this guest: the owner is asked, the judge is not");
+});
+
 // ---- a wake-up is judged like a chat message ----
 
 test("a wake-up task is judged like a chat message, whatever notes the run read (no note is marked)", async () => {

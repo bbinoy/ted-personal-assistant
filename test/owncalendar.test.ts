@@ -46,12 +46,12 @@ test("an update of the owner's own no-guest event is judged the same way (auto r
   assert.equal(c.asked.length, 0);
 });
 
-test("an event with an attendee is still the owner's call: never judged, asked in chat", async () => {
+test("an event with an attendee is judged like a send: the judge decides, nobody is asked when it says auto", async () => {
   const withGuest = { ...UNCLE, attendees: ["uschi@example.com"] };
-  assert.equal(isJudgeable(`${CAL}create_event`, withGuest), false);
+  assert.equal(isJudgeable(`${CAL}create_event`, withGuest), true);
   const c = chat("auto");
-  assert.equal(((await c.can(`${CAL}create_event`, withGuest, opts)) as { behavior: string }).behavior, "deny", "the stub owner said no");
-  assert.deepEqual([c.judged.length, c.asked.length], [0, 1]);
+  assert.equal(((await c.can(`${CAL}create_event`, withGuest, opts)) as { behavior: string }).behavior, "allow");
+  assert.deepEqual([c.judged.length, c.asked.length], [1, 0]);
 });
 
 test("the calendar skill and the chat persona say: create it, pick the likely day and time, and say which", () => {

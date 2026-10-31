@@ -136,8 +136,6 @@ test("the floor holds whatever the verdict: payments, the never-allowed set, sha
   // asks, and is never judged
   for (const [tool, input] of [
     ["mcp__claude_ai_Google_Drive__share_file", { fileId: "f" }],
-    [`${CAL}create_event`, { summary: "Dinner", attendees: [{ email: "a@example.com" }] }],
-    [`${CAL}update_event`, { eventId: "e", guests: ["a@example.com"] }],
     ["WebFetch", { url: "http://127.0.0.1:8080/x" }],
     ["WebFetch", { url: "https://127.0.0.1.nip.io/x" }],
     ["mcp__tenants__remove_tenant", { id: "t" }],

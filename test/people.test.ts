@@ -162,14 +162,15 @@ test("people: the tool is in a group's and a friend's set and the owner's; read-
   assert.equal(isFree(T), true);
 });
 
-test("people: an address found by Ted is no looser than any other, a send still asks and the floor still names it outside", () => {
+test("people: a send still asks; an address Ted found counts as named when the person said a name in it", () => {
   const send = "mcp__claude_ai_Gmail__send_message";
   assert.equal(classify(send, { to: ["sam@example.com"], subject: "hi", body: "hi" }, OWNER_CHAT), "ask");
   assert.equal(classify("mcp__mailbird__send_message_now", { messageId: "m" }, OWNER_CHAT), "ask");
   assert.equal(classify("mcp__claude_ai_Google_Calendar__create_event", { attendees: ["sam@example.com"] }, OWNER_CHAT), "ask");
-  // The person typed "send it to Sam": the address Ted found is not in their words, so it is outside (the owner is asked, never the judge).
+  // The person typed "send it to Sam": the address Ted found holds that name, so it is accounted for (the judge sees the whole address); "send it" names nobody.
   const view = { action: "send", to: ["sam.carter@example.com"], cc: [], bcc: [] } as never;
-  assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to Sam" } as never), ["sam.carter@example.com"]);
+  assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to Sam" } as never), []);
+  assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it" } as never), ["sam.carter@example.com"]);
   assert.deepEqual(recipientsOutside(view, {}, { kind: "owner", message: "send it to sam.carter@example.com" } as never), []);
 });
 

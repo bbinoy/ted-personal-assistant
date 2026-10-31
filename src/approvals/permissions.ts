@@ -13,6 +13,7 @@ import { mailSlot, registered } from "../modules/index.ts";
 import { archivedBy, restoredBy } from "../modules/archivecap.ts";
 import { tasksNote } from "../modules/tasks/taskfacts.ts";
 import { classify, denial, isReadTool } from "../policy/policy.ts";
+import { peopleIn } from "../policy/guests.ts";
 import { entryFor, mailToolsOf, mailView, readsUntrusted } from "../policy/toolmanifest.ts";
 import { UNSCOPED_KEY } from "../core/ownerkey.ts";
 import { callKey } from "../core/callkey.ts";
@@ -287,9 +288,10 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     // The same for every call in every place: the floor (a guard step, or isJudgeable), then the judge, told by code whose words or which standing task led
     // here. With nothing on record there is nothing to judge the action against and the owner is asked.
     const provenance = provenanceFor(setup.provenance?.(), source, setup.browseTask, agentID ? setup.expertBriefs?.() : undefined);
-    // A floor in code on top of isJudgeable, for what third-party text may have steered: a send to someone the person's words and the thread do not account for, in a run that
-    // has read untrusted mail or pages. The owner is asked.
-    const outside = view && isUntrusted() && MAIL_OUT.has(entryFor(tool)?.view ?? "") ? recipientsOutside(view, input, provenance) : [];
+    // A floor in code on top of isJudgeable, for what third-party text may have steered: a send, or an event's guests, reaching someone the person's words and the thread do not
+    // account for, in a run that has read untrusted mail or pages. The owner is asked.
+    const reached = view && MAIL_OUT.has(entryFor(tool)?.view ?? "") ? view : entryFor(tool)?.action === "calendar-write" ? { action: "send" as const, to: peopleIn(input), cc: [], bcc: [] } : undefined;
+    const outside = reached && isUntrusted() ? recipientsOutside(reached, input, provenance) : [];
     if (outside.length) log(tool, "judge-floor", source, { reason: "untrusted-recipient", recipients: outside.length });
     if (settings.autoApprove !== "off" && provenance && !g?.payment && !outside.length && (g?.kind !== "ask" || g.judge === true) && (g?.judge === true || isJudgeable(tool, input, view))) {
       judged = await judge({ description: description + notifyNote(tool, input) + createdNote(tool, input, conversation) + tasksNote(tool, conversation), provenance, untrustedInput: isUntrusted(), approved: g?.carried });

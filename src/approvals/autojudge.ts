@@ -46,13 +46,16 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
   return veto ? veto(input, view) : true;
 }
 
-// Pure: the recipients of an outgoing mail that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail or pages may have had
-// its recipient steered, so such a send is never judged (permissions.ts): the owner is asked. An address counts as the person's when it is written in their message (or the earlier
-// ones); a reply whose recipients the call does not name itself goes to the thread's own people. A standing task or a wake-up has no words of a person's: every named recipient is outside.
+// Pure: the people an outgoing mail or a calendar invite reaches that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail
+// or pages may have had its recipient or guest steered, so such a call is never judged (permissions.ts): the owner is asked. A person counts as the person's when their words hold
+// the address, or a name in it ("invite Anna" covers anna.clements@...; the judge still sees the whole address); a reply whose recipients the call does not name itself goes to
+// the thread's own people. A standing task or a wake-up has no words of a person's: everybody named is outside.
 export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined): string[] {
   const words = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n").toLowerCase();
+  const said = new Set(words.split(/[^\p{L}\p{N}]+/u));
+  const mentioned = (a: string): boolean => words.includes(a) || (a.split("@")[0] ?? "").split(/[^\p{L}]+/u).some((n) => n.length >= 3 && said.has(n));
   const named = new Set([input.to, input.cc, input.bcc].flatMap((v) => addrs(v)));
-  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !words.includes(a) && !(view.action === "reply" && !named.has(a)));
+  return [...view.to, ...view.cc, ...view.bcc].filter((a) => !mentioned(a) && !(view.action === "reply" && !named.has(a)));
 }
 
 // Pure: does this mode let a verdict skip the phone?
