@@ -34,7 +34,7 @@ export function makeApprove(send: (text: string) => Promise<number>, o: { scope:
     const asked = structuredClone(call.input);
     row(call.tool, "approval-asked", { args: argsForAudit(asked), question, details: description, writeMs: c.ms, by: c.by });
     // A question that does not hold the turn (handoff.ts) is stored once sent, and the turn gets "handed off" at once. Never a payment: only the blocking ask below takes a typed yes.
-    const handoff = o?.handoff && !o.typedYes ? handoffFor({ conv: scope, tool: call.tool, input: asked, renderHash: o.handoff.renderHash, label: description.split("\n")[0] ?? "", question, provenance: o.provenance, untrusted: !!o.untrusted, askedBy: source }, approvals.APPROVAL_TIMEOUT_MINUTES) : undefined;
+    const handoff = o?.handoff && !o.typedYes ? handoffFor({ conv: scope, tool: call.tool, input: asked, renderHash: o.handoff.renderHash, label: description.split("\n")[0] ?? "", question, provenance: o.handoff.provenance, untrusted: !!o.untrusted, askedBy: source }, approvals.APPROVAL_TIMEOUT_MINUTES) : undefined;
     const d = await request(send, description, call, abort, { question, scope, source, typedYes: o?.typedYes, ...(handoff ? { handoff } : {}) });
     if (d.handedOff) return { ...d, question };
     // Post-hoc, never blocking: is what will run what the question was written for?

@@ -21,6 +21,7 @@ export class TurnScope {
   #recent: { text: string; at: number; reactedOn?: number }[] = []; // reactedOn: for a reaction, when the message it was on was sent (0: not in the log any more)
   #wroteAt = 0; // the person's newest message of any kind (an answer to a question included), when it arrived
   #said = "";
+  #carried: RunProvenance | undefined; // a continuation turn (handoff.ts): the provenance of the turn that asked, restored; nobody's new words
   #derived: Extract<RunProvenance, { kind: "derived" }> | undefined; // (a wake-up's gate-selected task: the person's standing instruction acted on later)
 
   constructor(key: string) {
@@ -33,6 +34,7 @@ export class TurnScope {
   // `arrivedAt`: when the message was SENT (a queued message arrives long before its turn starts); default: now.
   say(text: string, assistantSaid?: string, reactedOn?: number, arrivedAt?: number): void {
     this.#derived = undefined;
+    this.#carried = undefined;
     this.#recent = [...this.#recent, { text, at: arrivedAt ?? Date.now(), ...(reactedOn !== undefined ? { reactedOn } : {}) }].slice(-KEEP);
     if (assistantSaid !== undefined) this.#said = assistantSaid.slice(0, LIMITS.quote);
   }
@@ -52,9 +54,15 @@ export class TurnScope {
     this.#said = text.slice(0, LIMITS.quote);
   }
 
+  // A turn nobody wrote (the continuation of an approved call): the judge is told what led to the asking turn, never the code text that starts this one or the arguments in it.
+  carry(p: RunProvenance): void {
+    this.#carried = p;
+  }
+
   // The turn is over.
   end(): void {
     this.#derived = undefined;
+    this.#carried = undefined;
     if (this.member) this.#recent = [];
   }
 
@@ -70,6 +78,7 @@ export class TurnScope {
 
   read = (now = Date.now()): RunProvenance | undefined => {
     if (this.#derived) return this.#derived;
+    if (this.#carried) return this.#carried;
     const last = this.#recent.at(-1);
     if (last === undefined) return undefined;
     return this.member ? { kind: "member", message: last.text, ...(this.#said ? { assistantSaid: this.#said } : {}) } : { kind: "owner", message: this.#shown(last, now), earlier: this.#recent.slice(0, -1).map((m) => this.#shown(m, now)), assistantSaid: this.#said || undefined };

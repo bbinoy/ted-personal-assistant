@@ -11,7 +11,7 @@ export function stepOf(decision: string): ToolStep | undefined {
   if (decision === "ask-sent") return "ask";
   if (decision.startsWith("deny-")) return "deny";
   if (decision === "auto-approved") return "auto-approved";
-  if (decision === "ask-approved" || decision === "ask-approved-modified") return "approved";
+  if (decision === "ask-approved" || decision === "ask-approved-modified" || decision === "granted-run") return "approved";
   if (decision === "ask-declined" || decision === "ask-feedback") return "declined";
   if (decision === "ask-failed") return "failed";
   return undefined;

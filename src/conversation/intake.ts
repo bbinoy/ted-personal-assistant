@@ -15,6 +15,8 @@ import { scopeOf } from "../approvals/turnscope.ts";
 import { createGroupAnswering, speaker, type Go } from "./group.ts";
 import { replayPrompt } from "./replay.ts";
 import { forgetDeclined } from "../approvals/declined.ts";
+import { voidGrants } from "../approvals/pendingstore.ts";
+import type { RunProvenance } from "../approvals/autojudge.ts";
 import { voiceOption } from "./voicereply.ts";
 import { settings } from "../core/settings.ts";
 import { clean, defuseSpeakers, LIMITS, oneLine } from "../core/sanitize.ts";
@@ -193,18 +195,22 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
   const waysOf = (conv: Conversation): Ways => (conv.direct ? WAYS.private : WAYS.group);
 
   // A private chat's turn: the burst's messages as one prompt, one run.
-  async function privateTurn(conv: Conversation, ms: Entry[], _go: Go, b: Batch<Entry>): Promise<void> {
-    const last = ms[ms.length - 1]!;
+  async function privateTurn(conv: Conversation, all: Entry[], _go: Go, b: Batch<Entry>): Promise<void> {
+    // A continuation (approved call, reply to re-propose from) is no message: it has no sender to answer, quote or react to, and its code-written text never becomes the person's words
+    // for the judge (it is passed on as `continuation`, whose provenance is the asking turn's). Any real messages that arrived with it are the turn as usual.
+    const cont = all.filter((x) => x.continuation);
+    const ms = all.filter((x) => !x.continuation);
+    const last = ms[ms.length - 1];
     for (const x of ms) {
       console.log(`owner message (${x.text.length} chars)`);
       if (x.quote) console.log(`owner is replying to an earlier message (${x.quote.text.length} chars)`);
     }
     const late = ms.filter((x) => x.late);
-    const shown = late.length ? replayPrompt(late.map((x) => ({ at: x.late!.at, text: x.text }))) : ownerPrompt(ms);
+    const said = late.length ? replayPrompt(late.map((x) => ({ at: x.late!.at, text: x.text }))) : ms.length ? ownerPrompt(ms) : "";
+    const shown = [said, ...cont.map((x) => x.text)].filter(Boolean).join("\n\n");
     await runTurn(conv, {
-      run: (hooks) => deps.run(conv, shown, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]!.timestamp),
-      target: { author: last.from, timestamp: last.timestamp },
-      threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp },
+      run: (hooks) => deps.run(conv, shown, ms.map((x) => x.text).join("\n"), ms.flatMap((x) => x.picture ?? []).slice(-MAX_PICTURES), hooks, takeDocuments(ms.map((x) => x.document)), undefined, undefined, ms[0]?.timestamp, cont[0]?.continuation),
+      ...(last ? { target: { author: last.from, timestamp: last.timestamp }, threadUnder: { text: last.text.slice(0, LIMITS.preview), author: last.from, timestamp: last.timestamp } } : {}),
       hadQuote: ms.some((x) => x.quote),
       announce: true,
       timing: b.timing,
@@ -289,6 +295,7 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
       if (await approvalAnswer(conv, m, author)) return;
     }
     forgetDeclined(conv.key); // 4. a new message: they may be asking for a declined action again (declined.ts)
+    voidGrants(conv.key); // ...and a yes not yet used is void: this may be them taking it back ("wait, don't"); a question still waiting stays open
     const e: Entry = { ...m, line, said: w.say(m, line, LIMITS.message), author, arrivedAt: arrived };
     if (w.forUs(m)) overtake(conv); // 5. a look of this conversation that is running gives way to the turn (a group's other talk is not a chat turn: the look goes on, and its post is judged against the log)
     if (!w.mayAnswer(m)) return;
@@ -311,12 +318,10 @@ export function createIntake(deps: PipelineDeps, queue: Queue, delivery: Deliver
 
   // A turn that nobody wrote: a yes the person gave to a call asked earlier (the grant is stored, approvals/handoff.ts), or a reply to one that must be re-proposed. The text is code-written data. It enters at step 5
   // like a message, so it joins what is waiting and takes its turn in order; it is not recorded as anyone's words and calls no look off (a look does not start while a question is open).
-  function continuation(conv: Conversation, text: string): Promise<void> {
-    const w = waysOf(conv);
+  function continuation(conv: Conversation, text: string, provenance?: RunProvenance): Promise<void> {
     const t = now();
-    const e: Entry = { from: "", text, timestamp: t, direct: conv.direct, addressedToMe: true, line: text, said: text, arrivedAt: t };
-    w.note(conv, e);
-    return settle(conv, w, e);
+    const e: Entry = { from: "", text, timestamp: t, direct: conv.direct, line: text, said: text, arrivedAt: t, continuation: { provenance } }; // (no w.note: a group's pending address is a member's, not this)
+    return settle(conv, waysOf(conv), e);
   }
 
   // An edit of an earlier message, the same for every conversation. Only its author may edit it; the original may be

@@ -26,13 +26,14 @@ export interface Pending {
   askedAt: number;
   expiresAt: number;
   status: PendingStatus;
+  answer?: { changes?: { field: string; value: unknown }[]; feedback?: string }; // what the person said (the edit they approved)
 }
 interface Row {
   id: string; conv: string; tool: string; input: string; call_key: string; render_hash: string; label: string; question: string; q_ts: number;
-  provenance: string | null; untrusted: number; asked_by: string; asked_at: number; expires_at: number; status: PendingStatus;
+  provenance: string | null; untrusted: number; asked_by: string; asked_at: number; expires_at: number; status: PendingStatus; answer: string | null;
 }
 const db = (scope: string) => convDb(convIdOfKey(scope));
-const fromRow = (r: Row): Pending => ({ id: r.id, conv: r.conv, tool: r.tool, input: JSON.parse(r.input), callKey: r.call_key, renderHash: r.render_hash, label: r.label, question: r.question, qTs: r.q_ts, provenance: r.provenance ? JSON.parse(r.provenance) : undefined, untrusted: !!r.untrusted, askedBy: r.asked_by, askedAt: r.asked_at, expiresAt: r.expires_at, status: r.status });
+const fromRow = (r: Row): Pending => ({ id: r.id, conv: r.conv, tool: r.tool, input: JSON.parse(r.input), callKey: r.call_key, renderHash: r.render_hash, label: r.label, question: r.question, qTs: r.q_ts, provenance: r.provenance ? JSON.parse(r.provenance) : undefined, untrusted: !!r.untrusted, askedBy: r.asked_by, askedAt: r.asked_at, expiresAt: r.expires_at, status: r.status, ...(r.answer ? { answer: JSON.parse(r.answer) } : {}) });
 
 /** The fingerprint of what the person was shown, as code rendered it (a mail send includes the draft as the mail client holds it): a grant holds only while it is unchanged. */
 export const renderHash = (description: string): string => createHash("sha256").update(description).digest("hex");
@@ -52,6 +53,15 @@ export function closePending(scope: string, id: string, status: "declined" | "ex
 /** pending -> granted: the grant is for `input` (the person's edit, when they approved one) and lasts until `expiresAt`. */
 export function grantPending(scope: string, id: string, input: Record<string, unknown>, tool: string, hash: string, expiresAt: number, answer?: unknown): boolean {
   return db(scope).run("UPDATE pending_actions SET status = 'granted', input = ?, call_key = ?, render_hash = ?, expires_at = ?, answer = ? WHERE id = ? AND tool = ? AND status = 'pending'", JSON.stringify(input), callKey(tool, input), hash, expiresAt, answer === undefined ? null : JSON.stringify(answer), id, tool).changes === 1;
+}
+
+/** One unused yes void (a restart came first). */
+export const voidGrant = (scope: string, id: string): boolean => db(scope).run("UPDATE pending_actions SET status = 'superseded' WHERE id = ? AND status = 'granted'", id).changes === 1;
+
+/** A new message from the people of the conversation: a yes not yet used is void (they may be taking it back, "wait, don't"). A question still waiting stays open. */
+export function voidGrants(scope: string): number {
+  const d = peekConvDb(convIdOfKey(scope));
+  return d ? d.run("UPDATE pending_actions SET status = 'superseded' WHERE conv = ? AND status = 'granted'", scope).changes : 0;
 }
 
 /** The single-use grant for exactly this call in this conversation, if one is live and the description still hashes as asked. Consumed atomically: two callers cannot both get it. */

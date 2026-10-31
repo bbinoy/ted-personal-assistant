@@ -1,6 +1,7 @@
 import { noticeFor } from "../tenants/errors.ts";
 import { tenantById, tenantContext } from "../tenants/tenants.ts";
 import type { Gate } from "./gate.ts";
+import type { RunProvenance } from "../approvals/autojudge.ts";
 import type { Runner } from "./group.ts";
 import { friendSponsorOf } from "./groupstore.ts";
 import { FILE as OWNER_LOG, type Extra, type Kind } from "../core/messages.ts";
@@ -99,8 +100,8 @@ export type Held = IncomingMessage & { voice?: boolean; picture?: Picture; docum
 export type Incoming = { type: "message"; m: IncomingMessage } | { type: "reaction"; r: IncomingReaction } | { type: "deletion"; d: IncomingDeletion };
 
 // What a message is while it waits for its turn (the burst, the queue): the message once prepared, plus what every conversation's turn needs of it. `line`: how it reads in the history (a voice
-// message is marked, a picture has its caption); `said`: the same labelled with whoever said it, at full length (a group's turn answers this); `late`: it was found in the log after a restart (replay.ts), written at `at`.
-export type Entry = Held & { line: string; said: string; author?: string; arrivedAt: number; late?: { at: string }; reaction?: { emoji: string; on: string; journal?: string[] } };
+// message is marked, a picture has its caption); `said`: the same labelled with whoever said it, at full length (a group's turn answers this); `continuation`: not a message at all but the code-written turn for a call the person approved (or a reply to re-propose from), with the provenance of the turn that asked; it has no author, quote or timestamp to answer; `late`: it was found in the log after a restart (replay.ts), written at `at`.
+export type Entry = Held & { line: string; said: string; author?: string; arrivedAt: number; late?: { at: string }; reaction?: { emoji: string; on: string; journal?: string[] }; continuation?: { provenance?: RunProvenance } };
 
 // What a group's turn is made of beyond the shared pipeline.
 export interface GroupDeps {
@@ -143,7 +144,7 @@ export interface PipelineDeps {
     sendPicture(file: string, caption: string, opts?: { quote?: Quote; kind?: Kind; target?: Target }): Promise<number>;
   };
   record: (target: Target, kind: Kind, ts: number, text: string, extra?: Extra) => void; // into that conversation's log (target: a group id, a person's direct target for a tenant, none for the owner)
-  run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], reactedTo?: string, reactedAt?: number, arrivedAt?: number) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)
+  run: (conv: Conversation, prompt: string, ownerMessage: string, pictures?: Picture[], hooks?: RunHooks, documents?: Document[], reactedTo?: string, reactedAt?: number, arrivedAt?: number, continuation?: { provenance?: RunProvenance }) => Promise<{ text: string; costUsd?: number }>; // one turn of a private chat (the owner's, a tenant's: for her the gates, her key, the run, the disclosure; tenantrun.ts)
   picture: (m: IncomingMessage) => Promise<Picture>; // throws a sentence the sender can be told
   longText?: (m: IncomingMessage) => Promise<{ text: string; cut: boolean } | undefined>; // the full text of a long message (the messenger's attachment, by id only); undefined when it cannot be read
   document: (m: IncomingMessage) => Promise<Document>; // a PDF or a text file (src/conversation/document.ts); throws a sentence the sender can be told, also for a kind of file that is not supported

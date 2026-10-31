@@ -10,9 +10,11 @@ import { LIMITS } from "../core/sanitize.ts";
 import { formatWait, noteLapsed, request, type Decision, type Handoff } from "./approvals.ts";
 import { clearDeclined, noteDeclined } from "./declined.ts";
 import { argsForAudit } from "./auditargs.ts";
-import { closePending, grantPending, livePending, savePending, type Pending } from "./pendingstore.ts";
+import { closePending, grantPending, livePending, savePending, voidGrant, type Pending } from "./pendingstore.ts";
 import { renderHashOf } from "./permissions.ts";
 import type { Change } from "../policy/policy.ts";
+import type { RunProvenance } from "./autojudge.ts";
+import { prepareJudge } from "./approvaljudge.ts";
 
 // THE APPROVAL HAND-OFF (docs/SAFETY.md). A question that needs a person's yes used to hold its turn (and the conversation's queue) for up to 15 minutes. Now the question is composed, judge-checked
 // and sent as before, a row is stored (pendingstore.ts), and the call is denied back to the run at once with "asked; it runs on their yes", so the turn ends and the queue is free. What the
@@ -25,8 +27,8 @@ import type { Change } from "../policy/policy.ts";
 // scopes it), so no text a run, a mail or another conversation relays can create one. This module cannot import the conversation pipeline: main.ts hands the continuation in (setContinuation).
 
 const GRANT_MINUTES = 15; // a yes that no run has used within this long is void
-let proceed: (scope: string, prompt: string) => void = () => {};
-/** main.ts (wiring.ts): how a continuation turn enters the conversation `scope`. */
+let proceed: (scope: string, prompt: string, provenance?: RunProvenance) => void = () => {};
+/** main.ts (wiring.ts): how a continuation turn enters the conversation `scope`. `provenance`: what led to the turn that asked (the judge reads that, never the prompt below). */
 export const setContinuation = (fn: typeof proceed): void => void (proceed = fn);
 
 const callBlock = (tool: string, input: Record<string, unknown>) => fence("approved_call", JSON.stringify({ tool, input }, null, 2));
@@ -51,15 +53,15 @@ export function handoffFor(a: Asked, minutes: number): Handoff {
       const hash = d.updatedInput ? await renderHashOf(a.conv, a.tool, input) : a.renderHash; // (an edit is shown the way the run will call it)
       if (!hash || !grantPending(a.conv, id, input, a.tool, hash, Date.now() + GRANT_MINUTES * 60_000, d.changes && { changes: d.changes })) return void console.error("approvals: a yes could not be turned into a grant, nothing is run");
       clearDeclined(a.conv, a.tool, a.input, Date.now());
-      row(d.updatedInput ? "ask-approved-modified" : "ask-approved", { handoff: true });
+      row(d.updatedInput ? "ask-granted-modified" : "ask-granted", { handoff: true }); // (the yes; "granted-run" is the call actually running on it, permissions.ts)
       row("approval-outcome", { approved: true, modified: !!d.updatedInput, argsEqual: callKey("", a.input) === callKey("", input), ...(d.updatedInput ? { executed: argsForAudit(input) } : {}) });
-      return proceed(a.conv, approvedPrompt(a.tool, input, d.changes));
+      return proceed(a.conv, approvedPrompt(a.tool, input, d.changes), a.provenance as RunProvenance | undefined);
     }
     if (d.feedback) {
       row("ask-feedback", { handoff: true });
       row("approval-outcome", { approved: false, modified: false, argsEqual: true, feedback: d.feedback.slice(0, LIMITS.line) });
       closePending(a.conv, id, "declined", { feedback: d.feedback });
-      return proceed(a.conv, repliedPrompt(a.tool, a.input, d.feedback, d.failure));
+      return proceed(a.conv, repliedPrompt(a.tool, a.input, d.feedback, d.failure), a.provenance as RunProvenance | undefined);
     }
     row(d.expired ? "ask-expired" : "ask-declined", { handoff: true });
     row("approval-outcome", { approved: false, modified: false, argsEqual: true });
@@ -73,19 +75,24 @@ export function handoffFor(a: Asked, minutes: number): Handoff {
   };
 }
 
-/** After a restart: every question still waiting is open again (its timer runs to the stored end), and a yes that was given but whose turn was lost gets its continuation. Call once, after the pipeline is up. */
+/** After a restart: every question still waiting is open again (its timer runs to the stored end), and a yes that was given but not yet used is void. Call once, after the pipeline is up. */
 export function rehydrate(now = Date.now()): void {
+  let opened = false;
   const l = layout(dataRoot());
   for (const c of existsSync(l.conversations) ? readdirSync(l.conversations) : []) {
     if (!isConvId(c) || !existsSync(l.conv(c).db)) continue;
     for (const p of livePending(convDbAt(l.root, c))) {
       if (p.expiresAt <= now) {
         if (p.status === "pending" && closePending(p.conv, p.id, "expired")) noteLapsed(p.conv, p.label, formatWait((p.expiresAt - p.askedAt) / 60_000));
-      } else if (p.status === "granted") proceed(p.conv, approvedPrompt(p.tool, p.input));
-      else {
+      } else if (p.status === "granted") {
+        // A yes nobody ran before the stop: words may have come in meanwhile that took it back, and nothing here can tell. It is void; the next run is told, and the person can say it again.
+        if (voidGrant(p.conv, p.id)) noteLapsed(p.conv, p.label, "", "interrupted");
+      } else {
+        opened = true;
         const minutes = (p.expiresAt - now) / 60_000;
-        void request(async () => p.qTs, p.label, { tool: p.tool, input: p.input }, undefined, { scope: p.conv, source: p.askedBy as Source, question: p.question, minutes, handoff: handoffFor(p, (p.expiresAt - p.askedAt) / 60_000) });
+        void request(async () => p.qTs, p.label, { tool: p.tool, input: p.input }, undefined, { scope: p.conv, source: p.askedBy as Source, question: p.question, minutes, resumed: true, handoff: handoffFor(p, (p.expiresAt - p.askedAt) / 60_000) });
       }
     }
   }
+  if (opened) prepareJudge(); // once, for all of them
 }

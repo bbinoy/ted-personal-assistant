@@ -27,7 +27,7 @@ export type Approve = (
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal,
-  o?: { typedYes?: boolean; provenance?: Provenance; untrusted?: boolean; handoff?: { renderHash: string } }, // (the context the judge read, shared with the question: judgecontext.ts) `handoff`: the question does not hold the turn (handoff.ts); the hash is what the person is shown
+  o?: { typedYes?: boolean; provenance?: Provenance; untrusted?: boolean; handoff?: { renderHash: string; provenance?: RunProvenance } }, // (the context the judge read, shared with the question: judgecontext.ts) `handoff`: the question does not hold the turn (handoff.ts); the hash is what the person is shown
 ) => Promise<Decision>;
 
 // A conversation nobody can be asked in (not set up, a person who is gone).
@@ -286,7 +286,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
     if (!g && !unattended) {
       const granted = takeGrant(conversation, tool, input, shownHash, Date.now());
       if (granted) {
-        log(tool, "granted-run", source, { grant: granted.id, ...idsOf(input) }, journalable(tool, input) ? { call: { input }, why: whyOf({ conv: conversation, step: "approved", notes: setup.notesSeen?.(), input, provenance: setup.provenance?.() }) } : undefined);
+        log(tool, "granted-run", source, { grant: granted.id, ...idsOf(input) }, journalable(tool, input) ? { call: { input }, why: whyOf({ conv: conversation, step: "approved", input, granted: granted.question }) } : undefined);
         if (onceOnly) remember(memo);
         if (readsUntrusted(tool, undefined, conversation)) markUntrusted();
         return { behavior: "allow", updatedInput: granted.input };
@@ -367,7 +367,7 @@ export function makeCanUseTool(approve: Approve, run: RunKind, memoryDir: string
       return { behavior: "deny", message: `Asking ${OWNER} about this exact call failed ${MAX_FAILED_ASKS} times, so it is not asked again. Do not retry it; tell ${OWNER} in your own words what you could not do, and drop it unless they bring it up again.` };
     }
     log(tool, "ask-sent", source); // logged before the wait, so a stuck approval is visible
-    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, { ...(g?.payment ? { typedYes: true } : {}), ...(g ? {} : { handoff: { renderHash: shownHash } }), provenance, untrusted: isUntrusted() });
+    const d = await approve(description, { tool, input: g?.redacted ?? input }, signal, { ...(g?.payment ? { typedYes: true } : {}), ...(g ? {} : { handoff: { renderHash: shownHash, provenance: setup.provenance?.() } }), provenance, untrusted: isUntrusted() });
     if (d.handedOff) {
       log(tool, "ask-handed-off", source);
       return { behavior: "deny", message: HANDED_OFF };

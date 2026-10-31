@@ -169,6 +169,7 @@ export interface WhyInput {
   provenance?: RunProvenance;
   judge?: string; // the judge's reason (auto-approved)
   asked?: boolean;
+  granted?: string; // a call run on a yes given earlier (handoff.ts): the question that was answered. The reason is that question, not the run's provenance
   notes?: readonly string[]; // the notes the run had read before this call, in order
   now?: number;
 }
@@ -189,6 +190,10 @@ export function whyOf(o: WhyInput): Why {
   }
 }
 function whyOfUnsafe(o: WhyInput): Why {
+  if (o.granted !== undefined) {
+    const reason = ownReasonOf(o.input);
+    return { text: `you said yes to: ${clip(o.granted, 140)}`, ...(reason ? { reason } : {}), asked: true };
+  }
   const at = scopeOf(o.conv).lastSaidAt();
   const p = o.provenance;
   const base =

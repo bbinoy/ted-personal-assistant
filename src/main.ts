@@ -83,7 +83,7 @@ const out = createOutbound(messenger, (kind, ts, text, target) => record(target,
 // This is the one place the modules' hooks are set (wiring.ts; it stops the start if one is missing): those modules are used by runs that have no pipeline in reach.
 wire({
   approvers: createApprovers(out),
-  continuation: (scope, prompt) => void pipeline.continuation(scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope), prompt).catch((e) => console.error("approved-call turn error:", e.message)),
+  continuation: (scope, prompt, provenance) => void pipeline.continuation(scope === OWNER_KEY ? owner() : isTenantKey(scope) ? tenant(scope.slice("tenant:".length)) : group(scope), prompt, provenance).catch((e) => console.error("approved-call turn error:", e.message)),
   sendFirst: messenger.sendFirst?.bind(messenger), // the owner's hello to a number or username (tenanttools.ts invite_person; undefined where the platform has none)
   dropTenant: (id) => (dropTenantWarm(id), dropAll(id)), // a suspended or removed tenant: her warm process and every connection of hers (modules/runtime.ts RUNTIME lifecycles: her Google server, her Notion) stop
 });
@@ -131,10 +131,12 @@ loadSponsors(); // (groups that friends sponsor are known as theirs from the fir
 if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 const tenantRunner = createTenantRunner({});
 // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
-const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt) => {
+const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt, continuation) => {
   const turn = scopeOf(conv.key); // what the approval judge is told led to this turn (turnscope.ts); a reaction's reacted-to text is what the assistant said, not their message
-  turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
-  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents) : runConversation(conv, {}, chatTurn(conv, { prompt, pictures, documents }), hooks?.firstOutput)).finally(() => turn.end());
+  if (continuation && !ownerMessage) {
+    if (continuation.provenance) turn.carry(continuation.provenance); // (a call the person approved: the judge reads what led to the asking, never the prompt or the arguments in it)
+  } else turn.say(ownerMessage, reactedTo, reactedAt, arrivedAt);
+  return (conv.tenantId ? tenantRunner.run(conv, prompt, pictures, hooks, documents, !!continuation) : runConversation(conv, {}, chatTurn(conv, { prompt, pictures, documents, untrusted: !!continuation }), hooks?.firstOutput)).finally(() => turn.end());
 };
 const pipeline: Pipeline = createPipeline({
   messenger,

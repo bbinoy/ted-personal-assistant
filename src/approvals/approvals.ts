@@ -67,6 +67,7 @@ interface Open {
   askedAt: number;
   source: Source;
   scope: string; // the conversation it was asked in (Conversation.key): an answer from another conversation never applies, whoever gives it (the admin included)
+  handedOff: boolean; // its turn is over (handoff.ts): a message that cannot be read must not close it
   typedYes: boolean; // a card payment: only a typed yes approves it (isTypedYes); never a reaction, an emoji, a voice message or the judge's own reading
 }
 // How long a question asked in a chat turn waits before it lapses (silently: a journal line). Unattended runs ask nobody; a stranger's registration waits a day.
@@ -78,7 +79,7 @@ const closed = new Map<string, { label: string; expired: boolean }>(); // recent
 
 // Questions that were declined or that nobody answered in time (background ones, and every question handed off, handoff.ts), kept in the conversation's database (`lapsed_approvals`, core/convdb.ts; pruned after 7 days, heartbeat/convretention.ts) so a restart keeps them: what the
 // next look is told about (heartbeat/facts.ts lapsedFact).
-export interface Lapsed { seq: number; at: number; label: string; wait: string; outcome: "lapsed" | "declined" }
+export interface Lapsed { seq: number; at: number; label: string; wait: string; outcome: "lapsed" | "declined" | "interrupted" }
 export const lapsedIn = (scope: string): Lapsed[] => convDb(convIdOfKey(scope)).all<Lapsed>("SELECT seq, at, label, wait, outcome FROM lapsed_approvals ORDER BY seq");
 export const forgetLapsed = (scope: string, gone: readonly Lapsed[]): void => {
   const db = convDb(convIdOfKey(scope));
@@ -232,7 +233,7 @@ async function read(text: string, onJudging: () => void, quote: { timestamp: num
     // Not approved, and not silent for the agent: every open chat approval returns the owner's words as feedback, so the agent
     // decides itself whether to ask again, rephrase or drop the action (permissions.ts caps the re-asks). Background ones stay open.
     record("failed");
-    const chat = eligible.filter((o) => !o.background && !o.done);
+    const chat = eligible.filter((o) => !o.background && !o.done && !o.handedOff); // (a handed-off question stays open and the message is an ordinary one: no turn waits on it)
     for (const o of chat) o.resolve({ approved: false, feedback: text, failure: "the owner's reply could not be read as a yes or no" });
     return chat.length ? { outcome: "feedback" } : { outcome: "none" };
   }
@@ -308,7 +309,7 @@ export function request(
   description: string,
   call: { tool: string; input: Record<string, unknown> },
   signal: AbortSignal | undefined,
-  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number; handoff?: Handoff },
+  opts: { scope: string; source: Source; background?: boolean; question?: string; typedYes?: boolean; minutes?: number; handoff?: Handoff; resumed?: boolean },
 ): Promise<Decision> {
   if (signal?.aborted) return Promise.resolve({ approved: false });
   const background = !!opts.background;
@@ -333,7 +334,7 @@ export function request(
       resolve(d);
       if (opts.handoff && entry.ts) opts.handoff.decided(d);
     };
-    const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, typedYes: !!opts.typedYes };
+    const entry: Open = { resolve: finish, label, call, background, ts: 0, done: false, shown, askedAt: Date.now(), source: opts.source, scope: opts.scope, handedOff: !!opts.handoff, typedYes: !!opts.typedYes };
     const onAbort = () => finish({ approved: false });
     const timer = setTimeout(() => {
       finish({ approved: false, expired: true }, `expired after ${formatWait(minutes)}${background ? " (background)" : ""}`);
@@ -346,12 +347,17 @@ export function request(
     // At most one open question per conversation for one action: a newer question about the same call closes the older one (declined.ts sameCall).
     for (const o of open.values()) if (o.scope === opts.scope && !o.done && !o.typedYes && !opts.typedYes && o.call.tool === call.tool && sameCall(call.tool, o.call.input, call.input)) o.resolve({ approved: false, superseded: true });
     openChat++;
-    prepareJudge(); // warm the judge while the owner reads the question
+    if (!opts.resumed) prepareJudge(); // warm the judge while the owner reads the question (a restart does it once for all it brings back)
     // The message is the model's question, as written: no header, no footer. A 👍 / 👎 or a reply on it answers it (open is keyed by its timestamp).
     send(shown)
       .then((ts) => {
         if (entry.done) return;
-        opts.handoff?.sent(ts, Date.now() + minutes * 60_000); // (a throw is a failed ask, below)
+        try {
+          opts.handoff?.sent(ts, Date.now() + minutes * 60_000);
+        } catch (e) {
+          console.error("approvals: could not keep a handed-off question:", (e as Error).message);
+          return finish({ approved: false, failure: "the question was sent but could not be kept, so nothing can be run on its answer" }); // (a failure, not a no)
+        }
         entry.ts = ts;
         open.set(slot(opts.scope, ts), entry);
         if (opts.handoff) {

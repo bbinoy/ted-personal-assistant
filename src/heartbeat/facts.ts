@@ -67,7 +67,7 @@ function lapsedFact(convId: string, entries: readonly Lapsed[], now: number): st
   const db = convDb(convId);
   const fresh = entries.filter((l) => now - l.at < LAPSED_DAYS * 86_400_000 && !db.get("SELECT 1 FROM told WHERE key = ?", lapsedKey(l)));
   if (!fresh.length) return "";
-  const lines = fresh.map((l) => `${oneLine(l.label, 120)} (${l.outcome === "declined" ? "declined" : `no answer within ${l.wait}`}; ${Math.max(1, Math.round((now - l.at) / 60_000))} min ago, nothing was done)`);
+  const lines = fresh.map((l) => `${oneLine(l.label, 120)} (${l.outcome === "declined" ? "declined" : l.outcome === "interrupted" ? "the person said yes, but a restart came before it ran" : `no answer within ${l.wait}`}; ${Math.max(1, Math.round((now - l.at) / 60_000))} min ago, nothing was done)`);
   return `Questions that were declined or lapsed unanswered, nothing was done:\n${fence("lapsed_approvals", lines.join("\n"))}`;
 }
 
