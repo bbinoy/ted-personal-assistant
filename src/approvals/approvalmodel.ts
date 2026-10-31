@@ -1,6 +1,6 @@
 import type { Source } from "../core/audit.ts";
 import { emitRecord } from "../core/events.ts";
-import { runJudge, withTimeout } from "./approvaljudge.ts";
+import { runJudge } from "./approvaljudge.ts";
 import type { JudgeIO } from "./judgespare.ts";
 import { factsOf, validateQuestion } from "./questionfacts.ts";
 import { judgeContext } from "./judgecontext.ts";
@@ -12,10 +12,10 @@ import { answerPrompt, checkPrompt, parseAnswer, parseCheck, parseWrite, writePr
 // answer for the wrong task or one that is not an exact enum value is "no answer" (undefined / inaccurate), never an approval.
 
 // Resolves undefined when the judge gave no usable answer; the caller then treats the reply as a normal chat message.
-export async function judgeAnswer(reply: string, open: readonly OpenView[], recent: readonly Recent[], quote?: { id?: string; ended?: boolean; voice?: boolean }, io: JudgeIO = {}, timeoutMs = 20_000): Promise<AnswerJudgement | undefined> {
+export async function judgeAnswer(reply: string, open: readonly OpenView[], recent: readonly Recent[], quote?: { id?: string; ended?: boolean; voice?: boolean }, io: JudgeIO = {}): Promise<AnswerJudgement | undefined> {
   const started = Date.now();
   try {
-    const r = await withTimeout(runJudge("answer", answerPrompt(reply, open, recent, quote), io), timeoutMs);
+    const r = await runJudge("answer", answerPrompt(reply, open, recent, quote), io);
     const j = r && parseAnswer(r.out, open.map((o) => o.id));
     console.log(`judge: answer ${j ? `-> ${j.target} ${j.outcome}` : "no usable result"} (${Date.now() - started}ms${r?.warm ? ", warm" : ", cold"})`);
     return j;
@@ -39,13 +39,13 @@ export interface QuestionInput {
 export type Composed = { text: string; ms: number; by?: "model" } | { text?: undefined; failure: string; ms: number; by?: undefined };
 
 type Run = (prompt: string) => Promise<unknown>;
-const viaJudge = (task: "write" | "check", io: JudgeIO, ms: number): Run => async (prompt) => (await withTimeout(runJudge(task, prompt, io), ms))?.out;
+const viaJudge = (task: "write" | "check", io: JudgeIO): Run => async (prompt) => (await runJudge(task, prompt, io))?.out;
 
 // ONE model call writes the question, always in the owner's language; code checks that every address, URL, id, title, time, date, amount
 // and the words Cc / Bcc from the exact arguments appear in it (questionfacts.ts) and that no address or URL outside the arguments and details does. If anything
 // fails (error, timeout, junk, a missing fact, a judge check that finds it unfaithful to the call) there is NO question and no retry (but a question the judge's check refuses gets ONE rewrite with the reason): the caller does not ask, the action is not
 // approved, and the failure is audited with the full arguments. Never throws.
-export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, timeoutMs = 15_000, run: Run = viaJudge("write", io, timeoutMs), check: Run = viaJudge("check", io, timeoutMs)): Promise<Composed> {
+export async function composeQuestion(q: QuestionInput, io: JudgeIO = {}, run: Run = viaJudge("write", io), check: Run = viaJudge("check", io)): Promise<Composed> {
   const started = Date.now();
   const facts = factsOf(q.args, q.details);
   // ONE context for the writer and the check (and the action judge before them): the same facts, so the check can accept what the writer was given

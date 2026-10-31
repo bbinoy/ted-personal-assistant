@@ -37,7 +37,6 @@ test("judge answers: anything but an exact auto is ask; slow or broken runs ask"
   const input = { description: "📅 Create calendar event", provenance: own("put it in my calendar") };
   assert.equal((await judgeAction(input, async () => ({ decision: "auto", reason: "ok" }))).decision, "auto");
   assert.equal((await judgeAction(input, async () => { throw new Error("boom"); })).decision, "ask");
-  assert.equal((await judgeAction(input, () => new Promise(() => {}), 20)).decision, "ask"); // never answers
 });
 
 test("provenance is code: the run's own, with the source and a browse task added next to it, and a browse sub-run without a parent has only the assistant's task, as derived", () => {

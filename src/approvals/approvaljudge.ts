@@ -1,5 +1,5 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { haikuOptions, oneShot, withTimeout } from "../tenants/haiku.ts";
+import { haikuOptions, oneShot } from "../tenants/haiku.ts";
 import { JudgeSpare, type JudgeIO } from "./judgespare.ts";
 import { LOGIN } from "../tenants/payer.ts";
 import { OWNER, settings } from "../core/settings.ts";
@@ -89,7 +89,8 @@ export function forTask(task: Task, out: unknown): unknown {
   return (out as { task?: unknown } | null | undefined)?.task === task ? out : undefined;
 }
 
-export { withTimeout }; // (haiku.ts: the judges wait on a model with the same fail-closed timeout)
+// The one limit of every judge task and run. A cold call on a flaky network took 20 s and more; a decision may now take twice this (one retry).
+const JUDGE_TIMEOUT_MS = 45_000;
 
 // One console line per judge call (sizes in chars, durations in ms, dollars; never the content), like the gate's `timing gate` line, so that the latency and
 // the dollars per day of the approval path can be added up from the log: warm|cold, init (call -> first message), result (call -> result), api (the model's
@@ -103,26 +104,34 @@ export function judgeTiming(task: Task, warm: boolean, promptChars: number, at: 
 // Undefined for an error result, no result, or an answer for the wrong task. Every task rebuilds the spare after use
 // (the write, the check and the answer of one question come one after the other; approvals.ts drops it when no question is open).
 export async function runJudge(task: Task, prompt: string, io: JudgeIO = {}): Promise<{ out: unknown; warm: boolean; subtype: string } | undefined> {
-  let warm = false;
-  const t0 = Date.now();
-  const at: Record<string, number> = {};
-  const r = await oneShot({
-    system: JUDGE_SYSTEM,
-    prompt: `task: ${task}\n${prompt}`,
-    model: settings.judgeModel,
-    payer: LOGIN, // the instance's login pays for every approval judgment, whoever's action it is: it is the safety net, not the person's work
-    schema: JUDGE_SCHEMA,
-    options: JUDGE_LIMITS,
-    run: io.query,
-    onMessage: (m) => void ("init" in at || (at.init = Date.now() - t0), m.type === "result" && (at.result = Date.now() - t0)),
-    spare: async (p) => {
-      const s = await spare.run(p, io);
-      warm = s.warm;
-      setImmediate(() => spare.prepare(io)); // after any task: the next one (write, check, answer, action) runs warm too
-      return s.messages;
-    },
-  }).catch(() => undefined); // a refusal of the API (usage limit, expired login) is no answer: the callers fail closed
-  console.log(judgeTiming(task, warm, prompt.length, at, r, Date.now() - t0));
-  if (!r || r.subtype === "no_result") return undefined;
-  return { out: r.ok ? forTask(task, r.output) : undefined, warm, subtype: r.subtype };
+  // A timeout (and only that) retries once, on a fresh cold process: the one that timed out is closed, and the spare may share its trouble.
+  for (const retry of [false, true]) {
+    let warm = false;
+    const t0 = Date.now();
+    const at: Record<string, number> = {};
+    const r = await oneShot({
+      system: JUDGE_SYSTEM,
+      prompt: `task: ${task}\n${prompt}`,
+      model: settings.judgeModel,
+      payer: LOGIN, // the instance's login pays for every approval judgment, whoever's action it is: it is the safety net, not the person's work
+      schema: JUDGE_SCHEMA,
+      options: JUDGE_LIMITS,
+      run: io.query,
+      timeoutMs: io.timeoutMs ?? JUDGE_TIMEOUT_MS,
+      onMessage: (m) => void ("init" in at || (at.init = Date.now() - t0), m.type === "result" && (at.result = Date.now() - t0)),
+      ...(retry ? {} : { spare: async (p: string) => {
+        const s = await spare.run(p, io);
+        warm = s.warm;
+        setImmediate(() => spare.prepare(io)); // after any task: the next one (write, check, answer, action) runs warm too
+        return s.messages;
+      } }),
+    }).catch(() => undefined); // a refusal of the API (usage limit, expired login) is no answer: the callers fail closed
+    console.log(judgeTiming(task, warm, prompt.length, at, r, Date.now() - t0));
+    if (r?.timedOut && !retry) {
+      console.log(`judge ${task}: timed out, retrying`);
+      continue;
+    }
+    if (!r || r.subtype === "no_result" || r.timedOut) return undefined;
+    return { out: r.ok ? forTask(task, r.output) : undefined, warm, subtype: r.subtype };
+  }
 }
