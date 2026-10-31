@@ -306,6 +306,7 @@ export function loadSettings(env: Env) {
     dream: oneOf(env, "DREAM", "on", ["on", "off"] as const) === "on",
     dreamHour: rhythm.dream.hour, // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
+    tasksPageUrl: env.TASKS_PAGE_URL?.trim() || undefined, // where the owner opens the task page from her phone (her tailnet address, https://<machine>.<tailnet>.ts.net:9443/tasks): shown in her /tasks and told to her runs; nothing is served from it
     tasksPagePort: num(env, "TASKS_PAGE_PORT", 8788, 0, 65_535), // the owner's read-only task page (tasks/taskspage.ts), on 127.0.0.1 only; 0 turns it off
 
     // The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window. RETENTION=off disables all of it; the windows people differ on are settings (0 where noted: that rule off); the rest are constants in heartbeat/retentionrules.ts and dbretention.ts.

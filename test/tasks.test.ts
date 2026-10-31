@@ -10,7 +10,8 @@ import { BROWSE_RUN, GROUP_CHAT, GROUP_LOOK, OWNER_CHAT, OWNER_LOOK } from "./ru
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "tasks-test-"));
 
 const S = await import("../src/tasks/store.ts");
-const { itemLine, tasksText } = await import("../src/tasks/render.ts");
+const { itemLine, tasksText, groupOpen } = await import("../src/tasks/render.ts");
+const { tasksPage } = await import("../src/tasks/taskspage.ts");
 const { createTasksServer } = await import("../src/modules/tasks/tasktools.ts");
 const { classify } = await import("../src/policy/policy.ts");
 const { allows, groupCapabilities, toolsFor, capabilitiesOf } = await import("../src/policy/capabilities.ts");
@@ -391,33 +392,43 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
     [
       "Tasks: 9 open, 1 overdue",
       "",
-      "Overdue (1)",
-      "• Overdue thing · Tue 20 Oct",
+      "Today (2)",
+      "\u2022 Overdue thing \u00b7 Tue 20 Oct \u00b7 overdue",
+      "\u2022 Send invoice \u00b7 15:00",
       "",
-      "Today (1)",
-      "• Send invoice · 15:00",
-      "",
-      "Upcoming (2)",
-      "• Water plants · Fri 23 Oct ↻",
-      "• Dentist · Tue 27 Oct 10:00",
-      "",
-      "No date (3)",
-      "• Someday",
-      "• Maybe reply to Bo",
-      "• Maybe call Cy",
-      "",
-      "Waiting on (1)",
-      "• Contract back · Wed 28 Oct · Anna",
-      "",
-      "I owe (1)",
-      "• Send photos · Lena",
+      "This week (3): Water plants, Dentist, Contract back",
+      "No date (4): Someday, Send photos, Maybe reply to Bo +1",
     ].join("\n"),
   );
+  // the same buckets as the task page, from the one grouping function
+  const page = tasksPage(k, NOW, ZONE);
+  for (const [b, xs] of Object.entries(groupOpen(S.listItems(k, { status: "open", limit: 200 }, NOW, ZONE), NOW, ZONE))) {
+    if (xs.length) assert.ok(page.includes(`<summary>${b} (${xs.length})</summary>`), b);
+  }
   assert.ok(tasksText(k, NOW, ZONE).split("\n").every((l) => l.length <= 60), "phone width");
+  // urgent is marked in text; the link is the owner's alone
+  S.addItem(scope(k), { title: "Pay rent", due: "2026-10-22", urgent: true });
+  assert.match(tasksText(k, NOW, ZONE), /Pay rent \u00b7 today \u00b7 urgent/);
+  const url = "https://machine.example.ts.net:9443/tasks";
+  (settings as { tasksPageUrl?: string }).tasksPageUrl = url;
+  const at = { now: () => new Date(NOW) };
+  try {
+    assert.ok(commandReply({ kind: "owner", key: "owner", convId: "owner" }, "/tasks", at)!.endsWith(`\n\nTask page: ${url}`));
+    (settings as { tenants: boolean }).tenants = true;
+    const rec = T.addTenant({ aci: "33333333-4444-4555-8666-777777777777", name: "Zed" })!;
+    const her = { kind: "tenant" as const, key: `tenant:${rec.id}`, convId: friendConvId(rec.id), tenantId: rec.id };
+    assert.doesNotMatch(commandReply(her, "/tasks", at)!, /Task page|ts\.net/);
+    const grp = { kind: "group" as const, key: k, convId: convIdOfKey(k) };
+    assert.doesNotMatch(commandReply(grp, "/tasks", at)!, /Task page|ts\.net/);
+    (settings as { tasksPageUrl?: string }).tasksPageUrl = undefined;
+    assert.doesNotMatch(commandReply({ kind: "owner", key: "owner", convId: "owner" }, "/tasks", at)!, /Task page/);
+  } finally {
+    (settings as { tasksPageUrl?: string }).tasksPageUrl = undefined;
+  }
   // more than eight in a section are counted, not all listed
   const many = fresh();
   for (let i = 0; i < 11; i++) S.addItem(scope(many), { title: `Item ${i}`, due: "2026-11-01" });
-  assert.match(tasksText(many, NOW, ZONE), /Upcoming \(11\)\n(• .*\n){8}… and 3 more/);
+  assert.match(tasksText(many, NOW, ZONE), /Later \(11\): Item 0, Item 1, Item 2 \+8/);
   // the command, through the same door as /status
   const now = new Date(NOW);
   const owner = { kind: "owner" as const, key: k, convId: "owner" };

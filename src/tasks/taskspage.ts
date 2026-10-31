@@ -3,25 +3,16 @@ import { createServer, type Server } from "node:http";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import { systemZone } from "../core/timezone.ts";
 import { completeItem, counts, dueClass, effectiveStatus, getItem, listItems, type Item } from "./store.ts";
-import { addDays, localOf, parseLocal, showLocal, todayIn } from "./when.ts";
+import { localOf, showLocal, todayIn } from "./when.ts";
+import { BUCKETS, groupOpen } from "./render.ts";
 
 // The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except one action: a tick-off button per open row. It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
 // ONLY the owner's conversation is read or changed, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
 
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const KIND = { task: "task", i_owe: "I owe", owed_to_me: "waiting on" } as const;
-const WEEK = 7; // "this week" = up to 7 days after today
+const WEEK = 7; // the "done" window, in days
 const DAY = 86_400_000;
-
-type Bucket = "Today" | "This week" | "Later" | "No date";
-const BUCKETS: readonly Bucket[] = ["Today", "This week", "Later", "No date"];
-
-function bucketOf(it: Item, now: number, zone: string): Bucket {
-  const c = dueClass(it, now, zone);
-  if (c === "overdue" || c === "today") return "Today"; // (overdue rows come first inside it)
-  if (c === "none") return "No date";
-  return parseLocal(it.due)!.date <= addDays(todayIn(now, zone), WEEK) ? "This week" : "Later";
-}
 
 function row(it: Item, now: number, zone: string, token?: string): string {
   const due = it.due ? showLocal(it.due, todayIn(now, zone)) : "";
@@ -39,11 +30,7 @@ export function tasksPage(key: string, now: number, zone: string, token?: string
   const open = listItems(key, { limit: 200 }, now, zone);
   const done = listItems(key, { status: "done", limit: 200 }, now, zone).filter((i) => (i.doneAt ?? 0) >= now - WEEK * DAY);
   const c = counts(key, now, zone);
-  const late = (i: Item): boolean => dueClass(i, now, zone) === "overdue";
-  const inBucket = (b: Bucket): Item[] => {
-    const xs = open.filter((i) => bucketOf(i, now, zone) === b);
-    return b === "Today" ? [...xs.filter(late), ...xs.filter((i) => !late(i))] : xs;
-  };
+  const g = groupOpen(open, now, zone);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="60"><title>Tasks</title><style>
 :root{color-scheme:light dark;--red:#c62828;--amber:#b26a00}@media(prefers-color-scheme:dark){:root{--red:#ff6b6b;--amber:#ffb74d}}
 body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1rem}h1{font-size:1.2rem;margin:.2rem 0}
@@ -53,7 +40,7 @@ li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li
 .b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit}
 .d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 </style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
-${BUCKETS.map((b) => block(b, inBucket(b), now, zone, b === "Today", token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
+${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today", token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
 ${block("Done in the last 7 days", done, now, zone, false)}</body></html>`;
 }
 

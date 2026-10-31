@@ -147,3 +147,20 @@ test("no run is handed learned facts; the record still answers on request (note 
   assert.equal(journalable("Write", { file_path: join(conv.notesDir, "people-di.md") }), true, "a look's note write is a journal line");
   assert.doesNotMatch(readFileSync("plugin/skills/daily-brief/SKILL.md", "utf8"), /notes_changed_facts/);
 });
+
+test("the owner's runs, chat turn and look alike, are told the task page address when TASKS_PAGE_URL is set; a group never is", () => {
+  const url = "https://machine.example.ts.net:9443/tasks";
+  const told = (f: { status: string[] }) => f.status.some((x) => x.includes(`Your owner's task page (tasks grouped like /tasks, with tick-off): ${url}`));
+  const g = group("facts-group-url");
+  s.tasksPageUrl = url;
+  try {
+    for (const attended of [true, false]) {
+      assert.ok(told(F.factsFor(owner(), new Date(NOW), attended)), `owner, attended ${attended}`);
+      assert.ok(!told(F.factsFor(g, new Date(NOW), attended)), `group, attended ${attended}`);
+    }
+    s.tasksPageUrl = undefined;
+    assert.ok(!told(F.factsFor(owner(), new Date(NOW), true)), "unset: no line");
+  } finally {
+    s.tasksPageUrl = undefined;
+  }
+});
