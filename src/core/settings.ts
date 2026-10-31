@@ -306,6 +306,8 @@ export function loadSettings(env: Env) {
     dream: oneOf(env, "DREAM", "on", ["on", "off"] as const) === "on",
     dreamHour: rhythm.dream.hour, // the dream runs on the first tick at or after this local hour, once a day (dream.ts dreamTrigger)
 
+    tasksPagePort: num(env, "TASKS_PAGE_PORT", 8788, 0, 65_535), // the owner's read-only task page (tasks/taskspage.ts), on 127.0.0.1 only; 0 turns it off
+
     // The retention job (core/retention.ts): once a day from 03:30 it removes what has outlived its window. RETENTION=off disables all of it; the windows people differ on are settings (0 where noted: that rule off); the rest are constants in heartbeat/retentionrules.ts and dbretention.ts.
     retention: oneOf(env, "RETENTION", "on", ["on", "off"] as const) === "on",
     auditRetentionDays: num(env, "AUDIT_RETENTION_DAYS", 90, 1, 3650), // rotated audit generations lose lines older than this; the current file is never touched
