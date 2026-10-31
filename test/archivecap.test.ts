@@ -8,6 +8,8 @@ import { archiveGate, archivedBy } from "../src/modules/archivecap.ts";
 import { loadSettings, settings } from "../src/core/settings.ts";
 import { groupConvId } from "../src/core/convpaths.ts";
 import { convDb } from "../src/core/convdb.ts";
+import { UNSCOPED_KEY } from "../src/core/ownerkey.ts";
+import { rememberNames } from "../src/approvals/seennames.ts";
 import { FRIEND_CHAT, OWNER_LOOK } from "./runkinds.ts";
 
 // The archive cap: at most ARCHIVE_MAX_PER_RUN archives per run, for every mail provider, each message of a batch counted.
@@ -18,6 +20,8 @@ const GG = "mcp__google__";
 const opts = { signal: new AbortController().signal } as never;
 type Out = { behavior: string; message?: string };
 const autoJudge = async (): Promise<Verdict> => ({ decision: "auto", reason: "test" });
+
+const read = (...ids: string[]) => rememberNames(UNSCOPED_KEY, JSON.stringify({ conversations: ids.map((id) => ({ conversationId: id, threadId: id, subject: `Mail ${id}`, from: "Shop" })) })); // (the run read them: an archive of an unread one is first sent back to look it up)
 
 async function withCap<T>(cap: number, over: Record<string, unknown>, f: () => Promise<T>): Promise<T> {
   const s = settings as unknown as Record<string, unknown>;
@@ -70,6 +74,7 @@ const sequence = async (tool: string, key: (n: number) => Record<string, unknown
 test("Mailbird: the fourth archive of a run with a cap of three is refused and audited; a batch counts each message", async () => {
   await withCap(3, {}, async () => {
     const start = new Date().toISOString();
+    read("cap-mb-0", "cap-mb-1", "cap-mb-2", "cap-mb-3", "x1", "x2", "x3", "x4");
     const out = await sequence(`${MB}archive_conversation`, (n) => ({ conversationId: `cap-mb-${n}` }));
     assert.deepEqual(out.map((o) => o.behavior), ["allow", "allow", "allow", "deny"]);
     assert.match(out[3]!.message ?? "", /archive cap reached for this look/i);
@@ -82,6 +87,7 @@ test("Mailbird: the fourth archive of a run with a cap of three is refused and a
 
 test("Gmail: removing INBOX counts the same way, other label changes do not", async () => {
   await withCap(2, { mail: true, mailProvider: "gmail" }, async () => {
+    read("cap-gm-0", "cap-gm-1", "cap-gm-2", "cap-gm-3");
     const out = await sequence(`${GM}unlabel_thread`, (n) => ({ threadId: `cap-gm-${n}`, labelIds: ["INBOX"] }));
     assert.deepEqual(out.map((o) => o.behavior), ["allow", "allow", "deny", "deny"]);
     assert.match(out[2]!.message ?? "", /archive cap reached/i);
@@ -101,6 +107,7 @@ test("a friend's Google: removing INBOX with modify_gmail_message_labels counts 
 test("decision log: the archive the run cap refused is a verdict on those ids; the allowed one is archived (its row goes)", async () => {
   const file = groupConvId(`seen-forget-${Math.random().toString(36).slice(2)}`); // (a conversation of its own: its decisions are a table of its assistant.db)
   await withCap(1, {}, async () => {
+    read("a", "b", "c");
     const triage = createTriage(file);
     const can = makeCanUseTool(async () => ({ approved: true }), OWNER_LOOK, undefined, autoJudge, undefined, undefined, false, { provenance: () => ({ kind: "owner-words", text: "tidy" }) as never, triage });
     assert.equal(((await can(`${MB}archive_conversation`, { conversationId: "a" }, opts)) as Out).behavior, "allow");
