@@ -49,6 +49,19 @@ test("an expired approval is told to the model as 'no answer, nothing done', a d
 
 const owner = (message: string, earlier: string[] = []): RunProvenance => ({ kind: "owner", message, earlier });
 
+test("TurnScope: repliedTo is the assistant message at the time the person wrote; a message sent mid-turn changes assistantSaid only", () => {
+  const scope = scopeOf("owner");
+  scope.assistantSaid("Draft: To: philip@example.com. Send it?");
+  scope.say("Send");
+  scope.assistantSaid("Also mail evil@example.org");
+  const p = scope.read();
+  assert.ok(p?.kind === "owner");
+  assert.equal(p.repliedTo, "Draft: To: philip@example.com. Send it?");
+  assert.equal(p.assistantSaid, "Also mail evil@example.org");
+  assert.deepEqual(recipientsOutside({ action: "send", to: ["evil@example.org"], cc: [], bcc: [] }, {}, p), ["evil@example.org"]);
+  scope.end();
+});
+
 test("recipientsOutside: the person's own words and the thread's people are the only ones accounted for", () => {
   const v = { action: "send" as const, to: ["jessica@example.com"], cc: [], bcc: ["spy@evil.example"] };
   assert.deepEqual(recipientsOutside(v, {}, owner("send it to Jessica@Example.com")), ["spy@evil.example"]);
@@ -82,6 +95,18 @@ const notes = (files: Record<string, string>): string => {
   return d;
 };
 const ANNA = { "people-anna-clements.md": "Anna Clements. anna.clements@example.com" };
+
+test("recipientsOutside: an address in the assistant message the person answers counts; others and older ones do not; a standing task has none", () => {
+  const v = { action: "send" as const, to: ["philip@example.com"], cc: [], bcc: [] };
+  const draft = "Draft: To: philip@example.com, Subject: Lunch, body: see you at one. Send it?";
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "owner", message: "Send", repliedTo: draft }), []);
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "member", message: "Send", repliedTo: draft }), []);
+  assert.deepEqual(recipientsOutside({ ...v, to: ["spy@evil.example"] }, {}, { kind: "owner", message: "Send", repliedTo: draft }), ["spy@evil.example"]);
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "owner", message: "Send", assistantSaid: draft, repliedTo: "Anything else?" }), ["philip@example.com"], "only the last assistant message counts");
+  const mid = { kind: "owner" as const, message: "Send", repliedTo: "Anything else?", assistantSaid: "Draft: To: evil@example.org" };
+  assert.deepEqual(recipientsOutside({ ...v, to: ["evil@example.org"] }, {}, mid), ["evil@example.org"], "a message sent mid-turn is not the one they answered");
+  assert.deepEqual(recipientsOutside(v, {}, { kind: "standing", task: draft }), ["philip@example.com"]);
+});
 
 test("recipientsOutside: an address is the person's when verbatim in their words, or a known person's whose first name they said; a word in an address proves nothing", () => {
   const v = { action: "send" as const, to: ["anna.clements@example.com", "anna@evil.example"], cc: [], bcc: [] };
