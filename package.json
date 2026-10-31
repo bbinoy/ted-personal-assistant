@@ -33,7 +33,8 @@
     "convdb": "node --conditions=workspace-source --env-file-if-exists=.env scripts/convdb.ts",
     "forget": "node --conditions=workspace-source --env-file-if-exists=.env scripts/forget.ts",
     "browse:smoke": "node --conditions=workspace-source --env-file-if-exists=.env scripts/browse-smoke.ts",
-    "setup:hooks": "git config core.hooksPath .githooks"
+    "setup:hooks": "git config core.hooksPath .githooks",
+    "eval:judge": "HARNESS_DATA_DIR=$(mktemp -d) node --conditions=workspace-source --env-file-if-exists=.env scripts/judge-eval.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
