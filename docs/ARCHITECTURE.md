@@ -277,6 +277,7 @@ Every tool call, in every conversation and run, goes through `src/approvals/perm
 4. **Unattended runs never ask** (`UNATTENDED_SKIP`, `RunKind.attended` false). A look, its expert, a routine and their browse worker act when the judge says `auto`; otherwise they get one fixed refusal, audited `background-skip`. Their approver is `NEVER_ASKS`. A payment is refused outright.
 
 - **Answers.** Only a message that arrives after the question, or a reaction on it, can answer. An exact yes or no for the single open question and 👍 / 👎 are matched by code; any other reply goes to the judge model with all open questions of that conversation (`approvalmodel.ts`, `approvalprompt.ts`). A failed reading approves nothing.
+- **Hand-off.** An ordinary ask does not hold the turn: after the question is sent, a `pending_actions` row is stored and the call is denied with "asked, it runs on their yes", so the turn ends and the queue is free. Every kind of yes (phrase, judge reading, reaction, quoted reply, allowed edit) makes one single-use grant for exactly that call and enters a *continuation* turn through the usual intake (`intake.ts continuation`, at the burst, so it merges with waiting messages); `permissions.ts` consumes the grant if the call, the conversation and the rendered details (the mail draft included) are unchanged. A no or silence leaves a fact for the next run. Payments and browse steps stay on the blocking ask. A look waits while a question is open (`queue.ts busy`); a restart brings the rows back (`handoff.ts rehydrate`). `approvals/` cannot import `conversation/`, so `main.ts` hands the continuation in (`wiring.ts`).
 - **One approver per conversation** (`approvers.ts`): the question goes to the conversation that triggered the action; an answer from anywhere else, the admin included, never applies. A stranger's registration asks the owner in her own chat (`registerask.ts`).
 - **Rules that persist.** A decline is final for 30 minutes for the same call (`declined.ts`). An expired question reaches the agent as "not answered in time", with a journal line and no chat message. A send is built from the draft read back from the mail client.
 
@@ -569,6 +570,8 @@ src/approvals/approvalreport.ts  `npm run report`
 src/approvals/judgecontext.ts  the one context of the judge's tasks: provenance, recent chat, seen names, details
 src/approvals/approvals.ts  open approvals: fast yes/no, judge, reactions
 src/approvals/approvers.ts  the approver of each conversation
+src/approvals/handoff.ts  a question that does not hold its turn: grant, continuation, restart
+src/approvals/pendingstore.ts  the stored question and single-use grant (pending_actions)
 src/approvals/auditargs.ts  a call's arguments for the audit, capped
 src/approvals/autojudge.ts  the judge's input and the vetoes before it
 src/approvals/created.ts  what the assistant itself made (24 hours)
