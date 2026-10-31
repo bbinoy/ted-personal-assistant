@@ -17,7 +17,7 @@ export const norm = (v: string | number): string => {
   return (hex ? hex.slice(1).join("") : s).toLowerCase();
 };
 
-const ID_KEY = /^(id|(event|message|draft|page|file|thread)_?id)$/i;
+const ID_KEY = /^(id|(event|message|draft|page|file|thread|conversation)_?id)$/i;
 
 // Pure. The ids a create result holds: the values of id-like keys anywhere in it (as JSON text, escaped or not), and any page id in a Notion address.
 export function idsInResult(response: unknown): string[] {
