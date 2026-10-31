@@ -31,23 +31,27 @@ export function tasksPage(key: string, now: number, zone: string, token?: string
   const done = listItems(key, { status: "done", limit: 200 }, now, zone).filter((i) => (i.doneAt ?? 0) >= now - WEEK * DAY);
   const c = counts(key, now, zone);
   const g = groupOpen(open, now, zone);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="60"><title>Tasks</title><style>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="60"><title>Tasks</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>
 :root{color-scheme:light dark;--red:#c62828;--amber:#b26a00}@media(prefers-color-scheme:dark){:root{--red:#ff6b6b;--amber:#ffb74d}}
 body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1rem}h1{font-size:1.2rem;margin:.2rem 0}
 .h{color:#777;margin-bottom:1rem}summary{font-weight:600;margin:.8rem 0 .3rem}ul{list-style:none;padding:0;margin:0}
 li{display:flex;gap:.6rem;align-items:center;padding:.45rem 0 .45rem .5rem;border-top:1px solid #8884;border-left:4px solid transparent}
 li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li.late .d{color:var(--red);font-weight:600}li.urgent .m{color:var(--amber);font-weight:600}
-.b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit}
+.b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit;cursor:pointer;transition:background-color .15s,border-color .15s}
+button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}button:active{background:#2e7d6b4d}button:focus-visible{outline:2px solid #2e7d6b;outline-offset:2px}
 .d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 </style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
 ${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today", token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
 ${block("Done in the last 7 days", done, now, zone, false)}</body></html>`;
 }
 
+/** The tab icon: a tick in a rounded square, mid-tone colours that read on light and dark tabs. Served by the page itself; nothing is loaded from outside. */
+const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2e7d6b"/><path d="M8 17l5.5 5.5L24 10.5" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 const HEADERS = {
-  "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  "content-security-policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "cache-control": "no-store",
-  "referrer-policy": "no-referrer",
+  "referrer-policy": "same-origin",
   "x-content-type-options": "nosniff",
 };
 
@@ -118,6 +122,7 @@ export function tasksPageServer(read: (token: string) => string = (t) => tasksPa
       return;
     }
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD, POST" });
+    if (path === "/favicon.svg" || path === "/favicon.ico") return send(200, "image/svg+xml", FAVICON, { "cache-control": "public, max-age=86400" }); // (browsers ask for the .ico unasked)
     if (path === "/healthz") return send(200, "text/plain", "ok");
     if (path !== "/tasks") return send(404, "text/plain", "not found");
     try {

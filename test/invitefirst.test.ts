@@ -8,18 +8,15 @@ import { tick } from "./util.ts";
 // The owner writes first: one fixed hello to a phone number or a username (Messenger.sendFirst); when the person answers she is a friend with no question.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "invitefirst-test-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const Reg = await import("../src/tenants/registration.ts");
 const R = await import("../src/tenants/tenantroute.ts");
 const { createTenantAdminServer, tenantHooks } = await import("../src/tenants/tenanttools.ts");
 const { FakeMessenger } = await import("@ted-assistant/messenger/testing");
 
-const on = settings as unknown as { tenants: boolean };
 const aci = (n: number) => `cccccccc-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 beforeEach(() => {
-  on.tenants = true;
   rmSync(Reg.FILE, { force: true });
 });
 

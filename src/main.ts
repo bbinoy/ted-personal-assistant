@@ -126,9 +126,8 @@ loadSponsors(); // (groups that friends sponsor are known as theirs from the fir
 // Both kinds of conversation run through one pipeline (src/conversation/conversation.ts). Spoken replies need the
 // assistant's own chat (in Note to Self our own voice message would echo back as if the owner had sent
 // it) and the local speech setup.
-// Several people on one instance (TENANTS=on, src/tenants/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
+// Several people on one instance (src/tenants/tenants.ts): each friend is a tenant with her own folder, API key (OpenBao), limits and cooldown.
 // Needs a messenger other people can write to: with Signal that is the assistant's own account (in Note to Self there is nobody else to talk to).
-if (settings.tenants && !messenger.capabilities.people) throw new Error("TENANTS=on needs the assistant's own account (with Signal: SIGNAL_ACCOUNT, docs/SIGNAL-ACCOUNT.md)");
 const tenantRunner = createTenantRunner({});
 // One turn of a private chat. A tenant's goes through her gates first (tenantrun.ts, which ends in the same runConversation); the owner's tells the approvals what she wrote.
 const runChat: PipelineDeps["run"] = (conv, prompt, ownerMessage, pictures, hooks, documents, reactedTo, reactedAt, arrivedAt, continuation) => {
@@ -165,9 +164,9 @@ const pipeline: Pipeline = createPipeline({
 // A group's event goes to the group; anything else must be the owner's own chat (the caller has checked).
 const route = (w: { group?: { id: string } }, ev: Parameters<Pipeline["handleIncoming"]>[1]) =>
   void pipeline.handleIncoming(w.group ? group(w.group.id) : owner(), ev).catch((e) => console.error(`${ev.type} error:`, e.message));
-// With TENANTS=on a private message from someone else is decided by tenantroute.ts: a tenant's goes to her conversation, anybody else gets ONE fixed line
+// A private message from someone else is decided by tenantroute.ts: a tenant's goes to her conversation, anybody else gets ONE fixed line
 // with no model call and the owner is asked in her own chat whether she may join (registerask.ts); what the stranger wrote is held, shown to nobody and
-// replayed as her first turn after the owner's yes. Off: ignored, exactly as before.
+// replayed as her first turn after the owner's yes.
 const deliverToTenant = (id: string, m: IncomingMessage) => void pipeline.handleIncoming(tenant(id), { type: "message", m }).catch((e) => console.error("tenant message error:", e.message));
 const registrar = createRegistrar({
   send: (text) => out.reply(text, { plain: true, kind: "approval" }),
@@ -185,7 +184,7 @@ function fromStranger(m: IncomingMessage): void {
 messenger.onMessage((m) => {
   if (!m.group) {
     if (!acceptOwner(m, resolveSender)) {
-      if (settings.tenants && m.other) return fromStranger(m);
+      if (m.other) return fromStranger(m);
       return void console.log(`ignored a message from ${mask(m.from)}`);
     }
     learnOwnerAci({ number: m.from, aci: m.fromUuid }); // the first message from her number carries her account id: the pair is recorded once
@@ -197,7 +196,7 @@ messenger.onMessage((m) => {
 // A message deleted for everyone: the same door as a message.
 messenger.onDeletion((d) => {
   if (d.group || acceptOwner(d, resolveSender)) route(d, { type: "deletion", d });
-  else if (settings.tenants && d.other && activeTenant(d.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(d.fromUuid)!.id), { type: "deletion", d }).catch((e) => console.error("tenant deletion error:", e.message));
+  else if (d.other && activeTenant(d.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(d.fromUuid)!.id), { type: "deletion", d }).catch((e) => console.error("tenant deletion error:", e.message));
 });
 
 // The mail provider's own start-up (its module, src/modules): Mailbird's connection (the approval of any send shows the draft read back from it), or the Gmail connector's read-backs for the same approval.
@@ -210,7 +209,7 @@ if (settings.tasksPagePort) startTasksPage(settings.tasksPagePort); // the owner
 messenger.onReaction((r) => {
   if (r.isRemove) return;
   if (r.group || acceptOwner(r, resolveSender)) route(r, { type: "reaction", r });
-  else if (settings.tenants && r.other && activeTenant(r.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(r.fromUuid)!.id), { type: "reaction", r }).catch((e) => console.error("tenant reaction error:", e.message));
+  else if (r.other && activeTenant(r.fromUuid)) void pipeline.handleIncoming(tenant(activeTenant(r.fromUuid)!.id), { type: "reaction", r }).catch((e) => console.error("tenant reaction error:", e.message));
 });
 
 // Policy of this app, not of the messenger: if the platform goes away we exit, and launchd restarts the whole agent
@@ -232,7 +231,7 @@ if (registryProblem() !== undefined) void say(REGISTRY_NOTICE).catch(() => {}); 
 welcomeStart(); // a fresh data folder is marked once: its first run (chat turn or look) is told to introduce itself (core/welcome.ts)
 rehydrate(); // questions handed off before the stop are open again, with the time they had left (approvals/handoff.ts)
 replayUnanswered({ pipeline, tell: (conv, text) => out.reply(text, { plain: true, kind: "other", target: conv.target }) }); // what anyone (the owner, a friend, a group) wrote just before the last stop and never got an answer to (replay.ts)
-if (settings.tenants) registrar.askOpen(); // requests still open from before this start are put to the owner again
+registrar.askOpen(); // requests still open from before this start are put to the owner again
 // The cloned voice takes a few seconds to load: have it ready for the first spoken reply (it is stopped again after WARM_IDLE_MINUTES (settings.ts) idle, and the next reply restarts it).
 if (settings.tts.provider === "qwen" && settings.warm && settings.voiceReplies && providerReady(settings.tts).ok) void warmQwen(settings.tts.qwen).then((err) => console.log(err ? `Qwen voice not warmed up (Kokoro stands in): ${err}` : "Qwen voice server ready"));
 // A warm process is used only while fresh (agent.ts); keep one ready so a message after a

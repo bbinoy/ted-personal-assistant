@@ -1,7 +1,6 @@
 import { readAudit, type AuditEntry, type Source } from "../core/audit.ts";
 import { isReadTool } from "../policy/policy.ts";
 import { foldEdits, kindIs, messagesSince, withoutDeleted, type Sent } from "../core/messages.ts";
-import { settings } from "../core/settings.ts";
 import { auditSource } from "../core/runkind.ts";
 import { LIMITS } from "../core/sanitize.ts";
 import { listTenants } from "../tenants/tenants.ts";
@@ -60,9 +59,9 @@ export function actedSince(rows: readonly AuditEntry[], source: Source, sinceMs:
 }
 const auditRows = (source: Source, sinceMs: number): AuditEntry[] => readAudit((e) => e.source === source && Date.parse(e.ts) >= sinceMs);
 
-// Every conversation worth looking at: the owner's, each friend's when TENANTS is on (her own gates still apply in her run) and every group we know.
+// Every conversation worth looking at: the owner's, each friend's (her own gates still apply in her run) and every group we know.
 function replayConversations(): Conversation[] {
-  return [owner(), ...(settings.tenants ? listTenants().map((t) => tenant(t.id)) : []), ...listGroups().map((g) => group(g.id))];
+  return [owner(), ...listTenants().map((t) => tenant(t.id)), ...listGroups().map((g) => group(g.id))];
 }
 
 export interface ReplayDeps {

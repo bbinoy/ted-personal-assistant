@@ -27,7 +27,6 @@ const { createMemoryServer } = await import("../src/modules/memory/memory-tools.
 const { convPaths, groupConvId } = await import("../src/core/convpaths.ts");
 
 const on = settings as unknown as Record<string, unknown>;
-on.tenants = true;
 on.warm = false;
 const KEY = "instance-key-for-the-group-sponsor-tests";
 const OWNER_NUMBER = "+15555550114";

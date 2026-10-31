@@ -1,9 +1,9 @@
 import { register, takeInvited, type Request } from "./registration.ts";
 import { ACI, addTenant, tenantByAci, type TenantRecord } from "./tenants.ts";
-import { ASSISTANT, settings } from "../core/settings.ts";
+import { ASSISTANT } from "../core/settings.ts";
 import { directTarget } from "@ted-assistant/messenger";
 
-// Who is this sender? The door for everybody who is not the owner (main.ts), with TENANTS=on. Pure of Signal: a sender and her text in, a decision out.
+// Who is this sender? The door for everybody who is not the owner (main.ts). Pure of Signal: a sender and her text in, a decision out.
 //   a tenant (invited or active)  -> her conversation
 //   a suspended tenant            -> nothing at all, not even a reply (she is not told, not logged as a message)
 //   somebody the owner wrote to   -> a tenant at once (the owner started it: no question), and her message is her first turn
@@ -34,8 +34,7 @@ export interface Sender {
   timestamp?: number;
 }
 
-export function routeSender(who: Sender, now = Date.now()): Route {
-  if (!settings.tenants) return { kind: "ignore", why: "tenants are off" };
+function routeSender(who: Sender, now = Date.now()): Route {
   const aci = who.aci?.toLowerCase();
   if (!aci || !ACI.test(aci)) return { kind: "ignore", why: "no account id" };
   const known = tenantByAci(aci);

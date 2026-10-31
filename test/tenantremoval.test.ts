@@ -8,7 +8,6 @@ import { join } from "node:path";
 // secret store that refuses is a printed admin command, never a failed removal.
 process.env.HARNESS_DATA_DIR = mkdtempSync(join(tmpdir(), "removal-test-"));
 
-const { settings } = await import("../src/core/settings.ts");
 const T = await import("../src/tenants/tenants.ts");
 const { adminCommand } = await import("../src/tenants/removal.ts");
 const { removeFriend: removeTenant } = await import("../src/conversation/tenantremoval.ts");
@@ -25,7 +24,6 @@ const rowsOf = (key: string): number => peekRowDb(rowConv(key))?.num("SELECT COU
 const { tenantKey } = await import("../src/core/ownerkey.ts");
 const { OpenBao } = await import("../src/secrets/openbao.ts");
 
-(settings as { tenants: boolean }).tenants = true;
 const ACI = (n: number) => `${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`;
 const voiceRoot = conversationsDir();
 const attachmentsDir = mkdtempSync(join(tmpdir(), "att-"));

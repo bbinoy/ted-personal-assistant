@@ -414,7 +414,6 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
   const at = { now: () => new Date(NOW) };
   try {
     assert.ok(commandReply({ kind: "owner", key: "owner", convId: "owner" }, "/tasks", at)!.endsWith(`\n\nTask page: ${url}`));
-    (settings as { tenants: boolean }).tenants = true;
     const rec = T.addTenant({ aci: "33333333-4444-4555-8666-777777777777", name: "Zed" })!;
     const her = { kind: "tenant" as const, key: `tenant:${rec.id}`, convId: friendConvId(rec.id), tenantId: rec.id };
     assert.doesNotMatch(commandReply(her, "/tasks", at)!, /Task page|ts\.net/);
@@ -438,7 +437,6 @@ test("tasks: /tasks in the owner's chat and a friend's own chat, phone-sized, gr
 });
 
 test("tasks: /tasks for a friend answers from HER list in her clock, and not for a friend without the capability", () => {
-  (settings as { tenants: boolean }).tenants = true;
   const rec = T.addTenant({ aci: "11111111-2222-4333-8444-555555555555", name: "Ida" })!;
   const key = `tenant:${rec.id}`;
   const her = { kind: "tenant" as const, key, convId: friendConvId(rec.id), tenantId: rec.id };
@@ -515,7 +513,6 @@ test("tasks: forgetting a group or a friend deletes the folder, and the list goe
   assert.equal(hasConvDb(groupConvId(GID)), false);
   assert.deepEqual(S.listItems(gk, { status: ["open", "done", "dropped", "snoozed"] }, NOW, ZONE), []);
   assert.equal(statSafe(dbFile), false);
-  (settings as { tenants: boolean }).tenants = true;
   const rec = T.addTenant({ aci: "22222222-3333-4444-8555-666666666666", name: "Kai" })!;
   const fk = `tenant:${rec.id}`;
   S.addItem(scope(fk, { origin: "friend", by: "friend" }), { title: "Her list" });

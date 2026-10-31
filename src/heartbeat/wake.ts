@@ -15,7 +15,7 @@ import { closeIdleConvDbs } from "../core/convdb.ts";
 import { fireReminders } from "./remindtick.ts";
 import { claimPreps } from "./preptick.ts";
 
-// The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant (TENANTS=on)
+// The clock of every conversation's own initiative. On every tick (a free timer, no model), for the owner's chat, every group the owner is in and every tenant
 // whose next look has come (or where something was said or a note changed since the last look), ONE thing happens, the same for all of them: the HEARTBEAT RUN
 // (heartbeat/look.ts). It is one Haiku run with the conversation's own persona, notes, tools and approver; it looks at the chat log and whatever the conversation can read
 // (mail, calendar, tasks), acts through the normal floor, judge and phone, and answers with a message or [[silent]] and its next look (10..120 minutes). Which tools and
@@ -120,15 +120,13 @@ export function createWakeups(deps: WakeDeps) {
         if (wake) convs.push(g);
       });
     }
-    if (settings.tenants) {
-      for (const id of (deps.tenantIds ?? (() => listTenants().filter((r) => r.status === "active").map((r) => r.id)))()) {
-        try {
-          const conv = tenant(id);
-          if (allows(conv, "tasks")) remind.push(conv);
-          if (wake && allows(conv, "heartbeat")) convs.push(conv); // the tick is her heartbeat: without it nothing of hers is looked at
-        } catch (e) {
-          console.error("wake: a tenant could not be looked at:", (e as Error).message);
-        }
+    for (const id of (deps.tenantIds ?? (() => listTenants().filter((r) => r.status === "active").map((r) => r.id)))()) {
+      try {
+        const conv = tenant(id);
+        if (allows(conv, "tasks")) remind.push(conv);
+        if (wake && allows(conv, "heartbeat")) convs.push(conv); // the tick is her heartbeat: without it nothing of hers is looked at
+      } catch (e) {
+        console.error("wake: a tenant could not be looked at:", (e as Error).message);
       }
     }
     if (wake) for (const key of states.keys()) if (!convs.some((c) => c.key === key)) states.delete(key); // groups and tenants that are gone

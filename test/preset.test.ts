@@ -175,7 +175,7 @@ test("a second preset's note categories reach every run: chat, group, friend, he
     console.log(JSON.stringify(out));
   `);
   const out = JSON.parse(execFileSync(process.execPath, ["--conditions=workspace-source", probe], {
-    env: { ...process.env, HARNESS_DATA_DIR: join(scratch, "data2"), ASSISTANT_PRESET: dir, TENANTS: "on", TENANT_ANTHROPIC_API_KEY: "k", OWNER_NAME: "Alex", ASSISTANT_NAME: "Coach" }, encoding: "utf8",
+    env: { ...process.env, HARNESS_DATA_DIR: join(scratch, "data2"), ASSISTANT_PRESET: dir, TENANT_ANTHROPIC_API_KEY: "k", OWNER_NAME: "Alex", ASSISTANT_NAME: "Coach" }, encoding: "utf8",
   }).trim().split("\n").at(-1)!);
   assert.match(out.chat, /exactly one category of goals, people, style\./);
   assert.match(out.friend, /exactly one category of goals, style\./);

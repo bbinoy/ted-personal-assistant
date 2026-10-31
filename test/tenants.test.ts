@@ -31,13 +31,11 @@ const { convPaths, conversationsDir, friendConvId, instancePaths, OWNER_CONV } =
 const { FILE: OWNER_LOG } = await import("../src/core/messages.ts");
 const { acceptOwner } = await import("../src/conversation/guards.ts");
 
-const on = settings as unknown as { tenants: boolean };
 const ACI_A = "11111111-1111-4111-8111-111111111111";
 const ACI_C = "33333333-3333-4333-8333-333333333333";
 const KEY_A = "sk-" + "ant-api03-AAAAAAAAAAAAAAAAAAAAAAAA";
 
 beforeEach(() => {
-  on.tenants = true;
   resetCooldown();
 });
 
@@ -100,12 +98,6 @@ test("a hand-edited registry cannot make a bad id, or an unknown role load; an o
   assert.ok(!("keyRef" in old));
   assert.ok(T.tenantById(rec.id));
   writeFileSync(file, JSON.stringify({ tenants: reg.tenants.filter((t: { id: string }) => t.id !== "owner" && !t.id.startsWith("odd") && t.id !== "old-one" && t.id !== "../escape") }));
-});
-
-test("routing: with TENANTS off nothing is answered, as today", () => {
-  on.tenants = false;
-  assert.deepEqual(R.routeSender({ aci: ACI_C, text: "hello" }), { kind: "ignore", why: "tenants are off" });
-  assert.deepEqual(R.routeSender({ aci: ACI_A, text: "hello" }).kind, "ignore", "not even a known tenant");
 });
 
 // ---- a tenant's turn ----
@@ -254,19 +246,17 @@ test("delete: her folder and her registry entry go; the others, the owner's reco
   assert.equal(T.deleteTenant(gone.id), false);
 });
 
-test("doctor: shows the instance key (set or not, never its value) and each tenant with status, spend and a pause; says nothing when TENANTS is off", async () => {
+test("doctor: shows the instance key (set or not, never its value) and each tenant with status, spend and a pause", async () => {
   const { tenantCheck } = await import("../src/doctor.ts");
   const lines: string[] = [];
   const line = (ok: boolean | "warn", what: string, detail = "") => void lines.push(`${ok === true ? "ok" : ok === "warn" ? "warn" : "FAIL"} ${what} ${detail}`);
-  tenantCheck(line, { on: false });
-  assert.deepEqual(lines, ["ok tenants: off TENANTS=off: one person, as always"]);
   lines.length = 0;
   const rec = join_("Doc");
   const ctx = T.tenantContext(rec);
   recordCost(0.25, ctx.ledger);
   T.setPaused(ctx, Date.now() + 3600_000);
   assert.ok(looksLikeApiKey(KEY_A) && !looksLikeApiKey("sk-ant-short") && !looksLikeApiKey("hello"));
-  tenantCheck(line, { on: true, key: KEY_A });
+  tenantCheck(line, { key: KEY_A });
   const mine = lines.find((l) => l.includes(`tenant ${rec.id}`))!;
   assert.match(mine, /^warn /);
   assert.match(mine, /active; capabilities [^;]+; today \$0\.25; paused until [\d-]+ \d\d:\d\d/);
@@ -277,7 +267,7 @@ test("doctor: shows the instance key (set or not, never its value) and each tena
   T.setPaused(ctx, undefined);
   assert.equal(T.pausedUntil(ctx), undefined);
   lines.length = 0;
-  tenantCheck(line, { on: true, key: undefined });
+  tenantCheck(line, { key: undefined });
   assert.match(lines.find((l) => l.includes("tenant API key"))!, /^warn tenant API key TENANT_ANTHROPIC_API_KEY is not set: friends are told the assistant is not set up/);
 });
 

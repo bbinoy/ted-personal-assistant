@@ -37,7 +37,6 @@ type Kind = Parameters<typeof recordMessage>[0];
 let created: string[] = []; // the tenants of the test that is running (the data folder is shared by all)
 beforeEach(() => {
   created = [];
-  on.tenants = true;
   on.wakeups = true;
   on.dream = true;
   resetCooldown();
@@ -120,7 +119,7 @@ test("a friend gets the heartbeat run, on the instance key, with her log and her
   assert.doesNotMatch(readFileSync(T.tenantContext(other).logFile, "utf8"), /"kind":"wake"/);
 });
 
-test("with the wake-ups switched off, with TENANTS off, or while not active: no look at all", async () => {
+test("with the wake-ups switched off, or while not active: no look at all", async () => {
   const susp = person("Ed");
   T.setStatus(susp.id, "suspended");
   note(susp);
@@ -132,10 +131,6 @@ test("with the wake-ups switched off, with TENANTS off, or while not active: no 
   on.wakeups = false; // the instance's switch (.env WAKEUPS=off): no friend is looked in on
   assert.equal(await r.wakeups.look(tenant(live.id), NOON), "not-allowed");
   on.wakeups = true;
-  on.tenants = false;
-  const off = rig();
-  await off.wakeups.tick(NOON);
-  assert.deepEqual(tenantRuns(off), [], "TENANTS=off: nothing of hers is touched");
   assert.equal(allows({ kind: "tenant", tenantId: susp.id }, "heartbeat"), false);
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "wake"), true);
   assert.equal(allows({ kind: "tenant", tenantId: live.id }, "mail"), googleReady(), "her mail is her own Google: there when the instance has the OAuth client, not before");
@@ -277,7 +272,7 @@ test("the gate's own call for a tenant is on the instance key and billed to her;
 
 // ---- the dream ----
 
-const friends = (ids: () => string[]) => () => (settings.tenants ? ids().map((id) => tenant(id)) : []); // (dreamConversations(["tenant"]) for chosen friends)
+const friends = (ids: () => string[]) => () => ids().map((id) => tenant(id)); // (dreamConversations(["tenant"]) for chosen friends)
 const ownerNotesBefore = () => (existsSync(NOTES_DIR) ? readdirSync(NOTES_DIR).sort().join(",") : "");
 const WRITE = (evidence: string) => ({ ops: [{ op: "write", file: "people-sister.md", description: "her sister", text: "Her sister Eve is vegetarian.", evidence }] });
 
@@ -325,7 +320,7 @@ test("the nightly dream tidies a tenant's notes from her words only, on her key;
   assert.equal(prompts.length, 0);
 });
 
-test("a tenant's dream: nothing new said, suspended, cooling down, no key, TENANTS off; and one failing never stops the next", async () => {
+test("a tenant's dream: nothing new said, suspended, cooling down, no key; and one failing never stops the next", async () => {
   const quiet = person("Pia");
   const sus = person("Quin");
   const fine = person("Tia");
@@ -353,10 +348,6 @@ test("a tenant's dream: nothing new said, suspended, cooling down, no key, TENAN
   await mk(KEY).run(new Date(NOON.getTime() + 86_400_000));
   assert.deepEqual(ran, [], "the key is cooling down");
   resetCooldown();
-  on.tenants = false;
-  await mk(KEY).run(new Date(NOON.getTime() + 2 * 86_400_000));
-  assert.deepEqual(ran, [], "TENANTS=off");
-  on.tenants = true;
   await mk(undefined).run(new Date(NOON.getTime() + 3 * 86_400_000));
   assert.deepEqual(ran, [], "no instance key: no run");
   assert.equal(alerts.length, 1, "and one notice for the admin");

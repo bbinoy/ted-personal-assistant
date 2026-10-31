@@ -203,7 +203,7 @@ export function buildOptions(approve: Approve, opts: RunOptions, resume: string 
   const provenance = opts.provenance ?? (tellKey && kind.attended ? scopeOf(tellKey).read : undefined);
   const askedIn = tenant ? approveIn(tenant.key) : !login && groupId ? approveIn(groupId) : approve; // a tenant's browse run asks HER, in her chat
   // The MCP servers are the loaded tool modules' (src/modules): each one says whether it has a server for THIS conversation (send, voice, draw, weather: the owner's chat
-  // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat with TENANTS=on;
+  // and groups; browse: also a wake-up; memory: where there are notes; intake: a tenant with the tool; the tenant administration: the owner's chat;
   // the browser: the browse run only) and builds it (a friend's Google server process and Notion connection are answered the same way).
   const ctx: RunContext = { kind, browsing, key: tellKey, groupId, tenant, sponsor: opts.sponsor, memory: opts.memory, guard: opts.guard, mode: login ? "owner" : "group", offers, browseRun: browseRunner(askedIn, tenant, { provenance, conversation, signal, attended: kind.attended, stopScope: opts.stopScope ?? opts.sessionConv, sponsor: opts.sponsor }) };
   const servers = serversFor(ctx);

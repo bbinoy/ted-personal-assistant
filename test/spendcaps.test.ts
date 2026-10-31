@@ -29,7 +29,6 @@ function friend(name: string) {
 const inst = (rec: { id: string }, ledger: string) => ({ kind: "instance", id: rec.id, apiKey: KEY, ledger }) as const;
 
 beforeEach(() => {
-  on.tenants = true;
   resetCooldown();
   instanceDb().run("DELETE FROM told");
   resetHeld(owner());

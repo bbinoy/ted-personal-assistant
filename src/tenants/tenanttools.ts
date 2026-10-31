@@ -11,7 +11,7 @@ import { OWNER_ID, people, setStatus, tenantById, tenantContext } from "./tenant
 import { appBao, deleteTenantItems, TENANT_ID } from "../secrets/secrets.ts";
 import { removeTenant, type RemovalDeps } from "./removal.ts";
 
-// The tenant administration: a small in-process MCP server (like memory-tools.ts) in the owner's chat, only with TENANTS=on: list tenants, suspend, resume, delete
+// The tenant administration: a small in-process MCP server (like memory-tools.ts) in the owner's chat: list tenants, suspend, resume, delete
 // (the last two ask on the phone, toolmanifest.ts).
 
 const reply = (text: string, isError = false) => ({ content: [{ type: "text" as const, text }], ...(isError ? { isError: true } : {}) });

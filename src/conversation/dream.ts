@@ -137,12 +137,12 @@ export const describePlan = (plan: Plan): string[] => {
 
 type Kind = Conversation["kind"];
 
-// The conversations to look at: the owner's chat, every group that has a folder, every friend of the registry (when TENANTS is on). Each is gated by its own capabilities.
+// The conversations to look at: the owner's chat, every group that has a folder, every friend of the registry. Each is gated by its own capabilities.
 export function dreamConversations(kinds: readonly Kind[] = ["owner", "group", "tenant"]): Conversation[] {
   const out: Conversation[] = [];
   if (kinds.includes("owner")) out.push(ownerConversation());
   if (kinds.includes("group")) for (const g of listGroups()) out.push(groupConversation(g.id));
-  if (kinds.includes("tenant") && settings.tenants) for (const r of listTenants()) out.push(tenantConversation(r.id));
+  if (kinds.includes("tenant")) for (const r of listTenants()) out.push(tenantConversation(r.id));
   return out;
 }
 

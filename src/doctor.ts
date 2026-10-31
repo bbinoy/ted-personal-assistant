@@ -197,13 +197,11 @@ export function servicesCheck(line: Line, o: ServicesOptions = {}): void {
   }
 }
 
-// The tenants (TENANTS=on): the instance key (set or not; never its value), who is there, what state each is in, what she spent today,
+// The tenants: the instance key (set or not; never its value), who is there, what state each is in, what she spent today,
 // and whether she is paused (a limit, no credit, refused: written by the running agent, since this is another process). Never a key, never a word she said.
-export function tenantCheck(line: Line, o: { on?: boolean; key?: string | undefined; now?: number; broken?: string | undefined } = {}): void {
-  const on = o.on ?? settings.tenants;
+export function tenantCheck(line: Line, o: { key?: string | undefined; now?: number; broken?: string | undefined } = {}): void {
   const broken = "broken" in o ? o.broken : registryProblem();
   if (broken !== undefined) line(false, "friends list", `tenants.json in the instance folder can't be read (${broken}); friends are paused, the owner is unaffected. It is kept as is: repair or move it, then restart`);
-  if (!on) return line(true, "tenants: off", "TENANTS=off: one person, as always");
   const now = o.now ?? Date.now();
   const key = "key" in o ? o.key : settings.tenantApiKey;
   line(key ? (looksLikeApiKey(key) ? true : "warn") : "warn", "tenant API key", key ? (looksLikeApiKey(key) ? "TENANT_ANTHROPIC_API_KEY is set; it must be a separate Console workspace key with a spend limit, never your own" : "TENANT_ANTHROPIC_API_KEY is set but does not look like an Anthropic API key") : "TENANT_ANTHROPIC_API_KEY is not set: friends are told the assistant is not set up for them (set a separate Console workspace key with a spend limit)");

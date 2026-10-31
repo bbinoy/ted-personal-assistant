@@ -30,7 +30,7 @@ test("a corrupt registry pauses the friends only: the owner is still routed and 
     assert.match(T.REGISTRY_NOTICE, /friends are paused/);
     const lines: [boolean | string, string, string][] = [];
     const { tenantCheck } = await import("../src/doctor.ts");
-    tenantCheck((ok, what, detail) => void lines.push([ok, what, detail ?? ""]) as never, { on: false });
+    tenantCheck((ok, what, detail) => void lines.push([ok, what, detail ?? ""]) as never);
     assert.ok(lines.some(([ok, what]) => ok === false && what === "friends list"), "npm run doctor reports it");
   } finally {
     console.error = silence;

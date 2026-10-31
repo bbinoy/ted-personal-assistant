@@ -6,7 +6,7 @@
       "tools": ["Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write", "browse server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Claude_Docs server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Calendar server", "claude_ai_Google_Docs server", "claude_ai_Google_Docs server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Google_Drive server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "claude_ai_Notion server", "draw server", "files server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "mailbird server", "meetings server", "memory server", "memory server", "memory server", "memory server", "people server", "send server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tasks server", "tenants server", "tenants server", "tenants server", "tenants server", "tenants server", "voice server", "weather server", "weather server", "weather server", "weather server", "weather server"],
       "builtin": ["Agent", "Edit", "Read", "Skill", "WebFetch", "WebSearch", "Write"],
       "skills": ["ted-personal-assistant:calendar", "ted-personal-assistant:daily-brief", "ted-personal-assistant:draw", "ted-personal-assistant:evening-wrap", "ted-personal-assistant:follow-through", "ted-personal-assistant:mail", "ted-personal-assistant:mailbird", "ted-personal-assistant:meeting-prep", "ted-personal-assistant:research-booking", "ted-personal-assistant:setup", "ted-personal-assistant:stay-in-touch", "ted-personal-assistant:surf-conditions", "ted-personal-assistant:tasks", "ted-personal-assistant:web-research", "ted-personal-assistant:weekly-review"],
-      "mcp": ["browse", "draw", "files", "meetings", "memory", "people", "send", "tasks", "voice", "weather"],
+      "mcp": ["browse", "draw", "files", "meetings", "memory", "people", "send", "tasks", "tenants", "voice", "weather"],
       "agents": ["expert", "expert-daily-brief", "expert-evening-wrap", "expert-meeting-prep", "expert-opus", "expert-weekly-review"],
       "expertSystem": ["personality", "capabilities", "expert"],
       "expertBrief": ["clock", "context", "held-posts", "chat-tail"],
@@ -202,6 +202,14 @@
       "values": {
         "on": ["owner chat", "owner look"],
         "-": ["group chat", "group look", "friend chat", "friend look"]
+      }
+    },
+    "mcp:tenants": {
+      "by": "either",
+      "reason": "capability X: a tool or server exists where the conversation's capability set holds it (capabilities.ts toolsFor), minus what attendance removes",
+      "values": {
+        "on": ["owner chat"],
+        "-": ["owner look", "group chat", "group look", "friend chat", "friend look"]
       }
     },
     "model": {
