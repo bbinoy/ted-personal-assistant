@@ -4,7 +4,7 @@ import { OWNER_KEY } from "../core/ownerkey.ts";
 import { systemZone } from "../core/timezone.ts";
 import { completeItem, counts, dueClass, effectiveStatus, getItem, listItems, type Item } from "./store.ts";
 import { localOf, showLocal, todayIn } from "./when.ts";
-import { BUCKETS, FOCUS, groupOpen } from "./render.ts";
+import { BUCKETS, FOCUS, groupOpen, subGroups, type Bucket } from "./render.ts";
 
 // The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except one action: a tick-off button per open row. It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
 // ONLY the owner's conversation is read or changed, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
@@ -22,8 +22,12 @@ function row(it: Item, now: number, zone: string, token?: string): string {
   return `<li class="${[late ? "late" : "", it.urgent ? "urgent" : ""].filter(Boolean).join(" ")}">${tick}<div class="b"><span class="t">${esc(it.title)}</span>${due ? ` <span class="d">${esc(due)}</span>` : ""}<br><span class="m">${bits.join(" · ")}</span></div></li>`;
 }
 
-const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string): string =>
-  items.length ? `<details${open ? " open" : ""}${title === FOCUS ? ' class="focus"' : ""}><summary>${esc(title)} (${items.length})</summary><ul>${items.map((i) => row(i, now, zone, token)).join("")}</ul></details>` : "";
+const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string): string => {
+  if (!items.length) return "";
+  const rows = (xs: readonly Item[]): string => xs.map((i) => row(i, now, zone, token)).join("");
+  const body = (BUCKETS as readonly string[]).includes(title) ? subGroups(title as Bucket, items, now, zone).map((g) => (g.label ? `<li class="sub">${esc(g.label)}</li>` : "") + rows(g.items)).join("") : rows(items);
+  return `<details${open ? " open" : ""}${title === FOCUS ? ' class="focus"' : ""}><summary>${esc(title)} (${items.length})</summary><ul>${body}</ul></details>`;
+};
 
 /**
  * The one inline script (allowed by the response's CSP nonce, nothing else may run): a tick-off posts in the background and the row fades out (without script the form posts and the server redirects back),
@@ -40,7 +44,7 @@ li.querySelectorAll(".err").forEach((x)=>x.remove());f.classList.add("busy");b.d
 try{const r=await fetch(f.action,{method:"POST",body:new URLSearchParams(new FormData(f)),redirect:"manual"});
 if(!r.ok&&r.type!=="opaqueredirect")throw 0;
 const d=li.closest("details"),ul=li.parentNode;li.classList.add("gone");
-setTimeout(()=>{li.remove();const n=ul.children.length;if(!n)d.remove();else{const s=d.querySelector("summary");s.textContent=s.textContent.replace(/\(\d+\)$/,"("+n+")")}},300);
+setTimeout(()=>{li.remove();ul.querySelectorAll("li.sub").forEach((h)=>{const x=h.nextElementSibling;if(!x||x.classList.contains("sub"))h.remove()});const n=ul.querySelectorAll("li:not(.sub)").length;if(!n)d.remove();else{const s=d.querySelector("summary");s.textContent=s.textContent.replace(/\(\d+\)$/,"("+n+")")}},300);
 }catch(x){f.classList.remove("busy");b.disabled=false;const m=document.createElement("span");m.className="err";m.textContent="Could not tick that off, try again.";li.querySelector(".b").append(m)}
 });
 })();`;
@@ -60,6 +64,7 @@ li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li
 .b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit;cursor:pointer;transition:background-color .15s,border-color .15s}
 button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}button:active{background:#2e7d6b4d}button:focus-visible{outline:2px solid #2e7d6b;outline-offset:2px}
 details.focus{background:#2e7d6b1f;border-left:4px solid #2e7d6b;border-radius:6px;padding:0 .6rem .3rem .6rem;margin-bottom:.5rem}details.focus li:first-child{border-top-color:transparent}
+li.sub{display:block;border-left-color:transparent;padding:.5rem 0 .1rem .5rem;font-size:.75rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#777}li.sub:not(:first-child){margin-top:.3rem}
 .gone{opacity:0;transition:opacity .3s}.err{display:block;color:var(--red);font-size:.85rem}.d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 </style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
 ${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today" || b === FOCUS, token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
