@@ -58,7 +58,8 @@ test("a title is escaped and nothing is loaded from outside", () => {
   const html = tasksPage(OWNER_KEY, NOW, ZONE);
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&#60;script&#62;"));
-  assert.ok(!/(src|href)=/.test(html));
+  assert.ok(!/(src|href)=/.test(html.replace(' href="/favicon.svg"', ""))); // (the page's own icon is the one link)
+  assert.ok(html.includes('<link rel="icon" href="/favicon.svg" type="image/svg+xml">'));
   assert.ok(!html.includes('name="token"')); // (no token, no buttons)
 });
 
@@ -85,6 +86,11 @@ test("only loopback and tailnet host names are served (DNS rebinding)", async ()
     assert.equal(await status("x.y.ts.net"), 200);
     assert.equal(await status("x.y.ts.net:9443"), 200);
     assert.equal(await status("ts.net.evil.example"), 421);
+    const icon = await new Promise<number>((ok, bad) => {
+      const req = httpRequest({ host: "127.0.0.1", port, path: "/favicon.svg", headers: { host: "evil.example" } }, (res) => (res.resume(), ok(res.statusCode!)));
+      req.on("error", bad).end();
+    });
+    assert.equal(icon, 421); // (the icon is behind the same Host check)
   } finally {
     server.close();
   }
@@ -108,6 +114,14 @@ test("routes, methods and headers", async () => {
     assert.equal((await fetch(`${base}/tasks`, { method: "POST", body: "x" })).status, 405);
     assert.equal((await fetch(`${base}/tasks`, { method: "HEAD" })).status, 200);
     assert.match(page.headers.get("content-security-policy")!, /form-action 'self'/);
+    assert.match(page.headers.get("content-security-policy")!, /img-src 'self'/);
+    for (const p of ["/favicon.svg", "/favicon.ico"]) {
+      const icon = await fetch(`${base}${p}`);
+      assert.equal(icon.status, 200);
+      assert.match(icon.headers.get("content-type")!, /^image\/svg\+xml/);
+      assert.match(icon.headers.get("cache-control")!, /max-age/);
+      assert.match(await icon.text(), /^<svg /);
+    }
   } finally {
     server.close();
   }
