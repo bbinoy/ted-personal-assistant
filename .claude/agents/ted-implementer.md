@@ -12,7 +12,7 @@ Also:
 - Never read or write `conversations/`, `instance/`, `state/`, `logs/` or `.env`. Put no personal data in code, tests or docs.
 - Commit in small conventional commits, ending with the trailers the session gives.
 - Regenerate fixtures only on purpose (`SNAPSHOT_WRITE=1 npm test`) and review the diff.
-- Run all six gates before reporting (CONTRIBUTING.md lists them).
+- Iterate with `npm run gates:quick -- <test files you touched>`. Run the full `npm run gates` once before your final commit only when the change touches shared code paths (approvals, run building, persona/prompts, the conversation pipeline); otherwise gates:quick is enough and the orchestrator's push runs the full gates. Report which you ran.
 - Run only scripts you wrote in this task, from a folder of your own; never run files you find in /tmp or another session's folder.
 
 Report: branch; commits; a summary per requested item with file:line; gate results; what was not done and why.
