@@ -37,7 +37,8 @@ body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1r
 .h{color:#777;margin-bottom:1rem}summary{font-weight:600;margin:.8rem 0 .3rem}ul{list-style:none;padding:0;margin:0}
 li{display:flex;gap:.6rem;align-items:center;padding:.45rem 0 .45rem .5rem;border-top:1px solid #8884;border-left:4px solid transparent}
 li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li.late .d{color:var(--red);font-weight:600}li.urgent .m{color:var(--amber);font-weight:600}
-.b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit}
+.b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit;cursor:pointer;transition:background-color .15s,border-color .15s}
+button:hover,button:focus-visible{background:#2e7d6b26;border-color:#2e7d6b}button:active{background:#2e7d6b4d}button:focus-visible{outline:2px solid #2e7d6b;outline-offset:2px}
 .d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 </style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
 ${BUCKETS.map((b) => block(b, g[b], now, zone, b === "Today", token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
@@ -50,7 +51,7 @@ const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><re
 const HEADERS = {
   "content-security-policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "cache-control": "no-store",
-  "referrer-policy": "no-referrer",
+  "referrer-policy": "same-origin",
   "x-content-type-options": "nosniff",
 };
 

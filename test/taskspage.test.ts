@@ -105,7 +105,7 @@ test("routes, methods and headers", async () => {
     assert.equal(page.status, 200);
     assert.equal(await page.text(), "<p>page</p>");
     assert.equal(page.headers.get("cache-control"), "no-store");
-    assert.equal(page.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(page.headers.get("referrer-policy"), "same-origin");
     assert.equal(page.headers.get("x-content-type-options"), "nosniff");
     assert.match(page.headers.get("content-security-policy")!, /^default-src 'none'/);
     assert.equal((await fetch(`${base}/healthz`)).status, 200);
@@ -177,6 +177,7 @@ test("a tick without the right token or origin is refused, the same way, and cha
       await post(port, `/tasks/${id}/done`, { token: "0".repeat(token.length) }),
       await post(port, `/tasks/${id}/done`, { token: token.slice(1) }),
       await post(port, `/tasks/${id}/done`, { token, origin: null }),
+      await post(port, `/tasks/${id}/done`, { token, origin: "null" }), // (what a browser sends under no-referrer)
       await post(port, `/tasks/${id}/done`, { token, origin: "http://evil.example" }),
       await post(port, `/tasks/${id}/done`, { token, origin: `http://127.0.0.1:${port + 1}` }),
       await post(port, `/tasks/${id}/done`, { token, origin: `https://127.0.0.1:${port}` }),
