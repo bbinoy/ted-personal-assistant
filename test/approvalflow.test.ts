@@ -304,7 +304,7 @@ const text = (t: string) => ({ task: "write", text: t });
 test("conversational: ONE call; a question that carries every fact is used and nothing else is called", async () => {
   const s = scripted([text(GOOD)]);
   const k = scripted([FAITHFUL]);
-  const c = await composeQuestion(q, {}, 1000, s.run, k.run);
+  const c = await composeQuestion(q, {}, s.run, k.run);
   assert.equal(c.text, GOOD);
   assert.equal(s.prompts.length, 1);
   assert.match(s.prompts[0]!, /REQUIRED strings/);
@@ -325,26 +325,26 @@ test("the judge's check is in its prompt: every recipient and attachment, the fu
 test("a misleading question is refused with a reason the run can act on; a faithful one goes", async () => {
   const mail = { ...q, args: { messageId: 1 }, details: REPLY };
   const w = () => scripted([text("Send a short thank-you to a@example.com?"), text("Send a short thank-you to a@example.com?")]);
-  const refused = await composeQuestion(mail, {}, 1000, w().run, scripted([{ task: "check", faithful: false, reason: "the text is not shown" }, { task: "check", faithful: false, reason: "the text is not shown" }]).run);
+  const refused = await composeQuestion(mail, {}, w().run, scripted([{ task: "check", faithful: false, reason: "the text is not shown" }, { task: "check", faithful: false, reason: "the text is not shown" }]).run);
   assert.equal(refused.text, undefined);
   assert.match(refused.failure!, /did not show the call faithfully \(the text is not shown\); rewrite it showing every recipient, every attachment and the full text verbatim/);
   const k = scripted([FAITHFUL]);
-  assert.equal((await composeQuestion(mail, {}, 1000, w().run, k.run)).text, "Send a short thank-you to a@example.com?");
+  assert.equal((await composeQuestion(mail, {}, w().run, k.run)).text, "Send a short thank-you to a@example.com?");
   assert.match(k.prompts[0]!, /Your code: 482913/); // the check sees the details and the question
   for (const bad of [undefined, { task: "check" }, { task: "check", faithful: "true" }, new Error("boom")]) {
-    assert.equal((await composeQuestion(mail, {}, 1000, w().run, scripted([bad]).run)).text, undefined, "an unusable check is no question");
+    assert.equal((await composeQuestion(mail, {}, w().run, scripted([bad]).run)).text, undefined, "an unusable check is no question");
   }
   // one rewrite after a refusal, with the reason; both refused is a failure; an unusable check never retries
   const w2 = scripted([text("Send a short thank-you to a@example.com?"), text("Send to a@example.com: “Your code: 482913”?")]);
-  const second = await composeQuestion(mail, {}, 1000, w2.run, scripted([{ task: "check", faithful: false, reason: "text missing" }, FAITHFUL]).run);
+  const second = await composeQuestion(mail, {}, w2.run, scripted([{ task: "check", faithful: false, reason: "text missing" }, FAITHFUL]).run);
   assert.equal(second.text, "Send to a@example.com: “Your code: 482913”?");
   assert.match(w2.prompts[1]!, /Your first question was refused by the checker: "text missing"/);
   assert.doesNotMatch(w2.prompts[0]!, /refused by the checker/);
   const w3 = scripted([text("Send a short thank-you to a@example.com?"), text("Send a thanks to a@example.com?")]);
-  const both = await composeQuestion(mail, {}, 1000, w3.run, scripted([{ task: "check", faithful: false, reason: "a" }, { task: "check", faithful: false, reason: "b" }]).run);
+  const both = await composeQuestion(mail, {}, w3.run, scripted([{ task: "check", faithful: false, reason: "a" }, { task: "check", faithful: false, reason: "b" }]).run);
   assert.match((both as { failure: string }).failure, /faithfully \(b\)/);
   const w4 = w();
-  await composeQuestion(mail, {}, 1000, w4.run, scripted([undefined]).run);
+  await composeQuestion(mail, {}, w4.run, scripted([undefined]).run);
   assert.equal(w4.prompts.length, 1);
 });
 
@@ -354,13 +354,13 @@ test("a card payment question is checked like any other: a refusal gets one rewr
   const free = text("Free trial at shop.example, pay with YES?");
   const refusal = { task: "check", faithful: false, reason: "the charge is called a trial" };
   const w = scripted([free, free]);
-  const refused = await composeQuestion(pay, {}, 1000, w.run, scripted([refusal, refusal]).run);
+  const refused = await composeQuestion(pay, {}, w.run, scripted([refusal, refusal]).run);
   assert.equal(refused.text, undefined);
   assert.match(refused.failure!, /faithfully \(the charge is called a trial\)/);
   assert.equal(w.prompts.length, 2);
   assert.match(w.prompts[1]!, /Your first question was refused by the checker: "the charge is called a trial"/);
   const k = scripted([FAITHFUL]);
-  const ok = await composeQuestion(pay, {}, 1000, scripted([text("Pay CHF 12.50 at shop.example? Reply YES.")]).run, k.run);
+  const ok = await composeQuestion(pay, {}, scripted([text("Pay CHF 12.50 at shop.example? Reply YES.")]).run, k.run);
   assert.equal(ok.text, "Pay CHF 12.50 at shop.example? Reply YES.");
   assert.match(k.prompts[0]!, /Card payment approval/);
   assert.match(APPROVAL_SYSTEM, /a card payment is not free, a trial, a refund, a deposit or a verification/);
@@ -377,7 +377,7 @@ test("a refused question is returned to the run as the failure and nothing is as
 test("conversational fails closed and silent: a failed validation, junk or an error is no question (no retry, no code-text card)", async () => {
   for (const steps of [[text("Send it to Alice, ok?")], [text("Send “Offsite agenda” to dave@example.com?")], [new Error("boom")], [undefined], [{ text: "short" }]]) {
     const s = scripted([...steps]);
-    const c = await composeQuestion(q, {}, 1000, s.run, scripted([FAITHFUL]).run);
+    const c = await composeQuestion(q, {}, s.run, scripted([FAITHFUL]).run);
     assert.equal(c.text, undefined, JSON.stringify(steps));
     assert.equal(s.prompts.length, 1); // never retried
   }

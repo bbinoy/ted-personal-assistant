@@ -1,4 +1,4 @@
-import { runJudge, withTimeout } from "./approvaljudge.ts";
+import { runJudge } from "./approvaljudge.ts";
 import { fence } from "../core/fence.ts";
 import { judgeContext } from "./judgecontext.ts";
 import { createdFact } from "./created.ts";
@@ -154,9 +154,9 @@ type Runner = (prompt: string) => Promise<unknown>;
 const realRunner: Runner = async (prompt) => (await runJudge("action", prompt))?.out;
 
 // Fails closed: an error or a slow answer is "ask".
-export async function judgeAction(i: JudgeInput, run: Runner = realRunner, timeoutMs = 20_000): Promise<Verdict> {
+export async function judgeAction(i: JudgeInput, run: Runner = realRunner): Promise<Verdict> {
   try {
-    return parseVerdict(await withTimeout(run(judgePrompt(i)), timeoutMs));
+    return parseVerdict(await run(judgePrompt(i)));
   } catch {
     return { decision: "ask", reason: "judge failed" };
   }

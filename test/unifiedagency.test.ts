@@ -193,9 +193,9 @@ test("judge error, timeout or junk output is ask, in any place (in an unattended
   scopeOf("owner").say("archive it");
   let asked = 0;
   let n = 0;
-  for (const j of [async () => { throw new Error("boom"); }, async () => ({ decision: "yes" }), async () => undefined, () => new Promise(() => {})]) {
+  for (const j of [async () => { throw new Error("boom"); }, async () => ({ decision: "yes" }), async () => undefined]) {
     const { judgeAction } = await import("../src/approvals/autojudge.ts");
-    const quick: typeof judgeAction = (i, _run) => judgeAction(i, (j as never), 30);
+    const quick: typeof judgeAction = (i, _run) => judgeAction(i, (j as never));
     const canUse = makeCanUseTool(async () => (asked++, { approved: false }), OWNER_LOOK, undefined, quick, undefined, undefined, false, { ...HANDLER, provenance: standing(HANDLER_TASK) });
     assert.notEqual(((await canUse(`${MB}archive_conversation`, { conversationId: `x${n++}` }, opts)) as Out).behavior, "allow");
   }

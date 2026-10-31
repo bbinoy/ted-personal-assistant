@@ -8,6 +8,7 @@ import { firstWarm, SpareSlot } from "../core/warmslot.ts";
 export interface JudgeIO {
   start?: typeof startup;
   query?: typeof query;
+  timeoutMs?: number; // tests: a short limit
 }
 
 const ID = "judge";

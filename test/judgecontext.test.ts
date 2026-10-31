@@ -39,7 +39,7 @@ test("one context: the action judge, the writer and the check read the same fenc
   read();
   const w = scripted([write(GOOD)]);
   const k = scripted([() => ({ task: "check", faithful: true, reason: "ok" })]);
-  const c = await composeQuestion(input(), {}, 1000, w.run, k.run);
+  const c = await composeQuestion(input(), {}, w.run, k.run);
   assert.equal(c.text, GOOD);
   const ctx = judgeContext({ details, provenance, untrusted: true, recent: input().recent, names: ["Christophe Mignon <c.mignon@example.com>"] });
   assert.ok(w.prompts[0]!.includes(ctx), "the writer reads the shared context");
@@ -61,12 +61,12 @@ test("the Christophe case: a name the seen names tie to the address is faithful;
   };
   const invented = "Add Christophe Mignon (c.mignon@example.com) to “Embassy reception” on Fri 21 Nov, 18:00? Ben will be notified too. OK?";
   const w = scripted([write(invented), write(GOOD)]);
-  const c = await composeQuestion(input(), {}, 1000, w.run, scripted([check, check]).run);
+  const c = await composeQuestion(input(), {}, w.run, scripted([check, check]).run);
   assert.equal(c.text, GOOD);
   assert.match(w.prompts[1]!, /refused by the checker: "claims Ben will be notified too"/);
   // without the seen name the same question is not supported
   forgetSeen();
-  const none = await composeQuestion(input(), {}, 1000, scripted([write(GOOD)]).run, scripted([check]).run);
+  const none = await composeQuestion(input(), {}, scripted([write(GOOD)]).run, scripted([check]).run);
   assert.equal(none.text, undefined);
 });
 
