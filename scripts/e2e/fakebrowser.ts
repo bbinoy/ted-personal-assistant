@@ -68,9 +68,9 @@ export class FakeBrowser {
       }
       return `### Page\n- Page URL: ${p.url}\n### Snapshot\n\`\`\`yaml\n${lines.join("\n")}\n\`\`\``;
     };
-    const target = (a: Record<string, any>): string => String(a.target ?? a.ref ?? "");
+    const target = (a: Record<string, any>): string => String(a.target);
     const digits = (s: string) => s.replace(/\D/g, "");
-    const shape = { target: z.string().optional(), ref: z.string().optional(), element: z.string().optional() };
+    const shape = { target: z.string(), element: z.string().optional() }; // as @playwright/mcp prints them: `target` is required, there is no `ref`
 
     this.service = fakeService(BROWSER_SERVER, rec, {
       browser_navigate: { description: "Open a page by its address.", shape: { url: z.string() }, run: (a) => (open(a.url), view()) },
