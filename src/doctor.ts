@@ -98,6 +98,13 @@ const list = (names: readonly string[]): string => (names.length > 1 ? `${names.
 
 // The intake page (intakeserver.ts): is it configured (INTAKE_BASE_URL, https), is its token write-only (create and update on the items of every kind, no
 // read, list or delete, nothing else), and is the process answering on its loopback port. Off is a valid setup: no setup links are offered.
+// The owner's task page (tasks/taskspage.ts): is it answering on loopback? (Off with TASKS_PAGE_PORT=0.)
+async function tasksPageCheck(line: Line, port: number = settings.tasksPagePort): Promise<void> {
+  if (!port) return line(true, "task page", "off (TASKS_PAGE_PORT=0)");
+  const up = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
+  line(up ? true : "warn", "task page", up ? `answering on 127.0.0.1:${port}` : `not answering on 127.0.0.1:${port}: restart the agent`);
+}
+
 export async function intakeCheck(line: Line, o: { cfg?: typeof settings.intake; bao?: () => OpenBao; keychain?: Keychain; probe?: (port: number) => Promise<boolean>; prefix?: string } = {}): Promise<void> {
   const cfg = o.cfg ?? settings.intake;
   const what = "intake page";
@@ -459,6 +466,7 @@ export async function doctor() {
   await openbaoCheck(line);
   if (dbOk) {
     await intakeCheck(line);
+    await tasksPageCheck(line);
     tenantCheck(line);
   }
   servicesCheck(line);

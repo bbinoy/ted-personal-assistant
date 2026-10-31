@@ -27,6 +27,7 @@ import { preparePicture } from "./run/image.ts";
 import { prepareFile, type AudioTools } from "./conversation/document.ts";
 import { createOutbound } from "./conversation/outbound.ts";
 import { Ledger } from "./modules/browse/payments.ts";
+import { startTasksPage } from "./tasks/taskspage.ts";
 import { applyCredentialMode, mask, settings, signalIdentity } from "./core/settings.ts";
 import { checkHideSettings } from "./modules/index.ts";
 import { createVoiceLanguage } from "./conversation/lang.ts";
@@ -197,6 +198,7 @@ messenger.onDeletion((d) => {
 // The mail provider's own start-up (its module, src/modules): Mailbird's connection (the approval of any send shows the draft read back from it), or the Gmail connector's read-backs for the same approval.
 // MAIL_PROVIDER=none: no mail client is made at all, so there is no proposer either.
 if (settings.mail) mailRuntime()?.start();
+if (settings.tasksPagePort) startTasksPage(settings.tasksPagePort); // the owner's task list as a read-only page on 127.0.0.1 (docs/SETUP.md "The task page")
 
 // A 👍 / 👎 on the pending approval message answers it (the pipeline checks); any other reaction of the
 // owner is feedback. (Our own status icons come back as reactions; the messenger does not deliver those.)
