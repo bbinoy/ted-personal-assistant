@@ -1,53 +1,64 @@
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { OWNER_KEY } from "../core/ownerkey.ts";
 import { systemZone } from "../core/timezone.ts";
-import { counts, dueClass, listItems, type Item } from "./store.ts";
+import { completeItem, counts, dueClass, effectiveStatus, getItem, listItems, type Item } from "./store.ts";
 import { addDays, localOf, parseLocal, showLocal, todayIn } from "./when.ts";
 
-// The owner's open tasks as one read-only web page, rendered by code straight from the store (no model). It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
-// ONLY the owner's conversation is read, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
+// The owner's open tasks as one web page, rendered by code straight from the store (no model). It is read-only except one action: a tick-off button per open row. It is served on 127.0.0.1 only; `tailscale serve` (never funnel) puts it on the owner's phone.
+// ONLY the owner's conversation is read or changed, never a friend's or a group's list: the admin cannot read friends' data and this page is on the admin's devices (CLAUDE.md §5).
 
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const KIND = { task: "task", i_owe: "I owe", owed_to_me: "waiting on" } as const;
 const WEEK = 7; // "this week" = up to 7 days after today
 const DAY = 86_400_000;
 
-type Bucket = "Overdue" | "Today" | "This week" | "Later" | "No date";
-const BUCKETS: readonly Bucket[] = ["Overdue", "Today", "This week", "Later", "No date"];
+type Bucket = "Today" | "This week" | "Later" | "No date";
+const BUCKETS: readonly Bucket[] = ["Today", "This week", "Later", "No date"];
 
 function bucketOf(it: Item, now: number, zone: string): Bucket {
   const c = dueClass(it, now, zone);
-  if (c === "overdue") return "Overdue";
-  if (c === "today") return "Today";
+  if (c === "overdue" || c === "today") return "Today"; // (overdue rows come first inside it)
   if (c === "none") return "No date";
   return parseLocal(it.due)!.date <= addDays(todayIn(now, zone), WEEK) ? "This week" : "Later";
 }
 
-function row(it: Item, now: number, zone: string): string {
+function row(it: Item, now: number, zone: string, token?: string): string {
   const due = it.due ? showLocal(it.due, todayIn(now, zone)) : "";
+  const late = dueClass(it, now, zone) === "overdue";
   const bits = [KIND[it.kind], it.person, it.urgent ? "urgent" : "", it.sourceKind].filter(Boolean).map((b) => esc(b!));
-  return `<li><span class="t">${esc(it.title)}</span>${due ? ` <span class="d">${esc(due)}</span>` : ""}<br><span class="m">${bits.join(" · ")}</span></li>`;
+  const tick = token === undefined ? "" : `<form method="post" action="/tasks/${it.id}/done"><input type="hidden" name="token" value="${esc(token)}"><button title="Mark done" aria-label="Mark done: ${esc(it.title)}">&#10003;</button></form>`;
+  return `<li class="${[late ? "late" : "", it.urgent ? "urgent" : ""].filter(Boolean).join(" ")}">${tick}<div class="b"><span class="t">${esc(it.title)}</span>${due ? ` <span class="d">${esc(due)}</span>` : ""}<br><span class="m">${bits.join(" · ")}</span></div></li>`;
 }
 
-const block = (title: string, items: readonly Item[], now: number, zone: string, open = true): string =>
-  items.length ? `<details${open ? " open" : ""}><summary>${esc(title)} (${items.length})</summary><ul>${items.map((i) => row(i, now, zone)).join("")}</ul></details>` : "";
+const block = (title: string, items: readonly Item[], now: number, zone: string, open: boolean, token?: string): string =>
+  items.length ? `<details${open ? " open" : ""}><summary>${esc(title)} (${items.length})</summary><ul>${items.map((i) => row(i, now, zone, token)).join("")}</ul></details>` : "";
 
-/** The whole page for one conversation's list at `now` in `zone`. */
-export function tasksPage(key: string, now: number, zone: string): string {
+/** The whole page for one conversation's list at `now` in `zone`. `token` is the tick-off forms' CSRF token; without it a row has no button. */
+export function tasksPage(key: string, now: number, zone: string, token?: string): string {
   const open = listItems(key, { limit: 200 }, now, zone);
   const done = listItems(key, { status: "done", limit: 200 }, now, zone).filter((i) => (i.doneAt ?? 0) >= now - WEEK * DAY);
   const c = counts(key, now, zone);
+  const late = (i: Item): boolean => dueClass(i, now, zone) === "overdue";
+  const inBucket = (b: Bucket): Item[] => {
+    const xs = open.filter((i) => bucketOf(i, now, zone) === b);
+    return b === "Today" ? [...xs.filter(late), ...xs.filter((i) => !late(i))] : xs;
+  };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="60"><title>Tasks</title><style>
-:root{color-scheme:light dark}body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1rem}h1{font-size:1.2rem;margin:.2rem 0}
-.h{color:#777;margin-bottom:1rem}summary{font-weight:600;margin:.8rem 0 .3rem}ul{list-style:none;padding:0;margin:0}li{padding:.45rem 0;border-top:1px solid #8884}
+:root{color-scheme:light dark;--red:#c62828;--amber:#b26a00}@media(prefers-color-scheme:dark){:root{--red:#ff6b6b;--amber:#ffb74d}}
+body{font:16px/1.4 system-ui,sans-serif;max-width:40rem;margin:0 auto;padding:1rem}h1{font-size:1.2rem;margin:.2rem 0}
+.h{color:#777;margin-bottom:1rem}summary{font-weight:600;margin:.8rem 0 .3rem}ul{list-style:none;padding:0;margin:0}
+li{display:flex;gap:.6rem;align-items:center;padding:.45rem 0 .45rem .5rem;border-top:1px solid #8884;border-left:4px solid transparent}
+li.urgent{border-left-color:var(--amber)}li.late{border-left-color:var(--red)}li.late .d{color:var(--red);font-weight:600}li.urgent .m{color:var(--amber);font-weight:600}
+.b{flex:1;min-width:0}form{margin:0}button{font:inherit;min-width:2.6rem;min-height:2.6rem;border:1px solid #8886;border-radius:50%;background:transparent;color:inherit}
 .d{float:right;margin-left:.5rem;white-space:nowrap}.m{color:#777;font-size:.85rem}
 </style></head><body><h1>Tasks</h1><div class="h">${open.length} open${c.overdue ? `, ${c.overdue} overdue` : ""} · updated ${esc(localOf(now, zone).time)}</div>
-${BUCKETS.map((b) => block(b, open.filter((i) => bucketOf(i, now, zone) === b), now, zone)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
+${BUCKETS.map((b) => block(b, inBucket(b), now, zone, b === "Today", token)).join("")}${open.length ? "" : "<p>Nothing open.</p>"}
 ${block("Done in the last 7 days", done, now, zone, false)}</body></html>`;
 }
 
 const HEADERS = {
-  "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "cache-control": "no-store",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
@@ -62,20 +73,68 @@ function hostAllowed(host: string | undefined, port: number | undefined): boolea
   return name.endsWith(".ts.net");
 }
 
-/** GET /tasks (the page) and GET /healthz, HEAD likewise; any other path is 404, any other method 405. `read` is the page's one data source (the owner's list). */
-export function tasksPageServer(read: () => string = () => tasksPage(OWNER_KEY, Date.now(), systemZone())): Server {
+/** The Origin a browser sends from this page: http on the loopback names, https on a tailnet name, always the Host the request came to. */
+const ownOrigin = (host: string): string => `${/^(127\.0\.0\.1|localhost)(:|$)/i.test(host) ? "http" : "https"}://${host.toLowerCase()}`;
+
+const BODY_MAX = 1024;
+const sameToken = (a: string, b: string): boolean => timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
+
+/** The tick-off: completed by the store function the complete_task tool uses (repeats, events, the journal line), in the owner's conversation only. False when the id is not one of the owner's open tasks. */
+function tickOff(id: number): boolean {
+  const now = Date.now();
+  const it = getItem(OWNER_KEY, id);
+  if (!it || effectiveStatus(it, now) !== "open") return false;
+  completeItem({ key: OWNER_KEY, zone: systemZone(), by: "owner", origin: "owner", source: "chat", now, why: { text: "ticked off on the task page" } }, id);
+  return true;
+}
+
+/**
+ * GET /tasks (the page), GET /healthz, HEAD likewise, and POST /tasks/<id>/done (the one action); any other path is 404, any other method 405.
+ * `read` renders the page for this process's CSRF token; `tick` completes one of the owner's open tasks and says whether it did.
+ * A POST needs the right Host, an Origin equal to the page's own, a form content type, a tiny body and the token; every CSRF failure gets the same 403.
+ */
+export function tasksPageServer(read: (token: string) => string = (t) => tasksPage(OWNER_KEY, Date.now(), systemZone(), t), tick: (id: number) => boolean = tickOff): Server {
+  const token = randomBytes(32).toString("hex"); // per process: a page from before a restart posts nothing
   return createServer((req, res) => {
-    const path = (req.url ?? "").split("?")[0];
+    const path = (req.url ?? "").split("?")[0]!;
     const send = (status: number, type: string, body: string, extra: Record<string, string> = {}): void => {
       res.writeHead(status, { ...HEADERS, "content-type": `${type}; charset=utf-8`, ...extra });
       res.end(req.method === "HEAD" ? undefined : body);
     };
-    if (!hostAllowed(req.headers.host, req.socket.localPort)) return send(421, "text/plain", "misdirected request"); // (DNS rebinding: a web page may point its own name at 127.0.0.1)
-    if (req.method !== "GET" && req.method !== "HEAD") return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD" });
+    const host = req.headers.host;
+    if (!hostAllowed(host, req.socket.localPort)) return send(421, "text/plain", "misdirected request"); // (DNS rebinding: a web page may point its own name at 127.0.0.1)
+    if (req.method === "POST") {
+      const m = /^\/tasks\/(\d{1,9})\/done$/.exec(path);
+      if (!m) return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD" });
+      const forbidden = (): void => send(403, "text/plain", "forbidden");
+      if (req.headers.origin?.toLowerCase() !== ownOrigin(host!)) return forbidden(); // (another website's POST carries its own Origin; none at all is refused too)
+      if (!/^application\/x-www-form-urlencoded\s*(;|$)/i.test(req.headers["content-type"] ?? "")) return send(415, "text/plain", "unsupported media type");
+      const chunks: Buffer[] = [];
+      let size = 0;
+      let over = false;
+      req.on("data", (c: Buffer) => {
+        size += c.length;
+        if (size > BODY_MAX) over = true;
+        else chunks.push(c);
+      });
+      req.on("end", () => {
+        if (over) return send(413, "text/plain", "too large", { connection: "close" });
+        if (!sameToken(new URLSearchParams(Buffer.concat(chunks).toString("utf8")).get("token") ?? "", token)) return forbidden();
+        try {
+          if (!tick(Number(m[1]))) return send(404, "text/plain", "not found");
+        } catch (e) {
+          console.error(`tasks page: ${(e as Error).message}`);
+          return send(500, "text/plain", "that cannot be done right now");
+        }
+        send(303, "text/plain", "done", { location: "/tasks" });
+      });
+      return;
+    }
+    if (req.method !== "GET" && req.method !== "HEAD") return send(405, "text/plain", "method not allowed", { allow: "GET, HEAD, POST" });
     if (path === "/healthz") return send(200, "text/plain", "ok");
     if (path !== "/tasks") return send(404, "text/plain", "not found");
     try {
-      send(200, "text/html", read());
+      send(200, "text/html", read(token));
     } catch (e) {
       console.error(`tasks page: ${(e as Error).message}`);
       send(500, "text/plain", "the list cannot be read right now");

@@ -29,12 +29,29 @@ const index = (html: string, s: string) => html.indexOf(s);
 
 test("tasks fall into the owner's day buckets, in the owner's zone", () => {
   const html = tasksPage(OWNER_KEY, NOW, ZONE);
-  const at = ["Overdue (1)", "Today (1)", "This week (1)", "Later (1)", "No date (1)"].map((h) => index(html, h));
+  const at = ["Today (2)", "This week (1)", "Later (1)", "No date (1)"].map((h) => index(html, h));
   assert.ok(at.every((i) => i >= 0), html);
+  assert.ok(!html.includes("Overdue ("));
   assert.deepEqual([...at].sort((a, b) => a - b), at);
-  assert.ok(index(html, "Pay rent") < at[1]! && index(html, "Call Sam") > at[1]! && index(html, "Call Sam") < at[2]!);
+  assert.ok(index(html, "Pay rent") > at[0]! && index(html, "Pay rent") < index(html, "Call Sam") && index(html, "Call Sam") < at[1]!); // overdue first
   assert.match(html, /5 open, 1 overdue · updated 00:00/);
   assert.match(html, /waiting on · Sam/);
+});
+
+test("only Today is open; the other sections are collapsed", () => {
+  const html = tasksPage(OWNER_KEY, NOW, ZONE);
+  const before = (h: string) => html.slice(index(html, h) - 30,index(html, h));
+  assert.ok(before("Today (2)").includes("<details open>"));
+  for (const h of ["This week (1)", "Later (1)", "No date (1)"]) assert.ok(before(h).includes("<details>"), h);
+});
+
+test("overdue and urgent rows carry their classes", () => {
+  const id = add(OWNER_KEY, "Fix boiler", { due: "2026-10-23", urgent: true }).item.id;
+  const html = tasksPage(OWNER_KEY, NOW, ZONE);
+  assert.match(html, /<li class="late">(?:(?!<\/li>).)*Pay rent/s);
+  assert.match(html, /<li class="urgent">(?:(?!<\/li>).)*Fix boiler/s);
+  assert.ok(!/<li class="late">(?:(?!<\/li>).)*Call Sam/s.test(html));
+  S.dropItem(scope(OWNER_KEY), id);
 });
 
 test("a title is escaped and nothing is loaded from outside", () => {
@@ -42,6 +59,7 @@ test("a title is escaped and nothing is loaded from outside", () => {
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&#60;script&#62;"));
   assert.ok(!/(src|href)=/.test(html));
+  assert.ok(!html.includes('name="token"')); // (no token, no buttons)
 });
 
 test("only the owner's list is read", () => {
@@ -89,7 +107,105 @@ test("routes, methods and headers", async () => {
     assert.equal((await fetch(`${base}/tasks/1`)).status, 404);
     assert.equal((await fetch(`${base}/tasks`, { method: "POST", body: "x" })).status, 405);
     assert.equal((await fetch(`${base}/tasks`, { method: "HEAD" })).status, 200);
+    assert.match(page.headers.get("content-security-policy")!, /form-action 'self'/);
   } finally {
     server.close();
   }
+});
+
+// The tick-off: POST /tasks/<id>/done.
+const post = (port: number, path: string, o: { host?: string; origin?: string | null; token?: string | null; type?: string; body?: string } = {}) =>
+  new Promise<{ status: number; location?: string; body: string }>((ok, bad) => {
+    const host = o.host ?? `127.0.0.1:${port}`;
+    const body = o.body ?? (o.token === null ? "" : `token=${o.token}`);
+    const headers: Record<string, string> = { host, "content-type": o.type ?? "application/x-www-form-urlencoded", "content-length": String(Buffer.byteLength(body)) };
+    if (o.origin !== null) headers.origin = o.origin ?? `http://${host}`;
+    const req = httpRequest({ host: "127.0.0.1", port, path, method: "POST", headers }, (res) => {
+      let b = "";
+      res.on("data", (c) => (b += c)).on("end", () => ok({ status: res.statusCode!, location: res.headers.location, body: b }));
+    });
+    req.on("error", bad).end(body);
+  });
+
+async function withServer(fn: (port: number, token: string) => Promise<void>): Promise<void> {
+  const server = tasksPageServer();
+  await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    const html = await (await fetch(`http://127.0.0.1:${port}/tasks`)).text();
+    await fn(port, /name="token" value="([0-9a-f]+)"/.exec(html)?.[1] ?? "");
+  } finally {
+    server.close();
+  }
+}
+const statusOf = (key: string, id: number) => S.getItem(key, id)?.status;
+
+test("a tick with the token and the page's own origin completes the task and goes back to the page", async () => {
+  const id = add(OWNER_KEY, "Water plants", { due: "2026-10-22" }).item.id;
+  await withServer(async (port, token) => {
+    assert.ok(token.length >= 32);
+    const r = await post(port, `/tasks/${id}/done`, { token });
+    assert.equal(r.status, 303);
+    assert.equal(r.location, "/tasks");
+    assert.equal(statusOf(OWNER_KEY, id), "done");
+    assert.equal((await post(port, `/tasks/${id}/done`, { token, host: `localhost:${port}` })).status, 404); // (already done: not open any more)
+    const t = add(OWNER_KEY, "Sort mail").item.id;
+    assert.equal((await post(port, `/tasks/${t}/done`, { token, host: "x.y.ts.net:9443", origin: "https://x.y.ts.net:9443" })).status, 303);
+    assert.equal(statusOf(OWNER_KEY, t), "done");
+  });
+});
+
+test("a tick without the right token or origin is refused, the same way, and changes nothing", async () => {
+  const id = add(OWNER_KEY, "Feed cat").item.id;
+  await withServer(async (port, token) => {
+    const bad = [
+      await post(port, `/tasks/${id}/done`, { token: null }),
+      await post(port, `/tasks/${id}/done`, { token: "0".repeat(token.length) }),
+      await post(port, `/tasks/${id}/done`, { token: token.slice(1) }),
+      await post(port, `/tasks/${id}/done`, { token, origin: null }),
+      await post(port, `/tasks/${id}/done`, { token, origin: "http://evil.example" }),
+      await post(port, `/tasks/${id}/done`, { token, origin: `http://127.0.0.1:${port + 1}` }),
+      await post(port, `/tasks/${id}/done`, { token, origin: `https://127.0.0.1:${port}` }),
+      await post(port, `/tasks/${id}/done`, { token, host: "x.y.ts.net", origin: "https://other.y.ts.net" }),
+    ];
+    for (const r of bad) assert.deepEqual([r.status, r.body], [403, "forbidden"]);
+    assert.equal(statusOf(OWNER_KEY, id), "open");
+    assert.equal((await post(port, `/tasks/${id}/done`, { token, type: "text/plain" })).status, 415);
+    assert.equal((await post(port, `/tasks/${id}/done`, { token, body: `token=${token}&x=${"a".repeat(2000)}` })).status, 413);
+    assert.equal(statusOf(OWNER_KEY, id), "open");
+  });
+});
+
+test("a tick from a foreign Host is misdirected", async () => {
+  const id = add(OWNER_KEY, "Post letter").item.id;
+  await withServer(async (port, token) => {
+    assert.equal((await post(port, `/tasks/${id}/done`, { token, host: "evil.example", origin: "http://evil.example" })).status, 421);
+    assert.equal(statusOf(OWNER_KEY, id), "open");
+  });
+});
+
+test("another conversation's task is refused, and a GET changes nothing", async () => {
+  let other = 0;
+  for (let i = 0; i < 60; i++) other = add("a-friends-or-group-key", `Friend errand ${i}`).item.id; // (ids count per conversation: this one is past every owner id)
+  const mine = add(OWNER_KEY, "Own errand").item.id;
+  assert.ok(other > mine);
+  await withServer(async (port, token) => {
+    assert.equal((await post(port, `/tasks/${other}/done`, { token })).status, 404);
+    assert.equal(statusOf("a-friends-or-group-key", other), "open");
+    assert.equal((await post(port, "/tasks/abc/done", { token })).status, 405);
+    assert.equal((await post(port, "/tasks", { token })).status, 405);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/tasks/${mine}/done`)).status, 404);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/tasks`, { method: "DELETE" })).status, 405);
+    assert.equal(statusOf(OWNER_KEY, mine), "open");
+  });
+});
+
+test("a repeating task moves to its next due, like the tool", async () => {
+  const id = add(OWNER_KEY, "Stretch", { due: "2026-10-22", repeat: "every day" }).item.id;
+  await withServer(async (port, token) => {
+    assert.equal((await post(port, `/tasks/${id}/done`, { token })).status, 303);
+    const it = S.getItem(OWNER_KEY, id)!;
+    assert.equal(it.status, "open");
+    assert.ok(it.due! > "2026-10-22" && it.doneAt !== undefined);
+  });
 });
