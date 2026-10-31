@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { fakeService, type FakeService, type Recorder } from "./fakeserver.ts";
 
-export const NOTION_SERVER = "claude.ai Notion";
+const NOTION_SERVER = "claude.ai Notion";
 
 export interface SeedDatabase {
   id: string;

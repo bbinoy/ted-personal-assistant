@@ -10,7 +10,7 @@ export const MB = toolPrefix(MAILBIRD_SERVER);
 
 export const check = (name: string, pass: boolean, why?: string): Check => ({ name, pass, ...(!pass && why ? { why } : {}) });
 export const created = (o: Outcome) => o.calendar.filter((e) => e.createdByCall);
-export const called = (o: Outcome, tool: string) => o.calls.filter((c) => c.tool === tool && c.ok);
+const called = (o: Outcome, tool: string) => o.calls.filter((c) => c.tool === tool && c.ok);
 export const plain = (html: string): string => html.replace(/<br\s*\/?>|<\/p>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
 export const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
 export const sends = (o: Outcome): string[] => called(o, `${MB}send_message_now`).map((c) => `a mail was sent (${JSON.stringify(c.args)})`);

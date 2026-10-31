@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { fakeService, type FakeService, type Recorder } from "./fakeserver.ts";
 
-export const BROWSER_SERVER = "browser";
+const BROWSER_SERVER = "browser";
 
 // A page: its address, a heading, static text lines, and the things on it. Each thing gets a ref (e1, e2, ...) in order of appearance.
 export interface FakePage {

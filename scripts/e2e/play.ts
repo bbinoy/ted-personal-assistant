@@ -32,7 +32,7 @@ import { FakeBrowser, type FakeCard } from "./fakebrowser.ts";
 import { RUNTIME } from "../../src/modules/runtime.ts";
 import { browse, browseToolText } from "../../src/modules/browse/browse.ts";
 import { Ledger } from "../../src/modules/browse/payments.ts";
-import { KillSwitch, type CardAccess, type CardRecord } from "../../src/modules/browse/card.ts";
+import { type CardAccess, type CardRecord } from "../../src/modules/browse/card.ts";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { FakeMail } from "./fakemail.ts";
@@ -103,7 +103,7 @@ export async function play(c: Case, o: { now: Date; zone: string; perfect?: bool
   const fb = world.web ? new FakeBrowser(rec, world.web, TEST_CARD_FOR_BROWSER) : undefined;
   const ledger = new Ledger();
   if (fb) {
-    const access: CardAccess = { info: { last4: TEST_CARD.last4, label: TEST_CARD.label, currency: TEST_CARD.currency }, load: async () => TEST_CARD, off: () => new KillSwitch(join(owner().notesDir, "..", "card.disabled")).off(), ledger, caps: { purchaseMinor: 50_000, dayMinor: 100_000 } };
+    const access: CardAccess = { info: { last4: TEST_CARD.last4, label: TEST_CARD.label, currency: TEST_CARD.currency }, load: async () => TEST_CARD, off: () => undefined, ledger, caps: { purchaseMinor: 50_000, dayMinor: 100_000 } };
     RUNTIME.browser!.server = () => fb.service.config;
     RUNTIME.browse!.server = (ctx) =>
       createSdkMcpServer({
