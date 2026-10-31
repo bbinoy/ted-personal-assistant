@@ -273,7 +273,7 @@ test("owner's look in the day: the daily cap holds the posts past it (urgent one
     assert.deepEqual(outcomes, ["posted", "posted", "silent", "posted"]);
     assert.equal(seen.posted.length, 3);
   } finally {
-    s.maxUnpromptedPerDay = 6;
+    s.maxUnpromptedPerDay = 12;
   }
 });
 
