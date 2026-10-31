@@ -50,12 +50,12 @@ export function isJudgeable(tool: string, input: Record<string, unknown>, view?:
 // Pure: the people an outgoing mail or a calendar invite reaches that neither the person's own words nor the thread being answered account for. A run that has read untrusted mail
 // or pages may have had its recipient or guest steered, so such a call is never judged (permissions.ts): the owner is asked. A person counts as the person's when their words hold
 // the address verbatim, or the address belongs to one of the conversation's known people (its own people notes, `known`) whose first name they said ("invite Anna" covers the
-// Anna of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`assistantSaid`: the draft Ted showed; they
+// Anna of the notes; the judge still sees the whole address), or when it is verbatim in the assistant message they are answering (`repliedTo`, snapshotted when their message arrived so that nothing the run sends mid-turn can change it: the draft Ted showed; they
 // have seen the exact address, and whether their reply approves it is the judge's call, the floor only stops blocking). Only that one message, never older ones. A word that merely appears in an address proves nothing. A reply whose recipients the call does not name itself goes to
 // the thread's own people. A standing task or a wake-up has no words of a person's: everybody named is outside.
 export function recipientsOutside(view: Pick<MailView, "action" | "to" | "cc" | "bcc">, input: Record<string, unknown>, p: RunProvenance | undefined, known: readonly Candidate[] = []): string[] {
   const text = (p?.kind === "owner" ? [p.message, ...(p.earlier ?? [])] : p?.kind === "member" ? [p.message] : []).join("\n");
-  const shown = p?.kind === "owner" || p?.kind === "member" ? p.assistantSaid ?? "" : "";
+  const shown = p?.kind === "owner" || p?.kind === "member" ? p.repliedTo ?? "" : "";
   const words = `${text}\n${shown}`.toLowerCase();
   const byName = addressesNamedIn(text, known);
   const named = new Set([input.to, input.cc, input.bcc].flatMap((v) => addrs(v)));
@@ -111,8 +111,8 @@ export function createdNote(tool: string, input: Record<string, unknown>, conver
 //            the same person: the trigger lowers nothing (the code floors and untrusted_input_in_run are the defence). By "assistant": only a browse run with no parent
 //            provenance, whose one text is what the assistant told its worker: no person's request is on record
 export type RunProvenance =
-  | { kind: "owner"; message: string; earlier?: readonly string[]; assistantSaid?: string }
-  | { kind: "member"; message: string; assistantSaid?: string }
+  | { kind: "owner"; message: string; earlier?: readonly string[]; assistantSaid?: string; repliedTo?: string }
+  | { kind: "member"; message: string; assistantSaid?: string; repliedTo?: string }
   | { kind: "standing"; task: string }
   | { kind: "derived"; by: "gate"; of: "owner" | "member"; text: string }
   | { kind: "derived"; by: "assistant"; text: string };

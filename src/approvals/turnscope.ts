@@ -21,6 +21,7 @@ export class TurnScope {
   #recent: { text: string; at: number; reactedOn?: number }[] = []; // reactedOn: for a reaction, when the message it was on was sent (0: not in the log any more)
   #wroteAt = 0; // the person's newest message of any kind (an answer to a question included), when it arrived
   #said = "";
+  #repliedTo = ""; // the assistant message as it stood when the person's message arrived: the one they answer. Unlike #said, a message the run sends mid-turn never changes it (the recipient floor reads this)
   #carried: RunProvenance | null | undefined; // a continuation turn (handoff.ts): the provenance of the turn that asked, restored; nobody's new words
   #derived: Extract<RunProvenance, { kind: "derived" }> | undefined; // (a wake-up's gate-selected task: the person's standing instruction acted on later)
 
@@ -37,6 +38,7 @@ export class TurnScope {
     this.#carried = undefined;
     this.#recent = [...this.#recent, { text, at: arrivedAt ?? Date.now(), ...(reactedOn !== undefined ? { reactedOn } : {}) }].slice(-KEEP);
     if (assistantSaid !== undefined) this.#said = assistantSaid.slice(0, LIMITS.quote);
+    this.#repliedTo = this.#said;
   }
 
   // The person wrote something (a message that answered an open question too): the pipeline says so on arrival.
@@ -81,7 +83,7 @@ export class TurnScope {
     if (this.#carried !== undefined) return this.#carried ?? undefined;
     const last = this.#recent.at(-1);
     if (last === undefined) return undefined;
-    return this.member ? { kind: "member", message: last.text, ...(this.#said ? { assistantSaid: this.#said } : {}) } : { kind: "owner", message: this.#shown(last, now), earlier: this.#recent.slice(0, -1).map((m) => this.#shown(m, now)), assistantSaid: this.#said || undefined };
+    return this.member ? { kind: "member", message: last.text, ...(this.#said ? { assistantSaid: this.#said } : {}), ...(this.#repliedTo ? { repliedTo: this.#repliedTo } : {}) } : { kind: "owner", message: this.#shown(last, now), earlier: this.#recent.slice(0, -1).map((m) => this.#shown(m, now)), assistantSaid: this.#said || undefined, ...(this.#repliedTo ? { repliedTo: this.#repliedTo } : {}) };
   };
 }
 
