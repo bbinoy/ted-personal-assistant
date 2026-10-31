@@ -202,6 +202,7 @@ test("a look that read notes before acting says so: 'per your notes' in reading 
   const seen: string[] = [];
   const generic = makeCanUseTool(async () => ({ approved: false }), OWNER_LOOK, undefined, judge({ decision: "auto", reason: "routine" }), undefined, undefined, false, { provenance: () => ({ kind: "standing", task: "look" }), conversation: key, notesSeen: () => seen });
   const before = journal(key).length;
+  rememberNames(key, JSON.stringify({ conversations: [{ conversationId: "n-1", subject: "One", from: "Shop" }, { conversationId: "n-2", subject: "Two", from: "Shop" }] })); // (read: an archive of an unread one is first sent back)
   await generic(tool, { conversationId: "n-1" }, opts);
   await noteDone({ conv: key, source: "background", tool, input: { conversationId: "n-1" } });
   seen.push("triage-linkedin", "people-eve", "triage-newsletters", "context-trip");

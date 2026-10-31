@@ -359,6 +359,7 @@ test("google: reads run free; a send, a draft and a label go to the judge and, u
   ] as const) assert.equal((await r.run(tool, input)).behavior, "deny", `${tool} ${JSON.stringify(input)}`);
   assert.equal(r.asked.length + r.judged.length, 0, "refused before any judge or question");
   // archive: a label change is judged like the owner's
+  rememberNames(`tenant:${ctx.id}`, JSON.stringify({ messages: [{ id: "a1", subject: "Lunch?", from: "Carl <carl@example.org>" }] })); // (read: an archive of an unread mail is first sent back to look it up)
   r = rig(ctx, "auto");
   assert.equal((await r.run("modify_gmail_message_labels", { message_id: "a1", remove_label_ids: ["INBOX"] })).behavior, "allow");
   assert.equal(r.judged.length, 1);

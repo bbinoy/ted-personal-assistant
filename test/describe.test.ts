@@ -101,10 +101,10 @@ test("the write prompt tells the writer never to show ids", () => {
 });
 
 // 22-29 October: the looks' archive calls reached the judge as a bare conversation id ("only a conversation id is shown"), because a conversationId was not read as an id.
-test("an archive of a conversation the run has read is named by its subject and sender", async () => {
+test("an archive of a conversation the run has read is named by its subject and sender; an unread one is unknown", async () => {
   forgetCreated();
   forgetSeen();
   rememberNames("owner", JSON.stringify({ conversations: [{ conversationId: 5547, subject: "Your receipt", lastSender: "Lumen Rail" }] }));
   assert.match(await objectLines("owner", "mcp__mailbird__archive_conversation", { conversationId: 5547 }), /^\nNamed: .*Your receipt.*Lumen Rail/);
-  assert.equal(await objectLines("owner", "mcp__mailbird__archive_conversation", { conversationId: 9999 }), "", "an unread one: no claim (not a delete)");
+  assert.match(await objectLines("owner", "mcp__mailbird__archive_conversation", { conversationId: 9999 }), /^\nNamed: unknown/, "an unread one says so: the run looks it up first");
 });
