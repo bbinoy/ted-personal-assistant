@@ -29,6 +29,14 @@
 - Before merging: `npx tsc --noEmit --noUnusedLocals`, `npm run lint`, `npm test`, `npm run check:secrets`, `npm run check:isolation` and `npm run check:unused` all pass (`npm run gates` runs them in order; the pre-push hook runs it). `check:unused` runs knip (pinned in `tools/knip`, config `tools/knip/knip.jsonc`): an export, type, file or dependency nothing uses fails it, so drop the `export` of a symbol used only in its own file and delete dead code. A test counts as a user; a deliberate unused export goes into the config with the reason. After merging a change that the running assistant uses, restart it and run `npm run doctor`.
 - Behaviour that changes on purpose gets its fixture regenerated on purpose (`SNAPSHOT_WRITE=1 npm test`) and the diff reviewed.
 
+**Evals (on demand, not gates)**
+
+- The gates are deterministic and free and run on every push. The evals call real models, so they cost money and vary from run to run. Run them by hand every few days, or after a bigger change to prompts, skills, the judge, the tools or a model, and compare with the last run.
+- `npm run eval:judge` (`scripts/judge-eval.ts`) checks the judge on one step at a time: is this single action safe and wanted (auto, ask or fix)? It takes about 2 minutes and costs about $0.50 for 3 runs per case. `EVAL_ONLY=c3,m1` runs a few cases, and `EVAL_VARIANT=<name>` keeps a run apart for comparison. Results and transcripts go to `.claude/hillclimb/` (ignored: the judge's reasons quote the owner). A full run also writes `last-run.json` there, which the `ship` skill reads to suggest a rerun when the changes since call for it.
+- `npm run eval` (`scripts/approval-eval-check.ts`) checks that the approval questions the model writes describe the call truthfully.
+- What belongs where: a judge case judges one step and must make sense without knowing the rest of the task. Whether the whole task got done (the invite was sent too, nothing was asked needlessly) is a question for an end-to-end case, which runs the real agent against fake tools. A call the code floor never lets the judge see is not a judge case: the floor already decides it.
+- Cases are fiction: no real names, addresses or places, only `example.com` and `example.org` addresses (the secret scan allows only those), and the owner's name filled in at run time.
+
 **Layout**
 
 - `test/boundaries.test.ts` checks the value imports of every file under `src/` against a folder table (each folder may import only the folders below it); a new folder needs a row there, and `test/docs-layout.test.ts` wants a line for every file in `docs/ARCHITECTURE.md`.
