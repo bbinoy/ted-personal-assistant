@@ -99,3 +99,12 @@ test("questionfacts: a question needs no id, but still the address and the amoun
 test("the write prompt tells the writer never to show ids", () => {
   assert.match(APPROVAL_SYSTEM, /Never show ids/);
 });
+
+// 22-29 October: the looks' archive calls reached the judge as a bare conversation id ("only a conversation id is shown"), because a conversationId was not read as an id.
+test("an archive of a conversation the run has read is named by its subject and sender", async () => {
+  forgetCreated();
+  forgetSeen();
+  rememberNames("owner", JSON.stringify({ conversations: [{ conversationId: 5547, subject: "Your receipt", lastSender: "Lumen Rail" }] }));
+  assert.match(await objectLines("owner", "mcp__mailbird__archive_conversation", { conversationId: 5547 }), /^\nNamed: .*Your receipt.*Lumen Rail/);
+  assert.equal(await objectLines("owner", "mcp__mailbird__archive_conversation", { conversationId: 9999 }), "", "an unread one: no claim (not a delete)");
+});
