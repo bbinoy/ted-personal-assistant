@@ -82,7 +82,21 @@ export class Mailbird {
 
   // Calls a tool and returns parsed JSON when the result is JSON text, else the raw text. The client built once for the process outlives Mailbird restarts: when the
   // connection itself fails it is closed and forgotten, and the call is made once more on a new one (never after a timeout, see above).
-  async call<T = unknown>(name: string, args: Record<string, unknown> = {}, retry = true): Promise<T> {
+  async call<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+    const text: string = (await this.invoke(name, args)).find((c: any) => c.type === "text")?.text ?? "";
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return text as T;
+    }
+  }
+
+  // The result's whole content list (text, image and resource items), for a tool that returns a file.
+  async content(name: string, args: Record<string, unknown> = {}): Promise<any[]> {
+    return this.invoke(name, args);
+  }
+
+  private async invoke(name: string, args: Record<string, unknown>, retry = true): Promise<any[]> {
     if (!this.client) await this.connect();
     let res: any;
     try {
@@ -91,15 +105,11 @@ export class Mailbird {
     } catch (e) {
       void this.close().catch(() => {}); // the dead connection is forgotten at once; closing it is not waited for
       if (!retry || timedOut(e)) throw e;
-      return this.call<T>(name, args, false);
+      return this.invoke(name, args, false);
     }
-    const text: string = res.content?.find((c: any) => c.type === "text")?.text ?? "";
-    if (res.isError) throw new Error(`mailbird ${name} failed: ${text.slice(0, LIMITS.preview)}`);
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      return text as T;
-    }
+    const content: any[] = res.content ?? [];
+    if (res.isError) throw new Error(`mailbird ${name} failed: ${(content.find((c: any) => c.type === "text")?.text ?? "").slice(0, LIMITS.preview)}`);
+    return content;
   }
 
   async close() {

@@ -446,6 +446,7 @@ src/conversation/lang.ts  the voice reply's language check
 src/conversation/ledger.ts  wake/action ledger in the log: when a look is due
 src/conversation/markdown.ts  Markdown to Signal text styles
 src/conversation/messenger.ts  the app's meeting point with the chat platform
+src/conversation/openbytes.ts  bytes the assistant fetched (a mail attachment) made ready for the model
 src/conversation/outbound.ts  sending, echo guard, retry of a failed send, one message per paragraph
 src/conversation/ownercommands.ts  /stop /pause /resume /status /today /quiet /tasks
 src/conversation/queue.ts  bursts, one turn at a time per conversation
@@ -516,6 +517,8 @@ src/modules/browse/paymentrules.ts  pure rules of a card payment
 src/modules/browse/payments.ts  the payment ledger
 src/modules/browse/profile.ts  the owner's saved details in OpenBao
 src/modules/browse/profilecli.ts  `npm run profile`
+src/modules/files/filetool.ts  the open_file tool: a mail attachment opened and kept for send
+src/modules/files/module.ts  files
 src/modules/draw/drawtool.ts  the draw tool: SVG in, PNG out
 src/modules/draw/module.ts  draw
 src/modules/draw/svgclean.ts  rebuilds model SVG from an allowlist
@@ -525,6 +528,7 @@ src/modules/gmail/gmailrules.ts  Gmail floor rules a flag cannot say
 src/modules/gmail/module.ts  Gmail connector (MAIL_PROVIDER=gmail)
 src/modules/google/googlemcp.ts  the pinned MCP server, one process per friend
 src/modules/google/module.ts  a friend's own Gmail and Calendar tools
+src/modules/mailbird/attachments.ts  an attachment from get_attachment_content, as bytes
 src/modules/mailbird/mailbird.ts  MCP client for the local mail server
 src/modules/mailbird/module.ts  Mailbird (MAIL_PROVIDER=mailbird)
 src/modules/mailbird/proposals.ts  a draft read back; the send-approval text

@@ -2,6 +2,8 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { createBrowseServer } from "./browse/browse.ts";
 import { browseStatus, browserServer } from "./browse/browseserver.ts";
 import { connected, readConnectors } from "./connectors.ts";
+import { createFilesServer, type AttachmentSource } from "./files/filetool.ts";
+import { attachmentOf } from "./mailbird/attachments.ts";
 import { createDrawServer } from "./draw/drawtool.ts";
 import { dreamScope } from "./memory/dreamscope.ts";
 import { googleHub, googleProxy, searchContacts, sweepStaleCredentialDirs } from "./google/googlemcp.ts";
@@ -52,8 +54,18 @@ export interface ModuleLifecycle {
   drop: (tenantId: string) => void;
 }
 
+// open_file's source: Mailbird's get_attachment_content over code's own connection (made when first needed), so the bytes never pass through the model.
+let attachmentClient: Mailbird | undefined;
+const mailbirdAttachments: AttachmentSource = async (a) => {
+  const res = await (attachmentClient ??= new Mailbird()).content("get_attachment_content", { messageId: a.messageId, attachmentId: a.attachmentId });
+  const got = attachmentOf(res);
+  if (!got) throw new Error("get_attachment_content returned no file content");
+  return got;
+};
+
 export const RUNTIME: Readonly<Record<string, ModuleRuntime>> = {
   send: { server: (ctx) => createSendServer(ctx.key!) },
+  files: { server: (ctx) => createFilesServer(ctx.key!, mailbirdAttachments) },
   weather: { server: () => createWeatherServer() },
   draw: { server: (ctx) => createDrawServer(ctx.key!) },
   voice: { server: (ctx) => createVoiceServer(ctx.key!) },
