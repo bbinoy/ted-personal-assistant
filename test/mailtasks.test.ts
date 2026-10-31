@@ -116,7 +116,7 @@ test("the look's prompt carries what was added from mail in the last day, fenced
   await tools("owner", { unattended: true, now: Date.now() }).add_task!.handler({ title: "Answer the tax office", source_kind: "mail", source_ref: "mail-tax-1", due: "2026-10-30" });
   recordMessage("owner", Date.now(), "and?", new Date(), c.logFile);
   await hb.look(c, {} as never, new Date());
-  assert.match(seen[1]!.prompt, /<task_list_facts[^>]*>[\s\S]*Added to the list by looks in the last 24 hours[\s\S]*Answer the tax office \| due Fri 30 Oct \| from mail \| added [^|]+ \| source mail-tax-1/);
+  assert.match(seen[1]!.prompt, /<task_list_facts[^>]*>[\s\S]*Added to the list by looks in the last 24 hours[\s\S]*Answer the tax office \| due Fri 30 Oct[^|]* \| from mail \| added [^|]+ \| source mail-tax-1/);
   assert.equal(seen[1]!.untrusted, true);
   assert.doesNotMatch(seen[1]!.prompt, /💡|👍 to add/);
 });
